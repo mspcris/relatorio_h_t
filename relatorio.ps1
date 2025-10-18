@@ -28,6 +28,8 @@ if ($code -eq 0) {
   if ($html) { Start-Process $html.FullName }  # abre no navegador padrão
 }
 
+
+
 exit $code
 
 
