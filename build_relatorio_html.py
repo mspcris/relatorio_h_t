@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Gera relatório HTML consolidando Trello + Harvest.
-Leitura:
-  - Trello: última subpasta export_trello/export_YYYYMMDD_HHMMSS
-  - Harvest: CSV mais recente em export_harvest/
-Saída:
-  - relatorio/relatorio_YYYYMMDD_HHMMSS.html
-Uso:
-  python build_relatorio_html.py
-  python build_relatorio_html.py --root . --outdir relatorio
+Relatório HTML consolidando Trello + Harvest.
+- Trello: lê a última subpasta export_trello/export_YYYYMMDD_HHMMSS
+- Harvest: lê o CSV mais recente em export_harvest/
+- Saída: relatorio/relatorio_YYYYMMDD_HHMMSS.html
 """
 from pathlib import Path
 from datetime import datetime
 import argparse
 import pandas as pd
+import re
 
-# -------------------- util --------------------
+# -------------------- utils --------------------
 def read_csv_safe(p: Path):
     if not p or not p.exists():
         return None
@@ -30,38 +26,40 @@ def latest_harvest_csv(root: Path) -> Path | None:
     if not base.exists():
         return None
     files = list(base.glob("*.csv"))
-    if not files:
-        return None
-    return max(files, key=lambda f: f.stat().st_mtime)
+    return max(files, key=lambda f: f.stat().st_mtime) if files else None
 
 def latest_trello_dir(root: Path) -> Path | None:
     base = root / "export_trello"
     if not base.exists():
         return None
-    # considera somente subpastas com cards.csv
     candidates = [p for p in base.iterdir() if p.is_dir() and (p / "cards.csv").exists()]
-    if not candidates:
-        return None
-    return max(candidates, key=lambda d: d.stat().st_mtime)
+    return max(candidates, key=lambda d: d.stat().st_mtime) if candidates else None
 
-def df_to_html_table(df: pd.DataFrame | None, table_id: str) -> str:
+def df_to_html_table(df: pd.DataFrame | None, table_id: str, raw_html_cols: set[str] | None = None) -> str:
     if df is None or df.empty:
         return '<div class="empty">Sem dados.</div>'
+    raw_html_cols = raw_html_cols or set()
     df = df.fillna("")
-    # escapar HTML
-    for c in df.columns:
-        if df[c].dtype == object:
-            df[c] = (
-                df[c]
-                .astype(str)
-                .str.replace("<", "&lt;", regex=False)
-                .str.replace(">", "&gt;", regex=False)
-            )
-    thead = "".join(f"<th>{c}</th>" for c in df.columns)
-    rows = "\n".join(
-        "<tr>" + "".join(f"<td>{r[c]}</td>" for c in df.columns) + "</tr>"
-        for _, r in df.iterrows()
-    )
+
+    # escapar HTML apenas para colunas não marcadas como raw
+    safe = df.copy()
+    for c in safe.columns:
+        if safe[c].dtype == object and c not in raw_html_cols:
+            safe[c] = (safe[c].astype(str)
+                             .str.replace("<","&lt;", regex=False)
+                             .str.replace(">","&gt;", regex=False))
+
+    thead = "".join(f"<th>{c}</th>" for c in safe.columns)
+    rows_html = []
+    for _, r in safe.iterrows():
+        tds = []
+        for c in safe.columns:
+            val = r[c]
+            # valores já estão escapados quando necessário; manter como está
+            tds.append(f"<td>{val}</td>")
+        rows_html.append("<tr>" + "".join(tds) + "</tr>")
+    rows = "\n".join(rows_html)
+
     return f"""
     <div class="table-wrap">
       <input class="filter" placeholder="Filtrar nesta tabela..." oninput="filterTable('{table_id}', this.value)"/>
@@ -79,6 +77,27 @@ def fmt_hours_hhmm(x):
         return f"{m//60:02d}:{m%60:02d}"
     except Exception:
         return str(x)
+
+def pick_username_column(df: pd.DataFrame) -> str | None:
+    """Seleciona a coluna com NOME do usuário e assegura o rótulo 'user.name'."""
+    if df is None or df.empty:
+        return None
+    if "user.name" in df.columns:
+        return "user.name"
+    candidates = [c for c in df.columns if re.search(r"^(user(\.name)?|username|usuario|colaborador|user[_ ]?name|nome[_ ]?usuario)$", c, re.I)]
+    best = None
+    best_score = -1.0
+    for c in candidates:
+        s = df[c].astype(str)
+        letters = s.str.contains(r"[A-Za-zÀ-ú]", regex=True, na=False).mean()
+        bonus = 0.1 if c.lower() in ("username",) else 0.0
+        score = letters + bonus
+        if score > best_score:
+            best_score, best = score, c
+    if best is not None and best_score >= 0.5:
+        df.rename(columns={best: "user.name"}, inplace=True)
+        return "user.name"
+    return None
 
 # -------------------- app --------------------
 def main():
@@ -106,74 +125,87 @@ def main():
     checklists = read_csv_safe(trello_dir / "checklists.csv")  if trello_dir else None
     atts       = read_csv_safe(trello_dir / "attachments.csv") if trello_dir else None
 
-    # enriquecer cards
+    # enriquecer e higienizar cards (remoções solicitadas + link clicável)
     if cards is not None and not cards.empty:
+        # mapear lista se necessário
         if lists is not None and not lists.empty:
             lists_map = dict(zip(lists.get("id", []), lists.get("name", [])))
             if "idList" in cards.columns and "list" not in cards.columns:
                 cards["list"] = cards["idList"].map(lists_map).fillna("")
+        # datas
         for col in ("due", "start", "updated"):
             if col in cards.columns:
                 cards[col] = pd.to_datetime(cards[col], errors="coerce")
         if "updated" in cards.columns:
-            cards = cards.sort_values(["list", "updated"], ascending=[True, False])
+            cards = cards.sort_values(["list","updated"], ascending=[True, False])
+
+        # remover colunas solicitadas
+        drop_cols = ["card_id","labels","members","due","sart","start","due_complete","short_link", "attachments_urls","attachments_count"]
+        keep_cols = [c for c in cards.columns if c not in drop_cols]
+        cards = cards[keep_cols]
+
+        # transformar url em link clicável
+        if "url" in cards.columns:
+            cards["url"] = cards["url"].astype(str).apply(
+                lambda u: f'<a href="{u}" target="_blank" rel="noopener">abrir</a>' if u else ""
+            )
 
     # --- Harvest ---
-    harvest = read_csv_safe(hv_csv) if hv_csv else None
+    harvest_raw = read_csv_safe(hv_csv) if hv_csv else None
+    harvest_display = None
     pivots = {}
-    if harvest is not None and not harvest.empty:
-        # Canonizar nomes sem criar duplicatas
-        ren = {}
-        seen = set()
-        for c in harvest.columns:
+
+    if harvest_raw is not None and not harvest_raw.empty:
+        # Canonizar nomes SEM criar duplicatas
+        ren, seen = {}, set()
+        for c in harvest_raw.columns:
             lc = c.lower()
             target = None
-            if lc in ("spent_date", "data", "date"): target = "date"
+            if lc in ("spent_date","data","date"): target = "date"
             elif ("project" in lc and "id" not in lc): target = "project"
-            elif ("client" in lc and "id" not in lc): target = "client"
-            elif ("task"   in lc and "id" not in lc): target = "task"
-            elif ("hours" in lc or "hour" in lc):     target = "hours"
-            elif ("notes" in lc or "descri" in lc):   target = "notes"
-            # preferir user.name como canônico
-            elif (lc == "user.name" or lc == "username" or "user name" in lc): target = "user.name"
-            elif ("user" in lc or "pessoa" in lc or "colaborador" in lc): target = "user.name"
+            elif ("client"  in lc and "id" not in lc): target = "client"
+            elif ("task"    in lc and "id" not in lc): target = "task"
+            elif ("hours" in lc or "hour" in lc):      target = "hours"
+            elif ("notes" in lc or "descri" in lc):    target = "notes"
+            # não decidir 'user.name' aqui; será feito pela heurística
             if target and target not in seen:
                 ren[c] = target
                 seen.add(target)
-        harvest = harvest.rename(columns=ren)
-        # remover colunas com nomes duplicados
+        harvest = harvest_raw.rename(columns=ren)
         harvest = harvest.loc[:, ~harvest.columns.duplicated()]
+
+        # Selecionar/forçar coluna de nome -> 'user.name' sem tocar em IDs
+        user_col = pick_username_column(harvest)
 
         # Tipos
         if "date"  in harvest.columns:  harvest["date"]  = pd.to_datetime(harvest["date"], errors="coerce").dt.date
         if "hours" in harvest.columns:  harvest["hours"] = pd.to_numeric(harvest["hours"], errors="coerce")
 
         # Pivôs
-        if {"client", "project", "hours"} <= set(harvest.columns):
+        if {"client","project","hours"} <= set(harvest.columns):
             pivots["by_client"] = (
                 harvest.groupby("client", dropna=False)["hours"]
                        .sum().reset_index().sort_values("hours", ascending=False)
             )
             pivots["by_project"] = (
-                harvest.groupby(["client", "project"], dropna=False)["hours"]
+                harvest.groupby(["client","project"], dropna=False)["hours"]
                        .sum().reset_index().sort_values(["client","hours"], ascending=[True, False])
             )
-        # usar user.name
-        if {"user.name", "hours"} <= set(harvest.columns):
+        if user_col and "hours" in harvest.columns and "user.name" in harvest.columns:
             pivots["by_user"] = (
                 harvest.groupby("user.name", dropna=False)["hours"]
                        .sum().reset_index().sort_values("hours", ascending=False)
-                       .rename(columns={"user.name": "user.name"})
             )
 
-        # Pós-processamento para exibição:
-        # 1) Remover colunas pedidas do grid Harvest
-        cols_drop = ["client.id", "client", "billable", "is_locked", "user", "project.id", "task.id"]
-        harvest = harvest.drop(columns=[c for c in cols_drop if c in harvest.columns], errors="ignore")
-
-        # 2) Converter hours para HH:MM no grid e nos pivôs
-        if "hours" in harvest.columns:
-            harvest["hours"] = harvest["hours"].apply(fmt_hours_hhmm)
+        # Grid de entradas (remoções + horas HH:MM)
+        harvest_display = harvest.copy()
+        cols_drop = ["client.id","client","billable","is_locked","user","project.id","task.id"]
+        harvest_display.drop(columns=[c for c in cols_drop if c in harvest_display.columns],
+                             inplace=True, errors="ignore")
+        if "user.name" not in harvest_display.columns:
+            harvest_display["user.name"] = ""
+        if "hours" in harvest_display.columns:
+            harvest_display["hours"] = harvest_display["hours"].apply(fmt_hours_hhmm)
         for k, df in list(pivots.items()):
             if df is not None and not df.empty and "hours" in df.columns:
                 df["hours"] = df["hours"].apply(fmt_hours_hhmm)
@@ -202,10 +234,6 @@ body {{ margin:0; font:14px/1.45 system-ui,Segoe UI,Roboto,Arial; background:var
 .panel {{ display:none; padding:16px }}
 .panel[aria-hidden="false"] {{ display:block }}
 .card {{ background:var(--card); border:1px solid #ffffff1a; border-radius:var(--radius); padding:16px; margin-bottom:16px }}
-.kpi {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:12px 0 }}
-.kpi .box {{ background:#ffffff0d; border:1px solid #ffffff1a; border-radius:12px; padding:12px; text-align:center }}
-.kpi .big {{ font-size:20px; font-weight:800 }}
-.note {{ font-size:12px; color:var(--muted) }}
 .table-wrap {{ margin-top:8px; overflow:auto }}
 .filter {{ width:100%; padding:8px; border-radius:8px; border:1px solid #ffffff22; background:#ffffff10; color:#fff }}
 table.data {{ width:100%; border-collapse:collapse; margin-top:8px }}
@@ -245,48 +273,23 @@ function filterTable(id, q){{
   <section id="trello" class="panel" aria-hidden="false">
     <div class="card">
       <h3>Cards</h3>
-      {df_to_html_table(cards, "tbl_cards")}
+      {df_to_html_table(cards, "tbl_cards", raw_html_cols={'url'})}
     </div>
     <div class="card">
       <h3>Checklists</h3>
       {df_to_html_table(checklists, "tbl_checklists")}
     </div>
-    <div class="card">
-      <h3>Etiquetas</h3>
-      {df_to_html_table(labels, "tbl_labels")}
-    </div>
-    <div class="card">
-      <h3>Membros</h3>
-      {df_to_html_table(members, "tbl_members")}
-    </div>
-    <div class="card">
-      <h3>Anexos</h3>
-      {df_to_html_table(atts, "tbl_atts")}
-    </div>
   </section>
 
   <section id="harvest" class="panel" aria-hidden="true">
-    <div class="card">
-      <h3>Entradas</h3>
-      {df_to_html_table(harvest, "tbl_harvest")}
-    </div>
-    <div class="card">
-      <h3>Horas por Cliente</h3>
-      {df_to_html_table(pivots.get("by_client"), "tbl_by_client")}
-    </div>
-    <div class="card">
-      <h3>Horas por Projeto</h3>
-      {df_to_html_table(pivots.get("by_project"), "tbl_by_project")}
-    </div>
-    <div class="card">
-      <h3>Horas por Usuário</h3>
-      {df_to_html_table(pivots.get("by_user"), "tbl_by_user")}
-    </div>
+    <div class="card"><h3>Entradas</h3>{df_to_html_table(harvest_display, "tbl_harvest")}</div>
+    <div class="card"><h3>Horas por Cliente</h3>{df_to_html_table(pivots.get("by_client"), "tbl_by_client")}</div>
+    <div class="card"><h3>Horas por Projeto</h3>{df_to_html_table(pivots.get("by_project"), "tbl_by_project")}</div>
+    <div class="card"><h3>Horas por Usuário</h3>{df_to_html_table(pivots.get("by_user"), "tbl_by_user")}</div>
   </section>
 </body>
 </html>
 """
-
     out_html.write_text(html, encoding="utf-8")
     print(f"OK: {out_html}")
 

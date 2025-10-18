@@ -6,12 +6,29 @@ New-Item -ItemType Directory -Force -Path $logd | Out-Null
 $ts = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 $log = "$logd\run_$ts.log"
 
-# roda no diretório do projeto (garante .env e paths relativos)
 Set-Location $root
+$code = 0
 
-# executa e loga saída/erros
 & $venv export_trello.py --board 1lAOxrLe --out .\export_trello *>> $log
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }
 
-& $venv export_harvest.py *>> $log
-exit $LASTEXITCODE
+if ($code -eq 0) {
+  & $venv export_harvest.py *>> $log
+  if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }
+}
+
+if ($code -eq 0) {
+  & $venv build_relatorio_html.py *>> $log
+  $code = $LASTEXITCODE
+}
+
+if ($code -eq 0) {
+  $reportDir = Join-Path $root 'relatorio'
+  $html = Get-ChildItem $reportDir -Filter 'relatorio_*.html' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if ($html) { Start-Process $html.FullName }  # abre no navegador padrão
+}
+
+exit $code
+
+
+exit $code
