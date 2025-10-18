@@ -31,4 +31,3 @@ if ($code -eq 0) {
 exit $code
 
 
-exit $code
