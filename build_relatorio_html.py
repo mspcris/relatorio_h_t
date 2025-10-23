@@ -4,7 +4,7 @@
 Relatório HTML consolidando Trello + Harvest.
 - Trello: lê a última subpasta export_trello/export_YYYYMMDD_HHMMSS
 - Harvest: lê o CSV mais recente em export_harvest/
-- Saída: relatorio/relatorio_YYYYMMDD_HHMMSS.html
+- Saída: relatorio/relatorio_YYYYMMDD_HHMMSS.html + relatorio/index.html (sempre sobrescrito)
 """
 from pathlib import Path
 from datetime import datetime
@@ -41,7 +41,6 @@ def df_to_html_table(df: pd.DataFrame | None, table_id: str, raw_html_cols: set[
     raw_html_cols = raw_html_cols or set()
     df = df.fillna("")
 
-    # escapar HTML apenas para colunas não marcadas como raw
     safe = df.copy()
     for c in safe.columns:
         if safe[c].dtype == object and c not in raw_html_cols:
@@ -55,7 +54,6 @@ def df_to_html_table(df: pd.DataFrame | None, table_id: str, raw_html_cols: set[
         tds = []
         for c in safe.columns:
             val = r[c]
-            # valores já estão escapados quando necessário; manter como está
             tds.append(f"<td>{val}</td>")
         rows_html.append("<tr>" + "".join(tds) + "</tr>")
     rows = "\n".join(rows_html)
@@ -111,6 +109,7 @@ def main():
     outdir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_html = outdir / f"relatorio_{stamp}.html"
+    out_index = outdir / "index.html"  # sempre sobrescrever
 
     # --- fontes ---
     trello_dir = latest_trello_dir(root)
@@ -125,26 +124,25 @@ def main():
     checklists = read_csv_safe(trello_dir / "checklists.csv")  if trello_dir else None
     atts       = read_csv_safe(trello_dir / "attachments.csv") if trello_dir else None
 
-    # enriquecer e higienizar cards (remoções solicitadas + link clicável)
+    # enriquecer e ordenar cards por updated desc
     if cards is not None and not cards.empty:
-        # mapear lista se necessário
         if lists is not None and not lists.empty:
             lists_map = dict(zip(lists.get("id", []), lists.get("name", [])))
             if "idList" in cards.columns and "list" not in cards.columns:
                 cards["list"] = cards["idList"].map(lists_map).fillna("")
-        # datas
+        # datas e sort
         for col in ("due", "start", "updated"):
             if col in cards.columns:
                 cards[col] = pd.to_datetime(cards[col], errors="coerce")
         if "updated" in cards.columns:
-            cards = cards.sort_values(["list","updated"], ascending=[True, False])
+            cards = cards.sort_values("updated", ascending=False, na_position="last")
 
         # remover colunas solicitadas
-        drop_cols = ["card_id","labels","members","due","sart","start","due_complete","short_link", "attachments_urls","attachments_count"]
+        drop_cols = ["card_id","labels","members","due","sart","start","due_complete","short_link","attachments_urls","attachments_count"]
         keep_cols = [c for c in cards.columns if c not in drop_cols]
         cards = cards[keep_cols]
 
-        # transformar url em link clicável
+        # link clicável
         if "url" in cards.columns:
             cards["url"] = cards["url"].astype(str).apply(
                 lambda u: f'<a href="{u}" target="_blank" rel="noopener">abrir</a>' if u else ""
@@ -156,7 +154,7 @@ def main():
     pivots = {}
 
     if harvest_raw is not None and not harvest_raw.empty:
-        # Canonizar nomes SEM criar duplicatas
+        # Canonizar nomes sem duplicar
         ren, seen = {}, set()
         for c in harvest_raw.columns:
             lc = c.lower()
@@ -167,19 +165,28 @@ def main():
             elif ("task"    in lc and "id" not in lc): target = "task"
             elif ("hours" in lc or "hour" in lc):      target = "hours"
             elif ("notes" in lc or "descri" in lc):    target = "notes"
-            # não decidir 'user.name' aqui; será feito pela heurística
             if target and target not in seen:
                 ren[c] = target
                 seen.add(target)
         harvest = harvest_raw.rename(columns=ren)
         harvest = harvest.loc[:, ~harvest.columns.duplicated()]
 
-        # Selecionar/forçar coluna de nome -> 'user.name' sem tocar em IDs
+        # Normalizar colunas de data e escolher chave de ordenação
+        for col in ("updated_at", "created_at", "date"):
+            if col in harvest.columns:
+                harvest[col] = pd.to_datetime(harvest[col], errors="coerce")
+        sort_col = "updated_at" if "updated_at" in harvest.columns else (
+                   "created_at" if "created_at" in harvest.columns else (
+                   "date" if "date" in harvest.columns else None))
+        if sort_col:
+            harvest = harvest.sort_values(sort_col, ascending=False, na_position="last")
+
+        # Selecionar/forçar coluna de nome -> 'user.name'
         user_col = pick_username_column(harvest)
 
         # Tipos
-        if "date"  in harvest.columns:  harvest["date"]  = pd.to_datetime(harvest["date"], errors="coerce").dt.date
-        if "hours" in harvest.columns:  harvest["hours"] = pd.to_numeric(harvest["hours"], errors="coerce")
+        if "hours" in harvest.columns:
+            harvest["hours"] = pd.to_numeric(harvest["hours"], errors="coerce")
 
         # Pivôs
         if {"client","project","hours"} <= set(harvest.columns):
@@ -197,7 +204,7 @@ def main():
                        .sum().reset_index().sort_values("hours", ascending=False)
             )
 
-        # Grid de entradas (remoções + horas HH:MM)
+        # Grid de entradas preservando a ordem
         harvest_display = harvest.copy()
         cols_drop = ["client.id","client","billable","is_locked","user","project.id","task.id"]
         harvest_display.drop(columns=[c for c in cols_drop if c in harvest_display.columns],
@@ -225,11 +232,15 @@ def main():
 :root {{ --bg:#0b1020; --card:#101935; --muted:#a3acc2; --fg:#e9eefb; --brand:#ffd000; --radius:14px; }}
 * {{ box-sizing:border-box }}
 body {{ margin:0; font:14px/1.45 system-ui,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--fg) }}
-.header {{ display:flex; gap:12px; padding:14px 16px; border-bottom:1px solid #ffffff1a; position:sticky; top:0; background:#0b1020 }}
+.header {{ display:flex; gap:12px; padding:14px 16px; border-bottom:1px solid #ffffff1a; position:sticky; top:0; background:#0b1020; align-items:center; justify-content:space-between }}
+.header .left {{ display:flex; gap:12px; align-items:center }}
+.header .right {{ display:flex; gap:8px; align-items:center }}
 .header h1 {{ margin:0; font-size:18px }}
 .badge {{ background:#ffffff14; color:var(--muted); padding:4px 8px; border-radius:999px; font-size:12px }}
+.link-btn {{ border:1px solid #ffffff22; background:#ffffff10; color:#fff; padding:8px 12px; border-radius:10px; text-decoration:none; font-weight:700 }}
+.link-btn:hover {{ background:#ffffff20 }}
 .tabs {{ display:flex; gap:8px; padding:12px 16px; flex-wrap:wrap }}
-.tab-btn {{ border:1px solid #ffffff22; background:#ffffff10; color:var(--fg); padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:700 }}
+.tab-btn {{ border:1px solid #ffffff22; background:#ffffff10; color:#fff; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:700 }}
 .tab-btn[aria-selected="true"] {{ background:var(--brand); color:#111; border-color:#00000044 }}
 .panel {{ display:none; padding:16px }}
 .panel[aria-hidden="false"] {{ display:block }}
@@ -259,10 +270,18 @@ function filterTable(id, q){{
 </head>
 <body>
   <div class="header">
-    <h1>Relatório — Trello & Harvest</h1>
-    <span class="badge">{now}</span>
-    <span class="badge">Trello: {trello_hint}</span>
-    <span class="badge">Harvest: {harvest_hint}</span>
+    <div class="left">
+      <h1>Relatório — Trello & Harvest</h1>
+      <span class="badge">{now}</span>
+      <span class="badge">Trello: {trello_hint}</span>
+      <span class="badge">Harvest: {harvest_hint}</span>
+    </div>
+    <div class="right">
+      <a class="link-btn" href="#harvest" onclick="selectTab('harvest')">Harvest</a>
+      <a class="link-btn" href="#trello" onclick="selectTab('trello')">Trello</a>
+      <!-- novo botão Governança -->
+      <a class="link-btn" href="../templates/index_lp.html">Governança</a>
+    </div>
   </div>
 
   <div class="tabs">
@@ -290,8 +309,11 @@ function filterTable(id, q){{
 </body>
 </html>
 """
+    # grava os dois arquivos: com carimbo e index.html sobrescrito
     out_html.write_text(html, encoding="utf-8")
+    out_index.write_text(html, encoding="utf-8")
     print(f"OK: {out_html}")
+    print(f"OK: {out_index} (sobrescrito)")
 
 if __name__ == "__main__":
     main()
