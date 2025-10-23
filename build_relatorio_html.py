@@ -311,7 +311,8 @@ function filterTable(id, q){{
       <a class="link-btn" href="#harvest" onclick="selectTab('harvest')">Harvest</a>
       <a class="link-btn" href="#trello" onclick="selectTab('trello')">Trello</a>
       <!-- novo botão Governança -->
-      <a class="link-btn" href="../templates/index_lp.html">Governança</a>
+      <a class="link-btn" href="/index_lp.html">Governança</a>
+
     </div>
   </div>
 

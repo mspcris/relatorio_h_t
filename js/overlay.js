@@ -1,24 +1,24 @@
-// 🔝 Força sempre abrir no topo
-function resetScroll() {
-  setTimeout(() => window.scrollTo(0, 0), 50);
-}
+// Sempre voltar ao topo
+function resetScroll(){ setTimeout(()=>window.scrollTo(0,0),50); }
 document.addEventListener("DOMContentLoaded", resetScroll);
 window.addEventListener("load", resetScroll);
+window.addEventListener("pageshow", resetScroll);
 
 document.addEventListener("DOMContentLoaded", () => {
-  const overlayContainer = document.getElementById("overlay");
-  if (!overlayContainer) return;
+  const c = document.getElementById("overlay");
+  if (!c) return;
 
-  // 1. Carrega o conteúdo externo do overlay
-  fetch("./overlay.html")
-    .then(res => res.text())
+  const overlayPath = "/templates/overlay.html";
+
+  fetch(overlayPath, { credentials: "same-origin" })
+    .then(r => {
+      if (!r.ok) throw new Error("Erro ao carregar " + overlayPath);
+      return r.text();
+    })
     .then(html => {
-      overlayContainer.innerHTML = html;
+      c.innerHTML = html;
 
-      // 2. Preenche o texto sorteado
-      const overlayText = overlayContainer.querySelector(".overlay-text");
-      if (overlayText) {
-        const frases = [
+              const frases = [
   "Métricas certas, decisões certas. <strong>Gerencie o que mede</strong> — inspirado em Peter Drucker",
   "Qualidade começa no processo. <strong>Padronize para melhorar</strong> — inspirado em W. Edwards Deming",
   "Valor nasce do cliente. <strong>Contabilidade com foco no mercado</strong> — inspirado em Philip Kotler",
@@ -70,21 +70,16 @@ document.addEventListener("DOMContentLoaded", () => {
   "Serviço com padrão. <strong>SLA financeiro respondendo ao negócio</strong> — inspirado em David Garvin",
   "Aprenda rápido. <strong>Fechamento contábil em T+3</strong> — inspirado em Kaizen (escola Lean)"
 ];
+      const el = c.querySelector(".overlay-text");
+      if (el) el.innerHTML = frases[Math.floor(Math.random()*frases.length)];
 
-        overlayText.innerHTML = frases[Math.floor(Math.random() * frases.length)];
-      }
-
-      // 3. Inicia fade-out após 5s
       setTimeout(() => {
-        overlayContainer.classList.add("fade-out");
-
-        // 4. Remove do DOM depois da animação
-        setTimeout(() => overlayContainer.remove(), 1000);
+        c.classList.add("fade-out");
+        setTimeout(() => c.remove(), 1000);
       }, 5000);
     })
-    .catch(err => console.error("Erro ao carregar overlay:", err));
-    window.addEventListener("pageshow", () => {
-  setTimeout(() => window.scrollTo(0, 0), 50);
-});
-
+    .catch(err => {
+      console.error("overlay:", err);
+      c.remove();
+    });
 });

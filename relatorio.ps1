@@ -17,6 +17,12 @@ if ($code -eq 0) {
   if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }
 }
 
+# NOVO: governança
+if ($code -eq 0) {
+  & $venv export_governanca.py *>> $log
+  if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }
+}
+
 if ($code -eq 0) {
   & $venv build_relatorio_html.py *>> $log
   $code = $LASTEXITCODE
@@ -25,11 +31,7 @@ if ($code -eq 0) {
 if ($code -eq 0) {
   $reportDir = Join-Path $root 'relatorio'
   $html = Get-ChildItem $reportDir -Filter 'relatorio_*.html' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-  if ($html) { Start-Process $html.FullName }  # abre no navegador padrão
+  if ($html) { Start-Process $html.FullName }
 }
 
-
-
 exit $code
-
-

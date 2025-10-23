@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="utf-8">
+    <title>KPI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/node_modules/admin-lte/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="/node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+    <style>
+        .card-body {
+            height: 320px
+        }
+    </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+    <div class="wrapper">
+        <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+            <span class="ml-2 font-weight-bold">Relatório Consolidado</span>
+        </nav>
+        <div class="content-wrapper">
+            <section class="content p-3">
+                <div id="err" class="text-danger mb-2"></div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Evolução Mensal</h3>
+                    </div>
+                    <div class="card-body"><canvas id="lineMensal"></canvas></div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="/node_modules/jquery/dist/jquery.min.js"></script>
+    <script src="/node_modules/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/node_modules/admin-lte/dist/js/adminlte.min.js"></script>
+    <script src="/node_modules/chart.js/dist/chart.umd.js"></script>
+    <script>
+        const DATA_URL = "/json_consolidado/consolidado_mensal.json";
+        const showErr = e => document.getElementById('err').textContent = e?.message || e;
+        fetch(DATA_URL).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} em ${DATA_URL}`); return r.json(); })
+            .then(json => {
+                const meses = Object.keys(json).sort();
+                const arr = k => meses.map(m => Number(json[m][k] || 0));
+                new Chart(document.getElementById('lineMensal'), {
+                    type: 'line',
+                    data: {
+                        labels: meses, datasets: [
+                            { label: 'Mensalidade', data: arr('mensalidade'), tension: 0.2 },
+                            { label: 'Médico', data: arr('medico'), tension: 0.2 },
+                            { label: 'Alimentação', data: arr('alimentacao'), tension: 0.2 },
+                        ]
+                    }, options: { responsive: true, maintainAspectRatio: false }
+                });
+            }).catch(showErr);
+    </script>
+</body>
+
+</html>
