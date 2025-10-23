@@ -4,13 +4,14 @@
 Relatório HTML consolidando Trello + Harvest.
 - Trello: lê a última subpasta export_trello/export_YYYYMMDD_HHMMSS
 - Harvest: lê o CSV mais recente em export_harvest/
-- Saída: relatorio/relatorio_YYYYMMDD_HHMMSS.html + relatorio/index.html (sempre sobrescrito)
+- Saída: relatorio/relatorio_YYYYMMDD_HHMMSS.html + templates/index.html (sempre sobrescrito)
 """
 from pathlib import Path
 from datetime import datetime
 import argparse
 import pandas as pd
 import re
+from typing import Iterable
 
 # -------------------- utils --------------------
 def read_csv_safe(p: Path):
@@ -44,9 +45,12 @@ def df_to_html_table(df: pd.DataFrame | None, table_id: str, raw_html_cols: set[
     safe = df.copy()
     for c in safe.columns:
         if safe[c].dtype == object and c not in raw_html_cols:
-            safe[c] = (safe[c].astype(str)
-                             .str.replace("<","&lt;", regex=False)
-                             .str.replace(">","&gt;", regex=False))
+            safe[c] = (
+                safe[c]
+                .astype(str)
+                .str.replace("<", "&lt;", regex=False)
+                .str.replace(">", "&gt;", regex=False)
+            )
 
     thead = "".join(f"<th>{c}</th>" for c in safe.columns)
     rows_html = []
@@ -82,7 +86,11 @@ def pick_username_column(df: pd.DataFrame) -> str | None:
         return None
     if "user.name" in df.columns:
         return "user.name"
-    candidates = [c for c in df.columns if re.search(r"^(user(\.name)?|username|usuario|colaborador|user[_ ]?name|nome[_ ]?usuario)$", c, re.I)]
+    candidates = [
+        c
+        for c in df.columns
+        if re.search(r"^(user(\.name)?|username|usuario|colaborador|user[_ ]?name|nome[_ ]?usuario)$", c, re.I)
+    ]
     best = None
     best_score = -1.0
     for c in candidates:
@@ -97,6 +105,18 @@ def pick_username_column(df: pd.DataFrame) -> str | None:
         return "user.name"
     return None
 
+def sort_by_recent(df: pd.DataFrame | None, cand_cols: Iterable[str]) -> pd.DataFrame | None:
+    """Coage colunas candidatas para datetime e ordena DESC pela primeira com dados."""
+    if df is None or df.empty:
+        return df
+    cols = [c for c in cand_cols if c in df.columns]
+    if not cols:
+        return df
+    for c in cols:
+        df[c] = pd.to_datetime(df[c], errors="coerce", utc=True)
+    key = next((c for c in cols if df[c].notna().any()), cols[0])
+    return df.sort_values(key, ascending=False, na_position="last").reset_index(drop=True)
+
 # -------------------- app --------------------
 def main():
     ap = argparse.ArgumentParser()
@@ -109,6 +129,7 @@ def main():
     outdir.mkdir(parents=True, exist_ok=True)
     templates_dir = (root / "templates").resolve()
     templates_dir.mkdir(parents=True, exist_ok=True)
+
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_html = outdir / f"relatorio_{stamp}.html"
     out_index = templates_dir / "index.html"  # sempre sobrescrever
@@ -126,21 +147,23 @@ def main():
     checklists = read_csv_safe(trello_dir / "checklists.csv")  if trello_dir else None
     atts       = read_csv_safe(trello_dir / "attachments.csv") if trello_dir else None
 
-    # enriquecer e ordenar cards por updated desc
+    # enriquecer e ordenar cards por data desc
     if cards is not None and not cards.empty:
         if lists is not None and not lists.empty:
             lists_map = dict(zip(lists.get("id", []), lists.get("name", [])))
             if "idList" in cards.columns and "list" not in cards.columns:
                 cards["list"] = cards["idList"].map(lists_map).fillna("")
-        # datas e sort
-        for col in ("due", "start", "updated"):
-            if col in cards.columns:
-                cards[col] = pd.to_datetime(cards[col], errors="coerce")
-        if "updated" in cards.columns:
-            cards = cards.sort_values("updated", ascending=False, na_position="last")
+        # sort robusto
+        cards = sort_by_recent(
+            cards,
+            cand_cols=("updated", "date", "dateLastActivity", "last_activity", "due", "start", "created", "created_at"),
+        )
 
         # remover colunas solicitadas
-        drop_cols = ["card_id","labels","members","due","sart","start","due_complete","short_link","attachments_urls","attachments_count"]
+        drop_cols = [
+            "card_id","labels","members","due","sart","start","due_complete",
+            "short_link","attachments_urls","attachments_count"
+        ]
         keep_cols = [c for c in cards.columns if c not in drop_cols]
         cards = cards[keep_cols]
 
@@ -161,7 +184,7 @@ def main():
         for c in harvest_raw.columns:
             lc = c.lower()
             target = None
-            if lc in ("spent_date","data","date"): target = "date"
+            if lc in ("spent_date", "data", "date"): target = "date"
             elif ("project" in lc and "id" not in lc): target = "project"
             elif ("client"  in lc and "id" not in lc): target = "client"
             elif ("task"    in lc and "id" not in lc): target = "task"
@@ -173,15 +196,11 @@ def main():
         harvest = harvest_raw.rename(columns=ren)
         harvest = harvest.loc[:, ~harvest.columns.duplicated()]
 
-        # Normalizar colunas de data e escolher chave de ordenação
-        for col in ("updated_at", "created_at", "date"):
-            if col in harvest.columns:
-                harvest[col] = pd.to_datetime(harvest[col], errors="coerce")
-        sort_col = "updated_at" if "updated_at" in harvest.columns else (
-                   "created_at" if "created_at" in harvest.columns else (
-                   "date" if "date" in harvest.columns else None))
-        if sort_col:
-            harvest = harvest.sort_values(sort_col, ascending=False, na_position="last")
+        # Normalizar e ordenar por data DESC
+        harvest = sort_by_recent(
+            harvest,
+            cand_cols=("updated_at", "created_at", "date", "spent_date"),
+        )
 
         # Selecionar/forçar coluna de nome -> 'user.name'
         user_col = pick_username_column(harvest)
@@ -191,33 +210,33 @@ def main():
             harvest["hours"] = pd.to_numeric(harvest["hours"], errors="coerce")
 
         # Pivôs
-        if {"client","project","hours"} <= set(harvest.columns):
+        if {"client", "project", "hours"} <= set(harvest.columns):
             pivots["by_client"] = (
                 harvest.groupby("client", dropna=False)["hours"]
-                       .sum().reset_index().sort_values("hours", ascending=False)
+                .sum().reset_index().sort_values("hours", ascending=False)
             )
             pivots["by_project"] = (
-                harvest.groupby(["client","project"], dropna=False)["hours"]
-                       .sum().reset_index().sort_values(["client","hours"], ascending=[True, False])
+                harvest.groupby(["client", "project"], dropna=False)["hours"]
+                .sum().reset_index().sort_values(["client", "hours"], ascending=[True, False])
             )
         if user_col and "hours" in harvest.columns and "user.name" in harvest.columns:
             pivots["by_user"] = (
                 harvest.groupby("user.name", dropna=False)["hours"]
-                       .sum().reset_index().sort_values("hours", ascending=False)
+                .sum().reset_index().sort_values("hours", ascending=False)
             )
 
-        # Grid de entradas preservando a ordem
+        # Grid de entradas preservando a ordem já DESC
         harvest_display = harvest.copy()
-        cols_drop = ["client.id","client","billable","is_locked","user","project.id","task.id"]
+        cols_drop = ["client.id", "client", "billable", "is_locked", "user", "project.id", "task.id"]
         harvest_display.drop(columns=[c for c in cols_drop if c in harvest_display.columns],
                              inplace=True, errors="ignore")
         if "user.name" not in harvest_display.columns:
             harvest_display["user.name"] = ""
         if "hours" in harvest_display.columns:
             harvest_display["hours"] = harvest_display["hours"].apply(fmt_hours_hhmm)
-        for k, df in list(pivots.items()):
-            if df is not None and not df.empty and "hours" in df.columns:
-                df["hours"] = df["hours"].apply(fmt_hours_hhmm)
+        for k, dfp in list(pivots.items()):
+            if dfp is not None and not dfp.empty and "hours" in dfp.columns:
+                dfp["hours"] = dfp["hours"].apply(fmt_hours_hhmm)
 
     # --- HTML ---
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -253,22 +272,32 @@ table.data {{ width:100%; border-collapse:collapse; margin-top:8px }}
 table.data th, table.data td {{ border:1px solid #ffffff1a; padding:6px 8px; vertical-align:top }}
 .empty {{ color:var(--muted); font-style:italic }}
 </style>
+
+
+
 <script>
-function selectTab(id){{
-  for(const b of document.querySelectorAll('.tab-btn')) b.setAttribute('aria-selected','false');
-  for(const p of document.querySelectorAll('.panel')) p.setAttribute('aria-hidden','true');
-  document.querySelector('[data-tab="'+id+'"]').setAttribute('aria-selected','true');
-  document.getElementById(id).setAttribute('aria-hidden','false');
-}}
-function filterTable(id, q){{
+ function selectTab(id){{    // todas as chaves JS duplicadas
+   document.querySelectorAll('.panel').forEach(p=>p.setAttribute('aria-hidden','true'));
+   const btn = document.querySelector('[data-tab="'+id+'"]');
+   if (btn){{ 
+     document.querySelectorAll('.tab-btn').forEach(b=>b.setAttribute('aria-selected','false'));
+     btn.setAttribute('aria-selected','true');
+   }}
+   const panel = document.getElementById(id);
+   if (panel) panel.setAttribute('aria-hidden','false');
+ }}
+function filterTable(id, q){{ 
   q = q.toLowerCase();
   const rows = document.querySelectorAll('#'+id+' tbody tr');
-  rows.forEach(r=>{{
+  rows.forEach(r=>{{ 
     const t = r.textContent.toLowerCase();
     r.style.display = t.indexOf(q) >= 0 ? '' : 'none';
   }});
 }}
 </script>
+
+
+
 </head>
 <body>
   <div class="header">
@@ -286,10 +315,11 @@ function filterTable(id, q){{
     </div>
   </div>
 
-  <div class="tabs">
-    <button class="tab-btn" data-tab="trello" aria-selected="true" onclick="selectTab('trello')">Trello</button>
-    <button class="tab-btn" data-tab="harvest" aria-selected="false" onclick="selectTab('harvest')">Harvest</button>
-  </div>
+
+  
+
+
+
 
   <section id="trello" class="panel" aria-hidden="false">
     <div class="card">
@@ -308,10 +338,24 @@ function filterTable(id, q){{
     <div class="card"><h3>Horas por Projeto</h3>{df_to_html_table(pivots.get("by_project"), "tbl_by_project")}</div>
     <div class="card"><h3>Horas por Usuário</h3>{df_to_html_table(pivots.get("by_user"), "tbl_by_user")}</div>
   </section>
+
+
+  
+
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {{
+    const target = (location.hash || '#harvest').slice(1);
+    selectTab(target);
+  }});
+  </script>
+
+  
+
+
 </body>
 </html>
 """
-    # grava os dois arquivos: com carimbo e index.html sobrescrito
+    # grava os dois arquivos: com carimbo e index.html em templates/
     out_html.write_text(html, encoding="utf-8")
     out_index.write_text(html, encoding="utf-8")
     print(f"OK: {out_html}")
