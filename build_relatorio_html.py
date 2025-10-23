@@ -107,9 +107,11 @@ def main():
     root = Path(args.root).resolve()
     outdir = (root / args.outdir).resolve()
     outdir.mkdir(parents=True, exist_ok=True)
+    templates_dir = (root / "templates").resolve()
+    templates_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_html = outdir / f"relatorio_{stamp}.html"
-    out_index = outdir / "index.html"  # sempre sobrescrever
+    out_index = templates_dir / "index.html"  # sempre sobrescrever
 
     # --- fontes ---
     trello_dir = latest_trello_dir(root)
