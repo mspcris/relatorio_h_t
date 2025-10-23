@@ -1,62 +1,100 @@
-# upload_report.ps1
+# upload_report.ps1 — tar + staging atômico
 $ErrorActionPreference = "Stop"; Set-StrictMode -Version Latest
 
-$scp    = "$env:SystemRoot\System32\OpenSSH\scp.exe"
-$ssh    = "$env:SystemRoot\System32\OpenSSH\ssh.exe"
-$key    = "$env:USERPROFILE\.ssh\contabo_deploy"
-$server = "deploy@154.38.172.227"
+$scp = "$env:SystemRoot\System32\OpenSSH\scp.exe"
+$ssh = "$env:SystemRoot\System32\OpenSSH\ssh.exe"
+$tar = "$env:SystemRoot\System32\tar.exe"
 
-$root      = "C:\Users\csdg\Documents\GitHub\projetos\RELATORIO_H_T"
-$srcTpl    = Join-Path $root 'templates'
-$srcJs     = Join-Path $root 'js'
-$srcCss    = Join-Path $root 'css'
-$srcImg    = Join-Path $root 'images'
-$srcFnt    = Join-Path $root 'fonts'
-$srcJson   = Join-Path $root 'json_consolidado'   # NOVO
+$key     = "$env:USERPROFILE\.ssh\contabo_deploy"
+$server  = "deploy@154.38.172.227"
+$webroot = "/var/www/reports"
+$stage   = "$webroot/.staging"
 
-# 1) staging no servidor
-& $ssh -i $key $server "/bin/mkdir -p /var/www/reports/.staging/{templates,js,css,images,fonts,json_consolidado}"
+$root    = "C:\Users\csdg\Documents\GitHub\projetos\RELATORIO_H_T"
+$srcTpl  = Join-Path $root 'templates'
+$srcJs   = Join-Path $root 'js'
+$srcCss  = Join-Path $root 'css'
+$srcImg  = Join-Path $root 'images'
+$srcFnt  = Join-Path $root 'fonts'
+$srcJson = Join-Path $root 'json_consolidado'
+$nm      = Join-Path $root 'node_modules'
 
-Write-Host "=> Enviando para staging"
-& $scp -i $key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -r $srcTpl  "${server}:/var/www/reports/.staging/"
-& $scp -i $key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -r $srcJs   "${server}:/var/www/reports/.staging/"
-& $scp -i $key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -r $srcCss  "${server}:/var/www/reports/.staging/"
-& $scp -i $key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -r $srcImg  "${server}:/var/www/reports/.staging/"
-& $scp -i $key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -r $srcFnt  "${server}:/var/www/reports/.staging/"
-& $scp -i $key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -r $srcJson "${server}:/var/www/reports/.staging/"  # NOVO
+# subset necessário
+$nmList = @(
+  'jquery/dist/jquery.min.js',
+  'bootstrap/dist/js/bootstrap.bundle.min.js',
+  'admin-lte/dist/css/adminlte.min.css',
+  'admin-lte/dist/js/adminlte.min.js',
+  '@fortawesome/fontawesome-free/css/all.min.css',
+  '@fortawesome/fontawesome-free/webfonts',
+  'chart.js/dist/chart.umd.js'
+)
 
-# 2) aplicar e ajustar permissões usando bash via STDIN
+# workspace local temporário
+$tmp = Join-Path $env:TEMP "relatorio_ht_deploy"
+if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
+New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+
+Copy-Item -Recurse -Force $srcTpl  (Join-Path $tmp 'templates')            -ErrorAction SilentlyContinue
+Copy-Item -Recurse -Force $srcJs   (Join-Path $tmp 'js')                   -ErrorAction SilentlyContinue
+Copy-Item -Recurse -Force $srcCss  (Join-Path $tmp 'css')                  -ErrorAction SilentlyContinue
+Copy-Item -Recurse -Force $srcImg  (Join-Path $tmp 'images')               -ErrorAction SilentlyContinue
+Copy-Item -Recurse -Force $srcFnt  (Join-Path $tmp 'fonts')                -ErrorAction SilentlyContinue
+Copy-Item -Recurse -Force $srcJson (Join-Path $tmp 'json_consolidado')
+
+# copiar subset node_modules
+$nmTmp = Join-Path $tmp 'node_modules'
+New-Item -ItemType Directory -Force -Path $nmTmp | Out-Null
+foreach ($rel in $nmList) {
+  $src = Join-Path $nm $rel
+  if (-not (Test-Path $src)) { Write-Warning "Não encontrado: $src"; continue }
+  $dest = Join-Path $nmTmp $rel
+  New-Item -ItemType Directory -Force -Path (Split-Path $dest -Parent) | Out-Null
+  Copy-Item -Recurse -Force $src $dest
+}
+
+# tarball único
+$tgz = Join-Path $env:TEMP "reports_payload.tgz"
+if (Test-Path $tgz) { Remove-Item -Force $tgz }
+Push-Location $tmp; & $tar -czf $tgz *; Pop-Location
+
+# staging remoto
+& $ssh -i $key $server "/bin/mkdir -p $stage"
+
+Write-Host "=> Enviando pacote único"
+& $scp -i $key -o BatchMode=yes -o StrictHostKeyChecking=accept-new $tgz "${server}:$stage/"
+
+# bloco remoto SEM interpolação
 $remote = @'
 set -e
-dst=/var/www/reports
-stage=/var/www/reports/.staging
+dst="/var/www/reports"
+stage="/var/www/reports/.staging"
+pkg="$stage/reports_payload.tgz"
 
-/bin/mkdir -p "$dst/templates" "$dst/js" "$dst/css" "$dst/images" "$dst/fonts" "$dst/json_consolidado"
+/bin/mkdir -p "$dst"
+/bin/tar -xzf "$pkg" -C "$stage"
 
-# assets
-for d in js css images fonts json_consolidado; do
+/bin/mkdir -p "$dst"/{templates,js,css,images,fonts,json_consolidado,node_modules}
+
+for d in js css images fonts json_consolidado node_modules; do
   /bin/cp -a "$stage/$d/." "$dst/$d/" 2>/dev/null || true
 done
-
-# templates
 /bin/cp -a "$stage/templates/." "$dst/templates/"
 
-# permissões
 /bin/chown -R deploy:www-data "$dst"
 /usr/bin/find "$dst" -type d -exec /bin/chmod 2755 {} +
 /usr/bin/find "$dst" -type f -exec /bin/chmod 0644 {} +
 
-# index atômico
-/usr/bin/install -m 0644 "$stage/templates/index.html" "$dst/templates/index.html.new"
-/bin/mv -f "$dst/templates/index.html.new" "$dst/templates/index.html"
+[ -f "$stage/templates/kpi.html" ]   && /usr/bin/install -m 0644 "$stage/templates/kpi.html"   "$dst/templates/kpi.html.new"   && /bin/mv -f "$dst/templates/kpi.html.new"   "$dst/templates/kpi.html"
+[ -f "$stage/templates/index.html" ] && /usr/bin/install -m 0644 "$stage/templates/index.html" "$dst/templates/index.html.new" && /bin/mv -f "$dst/templates/index.html.new" "$dst/templates/index.html"
 
-# favicon opcional na raiz
-/bin/cp -f "$dst/images/favicon.ico" "$dst/favicon.ico" 2>/dev/null || true
+[ -f "$dst/images/favicon.ico" ] && /bin/cp -f "$dst/images/favicon.ico" "$dst/favicon.ico" || true
 
-/bin/rm -rf "$stage"
-'@ -replace "`r",""
+/bin/rm -f "$pkg"
+/bin/rm -rf "$stage"/{js,css,images,fonts,json_consolidado,node_modules,templates}
+'@
 
 Write-Host "=> Aplicando no servidor"
-$remote | & $ssh -i $key $server "/bin/bash -s"
+($remote -replace "`r","") | & $ssh -i $key $server "/bin/bash -s"
 
-Write-Host "=> OK"
+Write-Host "=> OK. Abra: https://teste-ia.camim.com.br/templates/kpi.html"
