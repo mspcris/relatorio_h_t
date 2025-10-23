@@ -1,5 +1,8 @@
-# update.py
+# export_governanca.py
 # Requisitos: pandas, sqlalchemy>=2,<3, pyodbc, python-dotenv
+# Função: executa SQL por posto e mês, salva CSVs em /dados,
+#         gera JSON consolidado global e por posto em /json_consolidado.
+
 import os, re, sys, glob, json, argparse, shutil
 from datetime import date
 from urllib.parse import quote_plus
@@ -12,20 +15,27 @@ from dotenv import load_dotenv
 # Constantes e Defaults
 # =========================
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-SQL_DIR    = os.path.join(BASE_DIR, "sql")
+SQL_DIR    = os.path.join(BASE_DIR, "SQL")
 DADOS_DIR  = os.path.join(BASE_DIR, "dados")
 JSON_DIR   = os.path.join(BASE_DIR, "json_consolidado")
-SRC_TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
-TARGET_TEMPLATES_DIR = r"C:\Users\csdg\Documents\GitHub\projetos\RELATORIO_H_T\templates"
+SRC_TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")  # opcional: front estático
+TARGET_TEMPLATES_DIR = os.getenv("TARGET_TEMPLATES_DIR", os.path.join(BASE_DIR, "public"))
 
-EARLIEST_ALLOWED = date(2024, 1, 1)      # backfill padrão
-POSTOS = list("ANXYBRPCDGIMJ")           # ENV filtrará
+EARLIEST_ALLOWED = date(2024, 1, 1)
+POSTOS = list("ANXYBRPCDGIMJ")            # pode ser filtrado via CLI/ENV
 ODBC_DRIVER = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 
 KEY_PATTERNS = {
     "mensalidade": re.compile(r"(mensal|mensalid|receita|fin_?receita)", re.I),
     "medico":      re.compile(r"(medic|custo_?med|assist|sinistral)", re.I),
     "alimentacao": re.compile(r"(alimenta|refeic|cozinha|posto)", re.I),
+}
+
+PREFER_NOMES = {
+    "mensalidade": ["ValorPago", "Mensalidades", "valor", "total"],
+    "medico":      ["medicos", "valor", "total"],
+    "alimentacao": ["alimentacao", "valor", "total"],
+    "desconhecido":["valor", "total"]
 }
 
 # =========================
@@ -59,7 +69,7 @@ def ensure_dir(path): os.makedirs(path, exist_ok=True)
 
 def load_sql_strip_go(path):
     txt = open(path, "r", encoding="utf-8", errors="ignore").read()
-    txt = re.sub(r"(?im)^\s*go\s*$", "", txt)  # remove linhas GO
+    txt = re.sub(r"(?im)^\s*go\s*$", "", txt)
     return txt.strip()
 
 def infer_key_from_filename(fn):
@@ -92,13 +102,14 @@ def make_engine(odbc_conn_str):
         future=True,
     )
 
-def build_conns_from_env():
+def build_conns_from_env(postos=None):
     load_dotenv(os.path.join(BASE_DIR, ".env"))
     encrypt    = env("DB_ENCRYPT", "yes")
     trust_cert = env("DB_TRUST_CERT", "yes")
     timeout    = env("DB_TIMEOUT", "5")
     conns = {}
-    for p in POSTOS:
+    base_postos = postos or POSTOS
+    for p in base_postos:
         host = env(f"DB_HOST_{p}")
         base = env(f"DB_BASE_{p}")
         if not host or not base:
@@ -152,7 +163,7 @@ def run_query(engine, sql_text, ini, fim):
             stmt = text(body)
             return pd.read_sql_query(stmt, con, params={"ini": ini, "fim": fim})
     elif _has_positional_q(body):
-        conn = engine.raw_connection()  # compatível com '?'
+        conn = engine.raw_connection()
         try:
             return pd.read_sql_query(body, conn, params=[ini, fim])
         finally:
@@ -195,14 +206,9 @@ def sum_numeric(df, prefer_names):
     return float(pd.to_numeric(df[picked], errors="coerce").fillna(0).sum())
 
 def build_monthly_json():
+    """Agregado geral por mês."""
     ensure_dir(JSON_DIR)
     pattern = re.compile(r"^(?P<posto>[A-Z])_(?P<ym>\d{4}-\d{2})_(?P<key>[a-z_]+)\.csv$", re.I)
-    prefer_by_key = {
-        "mensalidade": ["ValorPago", "Mensalidades", "valor", "total"],
-        "medico":      ["medicos", "valor", "total"],
-        "alimentacao": ["alimentacao", "valor", "total"],
-        "desconhecido":["valor", "total"]
-    }
     totals = {}  # {ym: {key: total}}
     for fn in os.listdir(DADOS_DIR):
         m = pattern.match(fn)
@@ -215,45 +221,96 @@ def build_monthly_json():
             df = pd.read_csv(path)
         except Exception:
             continue
-        pref = prefer_by_key.get(key, ["valor", "total"])
-        val  = sum_numeric(df, pref)
+        val  = sum_numeric(df, PREFER_NOMES.get(key, ["valor", "total"]))
         if ym not in totals:
             totals[ym] = {}
         totals[ym][key] = round(totals[ym].get(key, 0.0) + val, 2)
     out_path = os.path.join(JSON_DIR, "consolidado_mensal.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(totals, f, ensure_ascii=False, indent=2)
-    print(f"[ETAPA 4/5] JSON consolidado gerado -> {os.path.relpath(out_path, BASE_DIR)}")
+    print(f"[ETAPA 4/6] JSON consolidado -> {os.path.relpath(out_path, BASE_DIR)}")
+
+def build_monthly_json_by_posto():
+    """Detalhe por mês e por posto."""
+    ensure_dir(JSON_DIR)
+    pattern = re.compile(r"^(?P<posto>[A-Z])_(?P<ym>\d{4}-\d{2})_(?P<key>[a-z_]+)\.csv$", re.I)
+    out = {}  # {ym: {posto: {key: total}}}
+    for fn in os.listdir(DADOS_DIR):
+        m = pattern.match(fn)
+        if not m:
+            continue
+        posto = m.group("posto")
+        ym    = m.group("ym")
+        key   = m.group("key").lower()
+        path  = os.path.join(DADOS_DIR, fn)
+        try:
+            df = pd.read_csv(path)
+        except Exception:
+            continue
+        val  = sum_numeric(df, PREFER_NOMES.get(key, ["valor", "total"]))
+        out.setdefault(ym, {}).setdefault(posto, {})
+        out[ym][posto][key] = round(out[ym][posto].get(key, 0.0) + val, 2)
+    out_path = os.path.join(JSON_DIR, "consolidado_mensal_por_posto.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(out, f, ensure_ascii=False, indent=2)
+    print(f"[ETAPA 5/6] JSON por posto -> {os.path.relpath(out_path, BASE_DIR)}")
+
+def build_percent_by_posto():
+    """Percentuais por posto no mês corrente: medico/mensalidade e alimentacao/mensalidade."""
+    ensure_dir(JSON_DIR)
+    cur_ym = month_bounds(date.today())[2]
+    by_posto_path = os.path.join(JSON_DIR, "consolidado_mensal_por_posto.json")
+    if not os.path.exists(by_posto_path):
+        return
+    data = json.load(open(by_posto_path, "r", encoding="utf-8"))
+    cur = data.get(cur_ym, {})
+    out_rows = []
+    for posto, vals in sorted(cur.items()):
+        v_mens = float(vals.get("mensalidade", 0) or 0)
+        v_med  = float(vals.get("medico", 0) or 0)
+        v_al   = float(vals.get("alimentacao", 0) or 0)
+        perc_m = (v_med / v_mens * 100.0) if v_mens > 0 else None
+        perc_a = (v_al  / v_mens * 100.0) if v_mens > 0 else None
+        out_rows.append({
+            "mes": cur_ym,
+            "posto": posto,
+            "valor_medico": round(v_med, 2),
+            "valor_alimentacao": round(v_al, 2),
+            "mensalidade": round(v_mens, 2),
+            "perc_medico_sobre_mensalidade": round(perc_m, 4) if perc_m is not None else None,
+            "perc_alimentacao_sobre_mensalidade": round(perc_a, 4) if perc_a is not None else None,
+        })
+    out_path = os.path.join(JSON_DIR, "percentuais_mensais_por_posto.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(out_rows, f, ensure_ascii=False, indent=2)
+    print(f"[ETAPA 6/6] JSON percentuais -> {os.path.relpath(out_path, BASE_DIR)}")
 
 def copy_templates():
+    """Copia templates/ para a pasta pública do site estático, se configurado."""
     src, dst = SRC_TEMPLATES_DIR, TARGET_TEMPLATES_DIR
     if not os.path.isdir(src):
-        print(f"[ETAPA 5/5] SKIP cópia: origem inexistente -> {src}")
+        print(f"[INFO] SKIP cópia: origem inexistente -> {src}")
         return
     os.makedirs(dst, exist_ok=True)
     shutil.copytree(src, dst, dirs_exist_ok=True)
-    print(f"[ETAPA 5/5] Templates copiados -> {dst}")
+    print(f"[INFO] Templates copiados -> {dst}")
 
 # =========================
 # CLI
 # =========================
 def parse_args():
     p = argparse.ArgumentParser(
-        description="ETL mensal: executa SQLs por posto, gera CSVs por mês, consolida JSON e copia templates.",
+        description="Governança: executa SQLs por posto, gera CSV por mês, consolida JSON.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--from", dest="from_ym", default=None,
-                   help="Mês inicial YYYY-MM. Default=2024-01.")
-    p.add_argument("--to", dest="to_ym", default=None,
-                   help="Mês final exclusivo YYYY-MM. Default=início do mês corrente.")
-    p.add_argument("--force", action="store_true",
-                   help="Reprocessa todos os meses e sobrescreve arquivos existentes.")
-    p.add_argument("--no-validate", action="store_true",
-                   help="Não valida o conteúdo dos .sql.")
-    p.add_argument("--only-month", dest="only_month", default=None,
-                   help="Executa somente um mês específico YYYY-MM.")
-    p.add_argument("--dry-run", action="store_true",
-                   help="Simula execução sem gravar arquivos nem copiar templates.")
+    p.add_argument("--from", dest="from_ym", default=None, help="Início YYYY-MM. Default=2024-01.")
+    p.add_argument("--to", dest="to_ym", default=None, help="Fim exclusivo YYYY-MM. Default=início do mês corrente.")
+    p.add_argument("--only-month", dest="only_month", default=None, help="Executa só um mês YYYY-MM.")
+    p.add_argument("--postos", default="".join(POSTOS), help="Subset de postos. Ex: ANX.")
+    p.add_argument("--force", action="store_true", help="Sobrescreve arquivos existentes.")
+    p.add_argument("--no-validate", action="store_true", help="Não valida o conteúdo dos .sql.")
+    p.add_argument("--dry-run", action="store_true", help="Executa sem gravar CSV/JSON.")
+    p.add_argument("--copy-templates", action="store_true", help="Copia templates/ para TARGET_TEMPLATES_DIR.")
     return p.parse_args()
 
 # =========================
@@ -261,8 +318,8 @@ def parse_args():
 # =========================
 def run():
     args = parse_args()
-    print("========== PIPELINE RELATÓRIO ==========")
-    print("[ETAPA 1/5] Setup e parâmetros")
+    print("========== EXPORT GOVERNANÇA ==========")
+    print("[ETAPA 1/6] Setup")
 
     ensure_dir(DADOS_DIR)
     ensure_dir(JSON_DIR)
@@ -278,15 +335,10 @@ def run():
         end_exclusive = ym_to_date(args.to_ym) if args.to_ym else fim_cur
         periodo_desc = f"{start} .. < {end_exclusive}"
 
-    print(f"- Backfill: {periodo_desc}")
-    print(f"- Mês corrente: {ym_current}")
-    print(f"- Forçar reprocessamento: {args.force}")
-    print(f"- Dry-run: {args.dry_run}")
-    print(f"- Validar .sql: {not args.no_validate}")
-
-    conns = build_conns_from_env()
+    postos = [c for c in args.postos if c.isalpha()]
+    conns = build_conns_from_env(postos)
     if not conns:
-        print("ERRO: .env sem DB_HOST_*/DB_BASE_* configurados.")
+        print("ERRO: .env sem DB_HOST_*/DB_BASE_* configurados para os postos informados.")
         sys.exit(1)
 
     sqls = collect_sql_files(validate=not args.no_validate)
@@ -294,14 +346,13 @@ def run():
         print(f"ERRO: Sem .sql em {SQL_DIR}.")
         sys.exit(1)
 
+    print(f"- Período: {periodo_desc}")
+    print(f"- Mês corrente: {ym_current}")
     print(f"- Postos: {list(conns.keys())}")
     print(f"- SQLs: {[os.path.basename(s['path']) for s in sqls]}")
+    print(f"- Force={args.force}  DryRun={args.dry_run}  Validate={not args.no_validate}")
 
-    print("\n[ETAPA 2/5] Execução por mês/posto/sql")
-    mensalidade_por_posto = {}
-    medico_por_posto      = {}
-    aliment_por_posto     = {}
-
+    print("\n[ETAPA 2/6] Execução por mês/posto/sql")
     for month_start in month_iter(start, end_exclusive):
         ini, fim, ym = month_bounds(month_start)
         print(f"\n-- Mês {ym} ----------------------------")
@@ -319,7 +370,7 @@ def run():
                 out_path = target_csv_path(posto, ym, key)
 
                 if not should_write_file(out_path, ym_current, ym, force=args.force):
-                    print(f"   [{posto}] SKIP {os.path.basename(out_path)} (já existe)")
+                    print(f"   [{posto}] SKIP {os.path.basename(out_path)} (existe)")
                     continue
 
                 print(f"   [{posto}] RUN {os.path.basename(entry['path'])} -> {os.path.basename(out_path)}")
@@ -339,59 +390,31 @@ def run():
                 except Exception as e:
                     print(f"   [{posto}] ERRO salvar: {e}")
 
-                if ym == ym_current and not df.empty:
-                    if key == "mensalidade":
-                        mensalidade_por_posto[posto] = mensalidade_por_posto.get(posto, 0.0) + \
-                            sum_numeric(df, ["ValorPago", "Mensalidades", "valor", "total"])
-                    elif key == "medico":
-                        medico_por_posto[posto] = medico_por_posto.get(posto, 0.0) + \
-                            sum_numeric(df, ["medicos", "valor", "total"])
-                    elif key == "alimentacao":
-                        aliment_por_posto[posto] = aliment_por_posto.get(posto, 0.0) + \
-                            sum_numeric(df, ["alimentacao", "valor", "total"])
-
     if args.dry_run:
-        print("\n[ETAPA 3/5] Consolidados CSV -> SKIP (dry-run)")
-        print("[ETAPA 4/5] JSON consolidado -> SKIP (dry-run)")
-        print("[ETAPA 5/5] Cópia de templates -> SKIP (dry-run)")
-        print("\nFinalizado (dry-run).")
+        print("\n[ETAPA 3/6] Consolidados -> SKIP (dry-run)")
+        print("[ETAPA 4/6] JSON consolidado -> SKIP (dry-run)")
+        print("[ETAPA 5/6] JSON por posto -> SKIP (dry-run)")
+        print("[ETAPA 6/6] Percentuais -> SKIP (dry-run)")
         return
 
-    print("\n[ETAPA 3/5] Consolidados CSV do mês corrente")
-    def safe_get(d, k): return float(d.get(k, 0.0) or 0.0)
+    print("\n[ETAPA 3/6] Conferência rápida")
+    csv_count = len([f for f in os.listdir(DADOS_DIR) if f.lower().endswith(".csv")])
+    print(f"- CSVs gerados: {csv_count}")
 
-    rows_med, rows_al = [], []
-    for posto in sorted(conns.keys()):
-        v_med  = safe_get(medico_por_posto, posto)
-        v_mens = safe_get(mensalidade_por_posto, posto)
-        v_al   = safe_get(aliment_por_posto, posto)
-        perc_m = (v_med / v_mens * 100.0) if v_mens > 0 else None
-        perc_a = (v_al  / v_mens * 100.0) if v_mens > 0 else None
-        rows_med.append({"mes": ym_current, "posto": posto,
-                         "valor_medico": round(v_med, 2),
-                         "mensalidade": round(v_mens, 2),
-                         "perc_medico_sobre_mensalidade": round(perc_m, 4) if perc_m is not None else None})
-        rows_al.append({"mes": ym_current, "posto": posto,
-                        "valor_alimentacao": round(v_al, 2),
-                        "mensalidade": round(v_mens, 2),
-                        "perc_alimentacao_sobre_mensalidade": round(perc_a, 4) if perc_a is not None else None})
-
-    ensure_dir(DADOS_DIR)
-    pd.DataFrame(rows_med).to_csv(os.path.join(DADOS_DIR, "consolidado_medico.csv"),
-                                  index=False, encoding="utf-8-sig")
-    pd.DataFrame(rows_al).to_csv(os.path.join(DADOS_DIR, "consolidado_alimentacao.csv"),
-                                 index=False, encoding="utf-8-sig")
-    print(f"- consolidado_medico.csv e consolidado_alimentacao.csv atualizados em {os.path.relpath(DADOS_DIR, BASE_DIR)}")
-
-    print("\n[ETAPA 4/5] JSON consolidado mensal")
+    print("\n[ETAPA 4/6] JSON consolidado mensal (global)")
     build_monthly_json()
 
-    print("\n[ETAPA 5/5] Cópia de templates")
-    copy_templates()
+    print("\n[ETAPA 5/6] JSON consolidado por posto")
+    build_monthly_json_by_posto()
+
+    print("\n[ETAPA 6/6] JSON de percentuais do mês corrente")
+    build_percent_by_posto()
+
+    if args.copy_templates:
+        print("\n[EXTRA] Cópia de templates")
+        copy_templates()
 
     print("\n✅ Finalizado.")
-
-    
 
 # =========================
 # Main
