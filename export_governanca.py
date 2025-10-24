@@ -89,7 +89,7 @@ def build_conn_str(host, base, user, pwd, port, encrypt, trust_cert, timeout):
         f"DRIVER={{{ODBC_DRIVER}}};"
         f"SERVER={server};DATABASE={base};"
         f"Encrypt={encrypt};TrustServerCertificate={trust_cert};"
-        f"Connection Timeout={timeout or '5'};"
+        f"Connection Timeout={timeout or '20'};"
     )
     if user:
         return common + f"UID={user};PWD={pwd}"
@@ -106,7 +106,7 @@ def build_conns_from_env(postos=None):
     load_dotenv(os.path.join(BASE_DIR, ".env"))
     encrypt    = env("DB_ENCRYPT", "yes")
     trust_cert = env("DB_TRUST_CERT", "yes")
-    timeout    = env("DB_TIMEOUT", "5")
+    timeout    = env("DB_TIMEOUT", "20")
     conns = {}
     base_postos = postos or POSTOS
     for p in base_postos:

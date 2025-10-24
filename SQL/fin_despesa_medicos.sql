@@ -1,7 +1,11 @@
-Select d.[iddespesa], d.[valor] as medicos from Fin_Despesa d
-Where idContaTipo<>11
- and d.[DatapagamentoAuto] >= :ini
- and d.[DatapagamentoAuto] < :fim
- and (D .DataPagamento IS NOT NULL and D .DataCancelamento IS NULL)
- and d.[idPlano] = (select idplano from fin_plano fp where fp.Descricao = 'MEDICINA CONVENCIONAL' and desativado = 0)
- and d.[idContaTipo] = (select idcontatipo from fin_contatipo ct where ct.Tipo = 'médico - hora médica' and desativado = 0)
+SELECT d.iddespesa, d.valor AS medicos
+FROM Fin_Despesa d
+JOIN fin_plano     fp ON fp.idplano = d.idPlano
+                     AND fp.Descricao = 'MEDICINA CONVENCIONAL'
+JOIN fin_contatipo ct ON ct.idcontatipo = d.idContaTipo
+                     AND ct.Tipo = 'médico - hora médica'
+WHERE d.idContaTipo <> 11
+  AND d.DataPagamentoAuto >= :ini
+  AND d.DataPagamentoAuto <  :fim
+  AND d.DataPagamento IS NOT NULL
+  AND (d.DataCancelamento IS NULL OR d.DataCancelamento = '')
