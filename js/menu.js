@@ -39,9 +39,9 @@ function openDrawer() {
     brand.classList.add("visible");
 
     menuItems.forEach((li, i) => {
-      setTimeout(() => li.classList.add("show"), i * 200);
+      setTimeout(() => li.classList.add("show"), i * 0);
     });
-  }, 2000);
+  }, 60);
 }
 
   /**

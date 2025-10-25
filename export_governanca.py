@@ -2,11 +2,14 @@
 # Requisitos: pandas, sqlalchemy>=2,<3, pyodbc, python-dotenv
 # Função: executa SQL por posto e mês, salva CSVs em /dados,
 #         gera JSON consolidado global e por posto em /json_consolidado.
+#         Adiciona mensalidade_qtd, ticket_medio e performance aos JSONs.
+#         NOVO: KPIs mensais e de período (rodapé) com médias geométricas, mix e estatísticas.
 
-import os, re, sys, glob, json, argparse, shutil
+import os, re, sys, glob, json, argparse, shutil, math
 from datetime import date
 from urllib.parse import quote_plus
 
+import numpy as pd
 import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
@@ -21,8 +24,8 @@ JSON_DIR   = os.path.join(BASE_DIR, "json_consolidado")
 SRC_TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")  # opcional: front estático
 TARGET_TEMPLATES_DIR = os.getenv("TARGET_TEMPLATES_DIR", os.path.join(BASE_DIR, "public"))
 
-EARLIEST_ALLOWED = date(2024, 1, 1)
-POSTOS = list("ANXYBRPCDGIMJ")            # pode ser filtrado via CLI/ENV
+EARLIEST_ALLOWED = date(2020, 1, 1)
+POSTOS = list("ANXYBRPCDGIMJ")
 ODBC_DRIVER = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 
 KEY_PATTERNS = {
@@ -174,6 +177,88 @@ def run_query(engine, sql_text, ini, fim):
             return pd.read_sql_query(stmt, con)
 
 # =========================
+# Funções de cálculo (KPIs)
+# =========================
+def safe_float(x):
+    try:
+        return float(x)
+    except Exception:
+        return 0.0
+
+def geometric_mean(values):
+    vals = [safe_float(v) for v in values if v is not None and safe_float(v) > 0]
+    if not vals:
+        return None
+    return math.exp(sum(math.log(v) for v in vals) / len(vals))
+
+def gm_rate_from_percents(perc_list):
+    """MG de fatores 1+p/100 -> retorna taxa média em %."""
+    facs = []
+    for p in perc_list:
+        try:
+            facs.append(1.0 + float(p)/100.0)
+        except Exception:
+            pass
+    facs = [f for f in facs if f > 0]
+    if not facs:
+        return None
+    gm = math.exp(sum(math.log(f) for f in facs) / len(facs))
+    return (gm - 1.0) * 100.0
+
+def accumulated_from_percents(perc_list):
+    fac = 1.0
+    for p in perc_list:
+        try:
+            fac *= (1.0 + float(p)/100.0)
+        except Exception:
+            continue
+    return (fac - 1.0) * 100.0
+
+def pct_change(curr, prev):
+    if prev is None or prev == 0:
+        return None
+    return (safe_float(curr)/safe_float(prev) - 1.0) * 100.0
+
+def log_return(curr, prev):
+    if prev is None or prev <= 0 or curr is None or curr <= 0:
+        return None
+    return math.log(curr/prev)
+
+def mix_decomposition(rt, rt_1, qt, qt_1, tk, tk_1):
+    """ΔR ≈ ΔQ*Tk_avg + ΔTk*Q_avg + interação. Usa médias simples entre t e t-1."""
+    if None in (rt, rt_1, qt, qt_1, tk, tk_1):
+        return None, None, None
+    dQ = qt - qt_1
+    dT = tk - tk_1
+    Qavg = (qt + qt_1)/2.0
+    Tavg = (tk + tk_1)/2.0
+    delta_preco = dT * Qavg
+    delta_volume = dQ * Tavg
+    interacao = (rt - rt_1) - (delta_preco + delta_volume)
+    return delta_preco, delta_volume, interacao
+
+def volatility(series):
+    vals = [v for v in series if v is not None]
+    if len(vals) < 2:
+        return None
+    s = pd.Series(vals, dtype="float64")
+    return float(s.std(ddof=1))
+
+def hit_rate_growth(series):
+    cnt = 0
+    tot = 0
+    prev = None
+    for v in series:
+        if prev is not None and v is not None:
+            tot += 1
+            if v > prev:
+                cnt += 1
+        prev = v
+    if tot == 0:
+        return None
+    return 100.0 * cnt / tot
+
+# =========================
 # Persistência e Consolidação
 # =========================
 def target_csv_path(posto, ym, key):
@@ -205,11 +290,21 @@ def sum_numeric(df, prefer_names):
         return 0.0
     return float(pd.to_numeric(df[picked], errors="coerce").fillna(0).sum())
 
+def count_rows(df) -> int:
+    return int(len(df))
+
+def _sorted_ym(keys):
+    return sorted(keys)
+
 def build_monthly_json():
-    """Agregado geral por mês."""
+    """Agregado global por mês. Adiciona campos derivados, deltas, mix e KPIs de período (_kpis_periodo)."""
     ensure_dir(JSON_DIR)
     pattern = re.compile(r"^(?P<posto>[A-Z])_(?P<ym>\d{4}-\d{2})_(?P<key>[a-z_]+)\.csv$", re.I)
-    totals = {}  # {ym: {key: total}}
+
+    totals = {}           # {ym: {key: total}}
+    mensalidade_qtd = {}  # {ym: int}
+
+    # varre CSVs mensais por posto e soma para o global
     for fn in os.listdir(DADOS_DIR):
         m = pattern.match(fn)
         if not m:
@@ -221,35 +316,284 @@ def build_monthly_json():
             df = pd.read_csv(path)
         except Exception:
             continue
-        val  = sum_numeric(df, PREFER_NOMES.get(key, ["valor", "total"]))
-        if ym not in totals:
-            totals[ym] = {}
+
+        val = sum_numeric(df, PREFER_NOMES.get(key, ["valor", "total"]))
+        totals.setdefault(ym, {})
         totals[ym][key] = round(totals[ym].get(key, 0.0) + val, 2)
+
+        if key == "mensalidade":
+            mensalidade_qtd[ym] = mensalidade_qtd.get(ym, 0) + count_rows(df)
+
+    # injeta quantidade
+    for ym, qtd in mensalidade_qtd.items():
+        totals.setdefault(ym, {})
+        totals[ym]["mensalidade_qtd"] = int(qtd)
+
+    months = _sorted_ym(totals.keys())
+
+    # campos mensais derivados + deltas e mix
+    for i, ym in enumerate(months):
+        mens = float(totals[ym].get("mensalidade", 0) or 0)
+        qtd  = int(totals[ym].get("mensalidade_qtd", 0) or 0)
+        ticket = (mens / qtd) if qtd > 0 else None
+        totals[ym]["ticket_medio"] = round(ticket, 2) if ticket is not None else None
+
+        # performance de QTD mês a mês (%)
+        if i > 0:
+            prev_ym = months[i-1]
+            prev_qtd = int(totals[prev_ym].get("mensalidade_qtd", 0) or 0)
+            perf = ((qtd - prev_qtd) / prev_qtd * 100.0) if prev_qtd > 0 else None
+        else:
+            perf = None
+        totals[ym]["performance"] = round(perf, 2) if perf is not None else None
+
+        # deltas MoM e logret da receita
+        if i > 0:
+            prev_mens   = float(totals[prev_ym].get("mensalidade", 0) or 0)
+            prev_ticket = totals[prev_ym].get("ticket_medio", None)
+            prev_qtd_v  = int(totals[prev_ym].get("mensalidade_qtd", 0) or 0)
+
+            totals[ym]["receita_mom_pct"] = round(pct_change(mens, prev_mens), 4) if prev_mens else None
+            totals[ym]["qtd_mom_pct"]     = round(pct_change(qtd,  prev_qtd_v), 4) if prev_qtd_v else None
+            totals[ym]["ticket_mom_pct"]  = round(pct_change(ticket, prev_ticket), 4) if prev_ticket else None
+
+            lr = log_return(mens, prev_mens)
+            totals[ym]["receita_logret"]  = round(lr, 6) if lr is not None else None
+
+            dp, dv, inter = mix_decomposition(mens, prev_mens, qtd, prev_qtd_v, ticket, prev_ticket)
+            totals[ym]["mix_delta_receita_preco"]      = round(dp, 2) if dp is not None else None
+            totals[ym]["mix_delta_receita_volume"]     = round(dv, 2) if dv is not None else None
+            totals[ym]["mix_delta_receita_interacao"]  = round(inter, 2) if inter is not None else None
+        else:
+            totals[ym]["receita_mom_pct"] = None
+            totals[ym]["qtd_mom_pct"]     = None
+            totals[ym]["ticket_mom_pct"]  = None
+            totals[ym]["receita_logret"]  = None
+            totals[ym]["mix_delta_receita_preco"] = None
+            totals[ym]["mix_delta_receita_volume"] = None
+            totals[ym]["mix_delta_receita_interacao"] = None
+
+        # YoY quando existir base (t e t-12) — no agregado global
+        idx_yoy = i - 12
+        if idx_yoy >= 0:
+            base_ym   = months[idx_yoy]
+            base_vals = totals.get(base_ym, {}) or {}
+
+            base_mens = float(base_vals.get("mensalidade", 0) or 0)
+            base_qtd  = int(base_vals.get("mensalidade_qtd", 0) or 0)
+            base_tk   = base_vals.get("ticket_medio", None)
+
+            totals[ym]["receita_yoy_pct"] = round(pct_change(mens, base_mens), 4) if base_mens else None
+            totals[ym]["qtd_yoy_pct"]     = round(pct_change(qtd,  base_qtd),  4) if base_qtd  else None
+            totals[ym]["ticket_yoy_pct"]  = round(pct_change(ticket, base_tk), 4) if base_tk   else None
+        else:
+            totals[ym]["receita_yoy_pct"] = None
+            totals[ym]["qtd_yoy_pct"]     = None
+            totals[ym]["ticket_yoy_pct"]  = None
+
+    # KPIs de período (_kpis_periodo)
+    receita_series = [safe_float(totals[m].get("mensalidade", 0)) for m in months]
+    qtd_series     = [float(totals[m].get("mensalidade_qtd", 0) or 0) for m in months]
+    tk_series      = [totals[m].get("ticket_medio") for m in months]
+    perf_series    = [totals[m].get("performance") for m in months if totals[m].get("performance") is not None]
+    logrets        = [totals[m].get("receita_logret") for m in months if totals[m].get("receita_logret") is not None]
+
+    total_receita  = sum(receita_series)
+    total_qtd      = sum(qtd_series)
+    tk_ponderado   = (total_receita/total_qtd) if total_qtd > 0 else None
+
+    gm_ticket = geometric_mean([t for t in tk_series if t is not None])
+    gm_qtd    = geometric_mean([q for q in qtd_series if q > 0])
+    gm_perf_mensal = gm_rate_from_percents(perf_series)       # %
+    perf_acumulada = accumulated_from_percents(perf_series)   # %
+
+    # CAGR receita entre primeiro e último mês
+    cagr = None
+    if receita_series and receita_series[0] > 0 and receita_series[-1] > 0:
+        n = max(1, len(receita_series)-1)
+        cagr = (receita_series[-1]/receita_series[0])**(1/n) - 1.0
+
+    run_rate_12m = receita_series[-1] * 12.0 if receita_series else None
+    hit_rate     = hit_rate_growth(receita_series)
+    vol_logret   = volatility(logrets)
+
+    # outliers de receita por z-score simples
+    if len(receita_series) >= 3:
+        s = pd.Series(receita_series, dtype="float64")
+        sd = float(s.std(ddof=1))
+        mu = float(s.mean())
+        outliers = []
+        if sd != 0.0:
+            for i, m in enumerate(months):
+                z = (receita_series[i]-mu)/sd
+                if abs(z) >= 2.0:
+                    outliers.append({"mes": m, "zscore": round(z, 3), "mensalidade": round(receita_series[i], 2)})
+    else:
+        outliers = []
+
+    # sazonalidade simples: média por mês-calendário / média geral - 1
+    sazonalidade = {}
+    if months:
+        df_aux = pd.DataFrame({"ym": months, "receita": receita_series})
+        df_aux["mm"] = df_aux["ym"].str[5:7]
+        mean_all = df_aux["receita"].mean() if len(df_aux) else None
+        if mean_all and mean_all != 0:
+            idx = (df_aux.groupby("mm")["receita"].mean() / mean_all) - 1.0
+            sazonalidade = {k: round(float(v), 6) for k, v in idx.to_dict().items()}
+
+    kpis_periodo = {
+        "periodo": {"inicio": months[0] if months else None, "fim": months[-1] if months else None, "n_meses": len(months)},
+        "totais": {
+            "receita_total": round(total_receita, 2),
+            "qtd_total": int(total_qtd),
+            "ticket_ponderado": round(tk_ponderado, 2) if tk_ponderado is not None else None,
+        },
+        "medias_geometricas": {
+            "ticket_medio_gm": round(gm_ticket, 2) if gm_ticket is not None else None,
+            "qtd_gm": round(gm_qtd, 0) if gm_qtd is not None else None,
+            "performance_mensal_gm_pct": round(gm_perf_mensal, 2) if gm_perf_mensal is not None else None,
+            "performance_acumulada_pct": round(perf_acumulada, 2) if perf_acumulada is not None else None,
+        },
+        "crescimento": {
+            "cagr_receita": round(cagr, 6) if cagr is not None else None,
+            "run_rate_12m": round(run_rate_12m, 2) if run_rate_12m is not None else None,
+        },
+        "qualidade": {
+            "hit_rate_crescimento_receita_pct": round(hit_rate, 2) if hit_rate is not None else None,
+            "volatilidade_logret_receita": round(vol_logret, 6) if vol_logret is not None else None,
+            "outliers_receita_zscore_ge_2": outliers,
+        },
+        "sazonalidade_idx": sazonalidade
+    }
+
+    totals["_kpis_periodo"] = kpis_periodo
+
     out_path = os.path.join(JSON_DIR, "consolidado_mensal.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(totals, f, ensure_ascii=False, indent=2)
     print(f"[ETAPA 4/6] JSON consolidado -> {os.path.relpath(out_path, BASE_DIR)}")
 
+
 def build_monthly_json_by_posto():
-    """Detalhe por mês e por posto."""
+    """Detalhe por mês e por posto. Adiciona mensalidade_qtd, ticket_medio, performance, deltas MoM, logret, mix e YoY."""
     ensure_dir(JSON_DIR)
     pattern = re.compile(r"^(?P<posto>[A-Z])_(?P<ym>\d{4}-\d{2})_(?P<key>[a-z_]+)\.csv$", re.I)
-    out = {}  # {ym: {posto: {key: total}}}
+
+    out = {}              # {ym: {posto: {key: total}}}
+    mensalidade_qtd = {}  # {ym: {posto: int}}
+
+    # ingestão
     for fn in os.listdir(DADOS_DIR):
         m = pattern.match(fn)
         if not m:
             continue
         posto = m.group("posto")
-        ym    = m.group("ym")
-        key   = m.group("key").lower()
-        path  = os.path.join(DADOS_DIR, fn)
+        ym = m.group("ym")
+        key = m.group("key").lower()
+        path = os.path.join(DADOS_DIR, fn)
         try:
             df = pd.read_csv(path)
         except Exception:
             continue
-        val  = sum_numeric(df, PREFER_NOMES.get(key, ["valor", "total"]))
+
+        val = sum_numeric(df, PREFER_NOMES.get(key, ["valor", "total"]))
         out.setdefault(ym, {}).setdefault(posto, {})
         out[ym][posto][key] = round(out[ym][posto].get(key, 0.0) + val, 2)
+
+        if key == "mensalidade":
+            mensalidade_qtd.setdefault(ym, {}).setdefault(posto, 0)
+            mensalidade_qtd[ym][posto] += count_rows(df)
+
+    # injeta quantidade
+    for ym, postos in mensalidade_qtd.items():
+        for p, qtd in postos.items():
+            out.setdefault(ym, {}).setdefault(p, {})
+            out[ym][p]["mensalidade_qtd"] = int(qtd)
+
+    months = _sorted_ym(out.keys())
+
+    # derivados por posto
+    for i, ym in enumerate(months):
+        prev_ym = months[i - 1] if i > 0 else None
+        yoy_idx = i - 12
+        base_ym = months[yoy_idx] if yoy_idx >= 0 else None
+
+        for posto, vals in out.get(ym, {}).items():
+            mens = float(vals.get("mensalidade", 0) or 0)
+            qtd = int(vals.get("mensalidade_qtd", 0) or 0)
+            tk = (mens / qtd) if qtd > 0 else None
+            out[ym][posto]["ticket_medio"] = round(tk, 2) if tk is not None else None
+
+            # MoM + logret + mix
+            if prev_ym:
+                prev_vals = out.get(prev_ym, {}).get(posto, {}) or {}
+                prev_mens = float(prev_vals.get("mensalidade", 0) or 0)
+                prev_qtd = int(prev_vals.get("mensalidade_qtd", 0) or 0)
+                prev_tk = prev_vals.get("ticket_medio", None)
+
+                perf = ((qtd - prev_qtd) / prev_qtd * 100.0) if prev_qtd > 0 else None
+                out[ym][posto]["performance"] = round(perf, 2) if perf is not None else None
+                out[ym][posto]["receita_mom_pct"] = round(pct_change(mens, prev_mens),4) if prev_mens else None
+                out[ym][posto]["qtd_mom_pct"] = round(pct_change(qtd, prev_qtd), 4) if prev_qtd else None
+                out[ym][posto]["ticket_mom_pct"] = round(pct_change(tk, prev_tk), 4) if prev_tk else None
+
+                lr = log_return(mens, prev_mens)
+                out[ym][posto]["receita_logret"] = round(lr, 6) if lr is not None else None
+
+                dp, dv, inter = mix_decomposition(mens, prev_mens, qtd, prev_qtd, tk, prev_tk)
+                out[ym][posto]["mix_delta_receita_preco"] = round(dp, 2) if dp is not None else None
+                out[ym][posto]["mix_delta_receita_volume"] = round(dv, 2) if dv is not None else None
+                out[ym][posto]["mix_delta_receita_interacao"] = round(inter, 2) if inter is not None else None
+            else:
+                out[ym][posto]["performance"] = None
+                out[ym][posto]["receita_mom_pct"] = None
+                out[ym][posto]["qtd_mom_pct"] = None
+                out[ym][posto]["ticket_mom_pct"] = None
+                out[ym][posto]["receita_logret"] = None
+                out[ym][posto]["mix_delta_receita_preco"] = None
+                out[ym][posto]["mix_delta_receita_volume"] = None
+                out[ym][posto]["mix_delta_receita_interacao"] = None
+
+            # YoY por posto
+            if base_ym:
+                base_vals = out.get(base_ym, {}).get(posto, {}) or {}
+                base_mens = float(base_vals.get("mensalidade", 0) or 0)
+                base_qtd = int(base_vals.get("mensalidade_qtd", 0) or 0)
+                base_tk = base_vals.get("ticket_medio", None)
+
+                out[ym][posto]["receita_yoy_pct"] = round(pct_change(mens, base_mens),4) if base_mens else None
+                out[ym][posto]["qtd_yoy_pct"] = round(pct_change(qtd, base_qtd), 4) if base_qtd else None
+                out[ym][posto]["ticket_yoy_pct"] = round(pct_change(tk, base_tk), 4) if base_tk else None
+            else:
+                out[ym][posto]["receita_yoy_pct"] = None
+                out[ym][posto]["qtd_yoy_pct"] = None
+                out[ym][posto]["ticket_yoy_pct"] = None
+
+    # KPI por posto no mês corrente
+    cur_ym = month_bounds(date.today())[2]
+    kpis_por_posto = {}
+    if cur_ym in out:
+        for p, vals in out[cur_ym].items():
+            if not isinstance(vals, dict):
+                continue
+            mens = float(vals.get("mensalidade", 0) or 0)
+            qtd = int(vals.get("mensalidade_qtd", 0) or 0)
+            tk = vals.get("ticket_medio", None)
+            kpis_por_posto[p] = {
+                "receita": mens,
+                "qtd": qtd,
+                "ticket_medio": tk,
+                "participacao_receita_pct": None,
+            }
+        total_cur = sum(v["receita"] for v in kpis_por_posto.values())
+        if total_cur > 0:
+            for p in kpis_por_posto:
+                kpis_por_posto[p]["participacao_receita_pct"] = round(
+                    100.0 * kpis_por_posto[p]["receita"] / total_cur, 4
+                )
+
+    out["_kpis_periodo_por_posto"] = {"mes": cur_ym, "sumario": kpis_por_posto}
+
     out_path = os.path.join(JSON_DIR, "consolidado_mensal_por_posto.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
@@ -261,11 +605,16 @@ def build_percent_by_posto():
     cur_ym = month_bounds(date.today())[2]
     by_posto_path = os.path.join(JSON_DIR, "consolidado_mensal_por_posto.json")
     if not os.path.exists(by_posto_path):
+        print("[ETAPA 6/6] JSON percentuais -> base por posto ausente; etapa pulada")
         return
-    data = json.load(open(by_posto_path, "r", encoding="utf-8"))
+    with open(by_posto_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
     cur = data.get(cur_ym, {})
     out_rows = []
     for posto, vals in sorted(cur.items()):
+        if not isinstance(vals, dict):
+            continue
         v_mens = float(vals.get("mensalidade", 0) or 0)
         v_med  = float(vals.get("medico", 0) or 0)
         v_al   = float(vals.get("alimentacao", 0) or 0)
@@ -280,10 +629,12 @@ def build_percent_by_posto():
             "perc_medico_sobre_mensalidade": round(perc_m, 4) if perc_m is not None else None,
             "perc_alimentacao_sobre_mensalidade": round(perc_a, 4) if perc_a is not None else None,
         })
+
     out_path = os.path.join(JSON_DIR, "percentuais_mensais_por_posto.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(out_rows, f, ensure_ascii=False, indent=2)
     print(f"[ETAPA 6/6] JSON percentuais -> {os.path.relpath(out_path, BASE_DIR)}")
+
 
 def copy_templates():
     """Copia templates/ para a pasta pública do site estático, se configurado."""

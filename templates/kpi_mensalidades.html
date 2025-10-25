@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>KPI - Mensalidades</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="../node_modules/admin-lte/dist/css/adminlte.min.css" />
+    <link rel="stylesheet" href="../node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <style>
+        .stack {
+            display: flex;
+            flex-direction: column;
+            gap: 12px
+        }
+
+        .kpi {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: .5rem
+        }
+
+        .kpi .card {
+            margin: 0
+        }
+
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .5rem 1rem;
+            align-items: flex-end;
+            padding: .75rem
+        }
+
+        .month-inputs {
+            display: flex;
+            gap: .5rem
+        }
+
+        .scroll-tabs {
+            white-space: nowrap;
+            overflow-x: auto
+        }
+
+        .scroll-tabs .nav-link {
+            display: inline-block;
+            min-width: 52px;
+            text-align: center;
+            cursor: pointer
+        }
+
+        .chart-card .card-body {
+            height: 320px
+        }
+
+        @media(max-width:576px) {
+            .chart-card .card-body {
+                height: 260px
+            }
+        }
+
+        .table-responsive {
+            width: 100%
+        }
+
+        .text-right {
+            text-align: right
+        }
+
+        .small-td {
+            white-space: nowrap
+        }
+
+        .muted {
+            color: #6b7280
+        }
+    </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+    <div class="wrapper">
+        <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+            <span class="ml-2 font-weight-bold">CAMIM - KPI de Mensalidades</span>
+        </nav>
+
+        <div class="content-wrapper">
+            <section class="content p-3 stack">
+                <div id="err" class="text-danger mb-1"></div>
+
+                <!-- 1) PERÍODO (DATASET) + POSTO(S) -->
+                <div class="card">
+                    <div class="filter-bar">
+                        <div>
+                            <label class="mb-0 small d-block">Período (dataset)</label>
+                            <div class="month-inputs">
+                                <input id="from1" type="month" class="form-control form-control-sm" />
+                                <input id="to1" type="month" class="form-control form-control-sm" />
+                                <button id="reset1" class="btn btn-sm btn-outline-secondary">Reset</button>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1">
+                            <label class="mb-0 small d-block">Posto</label>
+                            <ul id="postoTabs1" class="nav nav-pills scroll-tabs"></ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2) KPIs DA SELEÇÃO 1 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">KPIs da seleção do dataset</h3>
+                    </div>
+                    <div class="card-body kpi" id="kpisSel1"></div>
+                </div>
+
+                <!-- 3) PERÍODO (12 MESES) + POSTO(S) -->
+                <div class="card">
+                    <div class="filter-bar">
+                        <div>
+                            <label class="mb-0 small d-block">Período (últimos 12 meses)</label>
+                            <div class="month-inputs">
+                                <input id="from2" type="month" class="form-control form-control-sm" />
+                                <input id="to2" type="month" class="form-control form-control-sm" />
+                                <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1">
+                            <label class="mb-0 small d-block">Posto</label>
+                            <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4) KPIs DA SELEÇÃO 2 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">KPIs da seleção 12 meses</h3>
+                    </div>
+                    <div class="card-body kpi" id="kpisSel2"></div>
+                </div>
+
+                <!-- 5) TABELA SELEÇÃO 2 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Dados do Período Selecionado (12 meses)</h3>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Mês</th>
+                                        <th class="text-right">Qtd</th>
+                                        <th class="text-right">Mensalidade</th>
+                                        <th class="text-right">Ticket</th>
+                                        <th class="text-right">Perf MoM</th>
+                                        <th class="text-right small-td">Receita MoM</th>
+                                        <th class="text-right small-td">Qtd MoM</th>
+                                        <th class="text-right small-td">Ticket MoM</th>
+                                        <th class="text-right small-td">Receita YoY</th>
+                                        <th class="text-right small-td">Qtd YoY</th>
+                                        <th class="text-right small-td">Ticket YoY</th>
+                                        <th class="text-right small-td">LogRet</th>
+                                        <th class="text-right small-td">ΔPreço</th>
+                                        <th class="text-right small-td">ΔVolume</th>
+                                        <th class="text-right small-td">ΔInteração</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tblBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6) GRÁFICOS SELEÇÃO 2 -->
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title">Evolução Mensal</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartValores"></canvas></div>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title">Qtd e Ticket Médio</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartQtdTicket"></canvas></div>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title">Performance mensal</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartPerf"></canvas></div>
+                </div>
+
+                <!-- EXTRAS -->
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title">LogRet e Volatilidade móvel (3m)</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartVol"></canvas></div>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title">Receita YoY (%)</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartYoY"></canvas></div>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title">Mix de Crescimento: ΔPreço vs ΔVolume</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartMix"></canvas></div>
+                </div>
+
+            </section>
+        </div>
+    </div>
+
+    <script src="../node_modules/jquery/dist/jquery.min.js"></script>
+    <script src="../node_modules/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../node_modules/admin-lte/dist/js/adminlte.min.js"></script>
+    <script src="../node_modules/chart.js/dist/chart.umd.js"></script>
+
+    <script>
+        const URL_GERAL = new URL('../json_consolidado/consolidado_mensal.json', location.href).href;
+        const URL_POR_POSTO = new URL('../json_consolidado/consolidado_mensal_por_posto.json', location.href).href;
+
+        const el = s => document.querySelector(s);
+        const showErr = e => { console.error(e); el('#err').textContent = e?.message || e; };
+
+        const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+        const fmt2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const fmt4 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+        const fmtPct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+        const mFmt = ym => { const [y, m] = ym.split('-').map(Number); return `${MES_ABBR[m - 1].slice(0, 3)}-${String(y).slice(-2)}`; };
+        const inRange = (labels, from, to) => labels.filter(m => (!from || m >= from) && (!to || m <= to));
+        function lastCompleteMonth(labels) { const now = new Date(); const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; const L = labels.filter(m => m !== cur); return L.length ? L.at(-1) : labels.at(-1); }
+        const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+        const maybe = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+        const sum = arr => arr.reduce((a, b) => a + (b || 0), 0);
+        const wavg = (vals, weights) => { let sW = 0, s = 0; for (let i = 0; i < vals.length; i++) { const w = weights[i] ?? 0; const v = vals[i]; if (v == null) continue; s += v * w; sW += w; } return sW ? s / sW : null; }
+
+        let MESES = [], geral = {}, porPosto = {}, POSTOS = [];
+        let sel1 = 'ALL', sel2 = 'ALL';
+
+        function srcMens(g) {
+            return {
+                valor: num(g.mensalidade), qtd: num(g.mensalidade_qtd), ticket: maybe(g.ticket_medio),
+                perf: maybe(g.performance),
+                r_mom: maybe(g.receita_mom_pct), q_mom: maybe(g.qtd_mom_pct), t_mom: maybe(g.ticket_mom_pct),
+                r_yoy: maybe(g.receita_yoy_pct), q_yoy: maybe(g.qtd_yoy_pct), t_yoy: maybe(g.ticket_yoy_pct),
+                logret: maybe(g.receita_logret),
+                mix_p: maybe(g.mix_delta_receita_preco), mix_v: maybe(g.mix_delta_receita_volume), mix_i: maybe(g.mix_delta_receita_interacao)
+            };
+        }
+
+        function aggMens(ym, selection) {
+            if (selection === 'ALL') { return srcMens(geral[ym] || {}); }
+            const postos = [...selection];
+            const rows = postos.map(p => ((porPosto[ym] || {})[p]) || {});
+
+            const valor = sum(rows.map(r => num(r.mensalidade)));
+            const qtd = sum(rows.map(r => num(r.mensalidade_qtd)));
+            const ticket = (qtd ? valor / qtd : null);
+
+            const perf = wavg(rows.map(r => maybe(r.performance)), rows.map(r => num(r.mensalidade)));
+            const r_mom = wavg(rows.map(r => maybe(r.receita_mom_pct)), rows.map(r => num(r.mensalidade)));
+            const r_yoy = wavg(rows.map(r => maybe(r.receita_yoy_pct)), rows.map(r => num(r.mensalidade)));
+            const logret = wavg(rows.map(r => maybe(r.receita_logret)), rows.map(r => num(r.mensalidade)));
+
+            const q_mom = wavg(rows.map(r => maybe(r.qtd_mom_pct)), rows.map(r => num(r.mensalidade_qtd)));
+            const q_yoy = wavg(rows.map(r => maybe(r.qtd_yoy_pct)), rows.map(r => num(r.mensalidade_qtd)));
+            const t_mom = wavg(rows.map(r => maybe(r.ticket_mom_pct)), rows.map(r => num(r.mensalidade_qtd)));
+            const t_yoy = wavg(rows.map(r => maybe(r.ticket_yoy_pct)), rows.map(r => num(r.mensalidade_qtd)));
+
+            const mix_p = sum(rows.map(r => maybe(r.mix_delta_receita_preco) || 0));
+            const mix_v = sum(rows.map(r => maybe(r.mix_delta_receita_volume) || 0));
+            const mix_i = sum(rows.map(r => maybe(r.mix_delta_receita_interacao) || 0));
+
+            return { valor, qtd, ticket, perf, r_mom, q_mom, t_mom, r_yoy, q_yoy, t_yoy, logret, mix_p, mix_v, mix_i };
+        }
+
+        function kpiCard(title, val, fmt = 'text') {
+            const isNull = (val == null || Number.isNaN(val));
+            const neg = (!isNull && fmt === 'pct' && val < 0);
+            const out = isNull ? '<span class="muted">-</span>'
+                : (fmt === 'moeda' ? fmtInt.format(val)
+                    : (fmt === '2' ? fmt2.format(val)
+                        : (fmt === '4' ? fmt4.format(val)
+                            : (fmt === 'pct' ? (fmtPct.format(val) + '%') : String(val)))));
+            return `<div class="card"><div class="card-body p-2">
+      <div class="small muted">${title}</div>
+      <div class="h5 mb-0 ${neg ? 'text-danger' : ''}">${out}</div>
+    </div></div>`;
+        }
+
+        function buildKPIs(containerId, meses, selection) {
+            const rows = meses.map(m => aggMens(m, selection));
+            const receita = sum(rows.map(v => v.valor));
+            const qtd = sum(rows.map(v => v.qtd));
+            const ticketPond = qtd ? receita / qtd : null;
+
+            const perfs = rows.map(v => v.perf).filter(v => v != null);
+            const perfMA = perfs.length ? perfs.reduce((a, b) => a + b, 0) / perfs.length : null;   // NOVO: média aritmética
+            let perfMG = null, perfAc = null;
+            if (perfs.length) {
+                const mult = perfs.reduce((a, p) => a * (1 + p / 100), 1);
+                perfAc = (mult - 1) * 100;
+                perfMG = (Math.pow(mult, 1 / perfs.length) - 1) * 100;
+            }
+            let cagr = null;
+            if (meses.length >= 2) {
+                const first = aggMens(meses[0], selection).valor || 0, last = aggMens(meses.at(-1), selection).valor || 0;
+                if (first > 0) cagr = (Math.pow(last / first, 1 / (meses.length - 1)) - 1) * 100;
+            }
+            const runRate = meses.length ? (receita / meses.length) * 12 : null;
+
+            const moms = rows.map(v => v.r_mom).filter(v => v != null);
+            const hit = moms.length ? (moms.filter(x => x > 0).length / moms.length) * 100 : null;
+
+            const logrets = rows.map(v => v.logret).filter(v => v != null);
+            let vol = null;
+            if (logrets.length) {
+                const mean = logrets.reduce((a, b) => a + b, 0) / logrets.length;
+                const vr = logrets.reduce((a, x) => a + (x - mean) * (x - mean), 0) / logrets.length;
+                vol = Math.sqrt(vr);
+            }
+            const volPct = (vol == null) ? null : (vol * 100);
+
+            const box = el(containerId); box.innerHTML = '';
+            box.insertAdjacentHTML('beforeend', kpiCard('Receita total', receita, 'moeda'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Qtd total', qtd, 'moeda'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Ticket ponderado', ticketPond, '2'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Perf. mensal (MA)', perfMA, 'pct'));   <!-- aqui, à esquerda do MG -->
+            box.insertAdjacentHTML('beforeend', kpiCard('Perf. mensal (MG)', perfMG, 'pct'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Perf. acumulada', perfAc, 'pct'));
+            box.insertAdjacentHTML('beforeend', kpiCard('CAGR receita', cagr, 'pct'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Run-rate 12m', runRate, 'moeda'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Hit-rate crescimento', hit, 'pct'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Volatilidade logret', volPct, 'pct'));
+        }
+
+        function buildTable(meses, selection) {
+            const tb = el('#tblBody'); tb.innerHTML = '';
+            let sumMens = 0, sumQtd = 0, tickets = [];
+            meses.forEach(m => {
+                const v = aggMens(m, selection);
+                sumMens += v.valor; sumQtd += v.qtd; if (v.ticket != null) tickets.push(v.ticket);
+                tb.insertAdjacentHTML('beforeend', `
+        <tr>
+          <td>${mFmt(m)}</td>
+          <td class="text-right">${fmtInt.format(v.qtd)}</td>
+          <td class="text-right">${fmtInt.format(v.valor)}</td>
+          <td class="text-right">${v.ticket == null ? '-' : fmt2.format(v.ticket)}</td>
+          <td class="text-right">${v.perf == null ? '-' : fmtPct.format(v.perf) + '%'}</td>
+          <td class="text-right">${v.r_mom == null ? '-' : fmtPct.format(v.r_mom) + '%'}</td>
+          <td class="text-right">${v.q_mom == null ? '-' : fmtPct.format(v.q_mom) + '%'}</td>
+          <td class="text-right">${v.t_mom == null ? '-' : fmtPct.format(v.t_mom) + '%'}</td>
+          <td class="text-right">${v.r_yoy == null ? '-' : fmtPct.format(v.r_yoy) + '%'}</td>
+          <td class="text-right">${v.q_yoy == null ? '-' : fmtPct.format(v.q_yoy) + '%'}</td>
+          <td class="text-right">${v.t_yoy == null ? '-' : fmtPct.format(v.t_yoy) + '%'}</td>
+          <td class="text-right">${v.logret == null ? '-' : fmt4.format(v.logret)}</td>
+          <td class="text-right">${v.mix_p == null ? '-' : fmt2.format(v.mix_p)}</td>
+          <td class="text-right">${v.mix_v == null ? '-' : fmt2.format(v.mix_v)}</td>
+          <td class="text-right">${v.mix_i == null ? '-' : fmt2.format(v.mix_i)}</td>
+        </tr>`);
+            });
+            const avgMens = meses.length ? Math.round(sumMens / meses.length) : 0;
+            const avgQtd = meses.length ? Math.round(sumQtd / meses.length) : 0;
+            const avgTk = tickets.length ? tickets.reduce((a, b) => a + b, 0) / tickets.length : null;
+            tb.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td><b>Média</b></td>
+        <td class="text-right"><b>${fmtInt.format(avgQtd)}</b></td>
+        <td class="text-right"><b>${fmtInt.format(avgMens)}</b></td>
+        <td class="text-right"><b>${avgTk == null ? '-' : fmt2.format(avgTk)}</b></td>
+        <td class="text-right" colspan="12"><b class="muted">—</b></td>
+      </tr>`);
+            tb.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td><b>Total</b></td>
+        <td class="text-right"><b>${fmtInt.format(sumQtd)}</b></td>
+        <td class="text-right"><b>${fmtInt.format(sumMens)}</b></td>
+        <td class="text-right"><b>-</b></td>
+        <td class="text-right" colspan="12"><b>-</b></td>
+      </tr>`);
+        }
+
+        let chValores, chQtdTicket, chPerf, chVol, chYoY, chMix;
+
+        function initCharts() {
+            const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
+            chValores = new Chart(document.getElementById('chartValores'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
+            chQtdTicket = new Chart(document.getElementById('chartQtdTicket'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
+            chPerf = new Chart(document.getElementById('chartPerf'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+            chVol = new Chart(document.getElementById('chartVol'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
+            chYoY = new Chart(document.getElementById('chartYoY'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+            chMix = new Chart(document.getElementById('chartMix'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+        }
+
+        function rollingStd(arr, w) {
+            const out = [];
+            for (let i = 0; i < arr.length; i++) {
+                if (i + 1 < w) { out.push(null); continue; }
+                const s = arr.slice(i + 1 - w, i + 1).filter(v => v != null);
+                if (!s.length) { out.push(null); continue; }
+                const mean = s.reduce((a, b) => a + b, 0) / s.length;
+                const vr = s.reduce((a, x) => a + (x - mean) * (x - mean), 0) / s.length;
+                out.push(Math.sqrt(vr));
+            }
+            return out;
+        }
+
+        function labelSelec(selection) {
+            if (selection === 'ALL') return 'Todos';
+            const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos';
+        }
+
+        function updateCharts(meses, selection) {
+            const labels = meses.map(mFmt);
+            const tag = labelSelec(selection);
+            const rows = meses.map(m => aggMens(m, selection));
+
+            chValores.data.labels = labels;
+            chValores.data.datasets = [{ label: `Mensalidade (${tag})`, data: rows.map(v => v.valor), tension: .2 }];
+            chValores.update();
+
+            chQtdTicket.data.labels = labels;
+            chQtdTicket.data.datasets = [
+                { label: 'Qtd', data: rows.map(v => v.qtd), tension: .2, yAxisID: 'y' },
+                { label: 'Ticket', data: rows.map(v => v.ticket || 0), tension: .2, yAxisID: 'y1' }
+            ];
+            chQtdTicket.options = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true }, y1: { beginAtZero: true, position: 'right' } } };
+            chQtdTicket.update();
+
+            const perfVals = rows.map(v => v.perf);
+            const colors = perfVals.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)');
+            const borders = perfVals.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
+            chPerf.data.labels = labels;
+            chPerf.data.datasets = [{ label: `Performance MoM (${tag})`, data: perfVals, backgroundColor: colors, borderColor: borders, borderWidth: 1 }];
+            chPerf.update();
+
+            const logs = rows.map(v => v.logret);
+            const vol3 = rollingStd(logs, 3).map(v => v == null ? null : v * 100);
+            chVol.data.labels = labels;
+            chVol.data.datasets = [
+                { label: `LogRet (${tag})`, data: logs, tension: .2 },
+                { label: 'Vol. móvel 3m (%)', data: vol3, tension: .2 }
+            ];
+            chVol.update();
+
+            chYoY.data.labels = labels;
+            chYoY.data.datasets = [{ label: `Receita YoY (${tag})`, data: rows.map(v => v.r_yoy) }];
+            chYoY.update();
+
+            chMix.data.labels = labels;
+            chMix.data.datasets = [
+                { label: 'ΔPreço', data: rows.map(v => v.mix_p) },
+                { label: 'ΔVolume', data: rows.map(v => v.mix_v) }
+            ];
+            chMix.update();
+        }
+
+        function markActiveMulti(scopeId, selection) {
+            const isAll = selection === 'ALL';
+            document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
+                const p = a.dataset.posto;
+                if (p === 'ALL') { a.classList.toggle('active', isAll); }
+                else { a.classList.toggle('active', !isAll && selection.has(p)); }
+            });
+        }
+
+        function buildPostoTabs(ulId, getSel, setSel, onChange) {
+            const ul = el(ulId); ul.innerHTML = '';
+            ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="ALL" class="nav-link" href="#">Todos</a></li>`);
+            POSTOS.forEach(p => ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`));
+            markActiveMulti(ulId, getSel());
+
+            ul.addEventListener('click', e => {
+                if (!e.target.matches('.nav-link')) return;
+                e.preventDefault();
+                const p = e.target.dataset.posto;
+                let sel = getSel();
+
+                if (p === 'ALL') { sel = 'ALL'; }
+                else {
+                    if (sel === 'ALL') sel = new Set();
+                    if (sel.has(p)) sel.delete(p); else sel.add(p);
+                    if (sel.size === POSTOS.length || sel.size === 0) sel = 'ALL';
+                }
+                setSel(sel);
+                markActiveMulti(ulId, sel);
+                onChange();
+            });
+        }
+
+        function renderSel1() {
+            const meses = inRange(MESES, el('#from1').value || null, el('#to1').value || null);
+            buildKPIs('#kpisSel1', meses, sel1);
+        }
+        function renderSel2() {
+            const meses = inRange(MESES, el('#from2').value || null, el('#to2').value || null);
+            buildKPIs('#kpisSel2', meses, sel2);
+            buildTable(meses, sel2);
+            updateCharts(meses, sel2);
+        }
+
+        function attachHandlers(lastFull) {
+            el('#from1').addEventListener('change', renderSel1);
+            el('#to1').addEventListener('change', renderSel1);
+            el('#reset1').addEventListener('click', () => {
+                el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL';
+                markActiveMulti('#postoTabs1', sel1); renderSel1();
+            });
+
+            el('#from2').addEventListener('change', renderSel2);
+            el('#to2').addEventListener('change', renderSel2);
+            el('#reset2').addEventListener('click', () => {
+                const [y, m] = lastFull.split('-').map(Number);
+                const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
+                el('#from2').value = d.toISOString().slice(0, 7);
+                el('#to2').value = lastFull; sel2 = 'ALL';
+                markActiveMulti('#postoTabs2', sel2); renderSel2();
+            });
+        }
+
+        Promise.all([fetch(URL_GERAL, { cache: 'no-store' }), fetch(URL_POR_POSTO, { cache: 'no-store' })])
+            .then(async ([rg, rp]) => {
+                if (!rg.ok) throw new Error(`HTTP ${rg.status} em ${URL_GERAL}`);
+                if (!rp.ok) throw new Error(`HTTP ${rp.status} em ${URL_POR_POSTO}`);
+                geral = await rg.json(); porPosto = await rp.json();
+
+                MESES = Object.keys(geral).filter(k => !k.startsWith('_')).sort();
+                if (!MESES.length) throw new Error('JSON consolidado sem meses.');
+                const lastFull = lastCompleteMonth(MESES);
+
+                const ultimo = porPosto[lastFull] || {};
+                POSTOS = Object.keys(ultimo).filter(x => /^[A-Z]$/.test(x)).sort();
+
+                el('#from1').value = MESES[0]; el('#to1').value = lastFull;
+                const [y, m] = lastFull.split('-').map(Number);
+                const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
+                el('#from2').value = d.toISOString().slice(0, 7);
+                el('#to2').value = lastFull;
+
+                sel1 = 'ALL'; sel2 = 'ALL';
+
+                buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
+                buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; }, () => renderSel2());
+
+                initCharts();
+                attachHandlers(lastFull);
+                renderSel1();
+                renderSel2();
+            })
+            .catch(err => { showErr(err); alert('Falha ao carregar JSONs. Veja o console.'); });
+    </script>
+</body>
+
+</html>
