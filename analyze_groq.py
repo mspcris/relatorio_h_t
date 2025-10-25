@@ -1,11 +1,17 @@
-# analyze_groq.py
+# analyse.py
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+
 import os, re, json, time, textwrap, argparse, pathlib, html, unicodedata
 from datetime import date, datetime, timezone
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
+
 from dotenv import load_dotenv
-from groq import Groq, BadRequestError
+from groq import Groq
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from threading import Lock
 
 # -------------------------- paths e modelo --------------------------
 BASE = pathlib.Path(__file__).parent.resolve()
@@ -27,7 +33,7 @@ BUSINESS_CTX = (
     "As análises devem refletir esse escopo e evitar suposições sobre hospitalização."
 )
 
-# -------------------------- esquemas JSON estritos --------------------------
+# -------------------------- esquemas JSON --------------------------
 MENS_SCHEMA = {
     "type": "object",
     "required": ["resumo", "insights", "alertas", "recomendacoes"],
@@ -100,23 +106,22 @@ ALIM_SCHEMA = {
     "additionalProperties": False
 }
 
+# Mesmo contrato que a página espera quando envia "blocks"
+MENS_EXT_SCHEMA = MENS_SCHEMA
+
 # -------------------------- sanitização PT-BR --------------------------
 def _clean_pt(s: str) -> str:
     s = html.unescape(s or "")
     s = unicodedata.normalize("NFC", s)
     s = s.replace("\u00A0", " ").replace("\u200B", "")
-    # espaço após pontuação
     s = re.sub(r"([.,;:?!])(?!\s|$)", r"\1 ", s)
-    # separar minúscula seguida de Maiúscula grudadas
     s = re.sub(r"([a-zá-úç])([A-ZÁ-ÚÇ])", r"\1 \2", s)
-    # colagens clássicas dos títulos
-    heads = ["Resumo", "Alertas", "Recomendações", "Recomendacoes", "Picos e vales"]
-    for h in heads:
+    for h in ["Resumo", "Alertas", "Recomendações", "Recomendacoes", "Picos e vales"]:
         s = re.sub(rf"\b{h}(?=\S)", f"{h}: ", s)
     s = re.sub(r"\s{2,}", " ", s).strip()
     return s
 
-def _sanitize_obj(o):
+def _sanitize_obj(o: Any) -> Any:
     if isinstance(o, dict):
         return {k: _sanitize_obj(v) for k, v in o.items()}
     if isinstance(o, list):
@@ -179,13 +184,7 @@ def system_prompt() -> str:
     )
 
 def ask_json(client: Groq, user: str, schema: dict, retries: int = 3, wait_s: float = 1.5) -> dict:
-    """
-    1) Tenta response_format=json_schema estrito.
-    2) Fallback para json_object e varredura do primeiro bloco JSON.
-    Retorna dict já sanitizado.
-    """
-    # 1) schema estrito
-    for t in range(1, retries + 1):
+    for _ in range(retries):
         try:
             resp = client.chat.completions.create(
                 model=MODEL, temperature=0.1, max_completion_tokens=4096,
@@ -200,8 +199,7 @@ def ask_json(client: Groq, user: str, schema: dict, retries: int = 3, wait_s: fl
         except Exception:
             time.sleep(wait_s)
 
-    # 2) fallback json_object + varredura
-    for t in range(1, retries + 1):
+    for _ in range(retries):
         try:
             resp = client.chat.completions.create(
                 model=MODEL, temperature=0.1, max_completion_tokens=4096,
@@ -218,7 +216,7 @@ def ask_json(client: Groq, user: str, schema: dict, retries: int = 3, wait_s: fl
 
     raise RuntimeError("Falha ao obter JSON válido do modelo.")
 
-# -------------------------- prompts --------------------------
+# -------------------------- prompts tradicionais --------------------------
 def prompt_mensalidades(series: Dict[str, dict], meses: List[str]) -> str:
     dados = {m: series.get(m, {}) for m in meses}
     return textwrap.dedent(f"""
@@ -272,17 +270,71 @@ def prompt_alimentacao(series: Dict[str, dict], meses: List[str]) -> str:
     {{"resumo":"string","picos_e_vales":["string"],"percentual_alim_mens":{{"serie":[{{"mes":"YYYY-MM","pct":0.0}}]}}, "recomendacoes":["string"]}}
     """).strip()
 
+# -------------------------- prompt integrado para "blocks" --------------------------
+def prompt_from_blocks(blocks: List[Dict[str, Any]]) -> str:
+    def _short(o): 
+        try: 
+            return json.dumps(o, ensure_ascii=False)
+        except Exception:
+            return str(o)
+
+    sections = []
+    for b in blocks or []:
+        sc = b.get("scope")
+        if sc in ("kpi_sel1", "kpi_sel2"):
+            sections.append(f"{sc}: { _short(b.get('kpis', {})) }  período={_short(b.get('periodo'))} posto={b.get('posto')}")
+        elif sc == "tabela_12m":
+            keep = ["mes","receita","qtd","ticket","perf_mom","r_mom","q_mom","t_mom","r_yoy","q_yoy","t_yoy","logret","dpreco","dvolume","dinter"]
+            rows = [{k:r.get(k) for k in keep} for r in (b.get("rows") or [])]
+            sections.append(f"{sc}: { _short(rows) }")
+        elif sc in ("chart_valores","chart_qtd_ticket","chart_perf","chart_yoy","chart_mix","chart_scatter"):
+            pack = {k:b.get(k) for k in ('periodo','posto','series','perf','yoy','dpreco','dvolume') if b.get(k) is not None}
+            sections.append(f"{sc}: { _short(pack) }")
+        elif sc == "chart_pareto":
+            pack = {k:b.get(k) for k in ("labels","valores","total") if k in b}
+            sections.append(f"{sc}: { _short(pack) }")
+        elif sc == "chart_yoy_posto":
+            pack = {k:b.get(k) for k in ("postos","yoy_med") if k in b}
+            sections.append(f"{sc}: { _short(pack) }")
+        else:
+            sections.append(f"{sc or 'desconhecido'}: { _short(b) }")
+
+    corpo = "\n".join(f"- {s}" for s in sections) or "(sem blocos)"
+    return textwrap.dedent(f"""
+    CONTEXTO:
+    {BUSINESS_CTX}
+    Você receberá blocos heterogêneos vindos de uma UI (KPIs, Tabela 12m e séries de gráficos).
+
+    TAREFA:
+    1) Faça um diagnóstico integrado de MENSALIDADES usando TODAS as evidências.
+       - Tendência, sazonalidade, outliers, mudanças >±10% MoM e YoY.
+       - Conecte ΔPreço e ΔVolume à variação de receita.
+       - Use LogRet/volatilidade para comentar estabilidade/risco.
+       - Se houver Pareto: comente concentração por posto.
+       - Se houver YoY por posto: destaque top 3 e bottom 3.
+    2) Liste 3–7 insights e até 5 alertas.
+    3) Liste 3–7 recomendações práticas.
+    4) NÃO invente números que não estejam nos blocos.
+
+    SAÍDA JSON (apenas JSON):
+    {{"resumo":"string","insights":["string"],"alertas":["string"],"recomendacoes":["string"]}}
+
+    DADOS:
+    {corpo}
+    """).strip()
+
 # -------------------------- dados e série por posto --------------------------
 def read_json(path: pathlib.Path):
-    with open(path, "r", encoding="utf-8") as f: return json.load(f)
+    with open(path, "r", encoding="utf-8") as f: 
+        return json.load(f)
 
 def load_data() -> Tuple[Dict[str, dict], Dict[str, Dict[str, dict]]]:
     if not FILES["geral"].exists():
         raise FileNotFoundError(f"Arquivo não encontrado: {FILES['geral']}")
-    geral = read_json(FILES["geral"])                  # {mes:{mensalidade,medico,alimentacao}}
+    geral = read_json(FILES["geral"])
     por_posto = {}
     if FILES["por_posto"].exists():
-        por_posto = read_json(FILES["por_posto"])      # {mes:{posto:{...}}}
+        por_posto = read_json(FILES["por_posto"])
     return geral, por_posto
 
 def aggregate_all_from_por_posto(por_posto: Dict[str, Dict[str, dict]]) -> Dict[str, dict]:
@@ -302,9 +354,12 @@ def series_for(geral: Dict[str, dict], por_posto: Dict[str, Dict[str, dict]], po
     s: Dict[str, dict] = {}
     for mes, postos in por_posto.items():
         m = postos.get(posto)
-        if m: s[mes] = {"mensalidade":float(m.get("mensalidade",0) or 0),
-                        "medico":float(m.get("medico",0) or 0),
-                        "alimentacao":float(m.get("alimentacao",0) or 0)}
+        if m: 
+            s[mes] = {
+                "mensalidade": float(m.get("mensalidade",0) or 0),
+                "medico": float(m.get("medico",0) or 0),
+                "alimentacao": float(m.get("alimentacao",0) or 0)
+            }
     return s
 
 # -------------------------- saída --------------------------
@@ -318,12 +373,13 @@ def need_range(from_ym: str, to_ym: str, posto: str) -> bool:
             return True
     return False
 
-# -------------------------- núcleo --------------------------
+# -------------------------- núcleo tradicional --------------------------
 def run_one_range(client: Groq, geral: Dict[str, dict], por_posto: Dict[str, Dict[str, dict]],
                   from_ym: str, to_ym: str, posto: str, force: bool=False):
     meses = ym_list(from_ym, to_ym)
     series = series_for(geral, por_posto, posto)
-    if includes_current_month(from_ym, to_ym): force = True
+    if includes_current_month(from_ym, to_ym): 
+        force = True
 
     def _save(kind: str, prompt_builder, schema: dict):
         p = out_path(from_ym, to_ym, kind, posto)
@@ -340,26 +396,30 @@ def precompute_all(force: bool=False, start_ym: str="2024-01", posto: str="ALL")
     geral, por_posto = load_data()
     base_series = series_for(geral, por_posto, posto)
     all_months = sorted(base_series.keys())
-    if not all_months: raise RuntimeError("Sem meses na série base.")
+    if not all_months: 
+        raise RuntimeError("Sem meses na série base.")
     last_complete = last_complete_month(all_months)
 
     if start_ym not in all_months:
         all_ge = [m for m in all_months if m >= start_ym]
-        if not all_ge: raise RuntimeError("Sem meses >= start.")
+        if not all_ge: 
+            raise RuntimeError("Sem meses >= start.")
         start_ym = all_ge[0]
 
     months = [m for m in all_months if start_ym <= m <= last_complete]
     print(f"Meses considerados: {months[0]} .. {months[-1]}  (último completo: {last_complete}) [posto={posto}]")
 
     load_dotenv(); api_key = os.getenv("GROQ_API_KEY")
-    if not api_key: raise RuntimeError("GROQ_API_KEY ausente no ambiente/.env")
+    if not api_key: 
+        raise RuntimeError("GROQ_API_KEY ausente no ambiente/.env")
     client = Groq(api_key=api_key)
 
     n = len(months)
     for i in range(n):
         for j in range(i, n):
             from_ym, to_ym = months[i], months[j]
-            if not force and not need_range(from_ym, to_ym, posto): continue
+            if not force and not need_range(from_ym, to_ym, posto): 
+                continue
             print(f"-- Range {from_ym}..{to_ym} [{posto}]")
             run_one_range(client, geral, por_posto, from_ym, to_ym, posto, force=force)
 
@@ -372,47 +432,57 @@ def precompute_all(force: bool=False, start_ym: str="2024-01", posto: str="ALL")
     print("Meta atualizado:", (OUT_DIR / "_meta.json").name)
 
 # -------------------------- API on-demand --------------------------
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
-from threading import Lock
-
 app = FastAPI(title="IA-Groq-Analises")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 _lock = Lock()
 
 class Reqs(BaseModel):
-    from_ym: str   # "YYYY-MM"
-    to_ym:   str   # "YYYY-MM"
-    posto:   str   # "ALL" ou código do posto
+    from_ym: str
+    to_ym:   str
+    posto:   str
 
 @app.post("/ia/analisar")
-def ia_analisar(req: Reqs):
+async def ia_analisar_any(req: Request):
     try:
+        payload = await req.json()
+
+        # NOVO: payload com "blocks" vindo direto da página
+        if isinstance(payload, dict) and "blocks" in payload:
+            load_dotenv(); api_key = os.getenv("GROQ_API_KEY")
+            if not api_key: 
+                raise HTTPException(500, "GROQ_API_KEY ausente.")
+            client = Groq(api_key=api_key)
+
+            user = prompt_from_blocks(payload.get("blocks", []))
+            obj = ask_json(client, user, MENS_EXT_SCHEMA)
+            return obj  # objeto simples {resumo, insights, alertas, recomendacoes}
+
+        # LEGADO: payload simples com range
+        data = Reqs(**payload)
         geral, por_posto = load_data()
         load_dotenv(); api_key = os.getenv("GROQ_API_KEY")
-        if not api_key: raise HTTPException(500, "GROQ_API_KEY ausente.")
+        if not api_key: 
+            raise HTTPException(500, "GROQ_API_KEY ausente.")
         client = Groq(api_key=api_key)
 
         with _lock:
-            if not includes_current_month(req.from_ym, req.to_ym) and not need_range(req.from_ym, req.to_ym, req.posto):
+            if not includes_current_month(data.from_ym, data.to_ym) and not need_range(data.from_ym, data.to_ym, data.posto):
                 try:
                     return {
                         "cached": True,
-                        "mensalidades": json.loads(out_path(req.from_ym, req.to_ym, "mensalidades", req.posto).read_text(encoding="utf-8")),
-                        "medico":        json.loads(out_path(req.from_ym, req.to_ym, "medico",        req.posto).read_text(encoding="utf-8")),
-                        "alimentacao":   json.loads(out_path(req.from_ym, req.to_ym, "alimentacao",   req.posto).read_text(encoding="utf-8")),
+                        "mensalidades": json.loads(out_path(data.from_ym, data.to_ym, "mensalidades", data.posto).read_text(encoding="utf-8")),
+                        "medico":        json.loads(out_path(data.from_ym, data.to_ym, "medico",        data.posto).read_text(encoding="utf-8")),
+                        "alimentacao":   json.loads(out_path(data.from_ym, data.to_ym, "alimentacao",   data.posto).read_text(encoding="utf-8")),
                     }
                 except Exception:
                     pass
 
-            # gera on-demand
-            run_one_range(client, geral, por_posto, req.from_ym, req.to_ym, req.posto, force=False)
+            run_one_range(client, geral, por_posto, data.from_ym, data.to_ym, data.posto, force=False)
             return {
                 "cached": False,
-                "mensalidades": json.loads(out_path(req.from_ym, req.to_ym, "mensalidades", req.posto).read_text(encoding="utf-8")),
-                "medico":        json.loads(out_path(req.from_ym, req.to_ym, "medico",        req.posto).read_text(encoding="utf-8")),
-                "alimentacao":   json.loads(out_path(req.from_ym, req.to_ym, "alimentacao",   req.posto).read_text(encoding="utf-8")),
+                "mensalidades": json.loads(out_path(data.from_ym, data.to_ym, "mensalidades", data.posto).read_text(encoding="utf-8")),
+                "medico":        json.loads(out_path(data.from_ym, data.to_ym, "medico",        data.posto).read_text(encoding="utf-8")),
+                "alimentacao":   json.loads(out_path(data.from_ym, data.to_ym, "alimentacao",   data.posto).read_text(encoding="utf-8")),
             }
     except HTTPException as e:
         raise e
@@ -436,13 +506,14 @@ def main():
     args = parse_args()
     if args.serve:
         import uvicorn
-        uvicorn.run("analyze_groq:app", host=args.host, port=args.port, reload=False)
+        uvicorn.run("analyse:app", host=args.host, port=args.port, reload=False)
         return
     if args.only:
         from_ym, to_ym, posto = args.only
         geral, por_posto = load_data()
         load_dotenv(); api_key = os.getenv("GROQ_API_KEY")
-        if not api_key: raise RuntimeError("GROQ_API_KEY ausente no ambiente/.env")
+        if not api_key: 
+            raise RuntimeError("GROQ_API_KEY ausente no ambiente/.env")
         client = Groq(api_key=api_key)
         run_one_range(client, geral, por_posto, from_ym, to_ym, posto, force=args.force)
         meta = {"updated_at_utc": datetime.now(timezone.utc).isoformat(), "model": MODEL, "note": "Execução 'only'.", "posto": posto}

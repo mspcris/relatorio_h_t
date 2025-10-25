@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8" />
-    <title>KPI - Mensalidades</title>
+    <title>CAMIM — KPI de Mensalidades (com IA)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="../node_modules/admin-lte/dist/css/adminlte.min.css" />
     <link rel="stylesheet" href="../node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
@@ -74,6 +74,55 @@
         .muted {
             color: #6b7280
         }
+
+        .mini {
+            font-size: .85rem
+        }
+
+        .month-inputs .badge {
+            min-width: 46px
+        }
+
+        /* IA UI */
+        .ia-include,
+        .ia-toggle {
+            margin-left: .5rem
+        }
+
+        .ia-include.active,
+        .ia-toggle.active {
+            background: #2563eb;
+            color: #fff;
+            border-color: #2563eb
+        }
+
+        #iaPanel {
+            display: none
+        }
+
+        #iaPanel .ia-content {
+            background: #f8f9fa;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 10px
+        }
+
+        .ia-loading {
+            font-family: monospace
+        }
+
+        .ia-dots {
+            display: inline-block;
+            min-width: 1.4em
+        }
+
+        .dot {
+            opacity: .2
+        }
+
+        .dot.on {
+            opacity: 1
+        }
     </style>
 </head>
 
@@ -94,7 +143,9 @@
                             <label class="mb-0 small d-block">Período (dataset)</label>
                             <div class="month-inputs">
                                 <input id="from1" type="month" class="form-control form-control-sm" />
+                                <span id="from1Badge" class="badge badge-light align-self-center">&nbsp;</span>
                                 <input id="to1" type="month" class="form-control form-control-sm" />
+                                <span id="to1Badge" class="badge badge-light align-self-center">&nbsp;</span>
                                 <button id="reset1" class="btn btn-sm btn-outline-secondary">Reset</button>
                             </div>
                         </div>
@@ -102,16 +153,23 @@
                             <label class="mb-0 small d-block">Posto</label>
                             <ul id="postoTabs1" class="nav nav-pills scroll-tabs"></ul>
                         </div>
+                        <button id="iaAuto" class="btn btn-sm btn-outline-primary ia-toggle ml-auto"
+                            title="Reenviar à IA sempre que filtros mudarem">IA Auto</button>
                     </div>
                 </div>
 
                 <!-- 2) KPIs DA SELEÇÃO 1 -->
                 <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title">KPIs da seleção do dataset</h3>
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">KPIs da seleção do dataset</h3>
+                        <button class="btn btn-xs btn-outline-primary ia-include" data-key="kpi_sel1"
+                            title="Incluir estes KPIs na análise da IA">IA</button>
                     </div>
                     <div class="card-body kpi" id="kpisSel1"></div>
                 </div>
+
+                <!-- Painel de resposta da IA -->
+                <div id="iaPanel" class="p-2"></div>
 
                 <!-- 3) PERÍODO (12 MESES) + POSTO(S) -->
                 <div class="card">
@@ -120,7 +178,9 @@
                             <label class="mb-0 small d-block">Período (últimos 12 meses)</label>
                             <div class="month-inputs">
                                 <input id="from2" type="month" class="form-control form-control-sm" />
+                                <span id="from2Badge" class="badge badge-light align-self-center">&nbsp;</span>
                                 <input id="to2" type="month" class="form-control form-control-sm" />
+                                <span id="to2Badge" class="badge badge-light align-self-center">&nbsp;</span>
                                 <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
                             </div>
                         </div>
@@ -133,16 +193,18 @@
 
                 <!-- 4) KPIs DA SELEÇÃO 2 -->
                 <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title">KPIs da seleção 12 meses</h3>
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">KPIs da seleção 12 meses</h3>
+                        <button class="btn btn-xs btn-outline-primary ia-include" data-key="kpi_sel2">IA</button>
                     </div>
                     <div class="card-body kpi" id="kpisSel2"></div>
                 </div>
 
                 <!-- 5) TABELA SELEÇÃO 2 -->
                 <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title">Dados do Período Selecionado (12 meses)</h3>
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">Dados do Período Selecionado (12 meses)</h3>
+                        <button class="btn btn-xs btn-outline-primary ia-include" data-key="tabela_12m">IA</button>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -172,44 +234,72 @@
                     </div>
                 </div>
 
-                <!-- 6) GRÁFICOS SELEÇÃO 2 -->
+                <!-- 6) GRÁFICOS BASE -->
                 <div class="card chart-card">
-                    <div class="card-header">
-                        <h3 class="card-title">Evolução Mensal</h3>
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">Evolução Mensal</h3>
+                        <button class="btn btn-xs btn-outline-primary ia-include" data-key="chart_valores">IA</button>
                     </div>
                     <div class="card-body"><canvas id="chartValores"></canvas></div>
                 </div>
                 <div class="card chart-card">
-                    <div class="card-header">
-                        <h3 class="card-title">Qtd e Ticket Médio</h3>
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">Qtd e Ticket Médio</h3>
+                        <button class="btn btn-xs btn-outline-primary ia-include"
+                            data-key="chart_qtd_ticket">IA</button>
                     </div>
                     <div class="card-body"><canvas id="chartQtdTicket"></canvas></div>
                 </div>
                 <div class="card chart-card">
-                    <div class="card-header">
-                        <h3 class="card-title">Performance mensal</h3>
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">Performance mensal</h3>
+                        <button class="btn btn-xs btn-outline-primary ia-include" data-key="chart_perf">IA</button>
                     </div>
                     <div class="card-body"><canvas id="chartPerf"></canvas></div>
                 </div>
-
-                <!-- EXTRAS -->
                 <div class="card chart-card">
-                    <div class="card-header">
-                        <h3 class="card-title">LogRet e Volatilidade móvel (3m)</h3>
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">LogRet e Volatilidade móvel (3m)</h3>
+                        <button class="btn btn-xs btn-outline-primary ia-include" data-key="chart_vol">IA</button>
                     </div>
                     <div class="card-body"><canvas id="chartVol"></canvas></div>
                 </div>
                 <div class="card chart-card">
-                    <div class="card-header">
-                        <h3 class="card-title">Receita YoY (%)</h3>
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">Receita YoY (%)</h3>
+                        <button class="btn btn-xs btn-outline-primary ia-include" data-key="chart_yoy">IA</button>
                     </div>
                     <div class="card-body"><canvas id="chartYoY"></canvas></div>
                 </div>
                 <div class="card chart-card">
-                    <div class="card-header">
-                        <h3 class="card-title">Mix de Crescimento: ΔPreço vs ΔVolume</h3>
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">Mix de Crescimento: ΔPreço vs ΔVolume</h3>
+                        <button class="btn btn-xs btn-outline-primary ia-include" data-key="chart_mix">IA</button>
                     </div>
                     <div class="card-body"><canvas id="chartMix"></canvas></div>
+                </div>
+
+                <!-- 7) GRÁFICOS ADICIONAIS -->
+                <div class="card chart-card">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">Dispersão ΔPreço × ΔVolume</h3>
+                        <button class="btn btn-xs btn-outline-primary ia-include" data-key="chart_scatter">IA</button>
+                    </div>
+                    <div class="card-body"><canvas id="chartScatter"></canvas></div>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">Pareto de Receita por Posto</h3>
+                        <button class="btn btn-xs btn-outline-primary ia-include" data-key="chart_pareto">IA</button>
+                    </div>
+                    <div class="card-body"><canvas id="chartPareto"></canvas></div>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">YoY médio por Posto (12m)</h3>
+                        <button class="btn btn-xs btn-outline-primary ia-include" data-key="chart_yoy_posto">IA</button>
+                    </div>
+                    <div class="card-body"><canvas id="chartYoYPosto"></canvas></div>
                 </div>
 
             </section>
@@ -222,6 +312,7 @@
     <script src="../node_modules/chart.js/dist/chart.umd.js"></script>
 
     <script>
+        /* ==================== Dados base ==================== */
         const URL_GERAL = new URL('../json_consolidado/consolidado_mensal.json', location.href).href;
         const URL_POR_POSTO = new URL('../json_consolidado/consolidado_mensal_por_posto.json', location.href).href;
 
@@ -235,10 +326,11 @@
 
         const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
         const mFmt = ym => { const [y, m] = ym.split('-').map(Number); return `${MES_ABBR[m - 1].slice(0, 3)}-${String(y).slice(-2)}`; };
+        const mAbbr = ym => { if (!ym) return ''; const [y, m] = ym.split('-').map(Number); return `${MES_ABBR[m - 1].slice(0, 3)}/${String(y).slice(-2)}`; };
         const inRange = (labels, from, to) => labels.filter(m => (!from || m >= from) && (!to || m <= to));
         function lastCompleteMonth(labels) { const now = new Date(); const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; const L = labels.filter(m => m !== cur); return L.length ? L.at(-1) : labels.at(-1); }
-        const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-        const maybe = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+        const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+        const maybe = v => { const n = Number(v); return Number.isFinite(n) ? n : null; }
         const sum = arr => arr.reduce((a, b) => a + (b || 0), 0);
         const wavg = (vals, weights) => { let sW = 0, s = 0; for (let i = 0; i < vals.length; i++) { const w = weights[i] ?? 0; const v = vals[i]; if (v == null) continue; s += v * w; sW += w; } return sW ? s / sW : null; }
 
@@ -257,28 +349,23 @@
         }
 
         function aggMens(ym, selection) {
-            if (selection === 'ALL') { return srcMens(geral[ym] || {}); }
+            if (selection === 'ALL') return srcMens(geral[ym] || {});
             const postos = [...selection];
             const rows = postos.map(p => ((porPosto[ym] || {})[p]) || {});
-
             const valor = sum(rows.map(r => num(r.mensalidade)));
             const qtd = sum(rows.map(r => num(r.mensalidade_qtd)));
             const ticket = (qtd ? valor / qtd : null);
-
             const perf = wavg(rows.map(r => maybe(r.performance)), rows.map(r => num(r.mensalidade)));
             const r_mom = wavg(rows.map(r => maybe(r.receita_mom_pct)), rows.map(r => num(r.mensalidade)));
             const r_yoy = wavg(rows.map(r => maybe(r.receita_yoy_pct)), rows.map(r => num(r.mensalidade)));
             const logret = wavg(rows.map(r => maybe(r.receita_logret)), rows.map(r => num(r.mensalidade)));
-
             const q_mom = wavg(rows.map(r => maybe(r.qtd_mom_pct)), rows.map(r => num(r.mensalidade_qtd)));
             const q_yoy = wavg(rows.map(r => maybe(r.qtd_yoy_pct)), rows.map(r => num(r.mensalidade_qtd)));
             const t_mom = wavg(rows.map(r => maybe(r.ticket_mom_pct)), rows.map(r => num(r.mensalidade_qtd)));
             const t_yoy = wavg(rows.map(r => maybe(r.ticket_yoy_pct)), rows.map(r => num(r.mensalidade_qtd)));
-
             const mix_p = sum(rows.map(r => maybe(r.mix_delta_receita_preco) || 0));
             const mix_v = sum(rows.map(r => maybe(r.mix_delta_receita_volume) || 0));
             const mix_i = sum(rows.map(r => maybe(r.mix_delta_receita_interacao) || 0));
-
             return { valor, qtd, ticket, perf, r_mom, q_mom, t_mom, r_yoy, q_yoy, t_yoy, logret, mix_p, mix_v, mix_i };
         }
 
@@ -290,11 +377,10 @@
                     : (fmt === '2' ? fmt2.format(val)
                         : (fmt === '4' ? fmt4.format(val)
                             : (fmt === 'pct' ? (fmtPct.format(val) + '%') : String(val)))));
-            return `<div class="card"><div class="card-body p-2">
-      <div class="small muted">${title}</div>
-      <div class="h5 mb-0 ${neg ? 'text-danger' : ''}">${out}</div>
-    </div></div>`;
+            return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0 ${neg ? 'text-danger' : ''}">${out}</div></div></div>`;
         }
+
+        function maxDrawdown(vals) { let peak = -Infinity, mdd = 0; for (const v of vals) { if (v == null) continue; if (v > peak) peak = v; if (peak > 0) { const dd = (v - peak) / peak * 100; if (dd < mdd) mdd = dd; } } return mdd || 0; }
 
         function buildKPIs(containerId, meses, selection) {
             const rows = meses.map(m => aggMens(m, selection));
@@ -303,93 +389,83 @@
             const ticketPond = qtd ? receita / qtd : null;
 
             const perfs = rows.map(v => v.perf).filter(v => v != null);
-            const perfMA = perfs.length ? perfs.reduce((a, b) => a + b, 0) / perfs.length : null;   // NOVO: média aritmética
+            const perfMA = perfs.length ? perfs.reduce((a, b) => a + b, 0) / perfs.length : null;
             let perfMG = null, perfAc = null;
-            if (perfs.length) {
-                const mult = perfs.reduce((a, p) => a * (1 + p / 100), 1);
-                perfAc = (mult - 1) * 100;
-                perfMG = (Math.pow(mult, 1 / perfs.length) - 1) * 100;
-            }
-            let cagr = null;
-            if (meses.length >= 2) {
-                const first = aggMens(meses[0], selection).valor || 0, last = aggMens(meses.at(-1), selection).valor || 0;
-                if (first > 0) cagr = (Math.pow(last / first, 1 / (meses.length - 1)) - 1) * 100;
-            }
+            if (perfs.length) { const mult = perfs.reduce((a, p) => a * (1 + p / 100), 1); perfAc = (mult - 1) * 100; perfMG = (Math.pow(mult, 1 / perfs.length) - 1) * 100; }
+            let cagr = null; if (meses.length >= 2) { const first = aggMens(meses[0], selection).valor || 0, last = aggMens(meses.at(-1), selection).valor || 0; if (first > 0) cagr = (Math.pow(last / first, 1 / (meses.length - 1)) - 1) * 100; }
             const runRate = meses.length ? (receita / meses.length) * 12 : null;
 
             const moms = rows.map(v => v.r_mom).filter(v => v != null);
             const hit = moms.length ? (moms.filter(x => x > 0).length / moms.length) * 100 : null;
 
             const logrets = rows.map(v => v.logret).filter(v => v != null);
-            let vol = null;
-            if (logrets.length) {
-                const mean = logrets.reduce((a, b) => a + b, 0) / logrets.length;
-                const vr = logrets.reduce((a, x) => a + (x - mean) * (x - mean), 0) / logrets.length;
-                vol = Math.sqrt(vr);
-            }
+            let vol = null; if (logrets.length) { const mean = logrets.reduce((a, b) => a + b, 0) / logrets.length; const vr = logrets.reduce((a, x) => a + (x - mean) * (x - mean), 0) / logrets.length; vol = Math.sqrt(vr); }
             const volPct = (vol == null) ? null : (vol * 100);
+
+            const receitaSerie = meses.map(m => aggMens(m, selection).valor || null);
+            const mdd = maxDrawdown(receitaSerie);
 
             const box = el(containerId); box.innerHTML = '';
             box.insertAdjacentHTML('beforeend', kpiCard('Receita total', receita, 'moeda'));
             box.insertAdjacentHTML('beforeend', kpiCard('Qtd total', qtd, 'moeda'));
             box.insertAdjacentHTML('beforeend', kpiCard('Ticket ponderado', ticketPond, '2'));
-            box.insertAdjacentHTML('beforeend', kpiCard('Perf. mensal (MA)', perfMA, 'pct'));   <!-- aqui, à esquerda do MG -->
+            box.insertAdjacentHTML('beforeend', kpiCard('Perf. mensal (MA)', perfMA, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('Perf. mensal (MG)', perfMG, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('Perf. acumulada', perfAc, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('CAGR receita', cagr, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('Run-rate 12m', runRate, 'moeda'));
             box.insertAdjacentHTML('beforeend', kpiCard('Hit-rate crescimento', hit, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('Volatilidade logret', volPct, 'pct'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Max Drawdown receita', mdd, 'pct'));
         }
 
         function buildTable(meses, selection) {
-            const tb = el('#tblBody'); tb.innerHTML = '';
-            let sumMens = 0, sumQtd = 0, tickets = [];
+            const tb = el('#tblBody'); tb.innerHTML = ''; let sumMens = 0, sumQtd = 0, tickets = [];
             meses.forEach(m => {
                 const v = aggMens(m, selection);
                 sumMens += v.valor; sumQtd += v.qtd; if (v.ticket != null) tickets.push(v.ticket);
                 tb.insertAdjacentHTML('beforeend', `
-        <tr>
-          <td>${mFmt(m)}</td>
-          <td class="text-right">${fmtInt.format(v.qtd)}</td>
-          <td class="text-right">${fmtInt.format(v.valor)}</td>
-          <td class="text-right">${v.ticket == null ? '-' : fmt2.format(v.ticket)}</td>
-          <td class="text-right">${v.perf == null ? '-' : fmtPct.format(v.perf) + '%'}</td>
-          <td class="text-right">${v.r_mom == null ? '-' : fmtPct.format(v.r_mom) + '%'}</td>
-          <td class="text-right">${v.q_mom == null ? '-' : fmtPct.format(v.q_mom) + '%'}</td>
-          <td class="text-right">${v.t_mom == null ? '-' : fmtPct.format(v.t_mom) + '%'}</td>
-          <td class="text-right">${v.r_yoy == null ? '-' : fmtPct.format(v.r_yoy) + '%'}</td>
-          <td class="text-right">${v.q_yoy == null ? '-' : fmtPct.format(v.q_yoy) + '%'}</td>
-          <td class="text-right">${v.t_yoy == null ? '-' : fmtPct.format(v.t_yoy) + '%'}</td>
-          <td class="text-right">${v.logret == null ? '-' : fmt4.format(v.logret)}</td>
-          <td class="text-right">${v.mix_p == null ? '-' : fmt2.format(v.mix_p)}</td>
-          <td class="text-right">${v.mix_v == null ? '-' : fmt2.format(v.mix_v)}</td>
-          <td class="text-right">${v.mix_i == null ? '-' : fmt2.format(v.mix_i)}</td>
-        </tr>`);
+      <tr>
+        <td>${mFmt(m)}</td>
+        <td class="text-right">${fmtInt.format(v.qtd)}</td>
+        <td class="text-right">${fmtInt.format(v.valor)}</td>
+        <td class="text-right">${v.ticket == null ? '-' : fmt2.format(v.ticket)}</td>
+        <td class="text-right">${v.perf == null ? '-' : fmtPct.format(v.perf) + '%'}</td>
+        <td class="text-right">${v.r_mom == null ? '-' : fmtPct.format(v.r_mom) + '%'}</td>
+        <td class="text-right">${v.q_mom == null ? '-' : fmtPct.format(v.q_mom) + '%'}</td>
+        <td class="text-right">${v.t_mom == null ? '-' : fmtPct.format(v.t_mom) + '%'}</td>
+        <td class="text-right">${v.r_yoy == null ? '-' : fmtPct.format(v.r_yoy) + '%'}</td>
+        <td class="text-right">${v.q_yoy == null ? '-' : fmtPct.format(v.q_yoy) + '%'}</td>
+        <td class="text-right">${v.t_yoy == null ? '-' : fmtPct.format(v.t_yoy) + '%'}</td>
+        <td class="text-right">${v.logret == null ? '-' : fmt4.format(v.logret)}</td>
+        <td class="text-right">${v.mix_p == null ? '-' : fmt2.format(v.mix_p)}</td>
+        <td class="text-right">${v.mix_v == null ? '-' : fmt2.format(v.mix_v)}</td>
+        <td class="text-right">${v.mix_i == null ? '-' : fmt2.format(v.mix_i)}</td>
+      </tr>`);
             });
             const avgMens = meses.length ? Math.round(sumMens / meses.length) : 0;
             const avgQtd = meses.length ? Math.round(sumQtd / meses.length) : 0;
             const avgTk = tickets.length ? tickets.reduce((a, b) => a + b, 0) / tickets.length : null;
             tb.insertAdjacentHTML('beforeend', `
-      <tr>
-        <td><b>Média</b></td>
-        <td class="text-right"><b>${fmtInt.format(avgQtd)}</b></td>
-        <td class="text-right"><b>${fmtInt.format(avgMens)}</b></td>
-        <td class="text-right"><b>${avgTk == null ? '-' : fmt2.format(avgTk)}</b></td>
-        <td class="text-right" colspan="12"><b class="muted">—</b></td>
-      </tr>`);
+    <tr>
+      <td><b>Média</b></td>
+      <td class="text-right"><b>${fmtInt.format(avgQtd)}</b></td>
+      <td class="text-right"><b>${fmtInt.format(avgMens)}</b></td>
+      <td class="text-right"><b>${avgTk == null ? '-' : fmt2.format(avgTk)}</b></td>
+      <td class="text-right" colspan="12"><b class="muted">—</b></td>
+    </tr>`);
             tb.insertAdjacentHTML('beforeend', `
-      <tr>
-        <td><b>Total</b></td>
-        <td class="text-right"><b>${fmtInt.format(sumQtd)}</b></td>
-        <td class="text-right"><b>${fmtInt.format(sumMens)}</b></td>
-        <td class="text-right"><b>-</b></td>
-        <td class="text-right" colspan="12"><b>-</b></td>
-      </tr>`);
+    <tr>
+      <td><b>Total</b></td>
+      <td class="text-right"><b>${fmtInt.format(sumQtd)}</b></td>
+      <td class="text-right"><b>${fmtInt.format(sumMens)}</b></td>
+      <td class="text-right"><b>-</b></td>
+      <td class="text-right" colspan="12"><b>-</b></td>
+    </tr>`);
         }
 
-        let chValores, chQtdTicket, chPerf, chVol, chYoY, chMix;
-
+        /* ==================== Gráficos ==================== */
+        let chValores, chQtdTicket, chPerf, chVol, chYoY, chMix, chScatter, chPareto, chYoYPosto;
         function initCharts() {
             const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
             chValores = new Chart(document.getElementById('chartValores'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
@@ -398,40 +474,45 @@
             chVol = new Chart(document.getElementById('chartVol'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
             chYoY = new Chart(document.getElementById('chartYoY'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
             chMix = new Chart(document.getElementById('chartMix'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+            chScatter = new Chart(document.getElementById('chartScatter'), { type: 'scatter', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'ΔVolume' } }, y: { title: { display: true, text: 'ΔPreço' } } } } });
+            chPareto = new Chart(document.getElementById('chartPareto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+            chYoYPosto = new Chart(document.getElementById('chartYoYPosto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
         }
-
         function rollingStd(arr, w) {
-            const out = [];
-            for (let i = 0; i < arr.length; i++) {
+            const out = []; for (let i = 0; i < arr.length; i++) {
                 if (i + 1 < w) { out.push(null); continue; }
-                const s = arr.slice(i + 1 - w, i + 1).filter(v => v != null);
-                if (!s.length) { out.push(null); continue; }
-                const mean = s.reduce((a, b) => a + b, 0) / s.length;
-                const vr = s.reduce((a, x) => a + (x - mean) * (x - mean), 0) / s.length;
-                out.push(Math.sqrt(vr));
+                const s = arr.slice(i + 1 - w, i + 1).filter(v => v != null); if (!s.length) { out.push(null); continue; }
+                const mean = s.reduce((a, b) => a + b, 0) / s.length; const vr = s.reduce((a, x) => a + (x - mean) * (x - mean), 0) / s.length; out.push(Math.sqrt(vr));
             }
             return out;
         }
-
-        function labelSelec(selection) {
-            if (selection === 'ALL') return 'Todos';
-            const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos';
+        function labelSelec(selection) { if (selection === 'ALL') return 'Todos'; const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos'; }
+        function postoShares(meses, selection) {
+            const map = new Map();
+            meses.forEach(m => {
+                const row = porPosto[m] || {};
+                Object.keys(row).forEach(p => {
+                    if (selection !== 'ALL' && !selection.has(p)) return;
+                    const v = num(row[p]?.mensalidade);
+                    map.set(p, (map.get(p) || 0) + v);
+                });
+            });
+            const entries = [...map.entries()].sort((a, b) => b[1] - a[1]);
+            return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]), total: sum(entries.map(e => e[1])) };
         }
-
         function updateCharts(meses, selection) {
             const labels = meses.map(mFmt);
             const tag = labelSelec(selection);
             const rows = meses.map(m => aggMens(m, selection));
 
+            const receita = rows.map(v => v.valor);
+            const mm3 = receita.map((_, i) => { const s = receita.slice(Math.max(0, i - 2), i + 1).filter(x => x != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; });
             chValores.data.labels = labels;
-            chValores.data.datasets = [{ label: `Mensalidade (${tag})`, data: rows.map(v => v.valor), tension: .2 }];
+            chValores.data.datasets = [{ label: `Mensalidade (${tag})`, data: receita, tension: .2 }, { label: 'Média móvel 3m', data: mm3, tension: .2 }];
             chValores.update();
 
             chQtdTicket.data.labels = labels;
-            chQtdTicket.data.datasets = [
-                { label: 'Qtd', data: rows.map(v => v.qtd), tension: .2, yAxisID: 'y' },
-                { label: 'Ticket', data: rows.map(v => v.ticket || 0), tension: .2, yAxisID: 'y1' }
-            ];
+            chQtdTicket.data.datasets = [{ label: 'Qtd', data: rows.map(v => v.qtd), tension: .2, yAxisID: 'y' }, { label: 'Ticket', data: rows.map(v => v.ticket || 0), tension: .2, yAxisID: 'y1' }];
             chQtdTicket.options = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true }, y1: { beginAtZero: true, position: 'right' } } };
             chQtdTicket.update();
 
@@ -445,24 +526,47 @@
             const logs = rows.map(v => v.logret);
             const vol3 = rollingStd(logs, 3).map(v => v == null ? null : v * 100);
             chVol.data.labels = labels;
-            chVol.data.datasets = [
-                { label: `LogRet (${tag})`, data: logs, tension: .2 },
-                { label: 'Vol. móvel 3m (%)', data: vol3, tension: .2 }
-            ];
+            chVol.data.datasets = [{ label: `LogRet (${tag})`, data: logs, tension: .2 }, { label: 'Vol. móvel 3m (%)', data: vol3, tension: .2 }];
             chVol.update();
 
             chYoY.data.labels = labels;
-            chYoY.data.datasets = [{ label: `Receita YoY (${tag})`, data: rows.map(v => v.r_yoy) }];
+            const yoyVals = rows.map(v => v.r_yoy);
+            const yoyColors = yoyVals.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)');
+            const yoyBorders = yoyVals.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
+            chYoY.data.datasets = [{ label: `Receita YoY (${tag})`, data: yoyVals, backgroundColor: yoyColors, borderColor: yoyBorders, borderWidth: 1 }];
             chYoY.update();
 
             chMix.data.labels = labels;
-            chMix.data.datasets = [
-                { label: 'ΔPreço', data: rows.map(v => v.mix_p) },
-                { label: 'ΔVolume', data: rows.map(v => v.mix_v) }
-            ];
+            chMix.data.datasets = [{ label: 'ΔPreço', data: rows.map(v => v.mix_p) }, { label: 'ΔVolume', data: rows.map(v => v.mix_v) }];
             chMix.update();
+
+            chScatter.data.datasets = [{ label: 'Meses', data: rows.map(v => ({ x: v.mix_v || 0, y: v.mix_p || 0 })) }];
+            chScatter.update();
+
+            const shares = postoShares(meses, selection);
+            chPareto.data.labels = shares.labels;
+            chPareto.data.datasets = [{ label: 'Receita (período)', data: shares.valores }];
+            chPareto.update();
+
+            const mapYoY = new Map();
+            meses.forEach(m => {
+                const row = porPosto[m] || {};
+                Object.keys(row).forEach(p => {
+                    if (selection !== 'ALL' && !selection.has(p)) return;
+                    const yoy = maybe(row[p]?.receita_yoy_pct); if (yoy == null) return;
+                    const obj = mapYoY.get(p) || { sum: 0, count: 0 }; obj.sum += yoy; obj.count += 1; mapYoY.set(p, obj);
+                });
+            });
+            const postos = [...mapYoY.keys()].sort();
+            const yoyMed = postos.map(p => mapYoY.get(p).count ? mapYoY.get(p).sum / mapYoY.get(p).count : null);
+            const yoyPostoColors = yoyMed.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)');
+            const yoyPostoBorders = yoyMed.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
+            chYoYPosto.data.labels = postos;
+            chYoYPosto.data.datasets = [{ label: 'YoY médio (12m)', data: yoyMed, backgroundColor: yoyPostoColors, borderColor: yoyPostoBorders, borderWidth: 1 }];
+            chYoYPosto.update();
         }
 
+        /* ==================== UI seleção de Posto ==================== */
         function markActiveMulti(scopeId, selection) {
             const isAll = selection === 'ALL';
             document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
@@ -471,61 +575,139 @@
                 else { a.classList.toggle('active', !isAll && selection.has(p)); }
             });
         }
-
         function buildPostoTabs(ulId, getSel, setSel, onChange) {
             const ul = el(ulId); ul.innerHTML = '';
             ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="ALL" class="nav-link" href="#">Todos</a></li>`);
             POSTOS.forEach(p => ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`));
             markActiveMulti(ulId, getSel());
-
             ul.addEventListener('click', e => {
-                if (!e.target.matches('.nav-link')) return;
-                e.preventDefault();
-                const p = e.target.dataset.posto;
-                let sel = getSel();
-
+                if (!e.target.matches('.nav-link')) return; e.preventDefault();
+                const p = e.target.dataset.posto; let sel = getSel();
                 if (p === 'ALL') { sel = 'ALL'; }
                 else {
                     if (sel === 'ALL') sel = new Set();
                     if (sel.has(p)) sel.delete(p); else sel.add(p);
                     if (sel.size === POSTOS.length || sel.size === 0) sel = 'ALL';
                 }
-                setSel(sel);
-                markActiveMulti(ulId, sel);
-                onChange();
+                setSel(sel); markActiveMulti(ulId, sel); onChange();
             });
         }
 
-        function renderSel1() {
-            const meses = inRange(MESES, el('#from1').value || null, el('#to1').value || null);
-            buildKPIs('#kpisSel1', meses, sel1);
-        }
-        function renderSel2() {
-            const meses = inRange(MESES, el('#from2').value || null, el('#to2').value || null);
-            buildKPIs('#kpisSel2', meses, sel2);
-            buildTable(meses, sel2);
-            updateCharts(meses, sel2);
+        /* ==================== Renders e handlers ==================== */
+        function renderSel1() { const meses = inRange(MESES, el('#from1').value || null, el('#to1').value || null); buildKPIs('#kpisSel1', meses, sel1); }
+        function renderSel2() { const meses = inRange(MESES, el('#from2').value || null, el('#to2').value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
+
+        function syncBadges() {
+            const set = (inp, badge) => { const i = el(inp), b = el(badge); if (i && b) b.textContent = mAbbr(i.value); };
+            set('#from1', '#from1Badge'); set('#to1', '#to1Badge'); set('#from2', '#from2Badge'); set('#to2', '#to2Badge');
         }
 
         function attachHandlers(lastFull) {
-            el('#from1').addEventListener('change', renderSel1);
-            el('#to1').addEventListener('change', renderSel1);
-            el('#reset1').addEventListener('click', () => {
-                el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL';
-                markActiveMulti('#postoTabs1', sel1); renderSel1();
-            });
+            el('#from1').addEventListener('change', () => { renderSel1(); syncBadges(); if (IA_STATE.auto) IA_send(); });
+            el('#to1').addEventListener('change', () => { renderSel1(); syncBadges(); if (IA_STATE.auto) IA_send(); });
+            el('#reset1').addEventListener('click', () => { el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1(); syncBadges(); if (IA_STATE.auto) IA_send(); });
 
-            el('#from2').addEventListener('change', renderSel2);
-            el('#to2').addEventListener('change', renderSel2);
-            el('#reset2').addEventListener('click', () => {
-                const [y, m] = lastFull.split('-').map(Number);
-                const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
-                el('#from2').value = d.toISOString().slice(0, 7);
-                el('#to2').value = lastFull; sel2 = 'ALL';
-                markActiveMulti('#postoTabs2', sel2); renderSel2();
-            });
+            el('#from2').addEventListener('change', () => { renderSel2(); syncBadges(); if (IA_STATE.auto) IA_send(); });
+            el('#to2').addEventListener('change', () => { renderSel2(); syncBadges(); if (IA_STATE.auto) IA_send(); });
+            el('#reset2').addEventListener('click', () => { const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11); el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL'; markActiveMulti('#postoTabs2', sel2); renderSel2(); syncBadges(); if (IA_STATE.auto) IA_send(); });
         }
 
+        /* ==================== IA: botões, coleta, envio ==================== */
+        const API_ANALISAR = "/ia/analisar";               // ajuste o endpoint da sua API GROQ
+        const IA_BASE = (window.ROOT || "") + "json_retorno_groq"; // fallback local para mocks
+        const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
+
+        const loaders = new Map();
+        function startDots(box) {
+            const wrap = document.createElement('div'); wrap.className = 'ia-content ia-loading';
+            wrap.innerHTML = 'Analisando <span class="ia-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+            box.innerHTML = ''; box.appendChild(wrap); let t = 0; const int = setInterval(() => { const d = wrap.querySelectorAll('.dot'); d.forEach(x => x.classList.remove('on')); d[t % 3].classList.add('on'); t++; }, 260);
+            loaders.set(box, int);
+        }
+        function stopDots(box) { const int = loaders.get(box); if (int) { clearInterval(int); loaders.delete(box); } }
+        async function typeInto(box, html) { box.innerHTML = `<div class="ia-content">${html}</div>`; }
+
+        const IA_STATE = { auto: false, included: new Set() };
+        function mesesSel1() { return inRange(MESES, el('#from1').value || null, el('#to1').value || null); }
+        function mesesSel2() { return inRange(MESES, el('#from2').value || null, el('#to2').value || null); }
+        function postoAtual() { return sel2 === 'ALL' ? 'ALL' : [...sel2].sort().join('+'); }
+
+        function kpiSummary(meses, selection) {
+            const rows = meses.map(m => aggMens(m, selection));
+            const receita = sum(rows.map(v => v.valor));
+            const qtd = sum(rows.map(v => v.qtd));
+            const ticket = qtd ? receita / qtd : null;
+            const perf = rows.map(v => v.perf).filter(v => v != null);
+            const perf_ma = perf.length ? perf.reduce((a, b) => a + b, 0) / perf.length : null;
+            return { receita_total: receita, qtd_total: qtd, ticket_pond: ticket, perf_ma: perf_ma, run_rate_12m: meses.length ? (receita / meses.length) * 12 : null };
+        }
+        function tabela12Data(meses, selection) {
+            return meses.map(m => { const v = aggMens(m, selection); return { mes: m, receita: v.valor, qtd: v.qtd, ticket: v.ticket, perf_mom: v.perf, r_mom: v.r_mom, q_mom: v.q_mom, t_mom: v.t_mom, r_yoy: v.r_yoy, q_yoy: v.q_yoy, t_yoy: v.t_yoy, logret: v.logret, dpreco: v.mix_p, dvolume: v.mix_v, dinter: v.mix_i }; });
+        }
+        function seriesBasicas(meses, selection) {
+            const rows = meses.map(m => aggMens(m, selection));
+            return { labels: meses, receita: rows.map(v => v.valor), qtd: rows.map(v => v.qtd), ticket: rows.map(v => v.ticket), perf: rows.map(v => v.perf), yoy: rows.map(v => v.r_yoy), mix_p: rows.map(v => v.mix_p), mix_v: rows.map(v => v.mix_v) };
+        }
+        const IA_KEYS = {
+            kpi_sel1: () => ({ scope: 'kpi_sel1', periodo: { from: el('#from1').value, to: el('#to1').value }, posto: 'ALL', kpis: kpiSummary(mesesSel1(), 'ALL') }),
+            kpi_sel2: () => ({ scope: 'kpi_sel2', periodo: { from: el('#from2').value, to: el('#to2').value }, posto: postoAtual(), kpis: kpiSummary(mesesSel2(), sel2) }),
+            tabela_12m: () => ({ scope: 'tabela_12m', periodo: { from: el('#from2').value, to: el('#to2').value }, posto: postoAtual(), rows: tabela12Data(mesesSel2(), sel2) }),
+            chart_valores: () => { const meses = mesesSel2(); return { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: seriesBasicas(meses, sel2) }; },
+            chart_qtd_ticket: () => IA_KEYS.chart_valores(),
+            chart_perf: () => { const meses = mesesSel2(); const s = seriesBasicas(meses, sel2); return { scope: 'chart_perf', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), perf: s.perf }; },
+            chart_vol: () => IA_KEYS.chart_valores(),
+            chart_yoy: () => { const meses = mesesSel2(); const s = seriesBasicas(meses, sel2); return { scope: 'chart_yoy', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), yoy: s.yoy }; },
+            chart_mix: () => { const meses = mesesSel2(); const s = seriesBasicas(meses, sel2); return { scope: 'chart_mix', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), dpreco: s.mix_p, dvolume: s.mix_v }; },
+            chart_scatter: () => IA_KEYS.chart_mix(),
+            chart_pareto: () => ({ scope: 'chart_pareto', periodo: { from: el('#from2').value, to: el('#to2').value }, posto: postoAtual() }),
+            chart_yoy_posto: () => ({ scope: 'chart_yoy_posto', periodo: { from: el('#from2').value, to: el('#to2').value }, posto: postoAtual() })
+        };
+        async function iaFetch(payload) {
+            if (IS_LOCAL) {
+                try {
+                    const f = `${payload.blocks[0]?.periodo?.from || 'from'}_${payload.blocks[0]?.periodo?.to || 'to'}_${(payload.blocks[0]?.posto || 'ALL')}_mensalidades.json`;
+                    const url = `${IA_BASE}/${f}?t=${Date.now()}`;
+                    const r = await fetch(url, { cache: 'no-store' }); if (r.ok) return r.json();
+                } catch (e) { }
+                return { resumo: 'Mock local não encontrado para este filtro.', alertas: [] };
+            }
+            const r = await fetch(API_ANALISAR, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+        }
+        function toHtml(obj) {
+            if (typeof obj === 'string') return `<p>${obj}</p>`;
+            const parts = [];
+            if (obj.resumo) parts.push(`<h5><b>Resumo</b></h5><p>${obj.resumo}</p>`);
+            if (Array.isArray(obj.insights)) parts.push(`<h5><b>Insights</b></h5><ul>${obj.insights.map(x => `<li>${x}</li>`).join('')}</ul>`);
+            if (Array.isArray(obj.alertas) && obj.alertas.length) parts.push(`<h5><b>Alertas</b></h5><ul>${obj.alertas.map(x => `<li>${x}</li>`).join('')}</ul>`);
+            return parts.join('') || '<p>Sem conteúdo.</p>';
+        }
+        async function IA_send() {
+            const box = el('#iaPanel'); if (!box) return;
+            if (!IA_STATE.included.size) { box.style.display = 'none'; box.innerHTML = ''; return; }
+            box.style.display = 'block'; startDots(box);
+            try {
+                const blocks = [...IA_STATE.included].map(k => IA_KEYS[k] && IA_KEYS[k]()).filter(Boolean);
+                const payload = { produto: 'mensalidades', when: Date.now(), blocks };
+                const data = await iaFetch(payload); stopDots(box); await typeInto(box, toHtml(data));
+            } catch (err) { stopDots(box); box.innerHTML = `<div class="ia-content"><p>Falha na IA: ${err.message || err}</p></div>`; }
+        }
+
+        /* Bind dos botões IA */
+        document.addEventListener('click', ev => {
+            const btn = ev.target.closest('.ia-include'); if (!btn) return;
+            const key = btn.dataset.key; const on = btn.classList.toggle('active');
+            if (on) IA_STATE.included.add(key); else IA_STATE.included.delete(key);
+            if (IA_STATE.auto) IA_send();
+        });
+        document.addEventListener('click', ev => {
+            const btn = ev.target.closest('#iaAuto'); if (!btn) return;
+            IA_STATE.auto = !IA_STATE.auto; btn.classList.toggle('active', IA_STATE.auto);
+            if (IA_STATE.auto) IA_send();
+        });
+
+        /* ==================== Boot ==================== */
         Promise.all([fetch(URL_GERAL, { cache: 'no-store' }), fetch(URL_POR_POSTO, { cache: 'no-store' })])
             .then(async ([rg, rp]) => {
                 if (!rg.ok) throw new Error(`HTTP ${rg.status} em ${URL_GERAL}`);
@@ -536,24 +718,19 @@
                 if (!MESES.length) throw new Error('JSON consolidado sem meses.');
                 const lastFull = lastCompleteMonth(MESES);
 
-                const ultimo = porPosto[lastFull] || {};
-                POSTOS = Object.keys(ultimo).filter(x => /^[A-Z]$/.test(x)).sort();
+                const ultimo = porPosto[lastFull] || {}; POSTOS = Object.keys(ultimo).filter(x => /^[A-Z]$/.test(x)).sort();
 
                 el('#from1').value = MESES[0]; el('#to1').value = lastFull;
-                const [y, m] = lastFull.split('-').map(Number);
-                const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
-                el('#from2').value = d.toISOString().slice(0, 7);
-                el('#to2').value = lastFull;
+                const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
+                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull;
 
                 sel1 = 'ALL'; sel2 = 'ALL';
 
                 buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
                 buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; }, () => renderSel2());
 
-                initCharts();
-                attachHandlers(lastFull);
-                renderSel1();
-                renderSel2();
+                initCharts(); attachHandlers(lastFull);
+                renderSel1(); renderSel2(); syncBadges();
             })
             .catch(err => { showErr(err); alert('Falha ao carregar JSONs. Veja o console.'); });
     </script>
