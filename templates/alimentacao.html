@@ -203,6 +203,38 @@
             border-radius: 6px;
             color: #111
         }
+
+
+        /* MOBILE ADJUST NA UNHA :)*/
+
+
+        @media (max-width: 576px) {
+            .navbar .ml-auto {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                width: 100%;
+            }
+
+            .navbar .ml-auto .btn {
+                flex: 1 1 48%;
+                min-width: 140px;
+            }
+
+            #btnPrompts {
+                margin-left: 0;
+            }
+
+            .main-header .d-flex.align-items-center {
+                flex-wrap: wrap;
+            }
+
+            #jsonInfo {
+                flex: 0 0 100%;
+                margin-left: 0;
+                margin-top: 4px;
+            }
+        }
     </style>
 </head>
 
@@ -418,10 +450,6 @@
         </div>
     </div>
 
-
-
-
-
     <!-- NAV ativo -->
     <script>
         document.querySelectorAll('.nav-sidebar .nav-link').forEach(a => {
@@ -429,6 +457,150 @@
             if (location.pathname.endsWith(href)) a.classList.add('active');
         });
     </script>
+
+    <!-- ========== Prompt Manager (reutilizável) ========== -->
+    <script>
+        (function () {
+            const API_BASE = (window.PROMPTS_API_BASE || '/prompts/').replace(/\/+$/, '') + '/';
+            function uid() { return 'p_' + Math.random().toString(36).slice(2, 10) }
+            function nowISO() { return new Date().toISOString() }
+            function tplRender(tpl, vars) { return String(tpl || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => (vars?.[k] ?? `{${k}}`)) }
+
+            const Prompts = {
+                state: { pageId: null, mounted: false, editingId: null },
+                async init({ pageId, defaults = [], mountAfter }) {
+                    this.state.pageId = pageId;
+                    let data = await this._get(pageId);
+                    if (!data || !Array.isArray(data.list)) {
+                        const list = defaults.map(d => ({ id: uid(), name: d.name, template: d.template, updatedAt: nowISO() }));
+                        data = { list, activeId: list[0]?.id || null };
+                        await this._put(pageId, data);
+                    }
+                    this._cache = data;
+                    this._mountUI(mountAfter);
+                    this._renderList();
+                },
+                getActive() { const d = this._cache || { list: [], activeId: null }; return d.list.find(p => p.id === d.activeId) || null; },
+                render(vars) { const a = this.getActive(); return a ? tplRender(a.template, vars) : ''; },
+
+                async _get(id) { try { const r = await fetch(API_BASE + encodeURIComponent(id), { cache: 'no-store' }); if (!r.ok) return null; return r.json(); } catch { return null; } },
+                async _put(id, body) {
+                    const r = await fetch(API_BASE + encodeURIComponent(id), {
+                        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+                    });
+                    if (!r.ok) throw new Error('Falha ao salvar prompts');
+                    return r.json();
+                },
+
+                _mountUI(mountAfter) {
+                    if (this.state.mounted) return;
+                    const btn = document.createElement('button');
+                    btn.id = 'btnPrompts'; btn.className = 'btn btn-sm btn-outline-secondary ml-2';
+                    btn.textContent = 'Prompts'; btn.title = 'Gerenciar prompts desta página';
+                    const anchor = document.querySelector(mountAfter) || document.body;
+                    anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+
+                    const modal = document.createElement('div');
+                    modal.id = 'promptModal'; modal.style.display = 'none';
+                    modal.innerHTML = `
+<div class="card p-2" style="position:fixed;right:16px;bottom:16px;width:min(720px,92vw);max-height:80vh;overflow:auto;z-index:9999;box-shadow:0 10px 24px rgba(0,0,0,.18)">
+  <div class="d-flex align-items-center mb-2"><b class="mr-auto">Prompts desta página</b><button id="pmClose" class="btn btn-sm btn-outline-secondary">Fechar</button></div>
+  <div class="d-flex" style="gap:12px;flex-wrap:wrap">
+    <div style="flex:1 1 220px;min-width:220px">
+      <div class="mb-2 d-flex" style="gap:6px">
+        <button id="pmNew" class="btn btn-sm btn-primary">Novo</button>
+        <button id="pmDup" class="btn btn-sm btn-outline-secondary">Duplicar</button>
+        <button id="pmDel" class="btn btn-sm btn-outline-danger">Excluir</button>
+      </div>
+      <ul id="pmList" class="list-group"></ul>
+      <div class="mt-2">
+        <button id="pmExport" class="btn btn-sm btn-outline-secondary">Exportar</button>
+        <label class="btn btn-sm btn-outline-secondary mb-0">Importar <input id="pmImport" type="file" accept="application/json" hidden></label>
+      </div>
+    </div>
+    <div style="flex:2 1 360px;min-width:280px">
+      <input id="pmName" class="form-control form-control-sm mb-2" placeholder="Nome do prompt">
+      <textarea id="pmTpl" class="form-control form-control-sm" rows="12" placeholder="Template com {placeholders}"></textarea>
+      <small class="text-muted">Placeholders: {produto}, {from}, {to}, {posto}, {contexto}, {scopes}.</small>
+      <div class="mt-2 d-flex">
+        <button id="pmSave" class="btn btn-sm btn-success mr-2">Salvar</button>
+        <button id="pmSetActive" class="btn btn-sm btn-outline-primary">Definir como ativo</button>
+        <span id="pmStatus" class="ml-2 text-muted small"></span>
+      </div>
+    </div>
+  </div>
+</div>`;
+                    document.body.appendChild(modal);
+
+                    btn.addEventListener('click', () => modal.style.display = modal.style.display === 'none' ? 'block' : 'none');
+                    modal.querySelector('#pmClose').addEventListener('click', () => modal.style.display = 'none');
+                    modal.querySelector('#pmNew').addEventListener('click', () => this._new());
+                    modal.querySelector('#pmDup').addEventListener('click', () => this._dup());
+                    modal.querySelector('#pmDel').addEventListener('click', () => this._del());
+                    modal.querySelector('#pmSave').addEventListener('click', () => this._saveEdits());
+                    modal.querySelector('#pmSetActive').addEventListener('click', () => this._setActiveFromEditor());
+                    modal.querySelector('#pmExport').addEventListener('click', () => this._export());
+                    modal.querySelector('#pmImport').addEventListener('change', e => this._import(e));
+                    this.state.mounted = true;
+                },
+
+                _renderList() {
+                    const { list = [], activeId = null } = this._cache || {};
+                    const ul = document.querySelector('#pmList'); if (!ul) return;
+                    ul.innerHTML = '';
+                    list.forEach(p => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item d-flex align-items-center';
+                        li.dataset.id = p.id; li.style.cursor = 'pointer';
+                        li.innerHTML = `<span class="mr-2 ${p.id === activeId ? 'text-primary' : ''}">●</span><span class="flex-grow-1">${p.name}</span><small class="text-muted ml-2">${new Date(p.updatedAt).toLocaleString('pt-BR')}</small>`;
+                        li.addEventListener('click', () => this._loadToEditor(p.id));
+                        ul.appendChild(li);
+                    });
+                    if (list.length) this._loadToEditor(activeId || list[0].id);
+                },
+
+                _loadToEditor(id) {
+                    const { list = [] } = this._cache || {};
+                    const p = list.find(x => x.id === id) || list[0]; if (!p) return;
+                    document.querySelector('#pmName').value = p.name || '';
+                    document.querySelector('#pmTpl').value = p.template || '';
+                    document.querySelector('#pmList').querySelectorAll('li').forEach(li => li.classList.toggle('active', li.dataset.id === p.id));
+                    this.state.editingId = p.id; const st = document.querySelector('#pmStatus'); if (st) st.textContent = '';
+                },
+
+                async _persist() {
+                    await this._put(this.state.pageId, this._cache);
+                    const st = document.querySelector('#pmStatus'); if (st) { st.textContent = 'Salvo'; setTimeout(() => { st.textContent = ''; }, 1200); }
+                    this._renderList();
+                },
+
+                _new() { const d = this._cache; const id = uid(); d.list.unshift({ id, name: 'Novo prompt', template: '', updatedAt: nowISO() }); d.activeId = d.activeId || id; this._cache = d; this._renderList(); this._loadToEditor(id); this._persist(); },
+                _dup() { const d = this._cache; const id = this.state.editingId; const p = d.list.find(x => x.id === id); if (!p) return; const nid = uid(); d.list.unshift({ id: nid, name: p.name + ' (cópia)', template: p.template, updatedAt: nowISO() }); this._cache = d; this._renderList(); this._loadToEditor(nid); this._persist(); },
+                _del() { const d = this._cache; const id = this.state.editingId; if (!id) return; d.list = d.list.filter(x => x.id !== id); if (d.activeId === id) d.activeId = d.list[0]?.id || null; this._cache = d; this._renderList(); this._persist(); },
+                async _saveEdits() {
+                    const d = this._cache; const id = this.state.editingId; if (!id) return;
+                    const name = (document.querySelector('#pmName').value || 'Sem nome').trim();
+                    const template = document.querySelector('#pmTpl').value || '';
+                    const p = d.list.find(x => x.id === id); if (!p) return;
+                    p.name = name; p.template = template; p.updatedAt = nowISO();
+                    this._cache = d; await this._persist();
+                },
+                async _setActiveFromEditor() { const d = this._cache; const id = this.state.editingId; if (!id) return; d.activeId = id; this._cache = d; await this._persist(); },
+                _export() { const d = this._cache || { list: [], activeId: null }; const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `prompts_${this.state.pageId}.json`; a.click(); URL.revokeObjectURL(a.href); },
+                async _import(e) {
+                    const f = e.target.files?.[0]; if (!f) return;
+                    const txt = await f.text(); let obj = null; try { obj = JSON.parse(txt); } catch { return alert('JSON inválido'); }
+                    if (!obj || !Array.isArray(obj.list)) return alert('Estrutura inválida');
+                    obj.list = obj.list.map(x => ({ id: x.id || uid(), name: x.name || 'Sem nome', template: x.template || '', updatedAt: x.updatedAt || nowISO() }));
+                    obj.activeId = obj.activeId && obj.list.find(x => x.id === obj.activeId) ? obj.activeId : (obj.list[0]?.id || null);
+                    this._cache = obj; await this._persist(); e.target.value = '';
+                }
+            };
+
+            window.Prompts = Prompts;
+        })();
+    </script>
+    <!-- ========== FIM Prompt Manager ========== -->
 
     <!-- APP -->
     <script>
@@ -441,8 +613,7 @@
         const URL_POR_POSTO = new URL('json_consolidado/consolidado_mensal_por_posto.json', BASE).href;
 
         // Last-Modified → navbar
-        const LM = {}; // { key: {date: Date, label: string } }
-
+        const LM = {};
         function renderJsonInfo() {
             const elInfo = document.querySelector('#jsonInfo'); if (!elInfo) return;
             const entries = Object.values(LM).filter(Boolean);
@@ -453,20 +624,9 @@
             elInfo.title = entries.map(e => `${e.label}: ${fmt(e.date)}`).join(' | ');
         }
         function setJsonInfoFromHeaders(resp, key, label) {
-            try {
-                const lm = resp.headers.get('Last-Modified');
-                if (!lm) return false;
-                LM[key] = { date: new Date(lm), label };
-                renderJsonInfo();
-                return true;
-            } catch { return false; }
+            try { const lm = resp.headers.get('Last-Modified'); if (!lm) return false; LM[key] = { date: new Date(lm), label }; renderJsonInfo(); return true; } catch { return false; }
         }
-        async function tryHead(url, key, label) {
-            try {
-                const r = await fetch(url, { method: 'HEAD', cache: 'no-store' });
-                setJsonInfoFromHeaders(r, key, label);
-            } catch { }
-        }
+        async function tryHead(url, key, label) { try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); setJsonInfoFromHeaders(r, key, label); } catch { } }
 
         const IA_BASE = new URL('json_retorno_groq/', BASE).href.replace(/\/$/, '');
         const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
@@ -477,7 +637,6 @@
         const el = s => document.querySelector(s);
         const showErr = e => { console.error(e); const er = el('#err'); if (er) er.textContent = e?.message || e; };
 
-        // Botão pressionado: alterna outline ↔ sólido e aria-pressed
         function setPressed(btn, on, variant = 'primary') {
             btn.classList.toggle(`btn-outline-${variant}`, !on);
             btn.classList.toggle(`btn-${variant}`, on);
@@ -519,10 +678,7 @@
         function kpiCard(title, val, fmt = 'text') {
             const isNull = (val == null || Number.isNaN(val));
             const out = isNull ? '<span class="muted">-</span>' :
-                (fmt === 'moeda' ? fmtInt.format(val) :
-                    fmt === '2' ? fmt2.format(val) :
-                        fmt === 'pct' ? (fmtPct.format(val) + '%') :
-                            String(val));
+                (fmt === 'moeda' ? fmtInt.format(val) : fmt === '2' ? fmt2.format(val) : fmt === 'pct' ? fmtPct.format(val) + '%' : String(val));
             return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0">${out}</div></div></div>`;
         }
         function buildKPIs(containerId, meses, selection) {
@@ -549,22 +705,21 @@
         }
 
         function mm3(arr) {
-            return arr.map((_, i) => {
-                const s = arr.slice(Math.max(0, i - 2), i + 1).filter(v => v != null);
-                return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null;
-            });
+            return arr.map((_, i) => { const s = arr.slice(Math.max(0, i - 2), i + 1).filter(v => v != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; });
         }
 
         function buildTable(meses, selection) {
             const tb = el('#tblBody'); if (!tb) return; tb.innerHTML = '';
             const map = new Map(); meses.forEach(m => map.set(m, aggMes(m, selection)));
-            meses.forEach(m => {
+            const arrPct = meses.map(x => map.get(x)?.pctAli ?? null);
+            const arrMM3 = mm3(arrPct);
+            meses.forEach((m, idx) => {
                 const r = map.get(m);
                 const pm = prevMonth(m), py = prevYear(m);
                 const rPrev = map.get(pm), rYoY = map.get(py);
                 const mom = (r?.pctAli != null && rPrev?.pctAli != null) ? (r.pctAli - rPrev.pctAli) : null;
                 const yoy = (r?.pctAli != null && rYoY?.pctAli != null) ? (r.pctAli - rYoY.pctAli) : null;
-                const mm3pct = mm3(meses.map(x => map.get(x)?.pctAli || null))[meses.indexOf(m)];
+                const mm3pct = arrMM3[idx];
                 tb.insertAdjacentHTML('beforeend', `
 <tr>
   <td>${mFmt(m)}</td>
@@ -628,57 +783,36 @@
             const tag = postoLabel(selection);
             const rows = meses.map(m => aggMes(m, selection));
 
-            // % Alimentação
             const pct = rows.map(r => r.pctAli);
             chPct.data.labels = labels;
-            chPct.data.datasets = [
-                { label: `% Alim/Mensalidade (${tag})`, data: pct, tension: .2 },
-                { label: 'Média móvel 3m', data: mm3(pct), tension: .2 }
-            ];
+            chPct.data.datasets = [{ label: `% Alim/Mensalidade (${tag})`, data: pct, tension: .2 }, { label: 'Média móvel 3m', data: mm3(pct), tension: .2 }];
             chPct.update();
 
-            // Mensalidade x Alimentação
             chValores.data.labels = labels;
-            chValores.data.datasets = [
-                { label: `Mensalidade (${tag})`, data: rows.map(r => r.mens), tension: .2 },
-                { label: 'Alimentação', data: rows.map(r => r.ali), tension: .2 }
-            ];
+            chValores.data.datasets = [{ label: `Mensalidade (${tag})`, data: rows.map(r => r.mens), tension: .2 }, { label: 'Alimentação', data: rows.map(r => r.ali), tension: .2 }];
             chValores.update();
 
-            // Stack Alimentação + Margem
             chStack.data.labels = labels;
-            chStack.data.datasets = [
-                { label: 'Alimentação', data: rows.map(r => r.ali) },
-                { label: 'Margem aprox.', data: rows.map(r => r.margem) }
-            ];
+            chStack.data.datasets = [{ label: 'Alimentação', data: rows.map(r => r.ali) }, { label: 'Margem aprox.', data: rows.map(r => r.margem) }];
             chStack.update();
 
-            // YoY p.p.
-            const yoyPP = meses.map((m, i) => {
-                const py = prevYear(m); const j = meses.indexOf(py);
-                if (j < 0) return null;
-                const a = rows[i].pctAli; const b = aggMes(py, selection).pctAli;
-                return (a != null && b != null) ? a - b : null;
-            });
-            chYoYpp.data.labels = labels;
+            const yoyPP = meses.map((m, i) => { const py = prevYear(m); const j = meses.indexOf(py); if (j < 0) return null; const a = rows[i].pctAli; const b = aggMes(py, selection).pctAli; return (a != null && b != null) ? a - b : null; });
             const colors = yoyPP.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)');
             const borders = yoyPP.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
+            chYoYpp.data.labels = labels;
             chYoYpp.data.datasets = [{ label: 'Δ YoY (p.p.)', data: yoyPP, backgroundColor: colors, borderColor: borders, borderWidth: 1 }];
             chYoYpp.update();
 
-            // Pareto Alimentação
             const share = postoShares(meses, selection);
             chParetoAli.data.labels = share.labels;
             chParetoAli.data.datasets = [{ label: 'Custo Alimentação no período', data: share.valores }];
             chParetoAli.update();
 
-            // % médio por posto
             const ap = avgPctByPosto(meses, selection);
             chPctPosto.data.labels = ap.labels;
             chPctPosto.data.datasets = [{ label: '% médio (12m)', data: ap.valores }];
             chPctPosto.update();
 
-            // Dispersão
             chScatter.data.datasets = [{ label: 'Meses', data: rows.map(r => ({ x: r.mens, y: r.pctAli })) }];
             chScatter.update();
 
@@ -686,15 +820,10 @@
         }
 
         /* ==================== Heatmap ==================== */
-        function pctFor(ym, p) {
-            const row = porPosto[ym]?.[p]; if (!row) return null;
-            const mens = num(row.mensalidade), ali = num(row.alimentacao);
-            return mens > 0 ? ali / mens * 100 : null;
-        }
+        function pctFor(ym, p) { const row = porPosto[ym]?.[p]; if (!row) return null; const mens = num(row.mensalidade), ali = num(row.alimentacao); return mens > 0 ? ali / mens * 100 : null; }
         function buildHeatmap(meses, selection) {
             const box = el('#heatmapBox'); if (!box) return; box.innerHTML = '';
-            const postos = selection === 'ALL' ? POSTOS : [...selection].sort();
-            if (!postos.length) return;
+            const postos = selection === 'ALL' ? POSTOS : [...selection].sort(); if (!postos.length) return;
             function color(v) { if (v == null) return '#eee'; const x = Math.min(40, Math.max(0, v)); const g = Math.round(255 - (x / 40) * 200); const r = Math.round(55 + (x / 40) * 200); return `rgb(${r},${g},180)`; }
             const thead = `<thead><tr><th class="text-left">Posto</th>${meses.map(m => `<th>${mFmt(m)}</th>`).join('')}</tr></thead>`;
             const rows = postos.map(p => {
@@ -731,44 +860,6 @@
             });
         }
 
-        /* ==================== Renders e handlers ==================== */
-        function renderSel1() { const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null); buildKPIs('#kpisSel1', meses, sel1); }
-        function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
-
-        function attachHandlers(lastFull) {
-            // Comparar: único listener + estado visual
-            const btnCmp = el('#btnComparar');
-            if (btnCmp) btnCmp.addEventListener('click', () => {
-                const box = el('#compareBlock'); if (!box) return;
-                const show = (box.style.display === 'none' || box.style.display === '');
-                box.style.display = show ? 'block' : 'none';
-                setPressed(btnCmp, show, 'secondary');
-            });
-
-            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
-            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
-            if (el('#reset2')) el('#reset2').addEventListener('click', () => {
-                const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
-                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL';
-                markActiveMulti('#postoTabs2', sel2); renderSel2(); if (IA_STATE.auto) IA_send();
-            });
-
-            // IA Auto: alterna estado, pinta botão e mostra/oculta painel
-            const btnIA = el('#iaAuto');
-            if (btnIA) btnIA.addEventListener('click', () => {
-                IA_STATE.auto = !IA_STATE.auto;
-                setPressed(btnIA, IA_STATE.auto, 'primary');
-                const panel = el('#iaPanel'); if (!panel) return;
-                if (IA_STATE.auto) {
-                    panel.style.display = 'block';
-                    IA_send();
-                } else {
-                    const out = el('#iaOut'); if (out) out.innerHTML = '';
-                    panel.style.display = 'none';
-                }
-            });
-        }
-
         /* ==================== IA ==================== */
         function startDots(target) {
             const box = target || el('#iaOut') || el('#iaPanel');
@@ -776,16 +867,10 @@
             wrap.className = 'ia-content ia-loading';
             wrap.innerHTML = `Analisando <span class="ia-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
             box.innerHTML = ''; box.appendChild(wrap);
-            let t = 0; const int = setInterval(() => {
-                const d = wrap.querySelectorAll('.dot'); d.forEach(x => x.classList.remove('on')); d[t % 3].classList.add('on'); t++;
-            }, 260);
+            let t = 0; const int = setInterval(() => { const d = wrap.querySelectorAll('.dot'); d.forEach(x => x.classList.remove('on')); d[t % 3].classList.add('on'); t++; }, 260);
             loaders.set(box, int);
         }
-        function stopDots(target) {
-            const box = target || el('#iaOut') || el('#iaPanel');
-            const int = loaders.get(box);
-            if (int) { clearInterval(int); loaders.delete(box); }
-        }
+        function stopDots(target) { const box = target || el('#iaOut') || el('#iaPanel'); const int = loaders.get(box); if (int) { clearInterval(int); loaders.delete(box); } }
 
         function mesesSel2() { return inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); }
         function postoAtual() { return sel2 === 'ALL' ? 'ALL' : [...sel2].sort().join('+'); }
@@ -811,8 +896,7 @@
                 try {
                     const f = `${payload.blocks[0]?.periodo?.from || 'from'}_${payload.blocks[0]?.periodo?.to || 'to'}_${(payload.blocks[0]?.posto || 'ALL')}_custo_alimentacao.json`;
                     const url = `${IA_BASE}/${f}?t=${Date.now()}`;
-                    const r = await fetch(url, { cache: 'no-store' });
-                    if (r.ok) return r.json();
+                    const r = await fetch(url, { cache: 'no-store' }); if (r.ok) return r.json();
                 } catch { }
                 return { resumo: 'Mock local não encontrado para este filtro.', alertas: [] };
             }
@@ -850,6 +934,19 @@
                         { scope: 'chart_stack', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, alimentacao: s.alimentacao } }
                     ]
                 };
+
+                // ===== Integração Prompt Manager =====
+                const scopes = payload.blocks.map(b => b.scope).join(', ');
+                const renderedPrompt = Prompts.render({
+                    produto: 'custo_alimentacao',
+                    from: meses[0],
+                    to: meses.at(-1),
+                    posto: postoAtual(),
+                    contexto: 'graficos',
+                    scopes
+                });
+                payload.prompt = renderedPrompt;
+
                 const data = await iaFetch(payload);
                 stopDots(outBox);
                 const out = el('#iaOut'); if (out) out.innerHTML = toHtml(data);
@@ -859,18 +956,56 @@
             }
         }
 
+        /* ==================== Renders e handlers ==================== */
+        function renderSel1() { const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null); buildKPIs('#kpisSel1', meses, sel1); }
+        function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
+
+        function attachHandlers(lastFull) {
+            const btnCmp = el('#btnComparar');
+            if (btnCmp) btnCmp.addEventListener('click', () => {
+                const box = el('#compareBlock'); if (!box) return;
+                const show = (box.style.display === 'none' || box.style.display === '');
+                box.style.display = show ? 'block' : 'none';
+                setPressed(btnCmp, show, 'secondary');
+            });
+
+            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
+            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
+            if (el('#reset2')) el('#reset2').addEventListener('click', () => {
+                const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
+                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL';
+                markActiveMulti('#postoTabs2', sel2); renderSel2(); if (IA_STATE.auto) IA_send();
+            });
+
+            const btnIA = el('#iaAuto');
+            if (btnIA) btnIA.addEventListener('click', () => {
+                IA_STATE.auto = !IA_STATE.auto;
+                setPressed(btnIA, IA_STATE.auto, 'primary');
+                const panel = el('#iaPanel'); if (!panel) return;
+                if (IA_STATE.auto) { panel.style.display = 'block'; IA_send(); }
+                else { const out = el('#iaOut'); if (out) out.innerHTML = ''; panel.style.display = 'none'; }
+            });
+        }
+
         /* ==================== Boot ==================== */
-        Promise.all([
-            fetch(URL_POR_POSTO, { cache: 'no-store' })
-        ])
+
+        // Inicia Prompt Manager para ESTA página
+        Prompts.init({
+            pageId: 'alimentacao',
+            defaults: [
+                { name: 'Padrão', template: `Analise %Alimentação sobre Mensalidade, composição e ΔYoY pp para {posto} de {from} a {to}. Foque nos gráficos {scopes}. Liste até 5 insights e 3 alertas. Tom assertivo.` },
+                { name: 'Executivo', template: `Resumo executivo para {produto} no período {from}→{to}, posto {posto}. Destaque riscos e oportunidades. Cite {scopes}. Texto conciso.` }
+            ],
+            mountAfter: '#iaAuto'
+        });
+
+        Promise.all([fetch(URL_POR_POSTO, { cache: 'no-store' })])
             .then(async ([rp]) => {
                 if (!rp.ok) throw new Error(`HTTP ${rp.status} em ${URL_POR_POSTO}`);
 
-                // Header → navbar (Last-Modified)
                 const gotP = setJsonInfoFromHeaders(rp, 'postos', 'consolidado_mensal_por_posto.json');
                 if (!gotP) tryHead(URL_POR_POSTO, 'postos', 'consolidado_mensal_por_posto.json');
 
-                // JSON
                 porPosto = await rp.json();
                 MESES = Object.keys(porPosto).filter(k => !k.startsWith('_')).sort();
                 if (!MESES.length) throw new Error('JSON por posto sem meses.');
@@ -895,7 +1030,6 @@
                 initCharts(); attachHandlers(lastFull);
                 renderSel1(); renderSel2();
 
-                // Estado inicial consistente
                 if (el('#iaPanel')) el('#iaPanel').style.display = 'none';
                 if (el('#compareBlock')) el('#compareBlock').style.display = 'none';
                 if (el('#iaAuto')) setPressed(el('#iaAuto'), false, 'primary');
@@ -903,14 +1037,6 @@
             })
             .catch(err => { showErr(err); alert('Falha ao carregar JSONs. Veja o console.'); });
     </script>
-
-
-
-
-
-
-
-
 
 </body>
 

@@ -5,18 +5,15 @@
     <meta charset="UTF-8" />
     <title>CAMIM — KPI de Mensalidades (com IA)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-
     <!-- CSS -->
     <link rel="stylesheet" href="../css/style2.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
-
     <!-- JS (ordem importa) -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
     <style>
         .stack {
             display: flex;
@@ -61,12 +58,6 @@
 
         .chart-card .card-body {
             height: 320px
-        }
-
-        @media(max-width:576px) {
-            .chart-card .card-body {
-                height: 260px
-            }
         }
 
         .table-responsive {
@@ -181,21 +172,55 @@
             to {
                 transform: rotate(360deg)
             }
+
+
+            /* MOBILE ADJUST NA UNHA :)*/
+
+
+            /* @media(max-width:576px) {
+            .chart-card .card-body {
+                height: 260px
+            }
+         */
+        }
+
+
+
+        /* MOBILE ADJUST NA UNHA :)*/
+
+
+        @media (max-width: 576px) {
+            .navbar .ml-auto {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                width: 100%;
+            }
+
+            .navbar .ml-auto .btn {
+                flex: 1 1 48%;
+                min-width: 140px;
+            }
+
+            #btnPrompts {
+                margin-left: 0;
+            }
+
+            .main-header .d-flex.align-items-center {
+                flex-wrap: wrap;
+            }
+
+            #jsonInfo {
+                flex: 0 0 100%;
+                margin-left: 0;
+                margin-top: 4px;
+            }
         }
     </style>
 </head>
 
-
-
-
-
 <body class="hold-transition sidebar-mini">
     <div class="wrapper">
-
-
-
-
-
         <!-- NAVBAR superior -->
         <nav class="main-header navbar navbar-expand navbar-white navbar-light">
             <ul class="navbar-nav">
@@ -208,12 +233,7 @@
                 Quem tem saúde é mais feliz!
                 <span id="jsonInfo" class="ml-2 text-muted mini"></span>
             </span>
-
         </nav>
-
-
-
-
 
         <!-- SIDEBAR -->
         <aside class="main-sidebar sidebar-dark-primary elevation-4">
@@ -245,15 +265,6 @@
                 </nav>
             </div>
         </aside>
-
-
-
-
-
-
-
-
-
 
         <!-- CONTEÚDO -->
         <div class="content-wrapper">
@@ -328,15 +339,6 @@
                 <!-- Painel IA + Chat -->
                 <div id="iaPanel" class="p-2" style="display:none">
                     <div id="iaOut" class="ia-content"></div>
-
-                    <!-- <form id="iaForm" class="d-flex mt-2">
-                        <input id="iaMsg" type="text" class="form-control form-control-sm"
-                            placeholder="Pergunte sobre os GRÁFICOS desta página" autocomplete="off" />
-                        <button class="btn btn-sm btn-primary ml-2" type="submit">Enviar</button>
-                    </form>
-                    <small class="text-muted">Enter envia. Escopo: somente gráficos.</small> -->
-
-                    <!-- trilha removida -->
                     <div id="ia-chat" class="mt-3"></div>
                 </div>
 
@@ -434,15 +436,129 @@
         </div>
     </div>
 
-
-
-
-
-
-
-
+    <!-- ========== Prompt Manager (módulo reutilizável) ========== -->
     <script>
-        /* ==================== Dados base ==================== */
+        (function () {
+            const LS_PREFIX = 'camim.prompts::';
+            function uid() { return 'p_' + Math.random().toString(36).slice(2, 10); }
+            function nowISO() { return new Date().toISOString(); }
+            function tplRender(tpl, vars) { return String(tpl || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => (vars?.[k] ?? `{${k}}`)); }
+            const Prompts = {
+                state: { pageId: null, list: [], activeId: null, mounted: false },
+                init({ pageId, defaults = [], mountAfter }) {
+                    this.state.pageId = pageId;
+                    const saved = this._load();
+                    if (!saved) {
+                        const list = defaults.map(d => ({ id: uid(), name: d.name, template: d.template, updatedAt: nowISO() }));
+                        this._save({ list, activeId: list[0]?.id || null });
+                    }
+                    this._mountUI(mountAfter); this._renderList();
+                },
+                getActive() { const { list, activeId } = this._load(); return list.find(p => p.id === activeId) || null; },
+                render(vars) { const a = this.getActive(); return a ? tplRender(a.template, vars) : ''; },
+                _mountUI(mountAfter) {
+                    if (this.state.mounted) return;
+                    const btn = document.createElement('button');
+                    btn.id = 'btnPrompts'; btn.className = 'btn btn-sm btn-outline-secondary ml-2';
+                    btn.textContent = 'Prompts'; btn.title = 'Gerenciar prompts desta página';
+                    const anchor = document.querySelector(mountAfter) || document.body;
+                    anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+                    const modal = document.createElement('div');
+                    modal.id = 'promptModal'; modal.style.display = 'none';
+                    modal.innerHTML = `
+<div class="card p-2" style="position:fixed;right:16px;bottom:16px;width:min(720px,92vw);max-height:80vh;overflow:auto;z-index:9999;box-shadow:0 10px 24px rgba(0,0,0,.18)">
+  <div class="d-flex align-items-center mb-2"><b class="mr-auto">Prompts desta página</b><button id="pmClose" class="btn btn-sm btn-outline-secondary">Fechar</button></div>
+  <div class="d-flex" style="gap:12px;flex-wrap:wrap">
+    <div style="flex:1 1 220px;min-width:220px">
+      <div class="mb-2 d-flex" style="gap:6px">
+        <button id="pmNew" class="btn btn-sm btn-primary">Novo</button>
+        <button id="pmDup" class="btn btn-sm btn-outline-secondary">Duplicar</button>
+        <button id="pmDel" class="btn btn-sm btn-outline-danger">Excluir</button>
+      </div>
+      <ul id="pmList" class="list-group"></ul>
+      <div class="mt-2">
+        <button id="pmExport" class="btn btn-sm btn-outline-secondary">Exportar</button>
+        <label class="btn btn-sm btn-outline-secondary mb-0">Importar <input id="pmImport" type="file" accept="application/json" hidden></label>
+      </div>
+    </div>
+    <div style="flex:2 1 360px;min-width:280px">
+      <input id="pmName" class="form-control form-control-sm mb-2" placeholder="Nome do prompt">
+      <textarea id="pmTpl" class="form-control form-control-sm" rows="12" placeholder="Template com {placeholders}"></textarea>
+      <small class="text-muted">Placeholders: {produto}, {from}, {to}, {posto}, {contexto}, {scopes}.</small>
+      <div class="mt-2 d-flex">
+        <button id="pmSave" class="btn btn-sm btn-success mr-2">Salvar</button>
+        <button id="pmSetActive" class="btn btn-sm btn-outline-primary">Definir como ativo</button>
+        <span id="pmStatus" class="ml-2 text-muted small"></span>
+      </div>
+    </div>
+  </div>
+</div>`;
+                    document.body.appendChild(modal);
+                    btn.addEventListener('click', () => modal.style.display = modal.style.display === 'none' ? 'block' : 'none');
+                    modal.querySelector('#pmClose').addEventListener('click', () => modal.style.display = 'none');
+                    modal.querySelector('#pmNew').addEventListener('click', () => this._new());
+                    modal.querySelector('#pmDup').addEventListener('click', () => this._dup());
+                    modal.querySelector('#pmDel').addEventListener('click', () => this._del());
+                    modal.querySelector('#pmSave').addEventListener('click', () => this._saveEdits());
+                    modal.querySelector('#pmSetActive').addEventListener('click', () => this._setActiveFromEditor());
+                    modal.querySelector('#pmExport').addEventListener('click', () => this._export());
+                    modal.querySelector('#pmImport').addEventListener('change', e => this._import(e));
+                    this.state.mounted = true;
+                },
+                _renderList() {
+                    const { list, activeId } = this._load(); const ul = document.querySelector('#pmList'); if (!ul) return;
+                    ul.innerHTML = '';
+                    list.forEach(p => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item d-flex align-items-center';
+                        li.dataset.id = p.id; li.style.cursor = 'pointer';
+                        li.innerHTML = `<span class="mr-2 ${p.id === activeId ? 'text-primary' : ''}">●</span><span class="flex-grow-1">${p.name}</span><small class="text-muted ml-2">${new Date(p.updatedAt).toLocaleString('pt-BR')}</small>`;
+                        li.addEventListener('click', () => this._loadToEditor(p.id));
+                        ul.appendChild(li);
+                    });
+                    if (list.length) this._loadToEditor(activeId || list[0].id);
+                },
+                _loadToEditor(id) {
+                    const { list } = this._load(); const p = list.find(x => x.id === id) || list[0]; if (!p) return;
+                    document.querySelector('#pmName').value = p.name || '';
+                    document.querySelector('#pmTpl').value = p.template || '';
+                    document.querySelector('#pmList').querySelectorAll('li').forEach(li => li.classList.toggle('active', li.dataset.id === p.id));
+                    this.state.editingId = p.id; const st = document.querySelector('#pmStatus'); if (st) st.textContent = '';
+                },
+                _new() { const s = this._load(); const id = uid(); s.list.unshift({ id, name: 'Novo prompt', template: '', updatedAt: nowISO() }); this._save(s); this._renderList(); this._loadToEditor(id); },
+                _dup() { const s = this._load(); const id = this.state.editingId; const p = s.list.find(x => x.id === id); if (!p) return; const nid = uid(); s.list.unshift({ id: nid, name: p.name + ' (cópia)', template: p.template, updatedAt: nowISO() }); this._save(s); this._renderList(); this._loadToEditor(nid); },
+                _del() { const s = this._load(); const id = this.state.editingId; if (!id) return; s.list = s.list.filter(x => x.id !== id); if (s.activeId === id) s.activeId = s.list[0]?.id || null; this._save(s); this._renderList(); },
+                _saveEdits() {
+                    const s = this._load(); const id = this.state.editingId; if (!id) return;
+                    const name = document.querySelector('#pmName').value.trim() || 'Sem nome';
+                    const template = document.querySelector('#pmTpl').value;
+                    const p = s.list.find(x => x.id === id); if (!p) return; p.name = name; p.template = template; p.updatedAt = nowISO();
+                    this._save(s); this._renderList(); this._loadToEditor(id);
+                    const st = document.querySelector('#pmStatus'); if (st) { st.textContent = 'Salvo'; setTimeout(() => { st.textContent = ''; }, 1200); }
+                },
+                _setActiveFromEditor() { const s = this._load(); const id = this.state.editingId; if (!id) return; s.activeId = id; this._save(s); this._renderList(); },
+                _export() {
+                    const s = this._load(); const blob = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
+                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `prompts_${this.state.pageId}.json`; a.click(); URL.revokeObjectURL(a.href);
+                },
+                async _import(e) {
+                    const f = e.target.files?.[0]; if (!f) return; const txt = await f.text(); let obj = null;
+                    try { obj = JSON.parse(txt); } catch { return alert('JSON inválido'); }
+                    if (!obj || !Array.isArray(obj.list)) return alert('Estrutura inválida');
+                    obj.list = obj.list.map(x => ({ id: x.id || uid(), name: x.name || 'Sem nome', template: x.template || '', updatedAt: x.updatedAt || nowISO() }));
+                    obj.activeId = obj.activeId && obj.list.find(x => x.id === obj.activeId) ? obj.activeId : (obj.list[0]?.id || null);
+                    this._save(obj); this._renderList(); e.target.value = '';
+                },
+                _key() { return LS_PREFIX + this.state.pageId; },
+                _load() { try { const raw = localStorage.getItem(this._key()); if (!raw) return null; return JSON.parse(raw); } catch { return null; } },
+                _save(obj) { try { localStorage.setItem(this._key(), JSON.stringify(obj)); } catch (e) { console.error('localStorage', e); } this.state.list = obj.list; this.state.activeId = obj.activeId; }
+            };
+            window.Prompts = Prompts;
+        })();
+    </script>
+
+    <!-- ========== Script principal ========== -->
+    <script>
         const BASE = new URL('.', location.href);
         const URL_GERAL = new URL('json_consolidado/consolidado_mensal.json', BASE).href;
         const URL_POR_POSTO = new URL('json_consolidado/consolidado_mensal_por_posto.json', BASE).href;
@@ -452,7 +568,6 @@
         const API_ANALISAR = window.IA_API_URL || (IS_LOCAL ? 'http://127.0.0.1:8011/ia/analisar' : '/ia/analisar');
         const loaders = new Map();
 
-        /* ==================== Utils ==================== */
         const el = s => document.querySelector(s);
         const showErr = e => { console.error(e); const er = el('#err'); if (er) er.textContent = e?.message || e; };
 
@@ -470,7 +585,6 @@
         const sum = arr => arr.reduce((a, b) => a + (b || 0), 0);
         const wavg = (vals, weights) => { let sW = 0, s = 0; for (let i = 0; i < vals.length; i++) { const w = weights[i] ?? 0; const v = vals[i]; if (v == null) continue; s += v * w; sW += w; } return sW ? s / sW : null; };
 
-        // Visual "pressionado"
         function setPressed(btn, on, variant = 'primary') {
             btn.classList.toggle(`btn-outline-${variant}`, !on);
             btn.classList.toggle(`btn-${variant}`, on);
@@ -481,8 +595,8 @@
         let MESES = [], geral = {}, porPosto = {}, POSTOS = [];
         let sel1 = 'ALL', sel2 = 'ALL';
 
-        /* ==================== Header "dados gerados em" ==================== */
-        const LM = {}; // { key: { date: Date, label: string } }
+        /* Header "dados gerados em" */
+        const LM = {};
         function renderJsonInfo() {
             const elInfo = document.querySelector('#jsonInfo'); if (!elInfo) return;
             const entries = Object.values(LM).filter(Boolean);
@@ -493,32 +607,19 @@
             elInfo.title = entries.map(e => `${e.label}: ${fmt(e.date)}`).join(' | ');
         }
         function setJsonInfoFromHeaders(resp, key, label) {
-            try {
-                const lm = resp.headers.get('Last-Modified'); if (!lm) return false;
-                LM[key] = { date: new Date(lm), label }; renderJsonInfo(); return true;
-            } catch { return false; }
+            try { const lm = resp.headers.get('Last-Modified'); if (!lm) return false; LM[key] = { date: new Date(lm), label }; renderJsonInfo(); return true; } catch { return false; }
         }
-        async function tryHead(url, key, label) {
-            try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); setJsonInfoFromHeaders(r, key, label); } catch { }
-        }
+        async function tryHead(url, key, label) { try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); setJsonInfoFromHeaders(r, key, label); } catch { } }
 
-        /* ==================== Core de agregação ==================== */
+        /* Core */
         function srcMens(g) {
             return {
-                valor: num(g.mensalidade),
-                qtd: num(g.mensalidade_qtd),
-                ticket: maybe(g.ticket_medio),
-                perf: maybe(g.performance),
-                r_mom: maybe(g.receita_mom_pct),
-                q_mom: maybe(g.qtd_mom_pct),
-                t_mom: maybe(g.ticket_mom_pct),
-                r_yoy: maybe(g.receita_yoy_pct),
-                q_yoy: maybe(g.qtd_yoy_pct),
-                t_yoy: maybe(g.ticket_yoy_pct),
+                valor: num(g.mensalidade), qtd: num(g.mensalidade_qtd),
+                ticket: maybe(g.ticket_medio), perf: maybe(g.performance),
+                r_mom: maybe(g.receita_mom_pct), q_mom: maybe(g.qtd_mom_pct), t_mom: maybe(g.ticket_mom_pct),
+                r_yoy: maybe(g.receita_yoy_pct), q_yoy: maybe(g.qtd_yoy_pct), t_yoy: maybe(g.ticket_yoy_pct),
                 logret: maybe(g.receita_logret),
-                mix_p: maybe(g.mix_delta_receita_preco),
-                mix_v: maybe(g.mix_delta_receita_volume),
-                mix_i: maybe(g.mix_delta_receita_interacao)
+                mix_p: maybe(g.mix_delta_receita_preco), mix_v: maybe(g.mix_delta_receita_volume), mix_i: maybe(g.mix_delta_receita_interacao)
             };
         }
         function aggMens(ym, selection) {
@@ -542,7 +643,6 @@
             return { valor, qtd, ticket, perf, r_mom, q_mom, t_mom, r_yoy, q_yoy, t_yoy, logret, mix_p, mix_v, mix_i };
         }
 
-        /* ==================== KPIs e Tabela ==================== */
         function kpiCard(title, val, fmt = 'text') {
             const isNull = (val == null || Number.isNaN(val));
             const neg = (!isNull && fmt === 'pct' && val < 0);
@@ -643,7 +743,7 @@
 </tr>`);
         }
 
-        /* ==================== Gráficos ==================== */
+        /* Gráficos */
         let chValores, chQtdTicket, chPerf, chVol, chYoY, chMix, chScatter, chPareto, chYoYPosto;
         function initCharts() {
             const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
@@ -656,13 +756,6 @@
             chScatter = new Chart(document.getElementById('chartScatter'), { type: 'scatter', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'ΔVolume' } }, y: { title: { display: true, text: 'ΔPreço' } } } } });
             chPareto = new Chart(document.getElementById('chartPareto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
             chYoYPosto = new Chart(document.getElementById('chartYoYPosto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
-        }
-        function rollingStd(arr, w) {
-            const out = []; for (let i = 0; i < arr.length; i++) {
-                if (i + 1 < w) { out.push(null); continue; }
-                const s = arr.slice(i + 1 - w, i + 1).filter(v => v != null); if (!s.length) { out.push(null); continue; }
-                const mean = s.reduce((a, b) => a + b, 0) / s.length; const vr = s.reduce((a, x) => a + (x - mean) * (x - mean), 0) / s.length; out.push(Math.sqrt(vr));
-            } return out;
         }
         function labelSelec(selection) { if (selection === 'ALL') return 'Todos'; const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos'; }
         function postoShares(meses, selection) {
@@ -702,7 +795,7 @@
             chPerf.update();
 
             const logs = rows.map(v => v.logret);
-            const vol3 = rollingStd(logs, 3).map(v => v == null ? null : v * 100);
+            const vol3 = (function (arr, w) { const out = []; for (let i = 0; i < arr.length; i++) { if (i + 1 < w) { out.push(null); continue; } const s = arr.slice(i + 1 - w, i + 1).filter(v => v != null); if (!s.length) { out.push(null); continue; } const mean = s.reduce((a, b) => a + b, 0) / s.length; const vr = s.reduce((a, x) => a + (x - mean) * (x - mean), 0) / s.length; out.push(Math.sqrt(vr)); } return out; })(logs, 3).map(v => v == null ? null : v * 100);
             chVol.data.labels = labels;
             chVol.data.datasets = [{ label: `LogRet (${tag})`, data: logs, tension: .2 }, { label: 'Vol. móvel 3m (%)', data: vol3, tension: .2 }];
             chVol.update();
@@ -744,7 +837,7 @@
             chYoYPosto.update();
         }
 
-        /* ==================== UI seleção de Posto ==================== */
+        /* Seleção de Posto */
         function markActiveMulti(scopeId, selection) {
             const isAll = selection === 'ALL';
             document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
@@ -772,53 +865,7 @@
             });
         }
 
-        /* ==================== Renders e handlers ==================== */
-        function renderSel1() { const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null); buildKPIs('#kpisSel1', meses, sel1); }
-        function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
-
-        function attachHandlers(lastFull) {
-            // Dataset
-            if (el('#from1')) el('#from1').addEventListener('change', () => { renderSel1(); });
-            if (el('#to1')) el('#to1').addEventListener('change', () => { renderSel1(); });
-            if (el('#reset1')) el('#reset1').addEventListener('click', () => {
-                el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1();
-            });
-
-            // 12 meses
-            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
-            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
-            if (el('#reset2')) el('#reset2').addEventListener('click', () => {
-                const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
-                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL';
-                markActiveMulti('#postoTabs2', sel2); renderSel2(); if (IA_STATE.auto) IA_send();
-            });
-
-            // Comparar: toggle bloco + visual
-            const btnCmp = el('#btnComparar');
-            if (btnCmp) btnCmp.addEventListener('click', () => {
-                const box = el('#compareBlock'); if (!box) return;
-                const show = (box.style.display === 'none' || box.style.display === '');
-                box.style.display = show ? 'block' : 'none';
-                setPressed(btnCmp, show, 'secondary');
-            });
-
-            // IA Auto: toggle auto + painel
-            const btnIA = el('#iaAuto');
-            if (btnIA) btnIA.addEventListener('click', () => {
-                IA_STATE.auto = !IA_STATE.auto;
-                setPressed(btnIA, IA_STATE.auto, 'primary');
-                const panel = el('#iaPanel'); if (!panel) return;
-                if (IA_STATE.auto) {
-                    panel.style.display = 'block';
-                    IA_send();
-                } else {
-                    const out = el('#iaOut'); if (out) out.innerHTML = '';
-                    panel.style.display = 'none';
-                }
-            });
-        }
-
-        /* ==================== IA ==================== */
+        /* IA: loader */
         function startDots(target) {
             const box = target || el('#iaOut') || el('#iaPanel');
             const wrap = document.createElement('div');
@@ -832,7 +879,6 @@
 
         function postoAtual() { return sel2 === 'ALL' ? 'ALL' : [...sel2].sort().join('+'); }
         function mesesSel2() { return inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); }
-
         function seriesBasicas(meses, selection) {
             const rows = meses.map(m => aggMens(m, selection));
             return { labels: meses, receita: rows.map(v => v.valor), qtd: rows.map(v => v.qtd), ticket: rows.map(v => v.ticket), perf: rows.map(v => v.perf), yoy: rows.map(v => v.r_yoy), mix_p: rows.map(v => v.mix_p), mix_v: rows.map(v => v.mix_v), logret: rows.map(v => v.logret) };
@@ -850,35 +896,15 @@
                 vol_mov_3m: "desvio padrão de logret em janela móvel de 3 meses"
             };
         }
-        window.IA_buildBlocksFromState = function (userMsg) {
-            const meses = mesesSel2();
-            const posto = postoAtual();
-            const s = seriesBasicas(meses, sel2);
-            return {
-                produto: 'mensalidades',
-                when: Date.now(),
-                query: userMsg || null,
-                contexto: 'graficos',
-                prefs: { output: 'livre', assertivo: true },
-                defs: defs(),
-                blocks: [
-                    { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto, series: { labels: s.labels, receita: s.receita } },
-                    { scope: 'chart_qtd_ticket', periodo: { from: meses[0], to: meses.at(-1) }, posto, series: { labels: s.labels, qtd: s.qtd, ticket: s.ticket } },
-                    { scope: 'chart_perf', periodo: { from: meses[0], to: meses.at(-1) }, posto, perf: s.perf },
-                    { scope: 'chart_vol', periodo: { from: meses[0], to: meses.at(-1) }, posto, series: { labels: s.labels, logret: s.logret } },
-                    { scope: 'chart_yoy', periodo: { from: meses[0], to: meses.at(-1) }, posto, yoy: s.yoy },
-                    { scope: 'chart_mix', periodo: { from: meses[0], to: meses.at(-1) }, posto, dpreco: s.mix_p, dvolume: s.mix_v }
-                ]
-            };
-        };
+
+        const IA_STATE = { auto: false, userSentOnce: false };
 
         async function iaFetch(payload) {
             if (IS_LOCAL) {
                 try {
                     const f = `${payload.blocks[0]?.periodo?.from || 'from'}_${payload.blocks[0]?.periodo?.to || 'to'}_${(payload.blocks[0]?.posto || 'ALL')}_mensalidades.json`;
                     const url = `${IA_BASE}/${f}?t=${Date.now()}`;
-                    const r = await fetch(url, { cache: 'no-store' });
-                    if (r.ok) return r.json();
+                    const r = await fetch(url, { cache: 'no-store' }); if (r.ok) return r.json();
                 } catch { }
                 return { resumo: 'Mock local não encontrado para este filtro.', alertas: [] };
             }
@@ -896,7 +922,6 @@
             if (Array.isArray(obj?.alertas) && obj.alertas.length) parts.push(`<h5><b>Alertas</b></h5><ul>${obj.alertas.map(x => `<li>${x}</li>`).join('')}</ul>`);
             return parts.join('') || '<p>Sem conteúdo.</p>';
         }
-        const IA_STATE = { auto: false, userSentOnce: false };
 
         async function IA_send(userMsg) {
             const panel = el('#iaPanel'); if (!panel) return;
@@ -906,6 +931,15 @@
             try {
                 const meses = mesesSel2(); if (!meses.length) throw new Error('Seleção vazia.');
                 const s = seriesBasicas(meses, sel2);
+                const scopes = ['chart_valores', 'chart_qtd_ticket', 'chart_perf', 'chart_vol', 'chart_yoy', 'chart_mix'].join(', ');
+                const renderedPrompt = Prompts.render({
+                    produto: 'mensalidades',
+                    from: meses[0],
+                    to: meses.at(-1),
+                    posto: postoAtual(),
+                    contexto: 'graficos',
+                    scopes
+                });
                 const payload = {
                     produto: 'mensalidades',
                     when: Date.now(),
@@ -913,6 +947,7 @@
                     contexto: 'graficos',
                     prefs: { output: 'livre', assertivo: true },
                     defs: defs(),
+                    prompt: renderedPrompt,
                     blocks: [
                         { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, receita: s.receita } },
                         { scope: 'chart_qtd_ticket', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, qtd: s.qtd, ticket: s.ticket } },
@@ -931,7 +966,17 @@
             }
         }
 
-        /* ==================== Boot ==================== */
+        /* Boot */
+        // Inicializa Prompt Manager para esta página
+        Prompts.init({
+            pageId: 'mensalidades',
+            defaults: [
+                { name: 'Padrão', template: `Analise receita, quantidade, ticket, performance e mix (ΔPreço/ΔVolume) para {posto} de {from} a {to}. Foque nos gráficos {scopes}. Liste até 5 insights e 3 alertas. Tom assertivo.` },
+                { name: 'Executivo', template: `Resumo executivo para {produto} no período {from}→{to}, posto {posto}. Destaque riscos e oportunidades. Cite {scopes}. Texto conciso.` }
+            ],
+            mountAfter: '#iaAuto'
+        });
+
         Promise.all([
             fetch(URL_GERAL, { cache: 'no-store' }),
             fetch(URL_POR_POSTO, { cache: 'no-store' })
@@ -971,7 +1016,6 @@
                 initCharts(); attachHandlers(lastFull);
                 renderSel1(); renderSel2();
 
-                // Estado inicial dos botões e blocos
                 if (el('#iaPanel')) el('#iaPanel').style.display = 'none';
                 if (el('#compareBlock')) el('#compareBlock').style.display = 'none';
                 if (el('#iaAuto')) setPressed(el('#iaAuto'), false, 'primary');
@@ -979,32 +1023,42 @@
             })
             .catch(err => { showErr(err); alert('Falha ao carregar JSONs. Veja o console.'); });
 
-        /* ==================== Helper manual ==================== */
-        window.testIA = async function () {
-            const resp = await fetch(API_ANALISAR, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    produto: 'mensalidades',
-                    prefs: { output: 'livre', assertivo: true },
-                    blocks: [{ scope: 'kpi_sel2', periodo: { from: '2024-01', to: '2024-12' }, posto: 'ALL' }],
-                    when: Date.now()
-                })
+        function renderSel1() { const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null); buildKPIs('#kpisSel1', meses, sel1); }
+        function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
+
+        function attachHandlers(lastFull) {
+            if (el('#from1')) el('#from1').addEventListener('change', () => { renderSel1(); });
+            if (el('#to1')) el('#to1').addEventListener('change', () => { renderSel1(); });
+            if (el('#reset1')) el('#reset1').addEventListener('click', () => {
+                el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1();
             });
-            console.log('status', resp.status, await resp.text());
-        };
+
+            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
+            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
+            if (el('#reset2')) el('#reset2').addEventListener('click', () => {
+                const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
+                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL';
+                markActiveMulti('#postoTabs2', sel2); renderSel2(); if (IA_STATE.auto) IA_send();
+            });
+
+            const btnCmp = el('#btnComparar');
+            if (btnCmp) btnCmp.addEventListener('click', () => {
+                const box = el('#compareBlock'); if (!box) return;
+                const show = (box.style.display === 'none' || box.style.display === '');
+                box.style.display = show ? 'block' : 'none';
+                setPressed(btnCmp, show, 'secondary');
+            });
+
+            const btnIA = el('#iaAuto');
+            if (btnIA) btnIA.addEventListener('click', () => {
+                IA_STATE.auto = !IA_STATE.auto;
+                setPressed(btnIA, IA_STATE.auto, 'primary');
+                const panel = el('#iaPanel'); if (!panel) return;
+                if (IA_STATE.auto) { panel.style.display = 'block'; IA_send(); }
+                else { const out = el('#iaOut'); if (out) out.innerHTML = ''; panel.style.display = 'none'; }
+            });
+        }
     </script>
-
-
-
-
-
-
-
-
-
-
-
 </body>
 
 </html>

@@ -1,0 +1,58 @@
+
+kpi_v2.html — Receitas (cada performance = uma mensalidade paga)
+
+
+Analise RECEITAS do nosso plano de saúde no período {from}→{to} (posto {posto}).
+Você receberá um objeto JSON em outra mensagem com "blocks" vindos da UI. Leia tudo que houver (KPIs, tabela 12m, séries, pareto, yoy por posto, etc).
+
+Objetivos:
+1) Avalie tendências, sazonalidade e estabilidade das RECEITAS.
+2) Explique variações relevantes (> ±10%) em MoM e YoY quando possível.
+3) Se houver “ΔPreço/ΔVolume/LogRet” nos blocks, conecte-os à variação de receita.
+4) Se houver pareto ou ranking por posto, comente concentração e cauda longa.
+5) Se houver YoY por posto, destaque top 3 e bottom 3.
+6) Evite inventar números que não estejam nos dados.
+
+Restrições:
+- Linguagem técnica seguida de explicação clara.
+- Não extrapole além do período {from}→{to}.
+- Saída SOMENTE em JSON válido, sem markdown.
+
+SAÍDA:
+{"resumo":"string","insights":["string"],"alertas":["string"],"recomendacoes":["string"]}
+
+
+
+O QUE NÃO FOI ENVIADO DO MODELO DA API ANTES DE SEPARAR POR SCRPT NA PÁGINA:
+
+# -------------------------- contexto do negócio --------------------------
+BUSINESS_CTX = (
+    "Somos uma rede de clínicas ambulatoriais com plano de saúde próprio em modelo de franquia. "
+    "Não oferecemos internação, cirurgias ou parto. Atendimento exclusivamente ambulatorial. "
+    "As análises devem refletir esse escopo e evitar suposições sobre hospitalização."
+
+
+    def system_prompt() -> str:
+    return (
+        "Você é um analista financeiro sênior. Entregue respostas técnicas e acionáveis. Você está prestando consultoria para profissionais de empresa familiar em segunda geração. Nenhum economista ou contador está à mesa, explique tecnicamente sempre seguido de uma explicação compreensível para quem não é economista. Anualmente os planos de saúde recebem reajuste autorizado pela ANS, logo, geralmente em junho o índice é liberado o que me faz cobrar o reajuste de junho e maio em julho e agosto, o que pode explicar leves picos. As mensalidades são nossa principal fonte de arrecadação. Os dados aqui analisados são todos em relação ao que recebemos de mensalidades. Não temos alta complexidade. Não atendemos emergência. Não temos internação. Logo, nosso custo é com salário dos médicos. O atendimento oferecido por nosso plano é ambulatorial. Se houver como, verifique nosso site em www.camim.com.br para responder com melhor precisão sobre nós."
+        "Considere sazonalidade, tendência, outliers e riscos. "
+        "Retorne somente JSON válido, sem markdown. "
+        + BUSINESS_CTX
+    )
+
+    def prompt_mensalidades(series: Dict[str, dict], meses: List[str]) -> str:
+    dados = {m: series.get(m, {}) for m in meses}
+    return textwrap.dedent(f"""
+    CONTEXTO:
+    - {BUSINESS_CTX}
+    - Série mensal com chaves: mensalidade, medico, alimentacao.
+    - Meses analisados: {meses[0]}..{meses[-1]} (apenas meses completos).
+    DADOS:
+    {json.dumps(dados, ensure_ascii=False)}
+    TAREFA:
+    1) Analise exclusivamente as MENSALIDADES.
+    2) Traga tendências, sazonalidade, outliers e variações mensais >±10%.
+    3) Liste até 5 recomendações objetivas.
+    SAIDA_JSON:
+    {{"resumo":"string","insights":["string"],"alertas":["string"],"recomendacoes":["string"]}}
+    """).strip()
