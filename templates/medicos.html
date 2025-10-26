@@ -205,8 +205,6 @@
 
 <body class="hold-transition sidebar-mini">
     <div class="wrapper">
-
-
         <!-- NAVBAR superior -->
         <nav class="main-header navbar navbar-expand navbar-white navbar-light">
             <ul class="navbar-nav">
@@ -217,9 +215,9 @@
             <span class="ml-2 font-weight-bold">
                 <img src="../images/Logo Camim-01_50px.png" alt="Logo Camim">
                 Quem tem saúde é mais feliz!
+                <span id="jsonInfo" class="ml-2 text-muted mini"></span>
             </span>
         </nav>
-
 
         <!-- SIDEBAR -->
         <aside class="main-sidebar sidebar-dark-primary elevation-4">
@@ -251,9 +249,6 @@
                 </nav>
             </div>
         </aside>
-
-
-
 
         <!-- CONTEÚDO -->
         <div class="content-wrapper">
@@ -421,6 +416,128 @@
         </div>
     </div>
 
+    <!-- ========== Prompt Manager (módulo reutilizável) ========== -->
+    <script>
+        (function () {
+            const LS_PREFIX = 'camim.prompts::';
+            function uid() { return 'p_' + Math.random().toString(36).slice(2, 10); }
+            function nowISO() { return new Date().toISOString(); }
+            function tplRender(tpl, vars) { return String(tpl || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => (vars?.[k] ?? `{${k}}`)); }
+            const Prompts = {
+                state: { pageId: null, list: [], activeId: null, mounted: false },
+                init({ pageId, defaults = [], mountAfter }) {
+                    this.state.pageId = pageId;
+                    const saved = this._load();
+                    if (!saved) {
+                        const list = defaults.map(d => ({ id: uid(), name: d.name, template: d.template, updatedAt: nowISO() }));
+                        this._save({ list, activeId: list[0]?.id || null });
+                    }
+                    this._mountUI(mountAfter); this._renderList();
+                },
+                getActive() { const { list, activeId } = this._load(); return list.find(p => p.id === activeId) || null; },
+                render(vars) { const a = this.getActive(); return a ? tplRender(a.template, vars) : ''; },
+                _mountUI(mountAfter) {
+                    if (this.state.mounted) return;
+                    const btn = document.createElement('button');
+                    btn.id = 'btnPrompts'; btn.className = 'btn btn-sm btn-outline-secondary ml-2';
+                    btn.textContent = 'Prompts'; btn.title = 'Gerenciar prompts desta página';
+                    const anchor = document.querySelector(mountAfter) || document.body;
+                    anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+                    const modal = document.createElement('div');
+                    modal.id = 'promptModal'; modal.style.display = 'none';
+                    modal.innerHTML = `
+<div class="card p-2" style="position:fixed;right:16px;bottom:16px;width:min(720px,92vw);max-height:80vh;overflow:auto;z-index:9999;box-shadow:0 10px 24px rgba(0,0,0,.18)">
+  <div class="d-flex align-items-center mb-2"><b class="mr-auto">Prompts desta página</b><button id="pmClose" class="btn btn-sm btn-outline-secondary">Fechar</button></div>
+  <div class="d-flex" style="gap:12px;flex-wrap:wrap">
+    <div style="flex:1 1 220px;min-width:220px">
+      <div class="mb-2 d-flex" style="gap:6px">
+        <button id="pmNew" class="btn btn-sm btn-primary">Novo</button>
+        <button id="pmDup" class="btn btn-sm btn-outline-secondary">Duplicar</button>
+        <button id="pmDel" class="btn btn-sm btn-outline-danger">Excluir</button>
+      </div>
+      <ul id="pmList" class="list-group"></ul>
+      <div class="mt-2">
+        <button id="pmExport" class="btn btn-sm btn-outline-secondary">Exportar</button>
+        <label class="btn btn-sm btn-outline-secondary mb-0">Importar <input id="pmImport" type="file" accept="application/json" hidden></label>
+      </div>
+    </div>
+    <div style="flex:2 1 360px;min-width:280px">
+      <input id="pmName" class="form-control form-control-sm mb-2" placeholder="Nome do prompt">
+      <textarea id="pmTpl" class="form-control form-control-sm" rows="12" placeholder="Template com {placeholders}"></textarea>
+      <small class="text-muted">Placeholders: {produto}, {from}, {to}, {posto}, {contexto}, {scopes}.</small>
+      <div class="mt-2 d-flex">
+        <button id="pmSave" class="btn btn-sm btn-success mr-2">Salvar</button>
+        <button id="pmSetActive" class="btn btn-sm btn-outline-primary">Definir como ativo</button>
+        <span id="pmStatus" class="ml-2 text-muted small"></span>
+      </div>
+    </div>
+  </div>
+</div>`;
+                    document.body.appendChild(modal);
+                    btn.addEventListener('click', () => modal.style.display = modal.style.display === 'none' ? 'block' : 'none');
+                    modal.querySelector('#pmClose').addEventListener('click', () => modal.style.display = 'none');
+                    modal.querySelector('#pmNew').addEventListener('click', () => this._new());
+                    modal.querySelector('#pmDup').addEventListener('click', () => this._dup());
+                    modal.querySelector('#pmDel').addEventListener('click', () => this._del());
+                    modal.querySelector('#pmSave').addEventListener('click', () => this._saveEdits());
+                    modal.querySelector('#pmSetActive').addEventListener('click', () => this._setActiveFromEditor());
+                    modal.querySelector('#pmExport').addEventListener('click', () => this._export());
+                    modal.querySelector('#pmImport').addEventListener('change', e => this._import(e));
+                    this.state.mounted = true;
+                },
+                _renderList() {
+                    const { list, activeId } = this._load(); const ul = document.querySelector('#pmList'); if (!ul) return;
+                    ul.innerHTML = '';
+                    list.forEach(p => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item d-flex align-items-center';
+                        li.dataset.id = p.id; li.style.cursor = 'pointer';
+                        li.innerHTML = `<span class="mr-2 ${p.id === activeId ? 'text-primary' : ''}">●</span><span class="flex-grow-1">${p.name}</span><small class="text-muted ml-2">${new Date(p.updatedAt).toLocaleString('pt-BR')}</small>`;
+                        li.addEventListener('click', () => this._loadToEditor(p.id));
+                        ul.appendChild(li);
+                    });
+                    if (list.length) this._loadToEditor(activeId || list[0].id);
+                },
+                _loadToEditor(id) {
+                    const { list } = this._load(); const p = list.find(x => x.id === id) || list[0]; if (!p) return;
+                    document.querySelector('#pmName').value = p.name || '';
+                    document.querySelector('#pmTpl').value = p.template || '';
+                    document.querySelector('#pmList').querySelectorAll('li').forEach(li => li.classList.toggle('active', li.dataset.id === p.id));
+                    this.state.editingId = p.id; const st = document.querySelector('#pmStatus'); if (st) st.textContent = '';
+                },
+                _new() { const s = this._load(); const id = uid(); s.list.unshift({ id, name: 'Novo prompt', template: '', updatedAt: nowISO() }); this._save(s); this._renderList(); this._loadToEditor(id); },
+                _dup() { const s = this._load(); const id = this.state.editingId; const p = s.list.find(x => x.id === id); if (!p) return; const nid = uid(); s.list.unshift({ id: nid, name: p.name + ' (cópia)', template: p.template, updatedAt: nowISO() }); this._save(s); this._renderList(); this._loadToEditor(nid); },
+                _del() { const s = this._load(); const id = this.state.editingId; if (!id) return; s.list = s.list.filter(x => x.id !== id); if (s.activeId === id) s.activeId = s.list[0]?.id || null; this._save(s); this._renderList(); },
+                _saveEdits() {
+                    const s = this._load(); const id = this.state.editingId; if (!id) return;
+                    const name = document.querySelector('#pmName').value.trim() || 'Sem nome';
+                    const template = document.querySelector('#pmTpl').value;
+                    const p = s.list.find(x => x.id === id); if (!p) return; p.name = name; p.template = template; p.updatedAt = nowISO();
+                    this._save(s); this._renderList(); this._loadToEditor(id);
+                    const st = document.querySelector('#pmStatus'); if (st) { st.textContent = 'Salvo'; setTimeout(() => { st.textContent = ''; }, 1200); }
+                },
+                _setActiveFromEditor() { const s = this._load(); const id = this.state.editingId; if (!id) return; s.activeId = id; this._save(s); this._renderList(); },
+                _export() {
+                    const s = this._load(); const blob = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
+                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `prompts_${this.state.pageId}.json`; a.click(); URL.revokeObjectURL(a.href);
+                },
+                async _import(e) {
+                    const f = e.target.files?.[0]; if (!f) return; const txt = await f.text(); let obj = null;
+                    try { obj = JSON.parse(txt); } catch { return alert('JSON inválido'); }
+                    if (!obj || !Array.isArray(obj.list)) return alert('Estrutura inválida');
+                    obj.list = obj.list.map(x => ({ id: x.id || uid(), name: x.name || 'Sem nome', template: x.template || '', updatedAt: x.updatedAt || nowISO() }));
+                    obj.activeId = obj.activeId && obj.list.find(x => x.id === obj.activeId) ? obj.activeId : (obj.list[0]?.id || null);
+                    this._save(obj); this._renderList(); e.target.value = '';
+                },
+                _key() { return LS_PREFIX + this.state.pageId; },
+                _load() { try { const raw = localStorage.getItem(this._key()); if (!raw) return null; return JSON.parse(raw); } catch { return null; } },
+                _save(obj) { try { localStorage.setItem(this._key(), JSON.stringify(obj)); } catch (e) { console.error('localStorage', e); } this.state.list = obj.list; this.state.activeId = obj.activeId; }
+            };
+            window.Prompts = Prompts;
+        })();
+    </script>
+
+    <!-- ========== Script principal ========== -->
     <script>
         // Erros visíveis
         window.addEventListener('error', e => { const box = document.querySelector('#err'); if (box) box.textContent = 'Erro: ' + e.message; console.error(e.error || e.message); });
@@ -445,13 +562,21 @@
 
         const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
         const mFmt = ym => { const [y, m] = ym.split('-').map(Number); return `${MES_ABBR[m - 1].slice(0, 3)}-${String(y).slice(-2)}`; };
-        function inRange(labels, from, to) { return labels.filter(m => (!from || m >= from) && (!to || m <= to)); }
+        const inRange = (labels, from, to) => labels.filter(m => (!from || m >= from) && (!to || m <= to));
         function lastCompleteMonth(labels) { const now = new Date(); const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; const L = labels.filter(m => m !== cur); return L.length ? L.at(-1) : labels.at(-1); }
         const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
         const sum = arr => arr.reduce((a, b) => a + (b || 0), 0);
-
         function prevMonth(ym) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
         function prevYear(ym) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setFullYear(d.getFullYear() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+        function mm3(arr) { return arr.map((_, i) => { const s = arr.slice(Math.max(0, i - 2), i + 1).filter(v => v != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; }); }
+
+        // Botões "pressionados"
+        function setPressed(btn, on, variant = 'primary') {
+            btn.classList.toggle(`btn-outline-${variant}`, !on);
+            btn.classList.toggle(`btn-${variant}`, on);
+            btn.classList.toggle('active', on);
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
 
         let MESES = [], porPosto = {}, POSTOS = [];
         let sel1 = 'ALL', sel2 = 'ALL';
@@ -500,18 +625,18 @@
             box.insertAdjacentHTML('beforeend', kpiCard('% Margem ponderada', pctMargemPond, 'pct'));
         }
 
-        function mm3(arr) { return arr.map((_, i) => { const s = arr.slice(Math.max(0, i - 2), i + 1).filter(v => v != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; }); }
-
         function buildTable(meses, selection) {
             const tb = el('#tblBody'); if (!tb) return; tb.innerHTML = '';
             const map = new Map(); meses.forEach(m => map.set(m, aggMes(m, selection)));
-            meses.forEach(m => {
+            const arrPct = meses.map(x => map.get(x)?.pctMed ?? null);
+            const arrMM3 = mm3(arrPct);
+            meses.forEach((m, idx) => {
                 const r = map.get(m);
-                const pm = prevMonth(m), py = prevYear(m);
-                const rPrev = map.get(pm), rYoY = map.get(py);
+                const rPrev = map.get(prevMonth(m));
+                const rYoY = map.get(prevYear(m));
                 const mom = (r?.pctMed != null && rPrev?.pctMed != null) ? (r.pctMed - rPrev.pctMed) : null;
                 const yoy = (r?.pctMed != null && rYoY?.pctMed != null) ? (r.pctMed - rYoY.pctMed) : null;
-                const mm3pct = mm3(meses.map(x => map.get(x)?.pctMed || null))[meses.indexOf(m)];
+                const mm3pct = arrMM3[idx];
                 tb.insertAdjacentHTML('beforeend', `
 <tr>
   <td>${mFmt(m)}</td>
@@ -529,7 +654,6 @@
 
         /* ==================== Gráficos ==================== */
         let chPct, chValores, chStack, chYoYpp, chPctPosto, chParetoMed, chScatter;
-
         function initCharts() {
             const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
             chPct = new Chart(document.getElementById('chartPct'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
@@ -542,17 +666,22 @@
         }
 
         function postoLabel(selection) { if (selection === 'ALL') return 'Todos'; const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos'; }
-
         function postoShares(meses, selection) {
             const medMap = new Map();
             meses.forEach(m => { const row = porPosto[m] || {}; Object.keys(row).forEach(p => { if (selection !== 'ALL' && !selection.has(p)) return; medMap.set(p, (medMap.get(p) || 0) + num(row[p]?.medico)); }); });
             const entries = [...medMap.entries()].sort((a, b) => b[1] - a[1]);
             return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]) };
         }
-
         function avgPctByPosto(meses, selection) {
             const map = new Map();
-            meses.forEach(m => { const row = porPosto[m] || {}; Object.keys(row).forEach(p => { if (selection !== 'ALL' && !selection.has(p)) return; const r = row[p]; const mens = num(r?.mensalidade); const med = num(r?.medico); if (mens > 0) { const o = map.get(p) || { sum: 0, cnt: 0 }; o.sum += (med / mens * 100); o.cnt += 1; map.set(p, o); } }); });
+            meses.forEach(m => {
+                const row = porPosto[m] || {};
+                Object.keys(row).forEach(p => {
+                    if (selection !== 'ALL' && !selection.has(p)) return;
+                    const r = row[p]; const mens = num(r?.mensalidade); const med = num(r?.medico);
+                    if (mens > 0) { const o = map.get(p) || { sum: 0, cnt: 0 }; o.sum += (med / mens * 100); o.cnt += 1; map.set(p, o); }
+                });
+            });
             const postos = [...map.keys()].sort();
             return { labels: postos, valores: postos.map(p => map.get(p).cnt ? map.get(p).sum / map.get(p).cnt : null) };
         }
@@ -562,33 +691,23 @@
             const tag = postoLabel(selection);
             const rows = meses.map(m => aggMes(m, selection));
 
-            chPct.data.labels = labels;
             const pct = rows.map(r => r.pctMed);
-            chPct.data.datasets = [
-                { label: `% Médico/Mensalidade (${tag})`, data: pct, tension: .2 },
-                { label: 'Média móvel 3m', data: mm3(pct), tension: .2 }
-            ];
+            chPct.data.labels = labels;
+            chPct.data.datasets = [{ label: `% Médico/Mensalidade (${tag})`, data: pct, tension: .2 }, { label: 'Média móvel 3m', data: mm3(pct), tension: .2 }];
             chPct.update();
 
             chValores.data.labels = labels;
-            chValores.data.datasets = [
-                { label: `Mensalidade (${tag})`, data: rows.map(r => r.mens), tension: .2 },
-                { label: 'Médico', data: rows.map(r => r.med), tension: .2 }
-            ];
+            chValores.data.datasets = [{ label: `Mensalidade (${tag})`, data: rows.map(r => r.mens), tension: .2 }, { label: 'Médico', data: rows.map(r => r.med), tension: .2 }];
             chValores.update();
 
             chStack.data.labels = labels;
-            chStack.data.datasets = [
-                { label: 'Médico', data: rows.map(r => r.med) },
-                { label: 'Margem aprox.', data: rows.map(r => r.margem) }
-            ];
+            chStack.data.datasets = [{ label: 'Médico', data: rows.map(r => r.med) }, { label: 'Margem aprox.', data: rows.map(r => r.margem) }];
             chStack.update();
 
-            // YoY em p.p.
             const yoyPP = meses.map((m, i) => { const py = prevYear(m); const j = meses.indexOf(py); if (j < 0) return null; const a = rows[i].pctMed; const b = aggMes(py, selection).pctMed; return (a != null && b != null) ? a - b : null; });
-            chYoYpp.data.labels = labels;
             const colors = yoyPP.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)');
             const borders = yoyPP.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
+            chYoYpp.data.labels = labels;
             chYoYpp.data.datasets = [{ label: 'Δ YoY (p.p.)', data: yoyPP, backgroundColor: colors, borderColor: borders, borderWidth: 1 }];
             chYoYpp.update();
 
@@ -614,7 +733,6 @@
             const mens = num(row.mensalidade), med = num(row.medico);
             return mens > 0 ? med / mens * 100 : null;
         }
-
         function buildHeatmap(meses, selection) {
             const box = el('#heatmapBox'); if (!box) return; box.innerHTML = '';
             const postos = selection === 'ALL' ? POSTOS : [...selection].sort(); if (!postos.length) return;
@@ -654,26 +772,16 @@
             });
         }
 
-        /* ==================== Renders e handlers ==================== */
-        function renderSel1() { const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null); buildKPIs('#kpisSel1', meses, sel1); }
-        function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
-
-        function attachHandlers(lastFull) {
-            if (el('#from1')) el('#from1').addEventListener('change', () => { renderSel1(); });
-            if (el('#to1')) el('#to1').addEventListener('change', () => { renderSel1(); });
-            if (el('#reset1')) el('#reset1').addEventListener('click', () => { el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1(); });
-
-            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
-            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
-            if (el('#reset2')) el('#reset2').addEventListener('click', () => { const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11); el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL'; markActiveMulti('#postoTabs2', sel2); renderSel2(); if (IA_STATE.auto) IA_send(); });
-
-            if (el('#btnComparar')) el('#btnComparar').addEventListener('click', () => { const b = el('#compareBlock'); if (!b) return; b.style.display = (b.style.display === 'none' || b.style.display === '') ? 'block' : 'none'; });
-
-            if (el('#iaAuto')) el('#iaAuto').addEventListener('click', () => { IA_STATE.auto = !IA_STATE.auto; el('#iaAuto').classList.toggle('active', IA_STATE.auto); IA_send(); });
-        }
-
         /* ==================== IA ==================== */
-        function startDots(target) { const box = target || el('#iaOut') || el('#iaPanel'); const wrap = document.createElement('div'); wrap.className = 'ia-content ia-loading'; wrap.innerHTML = `Analisando <span class="ia-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`; box.innerHTML = ''; box.appendChild(wrap); let t = 0; const int = setInterval(() => { const d = wrap.querySelectorAll('.dot'); d.forEach(x => x.classList.remove('on')); d[t % 3].classList.add('on'); t++; }, 260); loaders.set(box, int); }
+        function startDots(target) {
+            const box = target || el('#iaOut') || el('#iaPanel');
+            const wrap = document.createElement('div');
+            wrap.className = 'ia-content ia-loading';
+            wrap.innerHTML = `Analisando <span class="ia-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
+            box.innerHTML = ''; box.appendChild(wrap);
+            let t = 0; const int = setInterval(() => { const d = wrap.querySelectorAll('.dot'); d.forEach(x => x.classList.remove('on')); d[t % 3].classList.add('on'); t++; }, 260);
+            loaders.set(box, int);
+        }
         function stopDots(target) { const box = target || el('#iaOut') || el('#iaPanel'); const int = loaders.get(box); if (int) { clearInterval(int); loaders.delete(box); } }
 
         function mesesSel2() { return inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); }
@@ -686,7 +794,6 @@
             const pct = labs.map(m => aggMes(m, selection).pctMed);
             return { labels: labs, mensalidade: mens, medico: med, pct_med: pct };
         }
-
         function defs() {
             return {
                 pct_med: '% da mensalidade consumido por custo médico',
@@ -701,8 +808,9 @@
             if (IS_LOCAL) {
                 try {
                     const f = `${payload.blocks[0]?.periodo?.from || 'from'}_${payload.blocks[0]?.periodo?.to || 'to'}_${(payload.blocks[0]?.posto || 'ALL')}_custo_medico.json`;
-                    const url = `${IA_BASE}/${f}?t=${Date.now()}`; const r = await fetch(url, { cache: 'no-store' }); if (r.ok) return r.json();
-                } catch (e) { }
+                    const url = `${IA_BASE}/${f}?t=${Date.now()}`;
+                    const r = await fetch(url, { cache: 'no-store' }); if (r.ok) return r.json();
+                } catch { }
                 return { resumo: 'Mock local não encontrado para este filtro.', alertas: [] };
             }
             const r = await fetch(API_ANALISAR, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -724,7 +832,8 @@
         async function IA_send() {
             const panel = el('#iaPanel'); if (!panel) return;
             panel.style.display = 'block';
-            const outBox = el('#iaOut') || panel; startDots(outBox);
+            const outBox = el('#iaOut') || panel;
+            startDots(outBox);
             try {
                 const meses = mesesSel2(); if (!meses.length) throw new Error('Seleção vazia.');
                 const s = seriesBasicas(meses, sel2);
@@ -737,10 +846,23 @@
                     defs: defs(),
                     blocks: [
                         { scope: 'chart_pct', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, pct_med: s.pct_med } },
-                        { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, mensalidade: s.mensalidade, medico: s.med } },
-                        { scope: 'chart_stack', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, medico: s.med } }
+                        { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, mensalidade: s.mensalidade, medico: s.medico } },
+                        { scope: 'chart_stack', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, medico: s.medico } }
                     ]
                 };
+
+                // ===== Prompt dinâmico (usa Prompt Manager) =====
+                const scopes = payload.blocks.map(b => b.scope).join(', ');
+                const renderedPrompt = Prompts.render({
+                    produto: 'custo_medico',
+                    from: meses[0],
+                    to: meses.at(-1),
+                    posto: postoAtual(),
+                    contexto: 'graficos',
+                    scopes
+                });
+                payload.prompt = renderedPrompt;
+
                 const data = await iaFetch(payload);
                 stopDots(outBox);
                 const out = el('#iaOut'); if (out) out.innerHTML = toHtml(data);
@@ -750,30 +872,102 @@
             }
         }
 
+        /* ==================== Header "dados gerados em" ==================== */
+        function setJsonInfoFromHeaders(resp) {
+            try {
+                const lm = resp.headers.get('Last-Modified'); if (!lm) return;
+                const dt = new Date(lm);
+                const txt = dt.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+                const elInfo = document.querySelector('#jsonInfo'); if (elInfo) elInfo.textContent = `• dados gerados em ${txt}`;
+            } catch { }
+        }
+
         /* ==================== Boot ==================== */
+        // Inicia Prompt Manager para esta página
+        Prompts.init({
+            pageId: 'medicos',
+            defaults: [
+                { name: 'Padrão', template: `Analise %Médico sobre Mensalidade, composição e ΔYoY pp para {posto} de {from} a {to}. Foque nos gráficos {scopes}. Liste até 5 insights e 3 alertas. Tom assertivo.` },
+                { name: 'Executivo', template: `Resumo executivo para {produto} no período {from}→{to}, posto {posto}. Destaque riscos e oportunidades. Cite {scopes}. Texto conciso.` }
+            ],
+            mountAfter: '#iaAuto'
+        });
+
         Promise.all([fetch(URL_POR_POSTO, { cache: 'no-store' })])
             .then(async ([rp]) => {
                 if (!rp.ok) throw new Error(`HTTP ${rp.status} em ${URL_POR_POSTO}`);
+                setJsonInfoFromHeaders(rp);
                 porPosto = await rp.json();
+
                 MESES = Object.keys(porPosto).filter(k => !k.startsWith('_')).sort();
                 if (!MESES.length) throw new Error('JSON por posto sem meses.');
                 const lastFull = lastCompleteMonth(MESES);
-                const ultimo = porPosto[lastFull] || {}; POSTOS = Object.keys(ultimo).filter(x => /^[A-Z]$/.test(x)).sort();
+
+                const ultimo = porPosto[lastFull] || {};
+                POSTOS = Object.keys(ultimo).filter(x => /^[A-Z]$/.test(x)).sort();
 
                 if (el('#from1')) el('#from1').value = MESES[0];
                 if (el('#to1')) el('#to1').value = lastFull;
-                const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
+
+                const [y, m] = lastFull.split('-').map(Number);
+                const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
                 if (el('#from2')) el('#from2').value = d.toISOString().slice(0, 7);
                 if (el('#to2')) el('#to2').value = lastFull;
+
                 sel1 = 'ALL'; sel2 = 'ALL';
 
                 buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
                 buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; }, () => renderSel2());
 
-                initCharts(); attachHandlers(lastFull); renderSel1(); renderSel2();
+                initCharts(); attachHandlers(lastFull);
+                renderSel1(); renderSel2();
+
                 if (el('#iaPanel')) el('#iaPanel').style.display = 'none';
+                if (el('#compareBlock')) el('#compareBlock').style.display = 'none';
+                if (el('#iaAuto')) setPressed(el('#iaAuto'), false, 'primary');
+                if (el('#btnComparar')) setPressed(el('#btnComparar'), false, 'secondary');
             })
             .catch(err => { showErr(err); alert('Falha ao carregar JSONs. Veja o console.'); });
+
+        /* ==================== Handlers ==================== */
+        function renderSel1() { const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null); buildKPIs('#kpisSel1', meses, sel1); }
+        function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
+
+        function attachHandlers(lastFull) {
+            // Dataset
+            if (el('#from1')) el('#from1').addEventListener('change', () => { renderSel1(); });
+            if (el('#to1')) el('#to1').addEventListener('change', () => { renderSel1(); });
+            if (el('#reset1')) el('#reset1').addEventListener('click', () => {
+                el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1();
+            });
+
+            // 12 meses
+            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
+            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
+            if (el('#reset2')) el('#reset2').addEventListener('click', () => {
+                const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
+                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL';
+                markActiveMulti('#postoTabs2', sel2); renderSel2(); if (IA_STATE.auto) IA_send();
+            });
+
+            // Comparar
+            const btnCmp = el('#btnComparar');
+            if (btnCmp) btnCmp.addEventListener('click', () => {
+                const b = el('#compareBlock'); if (!b) return;
+                const show = (b.style.display === 'none' || b.style.display === '');
+                b.style.display = show ? 'block' : 'none';
+                setPressed(btnCmp, show, 'secondary');
+            });
+
+            // IA Auto
+            const btnIA = el('#iaAuto');
+            if (btnIA) btnIA.addEventListener('click', () => {
+                IA_STATE.auto = !IA_STATE.auto;
+                setPressed(btnIA, IA_STATE.auto, 'primary');
+                const panel = el('#iaPanel'); if (!panel) return;
+                if (IA_STATE.auto) { panel.style.display = 'block'; IA_send(); } else { const out = el('#iaOut'); if (out) out.innerHTML = ''; panel.style.display = 'none'; }
+            });
+        }
     </script>
 </body>
 

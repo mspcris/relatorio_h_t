@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Relatório HTML consolidando Trello + Harvest.
+Relatório HTML consolidando Trello + Harvest com layout novo.
 - Trello: lê a última subpasta export_trello/export_YYYYMMDD_HHMMSS
 - Harvest: lê o CSV mais recente em export_harvest/
-- Saída: relatorio/relatorio_YYYYMMDD_HHMMSS.html + templates/index.html (sempre sobrescrito)
+- Saída: relatorio/relatorio_YYYYMMDD_HHMMSS.html
+         templates/trello_harvest.html (sempre sobrescrito)
 """
 from pathlib import Path
 from datetime import datetime
@@ -38,7 +39,12 @@ def latest_trello_dir(root: Path) -> Path | None:
 
 def df_to_html_table(df: pd.DataFrame | None, table_id: str, raw_html_cols: set[str] | None = None) -> str:
     if df is None or df.empty:
-        return '<div class="empty">Sem dados.</div>'
+        return """
+        <div class="table-wrap">
+          <input class="filter" placeholder="Filtrar nesta tabela..." oninput="filterTable('{tid}', this.value)"/>
+          <table id="{tid}" class="data"><thead><tr><th>Sem dados</th></tr></thead><tbody><tr><td class="empty">Sem dados.</td></tr></tbody></table>
+        </div>""".replace("{tid}", table_id)
+
     raw_html_cols = raw_html_cols or set()
     df = df.fillna("")
 
@@ -132,7 +138,7 @@ def main():
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_html = outdir / f"relatorio_{stamp}.html"
-    out_index = templates_dir / "index.html"  # sempre sobrescrever
+    out_index = templates_dir / "trello_harvest.html"  # sempre sobrescrever
 
     # --- fontes ---
     trello_dir = latest_trello_dir(root)
@@ -159,13 +165,14 @@ def main():
             cand_cols=("updated", "date", "dateLastActivity", "last_activity", "due", "start", "created", "created_at"),
         )
 
-        # remover colunas solicitadas
-        drop_cols = [
-            "card_id","labels","members","due","sart","start","due_complete",
-            "short_link","attachments_urls","attachments_count"
-        ]
-        keep_cols = [c for c in cards.columns if c not in drop_cols]
-        cards = cards[keep_cols]
+        # colunas mostradas no HTML novo (ajuste conforme necessário)
+        wanted_cols = ["name", "list", "url", "closed", "updated", "desc"]
+        rename_map = {"name": "card"}
+        # criar colunas ausentes
+        for c in wanted_cols:
+            if c not in cards.columns:
+                cards[c] = ""
+        cards = cards[wanted_cols].rename(columns=rename_map)
 
         # link clicável
         if "url" in cards.columns:
@@ -190,6 +197,7 @@ def main():
             elif ("task"    in lc and "id" not in lc): target = "task"
             elif ("hours" in lc or "hour" in lc):      target = "hours"
             elif ("notes" in lc or "descri" in lc):    target = "notes"
+            elif lc in ("user", "user.name", "username", "user name"): target = None  # será tratado por pick_username_column
             if target and target not in seen:
                 ren[c] = target
                 seen.add(target)
@@ -219,7 +227,10 @@ def main():
                 harvest.groupby(["client", "project"], dropna=False)["hours"]
                 .sum().reset_index().sort_values(["client", "hours"], ascending=[True, False])
             )
-        if user_col and "hours" in harvest.columns and "user.name" in harvest.columns:
+        if (user_col or "user.name" in harvest.columns) and "hours" in harvest.columns:
+            # garantir presença
+            if "user.name" not in harvest.columns and user_col:
+                harvest.rename(columns={user_col: "user.name"}, inplace=True)
             pivots["by_user"] = (
                 harvest.groupby("user.name", dropna=False)["hours"]
                 .sum().reset_index().sort_values("hours", ascending=False)
@@ -227,11 +238,16 @@ def main():
 
         # Grid de entradas preservando a ordem já DESC
         harvest_display = harvest.copy()
-        cols_drop = ["client.id", "client", "billable", "is_locked", "user", "project.id", "task.id"]
+        cols_drop = ["client.id", "billable", "is_locked", "user", "project.id", "task.id"]
         harvest_display.drop(columns=[c for c in cols_drop if c in harvest_display.columns],
                              inplace=True, errors="ignore")
-        if "user.name" not in harvest_display.columns:
-            harvest_display["user.name"] = ""
+        # garantir colunas exibidas no HTML novo
+        wanted_h_cols = ["id", "date", "hours", "notes", "user.id", "user.name", "project", "task", "created_at", "updated_at"]
+        for c in wanted_h_cols:
+            if c not in harvest_display.columns:
+                harvest_display[c] = ""
+        harvest_display = harvest_display[wanted_h_cols]
+
         if "hours" in harvest_display.columns:
             harvest_display["hours"] = harvest_display["hours"].apply(fmt_hours_hhmm)
         for k, dfp in list(pivots.items()):
@@ -243,120 +259,151 @@ def main():
     trello_hint = trello_dir.name if trello_dir else "não encontrado"
     harvest_hint = hv_csv.name if hv_csv else "não encontrado"
 
-    html = f"""<!doctype html>
+    html = f"""<!DOCTYPE html>
 <html lang="pt-br">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Relatório — Trello & Harvest</title>
-<style>
-:root {{ --bg:#0b1020; --card:#101935; --muted:#a3acc2; --fg:#e9eefb; --brand:#ffd000; --radius:14px; }}
-* {{ box-sizing:border-box }}
-body {{ margin:0; font:14px/1.45 system-ui,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--fg) }}
-.header {{ display:flex; gap:12px; padding:14px 16px; border-bottom:1px solid #ffffff1a; position:sticky; top:0; background:#0b1020; align-items:center; justify-content:space-between }}
-.header .left {{ display:flex; gap:12px; align-items:center }}
-.header .right {{ display:flex; gap:8px; align-items:center }}
-.header h1 {{ margin:0; font-size:18px }}
-.badge {{ background:#ffffff14; color:var(--muted); padding:4px 8px; border-radius:999px; font-size:12px }}
-.link-btn {{ border:1px solid #ffffff22; background:#ffffff10; color:#fff; padding:8px 12px; border-radius:10px; text-decoration:none; font-weight:700 }}
-.link-btn:hover {{ background:#ffffff20 }}
-.tabs {{ display:flex; gap:8px; padding:12px 16px; flex-wrap:wrap }}
-.tab-btn {{ border:1px solid #ffffff22; background:#ffffff10; color:#fff; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:700 }}
-.tab-btn[aria-selected="true"] {{ background:var(--brand); color:#111; border-color:#00000044 }}
-.panel {{ display:none; padding:16px }}
-.panel[aria-hidden="false"] {{ display:block }}
-.card {{ background:var(--card); border:1px solid #ffffff1a; border-radius:var(--radius); padding:16px; margin-bottom:16px }}
-.table-wrap {{ margin-top:8px; overflow:auto }}
-.filter {{ width:100%; padding:8px; border-radius:8px; border:1px solid #ffffff22; background:#ffffff10; color:#fff }}
-table.data {{ width:100%; border-collapse:collapse; margin-top:8px }}
-table.data th, table.data td {{ border:1px solid #ffffff1a; padding:6px 8px; vertical-align:top }}
-.empty {{ color:var(--muted); font-style:italic }}
-</style>
-
-
-
-<script>
- function selectTab(id){{    // todas as chaves JS duplicadas
-   document.querySelectorAll('.panel').forEach(p=>p.setAttribute('aria-hidden','true'));
-   const btn = document.querySelector('[data-tab="'+id+'"]');
-   if (btn){{ 
-     document.querySelectorAll('.tab-btn').forEach(b=>b.setAttribute('aria-selected','false'));
-     btn.setAttribute('aria-selected','true');
-   }}
-   const panel = document.getElementById(id);
-   if (panel) panel.setAttribute('aria-hidden','false');
- }}
-function filterTable(id, q){{ 
-  q = q.toLowerCase();
-  const rows = document.querySelectorAll('#'+id+' tbody tr');
-  rows.forEach(r=>{{ 
-    const t = r.textContent.toLowerCase();
-    r.style.display = t.indexOf(q) >= 0 ? '' : 'none';
-  }});
-}}
-</script>
-
-
-
-</head>
-<body>
-  <div class="header">
-    <div class="left">
-      <h1>Relatório — Trello & Harvest</h1>
-      <span class="badge">{now}</span>
-      <span class="badge">Trello: {trello_hint}</span>
-      <span class="badge">Harvest: {harvest_hint}</span>
-    </div>
-    <div class="right">
-      <a class="link-btn" href="#harvest" onclick="selectTab('harvest')">Harvest</a>
-      <a class="link-btn" href="#trello" onclick="selectTab('trello')">Trello</a>
-      <!-- novo botão Governança -->
-      <a class="link-btn" href="/index_lp.html">Governança</a>
-
-    </div>
-  </div>
-
-
-  
-
-
-
-
-  <section id="trello" class="panel" aria-hidden="false">
-    <div class="card">
-      <h3>Cards</h3>
-      {df_to_html_table(cards, "tbl_cards", raw_html_cols={'url'})}
-    </div>
-    <div class="card">
-      <h3>Checklists</h3>
-      {df_to_html_table(checklists, "tbl_checklists")}
-    </div>
-  </section>
-
-  <section id="harvest" class="panel" aria-hidden="true">
-    <div class="card"><h3>Entradas</h3>{df_to_html_table(harvest_display, "tbl_harvest")}</div>
-    <div class="card"><h3>Horas por Cliente</h3>{df_to_html_table(pivots.get("by_client"), "tbl_by_client")}</div>
-    <div class="card"><h3>Horas por Projeto</h3>{df_to_html_table(pivots.get("by_project"), "tbl_by_project")}</div>
-    <div class="card"><h3>Horas por Usuário</h3>{df_to_html_table(pivots.get("by_user"), "tbl_by_user")}</div>
-  </section>
-
-
-  
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shortcut_info</title>
+  <link rel="shortcut icon" href="../images/Logo Camim-01_50px.png" type="image/x-icon">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito+Rounded:wght@800&display=swap" rel="stylesheet">
+  <script src="../js/menu.js" defer></script>
+  <script src="../js/header.js" defer></script>
+  <script src="../js/footer.js" defer></script>
+  <script src="../js/overlay.js" defer></script>
+  <link rel="stylesheet" href="../css/style.css?v=5">
+  <style>
+    #overlay {{ position: fixed; inset: 0; background: rgba(255,255,255,0.2); backdrop-filter: blur(12px); display:flex; justify-content:center; align-items:center; z-index:9999; opacity:1; visibility:visible; transition:opacity 1s ease, visibility 0s linear; }}
+    #overlay.fade-out {{ opacity:0; visibility:hidden; transition:opacity 1s ease, visibility 0s linear 1s; }}
+    h1, h2, h3 {{ margin:16px 0 8px; }}
+    p {{ margin:8px 0 16px; }}
+    ul {{ margin:0 0 16px 20px; }}
+    code, pre {{ background:#f6f8fa; border:1px solid #eaecef; border-radius:6px; }}
+    pre {{ padding:12px; overflow:auto; }}
+    .kpi {{ display:grid; grid-template-columns:repeat(4, minmax(180px,1fr)); gap:12px; margin:16px 0; }}
+    .card {{ border:1px solid #e5e7eb; border-radius:8px; padding:12px; }}
+    .muted {{ color:#555; }}
+    table {{ width:100%; border-collapse:collapse; margin:12px 0 16px; }}
+    th, td {{ border:1px solid #e5e7eb; padding:8px 10px; text-align:left; }}
+    th {{ background:#fafafa; }}
+    small {{ color:#666; }}
+    .header2 {{ display:flex; gap:12px; padding:14px 16px; border-bottom:1px solid #ffffff1a; position:sticky; top:0; background:var(--cor4); align-items:center; justify-content:space-between }}
+    .h12 {{ color:var(--cor0); }}
+    .badge2 {{ color:var(--muted); padding:4px 8px; border-radius:999px; font-size:12px }}
+    .link-btn2 {{ border:1px solid #ffffff22; background:#ffffff10; color:#fff; padding:8px 12px; border-radius:10px; text-decoration:none; font-weight:700 }}
+    .link-btn2:hover {{ background:#ffffff20 }}
+    .right2 {{ display:flex; gap:8px; align-items:center }}
+    .table-wrap {{ margin-top:8px; overflow:auto }}
+    .filter {{ width:100%; padding:8px; border-radius:8px; border:1px solid #e5e7eb; }}
+    .empty {{ color:#666; font-style:italic }}
+  </style>
   <script>
-  document.addEventListener('DOMContentLoaded', () => {{
-    const target = (location.hash || '#harvest').slice(1);
-    selectTab(target);
-  }});
+    function selectTab(id) {{
+      document.querySelectorAll('.panel').forEach(p => p.setAttribute('aria-hidden', 'true'));
+      const btn = document.querySelector('[data-tab=\"' + id + '\"]');
+      if (btn) {{
+        document.querySelectorAll('.tab-btn').forEach(b => b.setAttribute('aria-selected', 'false'));
+        btn.setAttribute('aria-selected', 'true');
+      }}
+      const panel = document.getElementById(id);
+      if (panel) panel.setAttribute('aria-hidden', 'false');
+    }}
+    function filterTable(id, q) {{
+      q = (q||'').toLowerCase();
+      const rows = document.querySelectorAll('#' + id + ' tbody tr');
+      rows.forEach(r => {{
+        const t = r.textContent.toLowerCase();
+        r.style.display = t.indexOf(q) >= 0 ? '' : 'none';
+      }});
+    }}
   </script>
+</head>
 
-  
+<body>
 
+  <!-- Overlay de mensagem -->
+  <div id="overlay"></div>
 
+  <!-- Botão hamburguer que abre o menu -->
+  <button id="menuToggle" class="menu-btn" aria-label="Abrir menu" aria-controls="app-drawer" aria-expanded="false">
+    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"></path>
+    </svg>
+  </button>
+
+  <!-- Fundo escuro atrás do menu -->
+  <div id="drawerOverlay" class="menu-overlay" hidden></div>
+
+  <!-- O menu lateral -->
+  <aside id="app-drawer" class="menu-drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+    <div class="menu-splash">&nbsp;</div>
+    <header class="drawer-header">
+      <img src="../images/Logo Camim-01_50px.png" alt="Logo Camim">
+      <h2 id="drawerTitle">&nbsp;</h2>
+      <button id="drawerClose" class="menu-icon-btn" aria-label="Fechar menu">✖</button>
+    </header>
+    <nav class="menu-nav" aria-label="Menu principal">
+      <ul class="menu-list">
+        <li><a class="menu-link" href="/templates/index.html">🏠 Início</a></li>
+        <li><a class="menu-link" href="#">🏛️Governança</a></li>
+        <li><a class="menu-link" href="/templates/kpi_home.html">📊 KPIs e performance</a></li>
+        <li><a class="menu-link" href="/templates/trello_harvest.html">😡 Harvest</a></li>
+        <li><a class="menu-link" href="#">🧭 Direção e estratégia</a></li>
+        <li><a class="menu-link" href="#">🛡️Compliance e riscos</a></li>
+      </ul>
+    </nav>
+    <div class="menu-brand">&nbsp;</div>
+  </aside>
+
+  <div id="header"></div>
+
+  <main>
+    <div class="header2">
+      <div class="left">
+        <h1 class="h12">Relatório — Trello & Harvest</h1>
+        <span class="badge2">{now}</span>
+        <span class="badge2">Trello: {trello_hint}</span>
+        <span class="badge2">Harvest: {harvest_hint}</span>
+      </div>
+      <div class="right2">
+        <a class="link-btn2" href="#harvest" onclick="selectTab('harvest')">Harvest</a>
+        <a class="link-btn2" href="#trello" onclick="selectTab('trello')">Trello</a>
+      </div>
+    </div>
+
+    <section id="trello" class="panel" aria-hidden="false">
+      <div class="card">
+        <h3>Cards - Trello</h3>
+        {df_to_html_table(cards, "tbl_cards", raw_html_cols={'url'})}
+      </div>
+      
+    </section>
+
+    <section id="harvest" class="panel" aria-hidden="true">
+      <div class="card"><h3>Entradas - Harvest</h3>{df_to_html_table(harvest_display, "tbl_harvest")}</div>
+      <div class="card"><h3>Horas por Cliente</h3>{df_to_html_table(pivots.get("by_client"), "tbl_by_client")}</div>
+      <div class="card"><h3>Horas por Projeto</h3>{df_to_html_table(pivots.get("by_project"), "tbl_by_project")}</div>
+      <div class="card"><h3>Horas por Usuário</h3>{df_to_html_table(pivots.get("by_user"), "tbl_by_user")}</div>
+    </section>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {{
+        const target = (location.hash || '#harvest').slice(1);
+        selectTab(target);
+      }});
+    </script>
+
+  </main>
+
+  <div id="footer"></div>
+  <script src="../js/footer.js" defer></script>
 </body>
 </html>
 """
-    # grava os dois arquivos: com carimbo e index.html em templates/
+    # grava os dois arquivos
     out_html.write_text(html, encoding="utf-8")
     out_index.write_text(html, encoding="utf-8")
     print(f"OK: {out_html}")

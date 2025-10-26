@@ -206,7 +206,9 @@
             <span class="ml-2 font-weight-bold">
                 <img src="../images/Logo Camim-01_50px.png" alt="Logo Camim">
                 Quem tem saúde é mais feliz!
+                <span id="jsonInfo" class="ml-2 text-muted mini"></span>
             </span>
+
         </nav>
 
 
@@ -432,6 +434,13 @@
         </div>
     </div>
 
+
+
+
+
+
+
+
     <script>
         /* ==================== Dados base ==================== */
         const BASE = new URL('.', location.href);
@@ -461,8 +470,37 @@
         const sum = arr => arr.reduce((a, b) => a + (b || 0), 0);
         const wavg = (vals, weights) => { let sW = 0, s = 0; for (let i = 0; i < vals.length; i++) { const w = weights[i] ?? 0; const v = vals[i]; if (v == null) continue; s += v * w; sW += w; } return sW ? s / sW : null; };
 
+        // Visual "pressionado"
+        function setPressed(btn, on, variant = 'primary') {
+            btn.classList.toggle(`btn-outline-${variant}`, !on);
+            btn.classList.toggle(`btn-${variant}`, on);
+            btn.classList.toggle('active', on);
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+
         let MESES = [], geral = {}, porPosto = {}, POSTOS = [];
         let sel1 = 'ALL', sel2 = 'ALL';
+
+        /* ==================== Header "dados gerados em" ==================== */
+        const LM = {}; // { key: { date: Date, label: string } }
+        function renderJsonInfo() {
+            const elInfo = document.querySelector('#jsonInfo'); if (!elInfo) return;
+            const entries = Object.values(LM).filter(Boolean);
+            if (!entries.length) { elInfo.textContent = ''; elInfo.removeAttribute('title'); return; }
+            const newest = entries.slice().sort((a, b) => b.date - a.date)[0];
+            const fmt = d => d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+            elInfo.textContent = `• dados gerados em ${fmt(newest.date)}`;
+            elInfo.title = entries.map(e => `${e.label}: ${fmt(e.date)}`).join(' | ');
+        }
+        function setJsonInfoFromHeaders(resp, key, label) {
+            try {
+                const lm = resp.headers.get('Last-Modified'); if (!lm) return false;
+                LM[key] = { date: new Date(lm), label }; renderJsonInfo(); return true;
+            } catch { return false; }
+        }
+        async function tryHead(url, key, label) {
+            try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); setJsonInfoFromHeaders(r, key, label); } catch { }
+        }
 
         /* ==================== Core de agregação ==================== */
         function srcMens(g) {
@@ -483,7 +521,6 @@
                 mix_i: maybe(g.mix_delta_receita_interacao)
             };
         }
-
         function aggMens(ym, selection) {
             if (selection === 'ALL') return srcMens(geral[ym] || {});
             const postos = [...selection];
@@ -511,18 +548,16 @@
             const neg = (!isNull && fmt === 'pct' && val < 0);
             const out = isNull ? '<span class="muted">-</span>' :
                 (fmt === 'moeda' ? fmtInt.format(val) :
-                    (fmt === '2' ? fmt2.format(val) :
-                        (fmt === '4' ? fmt4.format(val) :
-                            (fmt === 'pct' ? (fmtPct.format(val) + '%') : String(val)))));
+                    fmt === '2' ? fmt2.format(val) :
+                        fmt === '4' ? fmt4.format(val) :
+                            fmt === 'pct' ? (fmtPct.format(val) + '%') : String(val));
             return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0 ${neg ? 'text-danger' : ''}">${out}</div></div></div>`;
         }
-
         function maxDrawdown(vals) {
             let peak = -Infinity, mdd = 0;
             for (const v of vals) { if (v == null) continue; if (v > peak) peak = v; if (peak > 0) { const dd = (v - peak) / peak * 100; if (dd < mdd) mdd = dd; } }
             return mdd || 0;
         }
-
         function buildKPIs(containerId, meses, selection) {
             const box = el(containerId); if (!box) return;
             const rows = meses.map(m => aggMens(m, selection));
@@ -562,7 +597,6 @@
             box.insertAdjacentHTML('beforeend', kpiCard('Volatilidade logret', volPct, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('Max Drawdown receita', mdd, 'pct'));
         }
-
         function buildTable(meses, selection) {
             const tb = el('#tblBody'); if (!tb) return;
             tb.innerHTML = ''; let sumMens = 0, sumQtd = 0, tickets = [];
@@ -623,13 +657,14 @@
             chPareto = new Chart(document.getElementById('chartPareto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
             chYoYPosto = new Chart(document.getElementById('chartYoYPosto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
         }
-
         function rollingStd(arr, w) {
-            const out = []; for (let i = 0; i < arr.length; i++) { if (i + 1 < w) { out.push(null); continue; } const s = arr.slice(i + 1 - w, i + 1).filter(v => v != null); if (!s.length) { out.push(null); continue; } const mean = s.reduce((a, b) => a + b, 0) / s.length; const vr = s.reduce((a, x) => a + (x - mean) * (x - mean), 0) / s.length; out.push(Math.sqrt(vr)); }
-            return out;
+            const out = []; for (let i = 0; i < arr.length; i++) {
+                if (i + 1 < w) { out.push(null); continue; }
+                const s = arr.slice(i + 1 - w, i + 1).filter(v => v != null); if (!s.length) { out.push(null); continue; }
+                const mean = s.reduce((a, b) => a + b, 0) / s.length; const vr = s.reduce((a, x) => a + (x - mean) * (x - mean), 0) / s.length; out.push(Math.sqrt(vr));
+            } return out;
         }
         function labelSelec(selection) { if (selection === 'ALL') return 'Todos'; const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos'; }
-
         function postoShares(meses, selection) {
             const map = new Map();
             meses.forEach(m => {
@@ -643,7 +678,6 @@
             const entries = [...map.entries()].sort((a, b) => b[1] - a[1]);
             return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]), total: sum(entries.map(e => e[1])) };
         }
-
         function updateCharts(meses, selection) {
             const labels = meses.map(mFmt);
             const tag = labelSelec(selection);
@@ -734,8 +768,7 @@
                     if (sel.has(p)) sel.delete(p); else sel.add(p);
                     if (sel.size === POSTOS.length || sel.size === 0) sel = 'ALL';
                 }
-                setSel(sel); markActiveMulti(ulId, sel); onChange();
-                if (IA_STATE.auto) IA_send();
+                setSel(sel); markActiveMulti(ulId, sel); onChange(); if (IA_STATE.auto) IA_send();
             });
         }
 
@@ -744,12 +777,14 @@
         function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
 
         function attachHandlers(lastFull) {
+            // Dataset
             if (el('#from1')) el('#from1').addEventListener('change', () => { renderSel1(); });
             if (el('#to1')) el('#to1').addEventListener('change', () => { renderSel1(); });
             if (el('#reset1')) el('#reset1').addEventListener('click', () => {
                 el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1();
             });
 
+            // 12 meses
             if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
             if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
             if (el('#reset2')) el('#reset2').addEventListener('click', () => {
@@ -758,24 +793,29 @@
                 markActiveMulti('#postoTabs2', sel2); renderSel2(); if (IA_STATE.auto) IA_send();
             });
 
-            if (el('#btnComparar')) el('#btnComparar').addEventListener('click', () => {
-                const b = el('#compareBlock'); if (!b) return; b.style.display = (b.style.display === 'none' || b.style.display === '') ? 'block' : 'none';
+            // Comparar: toggle bloco + visual
+            const btnCmp = el('#btnComparar');
+            if (btnCmp) btnCmp.addEventListener('click', () => {
+                const box = el('#compareBlock'); if (!box) return;
+                const show = (box.style.display === 'none' || box.style.display === '');
+                box.style.display = show ? 'block' : 'none';
+                setPressed(btnCmp, show, 'secondary');
             });
 
-            if (el('#iaAuto')) el('#iaAuto').addEventListener('click', () => {
+            // IA Auto: toggle auto + painel
+            const btnIA = el('#iaAuto');
+            if (btnIA) btnIA.addEventListener('click', () => {
                 IA_STATE.auto = !IA_STATE.auto;
-                el('#iaAuto').classList.toggle('active', IA_STATE.auto);
-                IA_send();
+                setPressed(btnIA, IA_STATE.auto, 'primary');
+                const panel = el('#iaPanel'); if (!panel) return;
+                if (IA_STATE.auto) {
+                    panel.style.display = 'block';
+                    IA_send();
+                } else {
+                    const out = el('#iaOut'); if (out) out.innerHTML = '';
+                    panel.style.display = 'none';
+                }
             });
-
-            // if (el('#iaForm')) el('#iaForm').addEventListener('submit', (e) => {
-            //     e.preventDefault();
-            //     const msg = (el('#iaMsg')?.value || '').trim();
-            //     if (!msg) return;
-            //     IA_STATE.userSentOnce = true;
-            //     IA_send(msg);
-            //     if (el('#iaMsg')) el('#iaMsg').value = '';
-            // });
         }
 
         /* ==================== IA ==================== */
@@ -819,7 +859,7 @@
                 when: Date.now(),
                 query: userMsg || null,
                 contexto: 'graficos',
-                prefs: { output: 'livre', assertivo: true },   // <- habilita resposta livre
+                prefs: { output: 'livre', assertivo: true },
                 defs: defs(),
                 blocks: [
                     { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto, series: { labels: s.labels, receita: s.receita } },
@@ -839,25 +879,23 @@
                     const url = `${IA_BASE}/${f}?t=${Date.now()}`;
                     const r = await fetch(url, { cache: 'no-store' });
                     if (r.ok) return r.json();
-                } catch (e) { }
+                } catch { }
                 return { resumo: 'Mock local não encontrado para este filtro.', alertas: [] };
             }
             const r = await fetch(API_ANALISAR, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!r.ok) { let errText = ''; try { errText = await r.text(); } catch { } throw new Error(`HTTP ${r.status} em ${API_ANALISAR} — ${errText}`); }
             return r.json();
         }
-
         function toHtml(obj) {
             if (typeof obj === 'string') return `<p>${obj}</p>`;
-            if (obj?.html) return obj.html;           // servidor pode devolver HTML pronto
-            if (obj?.livre) return `<p>${obj.livre}</p>`; // servidor pode devolver texto livre
+            if (obj?.html) return obj.html;
+            if (obj?.livre) return `<p>${obj.livre}</p>`;
             const parts = [];
             if (obj?.resumo) parts.push(`<h5><b>Resumo</b></h5><p>${obj.resumo}</p>`);
             if (Array.isArray(obj?.insights)) parts.push(`<h5><b>Insights</b></h5><ul>${obj.insights.map(x => `<li>${x}</li>`).join('')}</ul>`);
             if (Array.isArray(obj?.alertas) && obj.alertas.length) parts.push(`<h5><b>Alertas</b></h5><ul>${obj.alertas.map(x => `<li>${x}</li>`).join('')}</ul>`);
             return parts.join('') || '<p>Sem conteúdo.</p>';
         }
-
         const IA_STATE = { auto: false, userSentOnce: false };
 
         async function IA_send(userMsg) {
@@ -865,18 +903,15 @@
             panel.style.display = 'block';
             const outBox = el('#iaOut') || panel;
             startDots(outBox);
-
             try {
-                const meses = mesesSel2();
-                if (!meses.length) throw new Error('Seleção vazia.');
+                const meses = mesesSel2(); if (!meses.length) throw new Error('Seleção vazia.');
                 const s = seriesBasicas(meses, sel2);
-
                 const payload = {
                     produto: 'mensalidades',
                     when: Date.now(),
                     query: userMsg || null,
                     contexto: 'graficos',
-                    prefs: { output: 'livre', assertivo: true }, // sempre solicitar resposta livre
+                    prefs: { output: 'livre', assertivo: true },
                     defs: defs(),
                     blocks: [
                         { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, receita: s.receita } },
@@ -887,28 +922,9 @@
                         { scope: 'chart_mix', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), dpreco: s.mix_p, dvolume: s.mix_v }
                     ]
                 };
-
                 const data = await iaFetch(payload);
                 stopDots(outBox);
-
-                const out = el('#iaOut');
-                if (out) out.innerHTML = toHtml(data);
-
-                // chat trilha simples
-                // const chat = el('#ia-chat');
-                // if (userMsg && chat) {
-                //     const rowU = document.createElement('div'); rowU.className = 'ia-row';
-                //     const bubbleU = document.createElement('div'); bubbleU.className = 'ia-msg ia-user'; bubbleU.textContent = userMsg;
-                //     const metaU = document.createElement('div'); metaU.className = 'ia-meta'; metaU.textContent = 'Você • ' + new Date().toLocaleString();
-                //     rowU.appendChild(bubbleU); rowU.appendChild(metaU); chat.appendChild(rowU);
-
-                //     const rowB = document.createElement('div'); rowB.className = 'ia-row';
-                //     const bubbleB = document.createElement('div'); bubbleB.className = 'ia-msg ia-bot'; bubbleB.innerHTML = out.innerText ? out.innerText : out.innerHTML;
-                //     const metaB = document.createElement('div'); metaB.className = 'ia-meta'; metaB.textContent = 'IA • ' + new Date().toLocaleString();
-                //     rowB.appendChild(bubbleB); rowB.appendChild(metaB); chat.appendChild(rowB);
-                //     chat.scrollTop = chat.scrollHeight;
-                // }
-
+                const out = el('#iaOut'); if (out) out.innerHTML = toHtml(data);
             } catch (err) {
                 stopDots(outBox);
                 panel.innerHTML = `<div class="ia-content"><p>Falha na IA: ${err.message || err}</p></div>`;
@@ -916,11 +932,21 @@
         }
 
         /* ==================== Boot ==================== */
-        Promise.all([fetch(URL_GERAL, { cache: 'no-store' }), fetch(URL_POR_POSTO, { cache: 'no-store' })])
+        Promise.all([
+            fetch(URL_GERAL, { cache: 'no-store' }),
+            fetch(URL_POR_POSTO, { cache: 'no-store' })
+        ])
             .then(async ([rg, rp]) => {
                 if (!rg.ok) throw new Error(`HTTP ${rg.status} em ${URL_GERAL}`);
                 if (!rp.ok) throw new Error(`HTTP ${rp.status} em ${URL_POR_POSTO}`);
-                geral = await rg.json(); porPosto = await rp.json();
+
+                const gotG = setJsonInfoFromHeaders(rg, 'geral', 'consolidado_mensal.json');
+                const gotP = setJsonInfoFromHeaders(rp, 'postos', 'consolidado_mensal_por_posto.json');
+                if (!gotG) tryHead(URL_GERAL, 'geral', 'consolidado_mensal.json');
+                if (!gotP) tryHead(URL_POR_POSTO, 'postos', 'consolidado_mensal_por_posto.json');
+
+                geral = await rg.json();
+                porPosto = await rp.json();
 
                 MESES = Object.keys(geral).filter(k => !k.startsWith('_')).sort();
                 if (!MESES.length) throw new Error('JSON consolidado sem meses.');
@@ -932,7 +958,8 @@
                 if (el('#from1')) el('#from1').value = MESES[0];
                 if (el('#to1')) el('#to1').value = lastFull;
 
-                const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
+                const [y, m] = lastFull.split('-').map(Number);
+                const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
                 if (el('#from2')) el('#from2').value = d.toISOString().slice(0, 7);
                 if (el('#to2')) el('#to2').value = lastFull;
 
@@ -944,14 +971,20 @@
                 initCharts(); attachHandlers(lastFull);
                 renderSel1(); renderSel2();
 
+                // Estado inicial dos botões e blocos
                 if (el('#iaPanel')) el('#iaPanel').style.display = 'none';
+                if (el('#compareBlock')) el('#compareBlock').style.display = 'none';
+                if (el('#iaAuto')) setPressed(el('#iaAuto'), false, 'primary');
+                if (el('#btnComparar')) setPressed(el('#btnComparar'), false, 'secondary');
             })
             .catch(err => { showErr(err); alert('Falha ao carregar JSONs. Veja o console.'); });
 
         /* ==================== Helper manual ==================== */
         window.testIA = async function () {
             const resp = await fetch(API_ANALISAR, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     produto: 'mensalidades',
                     prefs: { output: 'livre', assertivo: true },
                     blocks: [{ scope: 'kpi_sel2', periodo: { from: '2024-01', to: '2024-12' }, posto: 'ALL' }],
@@ -961,6 +994,17 @@
             console.log('status', resp.status, await resp.text());
         };
     </script>
+
+
+
+
+
+
+
+
+
+
+
 </body>
 
 </html>
