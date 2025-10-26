@@ -1,345 +1,403 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-br">
+
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Relatório — Trello & Harvest</title>
-<style>
-:root { --bg:#0b1020; --card:#101935; --muted:#a3acc2; --fg:#e9eefb; --brand:#ffd000; --radius:14px; }
-* { box-sizing:border-box }
-body { margin:0; font:14px/1.45 system-ui,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--fg) }
-.header { display:flex; gap:12px; padding:14px 16px; border-bottom:1px solid #ffffff1a; position:sticky; top:0; background:#0b1020; align-items:center; justify-content:space-between }
-.header .left { display:flex; gap:12px; align-items:center }
-.header .right { display:flex; gap:8px; align-items:center }
-.header h1 { margin:0; font-size:18px }
-.badge { background:#ffffff14; color:var(--muted); padding:4px 8px; border-radius:999px; font-size:12px }
-.link-btn { border:1px solid #ffffff22; background:#ffffff10; color:#fff; padding:8px 12px; border-radius:10px; text-decoration:none; font-weight:700 }
-.link-btn:hover { background:#ffffff20 }
-.tabs { display:flex; gap:8px; padding:12px 16px; flex-wrap:wrap }
-.tab-btn { border:1px solid #ffffff22; background:#ffffff10; color:#fff; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:700 }
-.tab-btn[aria-selected="true"] { background:var(--brand); color:#111; border-color:#00000044 }
-.panel { display:none; padding:16px }
-.panel[aria-hidden="false"] { display:block }
-.card { background:var(--card); border:1px solid #ffffff1a; border-radius:var(--radius); padding:16px; margin-bottom:16px }
-.table-wrap { margin-top:8px; overflow:auto }
-.filter { width:100%; padding:8px; border-radius:8px; border:1px solid #ffffff22; background:#ffffff10; color:#fff }
-table.data { width:100%; border-collapse:collapse; margin-top:8px }
-table.data th, table.data td { border:1px solid #ffffff1a; padding:6px 8px; vertical-align:top }
-.empty { color:var(--muted); font-style:italic }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shortcut_info</title>
+    <link rel="shortcut icon" href="../images/Logo Camim-01_50px.png" type="image/x-icon">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <!-- Baloo 2 -->
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&display=swap" rel="stylesheet">
+    <!-- Fredoka (opção) -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
+    <!-- Nunito Rounded (opção) -->
+    <link href="https://fonts.googleapis.com/css2?family=Nunito+Rounded:wght@800&display=swap" rel="stylesheet">
+    <!-- Importa o JavaScript -->
+    <script src="../js/menu.js" defer></script>
+    <!-- <script src="js/preloader.js" defer></script> -->
+    <!-- <script src="../js/carrossel.js" defer></script> -->
+    <script src="../js/header.js" defer></script>
+    <script src="../js/footer.js" defer></script>
+    <script src="../js/overlay.js" defer></script>
 
 
 
-<script>
- function selectTab(id){    // todas as chaves JS duplicadas
-   document.querySelectorAll('.panel').forEach(p=>p.setAttribute('aria-hidden','true'));
-   const btn = document.querySelector('[data-tab="'+id+'"]');
-   if (btn){ 
-     document.querySelectorAll('.tab-btn').forEach(b=>b.setAttribute('aria-selected','false'));
-     btn.setAttribute('aria-selected','true');
-   }
-   const panel = document.getElementById(id);
-   if (panel) panel.setAttribute('aria-hidden','false');
- }
-function filterTable(id, q){ 
-  q = q.toLowerCase();
-  const rows = document.querySelectorAll('#'+id+' tbody tr');
-  rows.forEach(r=>{ 
-    const t = r.textContent.toLowerCase();
-    r.style.display = t.indexOf(q) >= 0 ? '' : 'none';
-  });
-}
-</script>
+    <!-- CSS -->
+    <!-- <meta name="viewport" content="width=device-width, initial-scale=1.0"> -->
+    <link rel="stylesheet" href="../css/style.css?v=5">
 
+
+
+    <style>
+        #overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(12px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 1s ease, visibility 0s linear;
+        }
+
+        #overlay.fade-out {
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 1s ease, visibility 0s linear 1s;
+        }
+
+
+
+        h1,
+        h2,
+        h3 {
+            margin: 16px 0 8px;
+        }
+
+        p {
+            margin: 8px 0 16px;
+        }
+
+        ul {
+            margin: 0 0 16px 20px;
+        }
+
+        code,
+        pre {
+            background: #f6f8fa;
+            border: 1px solid #eaecef;
+            border-radius: 6px;
+        }
+
+        pre {
+            padding: 12px;
+            overflow: auto;
+        }
+
+        .kpi {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(180px, 1fr));
+            gap: 12px;
+            margin: 16px 0;
+        }
+
+        .card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .muted {
+            color: #555;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0 16px;
+        }
+
+        th,
+        td {
+            border: 1px solid #e5e7eb;
+            padding: 8px 10px;
+            text-align: left;
+        }
+
+        th {
+            background: #fafafa;
+        }
+
+        small {
+            color: #666;
+        }
+    </style>
 
 
 </head>
+
+
+
+
 <body>
-  <div class="header">
-    <div class="left">
-      <h1>Relatório — Trello & Harvest</h1>
-      <span class="badge">2025-10-24 14:07</span>
-      <span class="badge">Trello: export_20251024_135657</span>
-      <span class="badge">Harvest: harvest_time_entries_2025-10-18_2025-10-24_20251024_135704.csv</span>
-    </div>
-    <div class="right">
-      <a class="link-btn" href="#harvest" onclick="selectTab('harvest')">Harvest</a>
-      <a class="link-btn" href="#trello" onclick="selectTab('trello')">Trello</a>
-      <!-- novo botão Governança -->
-      <a class="link-btn" href="/index_lp.html">Governança</a>
-
-    </div>
-  </div>
 
 
-  
+    <!-- Overlay de mensagem -->
+    <div id="overlay"></div>
 
 
 
+    <!-- Botão hamburguer que abre o menu -->
+    <button id="menuToggle" class="menu-btn" aria-label="Abrir menu" aria-controls="app-drawer" aria-expanded="false">
+        <!-- Ícone hamburguer -->
+        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"></path>
+        </svg>
+    </button>
 
-  <section id="trello" class="panel" aria-hidden="false">
-    <div class="card">
-      <h3>Cards</h3>
-      
-    <div class="table-wrap">
-      <input class="filter" placeholder="Filtrar nesta tabela..." oninput="filterTable('tbl_cards', this.value)"/>
-      <table id="tbl_cards" class="data">
-        <thead><tr><th>card</th><th>list</th><th>url</th><th>closed</th><th>updated</th><th>desc</th></tr></thead>
-        <tbody><tr><td>CRIAR NOSSO PRÓPRIO TRELLO COM HARVEST - DEFINIR BASE PARA INÍCIO DO DEBATE DO PROJETO</td><td>CRIAR NOSSO PRÓPRIO TRELLO COM HARVEST</td><td><a href="https://trello.com/c/dwCTPRf5/22-criar-nosso-pr%C3%B3prio-trello-com-harvest-definir-base-para-in%C3%ADcio-do-debate-do-projeto" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:42:31.231000+00:00</td><td>IMPORTANTE SALIENTAR QUE NÃO SEI SE SIGO COM ROBSON OU COM LINCOLN.</td></tr>
-<tr><td>ORÇAMENTOS RECEITAS ON LINE - APP ÉGIDE</td><td>#export - ROBSON e CARNEIRO - ENVIO DE MENSAGEM ORÇAMENTO CAMIM/ÉGIDE</td><td><a href="https://trello.com/c/YpZtq3oO/6-or%C3%A7amentos-receitas-on-line-app-%C3%A9gide" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:36:34.480000+00:00</td><td></td></tr>
-<tr><td>ORÇAMENTOS RECEITAS ON LINE -  APP CAMIM</td><td>#export - ROBSON e CARNEIRO - ENVIO DE MENSAGEM ORÇAMENTO CAMIM/ÉGIDE</td><td><a href="https://trello.com/c/sk4ezpTX/2-or%C3%A7amentos-receitas-on-line-app-camim" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:36:22.376000+00:00</td><td>OBJETIVO:
+    <!-- Fundo escuro atrás do menu -->
+    <div id="drawerOverlay" class="menu-overlay" hidden></div>
 
-‌
+    <!-- O menu lateral -->
+    <aside id="app-drawer" class="menu-drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+        <div class="menu-splash"> </div> <!--pré-carregador-->
+        <header class="drawer-header">
+            <img src="../images/Logo Camim-01_50px.png" alt="Logo Camim">
+            <h2 id="drawerTitle"> </h2>
+            <button id="drawerClose" class="menu-icon-btn" aria-label="Fechar menu">✖</button>
+        </header>
+        <nav class="menu-nav" aria-label="Menu principal">
 
-SE O EXAME É FEITO NA CAMIM, ENTÃO, ENVIAREMOS O ORÇAMENTO DA CAMIM. SE O EXAME NÃO É FEITO NA CAMIM, ENTÃO, MANDA LINK DO ÉGIDE.
-
-‌
-
-(LEMBRANDO QUE A TABELA DO SISTEMA DO MÉDICO É A TABELA DO ÉGIDE).
-
-REUNIÃO COM GESTORES INFORMANDO SOBRE: REALIZADO NO POSTO (BIT).</td></tr>
-<tr><td>CANCELAMENTO DE PREAGENDAMENTO NÃO CONFIRMADO - DHO</td><td>#export - Robson e Carneiro - DEADLINE  01-01 26 -CANCELAMENTO DE -CONSULTA PARA QUEM NÃO CONFIRMAR</td><td><a href="https://trello.com/c/Sp7OC0Y6/17-cancelamento-de-preagendamento-n%C3%A3o-confirmado-dho" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:34:43.673000+00:00</td><td>Treinamento da equipe.</td></tr>
-<tr><td>CANCELAMENTO DE PREAGENDAMENTO NÃO CONFIRMADO - MKT</td><td>#export - Robson e Carneiro - DEADLINE  01-01 26 -CANCELAMENTO DE -CONSULTA PARA QUEM NÃO CONFIRMAR</td><td><a href="https://trello.com/c/Abdg1B3b/16-cancelamento-de-preagendamento-n%C3%A3o-confirmado-mkt" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:34:18.825000+00:00</td><td>Estratégias de mkt sobre o projeto</td></tr>
-<tr><td>CANCELAMENTO DE PREAGENDAMENTO NÃO CONFIRMADO - ESCOPO</td><td>#export - Robson e Carneiro - DEADLINE  01-01 26 -CANCELAMENTO DE -CONSULTA PARA QUEM NÃO CONFIRMAR</td><td><a href="https://trello.com/c/RfC6eCaM/3-cancelamento-de-preagendamento-n%C3%A3o-confirmado-escopo" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:34:09.428000+00:00</td><td>### **Leonardo Carneiro**
-
-###
-
-seg., 1 de set., 16:49 (há 7 dias)
-
-para mim, Victoria
-
-![cleardot.gif](https://mail.google.com/mail/u/0/images/cleardot.gif)
-
-Cristiano
-
-Conforme alinhado na reunião, segue abaixo a proposta detalhada do projeto para reduzir o número de faltas em consultas agendadas via aplicativo.
-
-‌
-
-**Objetivo**
-Reduzir o número de clientes que agendam consultas pelo app e não comparecem, especialmente devido à facilidade de remarcar sem confirmação.
-
-‌
-
-‌
-
-**Solução Proposta**
-
-Implementar um sistema de confirmação obrigatória no aplicativo, com as seguintes regras:
-
-- O cliente deverá confirmar a consulta até **2 dias antes da data marcada**.
-- Caso não confirme, a consulta será automaticamente cancelada.
-
-‌
-
-**Riscos Identificados**
-Possibilidade de reclamações alegando falta de informação sobre o novo processo.
-
-**Mitigação dos riscos**
-
-- Envio de **duas notificações por e-mail**:
-  - 1ª: 5 dias antes da consulta
-  - 2ª: 3 dias antes da consulta
-- Envio de **push notifications**:
-
-- 1ª: 5 dias antes da consulta
-- 2ª: 3 dias antes da consulta
-
-‌
-
-- **Essencial gerar log dos envios de todas as notificações**
-
-‌
-
-**Alterações no Aplicativo**
-
-- Alterar o termo “Agendamento” para **“Pré-agendamento”**
-- Exibir um **banner informativo** ao abrir o app, explicando a nova regra de confirmação.
-  - Incluir checkbox para o cliente confirmar leitura, guardando no sistema data e hora da ciência por parte do cliente.
-- Repetir essa informação a cada novo pré-agendamento, com registro de ciência.
-- Criar (ou adaptar a tela de cancelamento) a tela para exibir consultas pré-agendadas, com opção de **confirmar ou cancelar**, desde que dentro do prazo previsto no cadastro da empresa.
-
-‌
-
-‌
-
-**Alterações no Sistema Camim**
-
-- Incluir no cadastro da empresa os campos:
-  - Dias antes da consulta para envio da **primeira notificação**
-  - Dias antes da consulta para envio da **segunda notificação**
-- Desenvolver um **robô** com as seguintes funcionalidades
-  - **Envio automático** de e-mails e push notifications conforme os prazos definidos.
-  - Cancelar consultas e notificar os clientes após o fim do prazo para consultas não confirmadas 
-
-**Considerações importantes**
-
-- O envio de e-mails e push devem considerar as faltas médicas, não enviando as mensagens nesse caso. 
-- É muito relevante que o termo pré-agendamento fique destacado e claro para o cliente na primeira etapa da marcação. 
-- Em um primeiro momento SOMENTE marcações realizadas pelo APP devem ser consideradas. Ou seja, clientes que o usuário seja o mesmo definido no cadastro da empresa como usuário do APP
-- Consultas marcadas abaixo do prazo definido no cadastro da empresa o APP deve considerar como marcação efetiva e já confirmada.
-
-‌
-
-[\@Victoria Camim TI](mailto:victoria@clinicacamim.com.br "‌") 
-Uma vez validado pelo Cristiano agradeço se criar os cards correspondentes para o Robson e o Janderson
-
-‌
-
-Obrigado
-
-**Leonardo Carneiro**
-Arquiteto Digital
-21 98269-6113</td></tr>
-<tr><td>MIDAS - PÓS VENDAS - 24/10 - Prazo Final - Confirmado através de áudio pelo Lincoln do dia 17.10</td><td>#export - Lincoln - MIDAS - PÓS VENDAS NOS POSTOS</td><td><a href="https://trello.com/c/WPjuZJgR/19-midas-p%C3%B3s-vendas-24-10-prazo-final-confirmado-atrav%C3%A9s-de-%C3%A1udio-pelo-lincoln-do-dia-1710" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:33:49.286000+00:00</td><td></td></tr>
-<tr><td>MIDAS - PÓS VENDAS - 22/10 - Versão prévia para fazer integração com o sistema da CAMIM, e enviar os dados para o Carneiro, pra ele importar.</td><td>#export - Lincoln - MIDAS - PÓS VENDAS NOS POSTOS</td><td><a href="https://trello.com/c/YiyFZsmv/21-midas-p%C3%B3s-vendas-22-10-vers%C3%A3o-pr%C3%A9via-para-fazer-integra%C3%A7%C3%A3o-com-o-sistema-da-camim-e-enviar-os-dados-para-o-carneiro-pra-ele-impo" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:33:44.983000+00:00</td><td></td></tr>
-<tr><td>MIDAS - PÓS VENDAS - Implementação nos postos entre os dias 20 e 24/10/25.</td><td>#export - Lincoln - MIDAS - PÓS VENDAS NOS POSTOS</td><td><a href="https://trello.com/c/UFtGzsUv/12-midas-p%C3%B3s-vendas-implementa%C3%A7%C3%A3o-nos-postos-entre-os-dias-20-e-24-10-25" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:33:35.707000+00:00</td><td></td></tr>
-<tr><td>CAMILA.AI VENDEDORA - Direcionamento automatizado entre corretor e Camila.AI Vendedora</td><td>#export - Lincoln - CAMILA.AI VENDEDORA</td><td><a href="https://trello.com/c/g0fRNl12/10-camilaai-vendedora-direcionamento-automatizado-entre-corretor-e-camilaai-vendedora" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:33:06.929000+00:00</td><td></td></tr>
-<tr><td>CAMILA.AI VENDEDORA - Funcionando em 08/09/2025</td><td>#export - Lincoln - CAMILA.AI VENDEDORA</td><td><a href="https://trello.com/c/76LsUlOE/1-camilaai-vendedora-funcionando-em-08-09-2025" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:32:48.199000+00:00</td><td>Possui número ZAP: 2455-9631
-
-API ZAP Evolution servidor contratado pela CAMIM.
-
-Regra de disparo atual: 70 disparos por dia para leads fechados sem matrícula.
-
-Não reenvia para clientes que informam que possuem contrato ativo ou que digam explicitamente que não possuem interesse.
-
-Demora até um minuto para responder a mensagem do cliente.</td></tr>
-<tr><td>CAMILA ATENDENTE - Em operação - Melhorias à medida em que são abertos chamados.</td><td>#export - Lincoln - CAMILA.AI ATENDENTE</td><td><a href="https://trello.com/c/kQPmgJcE/11-camila-atendente-em-opera%C3%A7%C3%A3o-melhorias-%C3%A0-medida-em-que-s%C3%A3o-abertos-chamados" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:32:26.526000+00:00</td><td></td></tr>
-<tr><td>28/10 à 04/11 - Confirmado através de áudio pelo Lincoln do dia 17.10</td><td>#export - Lincoln - PROMOZAP</td><td><a href="https://trello.com/c/akhNUKGH/20-28-10-%C3%A0-04-11-confirmado-atrav%C3%A9s-de-%C3%A1udio-pelo-lincoln-do-dia-1710" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-19 00:27:31.518000+00:00</td><td></td></tr>
-<tr><td>20/10 - Prazo final - Lincoln - Prontuários</td><td>#export - Lincoln - Sistema do médico inteligente.</td><td><a href="https://trello.com/c/1rjIMsxB/18-20-10-prazo-final-lincoln-prontu%C3%A1rios" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-17 20:51:56.255000+00:00</td><td></td></tr>
-<tr><td>Iniciar projeto após concluir Sistema do médico.</td><td>#export - Lincoln - CRIAR GPT para nossos usuários baseado em GROQ?</td><td><a href="https://trello.com/c/7oFtNQeD/15-iniciar-projeto-ap%C3%B3s-concluir-sistema-do-m%C3%A9dico" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-15 18:50:19.480000+00:00</td><td></td></tr>
-<tr><td>14/10/25 - Luis Gustavo deu feedback e fez uma lista enorme de pedidos para IA ajudar no atendimento.</td><td>#export - Lincoln - Sistema do médico inteligente.</td><td><a href="https://trello.com/c/WF6Rkwav/14-14-10-25-luis-gustavo-deu-feedback-e-fez-uma-lista-enorme-de-pedidos-para-ia-ajudar-no-atendimento" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-15 18:50:04.434000+00:00</td><td></td></tr>
-<tr><td>Carneiro criou primeira versão da VM na nuvem para subir o serviço em 07/10/2025</td><td>#export - Lincoln - Sistema do médico inteligente.</td><td><a href="https://trello.com/c/YpOYXmTi/13-carneiro-criou-primeira-vers%C3%A3o-da-vm-na-nuvem-para-subir-o-servi%C3%A7o-em-07-10-2025" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-15 18:49:37.441000+00:00</td><td></td></tr>
-<tr><td>Deadline para Camila Atendente iniciar operação</td><td>DONE</td><td><a href="https://trello.com/c/ikUEf9II/9-deadline-para-camila-atendente-iniciar-opera%C3%A7%C3%A3o" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-15 14:29:09.698000+00:00</td><td></td></tr>
-<tr><td>TABELA DO ÉGIDE/CAMIM -  RELACIONAR.</td><td>DONE</td><td><a href="https://trello.com/c/xvDTXAw2/7-tabela-do-%C3%A9gide-camim-relacionar" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-10-15 14:28:24.350000+00:00</td><td></td></tr>
-<tr><td>CAMILA.AI ATENDENTE - Robson precisa criar ambiente homolog e APP Camim homolog.</td><td>DONE</td><td><a href="https://trello.com/c/OQSNRw2t/4-camilaai-atendente-robson-precisa-criar-ambiente-homolog-e-app-camim-homolog" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-09-24 20:27:11.007000+00:00</td><td>[https://chat-homolog.camim.com.br/](https://chat-homolog.camim.com.br/ "smartCard-inline")
-
-[https://drive.google.com/file/d/1f7DhzU-tx-95BdggfH97gSntxqjs84X_/view?usp=sharing](https://drive.google.com/file/d/1f7DhzU-tx-95BdggfH97gSntxqjs84X_/view?usp=sharing "smartCard-inline")
-
-[https://api-chat-homolog.camim.com.br/](https://api-chat-homolog.camim.com.br/ "‌")</td></tr>
-<tr><td>CAMILA.AI ATENDENTE - Prazo para primeira versão de testes é 29/08/25</td><td>DONE</td><td><a href="https://trello.com/c/TItapnN2/5-camilaai-atendente-prazo-para-primeira-vers%C3%A3o-de-testes-%C3%A9-29-08-25" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-09-24 20:26:02.549000+00:00</td><td></td></tr>
-<tr><td>CAMILA.AI ATENDENTE - Solicitado ao Robson criar novo ambiente para Homolog do TI, já que cada vez que o @lincoln realiza testes, para de funcionar para o Ronald e este tem a percepção que parou de funcionar, não que está sendo atualizado e testado o tempo inteiro.</td><td>DONE</td><td><a href="https://trello.com/c/qYeC1kgc/8-camilaai-atendente-solicitado-ao-robson-criar-novo-ambiente-para-homolog-do-ti-j%C3%A1-que-cada-vez-que-o-lincoln-realiza-testes-para" target="_blank" rel="noopener">abrir</a></td><td>False</td><td>2025-09-24 20:25:53.359000+00:00</td><td></td></tr></tbody>
-      </table>
-    </div>
-    </div>
-    <div class="card">
-      <h3>Checklists</h3>
-      
-    <div class="table-wrap">
-      <input class="filter" placeholder="Filtrar nesta tabela..." oninput="filterTable('tbl_checklists', this.value)"/>
-      <table id="tbl_checklists" class="data">
-        <thead><tr><th>checklist_id</th><th>checklist</th><th>card_id</th><th>item_id</th><th>item</th><th>state</th><th>pos</th><th>due</th><th>member_id</th></tr></thead>
-        <tbody><tr><td>68f433968a37f0ecc9d2ac2b</td><td>MVP</td><td>68f4333c9d1ffde55823436a</td><td>68f4339b09c5feec6028ab5b</td><td>Login com google.</td><td>incomplete</td><td>140737488355328</td><td></td><td></td></tr>
-<tr><td>68f433968a37f0ecc9d2ac2b</td><td>MVP</td><td>68f4333c9d1ffde55823436a</td><td>68f433aac26fe770d61876bb</td><td>Criar projetos, cada board é um projeto.</td><td>incomplete</td><td>140737488371712</td><td></td><td></td></tr>
-<tr><td>68f433968a37f0ecc9d2ac2b</td><td>MVP</td><td>68f4333c9d1ffde55823436a</td><td>68f433c35474c20777ad97b8</td><td>Manter a lógica de ter uma board específica para cada projeto (exe, etc)</td><td>incomplete</td><td>140737488388096</td><td></td><td></td></tr>
-<tr><td>68f433968a37f0ecc9d2ac2b</td><td>MVP</td><td>68f4333c9d1ffde55823436a</td><td>68f433ee6d92a9633dc4b600</td><td>Colunas (boards) devem sempre ser em kanban, sem opção. Usar modelo de criação de projeto do pipify, lógica do trello.</td><td>incomplete</td><td>140737488404480</td><td></td><td></td></tr>
-<tr><td>68f433968a37f0ecc9d2ac2b</td><td>MVP</td><td>68f4333c9d1ffde55823436a</td><td>68f433f7902cf22d1fd50a4e</td><td>Harvest nativo.</td><td>incomplete</td><td>140737488420864</td><td></td><td></td></tr></tbody>
-      </table>
-    </div>
-    </div>
-  </section>
-
-  <section id="harvest" class="panel" aria-hidden="true">
-    <div class="card"><h3>Entradas</h3>
-    <div class="table-wrap">
-      <input class="filter" placeholder="Filtrar nesta tabela..." oninput="filterTable('tbl_harvest', this.value)"/>
-      <table id="tbl_harvest" class="data">
-        <thead><tr><th>id</th><th>date</th><th>hours</th><th>notes</th><th>user.id</th><th>user.name</th><th>project</th><th>task</th><th>created_at</th><th>updated_at</th></tr></thead>
-        <tbody><tr><td>2779730535</td><td>2025-10-24 00:00:00+00:00</td><td>06:10</td><td>[OCORRÊNCIAS.exe] - VCL - MELHORIAS DE UX</td><td>3932389</td><td>Caio Guimarães</td><td>Dalphi 7 - SID</td><td>Desenvolvimento - Nova rotina</td><td>2025-10-24 10:29:02+00:00</td><td>2025-10-24 16:39:19+00:00</td></tr>
-<tr><td>2780036806</td><td>2025-10-24 00:00:00+00:00</td><td>01:28</td><td>Colocar informações financeiras relevantes no APP GESTÂO / Fazer página CAMIM?</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>Repair</td><td>2025-10-24 15:29:43+00:00</td><td>2025-10-24 15:29:43+00:00</td></tr>
-<tr><td>2779988009</td><td>2025-10-24 00:00:00+00:00</td><td>00:33</td><td>Colocar informações financeiras relevantes no APP GESTÂO / Fazer página CAMIM?</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>Programming</td><td>2025-10-24 14:56:01+00:00</td><td>2025-10-24 15:28:53+00:00</td></tr>
-<tr><td>2779987696</td><td>2025-10-24 00:00:00+00:00</td><td>03:31</td><td>Colocar informações financeiras relevantes no APP GESTÂO / Fazer página CAMIM?</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>discussion or analyze</td><td>2025-10-24 14:55:49+00:00</td><td>2025-10-24 14:55:49+00:00</td></tr>
-<tr><td>2779857690</td><td>2025-10-24 00:00:00+00:00</td><td>01:13</td><td>[CAMILA ATENDENTE] - APRIMORAR COMPREENSÃO DE ROTEAMENTO DE FILA</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Programming</td><td>2025-10-24 13:18:27+00:00</td><td>2025-10-24 14:31:32+00:00</td></tr>
-<tr><td>2779954005</td><td>2025-10-24 00:00:00+00:00</td><td>02:26</td><td>[MYDAS] - [tit_ADAPTAÇÃO PARA USUARIO GERAL - RETIRAR HARD CODE - CRIAR UX USER] - [ded_31/10/2025]</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Programming</td><td>2025-10-24 14:31:32+00:00</td><td>2025-10-24 14:31:32+00:00</td></tr>
-<tr><td>2779709030</td><td>2025-10-24 00:00:00+00:00</td><td>00:40</td><td>[OCORRÊNCIAS.EXE] - Adaptar o app de Ocorrências VCL para todos os postos (Altamiro e Couto)</td><td>3932389</td><td>Caio Guimarães</td><td>Dalphi 7 - SID</td><td>Desenvolvimento - Correção e erros</td><td>2025-10-24 09:47:05+00:00</td><td>2025-10-24 10:27:22+00:00</td></tr>
-<tr><td>2779608840</td><td>2025-10-24 00:00:00+00:00</td><td>05:33</td><td>Colocar informações financeiras relevantes no APP GESTÂO / Fazer página CAMIM?</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>Programming</td><td>2025-10-24 06:42:15+00:00</td><td>2025-10-24 06:42:42+00:00</td></tr>
-<tr><td>2778895792</td><td>2025-10-23 00:00:00+00:00</td><td>09:41</td><td>Colocar informações financeiras relevantes no APP GESTÂO / Fazer página CAMIM?</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>Programming</td><td>2025-10-23 12:19:31+00:00</td><td>2025-10-23 22:00:21+00:00</td></tr>
-<tr><td>2779416691</td><td>2025-10-23 00:00:00+00:00</td><td>08:35</td><td>Alteração no sistema de notas fiscais - DPS</td><td>3650039</td><td>Janderson Henrique</td><td>CamimALE</td><td>Programming</td><td>2025-10-23 21:34:17+00:00</td><td>2025-10-23 21:34:17+00:00</td></tr>
-<tr><td>2779175027</td><td>2025-10-23 00:00:00+00:00</td><td>04:30</td><td>[CAMILA ATENDENTE] - APRIMORAR COMPREENSÃO DE ROTEAMENTO DE FILA</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Programming</td><td>2025-10-23 16:44:58+00:00</td><td>2025-10-23 21:14:48+00:00</td></tr>
-<tr><td>2779231080</td><td>2025-10-23 00:00:00+00:00</td><td>01:42</td><td>[OCORRÊNCIAS.EXE] - Adaptar o app de Ocorrências VCL para todos os postos (Altamiro e Couto)</td><td>3932389</td><td>Caio Guimarães</td><td>Dalphi 7 - SID</td><td>Desenvolvimento - Correção e erros</td><td>2025-10-23 17:50:18+00:00</td><td>2025-10-23 19:32:19+00:00</td></tr>
-<tr><td>2779007309</td><td>2025-10-23 00:00:00+00:00</td><td>02:29</td><td>[CAMILA ATENDENTE] -  RELATOS DE TEMPOS DE ATENDIMENTO MAIOR DO QUE 3H E TICKET NÃO ESTÁ SENDO FECHADO</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Programming</td><td>2025-10-23 14:15:52+00:00</td><td>2025-10-23 16:44:59+00:00</td></tr>
-<tr><td>2778878627</td><td>2025-10-23 00:00:00+00:00</td><td>04:48</td><td>[OCORRÊNCIAS.EXE] - Adaptar o app de Ocorrências VCL para todos os postos (Altamiro e Couto)</td><td>3932389</td><td>Caio Guimarães</td><td>Dalphi 7 - SID</td><td>Desenvolvimento - Correção e erros</td><td>2025-10-23 11:50:30+00:00</td><td>2025-10-23 16:38:31+00:00</td></tr>
-<tr><td>2778915156</td><td>2025-10-23 00:00:00+00:00</td><td>01:29</td><td>[CAMILA ATENDENTE] - APRIMORAR COMPREENSÃO DE ROTEAMENTO DE FILA</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Programming</td><td>2025-10-23 12:46:35+00:00</td><td>2025-10-23 14:15:52+00:00</td></tr>
-<tr><td>2778863016</td><td>2025-10-23 00:00:00+00:00</td><td>01:01</td><td>Colocar informações financeiras relevantes no APP GESTÂO / Fazer página CAMIM?</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>Desenvolvimento - Nova rotina</td><td>2025-10-23 11:17:59+00:00</td><td>2025-10-23 12:19:21+00:00</td></tr>
-<tr><td>2778408309</td><td>2025-10-22 00:00:00+00:00</td><td>04:22</td><td>[CAMILA ATENDENTE] - APRIMORAR COMPREENSÃO DE ROTEAMENTO DE FILA</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Programming</td><td>2025-10-22 18:38:52+00:00</td><td>2025-10-23 12:00:31+00:00</td></tr>
-<tr><td>2778188183</td><td>2025-10-22 00:00:00+00:00</td><td>07:19</td><td>Colocar informações financeiras relevantes no APP GESTÂO / Fazer página CAMIM?</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>Desenvolvimento - Nova rotina</td><td>2025-10-22 14:56:29+00:00</td><td>2025-10-23 11:17:35+00:00</td></tr>
-<tr><td>2778378795</td><td>2025-10-22 00:00:00+00:00</td><td>01:21</td><td>[OCORRÊNCIAS.EXE] - Adaptar o app de Ocorrências VCL para todos os postos (Altamiro e Couto)</td><td>3932389</td><td>Caio Guimarães</td><td>Dalphi 7 - SID</td><td>Desenvolvimento - Correção e erros</td><td>2025-10-22 18:01:01+00:00</td><td>2025-10-22 19:21:46+00:00</td></tr>
-<tr><td>2778048741</td><td>2025-10-22 00:00:00+00:00</td><td>05:46</td><td>[PROMOZAP] [tit_VALIDAÇÃO AUTOMÁRICA DO WHATSAPP AO SER IMPORTADA A PLANILHA]</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Reunião ou Brainstorm</td><td>2025-10-22 12:52:14+00:00</td><td>2025-10-22 18:38:10+00:00</td></tr>
-<tr><td>2777988077</td><td>2025-10-22 00:00:00+00:00</td><td>05:06</td><td>[OCORRÊNCIAS.EXE] - Adaptar o app de Ocorrências VCL para todos os postos (Altamiro e Couto)</td><td>3932389</td><td>Caio Guimarães</td><td>Dalphi 7 - SID</td><td>Desenvolvimento - Correção e erros</td><td>2025-10-22 11:14:33+00:00</td><td>2025-10-22 16:20:31+00:00</td></tr>
-<tr><td>2777510216</td><td>2025-10-21 00:00:00+00:00</td><td>02:19</td><td>[CAMILA ATENDENTE] - [til_ACOMPANHAMENTO DE ATENDIMENTOS APÓS FILTRO DE USUARIOS PARA NÃO VEREM MAIS TICKETS SEM FILA]</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Reunião ou Brainstorm</td><td>2025-10-21 18:34:05+00:00</td><td>2025-10-21 20:53:08+00:00</td></tr>
-<tr><td>2777347779</td><td>2025-10-21 00:00:00+00:00</td><td>02:48</td><td>[DASHBOARD DIREÇÃO] - Início do projeto que formará quadros orientativos sobre o funcionamento dos robôs. [DEADLINE 22/10/25]</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Reunião ou Brainstorm</td><td>2025-10-21 15:45:56+00:00</td><td>2025-10-21 18:34:06+00:00</td></tr>
-<tr><td>2777355433</td><td>2025-10-21 00:00:00+00:00</td><td>02:18</td><td>[OCORRÊNCIAS.EXE] - Adaptar o app de Ocorrências VCL para todos os postos (Altamiro e Couto)</td><td>3932389</td><td>Caio Guimarães</td><td>Dalphi 7 - SID</td><td>Desenvolvimento - Correção e erros</td><td>2025-10-21 15:52:12+00:00</td><td>2025-10-21 18:10:05+00:00</td></tr>
-<tr><td>2777354972</td><td>2025-10-21 00:00:00+00:00</td><td>00:00</td><td>[OCORRÊNCIAS.EXE] - Adaptar o app de Ocorrências VCL para todos os postos (Altamiro e Couto)</td><td>3932389</td><td>Caio Guimarães</td><td>Dalphi 7 - SID</td><td>Brainstorm</td><td>2025-10-21 15:51:49+00:00</td><td>2025-10-21 15:51:55+00:00</td></tr>
-<tr><td>2777174479</td><td>2025-10-21 00:00:00+00:00</td><td>02:05</td><td>[PROMOZAP] - [tit_CONFIGURAÇÃO E CRIAÇÃO DE CAMPANHA PARA USUARIO DE NOVA IGUAÇU]</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Reunião ou Brainstorm</td><td>2025-10-21 13:24:27+00:00</td><td>2025-10-21 15:29:21+00:00</td></tr>
-<tr><td>2777058843</td><td>2025-10-21 00:00:00+00:00</td><td>04:08</td><td>[pAtalho.exe] - Atualizar o pAtalho - [PRD-PLP-UXNV]</td><td>3932389</td><td>Caio Guimarães</td><td>Dalphi 7 - SID</td><td>Desenvolvimento - Nova rotina</td><td>2025-10-21 10:28:48+00:00</td><td>2025-10-21 14:37:16+00:00</td></tr>
-<tr><td>2775484611</td><td>2025-10-18 00:00:00+00:00</td><td>49:28</td><td>CRIAR NOSSO PRÓPRIO TRELLO COM HARVEST - DEFINIR BASE PARA INÍCIO DO DEBATE DO PROJETO</td><td>3649964</td><td>Cristiano Souza</td><td>CAMILA 2.0</td><td>Reunião ou Brainstorm</td><td>2025-10-19 00:44:12+00:00</td><td>2025-10-21 02:12:07+00:00</td></tr>
-<tr><td>2776275949</td><td>2025-10-20 00:00:00+00:00</td><td>11:29</td><td>CALL COM CRISTIANO</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Reunião ou Brainstorm</td><td>2025-10-20 14:42:42+00:00</td><td>2025-10-21 02:12:06+00:00</td></tr>
-<tr><td>2776721251</td><td>2025-10-20 00:00:00+00:00</td><td>08:00</td><td>Alteração no sistema de notas fiscais - DPS</td><td>3650039</td><td>Janderson Henrique</td><td>CamimALE</td><td>Programming</td><td>2025-10-20 21:12:24+00:00</td><td>2025-10-20 21:12:37+00:00</td></tr>
-<tr><td>2776671621</td><td>2025-10-20 00:00:00+00:00</td><td>00:04</td><td>Adaptar o app de Ocorrências VCL para todos os postos (Altamiro e Couto)</td><td>3932389</td><td>Caio Guimarães</td><td>Dalphi 7 - SID</td><td>Brainstorm</td><td>2025-10-20 20:17:35+00:00</td><td>2025-10-20 20:21:24+00:00</td></tr>
-<tr><td>2776672431</td><td>2025-10-20 00:00:00+00:00</td><td>00:03</td><td>Adaptar o app de Ocorrências VCL para todos os postos (Altamiro e Couto) - Definição de nova UX e criação de campos de prazo padronizado baseado no importância dada pelo solicitante. ADM vai poder alterar isso. </td><td>3649964</td><td>Cristiano Souza</td><td>Dalphi 7 - SID</td><td>Brainstorm</td><td>2025-10-20 20:18:23+00:00</td><td>2025-10-20 20:21:06+00:00</td></tr>
-<tr><td>2776665523</td><td>2025-10-20 00:00:00+00:00</td><td>00:06</td><td>Reunião com Cristiano.</td><td>3932389</td><td>Caio Guimarães</td><td>Dalphi 7 - SID</td><td>Brainstorm</td><td>2025-10-20 20:10:47+00:00</td><td>2025-10-20 20:16:44+00:00</td></tr>
-<tr><td>2776665127</td><td>2025-10-20 00:00:00+00:00</td><td>00:06</td><td>Reunião com Cristiano.</td><td>3649964</td><td>Cristiano Souza</td><td>Dalphi 7 - SID</td><td>Brainstorm</td><td>2025-10-20 20:10:23+00:00</td><td>2025-10-20 20:16:39+00:00</td></tr>
-<tr><td>2775964833</td><td>2025-10-20 00:00:00+00:00</td><td>09:41</td><td>Adaptar o app de Ocorrências VCL e FMX, para funcionar nas unidades Couto.</td><td>3932389</td><td>Caio Guimarães</td><td>Dalphi 7 - SID</td><td>Desenvolvimento - Nova rotina</td><td>2025-10-20 10:22:38+00:00</td><td>2025-10-20 20:03:29+00:00</td></tr>
-<tr><td>2776373876</td><td>2025-10-20 00:00:00+00:00</td><td>00:02</td><td>[prj_PRONTUARIO] - [tit_CRIAÇÃO DE ROTINA DINAMICA E EM TEMPO REAL DE CONDUTA MÉDICA. SINALIZANDO POSSIVEIS INTERCORRENCIAS EM DECORRENCIA DA CONDUTA ADOTADA] - Ferramenta com custo elevado para o banco? Usar ao sair do campo? </td><td>3649964</td><td>Cristiano Souza</td><td>CAMILA 2.0</td><td>Reunião ou Brainstorm</td><td>2025-10-20 15:43:22+00:00</td><td>2025-10-20 15:45:06+00:00</td></tr>
-<tr><td>2776306953</td><td>2025-10-20 00:00:00+00:00</td><td>00:42</td><td>Melhoria no processo de organização e aplicação de métodos ágeis - Organização do trello</td><td>3649964</td><td>Cristiano Souza</td><td>CAMILA 2.0</td><td>Reunião ou Brainstorm</td><td>2025-10-20 15:01:22+00:00</td><td>2025-10-20 15:43:22+00:00</td></tr>
-<tr><td>2776281751</td><td>2025-10-20 00:00:00+00:00</td><td>00:15</td><td>Melhoria no processo de organização e aplicação de métodos ágeis - Organização do trello</td><td>3649964</td><td>Cristiano Souza</td><td>CAMILA 2.0</td><td>Programming</td><td>2025-10-20 14:46:27+00:00</td><td>2025-10-20 15:01:09+00:00</td></tr>
-<tr><td>2776277996</td><td>2025-10-20 00:00:00+00:00</td><td>00:02</td><td>Melhoria no processo de organização e aplicação de métodos ágeis - Organização do trello</td><td>3649964</td><td>Cristiano Souza</td><td>CAMILA 2.0</td><td>Reunião ou Brainstorm</td><td>2025-10-20 14:44:03+00:00</td><td>2025-10-20 14:46:10+00:00</td></tr>
-<tr><td>2776108948</td><td>2025-10-20 00:00:00+00:00</td><td>01:34</td><td>[MYDAS] - DOWNLOAD DE VERSÃO, ADAPTÇÃO PARA USUARIO GERAL</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Programming</td><td>2025-10-20 13:08:50+00:00</td><td>2025-10-20 14:42:42+00:00</td></tr>
-<tr><td>2775484560</td><td>2025-10-18 00:00:00+00:00</td><td>00:25</td><td>CRIAR NOSSO PRÓPRIO TRELLO COM HARVEST - DEFINIR BASE PARA INÍCIO DO DEBATE DO PROJETO</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>Brainstorm</td><td>2025-10-19 00:42:49+00:00</td><td>2025-10-19 00:42:49+00:00</td></tr>
-<tr><td>2775484404</td><td>2025-10-18 00:00:00+00:00</td><td>00:03</td><td>CRIAR NOSSO PRÓPRIO TRELLO COM HARVEST - DEFINIR BASE PARA INÍCIO DO DEBATE DO PROJETO</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>Brainstorm</td><td>2025-10-19 00:40:05+00:00</td><td>2025-10-19 00:40:05+00:00</td></tr>
-<tr><td>2775484119</td><td>2025-10-18 00:00:00+00:00</td><td>00:25</td><td>CANCELAMENTO DE PREAGENDAMENTO NÃO CONFIRMADO - DHO</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>Brainstorm</td><td>2025-10-19 00:35:01+00:00</td><td>2025-10-19 00:35:01+00:00</td></tr>
-<tr><td>2775483866</td><td>2025-10-18 00:00:00+00:00</td><td>01:55</td><td>Implementação nos postos entre os dias 20 e 24/10/25.</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>discussion or analyze</td><td>2025-10-19 00:30:04+00:00</td><td>2025-10-19 00:30:04+00:00</td></tr>
-<tr><td>2775483854</td><td>2025-10-18 00:00:00+00:00</td><td>03:08</td><td>Em operação - Melhorias à medida em que são abertos chamados.</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>discussion or analyze</td><td>2025-10-19 00:29:41+00:00</td><td>2025-10-19 00:29:41+00:00</td></tr>
-<tr><td>2775483829</td><td>2025-10-18 00:00:00+00:00</td><td>08:35</td><td>ORÇAMENTO APP CAMIM</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>discussion or analyze</td><td>2025-10-19 00:29:20+00:00</td><td>2025-10-19 00:29:20+00:00</td></tr>
-<tr><td>2775483802</td><td>2025-10-18 00:00:00+00:00</td><td>05:35</td><td>28/10 à 04/11 - Confirmado através de áudio pelo Lincoln do dia 17.10</td><td>3649964</td><td>Cristiano Souza</td><td>Camim Cristiano</td><td>Project Management</td><td>2025-10-19 00:28:44+00:00</td><td>2025-10-19 00:28:44+00:00</td></tr>
-<tr><td>2775462622</td><td>2025-10-18 00:00:00+00:00</td><td>00:49</td><td>[SMGH] - IMPLEMENTAÇÃO DE FUNCIONALIDADE QUE ANALISA EM TEMPO REAL O QUE ESTÁ SENDO DIGITADO E EXIBE SINAIS DE ALERTA POR EXEMPLO, SE O PACIENTE É ALERGIGO A DETERMINADO MEDICAMENTO</td><td>5314330</td><td>Lincoln Menezes</td><td>CAMILA 2.0</td><td>Programming</td><td>2025-10-18 18:36:15+00:00</td><td>2025-10-18 19:25:11+00:00</td></tr></tbody>
-      </table>
-    </div></div>
-    <div class="card"><h3>Horas por Cliente</h3>
-    <div class="table-wrap">
-      <input class="filter" placeholder="Filtrar nesta tabela..." oninput="filterTable('tbl_by_client', this.value)"/>
-      <table id="tbl_by_client" class="data">
-        <thead><tr><th>client</th><th>hours</th></tr></thead>
-        <tbody><tr><td>Camim</td><td>101:59</td></tr>
-<tr><td>Ronald e Vinícius</td><td>93:50</td></tr></tbody>
-      </table>
-    </div></div>
-    <div class="card"><h3>Horas por Projeto</h3>
-    <div class="table-wrap">
-      <input class="filter" placeholder="Filtrar nesta tabela..." oninput="filterTable('tbl_by_project', this.value)"/>
-      <table id="tbl_by_project" class="data">
-        <thead><tr><th>client</th><th>project</th><th>hours</th></tr></thead>
-        <tbody><tr><td>Camim</td><td>Camim Cristiano</td><td>49:11</td></tr>
-<tr><td>Camim</td><td>Dalphi 7 - SID</td><td>36:13</td></tr>
-<tr><td>Camim</td><td>CamimALE</td><td>16:35</td></tr>
-<tr><td>Ronald e Vinícius</td><td>CAMILA 2.0</td><td>93:50</td></tr></tbody>
-      </table>
-    </div></div>
-    <div class="card"><h3>Horas por Usuário</h3>
-    <div class="table-wrap">
-      <input class="filter" placeholder="Filtrar nesta tabela..." oninput="filterTable('tbl_by_user', this.value)"/>
-      <table id="tbl_by_user" class="data">
-        <thead><tr><th>user.name</th><th>hours</th></tr></thead>
-        <tbody><tr><td>Cristiano Souza</td><td>99:50</td></tr>
-<tr><td>Lincoln Menezes</td><td>43:20</td></tr>
-<tr><td>Caio Guimarães</td><td>36:04</td></tr>
-<tr><td>Janderson Henrique</td><td>16:35</td></tr></tbody>
-      </table>
-    </div></div>
-  </section>
+            <ul class="menu-list">
+                <li><a class="menu-link" href="/templates/index.html">🏠 Início</a></li>
+                <li><a class="menu-link" href="#">🏛️Governança</a></li>
+                <li><a class="menu-link" href="/templates/kpi_home.html">📊 KPIs e performance</a></li>
+                <li><a class="menu-link" href="/templates/trello_harvest.html">😡 Harvest</a></li>
+                <!-- <li class="menu-group">
+                    <button class="menu-accordion" aria-controls="grp-kpi" aria-expanded="false">
+                        📊 KPIs e performance</button>
+                    <ul id="grp-kpi" class="menu-sublist">
+                        <li><a class="menu-sublink" href="/templates/kpi_mensalidades.html">Mensalidades</a></li>
+                        <li><a class="menu-sublink" href="/templates/medicos.html">Custo Médico x Mens</a></li>
+                        <li><a class="menu-sublink" href="/templates/alimentacao.html">Custo Alim x Mens</a>
+                        </li>
+                    </ul> -->
+                <li><a class="menu-link" href="#">🧭 Direção e estratégia</a></li>
+                <li><a class="menu-link" href="#">🛡️Compliance e riscos</a></li>
+            </ul>
+        </nav>
 
 
-  
 
-  <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const target = (location.hash || '#harvest').slice(1);
-    selectTab(target);
-  });
-  </script>
+        <!-- <div class="menu-splash">Carregando</div> Splash central -->
+        <div class="menu-brand"> 
+        </div> <!-- Marca fixa abaixo do header -->
 
-  
+    </aside>
 
+
+
+
+
+    <div id="header"></div>
+
+
+
+
+
+
+    <!-- ======== CARROSSEL ========
+    <div class="carousel2" aria-label="Carrossel 2">
+        Radios
+        <input type="radio" name="radio-btn-2" id="radio2-1" checked>
+        <input type="radio" name="radio-btn-2" id="radio2-2">
+        <input type="radio" name="radio-btn-2" id="radio2-3">
+        <input type="radio" name="radio-btn-2" id="radio2-4">
+        <input type="radio" name="radio-btn-2" id="radio2-5">
+
+        2) TRILHO DOS SLIDES
+        <div class="slides2">
+            <a href="diadascriancas2025_prestacao_de_contas.html">
+                <img src="../images/carrossel2/upup_carrossel_2_img1_anime_prestacao.jpg"
+                    alt="Dia das crianças - Prestação de contas - UPUP">
+            </a>
+            <a href="cursos_bombeiromirim.html">
+                <img src="../images/carrossel2/upup_curso_bombeiro_mirim_16x9_res_40_876x574px.png"
+                    alt="Curso Bombeiro Mirim - UPUP">
+            </a>
+            <a href="cursos_preparatoriotjrj.html">
+                <img src="../images/carrossel2/upup_curso_preparatorio_tjrj_16x9_1037x583_res_40.png"
+                    alt="Curso Preparatório TJ-RJ - UPUP">
+            </a>
+            <a href="https://www.facebook.com/61554552819759/posts/122244610568151760/?rdid=pulTmzgLO1PgYPXn"
+                target="_blank">
+                <img src="../images/upup_visita_lar_idosos.jpg" alt="UPUP - Visita ao lar de idosos de Natividade">
+            </a>
+            <a href="https://www.instagram.com/p/C_tYlRUB63i/?img_index=1" target="_blank">
+                <img src="../images/carrossel2/upup_evento_passeata.png" alt="Passeata Centro de Natividade - UPUP">
+            </a>
+        </div>
+
+        Navegação
+        <div class="navigation2">
+            <label for="radio2-1" class="bar"></label>
+            <label for="radio2-2" class="bar"></label>
+            <label for="radio2-3" class="bar"></label>
+            <label for="radio2-4" class="bar"></label>
+            <label for="radio2-5" class="bar"></label>
+        </div>
+    </div> -->
+
+
+
+
+
+
+    <main class="page">
+
+        <!-- APRESENTAÇÃO -->
+        <article class="card">
+            <h2>Apresentação</h2>
+            <p>Este pacote orquestra indicadores comparáveis por unidade, período e linha de despesa. Foco: acelerar
+                a decisão, evidenciar variações de custo e subsidiar contestações com base documental. Padrões de
+                governança garantem dado confiável, análise objetiva e plano de ação acoplado.</p>
+        </article>
+
+        <!-- ACESSO RÁPIDO E CONTESTAÇÕES -->
+        <article class="card">
+            <h2>Acesso rápido por unidade e contestações</h2>
+
+            <h3>Painel “Todas as Unidades”</h3>
+            <ul class="list">
+                <li>KPIs por unidade: <strong>ICA</strong>, <strong>Sinistralidade</strong>, <strong>Índice
+                        Alimentação</strong>, <strong>EBITDA Operacional</strong>.</li>
+                <li>Filtros: período, convênio, centro de custo, tipo de ocorrência.</li>
+                <li>Variações: M/M, YTD e média móvel 3M.</li>
+            </ul>
+
+            <h3>Mapa de evidências para contestações</h3>
+            <ul class="list">
+                <li>Anexos: NF, guia, laudo, contrato e regra de cobertura.</li>
+                <li>Status: Pendente, Em Análise, Enviado, Deferido, Indeferido.</li>
+                <li>Fila priorizada por impacto financeiro, SLA de corte e probabilidade de êxito.</li>
+                <li>Log: responsável, data, base documental.</li>
+            </ul>
+        </article>
+
+        <!-- KPIs E FÓRMULAS -->
+        <article class="card">
+            <h2>KPIs e fórmulas</h2>
+
+            <h3>1) Relação mensalidades vs custos médicos</h3>
+            <p><strong>Mensalidade Líquida</strong> = Mensalidades Brutas − Descontos/Glosas − Inadimplência
+                reconhecida</p>
+            <p><strong>Custo Médico</strong> = Honorários + Exames + Internações + OPME (líquido de glosa
+                recuperável)</p>
+            <p><strong>Índice de Cobertura Assistencial (ICA)</strong> = Mensalidade Líquida ÷ Custo Médico</p>
+            <p><strong>Sinistralidade Assistencial</strong> = Custo Médico ÷ Mensalidade Líquida</p>
+            <p class="muted">Recomendação: série de 6–12 meses, variação %, média móvel 3M e meta.</p>
+
+            <h3>2) Mensalidade vs alimentação</h3>
+            <p><strong>Custo Alimentação</strong> = Insumos + Terceiros + Perdas Auditadas</p>
+            <p><strong>Índice Alimentação</strong> = Custo Alimentação ÷ Mensalidade Líquida</p>
+            <p><strong>Delta Valor</strong> = Mensalidade Líquida − Custo Alimentação</p>
+            <p><strong>Share no Custo Total</strong> = Custo Alimentação ÷ Custo Total</p>
+            <p class="muted">Cortes: unidade, posto, turno e cardápio.</p>
+
+            <h3>3) Gasto do posto vs recebimento de mensalidade</h3>
+            <p><strong>Razão Posto</strong> = Custo Alimentação do Posto ÷ Mensalidade Líquida alocada ao Posto</p>
+            <p><strong>Break-even do Posto</strong> quando <strong>Razão Posto ≤ 1</strong></p>
+        </article>
+
+        <!-- TABELA EXEMPLO -->
+        <article class="card">
+            <h2>Tabela de referência — Posto x Mensalidade x Alimentação</h2>
+            <div class="tabela-doacoes-wrap">
+                <div class="tabela-scroll">
+                    <table class="tabela-doacoes" aria-label="Síntese por posto">
+                        <thead>
+                            <tr>
+                                <th>Posto</th>
+                                <th>Unidade</th>
+                                <th>Mês</th>
+                                <th>Mensalidade Alocada</th>
+                                <th>Custo Alimentação</th>
+                                <th>Razão Posto</th>
+                                <th>Variação M/M</th>
+                                <th>Observações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td data-label="Posto">Posto A</td>
+                                <td data-label="Unidade">Unidade 1</td>
+                                <td data-label="Mês">2025-08</td>
+                                <td data-label="Mensalidade Alocada">R$ 120.000</td>
+                                <td data-label="Custo Alimentação">R$ 78.000</td>
+                                <td data-label="Razão Posto">0,65</td>
+                                <td data-label="Variação M/M">-0,04 p.p.</td>
+                                <td data-label="Observações"><span class="badge ok">redução de perdas</span></td>
+                            </tr>
+                            <tr>
+                                <td data-label="Posto">Posto B</td>
+                                <td data-label="Unidade">Unidade 2</td>
+                                <td data-label="Mês">2025-08</td>
+                                <td data-label="Mensalidade Alocada">R$ 95.000</td>
+                                <td data-label="Custo Alimentação">R$ 102.000</td>
+                                <td data-label="Razão Posto">1,07</td>
+                                <td data-label="Variação M/M">+0,09 p.p.</td>
+                                <td data-label="Observações"><span class="badge pendente">revisar contrato</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p class="tabela-legenda muted">Legenda: Razão Posto = Custo Alimentação ÷ Mensalidade Alocada.
+                    </p>
+                </div>
+            </div>
+        </article>
+
+        <!-- LAYOUT DO DASHBOARD -->
+        <article class="card">
+            <h2>Layout recomendado do dashboard</h2>
+            <ul class="list">
+                <li><strong>Visão Executiva:</strong> cards por unidade com ICA, Sinistralidade, Índice Alimentação,
+                    EBITDA Operacional.</li>
+                <li><strong>Séries Temporais:</strong> Mensalidade Líquida, Custo Médico, Custo Alimentação.</li>
+                <li><strong>Matriz de Desvio:</strong> unidades × meses com heatmap.</li>
+                <li><strong>Drill-through:</strong> acesso a contas, NFs e evidências de contestação.</li>
+            </ul>
+        </article>
+
+        <!-- SQL MODELO -->
+        <article class="card">
+            <h2>Consultas — modelo SQL</h2>
+            <pre><code>-- Mensalidade x Custo Médico x Alimentação por mês e unidade
+SELECT
+  unidade,
+  DATE_TRUNC('month', competencia) AS mes,
+  SUM(mensalidade_bruta - descontos - glosas - inadimplencia) AS mensalidade_liquida,
+  SUM(custo_medico) AS custo_medico,
+  SUM(custo_alimentacao) AS custo_alimentacao,
+  ROUND(SUM(custo_alimentacao) / NULLIF(SUM(mensalidade_bruta - descontos - glosas - inadimplencia),0), 4) AS indice_alimentacao,
+  ROUND(SUM(mensalidade_bruta - descontos - glosas - inadimplencia) / NULLIF(SUM(custo_medico),0), 4) AS ica,
+  ROUND(SUM(custo_medico) / NULLIF(SUM(mensalidade_bruta - descontos - glosas - inadimplencia),0), 4) AS sinistralidade
+FROM fato_financeiro
+WHERE competencia BETWEEN :ini AND :fim
+GROUP BY 1,2
+ORDER BY 1,2;</code></pre>
+        </article>
+
+        <!-- CHECKLIST DE DADOS -->
+        <article class="card">
+            <h2>Checklist de dados para carga</h2>
+            <p>Envie CSV/planilha para habilitar o dashboard e as contestações.</p>
+            <ul class="list">
+                <li><strong>unidade</strong>, <strong>competencia</strong> (YYYY-MM)</li>
+                <li><strong>mensalidade_bruta</strong>, <strong>descontos</strong>, <strong>glosas</strong>,
+                    <strong>inadimplencia</strong>
+                </li>
+                <li><strong>custo_medico</strong>, <strong>custo_alimentacao</strong>, <strong>custo_total</strong>
+                    (opcional)</li>
+                <li><strong>posto</strong>, <strong>turno</strong> (se aplicável para alocação)</li>
+            </ul>
+        </article>
+
+    </main>
+
+
+
+
+
+    <!-- ORGANIZAR O FOOTER PARA POR EM UM ARQUIVO -->
+    <div id="footer"></div>
+    <script src="../js/footer.js" defer></script>
 
 </body>
+
 </html>
