@@ -1,4 +1,4 @@
-# analyse.py
+# analyze.py
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
@@ -15,8 +15,9 @@ from threading import Lock
 
 # -------------------------- paths e modelo --------------------------
 BASE = pathlib.Path(__file__).parent.resolve()
-INP_DIR  = BASE / "json_consolidado"
-OUT_DIR  = BASE / "json_retorno_groq"
+# substitua as 3 linhas atuais de INP_DIR/OUT_DIR por:
+INP_DIR = pathlib.Path(os.getenv("INP_DIR", BASE / "json_consolidado"))
+OUT_DIR = pathlib.Path(os.getenv("OUT_DIR", BASE / "json_retorno_groq"))
 OUT_DIR.mkdir(exist_ok=True)
 
 FILES = {
@@ -177,7 +178,7 @@ def first_json_block(txt: str) -> Optional[str]:
 # -------------------------- Groq: JSON schema + fallback --------------------------
 def system_prompt() -> str:
     return (
-        "Você é um analista financeiro sênior. Entregue respostas técnicas e acionáveis. "
+        "Você é um analista financeiro sênior. Entregue respostas técnicas e acionáveis. Você está prestando consultoria para profissionais de empresa familiar em segunda geração. Nenhum economista ou contador está à mesa, explique tecnicamente sempre seguido de uma explicação compreensível para quem não é economista. Anualmente os planos de saúde recebem reajuste autorizado pela ANS, logo, geralmente em junho o índice é liberado o que me faz cobrar o reajuste de junho e maio em julho e agosto, o que pode explicar leves picos. As mensalidades são nossa principal fonte de arrecadação. Os dados aqui analisados são todos em relação ao que recebemos de mensalidades. Não temos alta complexidade. Não atendemos emergência. Não temos internação. Logo, nosso custo é com salário dos médicos. O atendimento oferecido por nosso plano é ambulatorial. Se houver como, verifique nosso site em www.camim.com.br para responder com melhor precisão sobre nós."
         "Considere sazonalidade, tendência, outliers e riscos. "
         "Retorne somente JSON válido, sem markdown. "
         + BUSINESS_CTX
@@ -441,53 +442,49 @@ class Reqs(BaseModel):
     to_ym:   str
     posto:   str
 
+
+
+
+
+
+
 @app.post("/ia/analisar")
-async def ia_analisar_any(req: Request):
-    try:
-        payload = await req.json()
-
-        # NOVO: payload com "blocks" vindo direto da página
-        if isinstance(payload, dict) and "blocks" in payload:
-            load_dotenv(); api_key = os.getenv("GROQ_API_KEY")
-            if not api_key: 
-                raise HTTPException(500, "GROQ_API_KEY ausente.")
-            client = Groq(api_key=api_key)
-
-            user = prompt_from_blocks(payload.get("blocks", []))
-            obj = ask_json(client, user, MENS_EXT_SCHEMA)
-            return obj  # objeto simples {resumo, insights, alertas, recomendacoes}
-
-        # LEGADO: payload simples com range
-        data = Reqs(**payload)
-        geral, por_posto = load_data()
+async def ia_analisar(payload: dict = Body(...)):
+    if isinstance(payload, dict) and "blocks" in payload:
         load_dotenv(); api_key = os.getenv("GROQ_API_KEY")
-        if not api_key: 
-            raise HTTPException(500, "GROQ_API_KEY ausente.")
+        if not api_key: raise HTTPException(500, "GROQ_API_KEY ausente.")
         client = Groq(api_key=api_key)
+        user = prompt_from_blocks(payload.get("blocks", []))
+        return ask_json(client, user, MENS_EXT_SCHEMA)
 
-        with _lock:
-            if not includes_current_month(data.from_ym, data.to_ym) and not need_range(data.from_ym, data.to_ym, data.posto):
-                try:
-                    return {
-                        "cached": True,
-                        "mensalidades": json.loads(out_path(data.from_ym, data.to_ym, "mensalidades", data.posto).read_text(encoding="utf-8")),
-                        "medico":        json.loads(out_path(data.from_ym, data.to_ym, "medico",        data.posto).read_text(encoding="utf-8")),
-                        "alimentacao":   json.loads(out_path(data.from_ym, data.to_ym, "alimentacao",   data.posto).read_text(encoding="utf-8")),
-                    }
-                except Exception:
-                    pass
 
-            run_one_range(client, geral, por_posto, data.from_ym, data.to_ym, data.posto, force=False)
-            return {
-                "cached": False,
-                "mensalidades": json.loads(out_path(data.from_ym, data.to_ym, "mensalidades", data.posto).read_text(encoding="utf-8")),
-                "medico":        json.loads(out_path(data.from_ym, data.to_ym, "medico",        data.posto).read_text(encoding="utf-8")),
-                "alimentacao":   json.loads(out_path(data.from_ym, data.to_ym, "alimentacao",   data.posto).read_text(encoding="utf-8")),
-            }
+
+
+
+
+
+        # legado (se quiser manter)
+        data = Reqs(**payload)
+        # ... resto igual
     except HTTPException as e:
         raise e
     except Exception as e:
         raise HTTPException(500, f"Erro: {e}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # -------------------------- CLI --------------------------
 def parse_args():
@@ -506,7 +503,7 @@ def main():
     args = parse_args()
     if args.serve:
         import uvicorn
-        uvicorn.run("analyse:app", host=args.host, port=args.port, reload=False)
+        uvicorn.run("analyze_groq:app", host=args.host, port=args.port, reload=False)
         return
     if args.only:
         from_ym, to_ym, posto = args.only
