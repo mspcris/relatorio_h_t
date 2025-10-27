@@ -3,11 +3,11 @@
 
 <head>
     <meta charset="utf-8">
-    <title>CAMIM ó Login</title>
+    <title>CAMIM ‚Äî Login</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- CSS base j· usado no projeto -->
-    <link rel="stylesheet" href="../css/style.css">
-    <link rel="stylesheet" href="../css/style2.css">
+    <!-- CSS base j√° usado no projeto -->
+    <!-- <link rel="stylesheet" href="../css/style.css"> -->
+    <!-- <link rel="stylesheet" href="../css/style2.css"> -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
 
@@ -30,7 +30,7 @@
                 linear-gradient(135deg, #e6eef5 0%, #dfe7ef 40%, #d5e0ea 100%);
         }
 
-        /* Cart„o com vidro fosco (consistente com o efeito do menu/preload) */
+        /* Cart√£o com vidro fosco (consistente com o efeito do menu/preload) */
         .glass-card {
             width: min(420px, 92vw);
             border-radius: 16px;
@@ -45,7 +45,7 @@
             backdrop-filter: blur(16px) saturate(1.2);
         }
 
-        /* fallback quando n„o houver suporte ao backdrop-filter */
+        /* fallback quando n√£o houver suporte ao backdrop-filter */
         @supports not ((-webkit-backdrop-filter: blur(16px)) or (backdrop-filter: blur(16px))) {
             .glass-card {
                 background: rgba(255, 255, 255, .85);
@@ -104,18 +104,57 @@
             flex-wrap: wrap;
         }
     </style>
+
+
+    <style>
+        html,
+        body {
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+    </style>
+
+    <style id="force-visible">
+        html,
+        body,
+        .wrapper,
+        .login-wrap,
+        .glass-card {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+
+        [hidden],
+        .hidden,
+        .d-none,
+        .preloader,
+        #preloader,
+        .page-preload {
+            display: none !important;
+        }
+
+        /* evita texto branco invis√≠vel */
+        body {
+            color: #111 !important;
+        }
+    </style>
+
+
+
+
 </head>
 
-<body>
-
+<body class="loaded">
     <script>document.documentElement.classList.add('loaded');</script>
+
 
 
     <div class="login-wrap">
         <div class="glass-card">
             <div class="brand">
                 <img src="../images/Logo Camim-01_50px.png" alt="Logo CAMIM">
-                <div class="brand-title">Quem tem sa˙de È mais feliz!</div>
+                <div class="brand-title">Quem tem sa√∫de √© mais feliz!</div>
             </div>
             <div class="muted mb-3">Acesse sua conta para continuar.</div>
 
@@ -134,8 +173,9 @@
                     <label for="senha" class="small mb-1">Senha</label>
                     <div class="input-group">
                         <div class="input-group-prepend"><span class="input-group-text"><i
-                                    class="fas fa-lock"></i></span></div>
-                        <input id="senha" name="senha" type="password" class="form-control" placeholder="ïïïïïïïï"
+                                    class="fas fa-lock"></i></span>
+                        </div>
+                        <input id="senha" name="senha" type="password" class="form-control" placeholder="‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢"
                             minlength="4" required>
                         <div class="input-group-append">
                             <button class="btn btn-outline-secondary" type="button" id="togglePwd"
@@ -144,7 +184,12 @@
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary btn-block mt-2">Entrar</button>
+                <button type="submit" class="btn btn-primary btn-block mt-2"
+                    onclick="location.href='/protected/start'">Entrar</button>
+
+
+
+
 
                 <div class="helpers mt-3">
                     <a href="#" class="small">Esqueci minha senha</a>
@@ -168,29 +213,22 @@
             eye.classList.toggle('fa-eye-slash', on);
         });
 
-        // ValidaÁ„o simples (substitua pela sua rota)
+
+        // SUBMIT
+
+
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const email = document.getElementById('email').value.trim();
-            const senha = document.getElementById('senha').value;
-            const msg = document.getElementById('msg');
-            msg.textContent = '';
-
-            if (!email || !senha) { msg.textContent = 'Preencha e-mail e senha.'; return; }
-
+            const msg = document.getElementById('msg'); msg.textContent = '';
             try {
-                // Exemplo: POST para sua API. Ajuste URL e payload.
-                // const r = await fetch('/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, senha }) });
-                // if (!r.ok) throw new Error('Credenciais inv·lidas');
-                // location.href = '/templates/index.html';
-
-                // Mock local:
-                setTimeout(() => { window.location.href = 'index.html'; }, 300);
-            } catch (err) {
-                msg.textContent = err.message || 'Erro ao autenticar.';
-            }
+                const r = await fetch('/protected/ping', { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+                if (r.status === 204) { location.href = '/templates/index.html'; return; }
+                if (r.status === 401) { msg.textContent = 'Autentica√ß√£o necess√°ria. Tente novamente.'; return; }
+                msg.textContent = 'Falha: ' + r.status + ' ' + r.statusText;
+            } catch (err) { msg.textContent = err.message || 'Erro de rede.'; }
         });
     </script>
+
 </body>
 
 </html>

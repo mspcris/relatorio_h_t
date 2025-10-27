@@ -116,6 +116,29 @@
         small {
             color: #666;
         }
+
+        /* estado inicial de cada item do menu */
+        #app-drawer .menu-list>li {
+            opacity: 0;
+            transform: translateX(-10px);
+        }
+
+        /* animação */
+        @keyframes slideIn {
+            to {
+                opacity: 1;
+                transform: none;
+            }
+        }
+
+        /* acessibilidade */
+        @media (prefers-reduced-motion: reduce) {
+            #app-drawer .menu-list>li {
+                opacity: 1;
+                transform: none;
+                animation: none !important;
+            }
+        }
     </style>
 
 
@@ -169,6 +192,8 @@
                     </ul> -->
                 <li><a class="menu-link" href="#">🧭 Direção e estratégia</a></li>
                 <li><a class="menu-link" href="#">🛡️Compliance e riscos</a></li>
+                <li><a class="menu-link" href="/logout" id="btnLogout">🚪 Sair</a></li>
+
             </ul>
         </nav>
 
@@ -397,6 +422,54 @@ ORDER BY 1,2;</code></pre>
     <!-- ORGANIZAR O FOOTER PARA POR EM UM ARQUIVO -->
     <div id="footer"></div>
     <script src="../js/footer.js" defer></script>
+
+
+
+    <script>
+        document.addEventListener('click', (e) => {
+            const a = e.target.closest('#btnLogout');
+            if (!a) return;
+            e.preventDefault();
+
+            // tenta invalidar credenciais e caches
+            Promise.allSettled([
+                fetch('/logout', { cache: 'no-store', credentials: 'include' }),
+                fetch('/protected/logout', { cache: 'no-store', credentials: 'include' })
+            ]).finally(() => {
+                try { localStorage.clear(); sessionStorage.clear(); } catch { }
+                location.href = '/templates/login.html';
+            });
+        });
+    </script>
+
+
+
+    <script>
+        function animateMenuItems() {
+            const items = document.querySelectorAll('#app-drawer .menu-list > li');
+            items.forEach((el, i) => {
+                el.style.animation = 'none';            // reinicia
+                void el.offsetWidth;                    // reflow
+                el.style.animation = `slideIn .24s ease-out forwards`;
+                el.style.animationDelay = `${i * 60}ms`;  // “stagger” automático
+            });
+        }
+
+        /* chame isso no ponto onde você já abre o menu */
+        function openDrawer() {
+            drawer.hidden = false;
+            overlay.hidden = false;
+            animateMenuItems();
+        }
+
+        /* se preferir não tocar no openDrawer, observe a mudança do atributo */
+        const drawer = document.getElementById('app-drawer');
+        new MutationObserver(m => {
+            if (!drawer.hidden) animateMenuItems();
+        }).observe(drawer, { attributes: true, attributeFilter: ['hidden'] });
+    </script>
+
+
 
 </body>
 
