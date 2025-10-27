@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import os, json, pathlib, html, re, unicodedata, tempfile
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 
 from dotenv import load_dotenv
 from groq import Groq
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 # ========================== Config & Paths ==========================
 BASE = pathlib.Path(__file__).parent.resolve()
 MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+# Valor estático apenas para fallback; o /health lerá em runtime
+PROBE_MODELS = [m.strip() for m in os.getenv("GROQ_PROBE_MODELS", "").split(",") if m.strip()]
 
 PROMPTS_DIR = pathlib.Path(os.getenv("PROMPTS_DIR", "/var/appdata/prompts")).resolve()
 PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -34,7 +37,6 @@ def _sanitize_obj(o: Any) -> Any:
 
 # ========================== Util: extrair primeiro JSON ==========================
 def first_json_block(txt: str) -> Optional[str]:
-    # 1) Bloco ```json
     m = re.search(r"```json\s*(\{.*?\}|\[.*?\])\s*```", txt, flags=re.S)
     cand = m.group(1) if m else None
     if cand:
@@ -42,7 +44,6 @@ def first_json_block(txt: str) -> Optional[str]:
             json.loads(cand); return cand
         except Exception:
             pass
-    # 2) Primeiro objeto { ... } balanceado
     depth = 0; start = None
     for i, ch in enumerate(txt):
         if ch == "{":
@@ -60,9 +61,10 @@ def first_json_block(txt: str) -> Optional[str]:
 
 # ========================== Modelos (API) ==========================
 class AnalyzePayload(BaseModel):
-    prompt: str
-    blocks: list | None = None
-    prefs: dict | None = None
+    # Agora opcional para suportar text/plain ou cenários só com blocks
+    prompt: Optional[str] = None
+    blocks: Optional[List[Dict[str, Any]]] = None
+    prefs: Optional[Dict[str, Any]] = None
 
 class PromptItem(BaseModel):
     id: str = Field(..., min_length=1, max_length=64)
@@ -79,9 +81,7 @@ class PromptState(BaseModel):
     def _active_must_exist(cls, v, info):
         if v is None:
             return v
-        lst = info.data.get("list") or []
-        # permite valor “órfão”; o front pode ajustar
-        return v
+        return v  # permite valor “órfão”; o front pode ajustar
 
 # ========================== IO de arquivos (prompts) ==========================
 def _safe_page_id(page_id: str) -> str:
@@ -116,6 +116,22 @@ def _read_json_or_empty(path: pathlib.Path) -> dict:
     except Exception:
         return {"list": [], "activeId": None}
 
+# ========================== Probing opcional ==========================
+def pick_probe_model(client: Groq, probe_models: List[str]) -> Optional[str]:
+    for m in probe_models:
+        try:
+            r = client.chat.completions.create(
+                model=m,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+                temperature=0,
+            )
+            _ = r.choices[0].message.content
+            return m
+        except Exception:
+            continue
+    return None
+
 # ========================== Chamada Groq ==========================
 def ask_json_only_prompt(client: Groq, user_prompt: str, blocks: list | None, prefs: dict | None) -> dict:
     msgs = [{"role": "user", "content": user_prompt}]
@@ -123,8 +139,7 @@ def ask_json_only_prompt(client: Groq, user_prompt: str, blocks: list | None, pr
         msgs.append({"role": "user", "content": json.dumps({"blocks": blocks}, ensure_ascii=False)})
 
     temperature = float(prefs.get("temperature", 0.1)) if isinstance(prefs, dict) else 0.1
-    # aceita tanto max_tokens quanto legado max_completion_tokens
-    max_tokens  = int(prefs.get("max_tokens", prefs.get("max_completion_tokens", 4096))) if isinstance(prefs, dict) else 4096
+    max_tokens = int(prefs.get("max_tokens", prefs.get("max_completion_tokens", 4096))) if isinstance(prefs, dict) else 4096
     accept = (prefs.get("accept_format", "auto") if isinstance(prefs, dict) else "auto").lower()
 
     # Tentativa 1: JSON Mode
@@ -143,7 +158,7 @@ def ask_json_only_prompt(client: Groq, user_prompt: str, blocks: list | None, pr
     except Exception:
         pass
 
-    # Tentativa 2: resposta livre + extração de JSON, se houver
+    # Tentativa 2: livre + extração
     resp = client.chat.completions.create(
         model=MODEL,
         temperature=temperature,
@@ -159,10 +174,8 @@ def ask_json_only_prompt(client: Groq, user_prompt: str, blocks: list | None, pr
             obj = json.loads(blk)
             return {"content_mode": "json", "parse_status": "extracted", "data": _sanitize_obj(obj)}
         except Exception:
-            # segue adiante para fallback de texto
             pass
 
-    # Política de degradação: se caller exigir JSON estrito, errar; senão, retornar texto livre
     if accept == "json":
         raise RuntimeError("Modelo não retornou JSON válido.")
     return {"content_mode": "free_text", "parse_status": "raw", "text": _clean_pt(txt)}
@@ -176,7 +189,21 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "model": MODEL, "prompts_dir": str(PROMPTS_DIR)}
+    load_dotenv()
+    probe_models = [m.strip() for m in os.getenv("GROQ_PROBE_MODELS", "").split(",") if m.strip()]
+    api_key = os.getenv("GROQ_API_KEY")
+    probe_selected = None
+    if api_key and probe_models:
+        try:
+            probe_selected = pick_probe_model(Groq(api_key=api_key), probe_models)
+        except Exception:
+            probe_selected = None
+    return {"ok": True, "model": MODEL, "probe_models": probe_models, "probe_selected": probe_selected, "prompts_dir": str(PROMPTS_DIR)}
+
+# Health dedicado por prefixo (para Nginx, monitoramento, etc.)
+@app.get("/ia/healthz")
+async def healthz():
+    return {"ok": True}
 
 # --------- IA principal ---------
 class _AnalyzeResponse(BaseModel):
@@ -186,8 +213,18 @@ class _AnalyzeResponse(BaseModel):
     text: Optional[str] = None
 
 @app.post("/ia/analisar")
-async def ia_analisar(payload: AnalyzePayload) -> _AnalyzeResponse:
-    load_dotenv()  # permite .env local no CWD
+async def ia_analisar(req: Request, payload: Optional[AnalyzePayload] = Body(None)) -> _AnalyzeResponse:
+    # Suporte a text/plain
+    ctype = req.headers.get("content-type", "")
+    if payload is None and ctype.startswith("text/plain"):
+        text = (await req.body()).decode("utf-8", errors="ignore")
+        payload = AnalyzePayload(prompt=text, blocks=[])
+
+    # Validação mínima: precisa de prompt ou blocks
+    if payload is None or not ((payload.prompt and payload.prompt.strip()) or (payload.blocks and len(payload.blocks) > 0)):
+        return JSONResponse({"detail": "missing prompt or blocks"}, status_code=422)
+
+    load_dotenv()
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise HTTPException(500, "GROQ_API_KEY ausente.")
@@ -196,11 +233,10 @@ async def ia_analisar(payload: AnalyzePayload) -> _AnalyzeResponse:
     try:
         out = ask_json_only_prompt(
             client=client,
-            user_prompt=payload.prompt,
+            user_prompt=payload.prompt or "",
             blocks=payload.blocks or [],
             prefs=payload.prefs or {},
         )
-        # normaliza saída conforme o schema declarado
         return _AnalyzeResponse(**out)
     except HTTPException:
         raise
