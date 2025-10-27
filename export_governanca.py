@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 SQL_DIR    = os.path.join(BASE_DIR, "SQL")
 DADOS_DIR  = os.path.join(BASE_DIR, "dados")
-JSON_DIR = os.path.join(BASE_DIR, "templates", "json_consolidado")
+JSON_DIR = os.path.join(BASE_DIR, "json_consolidado")
 SRC_TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")  # opcional: front estático
 TARGET_TEMPLATES_DIR = os.getenv("TARGET_TEMPLATES_DIR", os.path.join(BASE_DIR, "public"))
 
