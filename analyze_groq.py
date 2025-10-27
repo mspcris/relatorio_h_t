@@ -1,8 +1,8 @@
-# analyze.py
+# analyze_groq.py
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import os, json, pathlib, html, re, unicodedata, tempfile, shutil
+import os, json, pathlib, html, re, unicodedata, tempfile
 from typing import Any, List, Optional
 
 from dotenv import load_dotenv
@@ -34,6 +34,7 @@ def _sanitize_obj(o: Any) -> Any:
 
 # ========================== Util: extrair primeiro JSON ==========================
 def first_json_block(txt: str) -> Optional[str]:
+    # 1) Bloco ```json
     m = re.search(r"```json\s*(\{.*?\}|\[.*?\])\s*```", txt, flags=re.S)
     cand = m.group(1) if m else None
     if cand:
@@ -41,6 +42,7 @@ def first_json_block(txt: str) -> Optional[str]:
             json.loads(cand); return cand
         except Exception:
             pass
+    # 2) Primeiro objeto { ... } balanceado
     depth = 0; start = None
     for i, ch in enumerate(txt):
         if ch == "{":
@@ -78,14 +80,11 @@ class PromptState(BaseModel):
         if v is None:
             return v
         lst = info.data.get("list") or []
-        if not any(p.id == v for p in lst):
-            # permite valor “órfão”, o front pode ajustar; evita 400 desnecessário
-            return v
+        # permite valor “órfão”; o front pode ajustar
         return v
 
 # ========================== IO de arquivos (prompts) ==========================
 def _safe_page_id(page_id: str) -> str:
-    # somente [a-zA-Z0-9_-] para evitar path traversal
     if not re.fullmatch(r"[a-zA-Z0-9_\-]{1,128}", page_id or ""):
         raise HTTPException(400, "pageId inválido.")
     return page_id
@@ -115,7 +114,6 @@ def _read_json_or_empty(path: pathlib.Path) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        # arquivo corrompido: retorna estrutura vazia para não bloquear operação
         return {"list": [], "activeId": None}
 
 # ========================== Chamada Groq ==========================
@@ -125,37 +123,49 @@ def ask_json_only_prompt(client: Groq, user_prompt: str, blocks: list | None, pr
         msgs.append({"role": "user", "content": json.dumps({"blocks": blocks}, ensure_ascii=False)})
 
     temperature = float(prefs.get("temperature", 0.1)) if isinstance(prefs, dict) else 0.1
-    max_tokens  = int(prefs.get("max_completion_tokens", 4096)) if isinstance(prefs, dict) else 4096
+    # aceita tanto max_tokens quanto legado max_completion_tokens
+    max_tokens  = int(prefs.get("max_tokens", prefs.get("max_completion_tokens", 4096))) if isinstance(prefs, dict) else 4096
+    accept = (prefs.get("accept_format", "auto") if isinstance(prefs, dict) else "auto").lower()
 
+    # Tentativa 1: JSON Mode
     try:
         resp = client.chat.completions.create(
             model=MODEL,
             temperature=temperature,
-            max_completion_tokens=max_tokens,
+            max_tokens=max_tokens,
             tool_choice="none",
             response_format={"type": "json_object"},
             messages=msgs,
         )
         raw = (resp.choices[0].message.content or "").strip()
         obj = json.loads(raw)
-        return _sanitize_obj(obj)
+        return {"content_mode": "json", "parse_status": "ok", "data": _sanitize_obj(obj)}
     except Exception:
         pass
 
+    # Tentativa 2: resposta livre + extração de JSON, se houver
     resp = client.chat.completions.create(
         model=MODEL,
         temperature=temperature,
-        max_completion_tokens=max_tokens,
+        max_tokens=max_tokens,
         tool_choice="none",
         messages=msgs,
     )
     txt = (resp.choices[0].message.content or "").strip()
-    blk = first_json_block(txt) or txt
-    try:
-        obj = json.loads(blk)
-    except Exception:
+
+    blk = first_json_block(txt)
+    if blk:
+        try:
+            obj = json.loads(blk)
+            return {"content_mode": "json", "parse_status": "extracted", "data": _sanitize_obj(obj)}
+        except Exception:
+            # segue adiante para fallback de texto
+            pass
+
+    # Política de degradação: se caller exigir JSON estrito, errar; senão, retornar texto livre
+    if accept == "json":
         raise RuntimeError("Modelo não retornou JSON válido.")
-    return _sanitize_obj(obj)
+    return {"content_mode": "free_text", "parse_status": "raw", "text": _clean_pt(txt)}
 
 # ========================== FastAPI ==========================
 app = FastAPI(title="IA-Groq-Analises")
@@ -169,21 +179,29 @@ async def health():
     return {"ok": True, "model": MODEL, "prompts_dir": str(PROMPTS_DIR)}
 
 # --------- IA principal ---------
+class _AnalyzeResponse(BaseModel):
+    content_mode: str
+    parse_status: str
+    data: Optional[dict] = None
+    text: Optional[str] = None
+
 @app.post("/ia/analisar")
-async def ia_analisar(payload: AnalyzePayload):
-    load_dotenv()
+async def ia_analisar(payload: AnalyzePayload) -> _AnalyzeResponse:
+    load_dotenv()  # permite .env local no CWD
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise HTTPException(500, "GROQ_API_KEY ausente.")
     client = Groq(api_key=api_key)
 
     try:
-        return ask_json_only_prompt(
+        out = ask_json_only_prompt(
             client=client,
             user_prompt=payload.prompt,
             blocks=payload.blocks or [],
             prefs=payload.prefs or {},
         )
+        # normaliza saída conforme o schema declarado
+        return _AnalyzeResponse(**out)
     except HTTPException:
         raise
     except Exception as e:
@@ -195,24 +213,21 @@ async def get_prompts(page_id: str):
     pid = _safe_page_id(page_id)
     path = _prompts_path(pid)
     data = _read_json_or_empty(path)
-    # garantia de forma
     try:
         state = PromptState(**data)
         return json.loads(state.model_dump_json())
     except Exception:
-        # se estruturalmente inválido, zera
         return {"list": [], "activeId": None}
 
 @app.put("/prompts/{page_id}")
 async def put_prompts(page_id: str, body: PromptState):
     pid = _safe_page_id(page_id)
-    # saneamento leve do conteúdo
     clean_list = []
     for item in body.list:
         clean_list.append(PromptItem(
             id=item.id.strip(),
             name=_clean_pt(item.name)[:256],
-            template=item.template,            # mantém texto integral; limite já aplicado no modelo
+            template=item.template,
             updatedAt=item.updatedAt.strip()
         ))
     state = PromptState(list=clean_list, activeId=(body.activeId or None))

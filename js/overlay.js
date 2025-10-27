@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const c = document.getElementById("overlay");
   if (!c) return;
 
-  const overlayPath = "/templates/overlay.html";
+  const overlayPath = "/overlay.html";
 
   fetch(overlayPath, { credentials: "same-origin" })
     .then(r => {

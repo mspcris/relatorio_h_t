@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const footerPath = "/templates/footer.html"; // absoluto
+  const footerPath = "/footer.html"; // absoluto
 
   fetch(footerPath, { credentials: "same-origin" })
     .then(res => {

@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const headerPath = "/templates/header.html";  // absoluto resolve em qualquer rota
+  const headerPath = "/header.html";  // absoluto resolve em qualquer rota
 
   fetch(headerPath)
     .then(res => {

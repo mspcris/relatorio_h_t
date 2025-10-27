@@ -138,7 +138,7 @@ def main():
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_html = outdir / f"relatorio_{stamp}.html"
-    out_index = templates_dir / "trello_harvest.html"  # sempre sobrescrever
+    out_index = root / "trello_harvest.html"  # sempre sobrescrever
 
     # --- fontes ---
     trello_dir = latest_trello_dir(root)

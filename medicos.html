@@ -3,20 +3,17 @@
 
 <head>
     <meta charset="UTF-8" />
-    <title>CAMIM — KPI de Custo Alimentação x Mensalidades (com IA)</title>
+    <title>CAMIM — KPI de Custo Médico x Mensalidades (com IA)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-
     <!-- CSS -->
-    <link rel="stylesheet" href="../css/style2.css">
+    <link rel="stylesheet" href="/css/style2.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
-
-    <!-- JS vendors -->
+    <!-- JS -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
     <style>
         .stack {
             display: flex;
@@ -205,6 +202,8 @@
         }
 
 
+
+
         /* MOBILE ADJUST NA UNHA :)*/
 
 
@@ -240,7 +239,6 @@
 
 <body class="hold-transition sidebar-mini">
     <div class="wrapper">
-
         <!-- NAVBAR superior -->
         <nav class="main-header navbar navbar-expand navbar-white navbar-light">
             <ul class="navbar-nav">
@@ -248,11 +246,11 @@
                     <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
                 </li>
             </ul>
-            <span class="ml-2 font-weight-bold d-flex align-items-center">
-                <img src="../images/Logo Camim-01_50px.png" alt="Logo Camim">
-                <span class="ml-2">Quem tem saúde é mais feliz!</span>
-                <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+            <span class="ml-2 font-weight-bold">
+                <img src="/images/Logo Camim-01_50px.png" alt="Logo Camim">
+                Quem tem saúde é mais feliz!
             </span>
+            <span id="jsonInfo" class="ml-2 text-muted mini"></span>
         </nav>
 
         <!-- SIDEBAR -->
@@ -292,12 +290,13 @@
 
 
 
+        
         <!-- CONTEÚDO -->
         <div class="content-wrapper">
-            <!-- Header -->
+            <!-- Header com IA Auto + Comparar -->
             <nav class="navbar navbar-expand navbar-white navbar-light">
                 <div class="d-flex w-100 align-items-center">
-                    <span class="ml-2 font-weight-bold">KPI — Custo Alimentação x Mensalidades</span>
+                    <span class="ml-2 font-weight-bold">KPI — Custo Médico x Mensalidades</span>
                     <div class="ml-auto">
                         <button id="iaAuto" class="btn btn-sm btn-outline-primary ia-toggle"
                             title="Reenviar à IA sempre que filtros mudarem">IA Auto</button>
@@ -380,9 +379,9 @@
                                     <tr>
                                         <th>Mês</th>
                                         <th class="text-right">Mensalidade</th>
-                                        <th class="text-right">Alimentação</th>
+                                        <th class="text-right">Médico</th>
                                         <th class="text-right small-td">Margem</th>
-                                        <th class="text-right">% Alim</th>
+                                        <th class="text-right">% Médico</th>
                                         <th class="text-right small-td">% Margem</th>
                                         <th class="text-right small-td">Δ pp MoM</th>
                                         <th class="text-right small-td">Δ pp YoY</th>
@@ -395,52 +394,54 @@
                     </div>
                 </div>
 
-                <!-- GRÁFICOS -->
+                <!-- GRÁFICOS PRINCIPAIS -->
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">% Alimentação sobre Mensalidade</h3>
+                        <h3 class="card-title mb-0">% Médico sobre Mensalidade</h3>
                     </div>
                     <div class="card-body"><canvas id="chartPct"></canvas></div>
                 </div>
 
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Evolução: Mensalidade e Alimentação</h3>
+                        <h3 class="card-title mb-0">Evolução: Mensalidade e Médico</h3>
                     </div>
                     <div class="card-body"><canvas id="chartValores"></canvas></div>
                 </div>
 
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Composição: Alimentação × Margem</h3>
+                        <h3 class="card-title mb-0">Composição: Médico × Margem</h3>
                     </div>
                     <div class="card-body"><canvas id="chartStack"></canvas></div>
                 </div>
 
+                <!-- VARIAÇÕES -->
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Variação YoY de % Alimentação (p.p.)</h3>
+                        <h3 class="card-title mb-0">Variação YoY de % Médico (p.p.)</h3>
                     </div>
                     <div class="card-body"><canvas id="chartYoYpp"></canvas></div>
                 </div>
 
+                <!-- POSTOS -->
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">% Alimentação médio por Posto (12m)</h3>
+                        <h3 class="card-title mb-0">% Médico médio por Posto (12m)</h3>
                     </div>
                     <div class="card-body"><canvas id="chartPctPosto"></canvas></div>
                 </div>
 
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Pareto de Custo Alimentação por Posto</h3>
+                        <h3 class="card-title mb-0">Pareto de Custo Médico por Posto</h3>
                     </div>
-                    <div class="card-body"><canvas id="chartParetoAli"></canvas></div>
+                    <div class="card-body"><canvas id="chartParetoMed"></canvas></div>
                 </div>
 
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Dispersão: Mensalidade × % Alimentação</h3>
+                        <h3 class="card-title mb-0">Dispersão: Mensalidade × % Médico</h3>
                     </div>
                     <div class="card-body"><canvas id="chartScatter"></canvas></div>
                 </div>
@@ -448,7 +449,7 @@
                 <!-- HEATMAP -->
                 <div class="card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Heatmap de % Alimentação por Posto</h3>
+                        <h3 class="card-title mb-0">Heatmap de % Médico por Posto</h3>
                     </div>
                     <div class="card-body heatmap" id="heatmapBox"></div>
                 </div>
@@ -456,15 +457,11 @@
         </div>
     </div>
 
-    <!-- NAV ativo -->
-    <script>
-        document.querySelectorAll('.nav-sidebar .nav-link').forEach(a => {
-            const href = a.getAttribute('href'); if (!href || href === "#") return;
-            if (location.pathname.endsWith(href)) a.classList.add('active');
-        });
-    </script>
 
-    <!-- ========== Prompt Manager (reutilizável) ========== -->
+
+
+    <!-- ========== Prompt Manager (módulo reutilizável) ========== -->
+
     <script>
         (function () {
             const API_BASE = (window.PROMPTS_API_BASE || '/prompts/').replace(/\/+$/, '') + '/';
@@ -474,6 +471,7 @@
 
             const Prompts = {
                 state: { pageId: null, mounted: false, editingId: null },
+
                 async init({ pageId, defaults = [], mountAfter }) {
                     this.state.pageId = pageId;
                     let data = await this._get(pageId);
@@ -486,10 +484,14 @@
                     this._mountUI(mountAfter);
                     this._renderList();
                 },
+
                 getActive() { const d = this._cache || { list: [], activeId: null }; return d.list.find(p => p.id === d.activeId) || null; },
                 render(vars) { const a = this.getActive(); return a ? tplRender(a.template, vars) : ''; },
 
-                async _get(id) { try { const r = await fetch(API_BASE + encodeURIComponent(id), { cache: 'no-store' }); if (!r.ok) return null; return r.json(); } catch { return null; } },
+                async _get(id) {
+                    try { const r = await fetch(API_BASE + encodeURIComponent(id), { cache: 'no-store' }); if (!r.ok) return null; return r.json(); }
+                    catch { return null; }
+                },
                 async _put(id, body) {
                     const r = await fetch(API_BASE + encodeURIComponent(id), {
                         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -606,9 +608,19 @@
             window.Prompts = Prompts;
         })();
     </script>
-    <!-- ========== FIM Prompt Manager ========== -->
 
-    <!-- APP -->
+
+
+
+
+
+    <!-- ========== FIM - Prompt Manager (módulo reutilizável) ========== -->
+
+
+
+
+
+    <!-- ========== Script principal ========== -->
     <script>
         // Erros visíveis
         window.addEventListener('error', e => { const box = document.querySelector('#err'); if (box) box.textContent = 'Erro: ' + e.message; console.error(e.error || e.message); });
@@ -618,22 +630,6 @@
         const BASE = new URL('.', location.href);
         const URL_POR_POSTO = new URL('json_consolidado/consolidado_mensal_por_posto.json', BASE).href;
 
-        // Last-Modified → navbar
-        const LM = {};
-        function renderJsonInfo() {
-            const elInfo = document.querySelector('#jsonInfo'); if (!elInfo) return;
-            const entries = Object.values(LM).filter(Boolean);
-            if (!entries.length) { elInfo.textContent = ''; elInfo.removeAttribute('title'); return; }
-            const newest = entries.slice().sort((a, b) => b.date - a.date)[0];
-            const fmt = d => d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-            elInfo.textContent = `• dados gerados em ${fmt(newest.date)}`;
-            elInfo.title = entries.map(e => `${e.label}: ${fmt(e.date)}`).join(' | ');
-        }
-        function setJsonInfoFromHeaders(resp, key, label) {
-            try { const lm = resp.headers.get('Last-Modified'); if (!lm) return false; LM[key] = { date: new Date(lm), label }; renderJsonInfo(); return true; } catch { return false; }
-        }
-        async function tryHead(url, key, label) { try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); setJsonInfoFromHeaders(r, key, label); } catch { } }
-
         const IA_BASE = new URL('json_retorno_groq/', BASE).href.replace(/\/$/, '');
         const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
         const API_ANALISAR = window.IA_API_URL || (IS_LOCAL ? 'http://127.0.0.1:8011/ia/analisar' : '/ia/analisar');
@@ -642,13 +638,6 @@
         /* ==================== Utils ==================== */
         const el = s => document.querySelector(s);
         const showErr = e => { console.error(e); const er = el('#err'); if (er) er.textContent = e?.message || e; };
-
-        function setPressed(btn, on, variant = 'primary') {
-            btn.classList.toggle(`btn-outline-${variant}`, !on);
-            btn.classList.toggle(`btn-${variant}`, on);
-            btn.classList.toggle('active', on);
-            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-        }
 
         const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
         const fmt2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -660,9 +649,17 @@
         function lastCompleteMonth(labels) { const now = new Date(); const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; const L = labels.filter(m => m !== cur); return L.length ? L.at(-1) : labels.at(-1); }
         const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
         const sum = arr => arr.reduce((a, b) => a + (b || 0), 0);
-
         function prevMonth(ym) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
         function prevYear(ym) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setFullYear(d.getFullYear() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+        function mm3(arr) { return arr.map((_, i) => { const s = arr.slice(Math.max(0, i - 2), i + 1).filter(v => v != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; }); }
+
+        // Botões "pressionados"
+        function setPressed(btn, on, variant = 'primary') {
+            btn.classList.toggle(`btn-outline-${variant}`, !on);
+            btn.classList.toggle(`btn-${variant}`, on);
+            btn.classList.toggle('active', on);
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
 
         let MESES = [], porPosto = {}, POSTOS = [];
         let sel1 = 'ALL', sel2 = 'ALL';
@@ -672,67 +669,64 @@
             const rows = porPosto[ym] || {};
             let postos = Object.keys(rows);
             if (selection !== 'ALL') postos = postos.filter(p => selection.has(p));
-            let mens = 0, ali = 0;
-            postos.forEach(p => { const r = rows[p] || {}; mens += num(r.mensalidade); ali += num(r.alimentacao); });
-            const pctAli = mens > 0 ? ali / mens * 100 : null;
-            const margem = mens - ali;
+            let mens = 0, med = 0;
+            postos.forEach(p => { const r = rows[p] || {}; mens += num(r.mensalidade); med += num(r.medico); });
+            const pctMed = mens > 0 ? med / mens * 100 : null;
+            const margem = mens - med;
             const pctMargem = mens > 0 ? margem / mens * 100 : null;
-            return { mens, ali, margem, pctAli, pctMargem };
+            return { mens, med, margem, pctMed, pctMargem };
         }
 
         /* ==================== KPIs e Tabela ==================== */
         function kpiCard(title, val, fmt = 'text') {
             const isNull = (val == null || Number.isNaN(val));
             const out = isNull ? '<span class="muted">-</span>' :
-                (fmt === 'moeda' ? fmtInt.format(val) : fmt === '2' ? fmt2.format(val) : fmt === 'pct' ? fmtPct.format(val) + '%' : String(val));
+                (fmt === 'moeda' ? fmtInt.format(val) : (fmt === '2' ? fmt2.format(val) : (fmt === 'pct' ? fmtPct.format(val) + '%' : String(val))));
             return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0">${out}</div></div></div>`;
         }
+
         function buildKPIs(containerId, meses, selection) {
             const box = el(containerId); if (!box) return; box.innerHTML = '';
             const rows = meses.map(m => aggMes(m, selection));
             const mens = sum(rows.map(r => r.mens));
-            const ali = sum(rows.map(r => r.ali));
+            const med = sum(rows.map(r => r.med));
             const margem = sum(rows.map(r => r.margem));
-            const pctAliPond = mens > 0 ? ali / mens * 100 : null;
+            const pctMedPond = mens > 0 ? med / mens * 100 : null;
             const pctMargemPond = mens > 0 ? margem / mens * 100 : null;
-            const pa = rows.map(r => r.pctAli).filter(x => x != null);
-            const pctAliAvg = pa.length ? pa.reduce((a, b) => a + b, 0) / pa.length : null;
-            const pctAliMax = pa.length ? Math.max(...pa) : null;
-            const pctAliMin = pa.length ? Math.min(...pa) : null;
+            const pm = rows.map(r => r.pctMed).filter(x => x != null);
+            const pctMedAvg = pm.length ? pm.reduce((a, b) => a + b, 0) / pm.length : null;
+            const pctMedMax = pm.length ? Math.max(...pm) : null;
+            const pctMedMin = pm.length ? Math.min(...pm) : null;
 
             box.insertAdjacentHTML('beforeend', kpiCard('Mensalidade total', mens, 'moeda'));
-            box.insertAdjacentHTML('beforeend', kpiCard('Alimentação total', ali, 'moeda'));
-            box.insertAdjacentHTML('beforeend', kpiCard('% Alimentação ponderado', pctAliPond, 'pct'));
-            box.insertAdjacentHTML('beforeend', kpiCard('% Alimentação média simples', pctAliAvg, 'pct'));
-            box.insertAdjacentHTML('beforeend', kpiCard('% Alimentação máximo', pctAliMax, 'pct'));
-            box.insertAdjacentHTML('beforeend', kpiCard('% Alimentação mínimo', pctAliMin, 'pct'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Médico total', med, 'moeda'));
+            box.insertAdjacentHTML('beforeend', kpiCard('% Médico ponderado', pctMedPond, 'pct'));
+            box.insertAdjacentHTML('beforeend', kpiCard('% Médico média simples', pctMedAvg, 'pct'));
+            box.insertAdjacentHTML('beforeend', kpiCard('% Médico máximo', pctMedMax, 'pct'));
+            box.insertAdjacentHTML('beforeend', kpiCard('% Médico mínimo', pctMedMin, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('Margem total aprox.', margem, 'moeda'));
             box.insertAdjacentHTML('beforeend', kpiCard('% Margem ponderada', pctMargemPond, 'pct'));
-        }
-
-        function mm3(arr) {
-            return arr.map((_, i) => { const s = arr.slice(Math.max(0, i - 2), i + 1).filter(v => v != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; });
         }
 
         function buildTable(meses, selection) {
             const tb = el('#tblBody'); if (!tb) return; tb.innerHTML = '';
             const map = new Map(); meses.forEach(m => map.set(m, aggMes(m, selection)));
-            const arrPct = meses.map(x => map.get(x)?.pctAli ?? null);
+            const arrPct = meses.map(x => map.get(x)?.pctMed ?? null);
             const arrMM3 = mm3(arrPct);
             meses.forEach((m, idx) => {
                 const r = map.get(m);
-                const pm = prevMonth(m), py = prevYear(m);
-                const rPrev = map.get(pm), rYoY = map.get(py);
-                const mom = (r?.pctAli != null && rPrev?.pctAli != null) ? (r.pctAli - rPrev.pctAli) : null;
-                const yoy = (r?.pctAli != null && rYoY?.pctAli != null) ? (r.pctAli - rYoY.pctAli) : null;
+                const rPrev = map.get(prevMonth(m));
+                const rYoY = map.get(prevYear(m));
+                const mom = (r?.pctMed != null && rPrev?.pctMed != null) ? (r.pctMed - rPrev.pctMed) : null;
+                const yoy = (r?.pctMed != null && rYoY?.pctMed != null) ? (r.pctMed - rYoY.pctMed) : null;
                 const mm3pct = arrMM3[idx];
                 tb.insertAdjacentHTML('beforeend', `
 <tr>
   <td>${mFmt(m)}</td>
   <td class="text-right">${fmtInt.format(r.mens)}</td>
-  <td class="text-right">${fmtInt.format(r.ali)}</td>
+  <td class="text-right">${fmtInt.format(r.med)}</td>
   <td class="text-right">${fmtInt.format(r.margem)}</td>
-  <td class="text-right">${r.pctAli == null ? '-' : fmtPct.format(r.pctAli) + '%'}</td>
+  <td class="text-right">${r.pctMed == null ? '-' : fmtPct.format(r.pctMed) + '%'}</td>
   <td class="text-right">${r.pctMargem == null ? '-' : fmtPct.format(r.pctMargem) + '%'}</td>
   <td class="text-right">${mom == null ? '-' : fmtPct.format(mom) + ' pp'}</td>
   <td class="text-right">${yoy == null ? '-' : fmtPct.format(yoy) + ' pp'}</td>
@@ -742,8 +736,7 @@
         }
 
         /* ==================== Gráficos ==================== */
-        let chPct, chValores, chStack, chYoYpp, chPctPosto, chParetoAli, chScatter;
-
+        let chPct, chValores, chStack, chYoYpp, chPctPosto, chParetoMed, chScatter;
         function initCharts() {
             const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
             chPct = new Chart(document.getElementById('chartPct'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
@@ -751,33 +744,25 @@
             chStack = new Chart(document.getElementById('chartStack'), { type: 'bar', data: { labels: [], datasets: [] }, options: { ...base, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } } });
             chYoYpp = new Chart(document.getElementById('chartYoYpp'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
             chPctPosto = new Chart(document.getElementById('chartPctPosto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
-            chParetoAli = new Chart(document.getElementById('chartParetoAli'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
-            chScatter = new Chart(document.getElementById('chartScatter'), { type: 'scatter', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Mensalidade' } }, y: { title: { display: true, text: '% Alimentação' } } } } });
+            chParetoMed = new Chart(document.getElementById('chartParetoMed'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+            chScatter = new Chart(document.getElementById('chartScatter'), { type: 'scatter', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Mensalidade' } }, y: { title: { display: true, text: '% Médico' } } } } });
         }
 
         function postoLabel(selection) { if (selection === 'ALL') return 'Todos'; const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos'; }
-
         function postoShares(meses, selection) {
-            const map = new Map();
-            meses.forEach(m => {
-                const row = porPosto[m] || {};
-                Object.keys(row).forEach(p => {
-                    if (selection !== 'ALL' && !selection.has(p)) return;
-                    map.set(p, (map.get(p) || 0) + num(row[p]?.alimentacao));
-                });
-            });
-            const entries = [...map.entries()].sort((a, b) => b[1] - a[1]);
+            const medMap = new Map();
+            meses.forEach(m => { const row = porPosto[m] || {}; Object.keys(row).forEach(p => { if (selection !== 'ALL' && !selection.has(p)) return; medMap.set(p, (medMap.get(p) || 0) + num(row[p]?.medico)); }); });
+            const entries = [...medMap.entries()].sort((a, b) => b[1] - a[1]);
             return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]) };
         }
-
         function avgPctByPosto(meses, selection) {
             const map = new Map();
             meses.forEach(m => {
                 const row = porPosto[m] || {};
                 Object.keys(row).forEach(p => {
                     if (selection !== 'ALL' && !selection.has(p)) return;
-                    const mens = num(row[p]?.mensalidade); const ali = num(row[p]?.alimentacao);
-                    if (mens > 0) { const o = map.get(p) || { sum: 0, cnt: 0 }; o.sum += (ali / mens * 100); o.cnt += 1; map.set(p, o); }
+                    const r = row[p]; const mens = num(r?.mensalidade); const med = num(r?.medico);
+                    if (mens > 0) { const o = map.get(p) || { sum: 0, cnt: 0 }; o.sum += (med / mens * 100); o.cnt += 1; map.set(p, o); }
                 });
             });
             const postos = [...map.keys()].sort();
@@ -789,20 +774,20 @@
             const tag = postoLabel(selection);
             const rows = meses.map(m => aggMes(m, selection));
 
-            const pct = rows.map(r => r.pctAli);
+            const pct = rows.map(r => r.pctMed);
             chPct.data.labels = labels;
-            chPct.data.datasets = [{ label: `% Alim/Mensalidade (${tag})`, data: pct, tension: .2 }, { label: 'Média móvel 3m', data: mm3(pct), tension: .2 }];
+            chPct.data.datasets = [{ label: `% Médico/Mensalidade (${tag})`, data: pct, tension: .2 }, { label: 'Média móvel 3m', data: mm3(pct), tension: .2 }];
             chPct.update();
 
             chValores.data.labels = labels;
-            chValores.data.datasets = [{ label: `Mensalidade (${tag})`, data: rows.map(r => r.mens), tension: .2 }, { label: 'Alimentação', data: rows.map(r => r.ali), tension: .2 }];
+            chValores.data.datasets = [{ label: `Mensalidade (${tag})`, data: rows.map(r => r.mens), tension: .2 }, { label: 'Médico', data: rows.map(r => r.med), tension: .2 }];
             chValores.update();
 
             chStack.data.labels = labels;
-            chStack.data.datasets = [{ label: 'Alimentação', data: rows.map(r => r.ali) }, { label: 'Margem aprox.', data: rows.map(r => r.margem) }];
+            chStack.data.datasets = [{ label: 'Médico', data: rows.map(r => r.med) }, { label: 'Margem aprox.', data: rows.map(r => r.margem) }];
             chStack.update();
 
-            const yoyPP = meses.map((m, i) => { const py = prevYear(m); const j = meses.indexOf(py); if (j < 0) return null; const a = rows[i].pctAli; const b = aggMes(py, selection).pctAli; return (a != null && b != null) ? a - b : null; });
+            const yoyPP = meses.map((m, i) => { const py = prevYear(m); const j = meses.indexOf(py); if (j < 0) return null; const a = rows[i].pctMed; const b = aggMes(py, selection).pctMed; return (a != null && b != null) ? a - b : null; });
             const colors = yoyPP.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)');
             const borders = yoyPP.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
             chYoYpp.data.labels = labels;
@@ -810,23 +795,27 @@
             chYoYpp.update();
 
             const share = postoShares(meses, selection);
-            chParetoAli.data.labels = share.labels;
-            chParetoAli.data.datasets = [{ label: 'Custo Alimentação no período', data: share.valores }];
-            chParetoAli.update();
+            chParetoMed.data.labels = share.labels;
+            chParetoMed.data.datasets = [{ label: 'Custo Médico no período', data: share.valores }];
+            chParetoMed.update();
 
             const ap = avgPctByPosto(meses, selection);
             chPctPosto.data.labels = ap.labels;
             chPctPosto.data.datasets = [{ label: '% médio (12m)', data: ap.valores }];
             chPctPosto.update();
 
-            chScatter.data.datasets = [{ label: 'Meses', data: rows.map(r => ({ x: r.mens, y: r.pctAli })) }];
+            chScatter.data.datasets = [{ label: 'Meses', data: rows.map(r => ({ x: r.mens, y: r.pctMed })) }];
             chScatter.update();
 
             buildHeatmap(meses, selection);
         }
 
         /* ==================== Heatmap ==================== */
-        function pctFor(ym, p) { const row = porPosto[ym]?.[p]; if (!row) return null; const mens = num(row.mensalidade), ali = num(row.alimentacao); return mens > 0 ? ali / mens * 100 : null; }
+        function pctFor(ym, p) {
+            const row = porPosto[ym]?.[p]; if (!row) return null;
+            const mens = num(row.mensalidade), med = num(row.medico);
+            return mens > 0 ? med / mens * 100 : null;
+        }
         function buildHeatmap(meses, selection) {
             const box = el('#heatmapBox'); if (!box) return; box.innerHTML = '';
             const postos = selection === 'ALL' ? POSTOS : [...selection].sort(); if (!postos.length) return;
@@ -884,23 +873,24 @@
         function seriesBasicas(meses, selection) {
             const labs = meses.slice();
             const mens = labs.map(m => aggMes(m, selection).mens);
-            const ali = labs.map(m => aggMes(m, selection).ali);
-            const pct = labs.map(m => aggMes(m, selection).pctAli);
-            return { labels: labs, mensalidade: mens, alimentacao: ali, pct_ali: pct };
+            const med = labs.map(m => aggMes(m, selection).med);
+            const pct = labs.map(m => aggMes(m, selection).pctMed);
+            return { labels: labs, mensalidade: mens, medico: med, pct_med: pct };
         }
         function defs() {
             return {
-                pct_ali: '% da mensalidade consumido por custo alimentação',
-                margem: 'mensalidade - alimentação',
+                pct_med: '% da mensalidade consumido por custo médico',
+                margem: 'mensalidade - médico',
                 yoy_pp: 'diferença em pontos percentuais vs mesmo mês do ano anterior'
             };
         }
+
         const IA_STATE = { auto: false };
 
         async function iaFetch(payload) {
             if (IS_LOCAL) {
                 try {
-                    const f = `${payload.blocks[0]?.periodo?.from || 'from'}_${payload.blocks[0]?.periodo?.to || 'to'}_${(payload.blocks[0]?.posto || 'ALL')}_custo_alimentacao.json`;
+                    const f = `${payload.blocks[0]?.periodo?.from || 'from'}_${payload.blocks[0]?.periodo?.to || 'to'}_${(payload.blocks[0]?.posto || 'ALL')}_custo_medico.json`;
                     const url = `${IA_BASE}/${f}?t=${Date.now()}`;
                     const r = await fetch(url, { cache: 'no-store' }); if (r.ok) return r.json();
                 } catch { }
@@ -910,6 +900,7 @@
             if (!r.ok) { let errText = ''; try { errText = await r.text(); } catch { } throw new Error(`HTTP ${r.status} em ${API_ANALISAR} — ${errText}`); }
             return r.json();
         }
+
         function toHtml(obj) {
             if (typeof obj === 'string') return `<p>${obj}</p>`;
             if (obj?.html) return obj.html;
@@ -920,31 +911,33 @@
             if (Array.isArray(obj?.alertas) && obj.alertas.length) parts.push(`<h5><b>Alertas</b></h5><ul>${obj.alertas.map(x => `<li>${x}</li>`).join('')}</ul>`);
             return parts.join('') || '<p>Sem conteúdo.</p>';
         }
+
         async function IA_send() {
             const panel = el('#iaPanel'); if (!panel) return;
             panel.style.display = 'block';
-            const outBox = el('#iaOut') || panel; startDots(outBox);
+            const outBox = el('#iaOut') || panel;
+            startDots(outBox);
             try {
                 const meses = mesesSel2(); if (!meses.length) throw new Error('Seleção vazia.');
                 const s = seriesBasicas(meses, sel2);
                 const payload = {
-                    produto: 'custo_alimentacao',
+                    produto: 'custo_medico',
                     when: Date.now(),
                     query: null,
                     contexto: 'graficos',
                     prefs: { output: 'livre', assertivo: true },
                     defs: defs(),
                     blocks: [
-                        { scope: 'chart_pct', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, pct_ali: s.pct_ali } },
-                        { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, mensalidade: s.mensalidade, alimentacao: s.alimentacao } },
-                        { scope: 'chart_stack', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, alimentacao: s.alimentacao } }
+                        { scope: 'chart_pct', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, pct_med: s.pct_med } },
+                        { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, mensalidade: s.mensalidade, medico: s.medico } },
+                        { scope: 'chart_stack', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, medico: s.medico } }
                     ]
                 };
 
-                // ===== Integração Prompt Manager =====
+                // ===== Prompt dinâmico (usa Prompt Manager) =====
                 const scopes = payload.blocks.map(b => b.scope).join(', ');
                 const renderedPrompt = Prompts.render({
-                    produto: 'custo_alimentacao',
+                    produto: 'custo_medico',
                     from: meses[0],
                     to: meses.at(-1),
                     posto: postoAtual(),
@@ -962,44 +955,22 @@
             }
         }
 
-        /* ==================== Renders e handlers ==================== */
-        function renderSel1() { const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null); buildKPIs('#kpisSel1', meses, sel1); }
-        function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
-
-        function attachHandlers(lastFull) {
-            const btnCmp = el('#btnComparar');
-            if (btnCmp) btnCmp.addEventListener('click', () => {
-                const box = el('#compareBlock'); if (!box) return;
-                const show = (box.style.display === 'none' || box.style.display === '');
-                box.style.display = show ? 'block' : 'none';
-                setPressed(btnCmp, show, 'secondary');
-            });
-
-            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
-            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
-            if (el('#reset2')) el('#reset2').addEventListener('click', () => {
-                const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
-                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL';
-                markActiveMulti('#postoTabs2', sel2); renderSel2(); if (IA_STATE.auto) IA_send();
-            });
-
-            const btnIA = el('#iaAuto');
-            if (btnIA) btnIA.addEventListener('click', () => {
-                IA_STATE.auto = !IA_STATE.auto;
-                setPressed(btnIA, IA_STATE.auto, 'primary');
-                const panel = el('#iaPanel'); if (!panel) return;
-                if (IA_STATE.auto) { panel.style.display = 'block'; IA_send(); }
-                else { const out = el('#iaOut'); if (out) out.innerHTML = ''; panel.style.display = 'none'; }
-            });
+        /* ==================== Header "dados gerados em" ==================== */
+        function setJsonInfoFromHeaders(resp) {
+            try {
+                const lm = resp.headers.get('Last-Modified'); if (!lm) return;
+                const dt = new Date(lm);
+                const txt = dt.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+                const elInfo = document.querySelector('#jsonInfo'); if (elInfo) elInfo.textContent = `• dados gerados em ${txt}`;
+            } catch { }
         }
 
         /* ==================== Boot ==================== */
-
-        // Inicia Prompt Manager para ESTA página
+        // Inicia Prompt Manager para esta página
         Prompts.init({
-            pageId: 'alimentacao',
+            pageId: 'medicos',
             defaults: [
-                { name: 'Padrão', template: `Analise %Alimentação sobre Mensalidade, composição e ΔYoY pp para {posto} de {from} a {to}. Foque nos gráficos {scopes}. Liste até 5 insights e 3 alertas. Tom assertivo.` },
+                { name: 'Padrão', template: `Analise %Médico sobre Mensalidade, composição e ΔYoY pp para {posto} de {from} a {to}. Foque nos gráficos {scopes}. Liste até 5 insights e 3 alertas. Tom assertivo.` },
                 { name: 'Executivo', template: `Resumo executivo para {produto} no período {from}→{to}, posto {posto}. Destaque riscos e oportunidades. Cite {scopes}. Texto conciso.` }
             ],
             mountAfter: '#iaAuto'
@@ -1008,11 +979,9 @@
         Promise.all([fetch(URL_POR_POSTO, { cache: 'no-store' })])
             .then(async ([rp]) => {
                 if (!rp.ok) throw new Error(`HTTP ${rp.status} em ${URL_POR_POSTO}`);
-
-                const gotP = setJsonInfoFromHeaders(rp, 'postos', 'consolidado_mensal_por_posto.json');
-                if (!gotP) tryHead(URL_POR_POSTO, 'postos', 'consolidado_mensal_por_posto.json');
-
+                setJsonInfoFromHeaders(rp);
                 porPosto = await rp.json();
+
                 MESES = Object.keys(porPosto).filter(k => !k.startsWith('_')).sort();
                 if (!MESES.length) throw new Error('JSON por posto sem meses.');
                 const lastFull = lastCompleteMonth(MESES);
@@ -1042,8 +1011,47 @@
                 if (el('#btnComparar')) setPressed(el('#btnComparar'), false, 'secondary');
             })
             .catch(err => { showErr(err); alert('Falha ao carregar JSONs. Veja o console.'); });
-    </script>
 
+        /* ==================== Handlers ==================== */
+        function renderSel1() { const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null); buildKPIs('#kpisSel1', meses, sel1); }
+        function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
+
+        function attachHandlers(lastFull) {
+            // Dataset
+            if (el('#from1')) el('#from1').addEventListener('change', () => { renderSel1(); });
+            if (el('#to1')) el('#to1').addEventListener('change', () => { renderSel1(); });
+            if (el('#reset1')) el('#reset1').addEventListener('click', () => {
+                el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1();
+            });
+
+            // 12 meses
+            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
+            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
+            if (el('#reset2')) el('#reset2').addEventListener('click', () => {
+                const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
+                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL';
+                markActiveMulti('#postoTabs2', sel2); renderSel2(); if (IA_STATE.auto) IA_send();
+            });
+
+            // Comparar
+            const btnCmp = el('#btnComparar');
+            if (btnCmp) btnCmp.addEventListener('click', () => {
+                const b = el('#compareBlock'); if (!b) return;
+                const show = (b.style.display === 'none' || b.style.display === '');
+                b.style.display = show ? 'block' : 'none';
+                setPressed(btnCmp, show, 'secondary');
+            });
+
+            // IA Auto
+            const btnIA = el('#iaAuto');
+            if (btnIA) btnIA.addEventListener('click', () => {
+                IA_STATE.auto = !IA_STATE.auto;
+                setPressed(btnIA, IA_STATE.auto, 'primary');
+                const panel = el('#iaPanel'); if (!panel) return;
+                if (IA_STATE.auto) { panel.style.display = 'block'; IA_send(); } else { const out = el('#iaOut'); if (out) out.innerHTML = ''; panel.style.display = 'none'; }
+            });
+        }
+    </script>
 </body>
 
 </html>
