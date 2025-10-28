@@ -2,6 +2,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 import json, os, threading
+from fastapi import FastAPI
+from admin_htpasswd import router as users_router
+
+app = FastAPI(title="Users API")
+app.include_router(users_router, prefix="/users-api")
 
 DATA_PATH = "/var/lib/users_api/users.json"
 _lock = threading.Lock()
