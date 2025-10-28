@@ -174,17 +174,30 @@
             }
 
 
-            /* MOBILE ADJUST NA UNHA :)*/
-
-
-            /* @media(max-width:576px) {
-            .chart-card .card-body {
-                height: 260px
-            }
-         */
         }
 
+        .lg-box {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 4px;
+            vertical-align: middle
+        }
 
+        .lg-pos {
+            background: #36A2EB
+        }
+
+        /* azul do gráfico */
+        .lg-neg {
+            background: #DC3545
+        }
+
+        /* vermelho do gráfico */
+
+
+
+        /* MOBILE ADJUST NA UNHA :)*/
 
         /* MOBILE ADJUST NA UNHA :)*/
 
@@ -215,6 +228,18 @@
                 margin-left: 0;
                 margin-top: 4px;
             }
+
+            @media (max-width:576px) {
+                .month-inputs {
+                    flex-wrap: wrap
+                }
+
+                .month-inputs .btn {
+                    flex: 0 0 100%
+                }
+            }
+
+
         }
     </style>
 </head>
@@ -228,10 +253,10 @@
                     <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
                 </li>
             </ul>
-            <span class="ml-2 font-weight-bold">
+            <span class="ml-2 font-weight-bold d-flex align-items-center">
                 <img src="/images/Logo Camim-01_50px.png" alt="Logo Camim">
-                Quem tem saúde é mais feliz!
-                <span id="jsonInfo" class="ml-2 text-muted mini"></span>
+                <span class="ml-2">Quem tem saúde é mais feliz!</span>
+                <span id="jsonInfo" class="ml-3 text-muted mini"></span>
             </span>
         </nav>
 
@@ -303,7 +328,7 @@
                     <div class="card">
                         <div class="filter-bar">
                             <div>
-                                <label class="mb-0 small d-block">Período (dataset)</label>
+                                <label class="mb-0 small d-block">Selecione o Período - KPIs Comparação</label>
                                 <div class="month-inputs">
                                     <input id="from1" type="month" class="form-control form-control-sm" />
                                     <input id="to1" type="month" class="form-control form-control-sm" />
@@ -319,7 +344,7 @@
 
                     <div class="card">
                         <div class="card-header d-flex align-items-center justify-content-between">
-                            <h3 class="card-title mb-0">KPIs da seleção do dataset</h3>
+                            <h3 class="card-title mb-0">KPIs de Comparação</h3>
                         </div>
                         <div class="card-body kpi" id="kpisSel1"></div>
                     </div>
@@ -329,7 +354,7 @@
                 <div class="card">
                     <div class="filter-bar">
                         <div>
-                            <label class="mb-0 small d-block">Período (últimos 12 meses)</label>
+                            <label class="mb-0 small d-block">Selecione o Período - KPIs Mensalidades</label>
                             <div class="month-inputs">
                                 <input id="from2" type="month" class="form-control form-control-sm" />
                                 <input id="to2" type="month" class="form-control form-control-sm" />
@@ -345,7 +370,7 @@
 
                 <div class="card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">KPIs da seleção 12 meses</h3>
+                        <h3 class="card-title mb-0">KPIs Mensalidades</h3>
                     </div>
                     <div class="card-body kpi" id="kpisSel2"></div>
                 </div>
@@ -359,7 +384,7 @@
                 <!-- TABELA -->
                 <div class="card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Dados do Período Selecionado (12 meses)</h3>
+                        <h3 class="card-title mb-0">KPIs do período</h3>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -404,7 +429,12 @@
                 </div>
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Performance mensal</h3>
+                        <h3 class="card-title mb-0">Performance mensal<div id="legend-yoy" class="mini muted">
+                                <span class="lg-box lg-pos"></span> Positivo
+                                &nbsp;&nbsp;
+                                <span class="lg-box lg-neg"></span> Negativo
+                            </div>
+                        </h3>
                     </div>
                     <div class="card-body"><canvas id="chartPerf"></canvas></div>
                 </div>
@@ -416,7 +446,12 @@
                 </div>
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Receita YoY (%)</h3>
+                        <h3 class="card-title mb-0">Receita YoY (%)<div id="legend-yoy" class="mini muted">
+                                <span class="lg-box lg-pos"></span> Positivo
+                                &nbsp;&nbsp;
+                                <span class="lg-box lg-neg"></span> Negativo
+                            </div>
+                        </h3>
                     </div>
                     <div class="card-body"><canvas id="chartYoY"></canvas></div>
                 </div>
@@ -442,7 +477,12 @@
                 </div>
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">YoY médio por Posto (12m)</h3>
+                        <h3 class="card-title mb-0">YoY médio por Posto (12m) <div id="legend-yoy" class="mini muted">
+                                <span class="lg-box lg-pos"></span> Positivo
+                                &nbsp;&nbsp;
+                                <span class="lg-box lg-neg"></span> Negativo
+                            </div>
+                        </h3>
                     </div>
                     <div class="card-body"><canvas id="chartYoYPosto"></canvas></div>
                 </div>

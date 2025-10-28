@@ -204,6 +204,25 @@
             color: #111
         }
 
+        .lg-box {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 4px;
+            vertical-align: middle
+        }
+
+        .lg-pos {
+            background: #36A2EB
+        }
+
+        /* azul do gráfico */
+        .lg-neg {
+            background: #DC3545
+        }
+
+        /* vermelho do gráfico */
+
 
         /* MOBILE ADJUST NA UNHA :)*/
 
@@ -234,6 +253,18 @@
                 margin-left: 0;
                 margin-top: 4px;
             }
+
+            @media (max-width:576px) {
+                .month-inputs {
+                    flex-wrap: wrap
+                }
+
+                .month-inputs .btn {
+                    flex: 0 0 100%
+                }
+            }
+
+
         }
     </style>
 </head>
@@ -314,7 +345,7 @@
                     <div class="card">
                         <div class="filter-bar">
                             <div>
-                                <label class="mb-0 small d-block">Período (dataset)</label>
+                                <label class="mb-0 small d-block">Selecione o Período - KPIs Comparação</label>
                                 <div class="month-inputs">
                                     <input id="from1" type="month" class="form-control form-control-sm" />
                                     <input id="to1" type="month" class="form-control form-control-sm" />
@@ -330,7 +361,7 @@
 
                     <div class="card">
                         <div class="card-header d-flex align-items-center justify-content-between">
-                            <h3 class="card-title mb-0">KPIs da seleção do dataset</h3>
+                            <h3 class="card-title mb-0">KPIs Comparação</h3>
                         </div>
                         <div class="card-body kpi" id="kpisSel1"></div>
                     </div>
@@ -340,7 +371,7 @@
                 <div class="card">
                     <div class="filter-bar">
                         <div>
-                            <label class="mb-0 small d-block">Período (últimos 12 meses)</label>
+                            <label class="mb-0 small d-block">Selecione o Período - KPIs de Alimentação</label>
                             <div class="month-inputs">
                                 <input id="from2" type="month" class="form-control form-control-sm" />
                                 <input id="to2" type="month" class="form-control form-control-sm" />
@@ -356,7 +387,7 @@
 
                 <div class="card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">KPIs da seleção 12 meses</h3>
+                        <h3 class="card-title mb-0">KPIs Alimentação</h3>
                     </div>
                     <div class="card-body kpi" id="kpisSel2"></div>
                 </div>
@@ -418,7 +449,13 @@
 
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Variação YoY de % Alimentação (p.p.)</h3>
+                        <h3 class="card-title mb-0">Variação YoY de % Alimentação (p.p.) <div id="legend-yoy"
+                                class="mini muted">
+                                <span class="lg-box lg-pos"></span> Positivo
+                                &nbsp;&nbsp;
+                                <span class="lg-box lg-neg"></span> Negativo
+                            </div>
+                        </h3>
                     </div>
                     <div class="card-body"><canvas id="chartYoYpp"></canvas></div>
                 </div>
