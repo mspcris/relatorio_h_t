@@ -141,6 +141,47 @@
                 animation: none !important;
             }
         }
+
+        /* reserva espaço fixo p/ a barra e evita sobreposição */
+        .menu-nav {
+            overflow-y: auto;
+            scrollbar-gutter: stable both-edges;
+            padding-right: 12px;
+        }
+
+        /* impede scroll no wrapper externo */
+        .menu-drawer {
+            overflow: hidden;
+        }
+
+        /* compensa qualquer sobra */
+        .menu-list {
+            padding-right: 4px;
+        }
+
+        .menu-list form {
+            margin: 0;
+        }
+
+        .menu-list form .menu-link {
+            display: block;
+            width: 100%;
+            text-align: left;
+        }
+
+        /* < !-- Ajustes mínimos para alinhamento se necessário -->*/
+        .menu-link {
+            display: flex;
+            align-items: center;
+            gap: .6rem
+        }
+
+        .menu-link i {
+            width: 1.25em;
+            text-align: center;
+            font-size: 1rem;
+            opacity: .95
+        }
     </style>
 
 
@@ -165,60 +206,78 @@
         </svg>
     </button>
 
+
+
+
+
+
+
+
+
+
     <!-- Fundo escuro atrás do menu -->
     <div id="drawerOverlay" class="menu-overlay" hidden></div>
-
     <!-- O menu lateral -->
     <aside id="app-drawer" class="menu-drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
-        <div class="menu-splash"> </div> <!--pré-carregador-->
+        <div class="menu-splash">&nbsp;</div>
         <header class="drawer-header">
             <img src="/images/Logo Camim-01_50px.png" alt="Logo Camim">
-            <h2 id="drawerTitle"> </h2>
+            <h2 id="drawerTitle">&nbsp;</h2>
             <button id="drawerClose" class="menu-icon-btn" aria-label="Fechar menu">✖</button>
         </header>
+        <!-- MENU LATERAL -->
         <nav class="menu-nav" aria-label="Menu principal">
-
             <ul class="menu-list">
-                <li><a class="menu-link" href="/index.html">🏠 Início</a></li>
-                <li><a class="menu-link" href="#">🏛️Governança</a></li>
-                <li><a class="menu-link" href="/kpi_home.html">📊 KPIs e performance</a></li>
-                <li><a class="menu-link" href="/trello_harvest.html">😡 Harvest</a></li>
-                <!-- <li class="menu-group">
-                    <button class="menu-accordion" aria-controls="grp-kpi" aria-expanded="false">
-                        📊 KPIs e performance</button>
-                    <ul id="grp-kpi" class="menu-sublist">
-                        <li><a class="menu-sublink" href="/templates/kpi_mensalidades.html">Mensalidades</a></li>
-                        <li><a class="menu-sublink" href="/templates/medicos.html">Custo Médico x Mens</a></li>
-                        <li><a class="menu-sublink" href="/templates/alimentacao.html">Custo Alim x Mens</a>
-                        </li>
-                    </ul> -->
-                <li><a class="menu-link" href="#">🧭 Direção e estratégia</a></li>
-                <li><a class="menu-link" href="#">🛡️Compliance e riscos</a></li>
                 <li>
-                    <form method="POST" action="/session/logout" style="display:inline">
-                        <button type="submit" class="menu-link"
-                            style="background:none;border:0;padding:0;cursor:pointer">🚪 Sair</button>
-
-
-
-
+                    <a class="menu-link" href="/index.html">
+                        <i class="fas fa-home"></i>
+                        <span>Início</span>
+                    </a>
                 </li>
-                </form>
+                <li>
+                    <a class="menu-link" href="/kpi_home.html">
+                        <i class="nav-icon fas fa-chart-line"></i>
+                        <span>KPIs</span>
+                    </a>
                 </li>
-
-
+                <li>
+                    <a class="menu-link" href="/trello_harvest.html">
+                        <i class="fab fa-trello" style="color:#0079bf"></i>
+                        <span>Harvest / Trello</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-link" href="#" id="btnLogout">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Sair</span>
+                    </a>
+                </li>
             </ul>
         </nav>
-
-
-
-
-
-        <!-- <div class="menu-splash">Carregando</div> Splash central -->
-        <div class="menu-brand"> 
-        </div> <!-- Marca fixa abaixo do header -->
-
+        <div class="menu-brand">&nbsp;</div>
     </aside>
+    <script>
+        document.getElementById('btnLogout')?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            try { await fetch('/session/logout', { method: 'POST', credentials: 'include' }); } catch (_) { }
+            location.href = '/login.html';
+        });
+    </script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

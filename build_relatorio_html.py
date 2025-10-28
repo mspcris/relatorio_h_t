@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Relatório HTML consolidando Trello + Harvest com layout novo.
-- Trello: lê a última subpasta export_trello/export_YYYYMMDD_HHMMSS
-- Harvest: lê o CSV mais recente em export_harvest/
-- Saída: relatorio/relatorio_YYYYMMDD_HHMMSS.html
-         templates/trello_harvest.html (sempre sobrescrito)
+Gera relatório HTML consolidando Trello + Harvest.
+- Trello: última subpasta em export_trello/export_YYYYMMDD_HHMMSS com cards.csv
+- Harvest: CSV mais recente em export_harvest/
+- Saída:
+  relatorio/relatorio_YYYYMMDD_HHMMSS.html
+  trello_harvest.html  (sempre sobrescrito)
 """
+from __future__ import annotations
+
 from pathlib import Path
 from datetime import datetime
 import argparse
 import pandas as pd
 import re
 from typing import Iterable
+from string import Template
 
 # -------------------- utils --------------------
-def read_csv_safe(p: Path):
+def read_csv_safe(p: Path | None):
     if not p or not p.exists():
         return None
     try:
@@ -39,11 +43,14 @@ def latest_trello_dir(root: Path) -> Path | None:
 
 def df_to_html_table(df: pd.DataFrame | None, table_id: str, raw_html_cols: set[str] | None = None) -> str:
     if df is None or df.empty:
-        return """
+        return f"""
         <div class="table-wrap">
-          <input class="filter" placeholder="Filtrar nesta tabela..." oninput="filterTable('{tid}', this.value)"/>
-          <table id="{tid}" class="data"><thead><tr><th>Sem dados</th></tr></thead><tbody><tr><td class="empty">Sem dados.</td></tr></tbody></table>
-        </div>""".replace("{tid}", table_id)
+          <input class="filter" placeholder="Filtrar nesta tabela..." oninput="filterTable('{table_id}', this.value)"/>
+          <table id="{table_id}" class="data">
+            <thead><tr><th>Sem dados</th></tr></thead>
+            <tbody><tr><td class="empty">Sem dados.</td></tr></tbody>
+          </table>
+        </div>"""
 
     raw_html_cols = raw_html_cols or set()
     df = df.fillna("")
@@ -63,8 +70,7 @@ def df_to_html_table(df: pd.DataFrame | None, table_id: str, raw_html_cols: set[
     for _, r in safe.iterrows():
         tds = []
         for c in safe.columns:
-            val = r[c]
-            tds.append(f"<td>{val}</td>")
+            tds.append(f"<td>{r[c]}</td>")
         rows_html.append("<tr>" + "".join(tds) + "</tr>")
     rows = "\n".join(rows_html)
 
@@ -87,14 +93,12 @@ def fmt_hours_hhmm(x):
         return str(x)
 
 def pick_username_column(df: pd.DataFrame) -> str | None:
-    """Seleciona a coluna com NOME do usuário e assegura o rótulo 'user.name'."""
     if df is None or df.empty:
         return None
     if "user.name" in df.columns:
         return "user.name"
     candidates = [
-        c
-        for c in df.columns
+        c for c in df.columns
         if re.search(r"^(user(\.name)?|username|usuario|colaborador|user[_ ]?name|nome[_ ]?usuario)$", c, re.I)
     ]
     best = None
@@ -102,7 +106,7 @@ def pick_username_column(df: pd.DataFrame) -> str | None:
     for c in candidates:
         s = df[c].astype(str)
         letters = s.str.contains(r"[A-Za-zÀ-ú]", regex=True, na=False).mean()
-        bonus = 0.1 if c.lower() in ("username",) else 0.0
+        bonus = 0.1 if c.lower() == "username" else 0.0
         score = letters + bonus
         if score > best_score:
             best_score, best = score, c
@@ -112,7 +116,6 @@ def pick_username_column(df: pd.DataFrame) -> str | None:
     return None
 
 def sort_by_recent(df: pd.DataFrame | None, cand_cols: Iterable[str]) -> pd.DataFrame | None:
-    """Coage colunas candidatas para datetime e ordena DESC pela primeira com dados."""
     if df is None or df.empty:
         return df
     cols = [c for c in cand_cols if c in df.columns]
@@ -123,143 +126,8 @@ def sort_by_recent(df: pd.DataFrame | None, cand_cols: Iterable[str]) -> pd.Data
     key = next((c for c in cols if df[c].notna().any()), cols[0])
     return df.sort_values(key, ascending=False, na_position="last").reset_index(drop=True)
 
-# -------------------- app --------------------
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default=".", help="raiz do projeto")
-    ap.add_argument("--outdir", default="relatorio", help="pasta de saída para o HTML")
-    args = ap.parse_args()
-
-    root = Path(args.root).resolve()
-    outdir = (root / args.outdir).resolve()
-    outdir.mkdir(parents=True, exist_ok=True)
-    templates_dir = (root / "templates").resolve()
-    templates_dir.mkdir(parents=True, exist_ok=True)
-
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_html = outdir / f"relatorio_{stamp}.html"
-    out_index = root / "trello_harvest.html"  # sempre sobrescrever
-
-    # --- fontes ---
-    trello_dir = latest_trello_dir(root)
-    hv_csv = latest_harvest_csv(root)
-
-    # Trello
-    board      = read_csv_safe(trello_dir / "board.csv")       if trello_dir else None
-    lists      = read_csv_safe(trello_dir / "lists.csv")       if trello_dir else None
-    members    = read_csv_safe(trello_dir / "members.csv")     if trello_dir else None
-    labels     = read_csv_safe(trello_dir / "labels.csv")      if trello_dir else None
-    cards      = read_csv_safe(trello_dir / "cards.csv")       if trello_dir else None
-    checklists = read_csv_safe(trello_dir / "checklists.csv")  if trello_dir else None
-    atts       = read_csv_safe(trello_dir / "attachments.csv") if trello_dir else None
-
-    # enriquecer e ordenar cards por data desc
-    if cards is not None and not cards.empty:
-        if lists is not None and not lists.empty:
-            lists_map = dict(zip(lists.get("id", []), lists.get("name", [])))
-            if "idList" in cards.columns and "list" not in cards.columns:
-                cards["list"] = cards["idList"].map(lists_map).fillna("")
-        # sort robusto
-        cards = sort_by_recent(
-            cards,
-            cand_cols=("updated", "date", "dateLastActivity", "last_activity", "due", "start", "created", "created_at"),
-        )
-
-        # colunas mostradas no HTML novo (ajuste conforme necessário)
-        wanted_cols = ["name", "list", "url", "closed", "updated", "desc"]
-        rename_map = {"name": "card"}
-        # criar colunas ausentes
-        for c in wanted_cols:
-            if c not in cards.columns:
-                cards[c] = ""
-        cards = cards[wanted_cols].rename(columns=rename_map)
-
-        # link clicável
-        if "url" in cards.columns:
-            cards["url"] = cards["url"].astype(str).apply(
-                lambda u: f'<a href="{u}" target="_blank" rel="noopener">abrir</a>' if u else ""
-            )
-
-    # --- Harvest ---
-    harvest_raw = read_csv_safe(hv_csv) if hv_csv else None
-    harvest_display = None
-    pivots = {}
-
-    if harvest_raw is not None and not harvest_raw.empty:
-        # Canonizar nomes sem duplicar
-        ren, seen = {}, set()
-        for c in harvest_raw.columns:
-            lc = c.lower()
-            target = None
-            if lc in ("spent_date", "data", "date"): target = "date"
-            elif ("project" in lc and "id" not in lc): target = "project"
-            elif ("client"  in lc and "id" not in lc): target = "client"
-            elif ("task"    in lc and "id" not in lc): target = "task"
-            elif ("hours" in lc or "hour" in lc):      target = "hours"
-            elif ("notes" in lc or "descri" in lc):    target = "notes"
-            elif lc in ("user", "user.name", "username", "user name"): target = None  # será tratado por pick_username_column
-            if target and target not in seen:
-                ren[c] = target
-                seen.add(target)
-        harvest = harvest_raw.rename(columns=ren)
-        harvest = harvest.loc[:, ~harvest.columns.duplicated()]
-
-        # Normalizar e ordenar por data DESC
-        harvest = sort_by_recent(
-            harvest,
-            cand_cols=("updated_at", "created_at", "date", "spent_date"),
-        )
-
-        # Selecionar/forçar coluna de nome -> 'user.name'
-        user_col = pick_username_column(harvest)
-
-        # Tipos
-        if "hours" in harvest.columns:
-            harvest["hours"] = pd.to_numeric(harvest["hours"], errors="coerce")
-
-        # Pivôs
-        if {"client", "project", "hours"} <= set(harvest.columns):
-            pivots["by_client"] = (
-                harvest.groupby("client", dropna=False)["hours"]
-                .sum().reset_index().sort_values("hours", ascending=False)
-            )
-            pivots["by_project"] = (
-                harvest.groupby(["client", "project"], dropna=False)["hours"]
-                .sum().reset_index().sort_values(["client", "hours"], ascending=[True, False])
-            )
-        if (user_col or "user.name" in harvest.columns) and "hours" in harvest.columns:
-            # garantir presença
-            if "user.name" not in harvest.columns and user_col:
-                harvest.rename(columns={user_col: "user.name"}, inplace=True)
-            pivots["by_user"] = (
-                harvest.groupby("user.name", dropna=False)["hours"]
-                .sum().reset_index().sort_values("hours", ascending=False)
-            )
-
-        # Grid de entradas preservando a ordem já DESC
-        harvest_display = harvest.copy()
-        cols_drop = ["client.id", "billable", "is_locked", "user", "project.id", "task.id"]
-        harvest_display.drop(columns=[c for c in cols_drop if c in harvest_display.columns],
-                             inplace=True, errors="ignore")
-        # garantir colunas exibidas no HTML novo
-        wanted_h_cols = ["id", "date", "hours", "notes", "user.id", "user.name", "project", "task", "created_at", "updated_at"]
-        for c in wanted_h_cols:
-            if c not in harvest_display.columns:
-                harvest_display[c] = ""
-        harvest_display = harvest_display[wanted_h_cols]
-
-        if "hours" in harvest_display.columns:
-            harvest_display["hours"] = harvest_display["hours"].apply(fmt_hours_hhmm)
-        for k, dfp in list(pivots.items()):
-            if dfp is not None and not dfp.empty and "hours" in dfp.columns:
-                dfp["hours"] = dfp["hours"].apply(fmt_hours_hhmm)
-
-    # --- HTML ---
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    trello_hint = trello_dir.name if trello_dir else "não encontrado"
-    harvest_hint = hv_csv.name if hv_csv else "não encontrado"
-
-    html = f"""<!DOCTYPE html>
+# -------------------- template --------------------
+HTML_TMPL = Template(r"""<!DOCTYPE html>
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
@@ -276,49 +144,55 @@ def main():
   <script src="../js/overlay.js" defer></script>
   <link rel="stylesheet" href="../css/style.css?v=5">
   <style>
-    #overlay {{ position: fixed; inset: 0; background: rgba(255,255,255,0.2); backdrop-filter: blur(12px); display:flex; justify-content:center; align-items:center; z-index:9999; opacity:1; visibility:visible; transition:opacity 1s ease, visibility 0s linear; }}
-    #overlay.fade-out {{ opacity:0; visibility:hidden; transition:opacity 1s ease, visibility 0s linear 1s; }}
-    h1, h2, h3 {{ margin:16px 0 8px; }}
-    p {{ margin:8px 0 16px; }}
-    ul {{ margin:0 0 16px 20px; }}
-    code, pre {{ background:#f6f8fa; border:1px solid #eaecef; border-radius:6px; }}
-    pre {{ padding:12px; overflow:auto; }}
-    .kpi {{ display:grid; grid-template-columns:repeat(4, minmax(180px,1fr)); gap:12px; margin:16px 0; }}
-    .card {{ border:1px solid #e5e7eb; border-radius:8px; padding:12px; }}
-    .muted {{ color:#555; }}
-    table {{ width:100%; border-collapse:collapse; margin:12px 0 16px; }}
-    th, td {{ border:1px solid #e5e7eb; padding:8px 10px; text-align:left; }}
-    th {{ background:#fafafa; }}
-    small {{ color:#666; }}
-    .header2 {{ display:flex; gap:12px; padding:14px 16px; border-bottom:1px solid #ffffff1a; position:sticky; top:0; background:var(--cor4); align-items:center; justify-content:space-between }}
-    .h12 {{ color:var(--cor0); }}
-    .badge2 {{ color:var(--muted); padding:4px 8px; border-radius:999px; font-size:12px }}
-    .link-btn2 {{ border:1px solid #ffffff22; background:#ffffff10; color:#fff; padding:8px 12px; border-radius:10px; text-decoration:none; font-weight:700 }}
-    .link-btn2:hover {{ background:#ffffff20 }}
-    .right2 {{ display:flex; gap:8px; align-items:center }}
-    .table-wrap {{ margin-top:8px; overflow:auto }}
-    .filter {{ width:100%; padding:8px; border-radius:8px; border:1px solid #e5e7eb; }}
-    .empty {{ color:#666; font-style:italic }}
+    #overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.2); backdrop-filter: blur(12px); display:flex; justify-content:center; align-items:center; z-index:9999; opacity:1; visibility:visible; transition:opacity 1s ease, visibility 0s linear; }
+    #overlay.fade-out { opacity:0; visibility:hidden; transition:opacity 1s ease, visibility 0s linear 1s; }
+    h1, h2, h3 { margin:16px 0 8px; }
+    p { margin:8px 0 16px; }
+    ul { margin:0 0 16px 20px; }
+    code, pre { background:#f6f8fa; border:1px solid #eaecef; border-radius:6px; }
+    pre { padding:12px; overflow:auto; }
+    .kpi { display:grid; grid-template-columns:repeat(4, minmax(180px,1fr)); gap:12px; margin:16px 0; }
+    .card { border:1px solid #e5e7eb; border-radius:8px; padding:12px; }
+    .muted { color:#555; }
+    table { width:100%; border-collapse:collapse; margin:12px 0 16px; }
+    th, td { border:1px solid #e5e7eb; padding:8px 10px; text-align:left; }
+    th { background:#fafafa; }
+    small { color:#666; }
+    .header2 { display:flex; gap:12px; padding:14px 16px; border-bottom:1px solid #ffffff1a; position:sticky; top:0; background:var(--cor4); align-items:center; justify-content:space-between }
+    .h12 { color:var(--cor0); }
+    .badge2 { color:var(--muted); padding:4px 8px; border-radius:999px; font-size:12px }
+    .link-btn2 { border:1px solid #ffffff22; background:#ffffff10; color:#fff; padding:8px 12px; border-radius:10px; text-decoration:none; font-weight:700 }
+    .link-btn2:hover { background:#ffffff20 }
+    .right2 { display:flex; gap:8px; align-items:center }
+    .table-wrap { margin-top:8px; overflow:auto }
+    .filter { width:100%; padding:8px; border-radius:8px; border:1px solid #e5e7eb; }
+    .empty { color:#666; font-style:italic }
+    /* MENU FUNCIONAL */
+    .menu-nav { overflow-y: auto; scrollbar-gutter: stable both-edges; padding-right: 12px; }
+    .menu-drawer { overflow: hidden; }
+    .menu-list { padding-right: 4px; }
+    .menu-list form { margin: 0; }
+    .menu-list form .menu-link { display: block; width: 100%; text-align: left; }
   </style>
   <script>
-    function selectTab(id) {{
+    function selectTab(id) {
       document.querySelectorAll('.panel').forEach(p => p.setAttribute('aria-hidden', 'true'));
-      const btn = document.querySelector('[data-tab=\"' + id + '\"]');
-      if (btn) {{
+      const btn = document.querySelector('[data-tab="' + id + '"]');
+      if (btn) {
         document.querySelectorAll('.tab-btn').forEach(b => b.setAttribute('aria-selected', 'false'));
         btn.setAttribute('aria-selected', 'true');
-      }}
+      }
       const panel = document.getElementById(id);
       if (panel) panel.setAttribute('aria-hidden', 'false');
-    }}
-    function filterTable(id, q) {{
-      q = (q||'').toLowerCase();
+    }
+    function filterTable(id, q) {
+      q = (q || '').toLowerCase();
       const rows = document.querySelectorAll('#' + id + ' tbody tr');
-      rows.forEach(r => {{
+      rows.forEach(r => {
         const t = r.textContent.toLowerCase();
         r.style.display = t.indexOf(q) >= 0 ? '' : 'none';
-      }});
-    }}
+      });
+    }
   </script>
 </head>
 
@@ -341,22 +215,28 @@ def main():
   <aside id="app-drawer" class="menu-drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
     <div class="menu-splash">&nbsp;</div>
     <header class="drawer-header">
-      <img src="../images/Logo Camim-01_50px.png" alt="Logo Camim">
+      <img src="/images/Logo Camim-01_50px.png" alt="Logo Camim">
       <h2 id="drawerTitle">&nbsp;</h2>
       <button id="drawerClose" class="menu-icon-btn" aria-label="Fechar menu">✖</button>
     </header>
     <nav class="menu-nav" aria-label="Menu principal">
       <ul class="menu-list">
-        <li><a class="menu-link" href="/templates/index.html">🏠 Início</a></li>
-        <li><a class="menu-link" href="#">🏛️Governança</a></li>
-        <li><a class="menu-link" href="/templates/kpi_home.html">📊 KPIs e performance</a></li>
-        <li><a class="menu-link" href="/templates/trello_harvest.html">😡 Harvest</a></li>
-        <li><a class="menu-link" href="#">🧭 Direção e estratégia</a></li>
-        <li><a class="menu-link" href="#">🛡️Compliance e riscos</a></li>
+        <li><a class="menu-link" href="/index.html">🏠 Início</a></li>
+        <li><a class="menu-link" href="/kpi_home.html">📊 KPIs e performance</a></li>
+        <li><a class="menu-link" href="/trello_harvest.html">😡 Harvest</a></li>
+        <li><a class="menu-link" href="#" id="btnLogout">🚪 Sair</a></li>
       </ul>
     </nav>
     <div class="menu-brand">&nbsp;</div>
   </aside>
+
+  <script>
+    document.getElementById('btnLogout')?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await fetch('/session/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+      location.href = '/login.html';
+    });
+  </script>
 
   <div id="header"></div>
 
@@ -364,9 +244,9 @@ def main():
     <div class="header2">
       <div class="left">
         <h1 class="h12">Relatório — Trello & Harvest</h1>
-        <span class="badge2">{now}</span>
-        <span class="badge2">Trello: {trello_hint}</span>
-        <span class="badge2">Harvest: {harvest_hint}</span>
+        <span class="badge2">$now</span>
+        <span class="badge2">Trello: $trello_hint</span>
+        <span class="badge2">Harvest: $harvest_hint</span>
       </div>
       <div class="right2">
         <a class="link-btn2" href="#harvest" onclick="selectTab('harvest')">Harvest</a>
@@ -377,23 +257,34 @@ def main():
     <section id="trello" class="panel" aria-hidden="false">
       <div class="card">
         <h3>Cards - Trello</h3>
-        {df_to_html_table(cards, "tbl_cards", raw_html_cols={'url'})}
+        $tbl_cards
       </div>
-      
     </section>
 
     <section id="harvest" class="panel" aria-hidden="true">
-      <div class="card"><h3>Entradas - Harvest</h3>{df_to_html_table(harvest_display, "tbl_harvest")}</div>
-      <div class="card"><h3>Horas por Cliente</h3>{df_to_html_table(pivots.get("by_client"), "tbl_by_client")}</div>
-      <div class="card"><h3>Horas por Projeto</h3>{df_to_html_table(pivots.get("by_project"), "tbl_by_project")}</div>
-      <div class="card"><h3>Horas por Usuário</h3>{df_to_html_table(pivots.get("by_user"), "tbl_by_user")}</div>
+      <div class="card">
+        <h3>Entradas - Harvest</h3>
+        $tbl_harvest
+      </div>
+      <div class="card">
+        <h3>Horas por Cliente</h3>
+        $tbl_by_client
+      </div>
+      <div class="card">
+        <h3>Horas por Projeto</h3>
+        $tbl_by_project
+      </div>
+      <div class="card">
+        <h3>Horas por Usuário</h3>
+        $tbl_by_user
+      </div>
     </section>
 
     <script>
-      document.addEventListener('DOMContentLoaded', () => {{
+      document.addEventListener('DOMContentLoaded', () => {
         const target = (location.hash || '#harvest').slice(1);
         selectTab(target);
-      }});
+      });
     </script>
 
   </main>
@@ -402,8 +293,129 @@ def main():
   <script src="../js/footer.js" defer></script>
 </body>
 </html>
-"""
-    # grava os dois arquivos
+""")
+
+# -------------------- app --------------------
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", default=".", help="raiz do projeto")
+    ap.add_argument("--outdir", default="relatorio", help="pasta de saída")
+    args = ap.parse_args()
+
+    root = Path(args.root).resolve()
+    outdir = (root / args.outdir).resolve()
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_html = outdir / f"relatorio_{stamp}.html"
+    out_index = root / "trello_harvest.html"  # sobrescreve o index do relatório
+
+    # --- fontes ---
+    trello_dir = latest_trello_dir(root)
+    hv_csv = latest_harvest_csv(root)
+
+    # Trello
+    lists = read_csv_safe(trello_dir / "lists.csv") if trello_dir else None
+    cards = read_csv_safe(trello_dir / "cards.csv") if trello_dir else None
+
+    if cards is not None and not cards.empty:
+        # mapear listas
+        if lists is not None and not lists.empty:
+            lists_map = dict(zip(lists.get("id", []), lists.get("name", [])))
+            if "idList" in cards.columns and "list" not in cards.columns:
+                cards["list"] = cards["idList"].map(lists_map).fillna("")
+        # ordenar por recência
+        cards = sort_by_recent(cards, ("updated", "dateLastActivity", "due", "start", "created", "created_at"))
+        # selecionar colunas e renomear
+        wanted_cols = ["name", "list", "url", "closed", "updated", "desc"]
+        for c in wanted_cols:
+            if c not in cards.columns:
+                cards[c] = ""
+        cards = cards[wanted_cols].rename(columns={"name": "card"})
+        # link
+        cards["url"] = cards["url"].astype(str).apply(
+            lambda u: f'<a href="{u}" target="_blank" rel="noopener">abrir</a>' if u else ""
+        )
+
+    # Harvest
+    harvest_raw = read_csv_safe(hv_csv) if hv_csv else None
+    harvest_display = None
+    pivots: dict[str, pd.DataFrame] = {}
+
+    if harvest_raw is not None and not harvest_raw.empty:
+        # normalizar nomes
+        ren, seen = {}, set()
+        for c in harvest_raw.columns:
+            lc = c.lower()
+            target = None
+            if lc in ("spent_date", "data", "date"): target = "date"
+            elif ("project" in lc and "id" not in lc): target = "project"
+            elif ("client" in lc and "id" not in lc): target = "client"
+            elif ("task" in lc and "id" not in lc): target = "task"
+            elif ("hours" in lc or "hour" in lc): target = "hours"
+            elif ("notes" in lc or "descri" in lc): target = "notes"
+            elif lc in ("user", "user.name", "username", "user name"): target = None
+            if target and target not in seen:
+                ren[c] = target
+                seen.add(target)
+        harvest = harvest_raw.rename(columns=ren)
+        harvest = harvest.loc[:, ~harvest.columns.duplicated()]
+
+        harvest = sort_by_recent(harvest, ("updated_at", "created_at", "date", "spent_date"))
+
+        user_col = pick_username_column(harvest)
+
+        if "hours" in harvest.columns:
+            harvest["hours"] = pd.to_numeric(harvest["hours"], errors="coerce")
+
+        if {"client", "project", "hours"} <= set(harvest.columns):
+            pivots["by_client"] = (
+                harvest.groupby("client", dropna=False)["hours"].sum().reset_index().sort_values("hours", ascending=False)
+            )
+            pivots["by_project"] = (
+                harvest.groupby(["client", "project"], dropna=False)["hours"]
+                .sum().reset_index().sort_values(["client", "hours"], ascending=[True, False])
+            )
+        if (user_col or "user.name" in harvest.columns) and "hours" in harvest.columns:
+            if "user.name" not in harvest.columns and user_col:
+                harvest.rename(columns={user_col: "user.name"}, inplace=True)
+            pivots["by_user"] = (
+                harvest.groupby("user.name", dropna=False)["hours"]
+                .sum().reset_index().sort_values("hours", ascending=False)
+            )
+
+        harvest_display = harvest.copy()
+        cols_drop = ["client.id", "billable", "is_locked", "user", "project.id", "task.id"]
+        harvest_display.drop(columns=[c for c in cols_drop if c in harvest_display.columns], errors="ignore", inplace=True)
+
+        wanted_h_cols = ["id", "date", "hours", "notes", "user.id", "user.name", "project", "task", "created_at", "updated_at"]
+        for c in wanted_h_cols:
+            if c not in harvest_display.columns:
+                harvest_display[c] = ""
+        harvest_display = harvest_display[wanted_h_cols]
+
+        if "hours" in harvest_display.columns:
+            harvest_display["hours"] = harvest_display["hours"].apply(fmt_hours_hhmm)
+        for k, dfp in list(pivots.items()):
+            if dfp is not None and not dfp.empty and "hours" in dfp.columns:
+                dfp["hours"] = dfp["hours"].apply(fmt_hours_hhmm)
+
+    # placeholders
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    trello_hint = trello_dir.name if trello_dir else "não encontrado"
+    harvest_hint = hv_csv.name if hv_csv else "não encontrado"
+
+    html = HTML_TMPL.substitute(
+        now=now,
+        trello_hint=trello_hint,
+        harvest_hint=harvest_hint,
+        tbl_cards=df_to_html_table(cards, "tbl_cards", raw_html_cols={"url"}),
+        tbl_harvest=df_to_html_table(harvest_display, "tbl_harvest"),
+        tbl_by_client=df_to_html_table(pivots.get("by_client"), "tbl_by_client"),
+        tbl_by_project=df_to_html_table(pivots.get("by_project"), "tbl_by_project"),
+        tbl_by_user=df_to_html_table(pivots.get("by_user"), "tbl_by_user"),
+    )
+
     out_html.write_text(html, encoding="utf-8")
     out_index.write_text(html, encoding="utf-8")
     print(f"OK: {out_html}")

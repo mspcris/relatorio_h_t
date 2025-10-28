@@ -253,6 +253,7 @@
             <span id="jsonInfo" class="ml-2 text-muted mini"></span>
         </nav>
 
+
         <!-- SIDEBAR -->
         <aside class="main-sidebar sidebar-dark-primary elevation-4">
             <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
@@ -263,7 +264,7 @@
                         <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
                                 <p>Home Page</p>
                             </a></li>
-                        <li class="nav-item"><a href="kpi_home.html" class="nav-link active"><i
+                        <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i
                                     class="nav-icon fas fa-book-open"></i>
                                 <p>Leia-me</p>
                             </a></li>
@@ -271,7 +272,7 @@
                                     class="nav-icon fas fa-utensils"></i>
                                 <p>KPI Custo Alimentação</p>
                             </a></li>
-                        <li class="nav-item"><a href="medicos.html" class="nav-link"><i
+                        <li class="nav-item"><a href="medicos.html" class="nav-link active"><i
                                     class="nav-icon fas fa-notes-medical"></i>
                                 <p>KPI Custo Médico</p>
                             </a></li>
@@ -279,10 +280,14 @@
                                     class="nav-icon fas fa-chart-line"></i>
                                 <p>KPI Mensalidades</p>
                             </a></li>
-                        <li class="nav-item"><a href="/logout" class="nav-link"><i
-                                    class="nav-icon fas fa-chart-line"></i>
-                                <p>🚪 Sair</p>
-                            </a></li>
+                        <li class="nav-item">
+                            <form method="POST" action="/session/logout" style="display:inline">
+                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                                    <p>Sair</p>
+                                </button>
+                            </form>
+                        </li>
                     </ul>
                 </nav>
             </div>
@@ -290,7 +295,7 @@
 
 
 
-        
+
         <!-- CONTEÚDO -->
         <div class="content-wrapper">
             <!-- Header com IA Auto + Comparar -->
@@ -460,18 +465,20 @@
 
 
 
-    <!-- ========== Prompt Manager (módulo reutilizável) ========== -->
 
+    <!-- ========== [BLK-PROMPTS_MANAGER] ========== -->
     <script>
+        /* [BLK-PROMPTS_MANAGER/IIFE] */
         (function () {
+            /* [BLK-PROMPTS_MANAGER/UTILS] */
             const API_BASE = (window.PROMPTS_API_BASE || '/prompts/').replace(/\/+$/, '') + '/';
             function uid() { return 'p_' + Math.random().toString(36).slice(2, 10) }
             function nowISO() { return new Date().toISOString() }
             function tplRender(tpl, vars) { return String(tpl || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => (vars?.[k] ?? `{${k}}`)) }
 
+            /* [BLK-PROMPTS_MANAGER/OBJECT] */
             const Prompts = {
                 state: { pageId: null, mounted: false, editingId: null },
-
                 async init({ pageId, defaults = [], mountAfter }) {
                     this.state.pageId = pageId;
                     let data = await this._get(pageId);
@@ -484,10 +491,10 @@
                     this._mountUI(mountAfter);
                     this._renderList();
                 },
-
                 getActive() { const d = this._cache || { list: [], activeId: null }; return d.list.find(p => p.id === d.activeId) || null; },
                 render(vars) { const a = this.getActive(); return a ? tplRender(a.template, vars) : ''; },
 
+                /* [BLK-PROMPTS_MANAGER/CRUD] */
                 async _get(id) {
                     try { const r = await fetch(API_BASE + encodeURIComponent(id), { cache: 'no-store' }); if (!r.ok) return null; return r.json(); }
                     catch { return null; }
@@ -500,6 +507,7 @@
                     return r.json();
                 },
 
+                /* [BLK-PROMPTS_MANAGER/UI] */
                 _mountUI(mountAfter) {
                     if (this.state.mounted) return;
                     const btn = document.createElement('button');
@@ -552,6 +560,7 @@
                     this.state.mounted = true;
                 },
 
+                /* [BLK-PROMPTS_MANAGER/LIST] */
                 _renderList() {
                     const { list = [], activeId = null } = this._cache || {};
                     const ul = document.querySelector('#pmList'); if (!ul) return;
@@ -567,6 +576,7 @@
                     if (list.length) this._loadToEditor(activeId || list[0].id);
                 },
 
+                /* [BLK-PROMPTS_MANAGER/EDITOR] */
                 _loadToEditor(id) {
                     const { list = [] } = this._cache || {};
                     const p = list.find(x => x.id === id) || list[0]; if (!p) return;
@@ -576,12 +586,14 @@
                     this.state.editingId = p.id; const st = document.querySelector('#pmStatus'); if (st) st.textContent = '';
                 },
 
+                /* [BLK-PROMPTS_MANAGER/PERSIST] */
                 async _persist() {
                     await this._put(this.state.pageId, this._cache);
                     const st = document.querySelector('#pmStatus'); if (st) { st.textContent = 'Salvo'; setTimeout(() => { st.textContent = ''; }, 1200); }
                     this._renderList();
                 },
 
+                /* [BLK-PROMPTS_MANAGER/ACTIONS] */
                 _new() { const d = this._cache; const id = uid(); d.list.unshift({ id, name: 'Novo prompt', template: '', updatedAt: nowISO() }); d.activeId = d.activeId || id; this._cache = d; this._renderList(); this._loadToEditor(id); this._persist(); },
                 _dup() { const d = this._cache; const id = this.state.editingId; const p = d.list.find(x => x.id === id); if (!p) return; const nid = uid(); d.list.unshift({ id: nid, name: p.name + ' (cópia)', template: p.template, updatedAt: nowISO() }); this._cache = d; this._renderList(); this._loadToEditor(nid); this._persist(); },
                 _del() { const d = this._cache; const id = this.state.editingId; if (!id) return; d.list = d.list.filter(x => x.id !== id); if (d.activeId === id) d.activeId = d.list[0]?.id || null; this._cache = d; this._renderList(); this._persist(); },
@@ -605,44 +617,33 @@
                 }
             };
 
+            /* [BLK-PROMPTS_MANAGER/EXPORT] */
             window.Prompts = Prompts;
         })();
     </script>
+    <!-- ========== [END BLK-PROMPTS_MANAGER] ========== -->
 
 
-
-
-
-
-    <!-- ========== FIM - Prompt Manager (módulo reutilizável) ========== -->
-
-
-
-
-
-    <!-- ========== Script principal ========== -->
+    <!-- ========== [BLK-MEDICOS_MAIN] ========== -->
     <script>
-        // Erros visíveis
+        /* [BLK-MAIN/ERROR_HANDLERS] */
         window.addEventListener('error', e => { const box = document.querySelector('#err'); if (box) box.textContent = 'Erro: ' + e.message; console.error(e.error || e.message); });
         window.addEventListener('unhandledrejection', e => { const box = document.querySelector('#err'); if (box) box.textContent = 'Falha: ' + (e.reason?.message || e.reason); console.error(e.reason); });
 
-        /* ==================== Dados base ==================== */
+        /* [BLK-MAIN/CONSTS] */
         const BASE = new URL('.', location.href);
         const URL_POR_POSTO = new URL('json_consolidado/consolidado_mensal_por_posto.json', BASE).href;
-
         const IA_BASE = new URL('json_retorno_groq/', BASE).href.replace(/\/$/, '');
         const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
         const API_ANALISAR = window.IA_API_URL || (IS_LOCAL ? 'http://127.0.0.1:8011/ia/analisar' : '/ia/analisar');
         const loaders = new Map();
 
-        /* ==================== Utils ==================== */
+        /* [BLK-MAIN/UTILS] */
         const el = s => document.querySelector(s);
         const showErr = e => { console.error(e); const er = el('#err'); if (er) er.textContent = e?.message || e; };
-
         const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
         const fmt2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const fmtPct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
         const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
         const mFmt = ym => { const [y, m] = ym.split('-').map(Number); return `${MES_ABBR[m - 1].slice(0, 3)}-${String(y).slice(-2)}`; };
         const inRange = (labels, from, to) => labels.filter(m => (!from || m >= from) && (!to || m <= to));
@@ -653,7 +654,7 @@
         function prevYear(ym) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setFullYear(d.getFullYear() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
         function mm3(arr) { return arr.map((_, i) => { const s = arr.slice(Math.max(0, i - 2), i + 1).filter(v => v != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; }); }
 
-        // Botões "pressionados"
+        /* [BLK-MAIN/TOGGLE_BUTTON] */
         function setPressed(btn, on, variant = 'primary') {
             btn.classList.toggle(`btn-outline-${variant}`, !on);
             btn.classList.toggle(`btn-${variant}`, on);
@@ -661,10 +662,11 @@
             btn.setAttribute('aria-pressed', on ? 'true' : 'false');
         }
 
+        /* [BLK-MAIN/STATE] */
         let MESES = [], porPosto = {}, POSTOS = [];
         let sel1 = 'ALL', sel2 = 'ALL';
 
-        /* ==================== Core de agregação ==================== */
+        /* [BLK-MAIN/AGG] */
         function aggMes(ym, selection) {
             const rows = porPosto[ym] || {};
             let postos = Object.keys(rows);
@@ -677,7 +679,7 @@
             return { mens, med, margem, pctMed, pctMargem };
         }
 
-        /* ==================== KPIs e Tabela ==================== */
+        /* [BLK-MAIN/KPI_CARD] */
         function kpiCard(title, val, fmt = 'text') {
             const isNull = (val == null || Number.isNaN(val));
             const out = isNull ? '<span class="muted">-</span>' :
@@ -685,6 +687,7 @@
             return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0">${out}</div></div></div>`;
         }
 
+        /* [BLK-MAIN/KPIS] */
         function buildKPIs(containerId, meses, selection) {
             const box = el(containerId); if (!box) return; box.innerHTML = '';
             const rows = meses.map(m => aggMes(m, selection));
@@ -708,6 +711,7 @@
             box.insertAdjacentHTML('beforeend', kpiCard('% Margem ponderada', pctMargemPond, 'pct'));
         }
 
+        /* [BLK-MAIN/TABLE] */
         function buildTable(meses, selection) {
             const tb = el('#tblBody'); if (!tb) return; tb.innerHTML = '';
             const map = new Map(); meses.forEach(m => map.set(m, aggMes(m, selection)));
@@ -735,7 +739,7 @@
             });
         }
 
-        /* ==================== Gráficos ==================== */
+        /* [BLK-MAIN/CHARTS_INIT] */
         let chPct, chValores, chStack, chYoYpp, chPctPosto, chParetoMed, chScatter;
         function initCharts() {
             const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
@@ -748,6 +752,7 @@
             chScatter = new Chart(document.getElementById('chartScatter'), { type: 'scatter', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Mensalidade' } }, y: { title: { display: true, text: '% Médico' } } } } });
         }
 
+        /* [BLK-MAIN/DERIVED_SERIES] */
         function postoLabel(selection) { if (selection === 'ALL') return 'Todos'; const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos'; }
         function postoShares(meses, selection) {
             const medMap = new Map();
@@ -769,6 +774,7 @@
             return { labels: postos, valores: postos.map(p => map.get(p).cnt ? map.get(p).sum / map.get(p).cnt : null) };
         }
 
+        /* [BLK-MAIN/CHARTS_UPDATE] */
         function updateCharts(meses, selection) {
             const labels = meses.map(mFmt);
             const tag = postoLabel(selection);
@@ -810,12 +816,8 @@
             buildHeatmap(meses, selection);
         }
 
-        /* ==================== Heatmap ==================== */
-        function pctFor(ym, p) {
-            const row = porPosto[ym]?.[p]; if (!row) return null;
-            const mens = num(row.mensalidade), med = num(row.medico);
-            return mens > 0 ? med / mens * 100 : null;
-        }
+        /* [BLK-MAIN/HEATMAP] */
+        function pctFor(ym, p) { const row = porPosto[ym]?.[p]; if (!row) return null; const mens = num(row.mensalidade), med = num(row.medico); return mens > 0 ? med / mens * 100 : null; }
         function buildHeatmap(meses, selection) {
             const box = el('#heatmapBox'); if (!box) return; box.innerHTML = '';
             const postos = selection === 'ALL' ? POSTOS : [...selection].sort(); if (!postos.length) return;
@@ -828,7 +830,7 @@
             box.innerHTML = `<div class="table-responsive"><table class="table table-sm">${thead}<tbody>${rows}</tbody></table></div>`;
         }
 
-        /* ==================== UI seleção de Posto ==================== */
+        /* [BLK-MAIN/POSTO_TABS] */
         function markActiveMulti(scopeId, selection) {
             const isAll = selection === 'ALL';
             document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
@@ -855,7 +857,7 @@
             });
         }
 
-        /* ==================== IA ==================== */
+        /* [BLK-MAIN/IA_LOADER] */
         function startDots(target) {
             const box = target || el('#iaOut') || el('#iaPanel');
             const wrap = document.createElement('div');
@@ -867,9 +869,9 @@
         }
         function stopDots(target) { const box = target || el('#iaOut') || el('#iaPanel'); const int = loaders.get(box); if (int) { clearInterval(int); loaders.delete(box); } }
 
+        /* [BLK-MAIN/IA_SERIES_DEFS] */
         function mesesSel2() { return inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); }
         function postoAtual() { return sel2 === 'ALL' ? 'ALL' : [...sel2].sort().join('+'); }
-
         function seriesBasicas(meses, selection) {
             const labs = meses.slice();
             const mens = labs.map(m => aggMes(m, selection).mens);
@@ -885,8 +887,10 @@
             };
         }
 
+        /* [BLK-MAIN/IA_STATE] */
         const IA_STATE = { auto: false };
 
+        /* [BLK-MAIN/IA_FETCH] */
         async function iaFetch(payload) {
             if (IS_LOCAL) {
                 try {
@@ -898,9 +902,26 @@
             }
             const r = await fetch(API_ANALISAR, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!r.ok) { let errText = ''; try { errText = await r.text(); } catch { } throw new Error(`HTTP ${r.status} em ${API_ANALISAR} — ${errText}`); }
-            return r.json();
+            const resp = await r.json();
+            // --- normalização do envelope do backend ---
+            if (!resp) return { resumo: 'Sem retorno da IA.' };
+            // texto livre
+            if (resp.content_mode === 'free_text' && resp.text) return { livre: resp.text };
+            // JSON estruturado vindo dentro de data
+            if (resp.data && (resp.data.html || resp.data.livre || resp.data.resumo || (Array.isArray(resp.data.insights) && resp.data.insights.length) || (Array.isArray(resp.data.alertas) && resp.data.alertas.length))) {
+                return resp.data;
+            }
+            // fallback: mostra o JSON retornado
+            if (resp.data) return { html: `<pre>${escapeHtml(JSON.stringify(resp.data, null, 2))}</pre>` };
+            return { resumo: 'Sem conteúdo.' };
         }
+        function escapeHtml(s) { return String(s).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[m])) }
 
+
+
+
+
+        /* [BLK-MAIN/IA_RENDER] */
         function toHtml(obj) {
             if (typeof obj === 'string') return `<p>${obj}</p>`;
             if (obj?.html) return obj.html;
@@ -912,6 +933,7 @@
             return parts.join('') || '<p>Sem conteúdo.</p>';
         }
 
+        /* [BLK-MAIN/IA_SEND] */
         async function IA_send() {
             const panel = el('#iaPanel'); if (!panel) return;
             panel.style.display = 'block';
@@ -934,7 +956,7 @@
                     ]
                 };
 
-                // ===== Prompt dinâmico (usa Prompt Manager) =====
+                /* [BLK-MAIN/IA_PROMPT_RENDER] */
                 const scopes = payload.blocks.map(b => b.scope).join(', ');
                 const renderedPrompt = Prompts.render({
                     produto: 'custo_medico',
@@ -955,7 +977,7 @@
             }
         }
 
-        /* ==================== Header "dados gerados em" ==================== */
+        /* [BLK-MAIN/HEADER_LAST_MODIFIED] */
         function setJsonInfoFromHeaders(resp) {
             try {
                 const lm = resp.headers.get('Last-Modified'); if (!lm) return;
@@ -965,8 +987,7 @@
             } catch { }
         }
 
-        /* ==================== Boot ==================== */
-        // Inicia Prompt Manager para esta página
+        /* [BLK-MAIN/BOOT] */
         Prompts.init({
             pageId: 'medicos',
             defaults: [
@@ -1012,10 +1033,11 @@
             })
             .catch(err => { showErr(err); alert('Falha ao carregar JSONs. Veja o console.'); });
 
-        /* ==================== Handlers ==================== */
+        /* [BLK-MAIN/RENDER_HELPERS] */
         function renderSel1() { const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null); buildKPIs('#kpisSel1', meses, sel1); }
         function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
 
+        /* [BLK-MAIN/HANDLERS] */
         function attachHandlers(lastFull) {
             // Dataset
             if (el('#from1')) el('#from1').addEventListener('change', () => { renderSel1(); });
@@ -1048,10 +1070,18 @@
                 IA_STATE.auto = !IA_STATE.auto;
                 setPressed(btnIA, IA_STATE.auto, 'primary');
                 const panel = el('#iaPanel'); if (!panel) return;
-                if (IA_STATE.auto) { panel.style.display = 'block'; IA_send(); } else { const out = el('#iaOut'); if (out) out.innerHTML = ''; panel.style.display = 'none'; }
+                if (IA_STATE.auto) { panel.style.display = 'block'; IA_send(); }
+                else { const out = el('#iaOut'); if (out) out.innerHTML = ''; panel.style.display = 'none'; }
             });
         }
     </script>
+    <!-- ========== [END BLK-MEDICOS_MAIN] ========== -->
+
+
+
+
+
+
 </body>
 
 </html>

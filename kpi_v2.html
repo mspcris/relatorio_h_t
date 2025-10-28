@@ -247,7 +247,7 @@
                         <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
                                 <p>Home Page</p>
                             </a></li>
-                        <li class="nav-item"><a href="kpi_home.html" class="nav-link active"><i
+                        <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i
                                     class="nav-icon fas fa-book-open"></i>
                                 <p>Leia-me</p>
                             </a></li>
@@ -259,14 +259,18 @@
                                     class="nav-icon fas fa-notes-medical"></i>
                                 <p>KPI Custo Médico</p>
                             </a></li>
-                        <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i
+                        <li class="nav-item"><a href="kpi_v2.html" class="nav-link active"><i
                                     class="nav-icon fas fa-chart-line"></i>
                                 <p>KPI Mensalidades</p>
                             </a></li>
-                        <li class="nav-item"><a href="/logout" class="nav-link"><i
-                                    class="nav-icon fas fa-chart-line"></i>
-                                <p>🚪 Sair</p>
-                            </a></li>
+                        <li class="nav-item">
+                            <form method="POST" action="/session/logout" style="display:inline">
+                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                                    <p>Sair</p>
+                                </button>
+                            </form>
+                        </li>
                     </ul>
                 </nav>
             </div>
@@ -445,6 +449,8 @@
             </section>
         </div>
     </div>
+
+
 
     <!-- ========== Prompt Manager (módulo reutilizável) ========== -->
     <script>
@@ -875,23 +881,79 @@
             });
         }
 
-        /* IA: loader */
+        //  <!--------------------- IA: loader --------------------------->
+
+        /* util de HTML */
+        function escapeHtml(s) {
+            return String(s ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        /* renderer do retorno da IA */
+        function toHtml(res) {
+            if (!res) return '<div class="ia-content">Sem retorno da IA.</div>';
+
+            // texto livre
+            if (typeof res === 'string' || res.livre) {
+                const txt = typeof res === 'string' ? res : res.livre;
+                return `<div class="ia-content"><pre class="mb-0">${escapeHtml(txt)}</pre></div>`;
+            }
+
+            // json padrão {resumo, insights[], alertas[]}
+            const parts = [];
+            if (res.resumo) parts.push(`<p>${escapeHtml(res.resumo)}</p>`);
+            if (Array.isArray(res.insights) && res.insights.length) {
+                parts.push(`<div><b>Insights</b><ul>${res.insights.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`);
+            }
+            if (Array.isArray(res.alertas) && res.alertas.length) {
+                parts.push(`<div><b>Alertas</b><ul>${res.alertas.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`);
+            }
+            if (!parts.length) {
+                parts.push(`<pre class="mb-0">${escapeHtml(JSON.stringify(res, null, 2))}</pre>`);
+            }
+            return `<div class="ia-content">${parts.join('')}</div>`;
+        }
+
+        /* loader visual */
         function startDots(target) {
             const box = target || el('#iaOut') || el('#iaPanel');
             const wrap = document.createElement('div');
             wrap.className = 'ia-content ia-loading';
             wrap.innerHTML = `Analisando <span class="ia-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
             box.innerHTML = ''; box.appendChild(wrap);
-            let t = 0; const int = setInterval(() => { const d = wrap.querySelectorAll('.dot'); d.forEach(x => x.classList.remove('on')); d[t % 3].classList.add('on'); t++; }, 260);
+            let t = 0;
+            const int = setInterval(() => {
+                const d = wrap.querySelectorAll('.dot');
+                d.forEach(x => x.classList.remove('on'));
+                d[t % 3].classList.add('on');
+                t++;
+            }, 260);
             loaders.set(box, int);
         }
-        function stopDots(target) { const box = target || el('#iaOut') || el('#iaPanel'); const int = loaders.get(box); if (int) { clearInterval(int); loaders.delete(box); } }
+        function stopDots(target) {
+            const box = target || el('#iaOut') || el('#iaPanel');
+            const int = loaders.get(box);
+            if (int) { clearInterval(int); loaders.delete(box); }
+        }
 
+        /* helpers de seleção e séries */
         function postoAtual() { return sel2 === 'ALL' ? 'ALL' : [...sel2].sort().join('+'); }
         function mesesSel2() { return inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); }
         function seriesBasicas(meses, selection) {
             const rows = meses.map(m => aggMens(m, selection));
-            return { labels: meses, receita: rows.map(v => v.valor), qtd: rows.map(v => v.qtd), ticket: rows.map(v => v.ticket), perf: rows.map(v => v.perf), yoy: rows.map(v => v.r_yoy), mix_p: rows.map(v => v.mix_p), mix_v: rows.map(v => v.mix_v), logret: rows.map(v => v.logret) };
+            return {
+                labels: meses,
+                receita: rows.map(v => v.valor),
+                qtd: rows.map(v => v.qtd),
+                ticket: rows.map(v => v.ticket),
+                perf: rows.map(v => v.perf),
+                yoy: rows.map(v => v.r_yoy),
+                mix_p: rows.map(v => v.mix_p),
+                mix_v: rows.map(v => v.mix_v),
+                logret: rows.map(v => v.logret)
+            };
         }
         function defs() {
             return {
@@ -909,30 +971,43 @@
 
         const IA_STATE = { auto: false, userSentOnce: false };
 
+        /* fetch da IA */
         async function iaFetch(payload) {
             if (IS_LOCAL) {
                 try {
                     const f = `${payload.blocks[0]?.periodo?.from || 'from'}_${payload.blocks[0]?.periodo?.to || 'to'}_${(payload.blocks[0]?.posto || 'ALL')}_mensalidades.json`;
                     const url = `${IA_BASE}/${f}?t=${Date.now()}`;
-                    const r = await fetch(url, { cache: 'no-store' }); if (r.ok) return r.json();
+                    const r = await fetch(url, { cache: 'no-store' });
+                    if (r.ok) {
+                        const res = await r.json();
+                        console.debug('IA payload ok (local):', { hasPrompt: !!(payload.prompt && payload.prompt.trim()), blocks: payload.blocks?.length });
+                        if (res && res.content_mode === 'free_text') return { livre: res.text || '' };
+                        if (res && res.content_mode === 'json') return res.data || {};
+                        return res;
+                    }
                 } catch { }
                 return { resumo: 'Mock local não encontrado para este filtro.', alertas: [] };
             }
-            const r = await fetch(API_ANALISAR, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (!r.ok) { let errText = ''; try { errText = await r.text(); } catch { } throw new Error(`HTTP ${r.status} em ${API_ANALISAR} — ${errText}`); }
-            return r.json();
-        }
-        function toHtml(obj) {
-            if (typeof obj === 'string') return `<p>${obj}</p>`;
-            if (obj?.html) return obj.html;
-            if (obj?.livre) return `<p>${obj.livre}</p>`;
-            const parts = [];
-            if (obj?.resumo) parts.push(`<h5><b>Resumo</b></h5><p>${obj.resumo}</p>`);
-            if (Array.isArray(obj?.insights)) parts.push(`<h5><b>Insights</b></h5><ul>${obj.insights.map(x => `<li>${x}</li>`).join('')}</ul>`);
-            if (Array.isArray(obj?.alertas) && obj.alertas.length) parts.push(`<h5><b>Alertas</b></h5><ul>${obj.alertas.map(x => `<li>${x}</li>`).join('')}</ul>`);
-            return parts.join('') || '<p>Sem conteúdo.</p>';
+
+            const r = await fetch(API_ANALISAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!r.ok) {
+                let errText = '';
+                try { errText = await r.text(); } catch { }
+                throw new Error(`HTTP ${r.status} em ${API_ANALISAR} — ${errText}`);
+            }
+
+            const res = await r.json();
+            console.debug('IA payload ok (remote):', { hasPrompt: !!(payload.prompt && payload.prompt.trim()), blocks: payload.blocks?.length });
+            if (res && res.content_mode === 'free_text') return { livre: res.text || '' };
+            if (res && res.content_mode === 'json') return res.data || {};
+            return res;
         }
 
+        /* envio para IA */
         async function IA_send(userMsg) {
             const panel = el('#iaPanel'); if (!panel) return;
             panel.style.display = 'block';
@@ -950,31 +1025,67 @@
                     contexto: 'graficos',
                     scopes
                 });
+
                 const payload = {
                     produto: 'mensalidades',
                     when: Date.now(),
                     query: userMsg || null,
                     contexto: 'graficos',
-                    prefs: { output: 'livre', assertivo: true },
+                    prefs: { output: 'livre', assertivo: true, accept_format: 'json', temperature: 0.2, max_tokens: 2048 },
                     defs: defs(),
                     prompt: renderedPrompt,
                     blocks: [
-                        { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, receita: s.receita } },
-                        { scope: 'chart_qtd_ticket', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, qtd: s.qtd, ticket: s.ticket } },
-                        { scope: 'chart_perf', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), perf: s.perf },
-                        { scope: 'chart_vol', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, logret: s.logret } },
-                        { scope: 'chart_yoy', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), yoy: s.yoy },
-                        { scope: 'chart_mix', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), dpreco: s.mix_p, dvolume: s.mix_v }
+                        {
+                            scope: 'chart_valores',
+                            periodo: { from: meses[0], to: meses.at(-1) },
+                            posto: postoAtual(),
+                            series: { labels: s.labels, receita: s.receita }
+                        },
+                        {
+                            scope: 'chart_qtd_ticket',
+                            periodo: { from: meses[0], to: meses.at(-1) },
+                            posto: postoAtual(),
+                            series: { labels: s.labels, qtd: s.qtd, ticket: s.ticket }
+                        },
+                        {
+                            scope: 'chart_perf',
+                            periodo: { from: meses[0], to: meses.at(-1) },
+                            posto: postoAtual(),
+                            series: { labels: s.labels, perf: s.perf }   // padronizado em series
+                        },
+                        {
+                            scope: 'chart_vol',
+                            periodo: { from: meses[0], to: meses.at(-1) },
+                            posto: postoAtual(),
+                            series: { labels: s.labels, logret: s.logret }
+                        },
+                        {
+                            scope: 'chart_yoy',
+                            periodo: { from: meses[0], to: meses.at(-1) },
+                            posto: postoAtual(),
+                            series: { labels: s.labels, yoy: s.yoy }     // padronizado em series
+                        },
+                        {
+                            scope: 'chart_mix',
+                            periodo: { from: meses[0], to: meses.at(-1) },
+                            posto: postoAtual(),
+                            series: { labels: s.labels, dpreco: s.mix_p, dvolume: s.mix_v } // padronizado em series
+                        }
                     ]
                 };
+
                 const data = await iaFetch(payload);
                 stopDots(outBox);
                 const out = el('#iaOut'); if (out) out.innerHTML = toHtml(data);
             } catch (err) {
                 stopDots(outBox);
-                panel.innerHTML = `<div class="ia-content"><p>Falha na IA: ${err.message || err}</p></div>`;
+                panel.innerHTML = `<div class="ia-content"><p>Falha na IA: ${escapeHtml(err.message || err)}</p></div>`;
             }
         }
+
+
+
+
 
         /* Boot */
         // Inicializa Prompt Manager para esta página

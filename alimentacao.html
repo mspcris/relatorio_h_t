@@ -255,6 +255,7 @@
             </span>
         </nav>
 
+
         <!-- SIDEBAR -->
         <aside class="main-sidebar sidebar-dark-primary elevation-4">
             <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
@@ -265,11 +266,11 @@
                         <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
                                 <p>Home Page</p>
                             </a></li>
-                        <li class="nav-item"><a href="kpi_home.html" class="nav-link active"><i
+                        <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i
                                     class="nav-icon fas fa-book-open"></i>
                                 <p>Leia-me</p>
                             </a></li>
-                        <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i
+                        <li class="nav-item"><a href="alimentacao.html" class="nav-link active"><i
                                     class="nav-icon fas fa-utensils"></i>
                                 <p>KPI Custo Alimentação</p>
                             </a></li>
@@ -281,10 +282,8 @@
                                     class="nav-icon fas fa-chart-line"></i>
                                 <p>KPI Mensalidades</p>
                             </a></li>
-                        <li class="nav-item"><a href="/logout" class="nav-link"><i
-                                    class="nav-icon fas fa-chart-line"></i>
-                                <p>🚪 Sair</p>
-                            </a></li>
+
+
                     </ul>
                 </nav>
             </div>
@@ -463,6 +462,13 @@
             if (location.pathname.endsWith(href)) a.classList.add('active');
         });
     </script>
+    <!-- NAV ativo -->
+    <script>
+        document.querySelectorAll('.nav-sidebar .nav-link').forEach(a => {
+            const href = a.getAttribute('href'); if (!href || href === "#") return;
+            if (location.pathname.endsWith(href)) a.classList.add('active');
+        });
+    </script>
 
     <!-- ========== Prompt Manager (reutilizável) ========== -->
     <script>
@@ -610,15 +616,15 @@
 
     <!-- APP -->
     <script>
-        // Erros visíveis
+        /* ========= Erros visíveis ========= */
         window.addEventListener('error', e => { const box = document.querySelector('#err'); if (box) box.textContent = 'Erro: ' + e.message; console.error(e.error || e.message); });
         window.addEventListener('unhandledrejection', e => { const box = document.querySelector('#err'); if (box) box.textContent = 'Falha: ' + (e.reason?.message || e.reason); console.error(e.reason); });
 
-        /* ==================== Dados base ==================== */
+        /* ========= Dados base ========= */
         const BASE = new URL('.', location.href);
         const URL_POR_POSTO = new URL('json_consolidado/consolidado_mensal_por_posto.json', BASE).href;
 
-        // Last-Modified → navbar
+        /* Last-Modified → navbar */
         const LM = {};
         function renderJsonInfo() {
             const elInfo = document.querySelector('#jsonInfo'); if (!elInfo) return;
@@ -634,12 +640,13 @@
         }
         async function tryHead(url, key, label) { try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); setJsonInfoFromHeaders(r, key, label); } catch { } }
 
+        /* ========= API IA ========= */
         const IA_BASE = new URL('json_retorno_groq/', BASE).href.replace(/\/$/, '');
         const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
         const API_ANALISAR = window.IA_API_URL || (IS_LOCAL ? 'http://127.0.0.1:8011/ia/analisar' : '/ia/analisar');
         const loaders = new Map();
 
-        /* ==================== Utils ==================== */
+        /* ========= Utils ========= */
         const el = s => document.querySelector(s);
         const showErr = e => { console.error(e); const er = el('#err'); if (er) er.textContent = e?.message || e; };
 
@@ -667,7 +674,7 @@
         let MESES = [], porPosto = {}, POSTOS = [];
         let sel1 = 'ALL', sel2 = 'ALL';
 
-        /* ==================== Core de agregação ==================== */
+        /* ========= Core de agregação ========= */
         function aggMes(ym, selection) {
             const rows = porPosto[ym] || {};
             let postos = Object.keys(rows);
@@ -680,7 +687,7 @@
             return { mens, ali, margem, pctAli, pctMargem };
         }
 
-        /* ==================== KPIs e Tabela ==================== */
+        /* ========= KPIs e Tabela ========= */
         function kpiCard(title, val, fmt = 'text') {
             const isNull = (val == null || Number.isNaN(val));
             const out = isNull ? '<span class="muted">-</span>' :
@@ -741,7 +748,7 @@
             });
         }
 
-        /* ==================== Gráficos ==================== */
+        /* ========= Gráficos ========= */
         let chPct, chValores, chStack, chYoYpp, chPctPosto, chParetoAli, chScatter;
 
         function initCharts() {
@@ -825,7 +832,7 @@
             buildHeatmap(meses, selection);
         }
 
-        /* ==================== Heatmap ==================== */
+        /* ========= Heatmap ========= */
         function pctFor(ym, p) { const row = porPosto[ym]?.[p]; if (!row) return null; const mens = num(row.mensalidade), ali = num(row.alimentacao); return mens > 0 ? ali / mens * 100 : null; }
         function buildHeatmap(meses, selection) {
             const box = el('#heatmapBox'); if (!box) return; box.innerHTML = '';
@@ -839,7 +846,7 @@
             box.innerHTML = `<div class="table-responsive"><table class="table table-sm">${thead}<tbody>${rows}</tbody></table></div>`;
         }
 
-        /* ==================== UI seleção de Posto ==================== */
+        /* ========= UI seleção de Posto ========= */
         function markActiveMulti(scopeId, selection) {
             const isAll = selection === 'ALL';
             document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
@@ -866,7 +873,7 @@
             });
         }
 
-        /* ==================== IA ==================== */
+        /* ========= IA ========= */
         function startDots(target) {
             const box = target || el('#iaOut') || el('#iaPanel');
             const wrap = document.createElement('div');
@@ -908,8 +915,15 @@
             }
             const r = await fetch(API_ANALISAR, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!r.ok) { let errText = ''; try { errText = await r.text(); } catch { } throw new Error(`HTTP ${r.status} em ${API_ANALISAR} — ${errText}`); }
-            return r.json();
+
+            const res = await r.json();
+
+            // --- Normalização do envelope do backend ---
+            if (res && res.content_mode === 'free_text') return { livre: res.text || '' };
+            if (res && res.content_mode === 'json') return res.data || {};
+            return res;
         }
+
         function toHtml(obj) {
             if (typeof obj === 'string') return `<p>${obj}</p>`;
             if (obj?.html) return obj.html;
@@ -920,6 +934,7 @@
             if (Array.isArray(obj?.alertas) && obj.alertas.length) parts.push(`<h5><b>Alertas</b></h5><ul>${obj.alertas.map(x => `<li>${x}</li>`).join('')}</ul>`);
             return parts.join('') || '<p>Sem conteúdo.</p>';
         }
+
         async function IA_send() {
             const panel = el('#iaPanel'); if (!panel) return;
             panel.style.display = 'block';
@@ -932,7 +947,8 @@
                     when: Date.now(),
                     query: null,
                     contexto: 'graficos',
-                    prefs: { output: 'livre', assertivo: true },
+                    // --- Preferências: força JSON no backend ---
+                    prefs: { output: 'livre', assertivo: true, accept_format: 'json', temperature: 0.2, max_tokens: 2048 },
                     defs: defs(),
                     blocks: [
                         { scope: 'chart_pct', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, pct_ali: s.pct_ali } },
@@ -941,7 +957,7 @@
                     ]
                 };
 
-                // ===== Integração Prompt Manager =====
+                // ===== Prompt Manager =====
                 const scopes = payload.blocks.map(b => b.scope).join(', ');
                 const renderedPrompt = Prompts.render({
                     produto: 'custo_alimentacao',
@@ -951,7 +967,7 @@
                     contexto: 'graficos',
                     scopes
                 });
-                payload.prompt = renderedPrompt;
+                payload.prompt = renderedPrompt || `Analise %Alimentação, composição e ΔYoY pp para ${postoAtual()} de ${meses[0]} a ${meses.at(-1)}. Foque em ${scopes}.`;
 
                 const data = await iaFetch(payload);
                 stopDots(outBox);
@@ -962,7 +978,7 @@
             }
         }
 
-        /* ==================== Renders e handlers ==================== */
+        /* ========= Renders e handlers ========= */
         function renderSel1() { const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null); buildKPIs('#kpisSel1', meses, sel1); }
         function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
 
@@ -993,9 +1009,7 @@
             });
         }
 
-        /* ==================== Boot ==================== */
-
-        // Inicia Prompt Manager para ESTA página
+        /* ========= Boot ========= */
         Prompts.init({
             pageId: 'alimentacao',
             defaults: [
@@ -1042,6 +1056,21 @@
                 if (el('#btnComparar')) setPressed(el('#btnComparar'), false, 'secondary');
             })
             .catch(err => { showErr(err); alert('Falha ao carregar JSONs. Veja o console.'); });
+    </script>
+
+    <!-- MENU-NAV -->
+    <script>
+        const cur = new URL(location.href);
+        document.querySelectorAll('.nav-sidebar .nav-link').forEach(a => {
+            a.classList.remove('active');
+            const href = a.getAttribute('href');
+            if (!href || href === '#') return;
+            const target = new URL(href, cur.origin);
+            const pathA = target.pathname.replace(/\/+$/, '');
+            const pathB = cur.pathname.replace(/\/+$/, '');
+            const isIndex = pathA.endsWith('/index.html') && (pathB === '' || pathB === '/' || pathB.endsWith('/index.html'));
+            if (pathA === pathB || isIndex) a.classList.add('active');
+        });
     </script>
 
 </body>
