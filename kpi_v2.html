@@ -528,7 +528,7 @@
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
                         <h3 class="card-title mb-0">Performance mensal
-                            <div id="legend-yoy" class="mini muted">
+                            <div class="legend-yoy" class="mini muted">
                                 <span class="lg-box lg-pos"></span> Positivo
                                 &nbsp;&nbsp;
                                 <span class="lg-box lg-neg"></span> Negativo
@@ -1021,7 +1021,10 @@
 
                 sel1 = 'ALL'; sel2 = 'ALL';
                 buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
-                buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; }, () => renderSel2());
+                buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; window.sel2 = sel2; }, () => renderSel2());
+
+                window.MESES = MESES;
+                window.sel2 = sel2;
 
                 initCharts(); attachHandlers(lastFull);
                 renderSel1(); renderSel2();
@@ -1043,7 +1046,7 @@
             if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); });
             if (el('#reset2')) el('#reset2').addEventListener('click', () => {
                 const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
-                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL'; markActiveMulti('#postoTabs2', sel2); renderSel2();
+                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL'; window.sel2 = sel2; markActiveMulti('#postoTabs2', sel2); renderSel2();
             });
 
             const btnCmp = el('#btnComparar');
@@ -1099,18 +1102,41 @@
         const iadOutBox = () => document.querySelector('#iadOut');
         const iadBtn = () => document.querySelector('#iaDeep');
 
+
+
+
+
+
+
+
+
+        /* ====== Saída/stream ====== */
         function cleanGroq(raw) {
             let s = String(raw || '');
+
+            // Normaliza quebras e escapes vindos da API
+            s = s.replace(/\r\n/g, '\n')
+                .replace(/\\n/g, '\n')
+                .replace(/\\t/g, '  ');
+
+            // Remove blocos de código e “tabelas ASCII”
             s = s.replace(/```[\s\S]*?```/g, ' ');
             s = s.replace(/^\s*[|+\-─═┌┐└┘┼┤├┬┴]+.*$/gm, ' ');
             s = s.replace(/^\s*\|\s*(?:[^|\n]+\|)+\s*$/gm, ' ');
             s = s.replace(/^\s*:?-{3,}:?\s*$/gm, ' ');
             s = s.replace(/^\s*[-*]\s{0,3}\|.*$/gm, ' ');
+
+            // Normaliza headings e múltiplas quebras
             s = s.replace(/[ \t]+\n/g, '\n');
             s = s.replace(/###\s*/g, '\n\n### ');
             s = s.replace(/\n{3,}/g, '\n\n');
+
+            // Opcional: some com LaTeX bruto (evita “lixos” visuais)
+            s = s.replace(/\\begin\{aligned\}[\s\S]*?\\end\{aligned\}/g, ' ');
+
             return s.trim();
         }
+
         function iadAppend(role, html) {
             const row = document.createElement('div'); row.className = 'd-flex flex-column';
             const b = document.createElement('div'); b.className = 'iad-msg ' + (role === 'user' ? 'iad-user' : 'iad-bot'); b.innerHTML = html;
@@ -1118,51 +1144,159 @@
             row.appendChild(b); row.appendChild(m); const out = iadOutBox(); out.appendChild(row);
             const sc = iadPanel().querySelector('.body'); sc.scrollTop = sc.scrollHeight;
         }
+
         function iadAppendBotStreaming(raw, charDelay = 8) {
-            const cleaned = cleanGroq(raw || '');
-            const blocks = cleaned.replace(/\r\n/g, '\n').split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+            const cleaned = cleanGroq(raw);
+            let blocks = cleaned.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+
+            // Fallback: se ainda veio 1 bloco gigante, forçar cortes suaves
+            if (blocks.length <= 1 && cleaned.length > 1500) {
+                blocks = cleaned.match(/[\s\S]{1,1200}(?=\n|$)/g) || [cleaned];
+            }
+
             const row = document.createElement('div'); row.className = 'd-flex flex-column';
             const box = document.createElement('div'); box.className = 'iad-msg iad-bot';
             const meta = document.createElement('div'); meta.className = 'iad-meta'; meta.textContent = 'IA';
             row.appendChild(box); row.appendChild(meta); iadOutBox().appendChild(row);
             const sc = iadPanel().querySelector('.body');
+
             let bi = 0, ci = 0, curEl = null, curText = '';
-            function nextBlock() { if (bi >= blocks.length) return; const isTitle = /^###\s*/.test(blocks[bi]); const text = blocks[bi].replace(/^###\s*/, ''); curEl = document.createElement(isTitle ? 'h5' : 'p'); if (isTitle) curEl.className = 'iad-h'; box.appendChild(curEl); curText = text; ci = 0; typeChar(); }
-            function typeChar() { if (ci < curText.length) { curEl.textContent += curText[ci++]; sc.scrollTop = sc.scrollHeight; setTimeout(typeChar, charDelay); } else { bi++; setTimeout(nextBlock, 40); } }
+            function nextBlock() {
+                if (bi >= blocks.length) return;
+                const isTitle = /^###\s*/.test(blocks[bi]);
+                const text = blocks[bi].replace(/^###\s*/, '');
+                curEl = document.createElement(isTitle ? 'h5' : 'p');
+                if (isTitle) curEl.className = 'iad-h';
+                box.appendChild(curEl);
+                curText = text; ci = 0; typeChar();
+            }
+            function typeChar() {
+                if (ci < curText.length) {
+                    curEl.textContent += curText[ci++]; sc.scrollTop = sc.scrollHeight;
+                    setTimeout(typeChar, charDelay);
+                } else { bi++; setTimeout(nextBlock, 40); }
+            }
             nextBlock();
         }
+
         function iadDotsStart() {
             const wrap = document.createElement('div');
             wrap.className = 'iad-msg iad-bot iad-loading';
             wrap.innerHTML = `Aguardando <span class="iad-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
             iadOutBox().appendChild(wrap);
-            let t = 0; const int = setInterval(() => { wrap.querySelectorAll('.dot').forEach(x => x.classList.remove('on')); wrap.querySelectorAll('.dot')[t % 3].classList.add('on'); t++; }, 260);
+            let t = 0; const int = setInterval(() => {
+                wrap.querySelectorAll('.dot').forEach(x => x.classList.remove('on'));
+                wrap.querySelectorAll('.dot')[t % 3].classList.add('on'); t++;
+            }, 260);
             iadDotsStop._int = int; iadDotsStop._el = wrap;
         }
-        function iadDotsStop() { if (iadDotsStop._int) { clearInterval(iadDotsStop._int); iadDotsStop._int = null; } if (iadDotsStop._el) { iadDotsStop._el.remove(); iadDotsStop._el = null; } }
+        function iadDotsStop() {
+            if (iadDotsStop._int) { clearInterval(iadDotsStop._int); iadDotsStop._int = null; }
+            if (iadDotsStop._el) { iadDotsStop._el.remove(); iadDotsStop._el = null; }
+        }
 
-        function mesesSel2Deep() { const from = document.querySelector('#from2')?.value || null; const to = document.querySelector('#to2')?.value || null; return (window.MESES || []).filter(m => (!from || m >= from) && (!to || m <= to)); }
+        /* ====== Payload com Mix, Pareto e YoY por posto ====== */
+        function mesesSel2Deep() {
+            const from = document.querySelector('#from2')?.value || null;
+            const to = document.querySelector('#to2')?.value || null;
+            return MESES.filter(m => (!from || m >= from) && (!to || m <= to));
+        }
+
         function buildPayloadDeep({ userQuery }) {
             const meses = mesesSel2Deep();
-            const sel = (window.sel2 === 'ALL' ? 'ALL' : [...window.sel2].sort().join('+'));
-            const rows = meses.map(m => aggMens(m, window.sel2));
-            const s = { labels: meses, receita: rows.map(v => v.valor), qtd: rows.map(v => v.qtd), ticket: rows.map(v => v.ticket), perf: rows.map(v => v.perf), yoy: rows.map(v => v.r_yoy) };
-            const scopes = ['chart_valores', 'chart_qtd_ticket', 'chart_perf'].join(', ');
-            const basePrompt = (window.Prompts?.render?.({ produto: 'mensalidades', from: meses[0], to: meses.at(-1), posto: sel, contexto: 'deep', scopes }) ||
-                `Relatório técnico de mensalidades ${meses[0]}→${meses.at(-1)} posto ${sel}. Foque em ${scopes}. Sem tabelas ASCII.`);
+            const sel = (sel2 === 'ALL' ? 'ALL' : [...sel2].sort().join('+'));
+            const rows = meses.map(m => aggMens(m, sel2));
+
+            const s = {
+                labels: meses,
+                receita: rows.map(v => v.valor),
+                qtd: rows.map(v => v.qtd),
+                ticket: rows.map(v => v.ticket),
+                perf: rows.map(v => v.perf),
+                yoy: rows.map(v => v.r_yoy),
+                dpreco: rows.map(v => v.mix_p),
+                dvol: rows.map(v => v.mix_v)
+            };
+
+            // Pareto do período
+            const shares = postoShares(meses, sel2);
+
+            // YoY médio por posto (mesma lógica usada no updateCharts)
+            const mapYoY = new Map();
+            meses.forEach(m => {
+                const row = porPosto[m] || {};
+                Object.keys(row).forEach(p => {
+                    if (sel2 !== 'ALL' && !sel2.has(p)) return;
+                    const yoy = Number(row[p]?.receita_yoy_pct);
+                    if (!Number.isFinite(yoy)) return;
+                    const o = mapYoY.get(p) || { sum: 0, count: 0 };
+                    o.sum += yoy; o.count += 1; mapYoY.set(p, o);
+                });
+            });
+            const postos = [...mapYoY.keys()].sort();
+            const yoyMed = postos.map(p => mapYoY.get(p).sum / mapYoY.get(p).count);
+
+            const scopes = [
+                'chart_valores', 'chart_qtd_ticket', 'chart_perf',
+                'chart_mix', 'chart_pareto', 'chart_yoy_posto'
+            ].join(', ');
+
+            const basePrompt =
+                (window.Prompts?.render?.({ produto: 'mensalidades', from: meses[0], to: meses.at(-1), posto: sel, contexto: 'deep', scopes })) ||
+                `Relatório técnico de mensalidades ${meses[0]}→${meses.at(-1)} posto ${sel}. Foque em ${scopes}. Sem tabelas ASCII.`;
+
             return {
-                produto: 'mensalidades', when: Date.now(),
+                produto: 'mensalidades',
+                when: Date.now(),
                 contexto: userQuery ? 'qa' : 'relatorio',
-                prefs: { output: 'livre', assertivo: true, accept_format: 'free_text', temperature: 0.2, max_tokens: 6000 },
-                defs: { receita: "Somatório de mensalidade no mês", qtd: "Quantidade de mensalidades", ticket: "Receita / Qtd", perf: "Variação % MoM da receita", yoy: "Variação % YoY da receita" },
+                prefs: { output: 'livre', assertivo: true, accept_format: 'free_text', temperature: 0.2, max_tokens: 7000 },
+                defs: {
+                    receita: "Somatório de mensalidade no mês",
+                    qtd: "Quantidade de mensalidades",
+                    ticket: "Receita / Qtd",
+                    perf: "Variação % MoM da receita",
+                    yoy: "Variação % YoY da receita",
+                    dpreco: "ΔPreço",
+                    dvol: "ΔVolume"
+                },
                 prompt: userQuery ? `${basePrompt}\nPergunta: ${userQuery}` : basePrompt,
                 blocks: [
-                    { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, receita: s.receita } },
-                    { scope: 'chart_qtd_ticket', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, qtd: s.qtd, ticket: s.ticket } },
-                    { scope: 'chart_perf', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, perf: s.perf } }
+                    {
+                        scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel,
+                        series: { labels: s.labels, receita: s.receita }
+                    },
+                    {
+                        scope: 'chart_qtd_ticket', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel,
+                        series: { labels: s.labels, qtd: s.qtd, ticket: s.ticket }
+                    },
+                    {
+                        scope: 'chart_perf', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel,
+                        series: { labels: s.labels, perf: s.perf, yoy: s.yoy }
+                    },
+                    {
+                        scope: 'chart_mix', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel,
+                        series: { labels: s.labels, dpreco: s.dpreco, dvol: s.dvol }
+                    },
+                    {
+                        scope: 'chart_pareto', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel,
+                        series: { postos: shares.labels, receita: shares.valores, total: shares.total }
+                    },
+                    {
+                        scope: 'chart_yoy_posto', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel,
+                        series: { postos, yoy_medio: yoyMed }
+                    }
                 ]
             };
         }
+
+        /* ====== Demais funções permanecem iguais (callIADeepMens, exportIADtoPDF, wireDeep etc.) ====== */
+
+
+
+
+
+
+
         async function callIADeepMens(payload) {
             const API = window.IA_API_URL || '/ia/analisar';
             const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
