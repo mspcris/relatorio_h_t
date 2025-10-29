@@ -16,7 +16,6 @@
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-
     <script>
         // mesmo host com proxy reverso
         window.IA_API_URL = '/ia/analisar';
@@ -37,7 +36,7 @@
         --cor5: #003f0a;
         --cor6: #0099ab;
         --cor7: #092019;
-        --cor8: #444444;
+        --cor8: #444444
     }
 
     body {
@@ -169,191 +168,6 @@
     .lg-neg {
         background: rgba(220, 53, 69, 1)
     }
-
-    /* IA Deep */
-    #iaDeepPanel {
-        display: none;
-        position: fixed;
-        right: 16px;
-        bottom: 16px;
-        width: min(760px, 95vw);
-        max-height: 85vh;
-        z-index: 9999;
-        box-shadow: 0 10px 24px rgba(0, 0, 0, .18)
-    }
-
-    #iaDeepPanel .body {
-        max-height: 60vh;
-        overflow: auto
-    }
-
-    #iaDeepPanel .iad-chat {
-        display: flex;
-        flex-direction: column;
-        gap: 10px
-    }
-
-    #iaDeepPanel .iad-msg {
-        max-width: 78%;
-        padding: 10px 12px;
-        border-radius: 12px;
-        line-height: 1.45;
-        white-space: pre-wrap;
-        word-break: break-word;
-        text-align: justify
-    }
-
-    #iaDeepPanel .iad-user {
-        background: #e6f0ff;
-        border: 1px solid #c6dcff;
-        align-self: flex-end
-    }
-
-    #iaDeepPanel .iad-bot {
-        background: #f4f4f5;
-        border: 1px solid #e4e4e7;
-        align-self: flex-start
-    }
-
-    #iaDeepPanel .iad-meta {
-        font-size: 12px;
-        color: #6b7280;
-        margin-top: 2px
-    }
-
-    #iaDeepPanel .iad-loading .dot {
-        opacity: .35
-    }
-
-    #iaDeepPanel .iad-loading .dot.on {
-        opacity: 1
-    }
-
-    .ia-clean p {
-        margin: 10px 0
-    }
-
-    .iad-msg p {
-        margin: 10px 0
-    }
-
-    .iad-msg .iad-h {
-        margin: 14px 0 8px;
-        font-weight: 600
-    }
-
-    #iaDeepPanel,
-    #iaDeepPanel * {
-        font-weight: 400
-    }
-
-    #iaDeepPanel .iad-h,
-    #iaDeepPanel .card-header b {
-        font-weight: 600
-    }
-
-    #iaDeepPanel b,
-    #iaDeepPanel strong {
-        font-weight: 600
-    }
-
-    /* Dark mode IA Deep */
-    #iaDeepPanel.card {
-        background: #1e1e1e;
-        color: #fff;
-        border: 1px solid #2a2a2a
-    }
-
-    #iaDeepPanel .card-header,
-    #iaDeepPanel .card-footer {
-        background: #242424;
-        color: #fff;
-        border-color: #2a2a2a
-    }
-
-    #iaDeepPanel .body {
-        background: #1e1e1e
-    }
-
-    #iaDeepPanel .iad-msg {
-        color: #eaeaea
-    }
-
-    #iaDeepPanel .iad-bot {
-        background: #2a2a2a;
-        border-color: #3a3a3a
-    }
-
-    #iaDeepPanel .iad-user {
-        background: #16324f;
-        border-color: #275a8a
-    }
-
-    #iaDeepPanel input.form-control {
-        background: #121212;
-        color: #fff;
-        border-color: #3a3a3a
-    }
-
-    #iaDeepPanel .btn.btn-outline-secondary {
-        color: #ddd;
-        border-color: #5a5a5a
-    }
-
-    #iaDeepPanel .btn.btn-outline-secondary:hover {
-        background: #333
-    }
-
-    #iaDeepPanel .btn.btn-primary {
-        background: #3b82f6;
-        border-color: #3b82f6
-    }
-
-    @media (max-width:576px) {
-        .navbar .ml-auto {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            width: 100%
-        }
-
-        .navbar .ml-auto .btn {
-            flex: 1 1 48%;
-            min-width: 140px
-        }
-
-        #btnPrompts {
-            margin-left: 0
-        }
-
-        .main-header .d-flex.align-items-center {
-            flex-wrap: wrap
-        }
-
-        #jsonInfo {
-            flex: 0 0 100%;
-            margin-left: 0;
-            margin-top: 4px
-        }
-
-        .month-inputs {
-            flex-wrap: wrap
-        }
-
-        .month-inputs .btn {
-            flex: 0 0 100%
-        }
-
-        .chart-card .card-body {
-            height: 260px
-        }
-    }
-
-    @media (max-width:360px) {
-        .chart-card .card-body {
-            height: 240px
-        }
-    }
 </style>
 
 <body class="hold-transition sidebar-mini">
@@ -412,14 +226,14 @@
 
         <!-- CONTEÚDO -->
         <div class="content-wrapper">
-            <!-- Header da página sem IA Auto -->
+            <!-- Header da página -->
             <nav class="navbar navbar-expand navbar-white navbar-light">
                 <div class="d-flex w-100 align-items-center">
                     <span class="ml-2 font-weight-bold">KPI de Mensalidades</span>
                     <div class="ml-auto">
                         <button id="btnComparar" class="btn btn-sm btn-outline-secondary"
                             title="Mostrar/ocultar bloco de comparação">Comparar</button>
-                        <!-- Botão IA Deep será injetado abaixo -->
+                        <!-- Botão IA será injetado pelo /js/chat.js -->
                     </div>
                 </div>
             </nav>
@@ -528,11 +342,10 @@
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
                         <h3 class="card-title mb-0">Performance mensal
-                            <div class="legend-yoy" class="mini muted">
-                                <span class="lg-box lg-pos"></span> Positivo
-                                &nbsp;&nbsp;
+                            <span class="legend-yoy mini muted">
+                                <span class="lg-box lg-pos"></span> Positivo &nbsp;&nbsp;
                                 <span class="lg-box lg-neg"></span> Negativo
-                            </div>
+                            </span>
                         </h3>
                     </div>
                     <div class="card-body"><canvas id="chartPerf"></canvas></div>
@@ -546,11 +359,10 @@
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
                         <h3 class="card-title mb-0">Receita YoY (%)
-                            <div id="legend-yoy" class="mini muted">
-                                <span class="lg-box lg-pos"></span> Positivo
-                                &nbsp;&nbsp;
+                            <span class="legend-yoy mini muted">
+                                <span class="lg-box lg-pos"></span> Positivo &nbsp;&nbsp;
                                 <span class="lg-box lg-neg"></span> Negativo
-                            </div>
+                            </span>
                         </h3>
                     </div>
                     <div class="card-body"><canvas id="chartYoY"></canvas></div>
@@ -578,11 +390,10 @@
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
                         <h3 class="card-title mb-0">YoY médio por Posto (12m)
-                            <div id="legend-yoy" class="mini muted">
-                                <span class="lg-box lg-pos"></span> Positivo
-                                &nbsp;&nbsp;
+                            <span class="legend-yoy mini muted">
+                                <span class="lg-box lg-pos"></span> Positivo &nbsp;&nbsp;
                                 <span class="lg-box lg-neg"></span> Negativo
-                            </div>
+                            </span>
                         </h3>
                     </div>
                     <div class="card-body"><canvas id="chartYoYPosto"></canvas></div>
@@ -684,8 +495,7 @@
                     if (list.length) this._loadToEditor(activeId || list[0].id);
                 },
                 _loadToEditor(id) {
-                    const { list } = this.state;
-                    const p = list.find(x => x.id === id) || list[0]; if (!p) return;
+                    const { list } = this.state; const p = list.find(x => x.id === id) || list[0]; if (!p) return;
                     document.querySelector('#pmName').value = p.name || '';
                     document.querySelector('#pmTpl').value = p.template || '';
                     document.querySelectorAll('#pmList li').forEach(li => li.classList.toggle('active', li.dataset.id === p.id));
@@ -727,13 +537,26 @@
         const sum = arr => arr.reduce((a, b) => a + (b || 0), 0);
         const wavg = (vals, weights) => { let sW = 0, s = 0; for (let i = 0; i < vals.length; i++) { const w = weights[i] ?? 0; const v = vals[i]; if (v == null) continue; s += v * w; sW += w; } return sW ? s / sW : null; };
 
-        function setPressed(btn, on, variant = 'primary') { btn.classList.toggle(`btn-outline-${variant}`, !on); btn.classList.toggle(`btn-${variant}`, on); btn.classList.toggle('active', on); btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+        function setPressed(btn, on, variant = 'primary') {
+            btn.classList.toggle(`btn-outline-${variant}`, !on);
+            btn.classList.toggle(`btn-${variant}`, on);
+            btn.classList.toggle('active', on);
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
 
         let MESES = [], geral = {}, porPosto = {}, POSTOS = [];
         let sel1 = 'ALL', sel2 = 'ALL';
 
         const LM = {};
-        function renderJsonInfo() { const elInfo = document.querySelector('#jsonInfo'); if (!elInfo) return; const entries = Object.values(LM).filter(Boolean); if (!entries.length) { elInfo.textContent = ''; elInfo.removeAttribute('title'); return; } const newest = entries.slice().sort((a, b) => b.date - a.date)[0]; const fmt = d => d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); elInfo.textContent = `• dados gerados em ${fmt(newest.date)}`; elInfo.title = entries.map(e => `${e.label}: ${fmt(e.date)}`).join(' | '); }
+        function renderJsonInfo() {
+            const elInfo = document.querySelector('#jsonInfo'); if (!elInfo) return;
+            const entries = Object.values(LM).filter(Boolean);
+            if (!entries.length) { elInfo.textContent = ''; elInfo.removeAttribute('title'); return; }
+            const newest = entries.slice().sort((a, b) => b.date - a.date)[0];
+            const fmt = d => d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+            elInfo.textContent = `• dados gerados em ${fmt(newest.date)}`;
+            elInfo.title = entries.map(e => `${e.label}: ${fmt(e.date)}`).join(' | ');
+        }
         function setJsonInfoFromHeaders(resp, key, label) { try { const lm = resp.headers.get('Last-Modified'); if (!lm) return false; LM[key] = { date: new Date(lm), label }; renderJsonInfo(); return true; } catch { return false; } }
         async function tryHead(url, key, label) { try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); setJsonInfoFromHeaders(r, key, label); } catch { } }
 
@@ -868,7 +691,7 @@
             chValores = new Chart(document.getElementById('chartValores'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
             chQtdTicket = new Chart(document.getElementById('chartQtdTicket'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
             chPerf = new Chart(document.getElementById('chartPerf'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
-            chVol = new Chart(document.getElementById('chartVol'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
+            chVol = new Chart(document.getElementById('chartVol'), { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: false } } } });
             chYoY = new Chart(document.getElementById('chartYoY'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
             chMix = new Chart(document.getElementById('chartMix'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
             chScatter = new Chart(document.getElementById('chartScatter'), { type: 'scatter', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'ΔVolume' } }, y: { title: { display: true, text: 'ΔPreço' } } } } });
@@ -1023,8 +846,7 @@
                 buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
                 buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; window.sel2 = sel2; }, () => renderSel2());
 
-                window.MESES = MESES;
-                window.sel2 = sel2;
+                window.MESES = MESES; window.sel2 = sel2;
 
                 initCharts(); attachHandlers(lastFull);
                 renderSel1(); renderSel2();
@@ -1059,149 +881,13 @@
         }
     </script>
 
-    <!-- IA Deep: relatório + chat + PDF fullscreen -->
+    <!-- Função de payload para a IA -->
     <script>
-        function _btnPressed(btn, on) { btn.classList.toggle('btn-outline-primary', !on); btn.classList.toggle('btn-primary', on); btn.classList.toggle('active', on); btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
-
-        (function injectIAD() {
-            const anchor = document.querySelector('#btnComparar'); if (!anchor) return;
-            if (!document.querySelector('#iaDeep')) {
-                const btn = document.createElement('button');
-                btn.id = 'iaDeep'; btn.className = 'btn btn-sm btn-outline-primary ml-2';
-                btn.textContent = 'IA Análise'; btn.title = 'Relatório completo e chat';
-                anchor.parentNode.insertBefore(btn, anchor.nextSibling);
-            }
-            if (!document.querySelector('#iaDeepPanel')) {
-                const wrap = document.createElement('div'); wrap.id = 'iaDeepPanel'; wrap.className = 'card';
-                wrap.style.cssText = 'display:none;position:fixed;right:16px;bottom:16px;width:min(760px,95vw);max-height:85vh;z-index:9999;box-shadow:0 10px 24px rgba(0,0,0,.18)';
-                wrap.innerHTML = `
-<div class="card-header d-flex align-items-center justify-content-between">
-  <b class="mb-0">IA — Análise Completa & Chat</b>
-  <div class="d-flex" style="gap:8px">
-    <button id="iadBrief" class="btn btn-sm btn-outline-secondary" title="Respostas em até 5 linhas">IA Resumida</button>
-    <button id="iadPDF" class="btn btn-sm btn-outline-secondary" title="Exportar PDF da conversa">PDF</button>
-    <button id="iadRefresh" class="btn btn-sm btn-outline-secondary" title="Regerar relatório completo">Regerar</button>
-    <button id="iadClose" class="btn btn-sm btn-outline-secondary">Fechar</button>
-  </div>
-</div>
-<div class="card-body body" style="max-height:60vh;overflow:auto">
-  <div id="iadOut" class="iad-chat d-flex flex-column ia-clean"></div>
-</div>
-<div class="card-footer">
-  <div class="d-flex" style="gap:8px">
-    <input id="iadInput" class="form-control form-control-sm" placeholder="Pergunte sobre drivers, mix, MoM, YoY...">
-    <button id="iadSend" class="btn btn-sm btn-primary">Enviar</button>
-  </div>
-  <small class="text-muted">Mensagens usam o recorte atual. Texto corrido, sem tabelas ASCII.</small>
-</div>`;
-                document.body.appendChild(wrap);
-            }
-        })();
-
-        const iadPanel = () => document.querySelector('#iaDeepPanel');
-        const iadOutBox = () => document.querySelector('#iadOut');
-        const iadBtn = () => document.querySelector('#iaDeep');
-
-
-
-
-
-
-
-
-
-        /* ====== Saída/stream ====== */
-        function cleanGroq(raw) {
-            let s = String(raw || '');
-
-            // Normaliza quebras e escapes vindos da API
-            s = s.replace(/\r\n/g, '\n')
-                .replace(/\\n/g, '\n')
-                .replace(/\\t/g, '  ');
-
-            // Remove blocos de código e “tabelas ASCII”
-            s = s.replace(/```[\s\S]*?```/g, ' ');
-            s = s.replace(/^\s*[|+\-─═┌┐└┘┼┤├┬┴]+.*$/gm, ' ');
-            s = s.replace(/^\s*\|\s*(?:[^|\n]+\|)+\s*$/gm, ' ');
-            s = s.replace(/^\s*:?-{3,}:?\s*$/gm, ' ');
-            s = s.replace(/^\s*[-*]\s{0,3}\|.*$/gm, ' ');
-
-            // Normaliza headings e múltiplas quebras
-            s = s.replace(/[ \t]+\n/g, '\n');
-            s = s.replace(/###\s*/g, '\n\n### ');
-            s = s.replace(/\n{3,}/g, '\n\n');
-
-            // Opcional: some com LaTeX bruto (evita “lixos” visuais)
-            s = s.replace(/\\begin\{aligned\}[\s\S]*?\\end\{aligned\}/g, ' ');
-
-            return s.trim();
-        }
-
-        function iadAppend(role, html) {
-            const row = document.createElement('div'); row.className = 'd-flex flex-column';
-            const b = document.createElement('div'); b.className = 'iad-msg ' + (role === 'user' ? 'iad-user' : 'iad-bot'); b.innerHTML = html;
-            const m = document.createElement('div'); m.className = 'iad-meta'; m.textContent = role === 'user' ? 'Você' : 'IA';
-            row.appendChild(b); row.appendChild(m); const out = iadOutBox(); out.appendChild(row);
-            const sc = iadPanel().querySelector('.body'); sc.scrollTop = sc.scrollHeight;
-        }
-
-        function iadAppendBotStreaming(raw, charDelay = 8) {
-            const cleaned = cleanGroq(raw);
-            let blocks = cleaned.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
-
-            // Fallback: se ainda veio 1 bloco gigante, forçar cortes suaves
-            if (blocks.length <= 1 && cleaned.length > 1500) {
-                blocks = cleaned.match(/[\s\S]{1,1200}(?=\n|$)/g) || [cleaned];
-            }
-
-            const row = document.createElement('div'); row.className = 'd-flex flex-column';
-            const box = document.createElement('div'); box.className = 'iad-msg iad-bot';
-            const meta = document.createElement('div'); meta.className = 'iad-meta'; meta.textContent = 'IA';
-            row.appendChild(box); row.appendChild(meta); iadOutBox().appendChild(row);
-            const sc = iadPanel().querySelector('.body');
-
-            let bi = 0, ci = 0, curEl = null, curText = '';
-            function nextBlock() {
-                if (bi >= blocks.length) return;
-                const isTitle = /^###\s*/.test(blocks[bi]);
-                const text = blocks[bi].replace(/^###\s*/, '');
-                curEl = document.createElement(isTitle ? 'h5' : 'p');
-                if (isTitle) curEl.className = 'iad-h';
-                box.appendChild(curEl);
-                curText = text; ci = 0; typeChar();
-            }
-            function typeChar() {
-                if (ci < curText.length) {
-                    curEl.textContent += curText[ci++]; sc.scrollTop = sc.scrollHeight;
-                    setTimeout(typeChar, charDelay);
-                } else { bi++; setTimeout(nextBlock, 40); }
-            }
-            nextBlock();
-        }
-
-        function iadDotsStart() {
-            const wrap = document.createElement('div');
-            wrap.className = 'iad-msg iad-bot iad-loading';
-            wrap.innerHTML = `Aguardando <span class="iad-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
-            iadOutBox().appendChild(wrap);
-            let t = 0; const int = setInterval(() => {
-                wrap.querySelectorAll('.dot').forEach(x => x.classList.remove('on'));
-                wrap.querySelectorAll('.dot')[t % 3].classList.add('on'); t++;
-            }, 260);
-            iadDotsStop._int = int; iadDotsStop._el = wrap;
-        }
-        function iadDotsStop() {
-            if (iadDotsStop._int) { clearInterval(iadDotsStop._int); iadDotsStop._int = null; }
-            if (iadDotsStop._el) { iadDotsStop._el.remove(); iadDotsStop._el = null; }
-        }
-
-        /* ====== Payload com Mix, Pareto e YoY por posto ====== */
         function mesesSel2Deep() {
             const from = document.querySelector('#from2')?.value || null;
             const to = document.querySelector('#to2')?.value || null;
             return MESES.filter(m => (!from || m >= from) && (!to || m <= to));
         }
-
         function buildPayloadDeep({ userQuery }) {
             const meses = mesesSel2Deep();
             const sel = (sel2 === 'ALL' ? 'ALL' : [...sel2].sort().join('+'));
@@ -1219,9 +905,21 @@
             };
 
             // Pareto do período
-            const shares = postoShares(meses, sel2);
+            const shares = (function postoSharesLocal() {
+                const map = new Map();
+                meses.forEach(m => {
+                    const row = porPosto[m] || {};
+                    Object.keys(row).forEach(p => {
+                        if (sel2 !== 'ALL' && !sel2.has(p)) return;
+                        const v = Number(row[p]?.mensalidade) || 0;
+                        map.set(p, (map.get(p) || 0) + v);
+                    });
+                });
+                const entries = [...map.entries()].sort((a, b) => b[1] - a[1]);
+                return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]), total: entries.reduce((a, [, v]) => a + v, 0) };
+            })();
 
-            // YoY médio por posto (mesma lógica usada no updateCharts)
+            // YoY médio por posto
             const mapYoY = new Map();
             meses.forEach(m => {
                 const row = porPosto[m] || {};
@@ -1236,13 +934,8 @@
             const postos = [...mapYoY.keys()].sort();
             const yoyMed = postos.map(p => mapYoY.get(p).sum / mapYoY.get(p).count);
 
-            const scopes = [
-                'chart_valores', 'chart_qtd_ticket', 'chart_perf',
-                'chart_mix', 'chart_pareto', 'chart_yoy_posto'
-            ].join(', ');
-
-            const basePrompt =
-                (window.Prompts?.render?.({ produto: 'mensalidades', from: meses[0], to: meses.at(-1), posto: sel, contexto: 'deep', scopes })) ||
+            const scopes = ['chart_valores', 'chart_qtd_ticket', 'chart_perf', 'chart_mix', 'chart_pareto', 'chart_yoy_posto'].join(', ');
+            const basePrompt = (window.Prompts?.render?.({ produto: 'mensalidades', from: meses[0], to: meses.at(-1), posto: sel, contexto: 'deep', scopes })) ||
                 `Relatório técnico de mensalidades ${meses[0]}→${meses.at(-1)} posto ${sel}. Foque em ${scopes}. Sem tabelas ASCII.`;
 
             return {
@@ -1261,117 +954,30 @@
                 },
                 prompt: userQuery ? `${basePrompt}\nPergunta: ${userQuery}` : basePrompt,
                 blocks: [
-                    {
-                        scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel,
-                        series: { labels: s.labels, receita: s.receita }
-                    },
-                    {
-                        scope: 'chart_qtd_ticket', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel,
-                        series: { labels: s.labels, qtd: s.qtd, ticket: s.ticket }
-                    },
-                    {
-                        scope: 'chart_perf', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel,
-                        series: { labels: s.labels, perf: s.perf, yoy: s.yoy }
-                    },
-                    {
-                        scope: 'chart_mix', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel,
-                        series: { labels: s.labels, dpreco: s.dpreco, dvol: s.dvol }
-                    },
-                    {
-                        scope: 'chart_pareto', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel,
-                        series: { postos: shares.labels, receita: shares.valores, total: shares.total }
-                    },
-                    {
-                        scope: 'chart_yoy_posto', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel,
-                        series: { postos, yoy_medio: yoyMed }
-                    }
+                    { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, receita: s.receita } },
+                    { scope: 'chart_qtd_ticket', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, qtd: s.qtd, ticket: s.ticket } },
+                    { scope: 'chart_perf', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, perf: s.perf, yoy: s.yoy } },
+                    { scope: 'chart_mix', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, dpreco: s.dpreco, dvol: s.dvol } },
+                    { scope: 'chart_pareto', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { postos: shares.labels, receita: shares.valores, total: shares.total } },
+                    { scope: 'chart_yoy_posto', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { postos, yoy_medio: yoyMed } }
                 ]
             };
         }
-
-        /* ====== Demais funções permanecem iguais (callIADeepMens, exportIADtoPDF, wireDeep etc.) ====== */
-
-
-
-
-
-
-
-        async function callIADeepMens(payload) {
-            const API = window.IA_API_URL || '/ia/analisar';
-            const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (!r.ok) { let t = ''; try { t = await r.text(); } catch { } throw new Error(`HTTP ${r.status} — ${t}`); }
-            const res = await r.json();
-            if (res?.content_mode === 'free_text') return res.text || '';
-            if (res?.content_mode === 'json') return (res.data?.html) || res.data?.livre || JSON.stringify(res.data);
-            return typeof res === 'string' ? res : (res?.html || res?.livre || JSON.stringify(res));
-        }
-
-        // PDF fullscreen do chat
-        function exportIADtoPDF() {
-            const node = document.getElementById('iadOut'); if (!node) return;
-            const opt = {
-                margin: [0, 0, 0, 0],
-                filename: `IA-Conversa_${new Date().toISOString().slice(0, 10)}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true, backgroundColor: null, windowWidth: node.scrollWidth, windowHeight: node.scrollHeight },
-                jsPDF: { unit: 'px', format: 'a4', orientation: 'portrait' },
-                pagebreak: { mode: ['css', 'legacy'] }
-            };
-            html2pdf().set(opt).from(node).save();
-        }
-
-        (function wireDeep() {
-            const btn = iadBtn(); const panel = iadPanel();
-            if (!btn || !panel) return;
-            let IA_BRIEF = false;
-            const input = () => document.querySelector('#iadInput');
-            const send = () => document.querySelector('#iadSend');
-            const brief = () => document.querySelector('#iadBrief');
-            const close = () => document.querySelector('#iadClose');
-            const regen = () => document.querySelector('#iadRefresh');
-            const pdfBtn = () => document.querySelector('#iadPDF');
-
-            btn.addEventListener('click', async () => {
-                const open = panel.style.display === 'none'; panel.style.display = open ? 'block' : 'none'; _btnPressed(btn, open);
-                if (open) {
-                    iadOutBox().innerHTML = '';
-                    try {
-                        iadDotsStart();
-                        const out = await callIADeepMens(buildPayloadDeep({}));
-                        iadDotsStop();
-                        iadAppend('bot', '<b>Relatório inicial</b>');
-                        iadAppendBotStreaming(out);
-                    } catch (err) {
-                        iadDotsStop();
-                        iadAppend('bot', `<span class="text-danger">Falha: ${err.message || err}</span>`);
-                    }
-                }
-            });
-            close().addEventListener('click', () => { panel.style.display = 'none'; _btnPressed(btn, false); });
-            regen().addEventListener('click', async () => {
-                try { iadAppend('bot', '<i>Regerando relatório…</i>'); iadDotsStart(); const out = await callIADeepMens(buildPayloadDeep({})); iadDotsStop(); iadAppendBotStreaming(out); }
-                catch (err) { iadDotsStop(); iadAppend('bot', `<span class="text-danger">Falha: ${err.message || err}</span>`); }
-            });
-            pdfBtn().addEventListener('click', exportIADtoPDF);
-            brief().addEventListener('click', () => { IA_BRIEF = !IA_BRIEF; _btnPressed(brief(), IA_BRIEF); });
-            send().addEventListener('click', async () => {
-                let q = (input().value || '').trim(); if (!q) return; input().value = '';
-                if (IA_BRIEF) q += '\n\n[INSTRUÇÃO: responda em até 5 linhas, linguagem executiva.]';
-                try {
-                    iadAppend('user', q);
-                    iadDotsStart();
-                    const out = await callIADeepMens(buildPayloadDeep({ userQuery: q }));
-                    iadDotsStop();
-                    iadAppendBotStreaming(out);
-                } catch (err) {
-                    iadDotsStop();
-                    iadAppend('bot', `<span class="text-danger">Falha: ${err.message || err}</span>`);
-                }
-            });
-            input().addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send().click(); } });
-        })();
     </script>
+
+    <!-- Chat reutilizável -->
+    <script src="/js/chat.js"></script>
+    <script>
+        ChatIA.init({
+            apiUrl: (window.IA_API_URL || '/ia/analisar'),
+            mountAfterSelector: '#btnComparar',
+            title: 'IA — Análise Completa & Chat',
+            briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
+            // sem auto análise: só monta payload quando usuário iniciar ou perguntar
+            getPayload: async ({ userQuery }) => buildPayloadDeep({ userQuery })
+        });
+    </script>
+
 </body>
 
 </html>
