@@ -15,12 +15,19 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
+    <script>
+        // mesmo host com proxy reverso
+        window.IA_API_URL = '/ia/analisar';
+        window.PROMPTS_API_BASE = '/prompts';
+        // outra porta (exige CORS)
+        // window.IA_API_URL = 'http://127.0.0.1:8011/ia/analisar';
+        // window.PROMPTS_API_BASE = 'http://127.0.0.1:8011/prompts';
+    </script>
 </head>
+
 <style>
-    /********************************************
-#                 VARIÁVEIS
-********************************************/
     :root {
         --cor0: #F2F2F2;
         --cor1: #afbfa5;
@@ -33,9 +40,6 @@
         --cor8: #444444;
     }
 
-    /********************************************
-#                 BASE
-********************************************/
     body {
         -webkit-font-smoothing: antialiased
     }
@@ -60,17 +64,10 @@
         width: 100%
     }
 
-    /********************************************
-#               LAYOUT / STACK
-#   Importante: NÃO tornar .stack um flex container
-********************************************/
     .stack>*+* {
         margin-top: 14px
     }
 
-    /********************************************
-#                FILTER BAR
-********************************************/
     .filter-bar {
         display: flex;
         gap: 12px;
@@ -85,9 +82,6 @@
         align-items: center
     }
 
-    /********************************************
-#                TABS / SCROLL
-********************************************/
     .scroll-tabs {
         display: flex;
         gap: 6px;
@@ -103,9 +97,6 @@
         cursor: pointer
     }
 
-    /********************************************
-#                  KPI GRID
-********************************************/
     .kpi {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -117,14 +108,12 @@
         margin: 0
     }
 
-    /* KPI GRID — força no container correto */
     .card-body.kpi {
         display: grid !important;
         grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 8px;
+        gap: 8px
     }
 
-    /* Cartões dos KPIs mais compactos */
     .card-body.kpi .card {
         margin: 0;
         border-radius: 12px
@@ -134,54 +123,10 @@
         padding: .5rem .75rem
     }
 
-    /* Stack: bloco simples com espaçamento entre irmãos */
-    .stack {
-        display: block
-    }
-
-    .stack>*+* {
-        margin-top: 14px
-    }
-
-    /* Chart card: mantém altura */
     .chart-card .card-body {
         height: 360px
     }
 
-    /* Filter bar e tabs seguem iguais */
-    .filter-bar {
-        display: flex;
-        gap: 12px;
-        align-items: flex-end;
-        flex-wrap: wrap;
-        padding: 10px
-    }
-
-    .month-inputs {
-        display: flex;
-        gap: 6px;
-        align-items: center
-    }
-
-    .scroll-tabs {
-        display: flex;
-        gap: 6px;
-        overflow: auto;
-        white-space: nowrap;
-        padding: 6px 0
-    }
-
-
-    /********************************************
-#                CHART CARD
-********************************************/
-    .chart-card .card-body {
-        height: 360px
-    }
-
-    /********************************************
-#                  HEATMAP
-********************************************/
     .heatmap {
         overflow: auto;
         max-height: 420px
@@ -208,9 +153,6 @@
         color: #111
     }
 
-    /********************************************
-#                  LEGEND
-********************************************/
     .lg-box {
         display: inline-block;
         width: 10px;
@@ -228,104 +170,7 @@
         background: rgba(220, 53, 69, 1)
     }
 
-    /********************************************
-#                IA - TOGGLE / PAINEL / CHAT
-********************************************/
-    .ia-toggle {
-        margin-left: .5rem
-    }
-
-    .ia-toggle.active {
-        background: var(--cor2);
-        color: #fff;
-        border-color: var(--cor5)
-    }
-
-    #iaPanel {
-        display: none
-    }
-
-    #iaPanel .ia-content {
-        background: #f8f9fa;
-        border: 1px solid #e5e7eb;
-        border-radius: 8px;
-        padding: 10px
-    }
-
-    .ia-loading {
-        font-family: monospace
-    }
-
-    .ia-dots {
-        display: inline-block;
-        min-width: 1.4em
-    }
-
-    .dot {
-        opacity: .2
-    }
-
-    .dot.on {
-        opacity: 1
-    }
-
-    #ia-chat {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        margin-top: 12px
-    }
-
-    .ia-msg {
-        max-width: 70%;
-        padding: 10px 12px;
-        border-radius: 12px;
-        line-height: 1.35;
-        white-space: pre-wrap;
-        word-wrap: break-word
-    }
-
-    .ia-user {
-        align-self: flex-end;
-        background: #e6f0ff;
-        border: 1px solid #c6dcff
-    }
-
-    .ia-bot {
-        align-self: flex-start;
-        background: #f4f4f5;
-        border: 1px solid #e4e4e7
-    }
-
-    .ia-meta {
-        font-size: 12px;
-        color: #6b7280;
-        margin-top: 2px
-    }
-
-    .ia-row {
-        display: flex;
-        flex-direction: column
-    }
-
-    .ia-spinner {
-        width: 18px;
-        height: 18px;
-        border: 2px solid #d1d5db;
-        border-top-color: #6b7280;
-        border-radius: 50%;
-        animation: spin .8s linear infinite
-    }
-
-    @keyframes spin {
-        to {
-            transform: rotate(360deg)
-        }
-    }
-
-    /********************************************
-#              IA DEEP - POPUP
-********************************************/
+    /* IA Deep */
     #iaDeepPanel {
         display: none;
         position: fixed;
@@ -388,17 +233,82 @@
         margin: 10px 0
     }
 
-    .ia-summary {
-        background: #fff;
-        border: 1px solid #e5e7eb;
-        border-radius: 10px;
-        padding: 12px;
-        line-height: 1.45
+    .iad-msg p {
+        margin: 10px 0
     }
 
-    /********************************************
-#               RESPONSIVIDADE
-********************************************/
+    .iad-msg .iad-h {
+        margin: 14px 0 8px;
+        font-weight: 600
+    }
+
+    #iaDeepPanel,
+    #iaDeepPanel * {
+        font-weight: 400
+    }
+
+    #iaDeepPanel .iad-h,
+    #iaDeepPanel .card-header b {
+        font-weight: 600
+    }
+
+    #iaDeepPanel b,
+    #iaDeepPanel strong {
+        font-weight: 600
+    }
+
+    /* Dark mode IA Deep */
+    #iaDeepPanel.card {
+        background: #1e1e1e;
+        color: #fff;
+        border: 1px solid #2a2a2a
+    }
+
+    #iaDeepPanel .card-header,
+    #iaDeepPanel .card-footer {
+        background: #242424;
+        color: #fff;
+        border-color: #2a2a2a
+    }
+
+    #iaDeepPanel .body {
+        background: #1e1e1e
+    }
+
+    #iaDeepPanel .iad-msg {
+        color: #eaeaea
+    }
+
+    #iaDeepPanel .iad-bot {
+        background: #2a2a2a;
+        border-color: #3a3a3a
+    }
+
+    #iaDeepPanel .iad-user {
+        background: #16324f;
+        border-color: #275a8a
+    }
+
+    #iaDeepPanel input.form-control {
+        background: #121212;
+        color: #fff;
+        border-color: #3a3a3a
+    }
+
+    #iaDeepPanel .btn.btn-outline-secondary {
+        color: #ddd;
+        border-color: #5a5a5a
+    }
+
+    #iaDeepPanel .btn.btn-outline-secondary:hover {
+        background: #333
+    }
+
+    #iaDeepPanel .btn.btn-primary {
+        background: #3b82f6;
+        border-color: #3b82f6
+    }
+
     @media (max-width:576px) {
         .navbar .ml-auto {
             display: flex;
@@ -451,9 +361,8 @@
         <!-- NAVBAR superior -->
         <nav class="main-header navbar navbar-expand navbar-white navbar-light">
             <ul class="navbar-nav">
-                <li class="nav-item">
-                    <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
-                </li>
+                <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i
+                            class="fas fa-bars"></i></a></li>
             </ul>
             <span class="ml-2 font-weight-bold d-flex align-items-center">
                 <img src="/images/Logo Camim-01_50px.png" alt="Logo Camim">
@@ -461,8 +370,6 @@
                 <span id="jsonInfo" class="ml-3 text-muted mini"></span>
             </span>
         </nav>
-
-
 
         <!-- SIDEBAR -->
         <aside class="main-sidebar sidebar-dark-primary elevation-4">
@@ -492,8 +399,8 @@
                             </a></li>
                         <li class="nav-item">
                             <form method="POST" action="/session/logout" style="display:inline">
-                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
-                                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left"><i
+                                        class="nav-icon fas fa-sign-out-alt"></i>
                                     <p>Sair</p>
                                 </button>
                             </form>
@@ -503,21 +410,16 @@
             </div>
         </aside>
 
-
-
-
-
         <!-- CONTEÚDO -->
         <div class="content-wrapper">
-            <!-- Header da página com IA Auto + Comparar -->
+            <!-- Header da página sem IA Auto -->
             <nav class="navbar navbar-expand navbar-white navbar-light">
                 <div class="d-flex w-100 align-items-center">
                     <span class="ml-2 font-weight-bold">KPI de Mensalidades</span>
                     <div class="ml-auto">
-                        <button id="iaAuto" class="btn btn-sm btn-outline-primary ia-toggle"
-                            title="Reenviar à IA sempre que filtros mudarem">IA Auto</button>
-                        <button id="btnComparar" class="btn btn-sm btn-outline-secondary ml-2"
+                        <button id="btnComparar" class="btn btn-sm btn-outline-secondary"
                             title="Mostrar/ocultar bloco de comparação">Comparar</button>
+                        <!-- Botão IA Deep será injetado abaixo -->
                     </div>
                 </div>
             </nav>
@@ -525,7 +427,7 @@
             <section class="content p-3 stack">
                 <div id="err" class="text-danger mb-1"></div>
 
-                <!-- BLOCO 1: COMPARAÇÃO -->
+                <!-- BLOCO: COMPARAÇÃO -->
                 <div id="compareBlock" style="display:none">
                     <div class="card">
                         <div class="filter-bar">
@@ -577,12 +479,6 @@
                     <div class="card-body kpi" id="kpisSel2"></div>
                 </div>
 
-                <!-- Painel IA + Chat -->
-                <div id="iaPanel" class="p-2" style="display:none">
-                    <div id="iaOut" class="ia-content"></div>
-                    <div id="ia-chat" class="mt-3"></div>
-                </div>
-
                 <!-- TABELA -->
                 <div class="card">
                     <div class="card-header d-flex align-items-center justify-content-between">
@@ -631,7 +527,8 @@
                 </div>
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Performance mensal<div id="legend-yoy" class="mini muted">
+                        <h3 class="card-title mb-0">Performance mensal
+                            <div id="legend-yoy" class="mini muted">
                                 <span class="lg-box lg-pos"></span> Positivo
                                 &nbsp;&nbsp;
                                 <span class="lg-box lg-neg"></span> Negativo
@@ -648,7 +545,8 @@
                 </div>
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Receita YoY (%)<div id="legend-yoy" class="mini muted">
+                        <h3 class="card-title mb-0">Receita YoY (%)
+                            <div id="legend-yoy" class="mini muted">
                                 <span class="lg-box lg-pos"></span> Positivo
                                 &nbsp;&nbsp;
                                 <span class="lg-box lg-neg"></span> Negativo
@@ -679,7 +577,8 @@
                 </div>
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">YoY médio por Posto (12m) <div id="legend-yoy" class="mini muted">
+                        <h3 class="card-title mb-0">YoY médio por Posto (12m)
+                            <div id="legend-yoy" class="mini muted">
                                 <span class="lg-box lg-pos"></span> Positivo
                                 &nbsp;&nbsp;
                                 <span class="lg-box lg-neg"></span> Negativo
@@ -692,92 +591,41 @@
         </div>
     </div>
 
-
-
-
-
-
-    <!-- ========== Prompt Manager (módulo reutilizável, compartilhado por página) ========== -->
+    <!-- PROMPTS (compartilhado) -->
     <script>
         (function () {
-            // Endpoint REST no back-end FastAPI
-            const API_PROMPTS = window.API_PROMPTS || '/prompts';
-
-            // Util
+            const API_PROMPTS = (window.PROMPTS_API_BASE || '/prompts').replace(/\/+$/, '');
             function uid() { return 'p_' + Math.random().toString(36).slice(2, 10); }
             function nowISO() { return new Date().toISOString(); }
             function tplRender(tpl, vars) { return String(tpl || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => (vars?.[k] ?? `{${k}}`)); }
-
-            // Fallback local opcional (só se API falhar)
-            const LS_PREFIX = 'camim.prompts::';
-            const loadLocal = (key) => { try { const r = localStorage.getItem(LS_PREFIX + key); return r ? JSON.parse(r) : null; } catch { return null; } };
-            const saveLocal = (key, obj) => { try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(obj)); } catch { } };
-
             const Prompts = {
                 state: { pageId: null, list: [], activeId: null, mounted: false, editingId: null },
-
-                // ----------- Persistência remota -----------
-                async _loadRemote(pageId) {
-                    const r = await fetch(`${API_PROMPTS}/${encodeURIComponent(pageId)}`, { credentials: 'same-origin' });
-                    if (!r.ok) return null;
-                    return await r.json(); // {list, activeId}
-                },
+                async _loadRemote(pageId) { const r = await fetch(`${API_PROMPTS}/${encodeURIComponent(pageId)}`, { credentials: 'same-origin' }); if (!r.ok) return null; return await r.json(); },
                 async _saveRemote(pageId, obj) {
                     const r = await fetch(`${API_PROMPTS}/${encodeURIComponent(pageId)}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'same-origin',
+                        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
                         body: JSON.stringify({ list: obj.list, activeId: obj.activeId })
-                    });
-                    if (!r.ok) throw new Error('Falha ao salvar no servidor');
+                    }); if (!r.ok) throw new Error('Falha ao salvar');
                 },
-
-                // ----------- API pública -----------
                 async init({ pageId, defaults = [], mountAfter }) {
                     this.state.pageId = pageId;
-
-                    // 1) tenta carregar do servidor
-                    let saved = null;
-                    try { saved = await this._loadRemote(pageId); } catch { }
-                    // 2) se vazio/indisponível, usa defaults e sobe para o servidor
+                    let saved = null; try { saved = await this._loadRemote(pageId); } catch { }
                     if (!saved || !Array.isArray(saved.list) || !saved.list.length) {
                         const list = defaults.map(d => ({ id: uid(), name: d.name, template: d.template, updatedAt: nowISO() }));
-                        saved = { list, activeId: list[0]?.id || null };
-                        try { await this._saveRemote(pageId, saved); } catch { /* fallback local */ saveLocal(pageId, saved); }
+                        saved = { list, activeId: list[0]?.id || null }; try { await this._saveRemote(pageId, saved); } catch { }
                     }
-
-                    this.state.list = saved.list;
-                    this.state.activeId = saved.activeId;
-
-                    this._mountUI(mountAfter);
-                    this._renderList();
+                    this.state.list = saved.list; this.state.activeId = saved.activeId;
+                    this._mountUI(mountAfter); this._renderList();
                 },
-
-                getActive() {
-                    const { list, activeId } = this.state;
-                    return list.find(p => p.id === activeId) || null;
-                },
-
-                render(vars) {
-                    const a = this.getActive();
-                    return a ? tplRender(a.template, vars) : '';
-                },
-
-                // ----------- UI -----------
+                getActive() { const { list, activeId } = this.state; return list.find(p => p.id === activeId) || null; },
+                render(vars) { const a = this.getActive(); return a ? tplRender(a.template, vars) : ''; },
                 _mountUI(mountAfter) {
                     if (this.state.mounted) return;
-
                     const btn = document.createElement('button');
-                    btn.id = 'btnPrompts';
-                    btn.className = 'btn btn-sm btn-outline-secondary ml-2';
-                    btn.textContent = 'Prompts';
-                    btn.title = 'Gerenciar prompts desta página';
-                    const anchor = document.querySelector(mountAfter) || document.body;
-                    anchor.parentNode.insertBefore(btn, anchor.nextSibling);
-
-                    const modal = document.createElement('div');
-                    modal.id = 'promptModal';
-                    modal.style.display = 'none';
+                    btn.id = 'btnPrompts'; btn.className = 'btn btn-sm btn-outline-secondary ml-2';
+                    btn.textContent = 'Prompts'; btn.title = 'Gerenciar prompts desta página';
+                    const anchor = document.querySelector(mountAfter) || document.body; anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+                    const modal = document.createElement('div'); modal.id = 'promptModal'; modal.style.display = 'none';
                     modal.innerHTML = `
 <div class="card p-2" style="position:fixed;right:16px;bottom:16px;width:min(720px,92vw);max-height:80vh;overflow:auto;z-index:9999;box-shadow:0 10px 24px rgba(0,0,0,.18)">
   <div class="d-flex align-items-center mb-2">
@@ -810,7 +658,6 @@
   </div>
 </div>`;
                     document.body.appendChild(modal);
-
                     btn.addEventListener('click', () => { modal.style.display = modal.style.display === 'none' ? 'block' : 'none'; });
                     modal.querySelector('#pmClose').addEventListener('click', () => { modal.style.display = 'none'; });
                     modal.querySelector('#pmNew').addEventListener('click', () => this._new());
@@ -820,10 +667,8 @@
                     modal.querySelector('#pmSetActive').addEventListener('click', () => this._setActiveFromEditor());
                     modal.querySelector('#pmExport').addEventListener('click', () => this._export());
                     modal.querySelector('#pmImport').addEventListener('change', e => this._import(e));
-
                     this.state.mounted = true;
                 },
-
                 _renderList() {
                     const { list, activeId } = this.state;
                     const ul = document.querySelector('#pmList'); if (!ul) return;
@@ -838,102 +683,32 @@
                     });
                     if (list.length) this._loadToEditor(activeId || list[0].id);
                 },
-
                 _loadToEditor(id) {
                     const { list } = this.state;
                     const p = list.find(x => x.id === id) || list[0]; if (!p) return;
                     document.querySelector('#pmName').value = p.name || '';
                     document.querySelector('#pmTpl').value = p.template || '';
                     document.querySelectorAll('#pmList li').forEach(li => li.classList.toggle('active', li.dataset.id === p.id));
-                    this.state.editingId = p.id;
-                    const st = document.querySelector('#pmStatus'); if (st) st.textContent = '';
+                    this.state.editingId = p.id; const st = document.querySelector('#pmStatus'); if (st) st.textContent = '';
                 },
-
-                // ----------- Ações -----------
-                async _persist() {
-                    const { pageId, list, activeId } = this.state;
-                    const payload = { list, activeId };
-                    try { await this._saveRemote(pageId, payload); }
-                    catch { saveLocal(pageId, payload); }
-                },
-
-                async _new() {
-                    const id = uid();
-                    this.state.list.unshift({ id, name: 'Novo prompt', template: '', updatedAt: nowISO() });
-                    await this._persist(); this._renderList(); this._loadToEditor(id);
-                },
-
-                async _dup() {
-                    const id = this.state.editingId;
-                    const p = this.state.list.find(x => x.id === id); if (!p) return;
-                    const nid = uid();
-                    this.state.list.unshift({ id: nid, name: p.name + ' (cópia)', template: p.template, updatedAt: nowISO() });
-                    await this._persist(); this._renderList(); this._loadToEditor(nid);
-                },
-
-                async _del() {
-                    const id = this.state.editingId; if (!id) return;
-                    this.state.list = this.state.list.filter(x => x.id !== id);
-                    if (this.state.activeId === id) this.state.activeId = this.state.list[0]?.id || null;
-                    await this._persist(); this._renderList();
-                },
-
-                async _saveEdits() {
-                    const id = this.state.editingId; if (!id) return;
-                    const name = (document.querySelector('#pmName').value || '').trim() || 'Sem nome';
-                    const template = document.querySelector('#pmTpl').value;
-                    const p = this.state.list.find(x => x.id === id); if (!p) return;
-                    p.name = name; p.template = template; p.updatedAt = nowISO();
-                    await this._persist(); this._renderList(); this._loadToEditor(id);
-                    const st = document.querySelector('#pmStatus'); if (st) { st.textContent = 'Salvo'; setTimeout(() => st.textContent = '', 1200); }
-                },
-
-                async _setActiveFromEditor() {
-                    const id = this.state.editingId; if (!id) return;
-                    this.state.activeId = id;
-                    await this._persist(); this._renderList();
-                },
-
-                _export() {
-                    const blob = new Blob([JSON.stringify({ list: this.state.list, activeId: this.state.activeId }, null, 2)], { type: 'application/json' });
-                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-                    a.download = `prompts_${this.state.pageId}.json`; a.click(); URL.revokeObjectURL(a.href);
-                },
-
-                async _import(e) {
-                    const f = e.target.files?.[0]; if (!f) return;
-                    const txt = await f.text(); let obj = null;
-                    try { obj = JSON.parse(txt); } catch { alert('JSON inválido'); return; }
-                    if (!obj || !Array.isArray(obj.list)) { alert('Estrutura inválida'); return; }
-                    const norm = obj.list.map(x => ({ id: x.id || uid(), name: x.name || 'Sem nome', template: x.template || '', updatedAt: x.updatedAt || nowISO() }));
-                    this.state.list = norm;
-                    this.state.activeId = obj.activeId && norm.find(x => x.id === obj.activeId) ? obj.activeId : (norm[0]?.id || null);
-                    await this._persist(); this._renderList(); e.target.value = '';
-                }
+                async _persist() { const { pageId, list, activeId } = this.state; const payload = { list, activeId }; try { await this._saveRemote(pageId, payload); } catch { } },
+                async _new() { const id = uid(); this.state.list.unshift({ id, name: 'Novo prompt', template: '', updatedAt: nowISO() }); await this._persist(); this._renderList(); this._loadToEditor(id); },
+                async _dup() { const id = this.state.editingId; const p = this.state.list.find(x => x.id === id); if (!p) return; const nid = uid(); this.state.list.unshift({ id: nid, name: p.name + ' (cópia)', template: p.template, updatedAt: nowISO() }); await this._persist(); this._renderList(); this._loadToEditor(nid); },
+                async _del() { const id = this.state.editingId; if (!id) return; this.state.list = this.state.list.filter(x => x.id !== id); if (this.state.activeId === id) this.state.activeId = this.state.list[0]?.id || null; await this._persist(); this._renderList(); },
+                async _saveEdits() { const id = this.state.editingId; if (!id) return; const name = (document.querySelector('#pmName').value || '').trim() || 'Sem nome'; const template = document.querySelector('#pmTpl').value; const p = this.state.list.find(x => x.id === id); if (!p) return; p.name = name; p.template = template; p.updatedAt = nowISO(); await this._persist(); this._renderList(); this._loadToEditor(id); const st = document.querySelector('#pmStatus'); if (st) { st.textContent = 'Salvo'; setTimeout(() => st.textContent = '', 1200); } },
+                async _setActiveFromEditor() { const id = this.state.editingId; if (!id) return; this.state.activeId = id; await this._persist(); this._renderList(); },
+                _export() { const blob = new Blob([JSON.stringify({ list: this.state.list, activeId: this.state.activeId }, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `prompts_${this.state.pageId}.json`; a.click(); URL.revokeObjectURL(a.href); },
+                async _import(e) { const f = e.target.files?.[0]; if (!f) return; const txt = await f.text(); let obj = null; try { obj = JSON.parse(txt); } catch { alert('JSON inválido'); return; } if (!obj || !Array.isArray(obj.list)) { alert('Estrutura inválida'); return; } const norm = obj.list.map(x => ({ id: x.id || uid(), name: x.name || 'Sem nome', template: x.template || '', updatedAt: x.updatedAt || nowISO() })); this.state.list = norm; this.state.activeId = obj.activeId && norm.find(x => x.id === obj.activeId) ? obj.activeId : (norm[0]?.id || null); await this._persist(); this._renderList(); e.target.value = ''; }
             };
-
             window.Prompts = Prompts;
         })();
     </script>
 
-
-
-
-
-
-
-
-
-    <!-- ========== Script principal ========== -->
+    <!-- Script principal -->
     <script>
         const BASE = new URL('.', location.href);
         const URL_GERAL = new URL('json_consolidado/consolidado_mensal.json', BASE).href;
         const URL_POR_POSTO = new URL('json_consolidado/consolidado_mensal_por_posto.json', BASE).href;
-
-        const IA_BASE = new URL('json_retorno_groq/', BASE).href.replace(/\/$/, '');
-        const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
-        const API_ANALISAR = window.IA_API_URL || (IS_LOCAL ? 'http://127.0.0.1:8011/ia/analisar' : '/ia/analisar');
-        const loaders = new Map();
 
         const el = s => document.querySelector(s);
         const showErr = e => { console.error(e); const er = el('#err'); if (er) er.textContent = e?.message || e; };
@@ -952,33 +727,16 @@
         const sum = arr => arr.reduce((a, b) => a + (b || 0), 0);
         const wavg = (vals, weights) => { let sW = 0, s = 0; for (let i = 0; i < vals.length; i++) { const w = weights[i] ?? 0; const v = vals[i]; if (v == null) continue; s += v * w; sW += w; } return sW ? s / sW : null; };
 
-        function setPressed(btn, on, variant = 'primary') {
-            btn.classList.toggle(`btn-outline-${variant}`, !on);
-            btn.classList.toggle(`btn-${variant}`, on);
-            btn.classList.toggle('active', on);
-            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-        }
+        function setPressed(btn, on, variant = 'primary') { btn.classList.toggle(`btn-outline-${variant}`, !on); btn.classList.toggle(`btn-${variant}`, on); btn.classList.toggle('active', on); btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
 
         let MESES = [], geral = {}, porPosto = {}, POSTOS = [];
         let sel1 = 'ALL', sel2 = 'ALL';
 
-        /* Header "dados gerados em" */
         const LM = {};
-        function renderJsonInfo() {
-            const elInfo = document.querySelector('#jsonInfo'); if (!elInfo) return;
-            const entries = Object.values(LM).filter(Boolean);
-            if (!entries.length) { elInfo.textContent = ''; elInfo.removeAttribute('title'); return; }
-            const newest = entries.slice().sort((a, b) => b.date - a.date)[0];
-            const fmt = d => d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-            elInfo.textContent = `• dados gerados em ${fmt(newest.date)}`;
-            elInfo.title = entries.map(e => `${e.label}: ${fmt(e.date)}`).join(' | ');
-        }
-        function setJsonInfoFromHeaders(resp, key, label) {
-            try { const lm = resp.headers.get('Last-Modified'); if (!lm) return false; LM[key] = { date: new Date(lm), label }; renderJsonInfo(); return true; } catch { return false; }
-        }
+        function renderJsonInfo() { const elInfo = document.querySelector('#jsonInfo'); if (!elInfo) return; const entries = Object.values(LM).filter(Boolean); if (!entries.length) { elInfo.textContent = ''; elInfo.removeAttribute('title'); return; } const newest = entries.slice().sort((a, b) => b.date - a.date)[0]; const fmt = d => d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); elInfo.textContent = `• dados gerados em ${fmt(newest.date)}`; elInfo.title = entries.map(e => `${e.label}: ${fmt(e.date)}`).join(' | '); }
+        function setJsonInfoFromHeaders(resp, key, label) { try { const lm = resp.headers.get('Last-Modified'); if (!lm) return false; LM[key] = { date: new Date(lm), label }; renderJsonInfo(); return true; } catch { return false; } }
         async function tryHead(url, key, label) { try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); setJsonInfoFromHeaders(r, key, label); } catch { } }
 
-        /* Core */
         function srcMens(g) {
             return {
                 valor: num(g.mensalidade), qtd: num(g.mensalidade_qtd),
@@ -991,8 +749,7 @@
         }
         function aggMens(ym, selection) {
             if (selection === 'ALL') return srcMens(geral[ym] || {});
-            const postos = [...selection];
-            const rows = postos.map(p => ((porPosto[ym] || {})[p]) || {});
+            const postos = [...selection]; const rows = postos.map(p => ((porPosto[ym] || {})[p]) || {});
             const valor = sum(rows.map(r => num(r.mensalidade)));
             const qtd = sum(rows.map(r => num(r.mensalidade_qtd)));
             const ticket = (qtd ? valor / qtd : null);
@@ -1020,11 +777,7 @@
                             fmt === 'pct' ? (fmtPct.format(val) + '%') : String(val));
             return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0 ${neg ? 'text-danger' : ''}">${out}</div></div></div>`;
         }
-        function maxDrawdown(vals) {
-            let peak = -Infinity, mdd = 0;
-            for (const v of vals) { if (v == null) continue; if (v > peak) peak = v; if (peak > 0) { const dd = (v - peak) / peak * 100; if (dd < mdd) mdd = dd; } }
-            return mdd || 0;
-        }
+        function maxDrawdown(vals) { let peak = -Infinity, mdd = 0; for (const v of vals) { if (v == null) continue; if (v > peak) peak = v; if (peak > 0) { const dd = (v - peak) / peak * 100; if (dd < mdd) mdd = dd; } } return mdd || 0; }
         function buildKPIs(containerId, meses, selection) {
             const box = el(containerId); if (!box) return;
             const rows = meses.map(m => aggMens(m, selection));
@@ -1036,16 +789,14 @@
             const perfMA = perfs.length ? perfs.reduce((a, b) => a + b, 0) / perfs.length : null;
             let perfMG = null, perfAc = null;
             if (perfs.length) { const mult = perfs.reduce((a, p) => a * (1 + p / 100), 1); perfAc = (mult - 1) * 100; perfMG = (Math.pow(mult, 1 / perfs.length) - 1) * 100; }
-            let cagr = null;
-            if (meses.length >= 2) { const first = aggMens(meses[0], selection).valor || 0; const last = aggMens(meses.at(-1), selection).valor || 0; if (first > 0) cagr = (Math.pow(last / first, 1 / (meses.length - 1)) - 1) * 100; }
+            let cagr = null; if (meses.length >= 2) { const first = aggMens(meses[0], selection).valor || 0; const last = aggMens(meses.at(-1), selection).valor || 0; if (first > 0) cagr = (Math.pow(last / first, 1 / (meses.length - 1)) - 1) * 100; }
             const runRate = meses.length ? (receita / meses.length) * 12 : null;
 
             const moms = rows.map(v => v.r_mom).filter(v => v != null);
             const hit = moms.length ? (moms.filter(x => x > 0).length / moms.length) * 100 : null;
 
             const logrets = rows.map(v => v.logret).filter(v => v != null);
-            let vol = null;
-            if (logrets.length) { const mean = logrets.reduce((a, b) => a + b, 0) / logrets.length; const vr = logrets.reduce((a, x) => a + (x - mean) * (x - mean), 0) / logrets.length; vol = Math.sqrt(vr); }
+            let vol = null; if (logrets.length) { const mean = logrets.reduce((a, b) => a + b, 0) / logrets.length; const vr = logrets.reduce((a, x) => a + (x - mean) * (x - mean), 0) / logrets.length; vol = Math.sqrt(vr); }
             const volPct = (vol == null) ? null : (vol * 100);
 
             const receitaSerie = meses.map(m => aggMens(m, selection).valor || null);
@@ -1204,7 +955,6 @@
             chYoYPosto.update();
         }
 
-        /* Seleção de Posto */
         function markActiveMulti(scopeId, selection) {
             const isAll = selection === 'ALL';
             document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
@@ -1228,231 +978,20 @@
                     if (sel.has(p)) sel.delete(p); else sel.add(p);
                     if (sel.size === POSTOS.length || sel.size === 0) sel = 'ALL';
                 }
-                setSel(sel); markActiveMulti(ulId, sel); onChange(); if (IA_STATE.auto) IA_send();
+                setSel(sel); markActiveMulti(ulId, sel); onChange();
             });
         }
 
-        //  <!--------------------- IA: loader --------------------------->
-
-        /* util de HTML */
-        function escapeHtml(s) {
-            return String(s ?? '')
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;');
-        }
-
-        /* renderer do retorno da IA */
-        function toHtml(res) {
-            if (!res) return '<div class="ia-content">Sem retorno da IA.</div>';
-
-            // texto livre
-            if (typeof res === 'string' || res.livre) {
-                const txt = typeof res === 'string' ? res : res.livre;
-                return `<div class="ia-content"><pre class="mb-0">${escapeHtml(txt)}</pre></div>`;
-            }
-
-            // json padrão {resumo, insights[], alertas[]}
-            const parts = [];
-            if (res.resumo) parts.push(`<p>${escapeHtml(res.resumo)}</p>`);
-            if (Array.isArray(res.insights) && res.insights.length) {
-                parts.push(`<div><b>Insights</b><ul>${res.insights.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`);
-            }
-            if (Array.isArray(res.alertas) && res.alertas.length) {
-                parts.push(`<div><b>Alertas</b><ul>${res.alertas.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`);
-            }
-            if (!parts.length) {
-                parts.push(`<pre class="mb-0">${escapeHtml(JSON.stringify(res, null, 2))}</pre>`);
-            }
-            return `<div class="ia-content">${parts.join('')}</div>`;
-        }
-
-        /* loader visual */
-        function startDots(target) {
-            const box = target || el('#iaOut') || el('#iaPanel');
-            const wrap = document.createElement('div');
-            wrap.className = 'ia-content ia-loading';
-            wrap.innerHTML = `Analisando <span class="ia-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
-            box.innerHTML = ''; box.appendChild(wrap);
-            let t = 0;
-            const int = setInterval(() => {
-                const d = wrap.querySelectorAll('.dot');
-                d.forEach(x => x.classList.remove('on'));
-                d[t % 3].classList.add('on');
-                t++;
-            }, 260);
-            loaders.set(box, int);
-        }
-        function stopDots(target) {
-            const box = target || el('#iaOut') || el('#iaPanel');
-            const int = loaders.get(box);
-            if (int) { clearInterval(int); loaders.delete(box); }
-        }
-
-        /* helpers de seleção e séries */
-        function postoAtual() { return sel2 === 'ALL' ? 'ALL' : [...sel2].sort().join('+'); }
-        function mesesSel2() { return inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); }
-        function seriesBasicas(meses, selection) {
-            const rows = meses.map(m => aggMens(m, selection));
-            return {
-                labels: meses,
-                receita: rows.map(v => v.valor),
-                qtd: rows.map(v => v.qtd),
-                ticket: rows.map(v => v.ticket),
-                perf: rows.map(v => v.perf),
-                yoy: rows.map(v => v.r_yoy),
-                mix_p: rows.map(v => v.mix_p),
-                mix_v: rows.map(v => v.mix_v),
-                logret: rows.map(v => v.logret)
-            };
-        }
-        function defs() {
-            return {
-                receita: "Somatório de mensalidade no mês",
-                qtd: "Quantidade de mensalidades",
-                ticket: "Receita / Qtd",
-                perf: "Variação % MoM da receita",
-                yoy: "Variação % YoY da receita",
-                logret: "ln(Receita_t / Receita_{t-1})",
-                mix_p: "Δ da receita atribuída a preço",
-                mix_v: "Δ da receita atribuída a volume",
-                vol_mov_3m: "desvio padrão de logret em janela móvel de 3 meses"
-            };
-        }
-
-        const IA_STATE = { auto: false, userSentOnce: false };
-
-        /* fetch da IA */
-        async function iaFetch(payload) {
-            if (IS_LOCAL) {
-                try {
-                    const f = `${payload.blocks[0]?.periodo?.from || 'from'}_${payload.blocks[0]?.periodo?.to || 'to'}_${(payload.blocks[0]?.posto || 'ALL')}_mensalidades.json`;
-                    const url = `${IA_BASE}/${f}?t=${Date.now()}`;
-                    const r = await fetch(url, { cache: 'no-store' });
-                    if (r.ok) {
-                        const res = await r.json();
-                        console.debug('IA payload ok (local):', { hasPrompt: !!(payload.prompt && payload.prompt.trim()), blocks: payload.blocks?.length });
-                        if (res && res.content_mode === 'free_text') return { livre: res.text || '' };
-                        if (res && res.content_mode === 'json') return res.data || {};
-                        return res;
-                    }
-                } catch { }
-                return { resumo: 'Mock local não encontrado para este filtro.', alertas: [] };
-            }
-
-            const r = await fetch(API_ANALISAR, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            if (!r.ok) {
-                let errText = '';
-                try { errText = await r.text(); } catch { }
-                throw new Error(`HTTP ${r.status} em ${API_ANALISAR} — ${errText}`);
-            }
-
-            const res = await r.json();
-            console.debug('IA payload ok (remote):', { hasPrompt: !!(payload.prompt && payload.prompt.trim()), blocks: payload.blocks?.length });
-            if (res && res.content_mode === 'free_text') return { livre: res.text || '' };
-            if (res && res.content_mode === 'json') return res.data || {};
-            return res;
-        }
-
-        /* envio para IA */
-        async function IA_send(userMsg) {
-            const panel = el('#iaPanel'); if (!panel) return;
-            panel.style.display = 'block';
-            const outBox = el('#iaOut') || panel;
-            startDots(outBox);
-            try {
-                const meses = mesesSel2(); if (!meses.length) throw new Error('Seleção vazia.');
-                const s = seriesBasicas(meses, sel2);
-                const scopes = ['chart_valores', 'chart_qtd_ticket', 'chart_perf', 'chart_vol', 'chart_yoy', 'chart_mix'].join(', ');
-                const renderedPrompt = Prompts.render({
-                    produto: 'mensalidades',
-                    from: meses[0],
-                    to: meses.at(-1),
-                    posto: postoAtual(),
-                    contexto: 'graficos',
-                    scopes
-                });
-
-                const payload = {
-                    produto: 'mensalidades',
-                    when: Date.now(),
-                    query: userMsg || null,
-                    contexto: 'graficos',
-                    prefs: { output: 'livre', assertivo: true, accept_format: 'json', temperature: 0.2, max_tokens: 2048 },
-                    defs: defs(),
-                    prompt: renderedPrompt,
-                    blocks: [
-                        {
-                            scope: 'chart_valores',
-                            periodo: { from: meses[0], to: meses.at(-1) },
-                            posto: postoAtual(),
-                            series: { labels: s.labels, receita: s.receita }
-                        },
-                        {
-                            scope: 'chart_qtd_ticket',
-                            periodo: { from: meses[0], to: meses.at(-1) },
-                            posto: postoAtual(),
-                            series: { labels: s.labels, qtd: s.qtd, ticket: s.ticket }
-                        },
-                        {
-                            scope: 'chart_perf',
-                            periodo: { from: meses[0], to: meses.at(-1) },
-                            posto: postoAtual(),
-                            series: { labels: s.labels, perf: s.perf }   // padronizado em series
-                        },
-                        {
-                            scope: 'chart_vol',
-                            periodo: { from: meses[0], to: meses.at(-1) },
-                            posto: postoAtual(),
-                            series: { labels: s.labels, logret: s.logret }
-                        },
-                        {
-                            scope: 'chart_yoy',
-                            periodo: { from: meses[0], to: meses.at(-1) },
-                            posto: postoAtual(),
-                            series: { labels: s.labels, yoy: s.yoy }     // padronizado em series
-                        },
-                        {
-                            scope: 'chart_mix',
-                            periodo: { from: meses[0], to: meses.at(-1) },
-                            posto: postoAtual(),
-                            series: { labels: s.labels, dpreco: s.mix_p, dvolume: s.mix_v } // padronizado em series
-                        }
-                    ]
-                };
-
-                const data = await iaFetch(payload);
-                stopDots(outBox);
-                const out = el('#iaOut'); if (out) out.innerHTML = toHtml(data);
-            } catch (err) {
-                stopDots(outBox);
-                panel.innerHTML = `<div class="ia-content"><p>Falha na IA: ${escapeHtml(err.message || err)}</p></div>`;
-            }
-        }
-
-
-
-
-
-        /* Boot */
-        // Inicializa Prompt Manager para esta página
         Prompts.init({
             pageId: 'mensalidades',
             defaults: [
                 { name: 'Padrão', template: `Analise receita, quantidade, ticket, performance e mix (ΔPreço/ΔVolume) para {posto} de {from} a {to}. Foque nos gráficos {scopes}. Liste até 5 insights e 3 alertas. Tom assertivo.` },
                 { name: 'Executivo', template: `Resumo executivo para {produto} no período {from}→{to}, posto {posto}. Destaque riscos e oportunidades. Cite {scopes}. Texto conciso.` }
             ],
-            mountAfter: '#iaAuto'
+            mountAfter: '#btnComparar'
         });
 
-        Promise.all([
-            fetch(URL_GERAL, { cache: 'no-store' }),
-            fetch(URL_POR_POSTO, { cache: 'no-store' })
-        ])
+        Promise.all([fetch(URL_GERAL, { cache: 'no-store' }), fetch(URL_POR_POSTO, { cache: 'no-store' })])
             .then(async ([rg, rp]) => {
                 if (!rg.ok) throw new Error(`HTTP ${rg.status} em ${URL_GERAL}`);
                 if (!rp.ok) throw new Error(`HTTP ${rp.status} em ${URL_POR_POSTO}`);
@@ -1481,16 +1020,13 @@
                 if (el('#to2')) el('#to2').value = lastFull;
 
                 sel1 = 'ALL'; sel2 = 'ALL';
-
                 buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
                 buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; }, () => renderSel2());
 
                 initCharts(); attachHandlers(lastFull);
                 renderSel1(); renderSel2();
 
-                if (el('#iaPanel')) el('#iaPanel').style.display = 'none';
                 if (el('#compareBlock')) el('#compareBlock').style.display = 'none';
-                if (el('#iaAuto')) setPressed(el('#iaAuto'), false, 'primary');
                 if (el('#btnComparar')) setPressed(el('#btnComparar'), false, 'secondary');
             })
             .catch(err => { showErr(err); alert('Falha ao carregar JSONs. Veja o console.'); });
@@ -1501,16 +1037,13 @@
         function attachHandlers(lastFull) {
             if (el('#from1')) el('#from1').addEventListener('change', () => { renderSel1(); });
             if (el('#to1')) el('#to1').addEventListener('change', () => { renderSel1(); });
-            if (el('#reset1')) el('#reset1').addEventListener('click', () => {
-                el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1();
-            });
+            if (el('#reset1')) el('#reset1').addEventListener('click', () => { el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1(); });
 
-            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
-            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); if (IA_STATE.auto) IA_send(); });
+            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); });
+            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); });
             if (el('#reset2')) el('#reset2').addEventListener('click', () => {
                 const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
-                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL';
-                markActiveMulti('#postoTabs2', sel2); renderSel2(); if (IA_STATE.auto) IA_send();
+                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL'; markActiveMulti('#postoTabs2', sel2); renderSel2();
             });
 
             const btnCmp = el('#btnComparar');
@@ -1520,16 +1053,190 @@
                 box.style.display = show ? 'block' : 'none';
                 setPressed(btnCmp, show, 'secondary');
             });
-
-            const btnIA = el('#iaAuto');
-            if (btnIA) btnIA.addEventListener('click', () => {
-                IA_STATE.auto = !IA_STATE.auto;
-                setPressed(btnIA, IA_STATE.auto, 'primary');
-                const panel = el('#iaPanel'); if (!panel) return;
-                if (IA_STATE.auto) { panel.style.display = 'block'; IA_send(); }
-                else { const out = el('#iaOut'); if (out) out.innerHTML = ''; panel.style.display = 'none'; }
-            });
         }
+    </script>
+
+    <!-- IA Deep: relatório + chat + PDF fullscreen -->
+    <script>
+        function _btnPressed(btn, on) { btn.classList.toggle('btn-outline-primary', !on); btn.classList.toggle('btn-primary', on); btn.classList.toggle('active', on); btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+
+        (function injectIAD() {
+            const anchor = document.querySelector('#btnComparar'); if (!anchor) return;
+            if (!document.querySelector('#iaDeep')) {
+                const btn = document.createElement('button');
+                btn.id = 'iaDeep'; btn.className = 'btn btn-sm btn-outline-primary ml-2';
+                btn.textContent = 'IA Análise'; btn.title = 'Relatório completo e chat';
+                anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+            }
+            if (!document.querySelector('#iaDeepPanel')) {
+                const wrap = document.createElement('div'); wrap.id = 'iaDeepPanel'; wrap.className = 'card';
+                wrap.style.cssText = 'display:none;position:fixed;right:16px;bottom:16px;width:min(760px,95vw);max-height:85vh;z-index:9999;box-shadow:0 10px 24px rgba(0,0,0,.18)';
+                wrap.innerHTML = `
+<div class="card-header d-flex align-items-center justify-content-between">
+  <b class="mb-0">IA — Análise Completa & Chat</b>
+  <div class="d-flex" style="gap:8px">
+    <button id="iadBrief" class="btn btn-sm btn-outline-secondary" title="Respostas em até 5 linhas">IA Resumida</button>
+    <button id="iadPDF" class="btn btn-sm btn-outline-secondary" title="Exportar PDF da conversa">PDF</button>
+    <button id="iadRefresh" class="btn btn-sm btn-outline-secondary" title="Regerar relatório completo">Regerar</button>
+    <button id="iadClose" class="btn btn-sm btn-outline-secondary">Fechar</button>
+  </div>
+</div>
+<div class="card-body body" style="max-height:60vh;overflow:auto">
+  <div id="iadOut" class="iad-chat d-flex flex-column ia-clean"></div>
+</div>
+<div class="card-footer">
+  <div class="d-flex" style="gap:8px">
+    <input id="iadInput" class="form-control form-control-sm" placeholder="Pergunte sobre drivers, mix, MoM, YoY...">
+    <button id="iadSend" class="btn btn-sm btn-primary">Enviar</button>
+  </div>
+  <small class="text-muted">Mensagens usam o recorte atual. Texto corrido, sem tabelas ASCII.</small>
+</div>`;
+                document.body.appendChild(wrap);
+            }
+        })();
+
+        const iadPanel = () => document.querySelector('#iaDeepPanel');
+        const iadOutBox = () => document.querySelector('#iadOut');
+        const iadBtn = () => document.querySelector('#iaDeep');
+
+        function cleanGroq(raw) {
+            let s = String(raw || '');
+            s = s.replace(/```[\s\S]*?```/g, ' ');
+            s = s.replace(/^\s*[|+\-─═┌┐└┘┼┤├┬┴]+.*$/gm, ' ');
+            s = s.replace(/^\s*\|\s*(?:[^|\n]+\|)+\s*$/gm, ' ');
+            s = s.replace(/^\s*:?-{3,}:?\s*$/gm, ' ');
+            s = s.replace(/^\s*[-*]\s{0,3}\|.*$/gm, ' ');
+            s = s.replace(/[ \t]+\n/g, '\n');
+            s = s.replace(/###\s*/g, '\n\n### ');
+            s = s.replace(/\n{3,}/g, '\n\n');
+            return s.trim();
+        }
+        function iadAppend(role, html) {
+            const row = document.createElement('div'); row.className = 'd-flex flex-column';
+            const b = document.createElement('div'); b.className = 'iad-msg ' + (role === 'user' ? 'iad-user' : 'iad-bot'); b.innerHTML = html;
+            const m = document.createElement('div'); m.className = 'iad-meta'; m.textContent = role === 'user' ? 'Você' : 'IA';
+            row.appendChild(b); row.appendChild(m); const out = iadOutBox(); out.appendChild(row);
+            const sc = iadPanel().querySelector('.body'); sc.scrollTop = sc.scrollHeight;
+        }
+        function iadAppendBotStreaming(raw, charDelay = 8) {
+            const cleaned = cleanGroq(raw || '');
+            const blocks = cleaned.replace(/\r\n/g, '\n').split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+            const row = document.createElement('div'); row.className = 'd-flex flex-column';
+            const box = document.createElement('div'); box.className = 'iad-msg iad-bot';
+            const meta = document.createElement('div'); meta.className = 'iad-meta'; meta.textContent = 'IA';
+            row.appendChild(box); row.appendChild(meta); iadOutBox().appendChild(row);
+            const sc = iadPanel().querySelector('.body');
+            let bi = 0, ci = 0, curEl = null, curText = '';
+            function nextBlock() { if (bi >= blocks.length) return; const isTitle = /^###\s*/.test(blocks[bi]); const text = blocks[bi].replace(/^###\s*/, ''); curEl = document.createElement(isTitle ? 'h5' : 'p'); if (isTitle) curEl.className = 'iad-h'; box.appendChild(curEl); curText = text; ci = 0; typeChar(); }
+            function typeChar() { if (ci < curText.length) { curEl.textContent += curText[ci++]; sc.scrollTop = sc.scrollHeight; setTimeout(typeChar, charDelay); } else { bi++; setTimeout(nextBlock, 40); } }
+            nextBlock();
+        }
+        function iadDotsStart() {
+            const wrap = document.createElement('div');
+            wrap.className = 'iad-msg iad-bot iad-loading';
+            wrap.innerHTML = `Aguardando <span class="iad-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
+            iadOutBox().appendChild(wrap);
+            let t = 0; const int = setInterval(() => { wrap.querySelectorAll('.dot').forEach(x => x.classList.remove('on')); wrap.querySelectorAll('.dot')[t % 3].classList.add('on'); t++; }, 260);
+            iadDotsStop._int = int; iadDotsStop._el = wrap;
+        }
+        function iadDotsStop() { if (iadDotsStop._int) { clearInterval(iadDotsStop._int); iadDotsStop._int = null; } if (iadDotsStop._el) { iadDotsStop._el.remove(); iadDotsStop._el = null; } }
+
+        function mesesSel2Deep() { const from = document.querySelector('#from2')?.value || null; const to = document.querySelector('#to2')?.value || null; return (window.MESES || []).filter(m => (!from || m >= from) && (!to || m <= to)); }
+        function buildPayloadDeep({ userQuery }) {
+            const meses = mesesSel2Deep();
+            const sel = (window.sel2 === 'ALL' ? 'ALL' : [...window.sel2].sort().join('+'));
+            const rows = meses.map(m => aggMens(m, window.sel2));
+            const s = { labels: meses, receita: rows.map(v => v.valor), qtd: rows.map(v => v.qtd), ticket: rows.map(v => v.ticket), perf: rows.map(v => v.perf), yoy: rows.map(v => v.r_yoy) };
+            const scopes = ['chart_valores', 'chart_qtd_ticket', 'chart_perf'].join(', ');
+            const basePrompt = (window.Prompts?.render?.({ produto: 'mensalidades', from: meses[0], to: meses.at(-1), posto: sel, contexto: 'deep', scopes }) ||
+                `Relatório técnico de mensalidades ${meses[0]}→${meses.at(-1)} posto ${sel}. Foque em ${scopes}. Sem tabelas ASCII.`);
+            return {
+                produto: 'mensalidades', when: Date.now(),
+                contexto: userQuery ? 'qa' : 'relatorio',
+                prefs: { output: 'livre', assertivo: true, accept_format: 'free_text', temperature: 0.2, max_tokens: 6000 },
+                defs: { receita: "Somatório de mensalidade no mês", qtd: "Quantidade de mensalidades", ticket: "Receita / Qtd", perf: "Variação % MoM da receita", yoy: "Variação % YoY da receita" },
+                prompt: userQuery ? `${basePrompt}\nPergunta: ${userQuery}` : basePrompt,
+                blocks: [
+                    { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, receita: s.receita } },
+                    { scope: 'chart_qtd_ticket', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, qtd: s.qtd, ticket: s.ticket } },
+                    { scope: 'chart_perf', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, perf: s.perf } }
+                ]
+            };
+        }
+        async function callIADeepMens(payload) {
+            const API = window.IA_API_URL || '/ia/analisar';
+            const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!r.ok) { let t = ''; try { t = await r.text(); } catch { } throw new Error(`HTTP ${r.status} — ${t}`); }
+            const res = await r.json();
+            if (res?.content_mode === 'free_text') return res.text || '';
+            if (res?.content_mode === 'json') return (res.data?.html) || res.data?.livre || JSON.stringify(res.data);
+            return typeof res === 'string' ? res : (res?.html || res?.livre || JSON.stringify(res));
+        }
+
+        // PDF fullscreen do chat
+        function exportIADtoPDF() {
+            const node = document.getElementById('iadOut'); if (!node) return;
+            const opt = {
+                margin: [0, 0, 0, 0],
+                filename: `IA-Conversa_${new Date().toISOString().slice(0, 10)}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, backgroundColor: null, windowWidth: node.scrollWidth, windowHeight: node.scrollHeight },
+                jsPDF: { unit: 'px', format: 'a4', orientation: 'portrait' },
+                pagebreak: { mode: ['css', 'legacy'] }
+            };
+            html2pdf().set(opt).from(node).save();
+        }
+
+        (function wireDeep() {
+            const btn = iadBtn(); const panel = iadPanel();
+            if (!btn || !panel) return;
+            let IA_BRIEF = false;
+            const input = () => document.querySelector('#iadInput');
+            const send = () => document.querySelector('#iadSend');
+            const brief = () => document.querySelector('#iadBrief');
+            const close = () => document.querySelector('#iadClose');
+            const regen = () => document.querySelector('#iadRefresh');
+            const pdfBtn = () => document.querySelector('#iadPDF');
+
+            btn.addEventListener('click', async () => {
+                const open = panel.style.display === 'none'; panel.style.display = open ? 'block' : 'none'; _btnPressed(btn, open);
+                if (open) {
+                    iadOutBox().innerHTML = '';
+                    try {
+                        iadDotsStart();
+                        const out = await callIADeepMens(buildPayloadDeep({}));
+                        iadDotsStop();
+                        iadAppend('bot', '<b>Relatório inicial</b>');
+                        iadAppendBotStreaming(out);
+                    } catch (err) {
+                        iadDotsStop();
+                        iadAppend('bot', `<span class="text-danger">Falha: ${err.message || err}</span>`);
+                    }
+                }
+            });
+            close().addEventListener('click', () => { panel.style.display = 'none'; _btnPressed(btn, false); });
+            regen().addEventListener('click', async () => {
+                try { iadAppend('bot', '<i>Regerando relatório…</i>'); iadDotsStart(); const out = await callIADeepMens(buildPayloadDeep({})); iadDotsStop(); iadAppendBotStreaming(out); }
+                catch (err) { iadDotsStop(); iadAppend('bot', `<span class="text-danger">Falha: ${err.message || err}</span>`); }
+            });
+            pdfBtn().addEventListener('click', exportIADtoPDF);
+            brief().addEventListener('click', () => { IA_BRIEF = !IA_BRIEF; _btnPressed(brief(), IA_BRIEF); });
+            send().addEventListener('click', async () => {
+                let q = (input().value || '').trim(); if (!q) return; input().value = '';
+                if (IA_BRIEF) q += '\n\n[INSTRUÇÃO: responda em até 5 linhas, linguagem executiva.]';
+                try {
+                    iadAppend('user', q);
+                    iadDotsStart();
+                    const out = await callIADeepMens(buildPayloadDeep({ userQuery: q }));
+                    iadDotsStop();
+                    iadAppendBotStreaming(out);
+                } catch (err) {
+                    iadDotsStop();
+                    iadAppend('bot', `<span class="text-danger">Falha: ${err.message || err}</span>`);
+                }
+            });
+            input().addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send().click(); } });
+        })();
     </script>
 </body>
 
