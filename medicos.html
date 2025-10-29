@@ -19,6 +19,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="/js/chat.js"></script>
 
+
     <script>
         // backend no mesmo host (proxy reverso)
         window.IA_API_URL = '/ia/analisar';
@@ -26,6 +27,42 @@
     </script>
 
     <style>
+        :root {
+            --cor0: #F2F2F2;
+            --cor1: #afbfa5;
+            --cor2: #91b62f;
+            --cor3: #009402;
+            --cor4: #1c7932;
+            --cor5: #003f0a;
+            --cor6: #0099ab;
+            --cor7: #092019;
+            --cor8: #444444
+        }
+
+        body {
+            -webkit-font-smoothing: antialiased
+        }
+
+        .muted {
+            color: #6b7280
+        }
+
+        .mini {
+            font-size: .85rem
+        }
+
+        .text-right {
+            text-align: right
+        }
+
+        .small-td {
+            white-space: nowrap
+        }
+
+        .table-responsive {
+            width: 100%
+        }
+
         .stack>*+* {
             margin-top: 14px
         }
@@ -44,16 +81,45 @@
             align-items: center
         }
 
+        .scroll-tabs {
+            display: flex;
+            gap: 6px;
+            overflow: auto;
+            white-space: nowrap;
+            padding: 6px 0
+        }
+
+        .scroll-tabs .nav-link {
+            display: inline-block;
+            min-width: 52px;
+            text-align: center;
+            cursor: pointer
+        }
+
         .kpi {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
             gap: 8px
         }
 
+        .kpi .card {
+            border-radius: 12px;
+            margin: 0
+        }
+
         .card-body.kpi {
             display: grid !important;
             grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
             gap: 8px
+        }
+
+        .card-body.kpi .card {
+            margin: 0;
+            border-radius: 12px
+        }
+
+        .card-body.kpi .card .card-body {
+            padding: .5rem .75rem
         }
 
         .chart-card .card-body {
@@ -63,6 +129,19 @@
         .heatmap {
             overflow: auto;
             max-height: 420px
+        }
+
+        .heatmap table {
+            border-collapse: separate;
+            border-spacing: 2px;
+            width: 100%
+        }
+
+        .heatmap th,
+        .heatmap td {
+            text-align: center;
+            padding: 6px;
+            font-size: 12px
         }
 
         .heatmap .cell {
@@ -89,10 +168,42 @@
         .lg-neg {
             background: rgba(220, 53, 69, 1)
         }
+
+        html {
+            font-size: 14px;
+        }
+
+        /* 14px deixa tudo igual ao “text-sm” */
+        @media (min-width: 992px) {
+
+            .card-title.h3,
+            .card-title .h3 {
+                font-size: 1.25rem;
+            }
+        }
+
+        .card .h5 {
+            font-size: 1.15rem;
+            line-height: 1.2;
+        }
+
+        .small,
+        .muted,
+        .text-muted {
+            font-size: .875rem;
+        }
     </style>
+
+
+
 </head>
 
-<body class="hold-transition sidebar-mini">
+<!-- <body class="hold-transition sidebar-mini">
+ -->
+
+<body class="hold-transition sidebar-mini text-sm">
+
+
     <div class="wrapper">
         <!-- NAV -->
         <nav class="main-header navbar navbar-expand navbar-white navbar-light">
@@ -153,8 +264,6 @@
                     <div class="ml-auto">
                         <button id="btnComparar" class="btn btn-sm btn-outline-secondary"
                             title="Mostrar/ocultar bloco de comparação">Comparar</button>
-                        <button id="btnIADeep" class="btn btn-sm btn-outline-primary ml-2"
-                            title="Relatório completo e chat">IA Análise</button>
                     </div>
                 </div>
             </nav>
@@ -176,7 +285,7 @@
                             </div>
                             <div class="flex-grow-1">
                                 <label class="mb-0 small d-block">Posto</label>
-                                <ul id="postoTabs1" class="nav nav-pills" style="overflow:auto;white-space:nowrap;">
+                                <ul id="postoTabs1" class="nav nav-pills scroll-tabs">
                                 </ul>
                             </div>
                         </div>
@@ -202,7 +311,8 @@
                         </div>
                         <div class="flex-grow-1">
                             <label class="mb-0 small d-block">Posto</label>
-                            <ul id="postoTabs2" class="nav nav-pills" style="overflow:auto;white-space:nowrap;"></ul>
+                            <ul id="postoTabs2" class="nav nav-pills scroll-tabs">
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -301,9 +411,122 @@
         </div>
     </div>
 
+
+    <script>
+        /* ===================== PROMPTS (compartilhado) ===================== */
+        (function () {
+            const API_PROMPTS = (window.PROMPTS_API_BASE || '/prompts').replace(/\/+$/, '');
+            function uid() { return 'p_' + Math.random().toString(36).slice(2, 10); }
+            function nowISO() { return new Date().toISOString(); }
+            function tplRender(tpl, vars) { return String(tpl || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => (vars?.[k] ?? `{${k}}`)); }
+            const Prompts = {
+                state: { pageId: null, list: [], activeId: null, mounted: false, editingId: null },
+                async _loadRemote(pageId) { const r = await fetch(`${API_PROMPTS}/${encodeURIComponent(pageId)}`, { credentials: 'same-origin' }); if (!r.ok) return null; return await r.json(); },
+                async _saveRemote(pageId, obj) {
+                    const r = await fetch(`${API_PROMPTS}/${encodeURIComponent(pageId)}`, {
+                        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                        body: JSON.stringify({ list: obj.list, activeId: obj.activeId })
+                    }); if (!r.ok) throw new Error('Falha ao salvar');
+                },
+                async init({ pageId, defaults = [], mountAfter }) {
+                    this.state.pageId = pageId;
+                    let saved = null; try { saved = await this._loadRemote(pageId); } catch { }
+                    if (!saved || !Array.isArray(saved.list) || !saved.list.length) {
+                        const list = defaults.map(d => ({ id: uid(), name: d.name, template: d.template, updatedAt: nowISO() }));
+                        saved = { list, activeId: list[0]?.id || null }; try { await this._saveRemote(pageId, saved); } catch { }
+                    }
+                    this.state.list = saved.list; this.state.activeId = saved.activeId;
+                    this._mountUI(mountAfter); this._renderList();
+                },
+                getActive() { const { list, activeId } = this.state; return list.find(p => p.id === activeId) || null; },
+                render(vars) { const a = this.getActive(); return a ? tplRender(a.template, vars) : ''; },
+                _mountUI(mountAfter) {
+                    if (this.state.mounted) return;
+                    const btn = document.createElement('button');
+                    btn.id = 'btnPrompts'; btn.className = 'btn btn-sm btn-outline-secondary ml-2';
+                    btn.textContent = 'Prompts'; btn.title = 'Gerenciar prompts desta página';
+                    const anchor = document.querySelector(mountAfter) || document.body; anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+                    const modal = document.createElement('div'); modal.id = 'promptModal'; modal.style.display = 'none';
+                    modal.innerHTML = `
+<div class="card p-2" style="position:fixed;right:16px;bottom:16px;width:min(720px,92vw);max-height:80vh;overflow:auto;z-index:9999;box-shadow:0 10px 24px rgba(0,0,0,.18)">
+  <div class="d-flex align-items-center mb-2">
+    <b class="mr-auto">Prompts desta página</b>
+    <button id="pmClose" class="btn btn-sm btn-outline-secondary">Fechar</button>
+  </div>
+  <div class="d-flex" style="gap:12px;flex-wrap:wrap">
+    <div style="flex:1 1 220px;min-width:220px">
+      <div class="mb-2 d-flex" style="gap:6px">
+        <button id="pmNew"  class="btn btn-sm btn-primary">Novo</button>
+        <button id="pmDup"  class="btn btn-sm btn-outline-secondary">Duplicar</button>
+        <button id="pmDel"  class="btn btn-sm btn-outline-danger">Excluir</button>
+      </div>
+      <ul id="pmList" class="list-group"></ul>
+      <div class="mt-2">
+        <button id="pmExport" class="btn btn-sm btn-outline-secondary">Exportar</button>
+        <label class="btn btn-sm btn-outline-secondary mb-0">Importar <input id="pmImport" type="file" accept="application/json" hidden></label>
+      </div>
+    </div>
+    <div style="flex:2 1 360px;min-width:280px">
+      <input id="pmName" class="form-control form-control-sm mb-2" placeholder="Nome do prompt">
+      <textarea id="pmTpl" class="form-control form-control-sm" rows="12" placeholder="Template com {placeholders}"></textarea>
+      <small class="text-muted">Placeholders: {produto}, {from}, {to}, {posto}, {contexto}, {scopes}.</small>
+      <div class="mt-2 d-flex">
+        <button id="pmSave"      class="btn btn-sm btn-success mr-2">Salvar</button>
+        <button id="pmSetActive" class="btn btn-sm btn-outline-primary">Definir como ativo</button>
+        <span id="pmStatus" class="ml-2 text-muted small"></span>
+      </div>
+    </div>
+  </div>
+</div>`;
+                    document.body.appendChild(modal);
+                    btn.addEventListener('click', () => { modal.style.display = modal.style.display === 'none' ? 'block' : 'none'; });
+                    modal.querySelector('#pmClose').addEventListener('click', () => { modal.style.display = 'none'; });
+                    modal.querySelector('#pmNew').addEventListener('click', () => this._new());
+                    modal.querySelector('#pmDup').addEventListener('click', () => this._dup());
+                    modal.querySelector('#pmDel').addEventListener('click', () => this._del());
+                    modal.querySelector('#pmSave').addEventListener('click', () => this._saveEdits());
+                    modal.querySelector('#pmSetActive').addEventListener('click', () => this._setActiveFromEditor());
+                    modal.querySelector('#pmExport').addEventListener('click', () => this._export());
+                    modal.querySelector('#pmImport').addEventListener('change', e => this._import(e));
+                    this.state.mounted = true;
+                },
+                _renderList() {
+                    const { list, activeId } = this.state;
+                    const ul = document.querySelector('#pmList'); if (!ul) return;
+                    ul.innerHTML = '';
+                    list.forEach(p => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item d-flex align-items-center';
+                        li.dataset.id = p.id; li.style.cursor = 'pointer';
+                        li.innerHTML = `<span class="mr-2 ${p.id === activeId ? 'text-primary' : ''}">●</span><span class="flex-grow-1">${p.name}</span><small class="text-muted ml-2">${new Date(p.updatedAt).toLocaleString('pt-BR')}</small>`;
+                        li.addEventListener('click', () => this._loadToEditor(p.id));
+                        ul.appendChild(li);
+                    });
+                    if (list.length) this._loadToEditor(activeId || list[0].id);
+                },
+                _loadToEditor(id) {
+                    const { list } = this.state; const p = list.find(x => x.id === id) || list[0]; if (!p) return;
+                    document.querySelector('#pmName').value = p.name || '';
+                    document.querySelector('#pmTpl').value = p.template || '';
+                    document.querySelectorAll('#pmList li').forEach(li => li.classList.toggle('active', li.dataset.id === p.id));
+                    this.state.editingId = p.id; const st = document.querySelector('#pmStatus'); if (st) st.textContent = '';
+                },
+                async _persist() { const { pageId, list, activeId } = this.state; const payload = { list, activeId }; try { await this._saveRemote(pageId, payload); } catch { } },
+                async _new() { const id = uid(); this.state.list.unshift({ id, name: 'Novo prompt', template: '', updatedAt: nowISO() }); await this._persist(); this._renderList(); this._loadToEditor(id); },
+                async _dup() { const id = this.state.editingId; const p = this.state.list.find(x => x.id === id); if (!p) return; const nid = uid(); this.state.list.unshift({ id: nid, name: p.name + ' (cópia)', template: p.template, updatedAt: nowISO() }); await this._persist(); this._renderList(); this._loadToEditor(nid); },
+                async _del() { const id = this.state.editingId; if (!id) return; this.state.list = this.state.list.filter(x => x.id !== id); if (this.state.activeId === id) this.state.activeId = this.state.list[0]?.id || null; await this._persist(); this._renderList(); },
+                async _saveEdits() { const id = this.state.editingId; if (!id) return; const name = (document.querySelector('#pmName').value || '').trim() || 'Sem nome'; const template = document.querySelector('#pmTpl').value; const p = this.state.list.find(x => x.id === id); if (!p) return; p.name = name; p.template = template; p.updatedAt = nowISO(); await this._persist(); this._renderList(); this._loadToEditor(id); const st = document.querySelector('#pmStatus'); if (st) { st.textContent = 'Salvo'; setTimeout(() => st.textContent = '', 1200); } },
+                async _setActiveFromEditor() { const id = this.state.editingId; if (!id) return; this.state.activeId = id; await this._persist(); this._renderList(); },
+                _export() { const blob = new Blob([JSON.stringify({ list: this.state.list, activeId: this.state.activeId }, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `prompts_${this.state.pageId}.json`; a.click(); URL.revokeObjectURL(a.href); },
+                async _import(e) { const f = e.target.files?.[0]; if (!f) return; const txt = await f.text(); let obj = null; try { obj = JSON.parse(txt); } catch { alert('JSON inválido'); return; } if (!obj || !Array.isArray(obj.list)) { alert('Estrutura inválida'); return; } const norm = obj.list.map(x => ({ id: x.id || uid(), name: x.name || 'Sem nome', template: x.template || '', updatedAt: x.updatedAt || nowISO() })); this.state.list = norm; this.state.activeId = obj.activeId && norm.find(x => x.id === obj.activeId) ? obj.activeId : (norm[0]?.id || null); await this._persist(); this._renderList(); e.target.value = ''; }
+            };
+            window.Prompts = Prompts;
+        })();
+    </script>
+
     <script>
         (function () {
-            // Util
+            // ==== Utils ===============================================================
             const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
             const fmt2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -311,17 +534,17 @@
             const num = v => Number.isFinite(Number(v)) ? Number(v) : 0;
             const sum = a => a.reduce((x, y) => x + (y || 0), 0);
             const mm3 = arr => arr.map((_, i) => { const s = arr.slice(Math.max(0, i - 2), i + 1).filter(v => v != null); return s.length ? (s.reduce((a, b) => a + b, 0) / s.length) : null; });
-            const prevMonth = ym => { const [yy, mm] = ym.split('-').map(Number); const d = new Date(yy, mm - 1, 1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
-            const prevYear = ym => { const [yy, mm] = ym.split('-').map(Number); return `${yy - 1}-${String(mm).padStart(2, '0')}`; }
+            const prevMonth = ym => { const [yy, mm] = ym.split('-').map(Number); const d = new Date(yy, mm - 1, 1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+            const prevYear = ym => { const [yy, mm] = ym.split('-').map(Number); return `${yy - 1}-${String(mm).padStart(2, '0')}`; };
             const inRange = (labels, from, to) => labels.filter(m => (!from || m >= from) && (!to || m <= to));
 
-            // Estado
+            // ==== Estado ==============================================================
             let POR_POSTO = {}, CONSOLIDADO = {}, PCT_POR_POSTO = {};
             let MESES = [], POSTOS = [];
             let sel1 = 'ALL', sel2 = 'ALL';
             let chPct, chValores, chStack, chYoYpp, chPctPosto, chParetoMed, chScatter;
 
-            // Tabs de posto
+            // ==== Tabs ================================================================
             function markActiveMulti(scopeId, selection) {
                 const isAll = selection === 'ALL';
                 document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
@@ -349,21 +572,17 @@
                 });
             }
 
-            // Agregadores
+            // ==== Agregadores =========================================================
             function aggMes(ym, selection) {
                 const rows = POR_POSTO[ym] || {};
                 const postos = selection === 'ALL' ? POSTOS : [...selection];
                 let mens = 0, med = 0;
                 postos.forEach(p => { const r = rows[p]; if (!r) return; mens += num(r.mensalidade); med += num(r.medico ?? r.custo_medico); });
                 const margem = mens - med;
-                return {
-                    mens, med, margem,
-                    pctMed: mens > 0 ? (med / mens * 100) : null,
-                    pctMargem: mens > 0 ? (margem / mens * 100) : null
-                };
+                return { mens, med, margem, pctMed: mens > 0 ? (med / mens * 100) : null, pctMargem: mens > 0 ? (margem / mens * 100) : null };
             }
 
-            // KPIs
+            // ==== KPIs ================================================================
             function kpiCard(title, val, fmt = 'text') {
                 const isNull = (val == null || Number.isNaN(val));
                 const out = isNull ? '<span class="text-muted">-</span>' :
@@ -390,7 +609,7 @@
                 box.insertAdjacentHTML('beforeend', kpiCard('% Margem ponderada', pctMargemPond, 'pct'));
             }
 
-            // Tabela
+            // ==== Tabela ==============================================================
             function buildTable(meses, selection) {
                 const tb = document.querySelector('#tblBody'); if (!tb) return; tb.innerHTML = '';
                 const map = new Map(); meses.forEach(m => map.set(m, aggMes(m, selection)));
@@ -401,21 +620,21 @@
                     const yoy = (r?.pctMed != null && rYoY?.pctMed != null) ? (r.pctMed - rYoY.pctMed) : null;
                     const mm3pct = arrMM3[idx];
                     tb.insertAdjacentHTML('beforeend', `
-        <tr>
-          <td>${mFmt(m)}</td>
-          <td class="text-right">${fmtInt.format(r.mens)}</td>
-          <td class="text-right">${fmtInt.format(r.med)}</td>
-          <td class="text-right">${fmtInt.format(r.margem)}</td>
-          <td class="text-right">${r.pctMed == null ? '-' : fmt2.format(r.pctMed) + '%'}</td>
-          <td class="text-right">${r.pctMargem == null ? '-' : fmt2.format(r.pctMargem) + '%'}</td>
-          <td class="text-right">${mom == null ? '-' : fmt2.format(mom) + ' pp'}</td>
-          <td class="text-right">${yoy == null ? '-' : fmt2.format(yoy) + ' pp'}</td>
-          <td class="text-right">${mm3pct == null ? '-' : fmt2.format(mm3pct) + '%'}</td>
-        </tr>`);
+<tr>
+  <td>${mFmt(m)}</td>
+  <td class="text-right">${fmtInt.format(r.mens)}</td>
+  <td class="text-right">${fmtInt.format(r.med)}</td>
+  <td class="text-right">${fmtInt.format(r.margem)}</td>
+  <td class="text-right">${r.pctMed == null ? '-' : fmt2.format(r.pctMed) + '%'}</td>
+  <td class="text-right">${r.pctMargem == null ? '-' : fmt2.format(r.pctMargem) + '%'}</td>
+  <td class="text-right">${mom == null ? '-' : fmt2.format(mom) + ' pp'}</td>
+  <td class="text-right">${yoy == null ? '-' : fmt2.format(yoy) + ' pp'}</td>
+  <td class="text-right">${mm3pct == null ? '-' : fmt2.format(mm3pct) + '%'}</td>
+</tr>`);
                 });
             }
 
-            // Gráficos
+            // ==== Gráficos ============================================================
             function initCharts() {
                 const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
                 chPct = new Chart(document.getElementById('chartPct'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
@@ -426,7 +645,7 @@
                 chParetoMed = new Chart(document.getElementById('chartParetoMed'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
                 chScatter = new Chart(document.getElementById('chartScatter'), { type: 'scatter', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Mensalidade' } }, y: { title: { display: true, text: '% Médico' } } } } });
             }
-            function postoLabel(selection) { if (selection === 'ALL') return 'Todos'; const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos'; }
+            function postoLabel(selection) { if (selection === 'ALL') return 'Todos'; const a = [...selection].sort(); return a.length ? a.join('+') : 'Todos'; }
             function postoShares(meses, selection) {
                 const medMap = new Map();
                 meses.forEach(m => {
@@ -481,12 +700,19 @@
                 buildHeatmap(meses, selection);
             }
 
-            // Chat IA payload
+            // ==== Payload ChatIA ======================================================
             function buildPayloadDeepMed({ userQuery }) {
                 const meses = window.__MESES_FN__?.() || [];
                 const serie = window.__SERIES_BAS__?.() || { labels: [], mensalidade: [], medico: [], pct_med: [] };
                 const posto = window.__POSTO_ATUAL__?.() || 'ALL';
                 const scopes = ['chart_pct', 'chart_valores', 'chart_stack'].join(', ');
+                const basePrompt =
+                    (window.Prompts?.render?.({ produto: 'medicos', from: meses[0], to: meses.at(-1), posto, contexto: 'deep', scopes })) ||
+                    `### RELATÓRIO TÉCNICO — medicos ${meses[0]}→${meses.at(-1)} — Posto ${posto}
+Objetivo: diagnóstico executivo e direcionadores de margem. Escopo: gráficos ${scopes}; drivers preço×volume; variações MoM/YoY; riscos e oportunidades; plano 30/60/90; validações.
+NÃO use tabelas, Markdown tabular, ASCII ou barras "|". Não desenhe gráficos. Apenas referencie os gráficos da tela pelo título. Responda em texto corrido, com parágrafos curtos.
+Não comece com “Visão executiva”. Títulos iniciam com “### ”.`;
+
                 const base = {
                     produto: 'medicos', when: Date.now(),
                     contexto: userQuery ? 'qa' : 'relatorio',
@@ -498,23 +724,17 @@
                         { scope: 'chart_stack', periodo: { from: meses[0], to: meses.at(-1) }, posto, series: { labels: serie.labels, medico: serie.medico } }
                     ]
                 };
-                const guard = 'NÃO use tabelas, Markdown tabular, ASCII ou barras "|". Não desenhe gráficos. Apenas referencie os gráficos da tela pelo título. Responda em texto corrido, com parágrafos curtos.';
-                const prompt = `### RELATÓRIO TÉCNICO — medicos ${meses[0]}→${meses.at(-1)} — Posto ${posto}
-Objetivo: diagnóstico executivo e direcionadores de margem. Escopo: gráficos ${scopes}; drivers preço×volume; variações MoM/YoY; riscos e oportunidades; plano 30/60/90; validações.
-
-${guard}
-
-Não comece com “Visão executiva”. Títulos iniciam com “### ”.`;
-                return userQuery ? { ...base, prompt: prompt + `\nPergunta: ${userQuery}` } : { ...base, prompt };
+                return userQuery ? { ...base, prompt: basePrompt + `\nPergunta: ${userQuery}` } : { ...base, prompt: basePrompt };
             }
 
-            // Boot
+            // ==== Boot ================================================================
             window.addEventListener('DOMContentLoaded', async () => {
+                const err = document.getElementById('err');
                 try {
-                    const BASE = new URL('.', location.href);
-                    const URL_POR_POSTO = new URL('json_consolidado/consolidado_mensal_por_posto.json', BASE).href;
-                    const URL_CONSOLID = new URL('json_consolidado/consolidado_mensal.json', BASE).href;
-                    const URL_PCT_POSTO = new URL('json_consolidado/percentuais_mensais_por_posto.json', BASE).href;
+                    // JSONs
+                    const URL_POR_POSTO = 'json_consolidado/consolidado_mensal_por_posto.json';
+                    const URL_CONSOLID = 'json_consolidado/consolidado_mensal.json';
+                    const URL_PCT_POSTO = 'json_consolidado/percentuais_mensais_por_posto.json';
 
                     const [r1, r2, r3] = await Promise.all([
                         fetch(URL_POR_POSTO, { cache: 'no-store' }),
@@ -522,20 +742,21 @@ Não comece com “Visão executiva”. Títulos iniciam com “### ”.`;
                         fetch(URL_PCT_POSTO, { cache: 'no-store' })
                     ]);
                     if (!r1.ok || !r2.ok || !r3.ok) throw new Error('Falha ao carregar JSON');
+
                     POR_POSTO = await r1.json();
                     CONSOLIDADO = await r2.json();
                     PCT_POR_POSTO = await r3.json();
 
+                    // Meses e Postos
                     MESES = Object.keys(POR_POSTO).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
                     if (!MESES.length) throw new Error('Sem dados');
 
-                    // Postos detectados
                     const setP = new Set();
-                    for (const m of MESES) { for (const p of Object.keys(POR_POSTO[m] || {})) { if (/^[A-Z]{1,3}$/.test(p)) setP.add(p); } }
+                    for (const m of MESES) for (const p of Object.keys(POR_POSTO[m] || {})) if (/^[A-Z]{1,3}$/.test(p)) setP.add(p);
                     POSTOS = [...setP].sort();
                     window.POSTOS = POSTOS;
 
-                    // UI default: últimos 12 meses disponíveis
+                    // Default UI: últimos 12 meses
                     const last = MESES.at(-1);
                     const d = new Date(last + '-01'); d.setMonth(d.getMonth() - 11);
                     const from12 = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -547,7 +768,11 @@ Não comece com “Visão executiva”. Títulos iniciam com “### ”.`;
 
                     // Info "dados gerados"
                     const lm = r1.headers.get('Last-Modified') || r2.headers.get('Last-Modified');
-                    if (lm) { const dt = new Date(lm); const info = document.querySelector('#jsonInfo'); if (info) info.textContent = '• dados gerados em ' + dt.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); }
+                    if (lm) {
+                        const dt = new Date(lm);
+                        const info = document.querySelector('#jsonInfo');
+                        if (info) info.textContent = '• dados gerados em ' + dt.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+                    }
 
                     // Exposição p/ ChatIA
                     window.__MESES_FN__ = () => inRange(MESES, document.querySelector('#from2').value, document.querySelector('#to2').value);
@@ -560,37 +785,66 @@ Não comece com “Visão executiva”. Títulos iniciam com “### ”.`;
                         return { labels: labs, mensalidade: mens, medico: med, pct_med: pct };
                     };
 
-                    // IA botão
+                    // Prompts: montar botão e modal no canto direito
+                    if (window.Prompts?.init) {
+                        Prompts.init({
+                            pageId: 'medicos',
+                            defaults: [
+                                { name: 'Padrão', template: `Analise % médico, mensalidade, custo e margem para {posto} de {from} a {to}. Foque nos gráficos {scopes}. Liste até 5 insights e 3 alertas. Tom assertivo.` },
+                                { name: 'Executivo', template: `Resumo executivo de {produto} {from}→{to}, posto {posto}. Riscos e oportunidades. Cite {scopes}. Texto conciso.` }
+                            ],
+                            mountAfter: '#btnComparar'
+                        });
+                    }
+
+                    // ChatIA: botão separado
                     if (window.ChatIA?.init) {
                         ChatIA.init({
                             apiUrl: (window.IA_API_URL || '/ia/analisar'),
-                            mountAfterSelector: '#btnIADeep',
+                            mountAfterSelector: '#btnComparar',
                             title: 'IA — Análise Completa & Chat',
                             briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
                             getPayload: async ({ userQuery }) => buildPayloadDeepMed({ userQuery })
                         });
+                    } else {
+                        console.warn('ChatIA.init indisponível. Verifique /js/chat.js');
                     }
 
                     // Tabs, charts e renders
-                    buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v }, () => renderSel1());
-                    buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v }, () => renderSel2());
+                    buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
+                    buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; }, () => renderSel2());
                     initCharts(); renderSel1(); renderSel2();
 
                     // Eventos
                     const on = (s, e, f) => { const o = document.querySelector(s); if (o) o.addEventListener(e, f); };
-                    on('#from1', 'change', renderSel1); on('#to1', 'change', renderSel1);
-                    on('#reset1', 'click', () => { document.querySelector('#from1').value = MESES[0]; document.querySelector('#to1').value = last; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1(); });
-                    on('#from2', 'change', renderSel2); on('#to2', 'change', renderSel2);
-                    on('#reset2', 'click', () => { document.querySelector('#from2').value = from12; document.querySelector('#to2').value = last; sel2 = 'ALL'; markActiveMulti('#postoTabs2', sel2); renderSel2(); });
-                    on('#btnComparar', 'click', () => { const b = document.querySelector('#compareBlock'); const show = (b.style.display === 'none' || b.style.display === ''); b.style.display = show ? 'block' : 'none'; });
+                    on('#from1', 'change', renderSel1);
+                    on('#to1', 'change', renderSel1);
+                    on('#reset1', 'click', () => {
+                        document.querySelector('#from1').value = MESES[0];
+                        document.querySelector('#to1').value = last;
+                        sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1();
+                    });
+                    on('#from2', 'change', renderSel2);
+                    on('#to2', 'change', renderSel2);
+                    on('#reset2', 'click', () => {
+                        document.querySelector('#from2').value = from12;
+                        document.querySelector('#to2').value = last;
+                        sel2 = 'ALL'; markActiveMulti('#postoTabs2', sel2); renderSel2();
+                    });
+                    on('#btnComparar', 'click', () => {
+                        const b = document.querySelector('#compareBlock');
+                        const show = (b.style.display === 'none' || b.style.display === '');
+                        b.style.display = show ? 'block' : 'none';
+                    });
 
                 } catch (e) {
                     console.error(e);
-                    const err = document.getElementById('err'); if (err) err.textContent = 'Erro: ' + (e.message || e);
+                    if (err) err.textContent = 'Erro: ' + (e.message || e);
                 }
             });
 
-            // Render wrappers
+
+            // ==== Render wrappers =====================================================
             function renderSel1() {
                 const meses = inRange(MESES, document.querySelector('#from1').value, document.querySelector('#to1').value);
                 buildKPIs('#kpisSel1', meses, sel1);
@@ -603,6 +857,18 @@ Não comece com “Visão executiva”. Títulos iniciam com “### ”.`;
             }
         })();
     </script>
+
+
+
+
+
+
+
+
+
+
+
+
 </body>
 
 </html>
