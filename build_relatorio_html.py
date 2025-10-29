@@ -208,35 +208,59 @@ HTML_TMPL = Template(r"""<!DOCTYPE html>
     </svg>
   </button>
 
-  <!-- Fundo escuro atrás do menu -->
-  <div id="drawerOverlay" class="menu-overlay" hidden></div>
+  
+    <!-- Fundo escuro atrás do menu -->
+    <div id="drawerOverlay" class="menu-overlay" hidden></div>
+    <!-- O menu lateral -->
+    <aside id="app-drawer" class="menu-drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+        <div class="menu-splash">&nbsp;</div>
+        <header class="drawer-header">
+            <img src="/images/Logo Camim-01_50px.png" alt="Logo Camim">
+            <h2 id="drawerTitle">&nbsp;</h2>
+            <button id="drawerClose" class="menu-icon-btn" aria-label="Fechar menu">✖</button>
+        </header>
+        <!-- MENU LATERAL -->
+        <nav class="menu-nav" aria-label="Menu principal">
+            <ul class="menu-list">
+                <!-- <li>
+                    <a class="menu-link" href="/index.html">
+                        <i class="fas fa-home"></i>
+                        <span>Início</span>
+                    </a>
+                </li> -->
+                <li>
+                    <a class="menu-link" href="/kpi_home.html">
+                        <i class="nav-icon fas fa-chart-line"></i>
+                        <span>KPIs</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-link" href="/trello_harvest.html">
+                        <i class="fab fa-trello" style="color:#0079bf"></i>
+                        <span>Harvest / Trello</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-link" href="#" id="btnLogout">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Sair</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        <div class="menu-brand">&nbsp;</div>
+    </aside>
+    <script>
+        document.getElementById('btnLogout')?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            try { await fetch('/session/logout', { method: 'POST', credentials: 'include' }); } catch (_) { }
+            location.href = '/login.html';
+        });
+    </script>
 
-  <!-- O menu lateral -->
-  <aside id="app-drawer" class="menu-drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
-    <div class="menu-splash">&nbsp;</div>
-    <header class="drawer-header">
-      <img src="/images/Logo Camim-01_50px.png" alt="Logo Camim">
-      <h2 id="drawerTitle">&nbsp;</h2>
-      <button id="drawerClose" class="menu-icon-btn" aria-label="Fechar menu">✖</button>
-    </header>
-    <nav class="menu-nav" aria-label="Menu principal">
-      <ul class="menu-list">
-        <li><a class="menu-link" href="/index.html">🏠 Início</a></li>
-        <li><a class="menu-link" href="/kpi_home.html">📊 KPIs e performance</a></li>
-        <li><a class="menu-link" href="/trello_harvest.html">😡 Harvest</a></li>
-        <li><a class="menu-link" href="#" id="btnLogout">🚪 Sair</a></li>
-      </ul>
-    </nav>
-    <div class="menu-brand">&nbsp;</div>
-  </aside>
 
-  <script>
-    document.getElementById('btnLogout')?.addEventListener('click', async (e) => {
-      e.preventDefault();
-      await fetch('/session/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
-      location.href = '/login.html';
-    });
-  </script>
+
+
 
   <div id="header"></div>
 

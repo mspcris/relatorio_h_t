@@ -492,44 +492,102 @@
 
 
 
-    <!-- ========== Prompt Manager (módulo reutilizável) ========== -->
+
+
+
+    <!-- ========== Prompt Manager (módulo reutilizável, compartilhado por página) ========== -->
     <script>
         (function () {
-            const LS_PREFIX = 'camim.prompts::';
+            // Endpoint REST no back-end FastAPI
+            const API_PROMPTS = window.API_PROMPTS || '/prompts';
+
+            // Util
             function uid() { return 'p_' + Math.random().toString(36).slice(2, 10); }
             function nowISO() { return new Date().toISOString(); }
             function tplRender(tpl, vars) { return String(tpl || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => (vars?.[k] ?? `{${k}}`)); }
+
+            // Fallback local opcional (só se API falhar)
+            const LS_PREFIX = 'camim.prompts::';
+            const loadLocal = (key) => { try { const r = localStorage.getItem(LS_PREFIX + key); return r ? JSON.parse(r) : null; } catch { return null; } };
+            const saveLocal = (key, obj) => { try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(obj)); } catch { } };
+
             const Prompts = {
-                state: { pageId: null, list: [], activeId: null, mounted: false },
-                init({ pageId, defaults = [], mountAfter }) {
-                    this.state.pageId = pageId;
-                    const saved = this._load();
-                    if (!saved) {
-                        const list = defaults.map(d => ({ id: uid(), name: d.name, template: d.template, updatedAt: nowISO() }));
-                        this._save({ list, activeId: list[0]?.id || null });
-                    }
-                    this._mountUI(mountAfter); this._renderList();
+                state: { pageId: null, list: [], activeId: null, mounted: false, editingId: null },
+
+                // ----------- Persistência remota -----------
+                async _loadRemote(pageId) {
+                    const r = await fetch(`${API_PROMPTS}/${encodeURIComponent(pageId)}`, { credentials: 'same-origin' });
+                    if (!r.ok) return null;
+                    return await r.json(); // {list, activeId}
                 },
-                getActive() { const { list, activeId } = this._load(); return list.find(p => p.id === activeId) || null; },
-                render(vars) { const a = this.getActive(); return a ? tplRender(a.template, vars) : ''; },
+                async _saveRemote(pageId, obj) {
+                    const r = await fetch(`${API_PROMPTS}/${encodeURIComponent(pageId)}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ list: obj.list, activeId: obj.activeId })
+                    });
+                    if (!r.ok) throw new Error('Falha ao salvar no servidor');
+                },
+
+                // ----------- API pública -----------
+                async init({ pageId, defaults = [], mountAfter }) {
+                    this.state.pageId = pageId;
+
+                    // 1) tenta carregar do servidor
+                    let saved = null;
+                    try { saved = await this._loadRemote(pageId); } catch { }
+                    // 2) se vazio/indisponível, usa defaults e sobe para o servidor
+                    if (!saved || !Array.isArray(saved.list) || !saved.list.length) {
+                        const list = defaults.map(d => ({ id: uid(), name: d.name, template: d.template, updatedAt: nowISO() }));
+                        saved = { list, activeId: list[0]?.id || null };
+                        try { await this._saveRemote(pageId, saved); } catch { /* fallback local */ saveLocal(pageId, saved); }
+                    }
+
+                    this.state.list = saved.list;
+                    this.state.activeId = saved.activeId;
+
+                    this._mountUI(mountAfter);
+                    this._renderList();
+                },
+
+                getActive() {
+                    const { list, activeId } = this.state;
+                    return list.find(p => p.id === activeId) || null;
+                },
+
+                render(vars) {
+                    const a = this.getActive();
+                    return a ? tplRender(a.template, vars) : '';
+                },
+
+                // ----------- UI -----------
                 _mountUI(mountAfter) {
                     if (this.state.mounted) return;
+
                     const btn = document.createElement('button');
-                    btn.id = 'btnPrompts'; btn.className = 'btn btn-sm btn-outline-secondary ml-2';
-                    btn.textContent = 'Prompts'; btn.title = 'Gerenciar prompts desta página';
+                    btn.id = 'btnPrompts';
+                    btn.className = 'btn btn-sm btn-outline-secondary ml-2';
+                    btn.textContent = 'Prompts';
+                    btn.title = 'Gerenciar prompts desta página';
                     const anchor = document.querySelector(mountAfter) || document.body;
                     anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+
                     const modal = document.createElement('div');
-                    modal.id = 'promptModal'; modal.style.display = 'none';
+                    modal.id = 'promptModal';
+                    modal.style.display = 'none';
                     modal.innerHTML = `
 <div class="card p-2" style="position:fixed;right:16px;bottom:16px;width:min(720px,92vw);max-height:80vh;overflow:auto;z-index:9999;box-shadow:0 10px 24px rgba(0,0,0,.18)">
-  <div class="d-flex align-items-center mb-2"><b class="mr-auto">Prompts desta página</b><button id="pmClose" class="btn btn-sm btn-outline-secondary">Fechar</button></div>
+  <div class="d-flex align-items-center mb-2">
+    <b class="mr-auto">Prompts desta página</b>
+    <button id="pmClose" class="btn btn-sm btn-outline-secondary">Fechar</button>
+  </div>
   <div class="d-flex" style="gap:12px;flex-wrap:wrap">
     <div style="flex:1 1 220px;min-width:220px">
       <div class="mb-2 d-flex" style="gap:6px">
-        <button id="pmNew" class="btn btn-sm btn-primary">Novo</button>
-        <button id="pmDup" class="btn btn-sm btn-outline-secondary">Duplicar</button>
-        <button id="pmDel" class="btn btn-sm btn-outline-danger">Excluir</button>
+        <button id="pmNew"  class="btn btn-sm btn-primary">Novo</button>
+        <button id="pmDup"  class="btn btn-sm btn-outline-secondary">Duplicar</button>
+        <button id="pmDel"  class="btn btn-sm btn-outline-danger">Excluir</button>
       </div>
       <ul id="pmList" class="list-group"></ul>
       <div class="mt-2">
@@ -542,7 +600,7 @@
       <textarea id="pmTpl" class="form-control form-control-sm" rows="12" placeholder="Template com {placeholders}"></textarea>
       <small class="text-muted">Placeholders: {produto}, {from}, {to}, {posto}, {contexto}, {scopes}.</small>
       <div class="mt-2 d-flex">
-        <button id="pmSave" class="btn btn-sm btn-success mr-2">Salvar</button>
+        <button id="pmSave"      class="btn btn-sm btn-success mr-2">Salvar</button>
         <button id="pmSetActive" class="btn btn-sm btn-outline-primary">Definir como ativo</button>
         <span id="pmStatus" class="ml-2 text-muted small"></span>
       </div>
@@ -550,8 +608,9 @@
   </div>
 </div>`;
                     document.body.appendChild(modal);
-                    btn.addEventListener('click', () => modal.style.display = modal.style.display === 'none' ? 'block' : 'none');
-                    modal.querySelector('#pmClose').addEventListener('click', () => modal.style.display = 'none');
+
+                    btn.addEventListener('click', () => { modal.style.display = modal.style.display === 'none' ? 'block' : 'none'; });
+                    modal.querySelector('#pmClose').addEventListener('click', () => { modal.style.display = 'none'; });
                     modal.querySelector('#pmNew').addEventListener('click', () => this._new());
                     modal.querySelector('#pmDup').addEventListener('click', () => this._dup());
                     modal.querySelector('#pmDel').addEventListener('click', () => this._del());
@@ -559,10 +618,13 @@
                     modal.querySelector('#pmSetActive').addEventListener('click', () => this._setActiveFromEditor());
                     modal.querySelector('#pmExport').addEventListener('click', () => this._export());
                     modal.querySelector('#pmImport').addEventListener('change', e => this._import(e));
+
                     this.state.mounted = true;
                 },
+
                 _renderList() {
-                    const { list, activeId } = this._load(); const ul = document.querySelector('#pmList'); if (!ul) return;
+                    const { list, activeId } = this.state;
+                    const ul = document.querySelector('#pmList'); if (!ul) return;
                     ul.innerHTML = '';
                     list.forEach(p => {
                         const li = document.createElement('li');
@@ -574,44 +636,91 @@
                     });
                     if (list.length) this._loadToEditor(activeId || list[0].id);
                 },
+
                 _loadToEditor(id) {
-                    const { list } = this._load(); const p = list.find(x => x.id === id) || list[0]; if (!p) return;
+                    const { list } = this.state;
+                    const p = list.find(x => x.id === id) || list[0]; if (!p) return;
                     document.querySelector('#pmName').value = p.name || '';
                     document.querySelector('#pmTpl').value = p.template || '';
-                    document.querySelector('#pmList').querySelectorAll('li').forEach(li => li.classList.toggle('active', li.dataset.id === p.id));
-                    this.state.editingId = p.id; const st = document.querySelector('#pmStatus'); if (st) st.textContent = '';
+                    document.querySelectorAll('#pmList li').forEach(li => li.classList.toggle('active', li.dataset.id === p.id));
+                    this.state.editingId = p.id;
+                    const st = document.querySelector('#pmStatus'); if (st) st.textContent = '';
                 },
-                _new() { const s = this._load(); const id = uid(); s.list.unshift({ id, name: 'Novo prompt', template: '', updatedAt: nowISO() }); this._save(s); this._renderList(); this._loadToEditor(id); },
-                _dup() { const s = this._load(); const id = this.state.editingId; const p = s.list.find(x => x.id === id); if (!p) return; const nid = uid(); s.list.unshift({ id: nid, name: p.name + ' (cópia)', template: p.template, updatedAt: nowISO() }); this._save(s); this._renderList(); this._loadToEditor(nid); },
-                _del() { const s = this._load(); const id = this.state.editingId; if (!id) return; s.list = s.list.filter(x => x.id !== id); if (s.activeId === id) s.activeId = s.list[0]?.id || null; this._save(s); this._renderList(); },
-                _saveEdits() {
-                    const s = this._load(); const id = this.state.editingId; if (!id) return;
-                    const name = document.querySelector('#pmName').value.trim() || 'Sem nome';
+
+                // ----------- Ações -----------
+                async _persist() {
+                    const { pageId, list, activeId } = this.state;
+                    const payload = { list, activeId };
+                    try { await this._saveRemote(pageId, payload); }
+                    catch { saveLocal(pageId, payload); }
+                },
+
+                async _new() {
+                    const id = uid();
+                    this.state.list.unshift({ id, name: 'Novo prompt', template: '', updatedAt: nowISO() });
+                    await this._persist(); this._renderList(); this._loadToEditor(id);
+                },
+
+                async _dup() {
+                    const id = this.state.editingId;
+                    const p = this.state.list.find(x => x.id === id); if (!p) return;
+                    const nid = uid();
+                    this.state.list.unshift({ id: nid, name: p.name + ' (cópia)', template: p.template, updatedAt: nowISO() });
+                    await this._persist(); this._renderList(); this._loadToEditor(nid);
+                },
+
+                async _del() {
+                    const id = this.state.editingId; if (!id) return;
+                    this.state.list = this.state.list.filter(x => x.id !== id);
+                    if (this.state.activeId === id) this.state.activeId = this.state.list[0]?.id || null;
+                    await this._persist(); this._renderList();
+                },
+
+                async _saveEdits() {
+                    const id = this.state.editingId; if (!id) return;
+                    const name = (document.querySelector('#pmName').value || '').trim() || 'Sem nome';
                     const template = document.querySelector('#pmTpl').value;
-                    const p = s.list.find(x => x.id === id); if (!p) return; p.name = name; p.template = template; p.updatedAt = nowISO();
-                    this._save(s); this._renderList(); this._loadToEditor(id);
-                    const st = document.querySelector('#pmStatus'); if (st) { st.textContent = 'Salvo'; setTimeout(() => { st.textContent = ''; }, 1200); }
+                    const p = this.state.list.find(x => x.id === id); if (!p) return;
+                    p.name = name; p.template = template; p.updatedAt = nowISO();
+                    await this._persist(); this._renderList(); this._loadToEditor(id);
+                    const st = document.querySelector('#pmStatus'); if (st) { st.textContent = 'Salvo'; setTimeout(() => st.textContent = '', 1200); }
                 },
-                _setActiveFromEditor() { const s = this._load(); const id = this.state.editingId; if (!id) return; s.activeId = id; this._save(s); this._renderList(); },
+
+                async _setActiveFromEditor() {
+                    const id = this.state.editingId; if (!id) return;
+                    this.state.activeId = id;
+                    await this._persist(); this._renderList();
+                },
+
                 _export() {
-                    const s = this._load(); const blob = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
-                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `prompts_${this.state.pageId}.json`; a.click(); URL.revokeObjectURL(a.href);
+                    const blob = new Blob([JSON.stringify({ list: this.state.list, activeId: this.state.activeId }, null, 2)], { type: 'application/json' });
+                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+                    a.download = `prompts_${this.state.pageId}.json`; a.click(); URL.revokeObjectURL(a.href);
                 },
+
                 async _import(e) {
-                    const f = e.target.files?.[0]; if (!f) return; const txt = await f.text(); let obj = null;
-                    try { obj = JSON.parse(txt); } catch { return alert('JSON inválido'); }
-                    if (!obj || !Array.isArray(obj.list)) return alert('Estrutura inválida');
-                    obj.list = obj.list.map(x => ({ id: x.id || uid(), name: x.name || 'Sem nome', template: x.template || '', updatedAt: x.updatedAt || nowISO() }));
-                    obj.activeId = obj.activeId && obj.list.find(x => x.id === obj.activeId) ? obj.activeId : (obj.list[0]?.id || null);
-                    this._save(obj); this._renderList(); e.target.value = '';
-                },
-                _key() { return LS_PREFIX + this.state.pageId; },
-                _load() { try { const raw = localStorage.getItem(this._key()); if (!raw) return null; return JSON.parse(raw); } catch { return null; } },
-                _save(obj) { try { localStorage.setItem(this._key(), JSON.stringify(obj)); } catch (e) { console.error('localStorage', e); } this.state.list = obj.list; this.state.activeId = obj.activeId; }
+                    const f = e.target.files?.[0]; if (!f) return;
+                    const txt = await f.text(); let obj = null;
+                    try { obj = JSON.parse(txt); } catch { alert('JSON inválido'); return; }
+                    if (!obj || !Array.isArray(obj.list)) { alert('Estrutura inválida'); return; }
+                    const norm = obj.list.map(x => ({ id: x.id || uid(), name: x.name || 'Sem nome', template: x.template || '', updatedAt: x.updatedAt || nowISO() }));
+                    this.state.list = norm;
+                    this.state.activeId = obj.activeId && norm.find(x => x.id === obj.activeId) ? obj.activeId : (norm[0]?.id || null);
+                    await this._persist(); this._renderList(); e.target.value = '';
+                }
             };
+
             window.Prompts = Prompts;
         })();
     </script>
+
+
+
+
+
+
+
+
 
     <!-- ========== Script principal ========== -->
     <script>
