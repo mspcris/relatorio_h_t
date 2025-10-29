@@ -7,546 +7,102 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="style2.css">
     <link rel="shortcut icon" href="images/Logo Camim-01_50px.png" type="image/x-icon">
+    <link rel="stylesheet" href="style2.css">
+
+    <!-- Libs -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="/js/chat.js"></script>
 
     <script>
-        // escolha UMA estratégia abaixo
-        // A) mesmo host com proxy reverso (recomendado p/ evitar CORS)
+        // backend no mesmo host (proxy reverso)
         window.IA_API_URL = '/ia/analisar';
         window.PROMPTS_API_BASE = '/prompts';
-
-        // B) backend em outra porta (exige CORS no backend)
-        //     window.IA_API_URL = 'http://127.0.0.1:8011/ia/analisar';
-        //     window.PROMPTS_API_BASE = 'http://127.0.0.1:8011/prompts';
     </script>
 
-</head>
-<style>
-    /********************************************
-#                 VARIÁVEIS
-********************************************/
-    :root {
-        --cor0: #F2F2F2;
-        --cor1: #afbfa5;
-        --cor2: #91b62f;
-        --cor3: #009402;
-        --cor4: #1c7932;
-        --cor5: #003f0a;
-        --cor6: #0099ab;
-        --cor7: #092019;
-        --cor8: #444444;
-    }
-
-    /********************************************
-#                 BASE
-********************************************/
-    body {
-        -webkit-font-smoothing: antialiased
-    }
-
-    .muted {
-        color: #6b7280
-    }
-
-    .mini {
-        font-size: .85rem
-    }
-
-    .text-right {
-        text-align: right
-    }
-
-    .small-td {
-        white-space: nowrap
-    }
-
-    .table-responsive {
-        width: 100%
-    }
-
-    /********************************************
-#               LAYOUT / STACK
-#   Importante: NÃO tornar .stack um flex container
-********************************************/
-    .stack>*+* {
-        margin-top: 14px
-    }
-
-    /********************************************
-#                FILTER BAR
-********************************************/
-    .filter-bar {
-        display: flex;
-        gap: 12px;
-        align-items: flex-end;
-        flex-wrap: wrap;
-        padding: 10px
-    }
-
-    .month-inputs {
-        display: flex;
-        gap: 6px;
-        align-items: center
-    }
-
-    /********************************************
-#                TABS / SCROLL
-********************************************/
-    .scroll-tabs {
-        display: flex;
-        gap: 6px;
-        overflow: auto;
-        white-space: nowrap;
-        padding: 6px 0
-    }
-
-    .scroll-tabs .nav-link {
-        display: inline-block;
-        min-width: 52px;
-        text-align: center;
-        cursor: pointer
-    }
-
-    /********************************************
-#                  KPI GRID
-********************************************/
-    .kpi {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 8px
-    }
-
-    .kpi .card {
-        border-radius: 12px;
-        margin: 0
-    }
-
-    /* KPI GRID — força no container correto */
-    .card-body.kpi {
-        display: grid !important;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 8px;
-    }
-
-    /* Cartões dos KPIs mais compactos */
-    .card-body.kpi .card {
-        margin: 0;
-        border-radius: 12px
-    }
-
-    .card-body.kpi .card .card-body {
-        padding: .5rem .75rem
-    }
-
-    /* Stack: bloco simples com espaçamento entre irmãos */
-    .stack {
-        display: block
-    }
-
-    .stack>*+* {
-        margin-top: 14px
-    }
-
-    /* Chart card: mantém altura */
-    .chart-card .card-body {
-        height: 360px
-    }
-
-    /* Filter bar e tabs seguem iguais */
-    .filter-bar {
-        display: flex;
-        gap: 12px;
-        align-items: flex-end;
-        flex-wrap: wrap;
-        padding: 10px
-    }
-
-    .month-inputs {
-        display: flex;
-        gap: 6px;
-        align-items: center
-    }
-
-    .scroll-tabs {
-        display: flex;
-        gap: 6px;
-        overflow: auto;
-        white-space: nowrap;
-        padding: 6px 0
-    }
-
-
-    /********************************************
-#                CHART CARD
-********************************************/
-    .chart-card .card-body {
-        height: 360px
-    }
-
-    /********************************************
-#                  HEATMAP
-********************************************/
-    .heatmap {
-        overflow: auto;
-        max-height: 420px
-    }
-
-    .heatmap table {
-        border-collapse: separate;
-        border-spacing: 2px;
-        width: 100%
-    }
-
-    .heatmap th,
-    .heatmap td {
-        text-align: center;
-        padding: 6px;
-        font-size: 12px
-    }
-
-    .heatmap .cell {
-        padding: 6px 8px;
-        border-radius: 8px;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-        color: #111
-    }
-
-    /********************************************
-#                  LEGEND
-********************************************/
-    .lg-box {
-        display: inline-block;
-        width: 10px;
-        height: 10px;
-        border-radius: 2px;
-        margin-right: 4px;
-        vertical-align: middle
-    }
-
-    .lg-pos {
-        background: rgba(54, 162, 235, 1)
-    }
-
-    .lg-neg {
-        background: rgba(220, 53, 69, 1)
-    }
-
-    /********************************************
-#                IA - TOGGLE / PAINEL / CHAT
-********************************************/
-    .ia-toggle {
-        margin-left: .5rem
-    }
-
-    .ia-toggle.active {
-        background: var(--cor2);
-        color: #fff;
-        border-color: var(--cor5)
-    }
-
-    #iaPanel {
-        display: none
-    }
-
-    #iaPanel .ia-content {
-        background: #f8f9fa;
-        border: 1px solid #e5e7eb;
-        border-radius: 8px;
-        padding: 10px
-    }
-
-    .ia-loading {
-        font-family: monospace
-    }
-
-    .ia-dots {
-        display: inline-block;
-        min-width: 1.4em
-    }
-
-    .dot {
-        opacity: .2
-    }
-
-    .dot.on {
-        opacity: 1
-    }
-
-    #ia-chat {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        margin-top: 12px
-    }
-
-    .ia-msg {
-        max-width: 70%;
-        padding: 10px 12px;
-        border-radius: 12px;
-        line-height: 1.35;
-        white-space: pre-wrap;
-        word-wrap: break-word
-    }
-
-    .ia-user {
-        align-self: flex-end;
-        background: #e6f0ff;
-        border: 1px solid #c6dcff
-    }
-
-    .ia-bot {
-        align-self: flex-start;
-        background: #f4f4f5;
-        border: 1px solid #e4e4e7
-    }
-
-    .ia-meta {
-        font-size: 12px;
-        color: #6b7280;
-        margin-top: 2px
-    }
-
-    .ia-row {
-        display: flex;
-        flex-direction: column
-    }
-
-    .ia-spinner {
-        width: 18px;
-        height: 18px;
-        border: 2px solid #d1d5db;
-        border-top-color: #6b7280;
-        border-radius: 50%;
-        animation: spin .8s linear infinite
-    }
-
-    @keyframes spin {
-        to {
-            transform: rotate(360deg)
+    <style>
+        .stack>*+* {
+            margin-top: 14px
         }
-    }
 
-    /********************************************
-#              IA DEEP - POPUP
-********************************************/
-    #iaDeepPanel {
-        display: none;
-        position: fixed;
-        right: 16px;
-        bottom: 16px;
-        width: min(760px, 95vw);
-        max-height: 85vh;
-        z-index: 9999;
-        box-shadow: 0 10px 24px rgba(0, 0, 0, .18)
-    }
-
-    #iaDeepPanel .body {
-        max-height: 60vh;
-        overflow: auto
-    }
-
-    #iaDeepPanel .iad-chat {
-        display: flex;
-        flex-direction: column;
-        gap: 10px
-    }
-
-    #iaDeepPanel .iad-msg {
-        max-width: 78%;
-        padding: 10px 12px;
-        border-radius: 12px;
-        line-height: 1.45;
-        white-space: pre-wrap;
-        word-break: break-word;
-        text-align: justify
-    }
-
-    #iaDeepPanel .iad-user {
-        background: #e6f0ff;
-        border: 1px solid #c6dcff;
-        align-self: flex-end
-    }
-
-    #iaDeepPanel .iad-bot {
-        background: #f4f4f5;
-        border: 1px solid #e4e4e7;
-        align-self: flex-start
-    }
-
-    #iaDeepPanel .iad-meta {
-        font-size: 12px;
-        color: #6b7280;
-        margin-top: 2px
-    }
-
-    #iaDeepPanel .iad-loading .dot {
-        opacity: .35
-    }
-
-    #iaDeepPanel .iad-loading .dot.on {
-        opacity: 1
-    }
-
-    .ia-clean p {
-        margin: 10px 0
-    }
-
-    .ia-summary {
-        background: #fff;
-        border: 1px solid #e5e7eb;
-        border-radius: 10px;
-        padding: 12px;
-        line-height: 1.45
-    }
-
-    /* Títulos e parágrafos do relatório IA */
-    .iad-msg p {
-        margin: 10px 0;
-    }
-
-    .iad-msg .iad-h {
-        margin: 14px 0 8px;
-        font-weight: 600;
-    }
-
-    /* Normaliza peso no chat */
-    #iaDeepPanel,
-    #iaDeepPanel * {
-        font-weight: 400;
-    }
-
-    #iaDeepPanel .iad-h,
-    #iaDeepPanel .card-header b {
-        font-weight: 600;
-    }
-
-    #iaDeepPanel b,
-    #iaDeepPanel strong {
-        font-weight: 600;
-    }
-
-
-    /********************************************
-#               RESPONSIVIDADE
-********************************************/
-    @media (max-width:576px) {
-        .navbar .ml-auto {
+        .filter-bar {
             display: flex;
+            gap: 12px;
+            align-items: flex-end;
             flex-wrap: wrap;
-            gap: 8px;
-            width: 100%
-        }
-
-        .navbar .ml-auto .btn {
-            flex: 1 1 48%;
-            min-width: 140px
-        }
-
-        #btnPrompts {
-            margin-left: 0
-        }
-
-        .main-header .d-flex.align-items-center {
-            flex-wrap: wrap
-        }
-
-        #jsonInfo {
-            flex: 0 0 100%;
-            margin-left: 0;
-            margin-top: 4px
+            padding: 10px
         }
 
         .month-inputs {
-            flex-wrap: wrap
+            display: flex;
+            gap: 6px;
+            align-items: center
         }
 
-        .month-inputs .btn {
-            flex: 0 0 100%
+        .kpi {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 8px
+        }
+
+        .card-body.kpi {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 8px
         }
 
         .chart-card .card-body {
-            height: 260px
+            height: 360px
         }
-    }
 
-    @media (max-width:360px) {
-        .chart-card .card-body {
-            height: 240px
+        .heatmap {
+            overflow: auto;
+            max-height: 420px
         }
-    }
 
-    /* Dark mode do IA Deep */
-    #iaDeepPanel.card {
-        background: #1e1e1e;
-        color: #fff;
-        border: 1px solid #2a2a2a;
-    }
+        .heatmap .cell {
+            padding: 6px 8px;
+            border-radius: 8px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            color: #111
+        }
 
-    #iaDeepPanel .card-header,
-    #iaDeepPanel .card-footer {
-        background: #242424;
-        color: #fff;
-        border-color: #2a2a2a;
-    }
+        .lg-box {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            margin-right: 4px;
+            vertical-align: middle
+        }
 
-    #iaDeepPanel .body {
-        background: #1e1e1e;
-    }
+        .lg-pos {
+            background: rgba(54, 162, 235, 1)
+        }
 
-    #iaDeepPanel .iad-msg {
-        color: #eaeaea;
-    }
-
-    #iaDeepPanel .iad-bot {
-        background: #2a2a2a;
-        border-color: #3a3a3a;
-    }
-
-    #iaDeepPanel .iad-user {
-        background: #16324f;
-        border-color: #275a8a;
-    }
-
-    #iaDeepPanel input.form-control {
-        background: #121212;
-        color: #fff;
-        border-color: #3a3a3a;
-    }
-
-    #iaDeepPanel .btn.btn-outline-secondary {
-        color: #ddd;
-        border-color: #5a5a5a;
-    }
-
-    #iaDeepPanel .btn.btn-outline-secondary:hover {
-        background: #333;
-    }
-
-    #iaDeepPanel .btn.btn-primary {
-        background: #3b82f6;
-        border-color: #3b82f6;
-    }
-</style>
+        .lg-neg {
+            background: rgba(220, 53, 69, 1)
+        }
+    </style>
+</head>
 
 <body class="hold-transition sidebar-mini">
     <div class="wrapper">
-        <!-- NAVBAR -->
+        <!-- NAV -->
         <nav class="main-header navbar navbar-expand navbar-white navbar-light">
             <ul class="navbar-nav">
                 <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
                 </li>
             </ul>
             <span class="ml-2 font-weight-bold d-flex align-items-center">
-                <img src="./images/Logo Camim-01_50px.png" alt="Logo Camim"><span class="ml-2">Quem tem saúde é mais
-                    feliz!</span>
+                <img src="./images/Logo Camim-01_50px.png" alt="Logo Camim">
+                <span class="ml-2">Quem tem saúde é mais feliz!</span>
                 <span id="jsonInfo" class="ml-3 text-muted mini"></span>
             </span>
         </nav>
@@ -597,7 +153,8 @@
                     <div class="ml-auto">
                         <button id="btnComparar" class="btn btn-sm btn-outline-secondary"
                             title="Mostrar/ocultar bloco de comparação">Comparar</button>
-                        <!-- IA Análise é injetado ao lado via script -->
+                        <button id="btnIADeep" class="btn btn-sm btn-outline-primary ml-2"
+                            title="Relatório completo e chat">IA Análise</button>
                     </div>
                 </div>
             </nav>
@@ -619,12 +176,13 @@
                             </div>
                             <div class="flex-grow-1">
                                 <label class="mb-0 small d-block">Posto</label>
-                                <ul id="postoTabs1" class="nav nav-pills scroll-tabs"></ul>
+                                <ul id="postoTabs1" class="nav nav-pills" style="overflow:auto;white-space:nowrap;">
+                                </ul>
                             </div>
                         </div>
                     </div>
                     <div class="card">
-                        <div class="card-header d-flex align-items-center justify-content-between">
+                        <div class="card-header">
                             <h3 class="card-title mb-0">KPIs Comparação</h3>
                         </div>
                         <div class="card-body kpi" id="kpisSel1"></div>
@@ -644,7 +202,7 @@
                         </div>
                         <div class="flex-grow-1">
                             <label class="mb-0 small d-block">Posto</label>
-                            <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
+                            <ul id="postoTabs2" class="nav nav-pills" style="overflow:auto;white-space:nowrap;"></ul>
                         </div>
                     </div>
                 </div>
@@ -657,12 +215,7 @@
                     <div class="card-body kpi" id="kpisSel2"></div>
                 </div>
 
-                <!-- IA place -->
-                <div id="iaPanel" class="p-2" style="display:none">
-                    <div id="iaOut" class="ia-clean"></div>
-                </div>
-
-                <!-- TABELA 12M -->
+                <!-- TABELA -->
                 <div class="card">
                     <div class="card-header d-flex align-items-center justify-content-between">
                         <h3 class="card-title mb-0">Dados do Período Selecionado (12 meses)</h3>
@@ -691,28 +244,25 @@
 
                 <!-- GRÁFICOS -->
                 <div class="card chart-card">
-                    <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0" id="g_pct">% Médico sobre Mensalidade</h3>
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">% Médico sobre Mensalidade</h3>
                     </div>
                     <div class="card-body"><canvas id="chartPct"></canvas></div>
                 </div>
-
                 <div class="card chart-card">
-                    <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0" id="g_val">Evolução: Mensalidade e Médico</h3>
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Evolução: Mensalidade e Médico</h3>
                     </div>
                     <div class="card-body"><canvas id="chartValores"></canvas></div>
                 </div>
-
                 <div class="card chart-card">
-                    <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0" id="g_stack">Composição: Médico × Margem</h3>
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Composição: Médico × Margem</h3>
                     </div>
                     <div class="card-body"><canvas id="chartStack"></canvas></div>
                 </div>
-
                 <div class="card chart-card">
-                    <div class="card-header d-flex align-items-center justify-content-between">
+                    <div class="card-header">
                         <h3 class="card-title mb-0">Variação YoY de % Médico (p.p.)
                             <span class="mini muted" style="margin-left:8px"><span
                                     class="lg-box lg-pos"></span>Positivo&nbsp;&nbsp;<span
@@ -721,23 +271,20 @@
                     </div>
                     <div class="card-body"><canvas id="chartYoYpp"></canvas></div>
                 </div>
-
                 <div class="card chart-card">
-                    <div class="card-header d-flex align-items-center justify-content-between">
+                    <div class="card-header">
                         <h3 class="card-title mb-0">% Médico médio por Posto (12m)</h3>
                     </div>
                     <div class="card-body"><canvas id="chartPctPosto"></canvas></div>
                 </div>
-
                 <div class="card chart-card">
-                    <div class="card-header d-flex align-items-center justify-content-between">
+                    <div class="card-header">
                         <h3 class="card-title mb-0">Pareto de Custo Médico por Posto</h3>
                     </div>
                     <div class="card-body"><canvas id="chartParetoMed"></canvas></div>
                 </div>
-
                 <div class="card chart-card">
-                    <div class="card-header d-flex align-items-center justify-content-between">
+                    <div class="card-header">
                         <h3 class="card-title mb-0">Dispersão: Mensalidade × % Médico</h3>
                     </div>
                     <div class="card-body"><canvas id="chartScatter"></canvas></div>
@@ -754,656 +301,308 @@
         </div>
     </div>
 
-
-
-    <!-- helpers de abas: definidos ANTES do boot -->
-    <script>
-        function markActiveMulti(scopeId, selection) {
-            const isAll = selection === 'ALL';
-            document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
-                const p = a.dataset.posto;
-                if (p === 'ALL') a.classList.toggle('active', isAll);
-                else a.classList.toggle('active', !isAll && selection.has(p));
-            });
-        }
-        function buildPostoTabs(ulId, getSel, setSel, onChange) {
-            const ul = document.querySelector(ulId); if (!ul) return;
-            ul.innerHTML = '';
-            ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="ALL" class="nav-link" href="#">Todos</a></li>`);
-            (window.POSTOS || []).forEach(p => {
-                ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`);
-            });
-            markActiveMulti(ulId, getSel());
-            ul.addEventListener('click', e => {
-                if (!e.target.matches('.nav-link')) return; e.preventDefault();
-                const p = e.target.dataset.posto; let sel = getSel();
-                if (p === 'ALL') sel = 'ALL';
-                else {
-                    if (sel === 'ALL') sel = new Set();
-                    if (sel.has(p)) sel.delete(p); else sel.add(p);
-                    if (sel.size === (window.POSTOS || []).length || sel.size === 0) sel = 'ALL';
-                }
-                setSel(sel); markActiveMulti(ulId, sel); onChange();
-            });
-        }
-        window.markActiveMulti = markActiveMulti;
-        window.buildPostoTabs = buildPostoTabs;
-    </script>
-
-    <!-- PROMPTS MANAGER -->
     <script>
         (function () {
-            const API_BASE = (window.PROMPTS_API_BASE || '/prompts/').replace(/\/+$/, '') + '/';
-            const uid = () => ('p_' + Math.random().toString(36).slice(2, 10));
-            const nowISO = () => new Date().toISOString();
-            const tplRender = (t, v) => String(t || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => (v?.[k] ?? `{${k}}`));
-            const Prompts = {
-                state: { pageId: null, mounted: false, editingId: null }, _cache: null,
-                async init({ pageId, defaults = [], mountAfter }) {
-                    this.state.pageId = pageId;
-                    let data = await this._get(pageId);
-                    if (!data || !Array.isArray(data.list)) {
-                        const list = defaults.map(d => ({ id: uid(), name: d.name, template: d.template, updatedAt: nowISO() }));
-                        data = { list, activeId: list[0]?.id || null };
-                        try { await this._put(pageId, data); } catch { }
-                    }
-                    this._cache = data || { list: [], activeId: null };
-                    this._mountUI(mountAfter); this._renderList();
-                },
-                getActive() { const d = this._cache || { list: [], activeId: null }; return d.list.find(p => p.id === d.activeId) || null; },
-                render(v) { const a = this.getActive(); return a ? tplRender(a.template, v) : ''; },
-                async _get(id) { try { const r = await fetch(API_BASE + encodeURIComponent(id), { cache: 'no-store' }); if (!r.ok) return { list: [], activeId: null }; return r.json(); } catch { return { list: [], activeId: null }; } },
-                async _put(id, body) { const r = await fetch(API_BASE + encodeURIComponent(id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); if (!r.ok) throw new Error('Falha ao salvar prompts'); return r.json(); },
-                _mountUI(mountAfter) {
-                    if (this.state.mounted) return;
-                    const anchor = document.querySelector(mountAfter) || document.body;
-                    const btn = document.createElement('button');
-                    btn.id = 'btnPrompts'; btn.className = 'btn btn-sm btn-outline-secondary ml-2';
-                    btn.textContent = 'Prompts'; btn.title = 'Definir o prompt ativo';
-                    anchor.parentNode.insertBefore(btn, anchor.nextSibling);
-                    const modal = document.createElement('div'); modal.id = 'promptModal'; modal.style.display = 'none';
-                    modal.innerHTML = `<div class="card p-2" style="position:fixed;right:16px;bottom:16px;width:min(720px,92vw);max-height:80vh;overflow:auto;z-index:9999;box-shadow:0 10px 24px rgba(0,0,0,.18)">
-<div class="d-flex align-items-center mb-2"><b class="mr-auto">Prompts desta página</b><button id="pmClose" class="btn btn-sm btn-outline-secondary">Fechar</button></div>
-<div class="d-flex" style="gap:12px;flex-wrap:wrap">
-  <div style="flex:1 1 220px;min-width:220px">
-    <div class="mb-2 d-flex" style="gap:6px">
-      <button id="pmNew" class="btn btn-sm btn-primary">Novo</button>
-      <button id="pmDup" class="btn btn-sm btn-outline-secondary">Duplicar</button>
-      <button id="pmDel" class="btn btn-sm btn-outline-danger">Excluir</button>
-    </div>
-    <ul id="pmList" class="list-group"></ul>
-    <div class="mt-2">
-      <button id="pmExport" class="btn btn-sm btn-outline-secondary">Exportar</button>
-      <label class="btn btn-sm btn-outline-secondary mb-0">Importar <input id="pmImport" type="file" accept="application/json" hidden></label>
-    </div>
-  </div>
-  <div style="flex:2 1 360px;min-width:280px">
-    <input id="pmName" class="form-control form-control-sm mb-2" placeholder="Nome do prompt">
-    <textarea id="pmTpl" class="form-control form-control-sm" rows="12" placeholder="Template com {placeholders}"></textarea>
-    <small class="text-muted">Placeholders: {produto}, {from}, {to}, {posto}, {contexto}, {scopes}.</small>
-    <div class="mt-2 d-flex">
-      <button id="pmSave" class="btn btn-sm btn-success mr-2">Salvar</button>
-      <button id="pmSetActive" class="btn btn-sm btn-outline-primary">Definir como ativo</button>
-      <span id="pmStatus" class="ml-2 text-muted small"></span>
-    </div>
-  </div>
-</div>
-</div>`;
-                    document.body.appendChild(modal);
-                    btn.addEventListener('click', () => modal.style.display = modal.style.display === 'none' ? 'block' : 'none');
-                    modal.querySelector('#pmClose').addEventListener('click', () => modal.style.display = 'none');
-                    modal.querySelector('#pmNew').addEventListener('click', () => this._new());
-                    modal.querySelector('#pmDup').addEventListener('click', () => this._dup());
-                    modal.querySelector('#pmDel').addEventListener('click', () => this._del());
-                    modal.querySelector('#pmSave').addEventListener('click', () => this._saveEdits());
-                    modal.querySelector('#pmSetActive').addEventListener('click', () => this._setActiveFromEditor());
-                    modal.querySelector('#pmExport').addEventListener('click', () => this._export());
-                    modal.querySelector('#pmImport').addEventListener('change', e => this._import(e));
-                    this.state.mounted = true;
-                },
-                _renderList() {
-                    const { list = [], activeId = null } = this._cache || {};
-                    const ul = document.querySelector('#pmList'); if (!ul) return; ul.innerHTML = '';
-                    list.forEach(p => {
-                        const li = document.createElement('li'); li.className = 'list-group-item d-flex align-items-center';
-                        li.dataset.id = p.id; li.style.cursor = 'pointer';
-                        li.innerHTML = `<span class="mr-2 ${p.id === activeId ? 'text-primary' : ''}">●</span><span class="flex-grow-1">${p.name}</span><small class="text-muted ml-2">${new Date(p.updatedAt).toLocaleString('pt-BR')}</small>`;
-                        li.addEventListener('click', () => this._loadToEditor(p.id)); ul.appendChild(li);
-                    });
-                    if (list.length) this._loadToEditor(activeId || list[0].id);
-                },
-                _loadToEditor(id) {
-                    const { list = [] } = this._cache || {}; const p = list.find(x => x.id === id) || list[0]; if (!p) return;
-                    document.querySelector('#pmName').value = p.name || ''; document.querySelector('#pmTpl').value = p.template || '';
-                    document.querySelector('#pmList').querySelectorAll('li').forEach(li => li.classList.toggle('active', li.dataset.id === p.id));
-                    this.state.editingId = p.id; const st = document.querySelector('#pmStatus'); if (st) st.textContent = '';
-                },
-                async _persist() {
-                    try { await this._put(this.state.pageId, this._cache); } catch { }
-                    this._renderList();
-                    const st = document.querySelector('#pmStatus'); if (st) { st.textContent = 'Salvo'; setTimeout(() => st.textContent = '', 1200); }
-                },
-                _new() {
-                    const d = this._cache; const id = (crypto.randomUUID?.()) || uid();
-                    d.list.unshift({ id, name: 'Novo prompt', template: '', updatedAt: new Date().toISOString() });
-                    d.activeId = d.activeId || id; this._cache = d; this._renderList(); this._loadToEditor(id); this._persist();
-                },
-                _dup() {
-                    const d = this._cache; const id = this.state.editingId; const p = d.list.find(x => x.id === id); if (!p) return;
-                    const nid = (crypto.randomUUID?.()) || uid();
-                    d.list.unshift({ id: nid, name: p.name + ' (cópia)', template: p.template, updatedAt: new Date().toISOString() });
-                    this._cache = d; this._renderList(); this._loadToEditor(nid); this._persist();
-                },
-                _del() {
-                    const d = this._cache; const id = this.state.editingId; if (!id) return;
-                    d.list = d.list.filter(x => x.id !== id); if (d.activeId === id) d.activeId = d.list[0]?.id || null;
-                    this._cache = d; this._renderList(); this._persist();
-                },
-                async _saveEdits() {
-                    const d = this._cache; const id = this.state.editingId; if (!id) return;
-                    const name = (document.querySelector('#pmName').value || 'Sem nome').trim();
-                    const template = document.querySelector('#pmTpl').value || '';
-                    const p = d.list.find(x => x.id === id); if (!p) return;
-                    p.name = name; p.template = template; p.updatedAt = new Date().toISOString();
-                    this._cache = d; await this._persist();
-                },
-                async _setActiveFromEditor() { const d = this._cache; const id = this.state.editingId; if (!id) return; d.activeId = id; this._cache = d; await this._persist(); },
-                _export() {
-                    const d = this._cache || { list: [], activeId: null };
-                    const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
-                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `prompts_${this.state.pageId}.json`; a.click(); URL.revokeObjectURL(a.href);
-                },
-                async _import(e) {
-                    const f = e.target.files?.[0]; if (!f) return; const txt = await f.text(); let obj = null;
-                    try { obj = JSON.parse(txt); } catch { return alert('JSON inválido') }
-                    if (!obj || !Array.isArray(obj.list)) return alert('Estrutura inválida');
-                    obj.list = obj.list.map(x => ({ id: x.id || (crypto.randomUUID?.()) || uid(), name: x.name || 'Sem nome', template: x.template || '', updatedAt: x.updatedAt || new Date().toISOString() }));
-                    obj.activeId = obj.activeId && obj.list.find(x => x.id === obj.activeId) ? obj.activeId : (obj.list[0]?.id || null);
-                    this._cache = obj; await this._persist(); e.target.value = '';
-                }
-            };
-            window.Prompts = Prompts;
-        })();
-    </script>
+            // Util
+            const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+            const fmt2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+            const mFmt = ym => { const [y, m] = ym.split('-').map(Number); return `${MES_ABBR[m - 1]}-${String(y).slice(-2)}`; };
+            const num = v => Number.isFinite(Number(v)) ? Number(v) : 0;
+            const sum = a => a.reduce((x, y) => x + (y || 0), 0);
+            const mm3 = arr => arr.map((_, i) => { const s = arr.slice(Math.max(0, i - 2), i + 1).filter(v => v != null); return s.length ? (s.reduce((a, b) => a + b, 0) / s.length) : null; });
+            const prevMonth = ym => { const [yy, mm] = ym.split('-').map(Number); const d = new Date(yy, mm - 1, 1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+            const prevYear = ym => { const [yy, mm] = ym.split('-').map(Number); return `${yy - 1}-${String(mm).padStart(2, '0')}`; }
+            const inRange = (labels, from, to) => labels.filter(m => (!from || m >= from) && (!to || m <= to));
 
-    <!-- IA ANÁLISE com parágrafos e “letra a letra” -->
-    <script>
-        function _btnPressed(btn, on) {
-            btn.classList.toggle('btn-outline-primary', !on);
-            btn.classList.toggle('btn-primary', on);
-            btn.classList.toggle('active', on);
-            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-        }
-        (function injectIAD() {
-            const anchor = document.querySelector('#btnComparar'); if (!anchor) return;
-            if (!document.querySelector('#iaDeep')) {
-                const btn = document.createElement('button');
-                btn.id = 'iaDeep'; btn.className = 'btn btn-sm btn-outline-primary ml-2';
-                btn.textContent = 'IA Análise'; btn.title = 'Relatório completo e chat';
-                anchor.parentNode.insertBefore(btn, anchor.nextSibling);
-            }
-            if (!document.querySelector('#iaDeepPanel')) {
-                const wrap = document.createElement('div'); wrap.id = 'iaDeepPanel'; wrap.className = 'card';
-                wrap.style.cssText = 'display:none;position:fixed;right:16px;bottom:16px;width:min(760px,95vw);max-height:85vh;z-index:9999;box-shadow:0 10px 24px rgba(0,0,0,.18)';
-                wrap.innerHTML = `
-<div class="card-header d-flex align-items-center justify-content-between">
-  <b class="mb-0">IA — Análise Completa & Chat</b>
-  <div class="d-flex" style="gap:8px">
-<button id="iadBrief" class="btn btn-sm btn-outline-secondary" title="Respostas em até 5 linhas">IA Resumida</button>
-    <button id="iadPDF" class="btn btn-sm btn-outline-secondary" title="Exportar PDF da conversa">PDF</button>
-    <button id="iadRefresh" class="btn btn-sm btn-outline-secondary" title="Regerar relatório completo">Regerar</button>
-    <button id="iadClose" class="btn btn-sm btn-outline-secondary">Fechar</button>
-  </div>
-</div>
-<div class="card-body body" style="max-height:60vh;overflow:auto">
-  <div id="iadOut" class="iad-chat d-flex flex-column ia-clean"></div>
-</div>
-<div class="card-footer">
-  <div class="d-flex" style="gap:8px">
-    <input id="iadInput" class="form-control form-control-sm" placeholder="Faça perguntas. Ex.: drivers de preço × volume?">
-    <button id="iadSend" class="btn btn-sm btn-primary">Enviar</button>
-  </div>
-  <small class="text-muted">Cada mensagem mantém o recorte atual. Respostas sempre em texto corrido, com parágrafos.</small>
-</div>`;
-                document.body.appendChild(wrap);
-            }
-        })();
+            // Estado
+            let POR_POSTO = {}, CONSOLIDADO = {}, PCT_POR_POSTO = {};
+            let MESES = [], POSTOS = [];
+            let sel1 = 'ALL', sel2 = 'ALL';
+            let chPct, chValores, chStack, chYoYpp, chPctPosto, chParetoMed, chScatter;
 
-        const IA_DEEP = { open: false, loaderEl: null, loaderInt: null };
-        const iadPanel = () => document.querySelector('#iaDeepPanel');
-        const iadOutBox = () => document.querySelector('#iadOut');
-        const iadBtn = () => document.querySelector('#iaDeep');
-
-        function cleanGroq(raw) {
-            let s = String(raw || '');
-            s = s.replace(/```[\s\S]*?```/g, ' ');
-            s = s.replace(/^\s*[|+\-─═┌┐└┘┼┤├┬┴]+.*$/gm, ' ');
-            s = s.replace(/^\s*\|\s*(?:[^|\n]+\|)+\s*$/gm, ' ');
-            s = s.replace(/^\s*:?-{3,}:?\s*$/gm, ' ');
-            s = s.replace(/^\s*[-*]\s{0,3}\|.*$/gm, ' ');
-            s = s.replace(/[ \t]+\n/g, '\n');
-            s = s.replace(/###\s*/g, '\n\n### ');
-            s = s.replace(/(^|\n)\s*vis[aã]o executiva\b/gi, '\n\n### Visão executiva');
-            s = s.replace(/^\s*#{1,6}\s*/gm, '\n\n### ');
-            s = s.replace(/\s\|\s/g, ' , ');
-            s = s.replace(/\n{3,}/g, '\n\n');
-            return s.trim();
-        }
-
-        function parafy(s) {
-            let t = String(s || '').replace(/\r\n/g, '\n').trim();
-            // Garante blocos limpos e títulos destacados
-            t = t.replace(/###\s*/g, '\n\n### ').replace(/\n{3,}/g, '\n\n');
-
-            const out = [];
-            t.split(/\n{2,}/).forEach(block => {
-                const b = block.trim();
-                if (!b) return;
-                const h = b.match(/^###\s*(.+)$/s);
-                if (h) out.push(`<h5 class="iad-h">${h[1].trim()}</h5>`);
-                else out.push(`<p>${b.replace(/\n+/g, '<br>')}</p>`);
-            });
-            return out.join('');
-        }
-
-        function iadAppendBotStreaming(raw, charDelay = 8) {
-            const cleaned = cleanGroq(raw || '');
-            // quebra em parágrafos; renderiza um bloco por vez
-            const blocks = cleaned.replace(/\r\n/g, '\n').split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
-
-            const row = document.createElement('div'); row.className = 'd-flex flex-column';
-            const box = document.createElement('div'); box.className = 'iad-msg iad-bot';
-            const meta = document.createElement('div'); meta.className = 'iad-meta'; meta.textContent = 'IA';
-            row.appendChild(box); row.appendChild(meta); iadOutBox().appendChild(row);
-
-            const sc = iadPanel().querySelector('.body');
-
-            let bi = 0, ci = 0, curEl = null, curText = '';
-            function nextBlock() {
-                if (bi >= blocks.length) return;
-                const isTitle = /^###\s*/.test(blocks[bi]);
-                const text = blocks[bi].replace(/^###\s*/, '');
-                curEl = document.createElement(isTitle ? 'h5' : 'p');
-                if (isTitle) curEl.className = 'iad-h';
-                box.appendChild(curEl);
-                curText = text; ci = 0; typeChar();
-            }
-            function typeChar() {
-                if (ci < curText.length) {
-                    curEl.textContent += curText[ci++];
-                    sc.scrollTop = sc.scrollHeight;
-                    setTimeout(typeChar, charDelay);
-                } else {
-                    bi++; setTimeout(nextBlock, 40);
-                }
-            }
-            nextBlock();
-        }
-
-
-
-        function iadAppend(role, html) {
-            const row = document.createElement('div'); row.className = 'd-flex flex-column';
-            const b = document.createElement('div'); b.className = 'iad-msg ' + (role === 'user' ? 'iad-user' : 'iad-bot'); b.innerHTML = html;
-            const m = document.createElement('div'); m.className = 'iad-meta'; m.textContent = role === 'user' ? 'Você' : 'IA';
-            row.appendChild(b); row.appendChild(m);
-            const out = iadOutBox(); out.appendChild(row);
-            const sc = iadPanel().querySelector('.body'); sc.scrollTop = sc.scrollHeight;
-        }
-
-        function iadDotsStart() {
-            const wrap = document.createElement('div');
-            wrap.className = 'iad-msg iad-bot iad-loading';
-            wrap.innerHTML = `Aguardando <span class="iad-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
-            iadOutBox().appendChild(wrap);
-            let t = 0;
-            const int = setInterval(() => {
-                wrap.querySelectorAll('.dot').forEach(x => x.classList.remove('on'));
-                wrap.querySelectorAll('.dot')[t % 3].classList.add('on'); t++;
-            }, 260);
-            IA_DEEP.loaderEl = wrap; IA_DEEP.loaderInt = int;
-        }
-        function iadDotsStop() {
-            if (IA_DEEP.loaderInt) { clearInterval(IA_DEEP.loaderInt); IA_DEEP.loaderInt = null; }
-            if (IA_DEEP.loaderEl) { IA_DEEP.loaderEl.remove(); IA_DEEP.loaderEl = null; }
-        }
-        function mesesSel2() { return window.__MESES_FN__?.() || [] }
-        function postoAtual() { return window.__POSTO_ATUAL__?.() || 'ALL' }
-        function seriesBasicas() { return window.__SERIES_BAS__?.() || { labels: [], mensalidade: [], medico: [], pct_med: [] } }
-        function defs() { return { pct_med: '% da mensalidade consumido por custo médico', margem: 'mensalidade - médico', yoy_pp: 'diferença em p.p. vs mesmo mês do ano anterior' } }
-        function activePrompt(scopes, ctx) {
-            const meses = mesesSel2();
-            const baseVars = { produto: 'medicos', from: meses[0], to: meses.at(-1), posto: postoAtual(), contexto: ctx, scopes };
-
-            const active = window.Prompts?.getActive?.();
-            const p = active ? (window.Prompts.render(baseVars) || '') : '';
-
-            const guard = [
-                'NÃO use tabelas, Markdown tabular, ASCII ou barras "|".',
-                'Não desenhe gráficos. Apenas referencie os gráficos da tela pelo título.',
-                'Responda em texto corrido, com parágrafos curtos.'
-            ].join(' ');
-
-            // Se não houver prompt ativo, force o “RELATÓRIO TÉCNICO” minimal
-            const fallback = '### RELATÓRIO TÉCNICO — {produto} {from}→{to} — Posto {posto}\n' +
-                'Objetivo: diagnóstico executivo e direcionadores de margem. ' +
-                'Escopo: gráficos {scopes}; drivers preço×volume; variações MoM/YoY; riscos e oportunidades; plano 30/60/90; validações.';
-
-            const promptText = (p && p.trim()) ? p : fallback.replace(/\{(\w+)\}/g, (_, k) => baseVars[k] || '');
-            return `${promptText}\n\n${guard}\n\nNão comece com “Visão executiva”. Títulos iniciam com “### ”.`;
-        }
-
-        function buildPayload({ mode, userQuery }) {
-            const m = mesesSel2(); const s = seriesBasicas(m);
-            const scopes = ['chart_pct', 'chart_valores', 'chart_stack'].join(', ');
-            const base = { produto: 'medicos', when: Date.now(), contexto: (mode === 'report' ? 'relatorio' : mode === 'sum' ? 'sum' : 'qa'), defs: defs(), prefs: { output: 'livre', assertivo: true, accept_format: 'free_text', temperature: 0.2, max_tokens: 8000 } };
-            const blocks = [
-                { scope: 'chart_pct', periodo: { from: m[0], to: m.at(-1) }, posto: postoAtual(), series: { labels: s.labels, pct_med: s.pct_med } },
-                { scope: 'chart_valores', periodo: { from: m[0], to: m.at(-1) }, posto: postoAtual(), series: { labels: s.labels, mensalidade: s.mensalidade, medico: s.medico } },
-                { scope: 'chart_stack', periodo: { from: m[0], to: m.at(-1) }, posto: postoAtual(), series: { labels: s.labels, medico: s.medico } }
-            ];
-            if (mode === 'report') return { ...base, blocks, prompt: activePrompt(scopes, 'relatorio') };
-            if (mode === 'sum') {
-                const convo = [...document.querySelectorAll('#iadOut .iad-msg')].map(x => x.textContent.trim()).filter(Boolean).join('\n\n');
-                return { ...base, blocks, prompt: activePrompt(scopes, 'sum') + '\n\nCondense a conversa acima em até 10 bullets executivos e 1 parágrafo final de conclusão.', query: convo.slice(0, 12000) };
-            }
-            const qa = `${activePrompt(scopes, 'qa')}\nPergunta: ${userQuery}`;
-            return { ...base, blocks, query: userQuery, prompt: qa };
-        }
-        async function callIADeep(payload) {
-            const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
-            const API_ANALISAR = window.IA_API_URL || (IS_LOCAL ? 'http://127.0.0.1:8011/ia/analisar' : '/ia/analisar');
-            const r = await fetch(API_ANALISAR, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (!r.ok) { let t = ''; try { t = await r.text(); } catch { } throw new Error(`HTTP ${r.status} — ${t}`); }
-            const res = await r.json();
-            if (res?.content_mode === 'free_text') return res.text || '';
-            if (res?.content_mode === 'json') return (res.data?.html) || res.data?.livre || JSON.stringify(res.data);
-            return typeof res === 'string' ? res : (res?.html || res?.livre || JSON.stringify(res));
-        }
-        async function IA_sendDeepReport() {
-            try { iadDotsStart(); const out = await callIADeep(buildPayload({ mode: 'report' })); iadDotsStop(); iadAppendBotStreaming(out); }
-            catch (err) { iadDotsStop(); iadAppend('bot', `<span class="text-danger">Falha: ${err.message || err}</span>`); }
-        }
-        async function IA_sendDeepQA(q) {
-            try { iadAppend('user', q); iadDotsStart(); const out = await callIADeep(buildPayload({ mode: 'qa', userQuery: q })); iadDotsStop(); iadAppendBotStreaming(out); }
-            catch (err) { iadDotsStop(); iadAppend('bot', `<span class="text-danger">Falha: ${err.message || err}</span>`); }
-        }
-        async function IA_sendSummary() {
-            try { iadDotsStart(); const out = await callIADeep(buildPayload({ mode: 'sum' })); iadDotsStop(); iadAppend('bot', '<b>Resumo consolidado</b>'); iadAppendBotStreaming(out); }
-            catch (err) { iadDotsStop(); iadAppend('bot', `<span class="text-danger">Falha: ${err.message || err}</span>`); }
-        }
-        (function wireDeep() {
-            const btn = iadBtn(); const panel = iadPanel();
-            const input = () => document.querySelector('#iadInput');
-            const send = () => document.querySelector('#iadSend');
-            const close = () => document.querySelector('#iadClose');
-            const regen = () => document.querySelector('#iadRefresh');
-            const brief = () => document.querySelector('#iadBrief');
-            const pdfBtn = () => document.querySelector('#iadPDF');
-            if (!btn || !panel) return;
-            btn.addEventListener('click', () => {
-                const open = panel.style.display === 'none'; panel.style.display = open ? 'block' : 'none'; _btnPressed(btn, open);
-                if (open && !IA_DEEP.open) { IA_DEEP.open = true; iadOutBox().innerHTML = ''; IA_sendDeepReport(); }
-                if (!open) IA_DEEP.open = false;
-            });
-            close().addEventListener('click', () => { panel.style.display = 'none'; _btnPressed(btn, false); IA_DEEP.open = false; });
-            regen().addEventListener('click', () => { iadAppend('bot', '<i>Regerando relatório…</i>'); IA_sendDeepReport(); });
-            let IA_BRIEF = false;
-            brief().addEventListener('click', () => { IA_BRIEF = !IA_BRIEF; _btnPressed(brief(), IA_BRIEF); });
-            pdfBtn().addEventListener('click', exportIADtoPDF);
-            send().addEventListener('click', () => {
-                let q = (input().value || '').trim(); if (!q) return;
-                input().value = '';
-                if (IA_BRIEF) q += '\n\n[INSTRUÇÃO_DO_SISTEMA: responda em linguagem executiva, com no máximo 5 linhas.]';
-                IA_sendDeepQA(q);
-            });
-            input().addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send().click(); } });
-        })();
-
-        function exportIADtoPDF() {
-            const el = document.querySelector('#iadOut');
-            if (!el) return;
-            html2canvas(el, { scale: 2 }).then(canvas => {
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF('p', 'pt', 'a4');
-                const img = canvas.toDataURL('image/png');
-                const pageW = pdf.internal.pageSize.getWidth();
-                const pageH = pdf.internal.pageSize.getHeight();
-                const ratio = Math.min(pageW / canvas.width, pageH / canvas.height);
-                const w = canvas.width * ratio, h = canvas.height * ratio;
-                pdf.addImage(img, 'PNG', (pageW - w) / 2, 20, w, h);
-                pdf.save('IA-Conversa.pdf');
-            });
-        }
-
-
-    </script>
-
-    <!-- APP PRINCIPAL -->
-    <script>
-        window.addEventListener('error', e => { const b = document.querySelector('#err'); if (b) b.textContent = 'Erro: ' + e.message; console.error(e.error || e.message); });
-        window.addEventListener('unhandledrejection', e => { const b = document.querySelector('#err'); if (b) b.textContent = 'Falha: ' + (e.reason?.message || e.reason); console.error(e.reason); });
-
-        const BASE = new URL('.', location.href);
-        const URL_POR_POSTO = new URL('json_consolidado/consolidado_mensal_por_posto.json', BASE).href;
-        const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
-        const fmt2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const fmtPct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-        const mFmt = ym => { const [y, m] = ym.split('-').map(Number); return `${MES_ABBR[m - 1]}-${String(y).slice(-2)}`; }
-        const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; }
-        const sum = a => a.reduce((x, y) => x + (y || 0), 0);
-        function prevMonth(ym) { const [yy, mm] = ym.split('-').map(Number); const d = new Date(yy, mm - 1, 1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
-        function prevYear(ym) { const [yy, mm] = ym.split('-').map(Number); const d = new Date(yy, mm - 1, 1); d.setFullYear(d.getFullYear() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
-        function mm3(arr) { return arr.map((_, i) => { const s = arr.slice(Math.max(0, i - 2), i + 1).filter(v => v != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; }); }
-
-        let MESES = [], porPosto = {}, POSTOS = [];
-        let sel1 = 'ALL', sel2 = 'ALL';
-
-        const el = s => document.querySelector(s);
-        const on = (s, e, f) => { const o = document.querySelector(s); if (o) o.addEventListener(e, f) }
-        const inRange = (labels, from, to) => labels.filter(m => (!from || m >= from) && (!to || m <= to));
-        const setMonth = (sel, val) => { const e = document.querySelector(sel); if (e) e.value = (val || '').slice(0, 7); };
-
-        function aggMes(ym, selection) {
-            const rows = porPosto[ym] || {};
-            let postos = selection === 'ALL' ? POSTOS.slice() : [...selection];
-            let mens = 0, med = 0;
-            postos.forEach(p => {
-                const r = rows[p]; if (!r) return;
-                mens += num(r.mensalidade);
-                med += num(r.medico);
-            });
-            const pctMed = mens > 0 ? (med / mens) * 100 : null;
-            const margem = mens - med;
-            const pctMargem = mens > 0 ? (margem / mens) * 100 : null;
-            return { mens, med, margem, pctMed, pctMargem };
-        }
-        function kpiCard(title, val, fmt = 'text') {
-            const isNull = (val == null || Number.isNaN(val));
-            const out = isNull ? '<span class="muted">-</span>' :
-                (fmt === 'moeda' ? fmtInt.format(val) : (fmt === '2' ? fmt2.format(val) : (fmt === 'pct' ? fmtPct.format(val) + '%' : String(val))));
-            return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0">${out}</div></div></div>`;
-        }
-        function buildKPIs(containerId, meses, selection) {
-            const box = el(containerId); if (!box) return; box.innerHTML = '';
-            const rows = meses.map(m => aggMes(m, selection));
-            const mens = sum(rows.map(r => r.mens)), med = sum(rows.map(r => r.med)), margem = sum(rows.map(r => r.margem));
-            const pctMedPond = mens > 0 ? med / mens * 100 : null, pctMargemPond = mens > 0 ? margem / mens * 100 : null;
-            const pm = rows.map(r => r.pctMed).filter(x => x != null);
-            const pctMedAvg = pm.length ? pm.reduce((a, b) => a + b, 0) / pm.length : null, pctMedMax = pm.length ? Math.max(...pm) : null, pctMedMin = pm.length ? Math.min(...pm) : null;
-            box.insertAdjacentHTML('beforeend', kpiCard('Mensalidade total', mens, 'moeda'));
-            box.insertAdjacentHTML('beforeend', kpiCard('Custo médico total', med, 'moeda'));
-            box.insertAdjacentHTML('beforeend', kpiCard('% Médico ponderado', pctMedPond, 'pct'));
-            box.insertAdjacentHTML('beforeend', kpiCard('% Médico média simples', pctMedAvg, 'pct'));
-            box.insertAdjacentHTML('beforeend', kpiCard('% Médico máximo', pctMedMax, 'pct'));
-            box.insertAdjacentHTML('beforeend', kpiCard('% Médico mínimo', pctMedMin, 'pct'));
-            box.insertAdjacentHTML('beforeend', kpiCard('Margem total aprox.', margem, 'moeda'));
-            box.insertAdjacentHTML('beforeend', kpiCard('% Margem ponderada', pctMargemPond, 'pct'));
-        }
-        function buildTable(meses, selection) {
-            const tb = el('#tblBody'); if (!tb) return; tb.innerHTML = '';
-            const map = new Map(); meses.forEach(m => map.set(m, aggMes(m, selection)));
-            const arrPct = meses.map(x => map.get(x)?.pctMed ?? null), arrMM3 = mm3(arrPct);
-            meses.forEach((m, idx) => {
-                const r = map.get(m), rPrev = map.get(prevMonth(m)), rYoY = map.get(prevYear(m));
-                const mom = (r?.pctMed != null && rPrev?.pctMed != null) ? (r.pctMed - rPrev.pctMed) : null;
-                const yoy = (r?.pctMed != null && rYoY?.pctMed != null) ? (r.pctMed - rYoY.pctMed) : null;
-                const mm3pct = arrMM3[idx];
-                tb.insertAdjacentHTML('beforeend', `
-<tr>
-  <td>${mFmt(m)}</td>
-  <td class="text-right">${fmtInt.format(r.mens)}</td>
-  <td class="text-right">${fmtInt.format(r.med)}</td>
-  <td class="text-right">${fmtInt.format(r.margem)}</td>
-  <td class="text-right">${r.pctMed == null ? '-' : fmtPct.format(r.pctMed) + '%'}</td>
-  <td class="text-right">${r.pctMargem == null ? '-' : fmtPct.format(r.pctMargem) + '%'}</td>
-  <td class="text-right">${mom == null ? '-' : fmtPct.format(mom) + ' pp'}</td>
-  <td class="text-right">${yoy == null ? '-' : fmtPct.format(yoy) + ' pp'}</td>
-  <td class="text-right">${mm3pct == null ? '-' : fmtPct.format(mm3pct) + '%'}</td>
-</tr>`);
-            });
-        }
-        let chPct, chValores, chStack, chYoYpp, chPctPosto, chParetoMed, chScatter;
-        function initCharts() {
-            const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
-            chPct = new Chart(document.getElementById('chartPct'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
-            chValores = new Chart(document.getElementById('chartValores'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
-            chStack = new Chart(document.getElementById('chartStack'), { type: 'bar', data: { labels: [], datasets: [] }, options: { ...base, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } } });
-            chYoYpp = new Chart(document.getElementById('chartYoYpp'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
-            chPctPosto = new Chart(document.getElementById('chartPctPosto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
-            chParetoMed = new Chart(document.getElementById('chartParetoMed'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
-            chScatter = new Chart(document.getElementById('chartScatter'), { type: 'scatter', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Mensalidade' } }, y: { title: { display: true, text: '% Médico' } } } } });
-        }
-        function postoLabel(selection) { if (selection === 'ALL') return 'Todos'; const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos'; }
-        function postoShares(meses, selection) {
-            const medMap = new Map();
-            meses.forEach(m => {
-                const row = porPosto[m] || {};
-                (selection === 'ALL' ? POSTOS : [...selection]).forEach(p => { const r = row[p]; if (!r) return; medMap.set(p, (medMap.get(p) || 0) + num(r.medico)); });
-            });
-            const entries = [...medMap.entries()].sort((a, b) => b[1] - a[1]);
-            return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]) };
-        }
-        function avgPctByPosto(meses, selection) {
-            const map = new Map();
-            meses.forEach(m => {
-                const row = porPosto[m] || {};
-                (selection === 'ALL' ? POSTOS : [...selection]).forEach(p => {
-                    const r = row[p]; if (!r) return;
-                    const mens = num(r.mensalidade), med = num(r.medico);
-                    if (mens > 0) { const o = map.get(p) || { sum: 0, cnt: 0 }; o.sum += (med / mens * 100); o.cnt += 1; map.set(p, o); }
+            // Tabs de posto
+            function markActiveMulti(scopeId, selection) {
+                const isAll = selection === 'ALL';
+                document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
+                    const p = a.dataset.posto;
+                    if (p === 'ALL') a.classList.toggle('active', isAll);
+                    else a.classList.toggle('active', !isAll && selection.has(p));
                 });
-            });
-            const postos = [...map.keys()].sort();
-            return { labels: postos, valores: postos.map(p => map.get(p).cnt ? map.get(p).sum / map.get(p).cnt : null) };
-        }
-        function updateCharts(meses, selection) {
-            const labels = meses.map(mFmt), tag = postoLabel(selection);
-            const rows = meses.map(m => aggMes(m, selection));
-            const pct = rows.map(r => r.pctMed);
-            chPct.data.labels = labels; chPct.data.datasets = [{ label: `% Médico/Mensalidade (${tag})`, data: pct, tension: .2 }, { label: 'Média móvel 3m', data: mm3(pct), tension: .2 }]; chPct.update();
-            chValores.data.labels = labels; chValores.data.datasets = [{ label: `Mensalidade (${tag})`, data: rows.map(r => r.mens), tension: .2 }, { label: 'Médico', data: rows.map(r => r.med), tension: .2 }]; chValores.update();
-            chStack.data.labels = labels; chStack.data.datasets = [{ label: 'Médico', data: rows.map(r => r.med) }, { label: 'Margem aprox.', data: rows.map(r => r.margem) }]; chStack.update();
-            const yoyPP = meses.map((m, i) => { const py = prevYear(m); const a = rows[i].pctMed; const b = aggMes(py, selection).pctMed; return (a != null && b != null) ? a - b : null; });
-            const colors = yoyPP.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)');
-            const borders = yoyPP.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
-            chYoYpp.data.labels = labels; chYoYpp.data.datasets = [{ label: 'Δ YoY (p.p.)', data: yoyPP, backgroundColor: colors, borderColor: borders, borderWidth: 1 }]; chYoYpp.update();
-            const share = postoShares(meses, selection); chParetoMed.data.labels = share.labels; chParetoMed.data.datasets = [{ label: 'Custo Médico no período', data: share.valores }]; chParetoMed.update();
-            const ap = avgPctByPosto(meses, selection); chPctPosto.data.labels = ap.labels; chPctPosto.data.datasets = [{ label: '% médio (12m)', data: ap.valores }]; chPctPosto.update();
-            chScatter.data.datasets = [{ label: 'Meses', data: rows.map(r => ({ x: r.mens, y: r.pctMed })) }]; chScatter.update();
-            buildHeatmap(meses, selection);
-        }
-        function pctFor(ym, p) { const row = porPosto[ym]?.[p]; if (!row) return null; const mens = num(row.mensalidade), med = num(row.medico); return mens > 0 ? med / mens * 100 : null; }
-        function buildHeatmap(meses, selection) {
-            const box = el('#heatmapBox'); if (!box) return; box.innerHTML = '';
-            const postos = selection === 'ALL' ? POSTOS : [...selection].sort(); if (!postos.length) return;
-            function color(v) { if (v == null) return '#eee'; const x = Math.min(40, Math.max(0, v)); const g = Math.round(255 - (x / 40) * 200); const r = Math.round(55 + (x / 40) * 200); return `rgb(${r},${g},180)`; }
-            const thead = `<thead><tr><th class="text-left">Posto</th>${meses.map(m => `<th>${mFmt(m)}</th>`).join('')}</tr></thead>`;
-            const rows = postos.map(p => {
-                const tds = meses.map(m => { const v = pctFor(m, p); return `<td><div class="cell" style="color:#111;background:${color(v)}">${v == null ? '-' : fmt2.format(v)}</div></td>`; }).join('');
-                return `<tr><th class="text-left">${p}</th>${tds}</tr>`;
-            }).join('');
-            box.innerHTML = `<div class="table-responsive"><table class="table table-sm">${thead}<tbody>${rows}</tbody></table></div>`;
-        }
-        async function waitFor(fn, { tries = 40, interval = 75 } = {}) { for (let i = 0; i < tries; i++) { const v = fn(); if (v) return v; await new Promise(r => setTimeout(r, interval)); } return null; }
-
-        (async function () {
-            if (!window.Prompts || typeof window.Prompts.init !== 'function') { await waitFor(() => window.Prompts && typeof window.Prompts.init === 'function'); }
-            if (!window.Prompts) { window.Prompts = { init: async () => { }, render: () => '', getActive: () => null }; }
-            await window.Prompts.init({ pageId: 'medicos', defaults: [], mountAfter: '#btnComparar' });
-
-            // Depois de Prompts.init(...)
-            const showActive = () => {
-                const a = window.Prompts?.getActive?.();
-                const btn = document.querySelector('#iaDeep');
-                if (btn && a) btn.title = `IA Análise — prompt ativo: ${a.name}`;
-            };
-            showActive();
-            document.addEventListener('click', e => {
-                if (e.target?.id === 'pmSetActive' || e.target?.id === 'pmSave') setTimeout(showActive, 300);
-            });
-
-            let r = null; try { r = await fetch(URL_POR_POSTO, { cache: 'no-store' }); } catch { }
-            if (!r || !r.ok) { const b = document.querySelector('#err'); if (b) b.textContent = 'Falha ao carregar dados'; return; }
-            porPosto = await r.json();
-
-            MESES = Object.keys(porPosto).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
-            if (!MESES.length) { const b = document.querySelector('#err'); if (b) b.textContent = 'Sem dados para exibir'; return; }
-
-            const postoSet = new Set();
-            for (const m of MESES) {
-                const row = porPosto[m] || {};
-                for (const k of Object.keys(row)) if (/^[A-Z]{1,3}$/.test(k)) postoSet.add(k);
             }
-            POSTOS = [...postoSet].sort();
-            window.POSTOS = POSTOS;
+            function buildPostoTabs(ulId, getSel, setSel, onChange) {
+                const ul = document.querySelector(ulId); if (!ul) return;
+                ul.innerHTML = '';
+                ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="ALL" class="nav-link" href="#">Todos</a></li>`);
+                POSTOS.forEach(p => ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`));
+                markActiveMulti(ulId, getSel());
+                ul.addEventListener('click', e => {
+                    if (!e.target.matches('.nav-link')) return; e.preventDefault();
+                    const p = e.target.dataset.posto; let sel = getSel();
+                    if (p === 'ALL') sel = 'ALL';
+                    else {
+                        if (sel === 'ALL') sel = new Set();
+                        if (sel.has(p)) sel.delete(p); else sel.add(p);
+                        if (sel.size === POSTOS.length || sel.size === 0) sel = 'ALL';
+                    }
+                    setSel(sel); markActiveMulti(ulId, sel); onChange();
+                });
+            }
 
-            const now = new Date(); const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-            const last = MESES.filter(m => m !== cur).at(-1) || MESES.at(-1);
+            // Agregadores
+            function aggMes(ym, selection) {
+                const rows = POR_POSTO[ym] || {};
+                const postos = selection === 'ALL' ? POSTOS : [...selection];
+                let mens = 0, med = 0;
+                postos.forEach(p => { const r = rows[p]; if (!r) return; mens += num(r.mensalidade); med += num(r.medico ?? r.custo_medico); });
+                const margem = mens - med;
+                return {
+                    mens, med, margem,
+                    pctMed: mens > 0 ? (med / mens * 100) : null,
+                    pctMargem: mens > 0 ? (margem / mens * 100) : null
+                };
+            }
 
-            const lm = r.headers.get('Last-Modified');
-            if (lm) { const dt = new Date(lm); const info = document.querySelector('#jsonInfo'); if (info) info.textContent = '• dados gerados em ' + dt.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); }
+            // KPIs
+            function kpiCard(title, val, fmt = 'text') {
+                const isNull = (val == null || Number.isNaN(val));
+                const out = isNull ? '<span class="text-muted">-</span>' :
+                    (fmt === 'moeda' ? fmtInt.format(val) : (fmt === 'pct' ? fmt2.format(val) + '%' : fmt2.format(val)));
+                return `<div class="card"><div class="card-body p-2"><div class="small text-muted">${title}</div><div class="h5 mb-0">${out}</div></div></div>`;
+            }
+            function buildKPIs(containerId, meses, selection) {
+                const box = document.querySelector(containerId); if (!box) return; box.innerHTML = '';
+                const rows = meses.map(m => aggMes(m, selection));
+                const mens = sum(rows.map(r => r.mens)), med = sum(rows.map(r => r.med)), margem = sum(rows.map(r => r.margem));
+                const pctMedPond = mens > 0 ? med / mens * 100 : null;
+                const pctMargemPond = mens > 0 ? margem / mens * 100 : null;
+                const pm = rows.map(r => r.pctMed).filter(x => x != null);
+                const pctMedAvg = pm.length ? pm.reduce((a, b) => a + b, 0) / pm.length : null;
+                const pctMedMax = pm.length ? Math.max(...pm) : null;
+                const pctMedMin = pm.length ? Math.min(...pm) : null;
+                box.insertAdjacentHTML('beforeend', kpiCard('Mensalidade total', mens, 'moeda'));
+                box.insertAdjacentHTML('beforeend', kpiCard('Custo médico total', med, 'moeda'));
+                box.insertAdjacentHTML('beforeend', kpiCard('% Médico ponderado', pctMedPond, 'pct'));
+                box.insertAdjacentHTML('beforeend', kpiCard('% Médico média simples', pctMedAvg, 'pct'));
+                box.insertAdjacentHTML('beforeend', kpiCard('% Médico máximo', pctMedMax, 'pct'));
+                box.insertAdjacentHTML('beforeend', kpiCard('% Médico mínimo', pctMedMin, 'pct'));
+                box.insertAdjacentHTML('beforeend', kpiCard('Margem total aprox.', margem, 'moeda'));
+                box.insertAdjacentHTML('beforeend', kpiCard('% Margem ponderada', pctMargemPond, 'pct'));
+            }
 
-            const [y, m] = last.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
-            setMonth('#from1', MESES[0]); setMonth('#to1', last);
-            setMonth('#from2', d.toISOString().slice(0, 7)); setMonth('#to2', last);
+            // Tabela
+            function buildTable(meses, selection) {
+                const tb = document.querySelector('#tblBody'); if (!tb) return; tb.innerHTML = '';
+                const map = new Map(); meses.forEach(m => map.set(m, aggMes(m, selection)));
+                const arrPct = meses.map(x => map.get(x)?.pctMed ?? null), arrMM3 = mm3(arrPct);
+                meses.forEach((m, idx) => {
+                    const r = map.get(m), rPrev = map.get(prevMonth(m)), rYoY = map.get(prevYear(m));
+                    const mom = (r?.pctMed != null && rPrev?.pctMed != null) ? (r.pctMed - rPrev.pctMed) : null;
+                    const yoy = (r?.pctMed != null && rYoY?.pctMed != null) ? (r.pctMed - rYoY.pctMed) : null;
+                    const mm3pct = arrMM3[idx];
+                    tb.insertAdjacentHTML('beforeend', `
+        <tr>
+          <td>${mFmt(m)}</td>
+          <td class="text-right">${fmtInt.format(r.mens)}</td>
+          <td class="text-right">${fmtInt.format(r.med)}</td>
+          <td class="text-right">${fmtInt.format(r.margem)}</td>
+          <td class="text-right">${r.pctMed == null ? '-' : fmt2.format(r.pctMed) + '%'}</td>
+          <td class="text-right">${r.pctMargem == null ? '-' : fmt2.format(r.pctMargem) + '%'}</td>
+          <td class="text-right">${mom == null ? '-' : fmt2.format(mom) + ' pp'}</td>
+          <td class="text-right">${yoy == null ? '-' : fmt2.format(yoy) + ' pp'}</td>
+          <td class="text-right">${mm3pct == null ? '-' : fmt2.format(mm3pct) + '%'}</td>
+        </tr>`);
+                });
+            }
 
-            window.__MESES_FN__ = () => inRange(MESES, document.querySelector('#from2').value, document.querySelector('#to2').value);
-            window.__POSTO_ATUAL__ = () => sel2 === 'ALL' ? 'ALL' : [...sel2].sort().join('+');
-            window.__SERIES_BAS__ = () => {
-                const meses = window.__MESES_FN__(); const labs = meses.slice();
-                const mens = labs.map(m => aggMes(m, sel2).mens);
-                const med = labs.map(m => aggMes(m, sel2).med);
-                const pct = labs.map(m => aggMes(m, sel2).pctMed);
-                return { labels: labs, mensalidade: mens, medico: med, pct_med: pct };
-            };
+            // Gráficos
+            function initCharts() {
+                const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
+                chPct = new Chart(document.getElementById('chartPct'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
+                chValores = new Chart(document.getElementById('chartValores'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
+                chStack = new Chart(document.getElementById('chartStack'), { type: 'bar', data: { labels: [], datasets: [] }, options: { ...base, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } } });
+                chYoYpp = new Chart(document.getElementById('chartYoYpp'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+                chPctPosto = new Chart(document.getElementById('chartPctPosto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+                chParetoMed = new Chart(document.getElementById('chartParetoMed'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+                chScatter = new Chart(document.getElementById('chartScatter'), { type: 'scatter', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Mensalidade' } }, y: { title: { display: true, text: '% Médico' } } } } });
+            }
+            function postoLabel(selection) { if (selection === 'ALL') return 'Todos'; const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos'; }
+            function postoShares(meses, selection) {
+                const medMap = new Map();
+                meses.forEach(m => {
+                    const row = POR_POSTO[m] || {};
+                    (selection === 'ALL' ? POSTOS : [...selection]).forEach(p => { const r = row[p]; if (!r) return; medMap.set(p, (medMap.get(p) || 0) + num(r.medico ?? r.custo_medico)); });
+                });
+                const entries = [...medMap.entries()].sort((a, b) => b[1] - a[1]);
+                return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]) };
+            }
+            function avgPctByPosto(meses, selection) {
+                const map = new Map();
+                meses.forEach(m => {
+                    const row = POR_POSTO[m] || {};
+                    (selection === 'ALL' ? POSTOS : [...selection]).forEach(p => {
+                        const r = row[p]; if (!r) return;
+                        const mens = num(r.mensalidade), med = num(r.medico ?? r.custo_medico);
+                        if (mens > 0) { const o = map.get(p) || { sum: 0, cnt: 0 }; o.sum += (med / mens * 100); o.cnt += 1; map.set(p, o); }
+                    });
+                });
+                const postos = [...map.keys()].sort();
+                return { labels: postos, valores: postos.map(p => map.get(p).cnt ? map.get(p).sum / map.get(p).cnt : null) };
+            }
+            function buildHeatmap(meses, selection) {
+                const box = document.querySelector('#heatmapBox'); if (!box) return; box.innerHTML = '';
+                const postos = selection === 'ALL' ? POSTOS : [...selection].sort(); if (!postos.length) return;
+                function color(v) { if (v == null) return '#eee'; const x = Math.min(40, Math.max(0, v)); const g = Math.round(255 - (x / 40) * 200); const r = Math.round(55 + (x / 40) * 200); return `rgb(${r},${g},180)`; }
+                const thead = `<thead><tr><th class="text-left">Posto</th>${meses.map(m => `<th>${mFmt(m)}</th>`).join('')}</tr></thead>`;
+                const rows = postos.map(p => {
+                    const tds = meses.map(m => {
+                        const r = POR_POSTO[m]?.[p]; const mens = num(r?.mensalidade), med = num(r?.medico ?? r?.custo_medico);
+                        const v = mens > 0 ? (med / mens * 100) : null;
+                        return `<td><div class="cell" style="background:${color(v)}">${v == null ? '-' : fmt2.format(v)}</div></td>`;
+                    }).join('');
+                    return `<tr><th class="text-left">${p}</th>${tds}</tr>`;
+                }).join('');
+                box.innerHTML = `<div class="table-responsive"><table class="table table-sm">${thead}<tbody>${rows}</tbody></table></div>`;
+            }
+            function updateCharts(meses, selection) {
+                const labels = meses.map(mFmt), tag = postoLabel(selection);
+                const rows = meses.map(m => aggMes(m, selection));
+                const pct = rows.map(r => r.pctMed);
+                chPct.data.labels = labels; chPct.data.datasets = [{ label: `% Médico/Mensalidade (${tag})`, data: pct, tension: .2 }, { label: 'Média móvel 3m', data: mm3(pct), tension: .2 }]; chPct.update();
+                chValores.data.labels = labels; chValores.data.datasets = [{ label: `Mensalidade (${tag})`, data: rows.map(r => r.mens), tension: .2 }, { label: 'Médico', data: rows.map(r => r.med), tension: .2 }]; chValores.update();
+                chStack.data.labels = labels; chStack.data.datasets = [{ label: 'Médico', data: rows.map(r => r.med) }, { label: 'Margem aprox.', data: rows.map(r => r.margem) }]; chStack.update();
+                const yoyPP = meses.map((m, i) => { const py = prevYear(m); const a = rows[i].pctMed; const b = aggMes(py, selection).pctMed; return (a != null && b != null) ? a - b : null; });
+                const colors = yoyPP.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)');
+                const borders = yoyPP.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
+                chYoYpp.data.labels = labels; chYoYpp.data.datasets = [{ label: 'Δ YoY (p.p.)', data: yoyPP, backgroundColor: colors, borderColor: borders, borderWidth: 1 }]; chYoYpp.update();
+                const share = postoShares(meses, selection); chParetoMed.data.labels = share.labels; chParetoMed.data.datasets = [{ label: 'Custo Médico no período', data: share.valores }]; chParetoMed.update();
+                const ap = avgPctByPosto(meses, selection); chPctPosto.data.labels = ap.labels; chPctPosto.data.datasets = [{ label: '% médio (12m)', data: ap.valores }]; chPctPosto.update();
+                chScatter.data.datasets = [{ label: 'Meses', data: rows.map(r => ({ x: r.mens, y: r.pctMed })) }]; chScatter.update();
+                buildHeatmap(meses, selection);
+            }
 
-            sel1 = 'ALL'; sel2 = 'ALL';
-            buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
-            buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; }, () => renderSel2());
+            // Chat IA payload
+            function buildPayloadDeepMed({ userQuery }) {
+                const meses = window.__MESES_FN__?.() || [];
+                const serie = window.__SERIES_BAS__?.() || { labels: [], mensalidade: [], medico: [], pct_med: [] };
+                const posto = window.__POSTO_ATUAL__?.() || 'ALL';
+                const scopes = ['chart_pct', 'chart_valores', 'chart_stack'].join(', ');
+                const base = {
+                    produto: 'medicos', when: Date.now(),
+                    contexto: userQuery ? 'qa' : 'relatorio',
+                    prefs: { output: 'livre', assertivo: true, accept_format: 'free_text', temperature: 0.2, max_tokens: 7000 },
+                    defs: { pct_med: '% da mensalidade consumido por custo médico', margem: 'mensalidade - médico', yoy_pp: 'diferença em p.p. vs mesmo mês do ano anterior' },
+                    blocks: [
+                        { scope: 'chart_pct', periodo: { from: meses[0], to: meses.at(-1) }, posto, series: { labels: serie.labels, pct_med: serie.pct_med } },
+                        { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto, series: { labels: serie.labels, mensalidade: serie.mensalidade, medico: serie.medico } },
+                        { scope: 'chart_stack', periodo: { from: meses[0], to: meses.at(-1) }, posto, series: { labels: serie.labels, medico: serie.medico } }
+                    ]
+                };
+                const guard = 'NÃO use tabelas, Markdown tabular, ASCII ou barras "|". Não desenhe gráficos. Apenas referencie os gráficos da tela pelo título. Responda em texto corrido, com parágrafos curtos.';
+                const prompt = `### RELATÓRIO TÉCNICO — medicos ${meses[0]}→${meses.at(-1)} — Posto ${posto}
+Objetivo: diagnóstico executivo e direcionadores de margem. Escopo: gráficos ${scopes}; drivers preço×volume; variações MoM/YoY; riscos e oportunidades; plano 30/60/90; validações.
 
-            initCharts(); renderSel1(); renderSel2();
+${guard}
 
-            on('#from1', 'change', renderSel1); on('#to1', 'change', renderSel1);
-            on('#reset1', 'click', () => { document.querySelector('#from1').value = MESES[0]; document.querySelector('#to1').value = last; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1(); });
+Não comece com “Visão executiva”. Títulos iniciam com “### ”.`;
+                return userQuery ? { ...base, prompt: prompt + `\nPergunta: ${userQuery}` } : { ...base, prompt };
+            }
 
-            on('#from2', 'change', renderSel2); on('#to2', 'change', renderSel2);
-            on('#reset2', 'click', () => { const dd = new Date(y, m - 1, 1); dd.setMonth(dd.getMonth() - 11); document.querySelector('#from2').value = dd.toISOString().slice(0, 7); document.querySelector('#to2').value = last; sel2 = 'ALL'; markActiveMulti('#postoTabs2', sel2); renderSel2(); });
+            // Boot
+            window.addEventListener('DOMContentLoaded', async () => {
+                try {
+                    const BASE = new URL('.', location.href);
+                    const URL_POR_POSTO = new URL('json_consolidado/consolidado_mensal_por_posto.json', BASE).href;
+                    const URL_CONSOLID = new URL('json_consolidado/consolidado_mensal.json', BASE).href;
+                    const URL_PCT_POSTO = new URL('json_consolidado/percentuais_mensais_por_posto.json', BASE).href;
 
-            const btnCmp = document.querySelector('#btnComparar');
-            if (btnCmp) on('#btnComparar', 'click', () => { const b = document.querySelector('#compareBlock'); const show = (b.style.display === 'none' || b.style.display === ''); b.style.display = show ? 'block' : 'none'; btnCmp.classList.toggle('btn-secondary', show); btnCmp.classList.toggle('btn-outline-secondary', !show); });
+                    const [r1, r2, r3] = await Promise.all([
+                        fetch(URL_POR_POSTO, { cache: 'no-store' }),
+                        fetch(URL_CONSOLID, { cache: 'no-store' }),
+                        fetch(URL_PCT_POSTO, { cache: 'no-store' })
+                    ]);
+                    if (!r1.ok || !r2.ok || !r3.ok) throw new Error('Falha ao carregar JSON');
+                    POR_POSTO = await r1.json();
+                    CONSOLIDADO = await r2.json();
+                    PCT_POR_POSTO = await r3.json();
 
-            console.log('URL JSON:', URL_POR_POSTO, 'MESES:', MESES.length, 'POSTOS:', POSTOS);
+                    MESES = Object.keys(POR_POSTO).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+                    if (!MESES.length) throw new Error('Sem dados');
+
+                    // Postos detectados
+                    const setP = new Set();
+                    for (const m of MESES) { for (const p of Object.keys(POR_POSTO[m] || {})) { if (/^[A-Z]{1,3}$/.test(p)) setP.add(p); } }
+                    POSTOS = [...setP].sort();
+                    window.POSTOS = POSTOS;
+
+                    // UI default: últimos 12 meses disponíveis
+                    const last = MESES.at(-1);
+                    const d = new Date(last + '-01'); d.setMonth(d.getMonth() - 11);
+                    const from12 = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+                    document.querySelector('#from1').value = MESES[0];
+                    document.querySelector('#to1').value = last;
+                    document.querySelector('#from2').value = from12;
+                    document.querySelector('#to2').value = last;
+
+                    // Info "dados gerados"
+                    const lm = r1.headers.get('Last-Modified') || r2.headers.get('Last-Modified');
+                    if (lm) { const dt = new Date(lm); const info = document.querySelector('#jsonInfo'); if (info) info.textContent = '• dados gerados em ' + dt.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); }
+
+                    // Exposição p/ ChatIA
+                    window.__MESES_FN__ = () => inRange(MESES, document.querySelector('#from2').value, document.querySelector('#to2').value);
+                    window.__POSTO_ATUAL__ = () => sel2 === 'ALL' ? 'ALL' : [...sel2].sort().join('+');
+                    window.__SERIES_BAS__ = () => {
+                        const meses = window.__MESES_FN__(); const labs = meses.slice();
+                        const mens = labs.map(m => sum(Object.values(POR_POSTO[m] || {}).map(r => num(r.mensalidade))));
+                        const med = labs.map(m => sum(Object.values(POR_POSTO[m] || {}).map(r => num(r.medico ?? r.custo_medico))));
+                        const pct = labs.map((_, i) => mens[i] > 0 ? (med[i] / mens[i] * 100) : null);
+                        return { labels: labs, mensalidade: mens, medico: med, pct_med: pct };
+                    };
+
+                    // IA botão
+                    if (window.ChatIA?.init) {
+                        ChatIA.init({
+                            apiUrl: (window.IA_API_URL || '/ia/analisar'),
+                            mountAfterSelector: '#btnIADeep',
+                            title: 'IA — Análise Completa & Chat',
+                            briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
+                            getPayload: async ({ userQuery }) => buildPayloadDeepMed({ userQuery })
+                        });
+                    }
+
+                    // Tabs, charts e renders
+                    buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v }, () => renderSel1());
+                    buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v }, () => renderSel2());
+                    initCharts(); renderSel1(); renderSel2();
+
+                    // Eventos
+                    const on = (s, e, f) => { const o = document.querySelector(s); if (o) o.addEventListener(e, f); };
+                    on('#from1', 'change', renderSel1); on('#to1', 'change', renderSel1);
+                    on('#reset1', 'click', () => { document.querySelector('#from1').value = MESES[0]; document.querySelector('#to1').value = last; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1(); });
+                    on('#from2', 'change', renderSel2); on('#to2', 'change', renderSel2);
+                    on('#reset2', 'click', () => { document.querySelector('#from2').value = from12; document.querySelector('#to2').value = last; sel2 = 'ALL'; markActiveMulti('#postoTabs2', sel2); renderSel2(); });
+                    on('#btnComparar', 'click', () => { const b = document.querySelector('#compareBlock'); const show = (b.style.display === 'none' || b.style.display === ''); b.style.display = show ? 'block' : 'none'; });
+
+                } catch (e) {
+                    console.error(e);
+                    const err = document.getElementById('err'); if (err) err.textContent = 'Erro: ' + (e.message || e);
+                }
+            });
+
+            // Render wrappers
+            function renderSel1() {
+                const meses = inRange(MESES, document.querySelector('#from1').value, document.querySelector('#to1').value);
+                buildKPIs('#kpisSel1', meses, sel1);
+            }
+            function renderSel2() {
+                const meses = inRange(MESES, document.querySelector('#from2').value, document.querySelector('#to2').value);
+                buildKPIs('#kpisSel2', meses, sel2);
+                buildTable(meses, sel2);
+                updateCharts(meses, sel2);
+            }
         })();
-
-        function renderSel1() { const meses = inRange(MESES, document.querySelector('#from1').value, document.querySelector('#to1').value); buildKPIs('#kpisSel1', meses, sel1); }
-        function renderSel2() { const meses = inRange(MESES, document.querySelector('#from2').value, document.querySelector('#to2').value); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
     </script>
-
-
-
-
 </body>
 
 </html>
