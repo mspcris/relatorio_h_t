@@ -29,13 +29,25 @@ if (-not (Test-Path $loginPath)) { throw "login.html não encontrado no raiz do 
 $build = (Get-Date).ToString('yyyyMMddHHmmss')
 $stage = "/home/deploy/stage/$build"
 
-# ===== PREP REMOTO: cria stage =====
+# ===== PREP REMOTO: cria stage e reports =====
 $prep = @"
 set -Eeuo pipefail
 umask 022
 mkdir -p '$stage' '$stage/reports'
 "@
 ($prep -replace "`r","") | & $ssh -i $key -o IdentitiesOnly=yes $remoteHost "/bin/bash -s"
+
+# ===== SCP: diretórios de reports -> $stage/reports/<dir> =====
+foreach ($d in $dirsReports) {
+  $src = Join-Path $root $d
+  if (Test-Path $src) {
+    # garante pasta alvo específica (ex.: $stage/reports/json_retorno_groq)
+    & $ssh -i $key -o IdentitiesOnly=yes $remoteHost "mkdir -p '$stage/reports/$d'"
+    # envia CONTEÚDO do diretório (evita canonicalization do scp)
+    & $scp -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -r `
+      (Join-Path $src '*') "${remoteHost}:$stage/reports/$d/"
+  }
+}
 
 # ===== SCP: assets públicos -> $stage =====
 foreach ($d in $dirsPublic) {
@@ -55,26 +67,14 @@ foreach ($d in $dirsPublicJson) {
   }
 }
 
-# ===== SCP: diretórios de reports -> $stage/reports =====
-foreach ($d in $dirsReports) {
-  $src = Join-Path $root $d
-  if (Test-Path $src) {
-    & $scp -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -r `
-      $src "${remoteHost}:$stage/reports/"
-  }
-}
-
 # ===== SCP: HTMLs do raiz -> $stage =====
 foreach ($h in $htmlFiles) {
   & $scp -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new `
     $h.FullName "${remoteHost}:$stage/$($h.Name)"
 }
 
-# garante $stage/login.html
-& $scp -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new `
-  $loginPath "${remoteHost}:$stage/login.html"
-
-# ===== SCP: PY da API -> $stage/reports =====
+# ===== PY da API -> $stage/reports =====
+& $ssh -i $key -o IdentitiesOnly=yes $remoteHost "mkdir -p '$stage/reports'"
 & $scp -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new `
   $py "${remoteHost}:$stage/reports/analyze_groq.py"
 
@@ -83,10 +83,8 @@ $final = @"
 set -Eeuo pipefail
 umask 022
 
-# sincroniza do stage para /var/www
 sudo -n rsync -a --delete '$stage/' /var/www/
 
-# donos e permissões padronizados
 sudo -n chown -R deploy:www-data /var/www
 sudo -n find /var/www -type d -exec chmod 2775 {} +
 sudo -n find /var/www -type f -exec chmod 0644 {} +
@@ -95,7 +93,6 @@ sudo -n chmod 755 /var /var/www
 echo 'SHA256:'
 sudo -n sha256sum /var/www/reports/analyze_groq.py 2>/dev/null || true
 
-# limpeza do stage
 rm -rf '$stage'
 "@
 ($final -replace "`r","") | & $ssh -i $key -o IdentitiesOnly=yes $remoteHost "/bin/bash -s"

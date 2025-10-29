@@ -6,18 +6,26 @@ import os, json, pathlib, html, re, unicodedata, tempfile
 from typing import Any, List, Optional, Dict
 
 from dotenv import load_dotenv
+load_dotenv()  # carregue envs uma vez, no topo
+
 from groq import Groq
 from fastapi import FastAPI, HTTPException, Body, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
+from fastapi.middleware.cors import CORSMiddleware
 
-# ========================== Config & Paths ==========================
+# ---------------- FastAPI + CORS (único bloco) ----------------
+app = FastAPI(title="IA-Groq-Analises")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://teste-ia.camim.com.br"],
+    allow_credentials=True,
+    allow_methods=["GET","POST","OPTIONS"],
+    allow_headers=["*"],
+)
+# ---------------- Config ----------------
 BASE = pathlib.Path(__file__).parent.resolve()
 MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
-# Valor estático apenas para fallback; o /health lerá em runtime
-PROBE_MODELS = [m.strip() for m in os.getenv("GROQ_PROBE_MODELS", "").split(",") if m.strip()]
-
 PROMPTS_DIR = pathlib.Path(os.getenv("PROMPTS_DIR", "/var/appdata/prompts")).resolve()
 PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -181,12 +189,7 @@ def ask_json_only_prompt(client: Groq, user_prompt: str, blocks: list | None, pr
     return {"content_mode": "free_text", "parse_status": "raw", "text": _clean_pt(txt)}
 
 # ========================== FastAPI ==========================
-app = FastAPI(title="IA-Groq-Analises")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
-
+ 
 @app.get("/health")
 async def health():
     load_dotenv()

@@ -9,240 +9,442 @@
     <link rel="stylesheet" href="/css/style2.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+    <link rel="shortcut icon" href="images/Logo Camim-01_50px.png" type="image/x-icon">
     <!-- JS (ordem importa) -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <style>
-        .stack {
-            display: flex;
-            flex-direction: column;
-            gap: 12px
-        }
 
-        .kpi {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: .5rem
-        }
+</head>
+<style>
+    /********************************************
+#                 VARIÁVEIS
+********************************************/
+    :root {
+        --cor0: #F2F2F2;
+        --cor1: #afbfa5;
+        --cor2: #91b62f;
+        --cor3: #009402;
+        --cor4: #1c7932;
+        --cor5: #003f0a;
+        --cor6: #0099ab;
+        --cor7: #092019;
+        --cor8: #444444;
+    }
 
-        .kpi .card {
-            margin: 0
-        }
+    /********************************************
+#                 BASE
+********************************************/
+    body {
+        -webkit-font-smoothing: antialiased
+    }
 
-        .filter-bar {
+    .muted {
+        color: #6b7280
+    }
+
+    .mini {
+        font-size: .85rem
+    }
+
+    .text-right {
+        text-align: right
+    }
+
+    .small-td {
+        white-space: nowrap
+    }
+
+    .table-responsive {
+        width: 100%
+    }
+
+    /********************************************
+#               LAYOUT / STACK
+#   Importante: NÃO tornar .stack um flex container
+********************************************/
+    .stack>*+* {
+        margin-top: 14px
+    }
+
+    /********************************************
+#                FILTER BAR
+********************************************/
+    .filter-bar {
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
+        flex-wrap: wrap;
+        padding: 10px
+    }
+
+    .month-inputs {
+        display: flex;
+        gap: 6px;
+        align-items: center
+    }
+
+    /********************************************
+#                TABS / SCROLL
+********************************************/
+    .scroll-tabs {
+        display: flex;
+        gap: 6px;
+        overflow: auto;
+        white-space: nowrap;
+        padding: 6px 0
+    }
+
+    .scroll-tabs .nav-link {
+        display: inline-block;
+        min-width: 52px;
+        text-align: center;
+        cursor: pointer
+    }
+
+    /********************************************
+#                  KPI GRID
+********************************************/
+    .kpi {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 8px
+    }
+
+    .kpi .card {
+        border-radius: 12px;
+        margin: 0
+    }
+
+    /* KPI GRID — força no container correto */
+    .card-body.kpi {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 8px;
+    }
+
+    /* Cartões dos KPIs mais compactos */
+    .card-body.kpi .card {
+        margin: 0;
+        border-radius: 12px
+    }
+
+    .card-body.kpi .card .card-body {
+        padding: .5rem .75rem
+    }
+
+    /* Stack: bloco simples com espaçamento entre irmãos */
+    .stack {
+        display: block
+    }
+
+    .stack>*+* {
+        margin-top: 14px
+    }
+
+    /* Chart card: mantém altura */
+    .chart-card .card-body {
+        height: 360px
+    }
+
+    /* Filter bar e tabs seguem iguais */
+    .filter-bar {
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
+        flex-wrap: wrap;
+        padding: 10px
+    }
+
+    .month-inputs {
+        display: flex;
+        gap: 6px;
+        align-items: center
+    }
+
+    .scroll-tabs {
+        display: flex;
+        gap: 6px;
+        overflow: auto;
+        white-space: nowrap;
+        padding: 6px 0
+    }
+
+
+    /********************************************
+#                CHART CARD
+********************************************/
+    .chart-card .card-body {
+        height: 360px
+    }
+
+    /********************************************
+#                  HEATMAP
+********************************************/
+    .heatmap {
+        overflow: auto;
+        max-height: 420px
+    }
+
+    .heatmap table {
+        border-collapse: separate;
+        border-spacing: 2px;
+        width: 100%
+    }
+
+    .heatmap th,
+    .heatmap td {
+        text-align: center;
+        padding: 6px;
+        font-size: 12px
+    }
+
+    .heatmap .cell {
+        padding: 6px 8px;
+        border-radius: 8px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: #111
+    }
+
+    /********************************************
+#                  LEGEND
+********************************************/
+    .lg-box {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        margin-right: 4px;
+        vertical-align: middle
+    }
+
+    .lg-pos {
+        background: rgba(54, 162, 235, 1)
+    }
+
+    .lg-neg {
+        background: rgba(220, 53, 69, 1)
+    }
+
+    /********************************************
+#                IA - TOGGLE / PAINEL / CHAT
+********************************************/
+    .ia-toggle {
+        margin-left: .5rem
+    }
+
+    .ia-toggle.active {
+        background: var(--cor2);
+        color: #fff;
+        border-color: var(--cor5)
+    }
+
+    #iaPanel {
+        display: none
+    }
+
+    #iaPanel .ia-content {
+        background: #f8f9fa;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px
+    }
+
+    .ia-loading {
+        font-family: monospace
+    }
+
+    .ia-dots {
+        display: inline-block;
+        min-width: 1.4em
+    }
+
+    .dot {
+        opacity: .2
+    }
+
+    .dot.on {
+        opacity: 1
+    }
+
+    #ia-chat {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 12px
+    }
+
+    .ia-msg {
+        max-width: 70%;
+        padding: 10px 12px;
+        border-radius: 12px;
+        line-height: 1.35;
+        white-space: pre-wrap;
+        word-wrap: break-word
+    }
+
+    .ia-user {
+        align-self: flex-end;
+        background: #e6f0ff;
+        border: 1px solid #c6dcff
+    }
+
+    .ia-bot {
+        align-self: flex-start;
+        background: #f4f4f5;
+        border: 1px solid #e4e4e7
+    }
+
+    .ia-meta {
+        font-size: 12px;
+        color: #6b7280;
+        margin-top: 2px
+    }
+
+    .ia-row {
+        display: flex;
+        flex-direction: column
+    }
+
+    .ia-spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid #d1d5db;
+        border-top-color: #6b7280;
+        border-radius: 50%;
+        animation: spin .8s linear infinite
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg)
+        }
+    }
+
+    /********************************************
+#              IA DEEP - POPUP
+********************************************/
+    #iaDeepPanel {
+        display: none;
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        width: min(760px, 95vw);
+        max-height: 85vh;
+        z-index: 9999;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, .18)
+    }
+
+    #iaDeepPanel .body {
+        max-height: 60vh;
+        overflow: auto
+    }
+
+    #iaDeepPanel .iad-chat {
+        display: flex;
+        flex-direction: column;
+        gap: 10px
+    }
+
+    #iaDeepPanel .iad-msg {
+        max-width: 78%;
+        padding: 10px 12px;
+        border-radius: 12px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        word-break: break-word;
+        text-align: justify
+    }
+
+    #iaDeepPanel .iad-user {
+        background: #e6f0ff;
+        border: 1px solid #c6dcff;
+        align-self: flex-end
+    }
+
+    #iaDeepPanel .iad-bot {
+        background: #f4f4f5;
+        border: 1px solid #e4e4e7;
+        align-self: flex-start
+    }
+
+    #iaDeepPanel .iad-meta {
+        font-size: 12px;
+        color: #6b7280;
+        margin-top: 2px
+    }
+
+    #iaDeepPanel .iad-loading .dot {
+        opacity: .35
+    }
+
+    #iaDeepPanel .iad-loading .dot.on {
+        opacity: 1
+    }
+
+    .ia-clean p {
+        margin: 10px 0
+    }
+
+    .ia-summary {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 12px;
+        line-height: 1.45
+    }
+
+    /********************************************
+#               RESPONSIVIDADE
+********************************************/
+    @media (max-width:576px) {
+        .navbar .ml-auto {
             display: flex;
             flex-wrap: wrap;
-            gap: .5rem 1rem;
-            align-items: flex-end;
-            padding: .75rem
-        }
-
-        .month-inputs {
-            display: flex;
-            gap: .5rem
-        }
-
-        .scroll-tabs {
-            white-space: nowrap;
-            overflow-x: auto
-        }
-
-        .scroll-tabs .nav-link {
-            display: inline-block;
-            min-width: 52px;
-            text-align: center;
-            cursor: pointer
-        }
-
-        .chart-card .card-body {
-            height: 320px
-        }
-
-        .table-responsive {
+            gap: 8px;
             width: 100%
         }
 
-        .text-right {
-            text-align: right
+        .navbar .ml-auto .btn {
+            flex: 1 1 48%;
+            min-width: 140px
         }
 
-        .small-td {
-            white-space: nowrap
+        #btnPrompts {
+            margin-left: 0
         }
 
-        .muted {
-            color: #6b7280
+        .main-header .d-flex.align-items-center {
+            flex-wrap: wrap
         }
 
-        .mini {
-            font-size: .85rem
+        #jsonInfo {
+            flex: 0 0 100%;
+            margin-left: 0;
+            margin-top: 4px
         }
 
-        /* IA */
-        .ia-toggle {
-            margin-left: .5rem
+        .month-inputs {
+            flex-wrap: wrap
         }
 
-        .ia-toggle.active {
-            background: #91b62f;
-            color: #fff;
-            border-color: #003f0a
+        .month-inputs .btn {
+            flex: 0 0 100%
         }
 
-        #iaPanel {
-            display: none
+        .chart-card .card-body {
+            height: 260px
         }
+    }
 
-        #iaPanel .ia-content {
-            background: #f8f9fa;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 10px
+    @media (max-width:360px) {
+        .chart-card .card-body {
+            height: 240px
         }
-
-        .ia-loading {
-            font-family: monospace
-        }
-
-        .ia-dots {
-            display: inline-block;
-            min-width: 1.4em
-        }
-
-        .dot {
-            opacity: .2
-        }
-
-        .dot.on {
-            opacity: 1
-        }
-
-        /* Chat */
-        #ia-chat {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-top: 12px
-        }
-
-        .ia-msg {
-            max-width: 70%;
-            padding: 10px 12px;
-            border-radius: 12px;
-            line-height: 1.35;
-            white-space: pre-wrap;
-            word-wrap: break-word
-        }
-
-        .ia-user {
-            align-self: flex-end;
-            background: #e6f0ff;
-            border: 1px solid #c6dcff
-        }
-
-        .ia-bot {
-            align-self: flex-start;
-            background: #f4f4f5;
-            border: 1px solid #e4e4e7
-        }
-
-        .ia-meta {
-            font-size: 12px;
-            color: #6b7280;
-            margin-top: 2px
-        }
-
-        .ia-row {
-            display: flex;
-            flex-direction: column
-        }
-
-        .ia-spinner {
-            width: 18px;
-            height: 18px;
-            border: 2px solid #d1d5db;
-            border-top-color: #6b7280;
-            border-radius: 50%;
-            animation: spin .8s linear infinite
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg)
-            }
-
-
-        }
-
-        .lg-box {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            margin-right: 4px;
-            vertical-align: middle
-        }
-
-        .lg-pos {
-            background: #36A2EB
-        }
-
-        /* azul do gráfico */
-        .lg-neg {
-            background: #DC3545
-        }
-
-        /* vermelho do gráfico */
-
-
-
-        /* MOBILE ADJUST NA UNHA :)*/
-
-        /* MOBILE ADJUST NA UNHA :)*/
-
-
-        @media (max-width: 576px) {
-            .navbar .ml-auto {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 8px;
-                width: 100%;
-            }
-
-            .navbar .ml-auto .btn {
-                flex: 1 1 48%;
-                min-width: 140px;
-            }
-
-            #btnPrompts {
-                margin-left: 0;
-            }
-
-            .main-header .d-flex.align-items-center {
-                flex-wrap: wrap;
-            }
-
-            #jsonInfo {
-                flex: 0 0 100%;
-                margin-left: 0;
-                margin-top: 4px;
-            }
-
-            @media (max-width:576px) {
-                .month-inputs {
-                    flex-wrap: wrap
-                }
-
-                .month-inputs .btn {
-                    flex: 0 0 100%
-                }
-            }
-
-
-        }
-    </style>
-</head>
+    }
+</style>
 
 <body class="hold-transition sidebar-mini">
     <div class="wrapper">
