@@ -1063,6 +1063,263 @@
 
 
 
+    <!-- ========== IA Análise (chat estateless com relatório completo) ========== -->
+    <style>
+        #iaDeepPanel {
+            display: none;
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            width: min(760px, 95vw);
+            max-height: 85vh;
+            z-index: 9999;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, .18);
+        }
+
+        #iaDeepPanel .body {
+            max-height: 60vh;
+            overflow: auto;
+        }
+
+        .iad-msg {
+            max-width: 78%;
+            padding: 10px 12px;
+            border-radius: 12px;
+            line-height: 1.35;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .iad-user {
+            align-self: flex-end;
+            background: #e6f0ff;
+            border: 1px solid #c6dcff
+        }
+
+        .iad-bot {
+            align-self: flex-start;
+            background: #f4f4f5;
+            border: 1px solid #e4e4e7
+        }
+
+        .iad-meta {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 2px
+        }
+
+        .iad-chat {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .iad-loading {
+            font-family: monospace
+        }
+
+        .iad-dots {
+            display: inline-block;
+            min-width: 1.4em
+        }
+
+        .dot {
+            opacity: .2
+        }
+
+        .dot.on {
+            opacity: 1
+        }
+    </style>
+
+    <!-- Botão ao lado do IA Auto -->
+    <script>
+        (function addDeepButton() {
+            const anchor = document.querySelector('#iaAuto');
+            if (!anchor || document.querySelector('#iaDeep')) return;
+            const btn = document.createElement('button');
+            btn.id = 'iaDeep'; btn.className = 'btn btn-sm btn-outline-primary ia-toggle ml-2';
+            btn.textContent = 'IA Análise';
+            btn.title = 'Relatório completo e chat sobre os dados';
+            anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+        })();
+    </script>
+
+    <!-- Painel -->
+    <div id="iaDeepPanel" class="card">
+        <div class="card-header d-flex align-items-center justify-content-between">
+            <b class="mb-0">IA — Análise Completa & Chat</b>
+            <div class="d-flex" style="gap:8px">
+                <button id="iadRefresh" class="btn btn-sm btn-outline-secondary"
+                    title="Regerar relatório completo">Regerar</button>
+                <button id="iadClose" class="btn btn-sm btn-outline-secondary">Fechar</button>
+            </div>
+        </div>
+        <div class="card-body body">
+            <div id="iadOut" class="iad-chat"></div>
+        </div>
+        <div class="card-footer">
+            <div class="d-flex" style="gap:8px">
+                <input id="iadInput" class="form-control form-control-sm"
+                    placeholder="Pergunte algo sobre os dados (ex: '% de médicos é um fator de risco?')">
+                <button id="iadSend" class="btn btn-sm btn-primary">Enviar</button>
+            </div>
+            <small class="text-muted">Cada mensagem reenvia o recorte de dados atual (período/posto), garantindo
+                respostas ancoradas.</small>
+        </div>
+    </div>
+
+    <script>
+        /* ===== Estado & helpers ===== */
+        const IA_DEEP = { open: false };
+        function iadPanel() { return document.querySelector('#iaDeepPanel'); }
+        function iadOut() { return document.querySelector('#iadOut'); }
+        function iadAppend(role, html) {
+            const row = document.createElement('div'); row.className = 'd-flex flex-column';
+            const b = document.createElement('div'); b.className = 'iad-msg ' + (role === 'user' ? 'iad-user' : 'iad-bot'); b.innerHTML = html;
+            const m = document.createElement('div'); m.className = 'iad-meta'; m.textContent = role === 'user' ? 'Você' : 'IA';
+            row.appendChild(b); row.appendChild(m);
+            iadOut().appendChild(row);
+            const sc = document.querySelector('#iaDeepPanel .body'); sc.scrollTop = sc.scrollHeight;
+        }
+        function iadDotsStart() {
+            const wrap = document.createElement('div'); wrap.className = 'iad-msg iad-bot iad-loading';
+            wrap.innerHTML = `Aguardando <span class="iad-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
+            iadOut().appendChild(wrap);
+            let t = 0; const int = setInterval(() => { wrap.querySelectorAll('.dot').forEach(x => x.classList.remove('on')); wrap.querySelectorAll('.dot')[t % 3].classList.add('on'); t++; }, 260);
+            wrap.dataset.loader = String(Date.now());
+            IA_DEEP.loaderEl = wrap; IA_DEEP.loaderInt = int;
+        }
+        function iadDotsStop() {
+            if (IA_DEEP.loaderInt) { clearInterval(IA_DEEP.loaderInt); IA_DEEP.loaderInt = null; }
+            if (IA_DEEP.loaderEl) { IA_DEEP.loaderEl.remove(); IA_DEEP.loaderEl = null; }
+        }
+
+        /* ===== Payloader (STATeless) ===== */
+        function seriesDeep() {
+            const meses = mesesSel2(); const selection = sel2;
+            const s = seriesBasicas(meses, selection);
+            return { meses, selection, s };
+        }
+        function promptRelatorioCompleto(scopes) {
+            // Usa o Prompt Manager se houver “Relatório Completo”; fallback agressivo
+            const cand = (Prompts.getActive()?.name || '').toLowerCase().includes('completo')
+                ? Prompts.render : null;
+            const p = cand ? Prompts.render({
+                produto: 'medicos', from: mesesSel2()[0], to: mesesSel2().at(-1), posto: postoAtual(), contexto: 'relatorio', scopes
+            }) : null;
+            return p || `Elabore um RELATÓRIO TÉCNICO COMPLETO, robusto e objetivo, sobre {produto} no período {from}→{to}, posto {posto}, cobrindo:
+- visão executiva (1 parágrafo), 
+- leitura dos gráficos {scopes},
+- principais drivers (preço vs volume),
+- análise de variações (MoM, YoY, Δ p.p.),
+- pockets de risco/oportunidade por posto,
+- recomendações (ação imediata, 30/60/90 dias),
+- apêndice com bullets de validação.
+Use números do recorte enviado, cite faixas, e aponte outliers. Tom assertivo, conciso, sem floreios.`;
+        }
+        function buildPayload({ mode, userQuery }) {
+            const { meses, s } = seriesDeep();
+            const scopes = ['chart_pct', 'chart_valores', 'chart_stack'].join(', ');
+            const base = {
+                produto: 'medicos',
+                when: Date.now(),
+                contexto: mode === 'report' ? 'relatorio' : 'qa',
+                defs: defs(),
+                prefs: { output: 'livre', assertivo: true, accept_format: 'free_text', temperature: 0.2, max_tokens: 8000 }
+            };
+            const blocks = [
+                { scope: 'chart_pct', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, pct_med: s.pct_med } },
+                { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, mensalidade: s.mensalidade, medico: s.medico } },
+                { scope: 'chart_stack', periodo: { from: meses[0], to: meses.at(-1) }, posto: postoAtual(), series: { labels: s.labels, medico: s.medico } }
+            ];
+            if (mode === 'report') {
+                return {
+                    ...base, blocks, prompt: promptRelatorioCompleto(scopes)
+                        .replace('{produto}', 'custo médico')
+                        .replace('{from}', meses[0]).replace('{to}', meses.at(-1)).replace('{posto}', postoAtual())
+                        .replace('{scopes}', scopes)
+                };
+            } else {
+                return {
+                    ...base, blocks, query: userQuery, prompt:
+                        `Responda APENAS com base nas séries enviadas. Seja direto e técnico. Pergunta: ${userQuery}`
+                };
+            }
+        }
+
+        /* ===== Chamada backend ===== */
+        async function callIADeep(payload) {
+            const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
+            const API_ANALISAR = window.IA_API_URL || (IS_LOCAL ? 'http://127.0.0.1:8011/ia/analisar' : '/ia/analisar');
+            const r = await fetch(API_ANALISAR, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!r.ok) { let t = ''; try { t = await r.text(); } catch { } throw new Error(`HTTP ${r.status} — ${t}`); }
+            const res = await r.json();
+            // suportando free_text/json
+            if (res?.content_mode === 'free_text') return res.text || '';
+            if (res?.content_mode === 'json') return (res.data?.html) || res.data?.livre || JSON.stringify(res.data);
+            return typeof res === 'string' ? res : (res.html || res.livre || JSON.stringify(res));
+        }
+
+        /* ===== Orquestração ===== */
+        async function IA_sendDeepReport() {
+            try {
+                iadDotsStart();
+                const payload = buildPayload({ mode: 'report' });
+                const out = await callIADeep(payload);
+                iadDotsStop();
+                iadAppend('bot', out || '<i>(sem conteúdo)</i>');
+            } catch (err) {
+                iadDotsStop(); iadAppend('bot', `<span class="text-danger">Falha: ${err.message || err}</span>`);
+            }
+        }
+        async function IA_sendDeepQA(question) {
+            try {
+                iadAppend('user', question);
+                iadDotsStart();
+                const payload = buildPayload({ mode: 'qa', userQuery: question });
+                const out = await callIADeep(payload);
+                iadDotsStop();
+                iadAppend('bot', out || '<i>(sem conteúdo)</i>');
+            } catch (err) {
+                iadDotsStop(); iadAppend('bot', `<span class="text-danger">Falha: ${err.message || err}</span>`);
+            }
+        }
+
+        /* ===== Eventos ===== */
+        (function wireDeep() {
+            const btn = document.querySelector('#iaDeep'); if (!btn) return;
+            const panel = iadPanel();
+            const input = document.querySelector('#iadInput');
+            const send = document.querySelector('#iadSend');
+            const close = document.querySelector('#iadClose');
+            const regen = document.querySelector('#iadRefresh');
+
+            btn.addEventListener('click', () => {
+                panel.style.display = 'block';
+                if (!IA_DEEP.open) {
+                    IA_DEEP.open = true;
+                    iadOut().innerHTML = '';
+                    // dispara relatório completo na abertura
+                    IA_sendDeepReport();
+                }
+            });
+            close.addEventListener('click', () => { panel.style.display = 'none'; IA_DEEP.open = false; });
+            regen.addEventListener('click', () => {
+                iadAppend('bot', '<i>Regerando relatório completo…</i>');
+                IA_sendDeepReport();
+            });
+            send.addEventListener('click', () => {
+                const q = (input.value || '').trim(); if (!q) return;
+                input.value = '';
+                IA_sendDeepQA(q);
+            });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send.click(); }
+            });
+        })();
+    </script>
+    <!-- ========== FIM IA Análise ========== -->
 
 
 
