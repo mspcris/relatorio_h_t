@@ -756,18 +756,22 @@ Não comece com “Visão executiva”. Títulos iniciam com “### ”.`;
                     POSTOS = [...setP].sort();
                     window.POSTOS = POSTOS;
 
-                    // Default UI: últimos 12 meses
-                    const last = MESES.at(-1);
-                    const d = new Date(last + '-01'); d.setMonth(d.getMonth() - 11);
-                    const from12 = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                    // Default UI: últimos 12 meses completos (até o mês anterior à data atual)
+                    function ym(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+                    const endDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1); endDate.setMonth(endDate.getMonth() - 1);
+                    const startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 11, 1);
+                    const last12 = inRange(MESES, ym(startDate), ym(endDate));
+                    const DEF_FROM = last12[0] || MESES.at(-12) || MESES[0];
+                    const DEF_TO = last12.at(-1) || MESES.at(-1);
 
-                    document.querySelector('#from1').value = MESES[0];
-                    document.querySelector('#to1').value = last;
-                    document.querySelector('#from2').value = from12;
-                    document.querySelector('#to2').value = last;
+                    document.querySelector('#from1').value = DEF_FROM;
+                    document.querySelector('#to1').value = DEF_TO;
+                    document.querySelector('#from2').value = DEF_FROM;
+                    document.querySelector('#to2').value = DEF_TO;
 
                     // Info "dados gerados"
                     const lm = r1.headers.get('Last-Modified') || r2.headers.get('Last-Modified');
+
                     if (lm) {
                         const dt = new Date(lm);
                         const info = document.querySelector('#jsonInfo');

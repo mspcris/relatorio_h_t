@@ -411,14 +411,26 @@
                 else a.classList.toggle('active', !isAll && selection.has(p));
             });
         }
+
+
+
+        // MONTAGEM E SELEÇÃO DOS POSTOS NO PAINEL
         function buildPostoTabs(ulId, getSel, setSel, onChange) {
             const ul = document.querySelector(ulId); if (!ul) return;
             ul.innerHTML = '';
             ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="ALL" class="nav-link" href="#">Todos</a></li>`);
-            (window.POSTOS || []).forEach(p => {
+            const rxPosto = /^[A-Z]{1,3}$/;
+            (window.POSTOS || []).filter(p => rxPosto.test(String(p))).forEach(p => {
                 ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`);
             });
             markActiveMulti(ulId, getSel());
+
+
+
+
+
+
+
             ul.addEventListener('click', e => {
                 if (!e.target.matches('.nav-link')) return; e.preventDefault();
                 const p = e.target.dataset.posto; let sel = getSel();
@@ -797,16 +809,36 @@
             // 2) Normalizar dataset
             porPosto = raw || {};
             MESES = Object.keys(porPosto).sort();
-            POSTOS = Array.from(new Set(MESES.flatMap(m => Object.keys(porPosto[m] || {})))).sort();
 
-            // 3) Default: últimos 12 meses
-            const last12 = MESES.slice(-12);
+            const rxPosto = /^[A-Z]{1,3}$/;
+            const BLOCK = new Set(['MES', 'SUMARIO', 'MÊS', 'SUMÁRIO']);
+
+            POSTOS = Array.from(
+                new Set(MESES.flatMap(m => Object.keys(porPosto[m] || {})))
+            )
+                .map(p => String(p).toUpperCase())
+                .filter(p => rxPosto.test(p) && !BLOCK.has(p))
+                .sort();
+
+            window.POSTOS = POSTOS;
+
+            // 3) Default: últimos 12 meses completos
+            function ym(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+            const endDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+            endDate.setMonth(endDate.getMonth() - 1);
+            const startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 11, 1);
+            const startYM = ym(startDate), endYM = ym(endDate);
+
+            // >>> adicione de volta:
+            const last12 = inRange(MESES, startYM, endYM);
             if (last12.length) {
                 setMonth('#from2', last12[0]);
                 setMonth('#to2', last12.at(-1));
                 setMonth('#from1', last12[0]);
                 setMonth('#to1', last12.at(-1));
             }
+
+
 
             // 4) Abas de posto (multi)
             buildPostoTabs('#postoTabs2', () => sel2, v => sel2 = v, refreshMain);
