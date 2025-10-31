@@ -1,43 +1,60 @@
-/* chat.js — Painel de IA reutilizável
+/* chat.js — Painel de IA reutilizável (v2)
+ * Objetivo: enviar SEMPRE o snapshot completo por padrão
+ *  - Chunking determinístico com síntese final
+ *  - Alternável para modo "inteligente" que evita reenvio quando contexto não mudou
  * API: ChatIA.init({
- *   getPayload,                // async ({ userQuery }) => payload COMPLETO com TODOS os dados da página
+ *   getPayload,                // async ({ userQuery }) => snapshot COMPLETO da página
  *   apiUrl,                    // POST endpoint
  *   mountAfterSelector,        // seletor para ancorar o botão
  *   title,                     // título do painel
  *   briefInstruction,          // instrução dura para resumo
- *   timeoutMs,                 // tempo base
- *   briefDefault               // bool: inicia com IA Resumida marcada
+ *   timeoutMs,                 // tempo base por requisição
+ *   briefDefault,              // inicia com IA Resumida marcada
+ *   alwaysFull                 // true => manda snapshot em TODA mensagem; false => heurística
  * })
- * Requer: window.fetch, html2pdf.js (opcional para PDF)
  */
 (function () {
   const ChatIA = {
+    /* ===================== Config ===================== */
+    _CFG: {
+      ALWAYS_FULL: true,                  // default. pode ser sobrescrito por init({ alwaysFull })
+      MAX_PAYLOAD_CHARS: 120_000,         // corte aproximado por chamada
+      CHUNK_BLOCKS: 4,                    // blocos por requisição quando chunkar
+      SYNTH_PARTS_LIMIT: 12,              // segurança
+      REFRESH_FULL_AFTER_MIN: 5,          // minutos
+    },
+
+    /* ===================== Estado ===================== */
     _state: {
       mounted: false,
       brief: true,
       opts: null,
       retried: false,
+      lastSnapshotHash: null,
+      lastSnapshotAt: 0,
+      forceFullNext: false,
     },
 
+    /* ===================== Boot ===================== */
     init(options) {
       const defaults = {
         apiUrl: (window.IA_API_URL || '/ia/analisar'),
         mountAfterSelector: '#btnComparar',
         title: 'IA — Análise Completa & Chat',
         briefInstruction: 'Responda em 200 a 300 caracteres, no máximo 3 linhas. Seja direto, executivo e objetivo.',
-        timeoutMs: 180000, // base maior
+        timeoutMs: 180000,
         briefDefault: true,
+        alwaysFull: true, // preferível para manter contexto 100% determinístico
         getPayload: async ({ userQuery }) => ({ prompt: userQuery || 'ok' })
       };
       this._state.opts = Object.assign({}, defaults, options || {});
       this._state.brief = !!this._state.opts.briefDefault;
+      this._CFG.ALWAYS_FULL = !!this._state.opts.alwaysFull;
 
       this._injectStyles();
       this._injectUI();
       this._wireUI();
       this._state.mounted = true;
-
-      // watchdog: garante o botão mesmo após re-render
       this._ensureBtnTimer = setInterval(() => this._ensureLauncher(), 1500);
     },
 
@@ -61,7 +78,8 @@
 #iadBrief{display:inline-flex;align-items:center;gap:6px}
 #iadBrief input{margin:0}
 .iad-hint{font-style:italic;color:#cfcfcf}
-`.trim();
+#iadMode{display:inline-flex;align-items:center;gap:6px}
+      `.trim();
       const s = document.createElement('style');
       s.id = 'chatia-styles';
       s.textContent = css;
@@ -77,10 +95,8 @@
         btn.textContent = 'IA Análise';
         btn.title = 'Relatório completo e chat';
         anchor.parentNode.insertBefore(btn, anchor.nextSibling);
-        // auto-wire imediato para o botão criado pelo watchdog
         btn.addEventListener('click', () => {
-          const panel = this._panel();
-          if (!panel) return;
+          const panel = this._panel(); if (!panel) return;
           const open = (panel.style.display === 'none' || panel.style.display === '');
           panel.style.display = open ? 'block' : 'none';
           this._toggleBtn(btn, open);
@@ -92,7 +108,6 @@
 
     _injectUI() {
       this._ensureLauncher();
-
       if (!document.getElementById('iaDeepPanel')) {
         const wrap = document.createElement('div');
         wrap.id = 'iaDeepPanel';
@@ -105,6 +120,10 @@
     <label id="iadBrief" class="btn btn-sm btn-outline-secondary mb-0" title="Respostas curtas">
       <input id="iadBriefChk" type="checkbox"${this._state.brief ? ' checked' : ''}/>
       <span>IA Resumida</span>
+    </label>
+    <label id="iadMode" class="btn btn-sm btn-outline-secondary mb-0" title="Modo de envio">
+      <input id="iadAlwaysFull" type="checkbox"${this._CFG.ALWAYS_FULL ? ' checked' : ''}/>
+      <span>Enviar snapshot sempre</span>
     </label>
     <button id="iadPDF" class="btn btn-sm btn-outline-secondary">PDF</button>
     <button id="iadRefresh" class="btn btn-sm btn-outline-secondary">Regerar</button>
@@ -122,15 +141,11 @@
   <small class="text-muted">Mensagens usam o recorte atual. Texto corrido, sem tabelas ASCII.</small>
 </div>`;
         document.body.appendChild(wrap);
-
-        // mensagem inicial
         this._append('bot', 'Olá, eu sou a Camila.AI e vou te ajudar a analisar os dados que estão nesta página. Toque em Iniciar ou digite algo sobre os dados aqui constantes.');
-        // garante existência do método
         this._prefillInput();
       }
     },
 
-    // método seguro para preenchimento inicial do input e rótulo do botão
     _prefillInput(initial) {
       const input = this._q('#iadInput');
       const send = this._q('#iadSend');
@@ -143,6 +158,8 @@
       const btn = this._btn();
       const briefLbl = this._q('#iadBrief');
       const briefChk = this._q('#iadBriefChk');
+      const modeLbl = this._q('#iadMode');
+      const modeChk = this._q('#iadAlwaysFull');
       const close = this._q('#iadClose');
       const regen = this._q('#iadRefresh');
       const pdfBtn = this._q('#iadPDF');
@@ -159,71 +176,47 @@
         btn.dataset.wired = '1';
       }
 
-      close.addEventListener('click', () => {
-        panel.style.display = 'none';
-        this._toggleBtn(btn, false);
-      });
-
-      regen.addEventListener('click', async () => {
-        await this._sendToIA(null, { force: true });
-      });
-
+      close.addEventListener('click', () => { panel.style.display = 'none'; this._toggleBtn(btn, false); });
+      regen.addEventListener('click', async () => { this._state.forceFullNext = true; await this._sendToIA(null, { force: true }); });
       pdfBtn.addEventListener('click', () => this._exportToPDF());
 
-      // marcar/desmarcar precisa escrever no chat
       briefLbl.addEventListener('click', (e) => {
         if (e.target.id !== 'iadBriefChk') { e.preventDefault(); briefChk.checked = !briefChk.checked; }
         this._state.brief = !!briefChk.checked;
-        const msg = this._state.brief
-          ? 'Resposta fora do escopo. Marcando bit IA Resumida.'
-          : 'Resposta fora do escopo. Desmarcando bit IA Resumida.';
+        const msg = this._state.brief ? 'Resposta fora do escopo. Marcando bit IA Resumida.' : 'Resposta fora do escopo. Desmarcando bit IA Resumida.';
         this._append('bot', `<span class="iad-hint">${msg}</span>`);
       });
 
-      // Iniciar/Enviar
+      modeLbl.addEventListener('click', (e) => {
+        if (e.target.id !== 'iadAlwaysFull') { e.preventDefault(); modeChk.checked = !modeChk.checked; }
+        this._CFG.ALWAYS_FULL = !!modeChk.checked;
+        const msg = this._CFG.ALWAYS_FULL ? 'Modo: enviar snapshot completo em toda mensagem.' : 'Modo: envio inteligente com reaproveitamento de contexto.';
+        this._append('bot', `<span class="iad-hint">${msg}</span>`);
+      });
+
       send.addEventListener('click', async () => {
         let q = (input.value || '').trim();
-
-        // primeiro clique sem texto: apenas alterna rótulo
-        if (!q && send.textContent === 'Iniciar') {
-          send.textContent = 'Enviar';
-          input.focus();
-          return;
-        }
-
+        if (!q && send.textContent === 'Iniciar') { send.textContent = 'Enviar'; input.focus(); return; }
         if (!q) return;
         input.value = '';
         this._append('user', q);
         await this._sendToIA(q);
       });
 
-      input.addEventListener('input', () => {
-        if (send.textContent !== 'Enviar') send.textContent = 'Enviar';
-      });
-
-      input.addEventListener('keydown', e => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send.click(); }
-      });
+      input.addEventListener('input', () => { if (send.textContent !== 'Enviar') send.textContent = 'Enviar'; });
+      input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send.click(); } });
     },
 
     _panel() { return document.getElementById('iaDeepPanel'); },
     _outBox() { return document.getElementById('iadOut'); },
     _btn() { return document.getElementById('iaDeep'); },
     _q(sel) { return document.querySelector(sel); },
-    _toggleBtn(el, on) {
-      if (!el) return;
-      el.classList.toggle('btn-outline-primary', !on);
-      el.classList.toggle('btn-primary', on);
-      el.classList.toggle('active', on);
-      el.setAttribute('aria-pressed', on ? 'true' : 'false');
-    },
+    _toggleBtn(el, on) { if (!el) return; el.classList.toggle('btn-outline-primary', !on); el.classList.toggle('btn-primary', on); el.classList.toggle('active', on); el.setAttribute('aria-pressed', on ? 'true' : 'false'); },
 
     /* ===================== Helpers ===================== */
     _displayNameFromEmail() {
-      const email = (window.USER_EMAIL || '').trim();
-      if (!email || !/@/.test(email)) return 'Você';
-      const first = email.split('@')[0];
-      return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'Você';
+      const email = (window.USER_EMAIL || '').trim(); if (!email || !/@/.test(email)) return 'Você';
+      const first = email.split('@')[0]; return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'Você';
     },
 
     _append(role, html) {
@@ -232,166 +225,128 @@
       if (role === 'user') b.textContent = html; else b.innerHTML = html;
       const m = document.createElement('div'); m.className = 'iad-meta'; m.textContent = role === 'user' ? this._displayNameFromEmail() : 'Camila.AI';
       row.appendChild(b); row.appendChild(m); this._outBox().appendChild(row);
-      const sc = this._panel().querySelector('.body');
-      sc.scrollTop = sc.scrollHeight;
+      const sc = this._panel().querySelector('.body'); sc.scrollTop = sc.scrollHeight;
     },
 
     _appendBotStreaming(raw) {
-      const cleaned = this._cleanGroq(raw);
-      if (!cleaned || !cleaned.trim()) return '';
-
+      const cleaned = this._cleanGroq(raw); if (!cleaned || !cleaned.trim()) return '';
       const blocks = cleaned.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
       const row = document.createElement('div'); row.className = 'd-flex flex-column';
       const box = document.createElement('div'); box.className = 'iad-msg iad-bot';
       const meta = document.createElement('div'); meta.className = 'iad-meta'; meta.textContent = 'Camila.AI';
       row.appendChild(box); row.appendChild(meta); this._outBox().appendChild(row);
-
-      blocks.forEach(b => {
-        const isTitle = /^###\s*/.test(b);
-        const text = b.replace(/^###\s*/, '');
-        const el = document.createElement(isTitle ? 'h5' : 'p');
-        if (isTitle) el.className = 'iad-h';
-        el.textContent = text;
-        box.appendChild(el);
-      });
-
-      const sc = this._panel().querySelector('.body');
-      requestAnimationFrame(() => { sc.scrollTop = sc.scrollHeight; });
+      blocks.forEach(b => { const isTitle = /^###\s*/.test(b); const text = b.replace(/^###\s*/, ''); const el = document.createElement(isTitle ? 'h5' : 'p'); if (isTitle) el.className = 'iad-h'; el.textContent = text; box.appendChild(el); });
+      const sc = this._panel().querySelector('.body'); requestAnimationFrame(() => { sc.scrollTop = sc.scrollHeight; });
       return cleaned;
     },
 
     _dotsStart() {
-      const wrap = document.createElement('div');
-      wrap.className = 'iad-msg iad-bot iad-loading';
+      const wrap = document.createElement('div'); wrap.className = 'iad-msg iad-bot iad-loading';
       wrap.innerHTML = `Aguardando <span class="iad-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
-      this._outBox().appendChild(wrap);
-      let t = 0;
-      const int = setInterval(() => {
-        wrap.querySelectorAll('.dot').forEach(x => x.classList.remove('on'));
-        wrap.querySelectorAll('.dot')[t % 3].classList.add('on'); t++;
-        const sc = this._panel().querySelector('.body'); sc.scrollTop = sc.scrollHeight;
-      }, 260);
+      this._outBox().appendChild(wrap); let t = 0;
+      const int = setInterval(() => { wrap.querySelectorAll('.dot').forEach(x => x.classList.remove('on')); wrap.querySelectorAll('.dot')[t % 3].classList.add('on'); t++; const sc = this._panel().querySelector('.body'); sc.scrollTop = sc.scrollHeight; }, 260);
       this._dotsStop._int = int; this._dotsStop._el = wrap;
     },
+    _dotsStop() { if (this._dotsStop._int) { clearInterval(this._dotsStop._int); this._dotsStop._int = null; } if (this._dotsStop._el) { this._dotsStop._el.remove(); this._dotsStop._el = null; } },
 
-    _dotsStop() {
-      if (this._dotsStop._int) { clearInterval(this._dotsStop._int); this._dotsStop._int = null; }
-      if (this._dotsStop._el) { this._dotsStop._el.remove(); this._dotsStop._el = null; }
-    },
-
-    /* ===================== Envio + Fallback ===================== */
+    /* ===================== Estrutura de envio ===================== */
     async _sendToIA(userQuery, { force = false } = {}) {
-      let reason = '';
-      this._state.retried = false;
-
+      this._dotsStart();
       try {
-        this._dotsStart();
+        const snapshot = await this._state.opts.getPayload({ userQuery });
+        const now = Date.now();
+        const hash = this._stableHash(snapshot);
+        const ageMin = (now - this._state.lastSnapshotAt) / 60000;
 
-        let payload = await this._state.opts.getPayload({ userQuery });
+        const mustFull = this._CFG.ALWAYS_FULL || this._state.forceFullNext || force || !this._state.lastSnapshotHash || hash !== this._state.lastSnapshotHash || ageMin >= this._CFG.REFRESH_FULL_AFTER_MIN;
 
-        // Dominância do RESUMO quando marcado
-        if (this._state.brief) payload = this._mergeBriefInstruction(payload, this._state.opts.briefInstruction, 340);
+        this._state.forceFullNext = false;
+        this._state.lastSnapshotAt = now;
+        this._state.lastSnapshotHash = hash;
 
-        // “Regerar” sem prompt do usuário
-        if (force && !userQuery && this._state.brief) {
-          payload = this._mergeBriefInstruction(payload, this._state.opts.briefInstruction, 340);
-        }
-
-        // 1ª tentativa normal
-        let out = await this._callIA(payload, this._state.opts.timeoutMs);
-        this._dotsStop();
-        let text = this._appendBotStreaming(out);
-
-        // Se vazio, fallback agressivo
-        if (!text || !text.trim()) {
-          reason = 'resposta vazia';
-          text = await this._fallback(payload, reason);
-        }
-
-        if (!text || !text.trim()) {
-          const msg = `Não foi possível responder${reason ? ` — possível motivo: ${reason}` : ''}.`;
-          this._append('bot', `<span class="text-warning">${msg}</span>`);
+        if (mustFull) {
+          await this._sendPossiblyChunked(snapshot);
+        } else {
+          // modo inteligente: envia apenas prompt + referência do hash
+          const minimal = {
+            prompt: (snapshot.prompt || ''),
+            qa: snapshot.qa || null,
+            contexto: 'qa',
+            meta: Object.assign({}, snapshot.meta || {}, { snapshot_hash: hash, page: (snapshot.meta && snapshot.meta.page) || 'kpi_v2' }),
+            prefs: Object.assign({}, snapshot.prefs || {})
+          };
+          if (this._state.brief) this._mergeBriefInstruction(minimal, this._state.opts.briefInstruction, 340);
+          const out = await this._callIA(minimal, this._state.opts.timeoutMs);
+          this._appendBotStreaming(out);
         }
       } catch (err) {
-        this._dotsStop();
         const msg = `Não foi possível responder${err?.message ? ` — possível motivo: ${err.message}` : ''}.`;
         this._append('bot', `<span class="text-warning">${msg}</span>`);
-      }
+      } finally { this._dotsStop(); }
     },
 
-    async _fallback(payload, reasonIn) {
-      const briefChk = this._q('#iadBriefChk');
-      let note = '';
-      if (this._state.brief) {
-        briefChk.checked = false; this._state.brief = false;
-        note = 'Resposta fora do escopo. Desmarcando bit IA Resumida.';
-      } else {
-        briefChk.checked = true; this._state.brief = true;
-        note = 'Resposta fora do escopo. Marcando bit IA Resumida.';
-      }
-      this._append('bot', `<span class="iad-hint">${note}</span>`);
+    async _sendPossiblyChunked(fullPayload) {
+      // aplica instrução de resumo se marcado
+      const basePrefs = Object.assign({}, fullPayload.prefs || {});
+      const full = this._state.brief ? this._mergeBriefInstruction(fullPayload, this._state.opts.briefInstruction, 340) : fullPayload;
 
-      const p2 = this._state.brief
-        ? this._mergeBriefInstruction(payload, this._state.opts.briefInstruction, 420)
-        : payload;
+      // calcula tamanho aproximado
+      const approx = this._approxSize(full);
+      const blocks = Array.isArray(full.blocks) ? full.blocks : [];
 
-      try {
-        this._dotsStart();
-        const out2 = await this._callIA(p2, this._state.opts.timeoutMs * 2);
-        this._dotsStop();
-        const text2 = this._appendBotStreaming(out2);
-        if (text2 && text2.trim()) return text2;
-      } catch (e) {
-        this._dotsStop();
+      if (approx <= this._CFG.MAX_PAYLOAD_CHARS || blocks.length <= this._CFG.CHUNK_BLOCKS) {
+        const out = await this._callIA(full, this._state.opts.timeoutMs);
+        this._appendBotStreaming(out);
+        return;
       }
 
-      if (Array.isArray(payload.blocks) && payload.blocks.length > 4) {
-        const groups = [];
-        const chunkSize = 4;
-        for (let i = 0; i < payload.blocks.length; i += chunkSize) {
-          groups.push(payload.blocks.slice(i, i + chunkSize));
-        }
-        const parts = [];
-        for (let i = 0; i < groups.length; i++) {
-          const pi = Object.assign({}, payload, {
-            blocks: groups[i],
-            prompt: (payload.prompt || '') + `\n\n[Parte ${i + 1}/${groups.length}]`,
-          });
-          if (this._state.brief) this._mergeBriefInstruction(pi, this._state.opts.briefInstruction, 420);
-          try {
-            this._dotsStart();
-            const oi = await this._callIA(pi, this._state.opts.timeoutMs * 2.5);
-            this._dotsStop();
-            const ti = this._cleanGroq(oi);
-            if (ti && ti.trim()) parts.push(ti);
-          } catch { this._dotsStop(); }
-        }
-        if (parts.length) {
-          const synthPayload = {
-            prompt: (this._state.brief
-              ? `${this._state.opts.briefInstruction}\n\nResuma os trechos abaixo em UMA única resposta.`
-              : 'Consolide os trechos abaixo em UMA resposta coerente:'),
-            contexto: 'sintese',
-            parts: parts.slice(0, 10)
-          };
-          try {
-            this._dotsStart();
-            const outS = await this._callIA(synthPayload, this._state.opts.timeoutMs * 2);
-            this._dotsStop();
-            const txt = this._appendBotStreaming(outS);
-            if (txt && txt.trim()) return txt;
-          } catch { this._dotsStop(); }
-        }
+      // chunking por blocos
+      const groups = [];
+      for (let i = 0; i < blocks.length; i += this._CFG.CHUNK_BLOCKS) groups.push(blocks.slice(i, i + this._CFG.CHUNK_BLOCKS));
+
+      const partialTexts = [];
+      for (let i = 0; i < groups.length; i++) {
+        const p = Object.assign({}, full, { blocks: groups[i] });
+        p.prompt = `${full.prompt || ''}\n\n[Parte ${i + 1}/${groups.length}]`;
+        p.prefs = Object.assign({}, basePrefs);
+        if (this._state.brief) this._mergeBriefInstruction(p, this._state.opts.briefInstruction, 420);
+        const out = await this._callIA(p, this._state.opts.timeoutMs * 1.5);
+        const cleaned = this._cleanGroq(out);
+        partialTexts.push(cleaned);
+        this._append('bot', `<span class="iad-hint">Parcial ${i + 1}/${groups.length} recebida.</span>`);
+        this._appendBotStreaming(cleaned);
       }
 
-      return '';
+      // síntese final
+      const synthPayload = {
+        prompt: (this._state.brief
+          ? `${this._state.opts.briefInstruction}\n\nResuma os trechos abaixo em UMA única resposta com foco executivo.`
+          : 'Consolide os trechos abaixo em UMA resposta coerente, integrando tendências, riscos e oportunidades.'),
+        contexto: 'sintese',
+        parts: partialTexts.slice(0, this._CFG.SYNTH_PARTS_LIMIT)
+      };
+      const outS = await this._callIA(synthPayload, this._state.opts.timeoutMs * 2);
+      this._append('bot', '<span class="iad-hint">Síntese final:</span>');
+      this._appendBotStreaming(outS);
+    },
+
+    /* ===================== Utilidades ===================== */
+    _stableHash(obj) {
+      // hash simples e determinístico
+      const s = typeof obj === 'string' ? obj : JSON.stringify(obj, Object.keys(obj).sort());
+      let h = 2166136261 >>> 0; // FNV-1a 32-bit
+      for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+      return ('0000000' + h.toString(16)).slice(-8);
+    },
+
+    _approxSize(obj) {
+      try { return JSON.stringify(obj).length; } catch { return 0; }
     },
 
     _mergeBriefInstruction(payload, instruction, maxTokens) {
       const p = Object.assign({}, payload);
       const inst = `[RESUMO-ESTRITO]: ${instruction} Priorize síntese.`;
-      if (typeof p.prompt === 'string') p.prompt = `${inst}\n\n${p.prompt}`;
-      else p.prompt = inst;
+      if (typeof p.prompt === 'string') p.prompt = `${inst}\n\n${p.prompt}`; else p.prompt = inst;
       p.prefs = Object.assign({}, p.prefs, { max_tokens: Math.max(120, Math.min(700, maxTokens || 340)), temperature: 0.2 });
       return p;
     },
@@ -401,23 +356,11 @@
       const API = this._state.opts.apiUrl;
       const controller = new AbortController();
       const to = setTimeout(() => controller.abort(), timeout || this._state.opts.timeoutMs);
-      let r;
-      try {
-        r = await fetch(API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify(typeof payload === 'string' ? { prompt: payload } : payload),
-          signal: controller.signal
-        });
+      let r; try {
+        r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(typeof payload === 'string' ? { prompt: payload } : payload), signal: controller.signal });
       } finally { clearTimeout(to); }
-      if (!r.ok) {
-        let t = ''; try { t = await r.text(); } catch { }
-        throw new Error(`HTTP ${r.status}${t ? ' — ' + t : ''}`);
-      }
-      let resText = await r.text();
-      let res = null;
-      try { res = JSON.parse(resText); } catch { }
+      if (!r.ok) { let t = ''; try { t = await r.text(); } catch { } throw new Error(`HTTP ${r.status}${t ? ' — ' + t : ''}`); }
+      let resText = await r.text(); let res = null; try { res = JSON.parse(resText); } catch { }
       if (!res) return resText;
       if (res && res.content_mode === 'free_text') return res.text || '';
       if (res && res.content_mode === 'json') return (res.data && (res.data.html || res.data.livre)) || JSON.stringify(res.data);
@@ -427,14 +370,7 @@
     _exportToPDF() {
       if (typeof html2pdf === 'undefined') { alert('html2pdf.js não carregado.'); return; }
       const node = document.getElementById('iadOut'); if (!node) return;
-      const opt = {
-        margin: [0, 0, 0, 0],
-        filename: `IA-Conversa_${new Date().toISOString().slice(0, 10)}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: null, windowWidth: node.scrollWidth, windowHeight: node.scrollHeight },
-        jsPDF: { unit: 'px', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'] }
-      };
+      const opt = { margin: [0, 0, 0, 0], filename: `IA-Conversa_${new Date().toISOString().slice(0, 10)}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: null, windowWidth: node.scrollWidth, windowHeight: node.scrollHeight }, jsPDF: { unit: 'px', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css', 'legacy'] } };
       html2pdf().set(opt).from(node).save();
     },
 
