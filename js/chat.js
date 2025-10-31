@@ -49,7 +49,7 @@
 #iaDeepPanel .iad-chat{display:flex;flex-direction:column;gap:10px}
 #iaDeepPanel .iad-msg{max-width:78%;padding:10px 12px;border-radius:12px;line-height:1.45;white-space:pre-wrap;word-break:break-word;text-align:justify}
 #iaDeepPanel .iad-bot{background:#2a2a2a;border:1px solid #3a3a3a;align-self:flex-start}
-#iaDeepPanel .iad-user{background:#16324f;border:1px solid #275a8a;align-self:flex-end} /* usuário à direita */
+#iaDeepPanel .iad-user{background:#16324f;border:1px solid #275a8a;align-self:flex-end}
 #iaDeepPanel .iad-meta{font-size:12px;color:#9aa1a9;margin-top:2px}
 #iaDeepPanel.card{background:#1e1e1e;color:#fff;border:1px solid #2a2a2a}
 #iaDeepPanel .card-header,#iaDeepPanel .card-footer{background:#242424;color:#fff;border-color:#2a2a2a}
@@ -77,6 +77,16 @@
         btn.textContent = 'IA Análise';
         btn.title = 'Relatório completo e chat';
         anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+        // auto-wire imediato para o botão criado pelo watchdog
+        btn.addEventListener('click', () => {
+          const panel = this._panel();
+          if (!panel) return;
+          const open = (panel.style.display === 'none' || panel.style.display === '');
+          panel.style.display = open ? 'block' : 'none';
+          this._toggleBtn(btn, open);
+          if (open) this._prefillInput(true);
+        });
+        btn.dataset.wired = '1';
       }
     },
 
@@ -113,9 +123,19 @@
 </div>`;
         document.body.appendChild(wrap);
 
-        // mensagem inicial simulando a IA
+        // mensagem inicial
         this._append('bot', 'Olá, eu sou a Camila.AI e vou te ajudar a analisar os dados que estão nesta página. Toque em Iniciar ou digite algo sobre os dados aqui constantes.');
+        // garante existência do método
+        this._prefillInput();
       }
+    },
+
+    // método seguro para preenchimento inicial do input e rótulo do botão
+    _prefillInput(initial) {
+      const input = this._q('#iadInput');
+      const send = this._q('#iadSend');
+      if (!input || !send) return;
+      if (initial) send.textContent = 'Iniciar';
     },
 
     _wireUI() {
@@ -129,12 +149,15 @@
       const send = this._q('#iadSend');
       const input = this._q('#iadInput');
 
-      btn.addEventListener('click', () => {
-        const open = (panel.style.display === 'none');
-        panel.style.display = open ? 'block' : 'none';
-        this._toggleBtn(btn, open);
-        // NENHUM envio automático aqui
-      });
+      if (btn && !btn.dataset.wired) {
+        btn.addEventListener('click', () => {
+          const open = (panel.style.display === 'none');
+          panel.style.display = open ? 'block' : 'none';
+          this._toggleBtn(btn, open);
+          if (open) this._prefillInput(true);
+        });
+        btn.dataset.wired = '1';
+      }
 
       close.addEventListener('click', () => {
         panel.style.display = 'none';
@@ -197,7 +220,7 @@
 
     /* ===================== Helpers ===================== */
     _displayNameFromEmail() {
-      const email = (window.USER_EMAIL || '').trim(); // defina window.USER_EMAIL no HTML após login
+      const email = (window.USER_EMAIL || '').trim();
       if (!email || !/@/.test(email)) return 'Você';
       const first = email.split('@')[0];
       return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'Você';
@@ -286,7 +309,6 @@
         }
 
         if (!text || !text.trim()) {
-          // Último recurso: mensagem tratada
           const msg = `Não foi possível responder${reason ? ` — possível motivo: ${reason}` : ''}.`;
           this._append('bot', `<span class="text-warning">${msg}</span>`);
         }
@@ -298,7 +320,6 @@
     },
 
     async _fallback(payload, reasonIn) {
-      // 1) alterna bit IA Resumida e informa
       const briefChk = this._q('#iadBriefChk');
       let note = '';
       if (this._state.brief) {
@@ -310,7 +331,6 @@
       }
       this._append('bot', `<span class="iad-hint">${note}</span>`);
 
-      // 2) reenvia com timeout maior
       const p2 = this._state.brief
         ? this._mergeBriefInstruction(payload, this._state.opts.briefInstruction, 420)
         : payload;
@@ -325,7 +345,6 @@
         this._dotsStop();
       }
 
-      // 3) chunk por blocos se existir muito dado (divide payload.blocks)
       if (Array.isArray(payload.blocks) && payload.blocks.length > 4) {
         const groups = [];
         const chunkSize = 4;
@@ -353,7 +372,7 @@
               ? `${this._state.opts.briefInstruction}\n\nResuma os trechos abaixo em UMA única resposta.`
               : 'Consolide os trechos abaixo em UMA resposta coerente:'),
             contexto: 'sintese',
-            parts: parts.slice(0, 10) // segurança
+            parts: parts.slice(0, 10)
           };
           try {
             this._dotsStart();
@@ -394,12 +413,11 @@
       } finally { clearTimeout(to); }
       if (!r.ok) {
         let t = ''; try { t = await r.text(); } catch { }
-        // retorna texto de erro para diagnóstico do fallback
         throw new Error(`HTTP ${r.status}${t ? ' — ' + t : ''}`);
       }
       let resText = await r.text();
       let res = null;
-      try { res = JSON.parse(resText); } catch { /* mantém texto */ }
+      try { res = JSON.parse(resText); } catch { }
       if (!res) return resText;
       if (res && res.content_mode === 'free_text') return res.text || '';
       if (res && res.content_mode === 'json') return (res.data && (res.data.html || res.data.livre)) || JSON.stringify(res.data);
@@ -424,18 +442,14 @@
     _cleanGroq(raw) {
       let s = String(raw || '');
       s = s.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '  ');
-      // remove blocos de código
       s = s.replace(/```[\s\S]*?```/g, ' ');
-      // remove Tabelas ASCII
       s = s.replace(/^\s*[|+\-─═┌┐└┘┼┤├┬┴]+.*$/gm, ' ');
       s = s.replace(/^\s*\|\s*(?:[^|\n]+\|)+\s*$/gm, ' ');
       s = s.replace(/^.*\|.*\|.*$/gm, ' ');
-      // remove LaTeX
       s = s.replace(/\\begin\{aligned\}[\s\S]*?\\end\{aligned\}/g, ' ');
       s = s.replace(/\$\$[\s\S]*?\$\$/g, ' ');
       s = s.replace(/\\\[[\s\S]*?\\\]/g, ' ');
       s = s.replace(/\\\([\s\S]*?\\\)/g, ' ');
-      // headings e quebras
       s = s.replace(/[ \t]+\n/g, '\n');
       s = s.replace(/###\s*/g, '\n\n### ');
       s = s.replace(/\n{3,}/g, '\n\n');

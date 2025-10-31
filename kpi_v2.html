@@ -23,7 +23,9 @@
         // outra porta (exige CORS)
         // window.IA_API_URL = 'http://127.0.0.1:8011/ia/analisar';
         // window.PROMPTS_API_BASE = 'http://127.0.0.1:8011/prompts';
+        window.USER_EMAIL = "{{ user.email }}";
     </script>
+
 </head>
 
 <style>
@@ -881,50 +883,45 @@
         }
     </script>
 
+
+
+
+
+
+
+
+
     <!-- Função de payload para a IA -->
     <script>
-        function mesesSel2Deep() {
-            const from = document.querySelector('#from2')?.value || null;
-            const to = document.querySelector('#to2')?.value || null;
+        // ——— HELPERS DE CÁLCULO ———
+        function mesesSel(rangeFromId, rangeToId) {
+            const from = document.querySelector(rangeFromId)?.value || null;
+            const to = document.querySelector(rangeToId)?.value || null;
             return MESES.filter(m => (!from || m >= from) && (!to || m <= to));
         }
-        function buildPayloadDeep({ userQuery }) {
-            const meses = mesesSel2Deep();
-            const sel = (sel2 === 'ALL' ? 'ALL' : [...sel2].sort().join('+'));
-            const rows = meses.map(m => aggMens(m, sel2));
-
-            const s = {
-                labels: meses,
-                receita: rows.map(v => v.valor),
-                qtd: rows.map(v => v.qtd),
-                ticket: rows.map(v => v.ticket),
-                perf: rows.map(v => v.perf),
-                yoy: rows.map(v => v.r_yoy),
-                dpreco: rows.map(v => v.mix_p),
-                dvol: rows.map(v => v.mix_v)
-            };
-
-            // Pareto do período
-            const shares = (function postoSharesLocal() {
-                const map = new Map();
-                meses.forEach(m => {
-                    const row = porPosto[m] || {};
-                    Object.keys(row).forEach(p => {
-                        if (sel2 !== 'ALL' && !sel2.has(p)) return;
-                        const v = Number(row[p]?.mensalidade) || 0;
-                        map.set(p, (map.get(p) || 0) + v);
-                    });
+        function postoSharesPeriodo(meses, selection) {
+            const map = new Map();
+            meses.forEach(m => {
+                const row = porPosto[m] || {};
+                Object.keys(row).forEach(p => {
+                    if (selection !== 'ALL' && !selection.has(p)) return;
+                    const v = Number(row[p]?.mensalidade) || 0;
+                    map.set(p, (map.get(p) || 0) + v);
                 });
-                const entries = [...map.entries()].sort((a, b) => b[1] - a[1]);
-                return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]), total: entries.reduce((a, [, v]) => a + v, 0) };
-            })();
-
-            // YoY médio por posto
+            });
+            const entries = [...map.entries()].sort((a, b) => b[1] - a[1]);
+            return {
+                labels: entries.map(e => e[0]),
+                valores: entries.map(e => e[1]),
+                total: entries.reduce((a, [, v]) => a + v, 0)
+            };
+        }
+        function yoyMedioPorPosto(meses, selection) {
             const mapYoY = new Map();
             meses.forEach(m => {
                 const row = porPosto[m] || {};
                 Object.keys(row).forEach(p => {
-                    if (sel2 !== 'ALL' && !sel2.has(p)) return;
+                    if (selection !== 'ALL' && !selection.has(p)) return;
                     const yoy = Number(row[p]?.receita_yoy_pct);
                     if (!Number.isFinite(yoy)) return;
                     const o = mapYoY.get(p) || { sum: 0, count: 0 };
@@ -933,15 +930,240 @@
             });
             const postos = [...mapYoY.keys()].sort();
             const yoyMed = postos.map(p => mapYoY.get(p).sum / mapYoY.get(p).count);
+            return { postos, yoyMed };
+        }
+        function maxDrawdown(vals) {
+            let peak = -Infinity, mdd = 0;
+            for (const v of vals) {
+                if (v == null) continue;
+                if (v > peak) peak = v;
+                if (peak > 0) {
+                    const dd = (v - peak) / peak * 100;
+                    if (dd < mdd) mdd = dd;
+                }
+            }
+            return mdd || 0;
+        }
+        function media(arr) { const v = arr.filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; }
+        function wavg(vals, weights) {
+            let sW = 0, s = 0;
+            for (let i = 0; i < vals.length; i++) {
+                const w = weights[i] ?? 0; const v = vals[i];
+                if (v == null) continue; s += v * w; sW += w;
+            }
+            return sW ? s / sW : null;
+        }
+        function serieMM3(arr) {
+            return arr.map((_, i) => {
+                const s = arr.slice(Math.max(0, i - 2), i + 1).filter(x => x != null);
+                return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null;
+            });
+        }
+        function volMovelPct(logrets, w = 3) {
+            const out = [];
+            for (let i = 0; i < logrets.length; i++) {
+                if (i + 1 < w) { out.push(null); continue; }
+                const s = logrets.slice(i + 1 - w, i + 1).filter(v => v != null);
+                if (!s.length) { out.push(null); continue; }
+                const mean = s.reduce((a, b) => a + b, 0) / s.length;
+                const vr = s.reduce((a, x) => a + (x - mean) * (x - mean), 0) / s.length;
+                out.push(Math.sqrt(vr) * 100);
+            }
+            return out;
+        }
 
-            const scopes = ['chart_valores', 'chart_qtd_ticket', 'chart_perf', 'chart_mix', 'chart_pareto', 'chart_yoy_posto'].join(', ');
-            const basePrompt = (window.Prompts?.render?.({ produto: 'mensalidades', from: meses[0], to: meses.at(-1), posto: sel, contexto: 'deep', scopes })) ||
-                `Relatório técnico de mensalidades ${meses[0]}→${meses.at(-1)} posto ${sel}. Foque em ${scopes}. Sem tabelas ASCII.`;
+        // ——— KPIs e snapshots ———
+        function computeKPIs(meses, selection) {
+            const rows = meses.map(m => aggMens(m, selection));
+            const receita = rows.reduce((a, b) => a + (b.valor || 0), 0);
+            const qtd = rows.reduce((a, b) => a + (b.qtd || 0), 0);
+            const ticketPond = qtd ? receita / qtd : null;
+
+            const perfs = rows.map(v => v.perf).filter(v => v != null);
+            const perfMA = media(perfs);
+            let perfMG = null, perfAc = null;
+            if (perfs.length) {
+                const mult = perfs.reduce((a, p) => a * (1 + p / 100), 1);
+                perfAc = (mult - 1) * 100;
+                perfMG = (Math.pow(mult, 1 / perfs.length) - 1) * 100;
+            }
+            let cagr = null;
+            if (meses.length >= 2) {
+                const first = (aggMens(meses[0], selection).valor || 0);
+                const last = (aggMens(meses.at(-1), selection).valor || 0);
+                if (first > 0) cagr = (Math.pow(last / first, 1 / (meses.length - 1)) - 1) * 100;
+            }
+            const runRate = meses.length ? (receita / meses.length) * 12 : null;
+
+            const moms = rows.map(v => v.r_mom).filter(v => v != null);
+            const hit = moms.length ? (moms.filter(x => x > 0).length / moms.length) * 100 : null;
+
+            const logrets = rows.map(v => v.logret).filter(v => v != null);
+            let volPct = null;
+            if (logrets.length) {
+                const mean = media(logrets);
+                const vr = logrets.reduce((a, x) => a + (x - mean) * (x - mean), 0) / logrets.length;
+                volPct = Math.sqrt(vr) * 100;
+            }
+
+            const receitaSerie = meses.map(m => aggMens(m, selection).valor || null);
+            const mdd = maxDrawdown(receitaSerie);
 
             return {
-                produto: 'mensalidades',
+                receita_total: receita,
+                qtd_total: qtd,
+                ticket_ponderado: ticketPond,
+                perf_ma: perfMA,
+                perf_mg: perfMG,
+                perf_acumulada: perfAc,
+                cagr_receita: cagr,
+                run_rate_12m: runRate,
+                hit_rate: hit,
+                volatilidade_logret_pct: volPct,
+                max_drawdown_receita_pct: mdd
+            };
+        }
+
+        function buildTableSnapshot(meses, selection) {
+            const rows = meses.map(m => {
+                const v = aggMens(m, selection);
+                return {
+                    mes: m,
+                    qtd: v.qtd ?? null,
+                    receita: v.valor ?? null,
+                    ticket: v.ticket ?? null,
+                    perf_mom: v.perf ?? null,
+                    receita_mom: v.r_mom ?? null,
+                    qtd_mom: v.q_mom ?? null,
+                    ticket_mom: v.t_mom ?? null,
+                    receita_yoy: v.r_yoy ?? null,
+                    qtd_yoy: v.q_yoy ?? null,
+                    ticket_yoy: v.t_yoy ?? null,
+                    logret: v.logret ?? null,
+                    dpreco: v.mix_p ?? null,
+                    dvol: v.mix_v ?? null,
+                    dinter: v.mix_i ?? null
+                };
+            });
+            const sumReceita = rows.reduce((a, b) => a + (b.receita || 0), 0);
+            const sumQtd = rows.reduce((a, b) => a + (b.qtd || 0), 0);
+            const tk = rows.map(r => r.ticket).filter(x => x != null);
+            const avg = {
+                qtd: Math.round(sumQtd / (meses.length || 1)) || 0,
+                receita: Math.round(sumReceita / (meses.length || 1)) || 0,
+                ticket: tk.length ? tk.reduce((a, b) => a + b, 0) / tk.length : null
+            };
+            const totals = { qtd: sumQtd, receita: sumReceita };
+            return { rows, avg, totals };
+        }
+
+        function buildChartsSnapshot(meses, selection) {
+            const rows = meses.map(m => aggMens(m, selection));
+            const lbls = [...meses];
+
+            const receita = rows.map(v => v.valor ?? null);
+            const mm3 = serieMM3(receita);
+
+            const qtd = rows.map(v => v.qtd ?? null);
+            const ticket = rows.map(v => v.ticket ?? null);
+
+            const perf = rows.map(v => v.perf ?? null);
+            const yoy = rows.map(v => v.r_yoy ?? null);
+
+            const logret = rows.map(v => v.logret ?? null);
+            const vol3pct = volMovelPct(logret, 3);
+
+            const dpreco = rows.map(v => v.mix_p ?? null);
+            const dvol = rows.map(v => v.mix_v ?? null);
+            const scatter = rows.map(v => ({ x: v.mix_v ?? 0, y: v.mix_p ?? 0 }));
+
+            const pareto = postoSharesPeriodo(meses, selection);
+            const yoyp = yoyMedioPorPosto(meses, selection);
+
+            return {
+                chart_valores: { labels: lbls, receita, media_movel_3m: mm3 },
+                chart_qtd_ticket: { labels: lbls, qtd, ticket },
+                chart_perf: { labels: lbls, perf, yoy },
+                chart_vol: { labels: lbls, logret, vol_movel_3m_pct: vol3pct },
+                chart_yoy: { labels: lbls, yoy },
+                chart_mix: { labels: lbls, dpreco, dvol },
+                chart_scatter: { pontos: scatter },
+                chart_pareto: { postos: pareto.labels, receita: pareto.valores, total: pareto.total },
+                chart_yoy_posto: { postos: yoyp.postos, yoy_medio: yoyp.yoyMed }
+            };
+        }
+
+        function labelSelec(selection) {
+            if (selection === 'ALL') return 'ALL';
+            const arr = [...selection].sort();
+            return arr.length ? arr.join('+') : 'ALL';
+        }
+
+        // ——— Snapshot completo para a IA ———
+        function snapshotPageState({ userQuery }) {
+            const meses1 = mesesSel('#from1', '#to1');
+            const meses2 = mesesSel('#from2', '#to2');
+            const sel_1 = sel1;
+            const sel_2 = sel2;
+
+            const scopes = [
+                'chart_valores', 'chart_qtd_ticket', 'chart_perf', 'chart_vol',
+                'chart_yoy', 'chart_mix', 'chart_scatter', 'chart_pareto', 'chart_yoy_posto'
+            ].join(', ');
+
+            const basePrompt =
+                (window.Prompts?.render?.({
+                    produto: 'mensalidades',
+                    from: meses2[0], to: meses2.at(-1),
+                    posto: labelSelec(sel_2),
+                    contexto: userQuery ? 'qa' : 'relatorio',
+                    scopes
+                })) ||
+                `Relatório técnico de mensalidades ${meses2[0]}→${meses2.at(-1)} posto ${labelSelec(sel_2)}. ` +
+                `Foque em ${scopes}. Sem tabelas ASCII.`;
+
+            const kpis_sel1 = computeKPIs(meses1, sel_1);
+            const kpis_sel2 = computeKPIs(meses2, sel_2);
+            const tabela_sel2 = buildTableSnapshot(meses2, sel_2);
+            const charts = buildChartsSnapshot(meses2, sel_2);
+
+            const jsonInfo = document.querySelector('#jsonInfo')?.textContent || '';
+            const meta = {
+                page: 'kpi_v2',
+                title: document.title || '',
                 when: Date.now(),
+                json_info_text: jsonInfo,
+                urls: {
+                    geral: (typeof URL_GERAL !== 'undefined' ? URL_GERAL : null),
+                    por_posto: (typeof URL_POR_POSTO !== 'undefined' ? URL_POR_POSTO : null)
+                },
+                datasets: { MESES, POSTOS },
+            };
+
+            const filtros = {
+                compare: { from: document.querySelector('#from1')?.value || null, to: document.querySelector('#to1')?.value || null, posto: labelSelec(sel_1) },
+                deep: { from: document.querySelector('#from2')?.value || null, to: document.querySelector('#to2')?.value || null, posto: labelSelec(sel_2) }
+            };
+
+            const blocks = [
+                { scope: 'chart_valores', periodo: filtros.deep, posto: filtros.deep.posto, series: { labels: charts.chart_valores.labels, receita: charts.chart_valores.receita, mm3: charts.chart_valores.media_movel_3m } },
+                { scope: 'chart_qtd_ticket', periodo: filtros.deep, posto: filtros.deep.posto, series: { labels: charts.chart_qtd_ticket.labels, qtd: charts.chart_qtd_ticket.qtd, ticket: charts.chart_qtd_ticket.ticket } },
+                { scope: 'chart_perf', periodo: filtros.deep, posto: filtros.deep.posto, series: { labels: charts.chart_perf.labels, perf: charts.chart_perf.perf, yoy: charts.chart_perf.yoy } },
+                { scope: 'chart_vol', periodo: filtros.deep, posto: filtros.deep.posto, series: { labels: charts.chart_vol.labels, logret: charts.chart_vol.logret, vol_movel_3m_pct: charts.chart_vol.vol_movel_3m_pct } },
+                { scope: 'chart_yoy', periodo: filtros.deep, posto: filtros.deep.posto, series: { labels: charts.chart_yoy.labels, yoy: charts.chart_yoy.yoy } },
+                { scope: 'chart_mix', periodo: filtros.deep, posto: filtros.deep.posto, series: { labels: charts.chart_mix.labels, dpreco: charts.chart_mix.dpreco, dvol: charts.chart_mix.dvol } },
+                { scope: 'chart_scatter', periodo: filtros.deep, posto: filtros.deep.posto, series: { pontos: charts.chart_scatter.pontos } },
+                { scope: 'chart_pareto', periodo: filtros.deep, posto: filtros.deep.posto, series: { postos: charts.chart_pareto.postos, receita: charts.chart_pareto.receita, total: charts.chart_pareto.total } },
+                { scope: 'chart_yoy_posto', periodo: filtros.deep, posto: filtros.deep.posto, series: { postos: charts.chart_yoy_posto.postos, yoy_medio: charts.chart_yoy_posto.yoy_medio } },
+                { scope: 'tabela_kpis', periodo: filtros.deep, posto: filtros.deep.posto, kpis: kpis_sel2, tabela: tabela_sel2 }
+            ];
+
+            return {
+                meta,
+                filtros,
+                produto: 'mensalidades',
                 contexto: userQuery ? 'qa' : 'relatorio',
+                qa: userQuery || null,
                 prefs: { output: 'livre', assertivo: true, accept_format: 'free_text', temperature: 0.2, max_tokens: 7000 },
                 defs: {
                     receita: "Somatório de mensalidade no mês",
@@ -953,30 +1175,64 @@
                     dvol: "ΔVolume"
                 },
                 prompt: userQuery ? `${basePrompt}\nPergunta: ${userQuery}` : basePrompt,
-                blocks: [
-                    { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, receita: s.receita } },
-                    { scope: 'chart_qtd_ticket', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, qtd: s.qtd, ticket: s.ticket } },
-                    { scope: 'chart_perf', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, perf: s.perf, yoy: s.yoy } },
-                    { scope: 'chart_mix', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: s.labels, dpreco: s.dpreco, dvol: s.dvol } },
-                    { scope: 'chart_pareto', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { postos: shares.labels, receita: shares.valores, total: shares.total } },
-                    { scope: 'chart_yoy_posto', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { postos, yoy_medio: yoyMed } }
-                ]
+                kpis: { comparacao: kpis_sel1, mensalidades: kpis_sel2 },
+                tabela: tabela_sel2,
+                charts,
+                blocks
             };
         }
+
+        // ——— Export para escopo global ———
+        window.snapshotPageState = snapshotPageState;
+        window.buildPayloadDeep = function ({ userQuery }) {
+            return window.snapshotPageState({ userQuery });
+        };
     </script>
 
     <!-- Chat reutilizável -->
     <script src="/js/chat.js"></script>
+
     <script>
         ChatIA.init({
             apiUrl: (window.IA_API_URL || '/ia/analisar'),
             mountAfterSelector: '#btnComparar',
             title: 'IA — Análise Completa & Chat',
             briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
-            // sem auto análise: só monta payload quando usuário iniciar ou perguntar
-            getPayload: async ({ userQuery }) => buildPayloadDeep({ userQuery })
+            getPayload: async ({ userQuery }) => {
+                // tenta usar o builder completo, senão devolve fallback seguro
+                const fn = (window.buildPayloadDeep || window.snapshotPageState);
+                if (typeof fn === 'function') return fn({ userQuery });
+                const meses2 = (window.MESES || []).slice(-12);
+                const promptBase = (window.Prompts?.render?.({
+                    produto: 'mensalidades',
+                    from: meses2[0], to: meses2.at(-1),
+                    posto: (window.sel2 === 'ALL' ? 'ALL' : [...window.sel2].sort().join('+')) || 'ALL',
+                    contexto: userQuery ? 'qa' : 'relatorio',
+                    scopes: 'chart_valores, chart_qtd_ticket, chart_perf, chart_vol, chart_yoy, chart_mix, chart_scatter, chart_pareto, chart_yoy_posto'
+                })) || 'Relatório técnico de mensalidades. Foque em valores, quantidade, ticket, perf, vol, yoy e mix.';
+                return {
+                    meta: { page: 'kpi_v2', title: document.title || '' },
+                    produto: 'mensalidades',
+                    contexto: userQuery ? 'qa' : 'relatorio',
+                    qa: userQuery || null,
+                    prefs: { output: 'livre', assertivo: true, accept_format: 'free_text', temperature: 0.2, max_tokens: 7000 },
+                    prompt: userQuery ? `${promptBase}\nPergunta: ${userQuery}` : promptBase,
+                    blocks: [] // fallback enxuto
+                };
+            }
         });
     </script>
+
+
+
+
+
+
+
+
+
+
+
 
 </body>
 
