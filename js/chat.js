@@ -15,8 +15,11 @@
  */
 (function () {
   const ChatIA = {
+      _CFG: {
+    /* === Retry config === */
+      MAX_RETRIES: 5,          // reenviar mais 5 vezes
+      RETRY_DELAY_MS: 1200,     // intervalo entre tentativas  
     /* ===================== Config ===================== */
-    _CFG: {
       ALWAYS_FULL: true,                  // default. pode ser sobrescrito por init({ alwaysFull })
       MAX_PAYLOAD_CHARS: 120_000,         // corte aproximado por chamada
       CHUNK_BLOCKS: 4,                    // blocos por requisição quando chunkar
@@ -218,6 +221,8 @@
       const email = (window.USER_EMAIL || '').trim(); if (!email || !/@/.test(email)) return 'Você';
       const first = email.split('@')[0]; return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'Você';
     },
+
+    _sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
 
     _append(role, html) {
       const row = document.createElement('div'); row.className = 'd-flex flex-column';
