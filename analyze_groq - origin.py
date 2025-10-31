@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from fastapi.middleware.cors import CORSMiddleware
 
-# ---------------- FastAPI + CORS (único bloco) ----------------
+# ---------------- FastAPI + CORS ----------------
 app = FastAPI(title="IA-Groq-Analises")
 app.add_middleware(
     CORSMiddleware,
@@ -23,11 +23,16 @@ app.add_middleware(
     allow_methods=["GET","POST","OPTIONS"],
     allow_headers=["*"],
 )
+
 # ---------------- Config ----------------
 BASE = pathlib.Path(__file__).parent.resolve()
 MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 PROMPTS_DIR = pathlib.Path(os.getenv("PROMPTS_DIR", "/var/appdata/prompts")).resolve()
 PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Limites simples de chunk
+MAX_BLOCKS_PER_PART = int(os.getenv("IA_MAX_BLOCKS_PER_PART", "4"))
+MAX_PARTS = int(os.getenv("IA_MAX_PARTS", "6"))
 
 # ========================== Sanitização PT-BR ==========================
 def _clean_pt(s: str) -> str:
@@ -36,6 +41,15 @@ def _clean_pt(s: str) -> str:
     s = re.sub(r"([.,;:?!])(?!\s|$)", r"\1 ", s)
     s = re.sub(r"\s{2,}", " ", s).strip()
     return s
+
+def _strip_heavy_markup(s: str) -> str:
+    if not s:
+        return s
+    s = re.sub(r"```[\s\S]*?```", " ", s)                 # code fences
+    s = re.sub(r"^\s*\|.*\|\s*$", " ", s, flags=re.M)     # tabelas ASCII
+    s = re.sub(r"\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)", " ", s)  # LaTeX
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return _clean_pt(s)
 
 def _sanitize_obj(o: Any) -> Any:
     if isinstance(o, dict):  return {k: _sanitize_obj(v) for k, v in o.items()}
@@ -69,7 +83,6 @@ def first_json_block(txt: str) -> Optional[str]:
 
 # ========================== Modelos (API) ==========================
 class AnalyzePayload(BaseModel):
-    # Agora opcional para suportar text/plain ou cenários só com blocks
     prompt: Optional[str] = None
     blocks: Optional[List[Dict[str, Any]]] = None
     prefs: Optional[Dict[str, Any]] = None
@@ -140,16 +153,53 @@ def pick_probe_model(client: Groq, probe_models: List[str]) -> Optional[str]:
             continue
     return None
 
+# ========================== Helpers internos ==========================
+def _normalize_blocks(blocks: Any) -> list[dict]:
+    if not isinstance(blocks, list):
+        return []
+    out: list[dict] = []
+    for b in blocks:
+        if isinstance(b, dict):
+            out.append(b)
+    return out
+
+def _chunk_blocks(blocks: list[dict], size: int = MAX_BLOCKS_PER_PART) -> List[list[dict]]:
+    if size <= 0:
+        size = 4
+    parts = []
+    for i in range(0, len(blocks), size):
+        parts.append(blocks[i:i+size])
+        if len(parts) >= MAX_PARTS:
+            break
+    return parts if parts else [[]]
+
+def _nonempty_text(txt: str) -> str:
+    s = _strip_heavy_markup(txt or "")
+    return s if s else "sem conteúdo."
+
 # ========================== Chamada Groq ==========================
+def _call_groq_free(client: Groq, messages: list, temperature: float, max_tokens: int) -> str:
+    resp = client.chat.completions.create(
+        model=MODEL,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        tool_choice="none",
+        messages=messages,
+    )
+    return (resp.choices[0].message.content or "").strip()
+
 def ask_json_only_prompt(client: Groq, user_prompt: str, blocks: list | None, prefs: dict | None) -> dict:
     msgs = [{"role": "user", "content": user_prompt}]
     if blocks:
         msgs.append({"role": "user", "content": json.dumps({"blocks": blocks}, ensure_ascii=False)})
 
+    # prefs
     temperature = float(prefs.get("temperature", 0.1)) if isinstance(prefs, dict) else 0.1
+    # compat: aceitar chaves novas ou antigas
     max_tokens = int(prefs.get("max_tokens", prefs.get("max_completion_tokens", 4096))) if isinstance(prefs, dict) else 4096
     accept = (prefs.get("accept_format", "auto") if isinstance(prefs, dict) else "auto").lower()
 
+    # ===== Caminho 1: forçar JSON apenas quando solicitado =====
     if accept == "json":
         try:
             resp = client.chat.completions.create(
@@ -164,8 +214,10 @@ def ask_json_only_prompt(client: Groq, user_prompt: str, blocks: list | None, pr
             obj = json.loads(raw)
             return {"content_mode": "json", "parse_status": "ok", "data": _sanitize_obj(obj)}
         except Exception as e:
+            # quando o cliente exigiu JSON, falha dura
             raise RuntimeError(f"Modelo não retornou JSON válido: {e}")
 
+    # ===== Caminho 2: forçar texto livre quando solicitado =====
     if accept == "free_text":
         resp = client.chat.completions.create(
             model=MODEL,
@@ -177,7 +229,8 @@ def ask_json_only_prompt(client: Groq, user_prompt: str, blocks: list | None, pr
         txt = (resp.choices[0].message.content or "").strip()
         return {"content_mode": "free_text", "parse_status": "raw", "text": _clean_pt(txt)}
 
-    # Tentativa 1: JSON Mode
+    # ===== Caminho 3: auto (heurística antiga, mas segura) =====
+    # tenta JSON e, se falhar, cai para texto e tenta extrair JSON embutido
     try:
         resp = client.chat.completions.create(
             model=MODEL,
@@ -193,7 +246,6 @@ def ask_json_only_prompt(client: Groq, user_prompt: str, blocks: list | None, pr
     except Exception:
         pass
 
-    # Tentativa 2: livre + extração
     resp = client.chat.completions.create(
         model=MODEL,
         temperature=temperature,
@@ -211,12 +263,9 @@ def ask_json_only_prompt(client: Groq, user_prompt: str, blocks: list | None, pr
         except Exception:
             pass
 
-    if accept == "json":
-        raise RuntimeError("Modelo não retornou JSON válido.")
     return {"content_mode": "free_text", "parse_status": "raw", "text": _clean_pt(txt)}
 
 # ========================== FastAPI ==========================
- 
 @app.get("/health")
 async def health():
     load_dotenv()
@@ -230,7 +279,6 @@ async def health():
             probe_selected = None
     return {"ok": True, "model": MODEL, "probe_models": probe_models, "probe_selected": probe_selected, "prompts_dir": str(PROMPTS_DIR)}
 
-# Health dedicado por prefixo (para Nginx, monitoramento, etc.)
 @app.get("/ia/healthz")
 async def healthz():
     return {"ok": True}
@@ -261,17 +309,28 @@ async def ia_analisar(req: Request, payload: Optional[AnalyzePayload] = Body(Non
     client = Groq(api_key=api_key)
 
     try:
+        blk_norm = _normalize_blocks(payload.blocks or [])
         out = ask_json_only_prompt(
             client=client,
-            user_prompt=payload.prompt or "",
-            blocks=payload.blocks or [],
+            user_prompt=(payload.prompt or "").strip(),
+            blocks=blk_norm,
             prefs=payload.prefs or {},
         )
+        # Normaliza texto final para o front
+        if out.get("content_mode") == "free_text":
+            out["text"] = _strip_heavy_markup(out.get("text") or "")
+        if out.get("content_mode") == "json":
+            out["data"] = _sanitize_obj(out.get("data") or {})
         return _AnalyzeResponse(**out)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, f"Erro: {e}")
+        # nunca quebra: retorna texto explicativo
+        return _AnalyzeResponse(
+            content_mode="free_text",
+            parse_status="exception_fallback",
+            text=_clean_pt(f"falha interna: {e}")
+        )
 
 # --------- Persistência de prompts (compartilhado) ---------
 @app.get("/prompts/{page_id}")
