@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-br"><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="stylesheet" href="assets/style.css"/>
+<title>Indicadores — PTAX, IPCA, IGP-M</title>
+<body>
+<header><h1>Indicadores para análise financeira</h1>
+<p>Fonte: BCB/PTAX, IBGE/SIDRA e Ipeadata/FGV. Período: 2020-01+</p></header>
+<div class="grid">
+<section class="card"><h2>USD/BRL — PTAX (diário)</h2>
+<div class="downloads"><a href="ptax_daily.json">JSON</a> <a href="ptax_daily.csv">CSV</a></div>
+<div id="ptax"></div></section>
+<section class="card"><h2>IPCA — var. mensal</h2>
+<div class="downloads"><a href="ipca_monthly.json">JSON</a> <a href="ipca_monthly.csv">CSV</a></div>
+<div id="ipca"></div></section>
+<section class="card"><h2>IGP-M — var. mensal</h2>
+<div class="downloads"><a href="igpm_monthly.json">JSON</a> <a href="igpm_monthly.csv">CSV</a></div>
+<div id="igpm"></div></section>
+</div>
+<footer><p>Arquivos prontos para consumo por IA.</p></footer>
+<script>
+async function load(id, url){
+  const el=document.getElementById(id);
+  try{
+    const r=await fetch(url); const data=await r.json();
+    const rows=data.slice(-6).reverse();
+    const tbl=document.createElement('table');
+    tbl.innerHTML='<thead><tr><th>Data</th><th>Valor</th></tr></thead>';
+    const tb=document.createElement('tbody');
+    for(const row of rows){
+      const ref=row.date||row.ref_date;
+      const val=(row.mid ?? row.value);
+      const v=(typeof val==='number')? val.toFixed(4): val;
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${ref}</td><td>${v}</td>`; tb.appendChild(tr);
+    }
+    tbl.appendChild(tb); el.appendChild(tbl);
+  }catch(e){ el.textContent='Falha ao carregar.' }
+}
+load('ptax','ptax_daily.json');
+load('ipca','ipca_monthly.json');
+load('igpm','igpm_monthly.json');
+</script>
+</body></html>

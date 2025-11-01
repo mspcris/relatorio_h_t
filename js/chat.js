@@ -33,6 +33,7 @@
       brief: true,
       opts: null,
       retried: false,
+      lastRaw: '',
       lastSnapshotHash: null,
       lastSnapshotAt: 0,
       forceFullNext: false,
@@ -256,7 +257,17 @@
 
     /* ===================== Estrutura de envio ===================== */
     async _sendToIA(userQuery, { force = false } = {}) {
-      this._dotsStart();
+      // helper de uma tentativa: mostra “Aguardando…”, chama API, guarda raw, pensa 2s e pós-processa
+      const tryOnce = async (payload, timeout) => {
+        this._dotsStart();
+        const out = await this._callIA(payload, timeout || this._state.opts.timeoutMs);
+        this._dotsStop();
+        this._state.lastRaw = String(out || '');
+        await this._thinking2s();
+        const cleaned = this._postProcess(this._state.lastRaw);
+        return this._appendBotStreaming(cleaned);
+      };
+
       try {
         const snapshot = await this._state.opts.getPayload({ userQuery });
         const now = Date.now();
@@ -269,10 +280,12 @@
         this._state.lastSnapshotAt = now;
         this._state.lastSnapshotHash = hash;
 
-        if (mustFull) {
-          await this._sendPossiblyChunked(snapshot);
-        } else {
-          // modo inteligente: envia apenas prompt + referência do hash
+        // monta payload base e com resumo
+        const basePayload = snapshot;
+        const briefPayload = this._state.brief ? this._mergeBriefInstruction(structuredClone(basePayload), this._state.opts.briefInstruction, 340) : structuredClone(basePayload);
+
+        // função para decidir payload “inteligente”
+        const sendMinimal = async () => {
           const minimal = {
             prompt: (snapshot.prompt || ''),
             qa: snapshot.qa || null,
@@ -281,31 +294,71 @@
             prefs: Object.assign({}, snapshot.prefs || {})
           };
           if (this._state.brief) this._mergeBriefInstruction(minimal, this._state.opts.briefInstruction, 340);
-          const out = await this._callIA(minimal, this._state.opts.timeoutMs);
-          this._appendBotStreaming(out);
+          return tryOnce(minimal);
+        };
+
+        // Estratégia de envio com retentativas 5+5 alternando IA Resumida
+        const runWithRetries = async (payloadA, payloadB) => {
+          // 5 tentativas com A
+          for (let i = 0; i < this._CFG.MAX_RETRIES; i++) {
+            try { const t = await tryOnce(payloadA); if (t?.trim()) return true; } catch {}
+            await this._sleep(this._CFG.RETRY_DELAY_MS);
+          }
+          // alterna flag visual
+          const briefChk = this._q('#iadBriefChk');
+          if (briefChk) briefChk.checked = !briefChk.checked;
+          this._state.brief = !this._state.brief;
+          this._append('bot', `<span class="iad-hint">Alternando modo de resposta.</span>`);
+          // 5 tentativas com B
+          for (let i = 0; i < this._CFG.MAX_RETRIES; i++) {
+            try { const t = await tryOnce(payloadB); if (t?.trim()) return true; } catch {}
+            await this._sleep(this._CFG.RETRY_DELAY_MS);
+          }
+          return false;
+        };
+
+        // full snapshot vs minimal inteligente
+        if (mustFull) {
+          const ok = await runWithRetries(briefPayload, basePayload);
+          if (!ok) this._append('bot', `<span class="text-warning">Não foi possível obter resposta após ${this._CFG.MAX_RETRIES * 2} tentativas.</span>`);
+        } else {
+          const ok = await runWithRetries(await (async () => {
+            const m = {
+              prompt: (snapshot.prompt || ''),
+              qa: snapshot.qa || null,
+              contexto: 'qa',
+              meta: Object.assign({}, snapshot.meta || {}, { snapshot_hash: hash, page: (snapshot.meta && snapshot.meta.page) || 'kpi_v2' }),
+              prefs: Object.assign({}, snapshot.prefs || {})
+            };
+            return this._state.brief ? this._mergeBriefInstruction(m, this._state.opts.briefInstruction, 340) : m;
+          })(), basePayload);
+          if (!ok) this._append('bot', `<span class="text-warning">Sem retorno consistente no modo inteligente.</span>`);
         }
       } catch (err) {
+        this._dotsStop();
         const msg = `Não foi possível responder${err?.message ? ` — possível motivo: ${err.message}` : ''}.`;
         this._append('bot', `<span class="text-warning">${msg}</span>`);
-      } finally { this._dotsStop(); }
+      }
     },
 
     async _sendPossiblyChunked(fullPayload) {
-      // aplica instrução de resumo se marcado
       const basePrefs = Object.assign({}, fullPayload.prefs || {});
       const full = this._state.brief ? this._mergeBriefInstruction(fullPayload, this._state.opts.briefInstruction, 340) : fullPayload;
 
-      // calcula tamanho aproximado
       const approx = this._approxSize(full);
       const blocks = Array.isArray(full.blocks) ? full.blocks : [];
 
       if (approx <= this._CFG.MAX_PAYLOAD_CHARS || blocks.length <= this._CFG.CHUNK_BLOCKS) {
+        this._dotsStart();
         const out = await this._callIA(full, this._state.opts.timeoutMs);
-        this._appendBotStreaming(out);
+        this._dotsStop();
+        this._state.lastRaw = String(out || '');
+        await this._thinking2s();
+        const cleaned = this._postProcess(this._state.lastRaw);
+        this._appendBotStreaming(cleaned);
         return;
       }
 
-      // chunking por blocos
       const groups = [];
       for (let i = 0; i < blocks.length; i += this._CFG.CHUNK_BLOCKS) groups.push(blocks.slice(i, i + this._CFG.CHUNK_BLOCKS));
 
@@ -315,14 +368,17 @@
         p.prompt = `${full.prompt || ''}\n\n[Parte ${i + 1}/${groups.length}]`;
         p.prefs = Object.assign({}, basePrefs);
         if (this._state.brief) this._mergeBriefInstruction(p, this._state.opts.briefInstruction, 420);
+        this._dotsStart();
         const out = await this._callIA(p, this._state.opts.timeoutMs * 1.5);
-        const cleaned = this._cleanGroq(out);
+        this._dotsStop();
+        this._state.lastRaw = String(out || '');
+        await this._thinking2s();
+        const cleaned = this._postProcess(this._state.lastRaw);
         partialTexts.push(cleaned);
         this._append('bot', `<span class="iad-hint">Parcial ${i + 1}/${groups.length} recebida.</span>`);
         this._appendBotStreaming(cleaned);
       }
 
-      // síntese final
       const synthPayload = {
         prompt: (this._state.brief
           ? `${this._state.opts.briefInstruction}\n\nResuma os trechos abaixo em UMA única resposta com foco executivo.`
@@ -330,14 +386,18 @@
         contexto: 'sintese',
         parts: partialTexts.slice(0, this._CFG.SYNTH_PARTS_LIMIT)
       };
+      this._dotsStart();
       const outS = await this._callIA(synthPayload, this._state.opts.timeoutMs * 2);
+      this._dotsStop();
+      this._state.lastRaw = String(outS || '');
+      await this._thinking2s();
+      const cleanedS = this._postProcess(this._state.lastRaw);
       this._append('bot', '<span class="iad-hint">Síntese final:</span>');
-      this._appendBotStreaming(outS);
+      this._appendBotStreaming(cleanedS);
     },
 
     /* ===================== Utilidades ===================== */
     _stableHash(obj) {
-      // hash simples e determinístico
       const s = typeof obj === 'string' ? obj : JSON.stringify(obj, Object.keys(obj).sort());
       let h = 2166136261 >>> 0; // FNV-1a 32-bit
       for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
@@ -395,6 +455,31 @@
       s = s.replace(/###\s*/g, '\n\n### ');
       s = s.replace(/\n{3,}/g, '\n\n');
       return s.trim();
+    },
+
+    /* ===================== Pós-processamento local ===================== */
+    async _thinking2s() {
+      const row = document.createElement('div');
+      row.className = 'd-flex flex-column';
+      const b = document.createElement('div');
+      b.className = 'iad-msg iad-bot';
+      b.textContent = 'Pensando...';
+      row.appendChild(b);
+      this._outBox().appendChild(row);
+      const sc = this._panel().querySelector('.body'); sc.scrollTop = sc.scrollHeight;
+      await this._sleep(2000);
+      row.remove();
+    },
+    _postProcess(txt) {
+      let s = String(txt || '');
+      s = s.replace(/```[\s\S]*?```/g, ' ');
+      s = s.replace(/^\s*\|.*\|\s*$/gm, ' ');
+      s = s.replace(/\u00A0/g, ' ');
+      s = s.replace(/\s{2,}/g, ' ');
+      s = s.replace(/([.,;:!?])(?!\s|$)/g, '$1 ');
+      s = s.replace(/\s*[-–—]\s+/g, '\n- ');
+      s = s.replace(/\n{3,}/g, '\n\n').trim();
+      return s;
     }
   };
 

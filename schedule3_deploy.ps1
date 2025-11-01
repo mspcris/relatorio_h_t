@@ -49,15 +49,6 @@ foreach ($d in $dirsReports) {
   }
 }
 
-# ===== SCP: assets públicos -> $stage =====
-foreach ($d in $dirsPublic) {
-  $src = Join-Path $root $d
-  if (Test-Path $src) {
-    & $scp -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -r `
-      $src "${remoteHost}:$stage/"
-  }
-}
-
 # ===== SCP: json_consolidado -> $stage =====
 foreach ($d in $dirsPublicJson) {
   $src = Join-Path $root $d
@@ -73,10 +64,6 @@ foreach ($h in $htmlFiles) {
     $h.FullName "${remoteHost}:$stage/$($h.Name)"
 }
 
-# ===== PY da API -> $stage/reports =====
-& $ssh -i $key -o IdentitiesOnly=yes $remoteHost "mkdir -p '$stage/reports'"
-& $scp -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new `
-  $py "${remoteHost}:$stage/reports/analyze_groq.py"
 
 # ===== PROMOÇÃO: rsync stage -> /var/www, perms e checksum =====
 $final = @"
