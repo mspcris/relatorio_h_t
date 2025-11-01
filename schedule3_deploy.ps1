@@ -15,7 +15,7 @@ $py   = Join-Path $root 'analyze_groq.py'
 # pastas do projeto
 $dirsPublic      = @('js','css','images','fonts')     # -> /var/www/{...}
 $dirsPublicJson  = @('json_consolidado')              # -> /var/www/json_consolidado/{...}
-$dirsReports     = @('json_retorno_groq')             # -> /var/www/reports/{...}
+
 
 # HTMLs do RAIZ -> /var/www
 $htmlFiles = Get-ChildItem $root -File -Filter *.html
@@ -49,6 +49,15 @@ foreach ($d in $dirsReports) {
   }
 }
 
+# ===== SCP: assets públicos -> $stage =====
+foreach ($d in $dirsPublic) {
+  $src = Join-Path $root $d
+  if (Test-Path $src) {
+    & $scp -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -r `
+      $src "${remoteHost}:$stage/"
+  }
+}
+
 # ===== SCP: json_consolidado -> $stage =====
 foreach ($d in $dirsPublicJson) {
   $src = Join-Path $root $d
@@ -63,7 +72,6 @@ foreach ($h in $htmlFiles) {
   & $scp -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new `
     $h.FullName "${remoteHost}:$stage/$($h.Name)"
 }
-
 
 # ===== PROMOÇÃO: rsync stage -> /var/www, perms e checksum =====
 $final = @"

@@ -11,6 +11,7 @@
     <!-- DataTables -->
     <link rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/datatables.net-bs4@1.13.10/css/dataTables.bootstrap4.min.css">
+    <link rel="shortcut icon" href="images/Logo Camim-01_50px.png" type="image/x-icon">
     <style>
         .kpi .info-box-number {
             font-weight: 700
@@ -306,42 +307,75 @@
     <script src="https://cdn.jsdelivr.net/npm/datatables.net@1.13.10/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/datatables.net-bs4@1.13.10/js/dataTables.bootstrap4.min.js"></script>
 
+
+
+
+
+
+
+
+
     <script>
         /* ====== Config ====== */
         const DATA_BASES = ["./json_consolidado/", "json_consolidado/", "/json_consolidado/"];
         async function fetchFirst(path) {
             for (const base of DATA_BASES) {
-                try { const r = await fetch(base + path, { cache: 'no-cache' }); if (r.ok) return await r.json(); } catch (e) { }
+                try {
+                    const r = await fetch(base + path, { cache: "no-cache" });
+                    if (r.ok) return await r.json();
+                } catch (e) { }
             }
             throw new Error("Arquivo não encontrado: " + path);
         }
 
         /* ====== Utils ====== */
-        const fmtNum = v => (v == null || isNaN(v)) ? "—" : v.toFixed(4);
-        function normalizePctMaybe(x) { return Math.abs(x) >= 10 ? x / 100 : x; }
-        function normalizeUsdBrl(mid) { return mid > 100 ? mid / 10000 : mid; }
-        function movingAverage(arr, win) { const out = []; let s = 0; for (let i = 0; i < arr.length; i++) { s += arr[i]; if (i >= win) s -= arr[i - win]; out.push(i >= win - 1 ? s / win : null); } return out; }
+        const fmtNum = v => (v == null || isNaN(v)) ? "—" : Number(v).toFixed(4);
+        function normalizePctMaybe(x) { x = Number(x); return Math.abs(x) >= 10 ? x / 100 : x; } // protege caso venha em pb
+        function normalizeUsdBrl(mid) { mid = Number(mid); return mid > 100 ? mid / 10000 : mid; }
+        function movingAverage(arr, win) {
+            const out = []; let s = 0;
+            for (let i = 0; i < arr.length; i++) { s += arr[i]; if (i >= win) s -= arr[i - win]; out.push(i >= win - 1 ? s / win : null); }
+            return out;
+        }
+        // composição correta: recebe série em % (ex.: 0.56) e retorna 12m também em %
+        function rolling12Compounded(percentSeries) {
+            const out = [];
+            for (let i = 0; i < percentSeries.length; i++) {
+                if (i < 11) { out.push(null); continue; }
+                let acc = 1;
+                for (let k = i - 11; k <= i; k++) acc *= (1 + (percentSeries[k] || 0) / 100);
+                out.push((acc - 1) * 100);
+            }
+            return out;
+        }
 
         /* ====== Dados ====== */
         let PTAX = [], IPCA = [], IGPM = [];
         async function loadAll() {
-            PTAX = (await fetchFirst("ptax_daily.json")).map(r => ({ ...r, mid: normalizeUsdBrl(+r.mid) }));
-            IPCA = (await fetchFirst("ipca_monthly.json")).map(r => ({ ref_date: r.ref_date, value: normalizePctMaybe(+r.value) }));
-            IGPM = (await fetchFirst("igpm_monthly.json")).map(r => ({ ref_date: r.ref_date, value: normalizePctMaybe(+r.value) }));
+            PTAX = (await fetchFirst("ptax_daily.json")).map(r => ({
+                date: r.date, buy: +r.buy, sell: +r.sell, mid: normalizeUsdBrl(+r.mid), source: r.source, as_of: r.as_of
+            }));
+            IPCA = (await fetchFirst("ipca_monthly.json")).map(r => ({
+                ref_date: r.ref_date, value: normalizePctMaybe(+r.value) // mantém em %
+            }));
+            IGPM = (await fetchFirst("igpm_monthly.json")).map(r => ({
+                ref_date: r.ref_date, value: normalizePctMaybe(+r.value) // mantém em %
+            }));
         }
 
         /* ====== Range padrão: últimos 12 meses completos ====== */
         function lastCompleteWindow() {
             const today = new Date();
-            const end = new Date(today.getFullYear(), today.getMonth(), 1);
-            end.setMonth(end.getMonth() - 1);
+            const end = new Date(today.getFullYear(), today.getMonth(), 1); // 1º do mês atual
+            end.setMonth(end.getMonth() - 1);                                // mês anterior
             const start = new Date(end.getFullYear(), end.getMonth() - 11, 1);
-            const toYM = (d) => d.toISOString().slice(0, 7);
+            const toYM = d => d.toISOString().slice(0, 7);
             return { ini: toYM(start), fim: toYM(end) };
         }
 
         /* ====== KPIs ====== */
         function kpisFromData() {
+            // PTAX
             const last = PTAX.slice(-1)[0]?.mid ?? null;
             const lastMonth = PTAX.length ? PTAX[PTAX.length - 1].date.slice(0, 7) : null;
             const month = lastMonth ? PTAX.filter(r => r.date.slice(0, 7) === lastMonth) : [];
@@ -349,21 +383,24 @@
             $("#kpi_ptax_last").text(last != null ? "R$ " + fmtNum(last) : "—");
             $("#kpi_ptax_mom").text("MoM: " + (mom != null ? (mom * 100).toFixed(2) + "%" : "—"));
 
+            // IPCA em % (sem *100)
             const lastIpca = IPCA.slice(-1)[0]?.value ?? null;
-            const ip12 = IPCA.length >= 12 ? IPCA.slice(-12).reduce((a, b) => a + (b.value || 0), 0) : null;
-            $("#kpi_ipca_last").text(lastIpca != null ? (lastIpca * 100).toFixed(2) + "%" : "—");
-            $("#kpi_ipca_12m").text("Acum. 12m: " + (ip12 != null ? (ip12 * 100).toFixed(2) + "%" : "—"));
+            const ipRoll12 = rolling12Compounded(IPCA.map(x => x.value)).slice(-1)[0] ?? null;
+            $("#kpi_ipca_last").text(lastIpca != null ? lastIpca.toFixed(2) + "%" : "—");
+            $("#kpi_ipca_12m").text("Acum. 12m: " + (ipRoll12 != null ? ipRoll12.toFixed(2) + "%" : "—"));
 
+            // IGP-M em % (sem *100)
             const lastIgpm = IGPM.slice(-1)[0]?.value ?? null;
-            const ig12 = IGPM.length >= 12 ? IGPM.slice(-12).reduce((a, b) => a + (b.value || 0), 0) : null;
-            $("#kpi_igpm_last").text(lastIgpm != null ? (lastIgpm * 100).toFixed(2) + "%" : "—");
-            $("#kpi_igpm_12m").text("Acum. 12m: " + (ig12 != null ? (ig12 * 100).toFixed(2) + "%" : "—"));
+            const igRoll12 = rolling12Compounded(IGPM.map(x => x.value)).slice(-1)[0] ?? null;
+            $("#kpi_igpm_last").text(lastIgpm != null ? lastIgpm.toFixed(2) + "%" : "—");
+            $("#kpi_igpm_12m").text("Acum. 12m: " + (igRoll12 != null ? igRoll12.toFixed(2) + "%" : "—"));
 
+            // Spread em pp
             const ref = IPCA.slice(-1)[0]?.ref_date;
             const ip = IPCA.slice(-1)[0]?.value ?? null;
             const ig = IGPM.find(x => x.ref_date === ref)?.value ?? null;
             const sp = (ip != null && ig != null) ? ig - ip : null;
-            $("#kpi_spread").text(sp != null ? (sp * 100).toFixed(2) + "%" : "—");
+            $("#kpi_spread").text(sp != null ? sp.toFixed(2) + " pp" : "—");
         }
 
         /* ====== Charts ====== */
@@ -373,125 +410,131 @@
             const labels = data.map(r => r.date);
             const vals = data.map(r => r.mid);
             const mm21 = movingAverage(vals, 21);
-            chPTAXLine = new Chart(document.getElementById('ptax_line'), {
-                type: 'line',
+            chPTAXLine = new Chart(document.getElementById("ptax_line"), {
+                type: "line",
                 data: {
                     labels, datasets: [
-                        { label: 'PTAX', data: vals, borderWidth: 1, pointRadius: 0 },
-                        { label: 'Média móvel 21d', data: mm21, borderDash: [6, 4], borderWidth: 1, pointRadius: 0 }
+                        { label: "PTAX", data: vals, borderWidth: 1, pointRadius: 0 },
+                        { label: "Média móvel 21d", data: mm21, borderDash: [6, 4], borderWidth: 1, pointRadius: 0 }
                     ]
                 },
-                options: { responsive: true, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: false } } }
+                options: { responsive: true, interaction: { mode: "index", intersect: false }, scales: { y: { beginAtZero: false } } }
             });
 
+            // hist de retornos em %
             const ret = [];
             for (let i = 1; i < vals.length; i++) { if (vals[i - 1]) ret.push((vals[i] / vals[i - 1] - 1) * 100); }
             const bins = new Array(21).fill(0);
             ret.forEach(r => { const idx = Math.max(0, Math.min(20, Math.floor((r + 5) / 0.5))); bins[idx]++; });
-            const hlabels = Array.from({ length: 21 }, (_, i) => ((i * 0.5 - 5).toFixed(1)) + '%');
-            chPTAXHist = new Chart(document.getElementById('ptax_hist'), {
-                type: 'bar', data: { labels: hlabels, datasets: [{ label: 'Freq. retornos diários', data: bins }] },
+            const hlabels = Array.from({ length: 21 }, (_, i) => ((i * 0.5 - 5).toFixed(1)) + "%");
+            chPTAXHist = new Chart(document.getElementById("ptax_hist"), {
+                type: "bar", data: { labels: hlabels, datasets: [{ label: "Freq. retornos diários", data: bins }] },
                 options: { responsive: true, scales: { y: { beginAtZero: true } } }
             });
         }
 
         function buildIPCA(data) {
             const labels = data.map(r => r.ref_date);
-            const vals = data.map(r => r.value * 100);
-            const roll12 = data.map((_, i) => i < 11 ? null : data.slice(i - 11, i + 1).reduce((a, b) => a + b.value * 100, 0));
-            chIPCABarLine = new Chart(document.getElementById('ipca_bar_line'), {
-                type: 'bar',
+            const vals = data.map(r => r.value);               // já em %
+            const roll12 = rolling12Compounded(vals);          // 12m em %
+
+            chIPCABarLine = new Chart(document.getElementById("ipca_bar_line"), {
+                type: "bar",
                 data: {
                     labels, datasets: [
-                        { label: 'IPCA % mês', data: vals, yAxisID: 'y' },
-                        { type: 'line', label: 'IPCA 12m %', data: roll12, yAxisID: 'y1', borderDash: [6, 4], pointRadius: 0 }
+                        { label: "IPCA % mês", data: vals, yAxisID: "y" },
+                        { type: "line", label: "IPCA 12m %", data: roll12, yAxisID: "y1", borderDash: [6, 4], pointRadius: 0 }
                     ]
                 },
                 options: {
-                    responsive: true, interaction: { mode: 'index', intersect: false },
-                    scales: { y: { beginAtZero: true }, y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } } }
+                    responsive: true, interaction: { mode: "index", intersect: false },
+                    scales: { y: { beginAtZero: true }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false } } }
                 }
             });
 
-            const year = (labels.slice(-1)[0] || '').slice(0, 4);
-            const cur = data.filter(r => r.ref_date.startsWith(year)).map(r => ({ m: r.ref_date.slice(5), v: r.value * 100 }));
+            // Pareto do ano corrente
+            const year = (labels.slice(-1)[0] || "").slice(0, 4);
+            const cur = data.filter(r => r.ref_date.startsWith(year)).map(r => ({ m: r.ref_date.slice(5), v: r.value }));
             const total = cur.reduce((a, b) => a + b.v, 0); let cum = 0;
-            chIPCAPareto = new Chart(document.getElementById('ipca_pareto'), {
-                type: 'bar',
+            chIPCAPareto = new Chart(document.getElementById("ipca_pareto"), {
+                type: "bar",
                 data: {
                     labels: cur.map(x => x.m), datasets: [
-                        { label: '% por mês', data: cur.map(x => x.v), yAxisID: 'y' },
-                        { type: 'line', label: 'Acum. % do ano', data: cur.map(x => { cum += x.v; return (cum / Math.max(1, total)) * 100; }), yAxisID: 'y1', pointRadius: 3 }
+                        { label: "% por mês", data: cur.map(x => x.v), yAxisID: "y" },
+                        { type: "line", label: "Acum. % do ano", data: cur.map(x => { cum += x.v; return (cum / Math.max(1, total)) * 100; }), yAxisID: "y1", pointRadius: 3 }
                     ]
                 },
-                options: { responsive: true, scales: { y: { beginAtZero: true }, y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } } } }
+                options: { responsive: true, scales: { y: { beginAtZero: true }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false } } } }
             });
         }
 
         function buildIGPM(igData, ipData) {
             const L = igData.map(r => r.ref_date);
-            const V = igData.map(r => r.value * 100);
-            const R12 = igData.map((_, i) => i < 11 ? null : igData.slice(i - 11, i + 1).reduce((a, b) => a + b.value * 100, 0));
-            chIGPMBarLine = new Chart(document.getElementById('igpm_bar_line'), {
-                type: 'bar',
+            const V = igData.map(r => r.value);                 // já em %
+            const R12 = rolling12Compounded(V);                 // 12m em %
+
+            chIGPMBarLine = new Chart(document.getElementById("igpm_bar_line"), {
+                type: "bar",
                 data: {
                     labels: L, datasets: [
-                        { label: 'IGP-M % mês', data: V, yAxisID: 'y' },
-                        { type: 'line', label: 'IGP-M 12m %', data: R12, yAxisID: 'y1', pointRadius: 0, borderDash: [6, 4] }
+                        { label: "IGP-M % mês", data: V, yAxisID: "y" },
+                        { type: "line", label: "IGP-M 12m %", data: R12, yAxisID: "y1", pointRadius: 0, borderDash: [6, 4] }
                     ]
                 },
                 options: {
-                    responsive: true, interaction: { mode: 'index', intersect: false },
-                    scales: { y: { beginAtZero: true }, y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } } }
+                    responsive: true, interaction: { mode: "index", intersect: false },
+                    scales: { y: { beginAtZero: true }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false } } }
                 }
             });
 
-            const mapIP = new Map(ipData.map(x => [x.ref_date, x.value * 100]));
-            const common = igData.map(x => ({ ref: x.ref_date, igpm: x.value * 100, ipca: mapIP.get(x.ref_date) })).filter(r => r.ipca != null);
-            chIPCAvsIGPM = new Chart(document.getElementById('ipca_vs_igpm'), {
-                type: 'line',
+            // IPCA vs IGP-M em %
+            const mapIP = new Map(ipData.map(x => [x.ref_date, x.value]));
+            const common = igData.map(x => ({ ref: x.ref_date, igpm: x.value, ipca: mapIP.get(x.ref_date) })).filter(r => r.ipca != null);
+            chIPCAvsIGPM = new Chart(document.getElementById("ipca_vs_igpm"), {
+                type: "line",
                 data: {
                     labels: common.map(r => r.ref), datasets: [
-                        { label: 'IPCA %', data: common.map(r => r.ipca), pointRadius: 0 },
-                        { label: 'IGP-M %', data: common.map(r => r.igpm), pointRadius: 0 },
-                        { type: 'bar', label: 'Spread (IGP-M - IPCA) pp', data: common.map(r => r.igpm - r.ipca), yAxisID: 'y1' }
+                        { label: "IPCA %", data: common.map(r => r.ipca), pointRadius: 0 },
+                        { label: "IGP-M %", data: common.map(r => r.igpm), pointRadius: 0 },
+                        { type: "bar", label: "Spread (IGP-M - IPCA) pp", data: common.map(r => r.igpm - r.ipca), yAxisID: "y1" }
                     ]
                 },
                 options: {
-                    responsive: true, interaction: { mode: 'index', intersect: false },
-                    scales: { y: { beginAtZero: true }, y1: { position: 'right', grid: { drawOnChartArea: false } } }
+                    responsive: true, interaction: { mode: "index", intersect: false },
+                    scales: { y: { beginAtZero: true }, y1: { position: "right", grid: { drawOnChartArea: false } } }
                 }
             });
         }
 
         /* ====== Tabelas ====== */
         function buildTables(pt, ip, ig) {
-            $('#dt_ptax').DataTable({
+            $("#dt_ptax").DataTable({
                 data: pt.map(r => [r.date, r.buy, r.sell, r.mid, r.source]),
-                columns: [{ title: 'Data', className: 'nowrap' }, { title: 'Compra' }, { title: 'Venda' }, { title: 'Média' }, { title: 'Fonte' }],
+                columns: [{ title: "Data", className: "nowrap" }, { title: "Compra" }, { title: "Venda" }, { title: "Média" }, { title: "Fonte" }],
                 pageLength: 10, destroy: true
             });
-            $('#dt_ipca').DataTable({
-                data: ip.map(r => [r.ref_date, (r.value * 100).toFixed(2) + ' %']),
-                columns: [{ title: 'Referência', className: 'nowrap' }, { title: 'Variação' }],
+            $("#dt_ipca").DataTable({
+                data: ip.map(r => [r.ref_date, (r.value).toFixed(2) + " %"]),  // sem *100
+                columns: [{ title: "Referência", className: "nowrap" }, { title: "Variação" }],
                 pageLength: 12, destroy: true
             });
-            $('#dt_igpm').DataTable({
-                data: ig.map(r => [r.ref_date, (r.value * 100).toFixed(2) + ' %']),
-                columns: [{ title: 'Referência', className: 'nowrap' }, { title: 'Variação' }],
+            $("#dt_igpm").DataTable({
+                data: ig.map(r => [r.ref_date, (r.value).toFixed(2) + " %"]),  // sem *100
+                columns: [{ title: "Referência", className: "nowrap" }, { title: "Variação" }],
                 pageLength: 12, destroy: true
             });
         }
 
         /* ====== Filtro e aplicação automática ====== */
         function applyRange() {
-            const ini = $('#dtIni').val(); const fim = $('#dtFim').val();
-            const inRange = (ym) => (!ini || ym >= ini) && (!fim || ym <= fim);
+            const ini = $("#dtIni").val(); const fim = $("#dtFim").val();
+            const inRange = ym => (!ini || ym >= ini) && (!fim || ym <= fim);
 
             const ip = IPCA.filter(r => inRange(r.ref_date));
             const ig = IGPM.filter(r => inRange(r.ref_date));
             const pt = PTAX.filter(r => inRange(r.date.slice(0, 7)));
 
+            // PTAX
             chPTAXLine.data.labels = pt.map(r => r.date);
             chPTAXLine.data.datasets[0].data = pt.map(r => r.mid);
             chPTAXLine.data.datasets[1].data = movingAverage(pt.map(r => r.mid), 21);
@@ -499,30 +542,32 @@
 
             const vals = pt.map(r => r.mid); const ret = [];
             for (let i = 1; i < vals.length; i++) { if (vals[i - 1]) ret.push((vals[i] / vals[i - 1] - 1) * 100); }
-            const bins = new Array(21).fill(0);
-            ret.forEach(r => { const idx = Math.max(0, Math.min(20, Math.floor((r + 5) / 0.5))); bins[idx]++; });
+            const bins = new Array(21).fill(0); ret.forEach(r => { const idx = Math.max(0, Math.min(20, Math.floor((r + 5) / 0.5))); bins[idx]++; });
             chPTAXHist.data.datasets[0].data = bins; chPTAXHist.update();
 
+            // IPCA
             chIPCABarLine.data.labels = ip.map(r => r.ref_date);
-            chIPCABarLine.data.datasets[0].data = ip.map(r => r.value * 100);
-            chIPCABarLine.data.datasets[1].data = ip.map((_, i) => i < 11 ? null : ip.slice(i - 11, i + 1).reduce((a, b) => a + b.value * 100, 0));
+            chIPCABarLine.data.datasets[0].data = ip.map(r => r.value);
+            chIPCABarLine.data.datasets[1].data = rolling12Compounded(ip.map(r => r.value));
             chIPCABarLine.update();
 
-            const year = (chIPCABarLine.data.labels.slice(-1)[0] || '').slice(0, 4);
-            const cur = ip.filter(r => r.ref_date.startsWith(year)).map(r => ({ m: r.ref_date.slice(5), v: r.value * 100 }));
+            const year = (chIPCABarLine.data.labels.slice(-1)[0] || "").slice(0, 4);
+            const cur = ip.filter(r => r.ref_date.startsWith(year)).map(r => ({ m: r.ref_date.slice(5), v: r.value }));
             const total = cur.reduce((a, b) => a + b.v, 0); let cum = 0;
             chIPCAPareto.data.labels = cur.map(x => x.m);
             chIPCAPareto.data.datasets[0].data = cur.map(x => x.v);
             chIPCAPareto.data.datasets[1].data = cur.map(x => { cum += x.v; return (cum / Math.max(1, total)) * 100; });
             chIPCAPareto.update();
 
+            // IGP-M
             chIGPMBarLine.data.labels = ig.map(r => r.ref_date);
-            chIGPMBarLine.data.datasets[0].data = ig.map(r => r.value * 100);
-            chIGPMBarLine.data.datasets[1].data = ig.map((_, i) => i < 11 ? null : ig.slice(i - 11, i + 1).reduce((a, b) => a + b.value * 100, 0));
+            chIGPMBarLine.data.datasets[0].data = ig.map(r => r.value);
+            chIGPMBarLine.data.datasets[1].data = rolling12Compounded(ig.map(r => r.value));
             chIGPMBarLine.update();
 
-            const mapIP = new Map(ip.map(x => [x.ref_date, x.value * 100]));
-            const common = ig.map(x => ({ ref: x.ref_date, igpm: x.value * 100, ipca: mapIP.get(x.ref_date) })).filter(r => r.ipca != null);
+            // IPCA vs IGP-M
+            const mapIP = new Map(ip.map(x => [x.ref_date, x.value]));
+            const common = ig.map(x => ({ ref: x.ref_date, igpm: x.value, ipca: mapIP.get(x.ref_date) })).filter(r => r.ipca != null);
             chIPCAvsIGPM.data.labels = common.map(r => r.ref);
             chIPCAvsIGPM.data.datasets[0].data = common.map(r => r.ipca);
             chIPCAvsIGPM.data.datasets[1].data = common.map(r => r.igpm);
@@ -532,17 +577,22 @@
             buildTables(pt, ip, ig);
         }
 
-        $(document).on('change', '#dtIni,#dtFim', applyRange);
-        $('#resetRange').on('click', () => { const { ini, fim } = lastCompleteWindow(); $('#dtIni').val(ini); $('#dtFim').val(fim); applyRange(); });
-        $('#refreshBtn').on('click', async (e) => { e.preventDefault(); await loadAll(); kpisFromData(); const { ini, fim } = lastCompleteWindow(); $('#dtIni').val(ini); $('#dtFim').val(fim); applyRange(); });
+        /* ====== Bootstrap ====== */
+        $(document).on("change", "#dtIni,#dtFim", applyRange);
+        $("#resetRange").on("click", () => { const { ini, fim } = lastCompleteWindow(); $("#dtIni").val(ini); $("#dtFim").val(fim); applyRange(); });
+        $("#refreshBtn").on("click", async (e) => {
+            e.preventDefault();
+            await loadAll(); kpisFromData();
+            const { ini, fim } = lastCompleteWindow(); $("#dtIni").val(ini); $("#dtFim").val(fim); applyRange();
+        });
 
         (async function init() {
             await loadAll();
             kpisFromData();
             const { ini, fim } = lastCompleteWindow();
-            $('#dtIni').val(ini);
-            $('#dtFim').val(fim);
-            const inRange = (ym) => ym >= ini && ym <= fim;
+            $("#dtIni").val(ini);
+            $("#dtFim").val(fim);
+            const inRange = ym => ym >= ini && ym <= fim;
             const pt = PTAX.filter(r => inRange(r.date.slice(0, 7)));
             const ip = IPCA.filter(r => inRange(r.ref_date));
             const ig = IGPM.filter(r => inRange(r.ref_date));
@@ -552,6 +602,19 @@
             buildTables(pt, ip, ig);
         })();
     </script>
+
+
+
+
+
+
+
+
+
+
+
+
+
 </body>
 
 </html>
