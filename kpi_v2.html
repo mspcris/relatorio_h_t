@@ -888,6 +888,8 @@
     <!-- SNAPSHOT COMPLETO PARA A IA, incluindo macro -->
     <script>
         function media(arr) { const v = arr.filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; }
+        // validação conservadora: IPCA mensal entre -2% e +3% é plausível
+        function sane(v) { return v != null && v > -2 && v < 3 }
         function serieMM3(arr) { return arr.map((_, i) => { const s = arr.slice(Math.max(0, i - 2), i + 1).filter(x => x != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; }); }
         function volMovelPct(logrets, w = 3) { const out = []; for (let i = 0; i < logrets.length; i++) { if (i + 1 < w) { out.push(null); continue; } const s = logrets.slice(i + 1 - w, i + 1).filter(v => v != null); if (!s.length) { out.push(null); continue; } const mean = s.reduce((a, b) => a + b, 0) / s.length; const vr = s.reduce((a, x) => a + (x - mean) * (x - mean), 0) / s.length; out.push(Math.sqrt(vr) * 100); } return out; }
         function postoSharesPeriodo(meses, selection) { const map = new Map(); meses.forEach(m => { const row = porPosto[m] || {}; Object.keys(row).forEach(p => { if (selection !== 'ALL' && !selection.has(p)) return; const v = Number(row[p]?.mensalidade) || 0; map.set(p, (map.get(p) || 0) + v); }); }); const entries = [...map.entries()].sort((a, b) => b[1] - a[1]); return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]), total: entries.reduce((a, [, v]) => a + v, 0) }; }
@@ -924,7 +926,11 @@
             const meses2 = MESES.filter(m => (!from2?.value || m >= from2.value) && (!to2?.value || m <= to2.value));
 
             // Macro alinhada
-            const macro = macroSeriesFor(meses2, ipcaMonthly, igpmMonthly, (window._PTAX_MONTHLY || {})); const macroSafe = sane(media(macro.map(x => x.ipca))) ? macro : macro.map(x => ({ ...x, ipca: null }));
+            // Macro alinhada + sane guard no IPCA
+            const macro = macroSeriesFor(meses2, ipcaMonthly, igpmMonthly, (window._PTAX_MONTHLY || {}));
+            const macroSafe = sane(media(macro.map(x => x.ipca)))
+                ? macro
+                : macro.map(x => ({ ...x, ipca: null }));
             const scopes = ['chart_valores', 'chart_qtd_ticket', 'chart_perf', 'chart_vol', 'chart_yoy', 'chart_mix', 'chart_scatter', 'chart_pareto', 'chart_yoy_posto', 'macro_indices'].join(', ');
             const basePrompt = (window.Prompts?.render?.({ produto: 'mensalidades', from: meses2[0], to: meses2.at(-1), posto: labelSelec(sel2), contexto: userQuery ? 'qa' : 'relatorio', scopes }))
                 || `Relatório técnico de mensalidades ${meses2[0]}→${meses2.at(-1)} posto ${labelSelec(sel2)}. Considere também IPCA, IGP-M e PTAX (média mensal) para perdas reais e efeito cambial. Sem tabelas ASCII.`;
@@ -954,13 +960,14 @@
                 { scope: 'chart_pareto', periodo: filtros.deep, posto: filtros.deep.posto, series: { postos: charts.chart_pareto.postos, receita: charts.chart_pareto.receita, total: charts.chart_pareto.total } },
                 { scope: 'chart_yoy_posto', periodo: filtros.deep, posto: filtros.deep.posto, series: { postos: charts.chart_yoy_posto.postos, yoy_medio: charts.chart_yoy_posto.yoy_medio } },
                 // NOVO bloco macro
-                { scope: 'macro_indices', periodo: filtros.deep, series: { meses: meses2, ipca: macro.map(x => x.ipca), igpm: macro.map(x => x.igpm), ptax_avg: macro.map(x => x.ptax_avg) } },
+                { scope: 'macro_indices', periodo: filtros.deep, series: { meses: meses2, ipca: macroSafe.map(x => x.ipca), igpm: macroSafe.map(x => x.igpm), ptax_avg: macroSafe.map(x => x.ptax_avg) } },
+
                 { scope: 'tabela_kpis', periodo: filtros.deep, posto: filtros.deep.posto, kpis: kpis_sel2, tabela: tabela_sel2 }
             ];
 
             return {
                 meta, filtros, produto: 'mensalidades', contexto: userQuery ? 'qa' : 'relatorio', qa: userQuery || null,
-                macro: { series: macro },
+                macro: { series: macroSafe },
                 prefs: { output: 'livre', assertivo: true, accept_format: 'free_text', temperature: 0.2, max_tokens: 7000 },
                 defs: { receita: 'Somatório de mensalidade no mês', qtd: 'Quantidade de mensalidades', ticket: 'Receita / Qtd', perf: 'Variação % MoM da receita', yoy: 'Variação % YoY da receita', dpreco: 'ΔPreço', dvol: 'ΔVolume', ipca: 'Inflação oficial mensal', igpm: 'IGP-M mensal', ptax: 'Média mensal PTAX USD/BRL' },
                 prompt: userQuery ? `${basePrompt}\nPergunta: ${userQuery}` : basePrompt,

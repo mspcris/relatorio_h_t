@@ -242,6 +242,10 @@
       // dispara o efeito de revelar após montar todo o conteúdo
       requestAnimationFrame(() => this._typeReveal(box));
 
+      // ...cria 'box', adiciona blocos...
+      // dispare a animação CSS após montar o conteúdo
+      requestAnimationFrame(() => this._typeReveal(box));
+
       const sc = this._panel().querySelector('.body');
       requestAnimationFrame(() => { sc.scrollTop = sc.scrollHeight; });
       return cleaned;
@@ -250,6 +254,34 @@
 
 
 
+
+
+    // Efeito “digitar” por CSS mask (sem stream): anima a var CSS --reveal
+_typeReveal(container, baseMs = 25) {
+  if (!container) return;
+  // aplica nos filhos (h5, p) da bolha do bot, para revelar bloco a bloco
+  const targets = container.querySelectorAll('h5, p');
+  targets.forEach((el) => {
+    // seta estado inicial
+    el.classList.add('iad-type', 'caret');
+    el.style.setProperty('--reveal', '0%');
+
+    // calcula duração em função do tamanho do texto
+    const chars = (el.textContent || '').length || 1;
+    const dur = Math.min(8000, Math.max(600, chars * baseMs));
+
+    // anima a variável CSS --reveal de 0% a 100% em "steps"
+    const anim = el.animate(
+      [{ '--reveal': '0%' }, { '--reveal': '100%' }],
+      { duration: dur, easing: `steps(${Math.min(chars, 2000)}, end)` }
+    );
+
+    anim.onfinish = () => {
+      el.classList.remove('caret');
+      el.style.setProperty('--reveal', '100%'); // mantém visível após a animação
+    };
+  });
+},
 
 
 
