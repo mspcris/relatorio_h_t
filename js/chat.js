@@ -1,59 +1,45 @@
 /* chat.js — Painel de IA reutilizável (v2)
  * Objetivo: enviar SEMPRE o snapshot completo por padrão
- *  - Chunking determinístico com síntese final
- *  - Alternável para modo "inteligente" que evita reenvio quando contexto não mudou
+ *  - "IA Resumida": agora resume após receber a resposta completa
+ *  - Parseia respostas JSON e evita mostrar { ... } no chat
+ *  - Parágrafos e títulos para leitura fluida
  * API: ChatIA.init({
- *   getPayload,                // async ({ userQuery }) => snapshot COMPLETO da página
- *   apiUrl,                    // POST endpoint
- *   mountAfterSelector,        // seletor para ancorar o botão
- *   title,                     // título do painel
- *   briefInstruction,          // instrução dura para resumo
- *   timeoutMs,                 // tempo base por requisição
- *   briefDefault,              // inicia com IA Resumida marcada
- *   alwaysFull                 // true => manda snapshot em TODA mensagem; false => heurística
+ *   getPayload, apiUrl, mountAfterSelector, title, briefInstruction,
+ *   timeoutMs, briefDefault
  * })
  */
 (function () {
   const ChatIA = {
-      _CFG: {
-    /* === Retry config === */
-      MAX_RETRIES: 5,          // reenviar mais 5 vezes
-      RETRY_DELAY_MS: 1200,     // intervalo entre tentativas  
-    /* ===================== Config ===================== */
-      ALWAYS_FULL: true,                  // default. pode ser sobrescrito por init({ alwaysFull })
-      MAX_PAYLOAD_CHARS: 120_000,         // corte aproximado por chamada
-      CHUNK_BLOCKS: 4,                    // blocos por requisição quando chunkar
-      SYNTH_PARTS_LIMIT: 12,              // segurança
-      REFRESH_FULL_AFTER_MIN: 5,          // minutos
+    _CFG: {
+      MAX_RETRIES: 5,
+      RETRY_DELAY_MS: 1200,
+      MAX_PAYLOAD_CHARS: 120_000,
+      CHUNK_BLOCKS: 4,
+      SYNTH_PARTS_LIMIT: 12,
+      REFRESH_FULL_AFTER_MIN: 5
     },
 
-    /* ===================== Estado ===================== */
     _state: {
       mounted: false,
       brief: true,
       opts: null,
-      retried: false,
       lastRaw: '',
       lastSnapshotHash: null,
-      lastSnapshotAt: 0,
-      forceFullNext: false,
+      lastSnapshotAt: 0
     },
 
-    /* ===================== Boot ===================== */
     init(options) {
       const defaults = {
         apiUrl: (window.IA_API_URL || '/ia/analisar'),
         mountAfterSelector: '#btnComparar',
         title: 'IA — Análise Completa & Chat',
-        briefInstruction: 'Responda em 200 a 300 caracteres, no máximo 3 linhas. Seja direto, executivo e objetivo.',
+        briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
         timeoutMs: 180000,
         briefDefault: true,
-        alwaysFull: true, // preferível para manter contexto 100% determinístico
         getPayload: async ({ userQuery }) => ({ prompt: userQuery || 'ok' })
       };
       this._state.opts = Object.assign({}, defaults, options || {});
       this._state.brief = !!this._state.opts.briefDefault;
-      this._CFG.ALWAYS_FULL = !!this._state.opts.alwaysFull;
 
       this._injectStyles();
       this._injectUI();
@@ -82,7 +68,6 @@
 #iadBrief{display:inline-flex;align-items:center;gap:6px}
 #iadBrief input{margin:0}
 .iad-hint{font-style:italic;color:#cfcfcf}
-#iadMode{display:inline-flex;align-items:center;gap:6px}
       `.trim();
       const s = document.createElement('style');
       s.id = 'chatia-styles';
@@ -125,10 +110,6 @@
       <input id="iadBriefChk" type="checkbox"${this._state.brief ? ' checked' : ''}/>
       <span>IA Resumida</span>
     </label>
-    <label id="iadMode" class="btn btn-sm btn-outline-secondary mb-0" title="Modo de envio">
-      <input id="iadAlwaysFull" type="checkbox"${this._CFG.ALWAYS_FULL ? ' checked' : ''}/>
-      <span>Enviar snapshot sempre</span>
-    </label>
     <button id="iadPDF" class="btn btn-sm btn-outline-secondary">PDF</button>
     <button id="iadRefresh" class="btn btn-sm btn-outline-secondary">Regerar</button>
     <button id="iadClose" class="btn btn-sm btn-outline-secondary">Fechar</button>
@@ -162,8 +143,6 @@
       const btn = this._btn();
       const briefLbl = this._q('#iadBrief');
       const briefChk = this._q('#iadBriefChk');
-      const modeLbl = this._q('#iadMode');
-      const modeChk = this._q('#iadAlwaysFull');
       const close = this._q('#iadClose');
       const regen = this._q('#iadRefresh');
       const pdfBtn = this._q('#iadPDF');
@@ -181,20 +160,13 @@
       }
 
       close.addEventListener('click', () => { panel.style.display = 'none'; this._toggleBtn(btn, false); });
-      regen.addEventListener('click', async () => { this._state.forceFullNext = true; await this._sendToIA(null, { force: true }); });
+      regen.addEventListener('click', async () => { await this._sendToIA(null, { force: true }); });
       pdfBtn.addEventListener('click', () => this._exportToPDF());
 
       briefLbl.addEventListener('click', (e) => {
         if (e.target.id !== 'iadBriefChk') { e.preventDefault(); briefChk.checked = !briefChk.checked; }
         this._state.brief = !!briefChk.checked;
-        const msg = this._state.brief ? 'Resposta fora do escopo. Marcando bit IA Resumida.' : 'Resposta fora do escopo. Desmarcando bit IA Resumida.';
-        this._append('bot', `<span class="iad-hint">${msg}</span>`);
-      });
-
-      modeLbl.addEventListener('click', (e) => {
-        if (e.target.id !== 'iadAlwaysFull') { e.preventDefault(); modeChk.checked = !modeChk.checked; }
-        this._CFG.ALWAYS_FULL = !!modeChk.checked;
-        const msg = this._CFG.ALWAYS_FULL ? 'Modo: enviar snapshot completo em toda mensagem.' : 'Modo: envio inteligente com reaproveitamento de contexto.';
+        const msg = this._state.brief ? 'IA Resumida: respostas serão consolidadas e resumidas.' : 'IA Completa: respostas integrais.';
         this._append('bot', `<span class="iad-hint">${msg}</span>`);
       });
 
@@ -215,15 +187,21 @@
     _outBox() { return document.getElementById('iadOut'); },
     _btn() { return document.getElementById('iaDeep'); },
     _q(sel) { return document.querySelector(sel); },
-    _toggleBtn(el, on) { if (!el) return; el.classList.toggle('btn-outline-primary', !on); el.classList.toggle('btn-primary', on); el.classList.toggle('active', on); el.setAttribute('aria-pressed', on ? 'true' : 'false'); },
+    _toggleBtn(el, on) {
+      if (!el) return;
+      el.classList.toggle('btn-outline-primary', !on);
+      el.classList.toggle('btn-primary', on);
+      el.classList.toggle('active', on);
+      el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    },
 
     /* ===================== Helpers ===================== */
     _displayNameFromEmail() {
-      const email = (window.USER_EMAIL || '').trim(); if (!email || !/@/.test(email)) return 'Você';
-      const first = email.split('@')[0]; return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'Você';
+      const email = (window.USER_EMAIL || '').trim();
+      if (!email || !/@/.test(email)) return 'Você';
+      const first = email.split('@')[0];
+      return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'Você';
     },
-
-    _sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
 
     _append(role, html) {
       const row = document.createElement('div'); row.className = 'd-flex flex-column';
@@ -235,105 +213,98 @@
     },
 
     _appendBotStreaming(raw) {
-      const cleaned = this._cleanGroq(raw); if (!cleaned || !cleaned.trim()) return '';
+      const cleaned = this._cleanGroq(raw);
+      if (!cleaned || !cleaned.trim()) return '';
+
       const blocks = cleaned.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
       const row = document.createElement('div'); row.className = 'd-flex flex-column';
       const box = document.createElement('div'); box.className = 'iad-msg iad-bot';
       const meta = document.createElement('div'); meta.className = 'iad-meta'; meta.textContent = 'Camila.AI';
       row.appendChild(box); row.appendChild(meta); this._outBox().appendChild(row);
-      blocks.forEach(b => { const isTitle = /^###\s*/.test(b); const text = b.replace(/^###\s*/, ''); const el = document.createElement(isTitle ? 'h5' : 'p'); if (isTitle) el.className = 'iad-h'; el.textContent = text; box.appendChild(el); });
-      const sc = this._panel().querySelector('.body'); requestAnimationFrame(() => { sc.scrollTop = sc.scrollHeight; });
+
+
+
+
+
+
+
+
+      
+      blocks.forEach(b => {
+        const isTitle = /^###\s*/.test(b);
+        const text = b.replace(/^###\s*/, '');
+        const el = document.createElement(isTitle ? 'h5' : 'p');
+        if (isTitle) el.className = 'iad-h';
+        el.textContent = text;
+        box.appendChild(el);
+      });
+
+      // dispara o efeito de revelar após montar todo o conteúdo
+      requestAnimationFrame(() => this._typeReveal(box));
+
+      const sc = this._panel().querySelector('.body');
+      requestAnimationFrame(() => { sc.scrollTop = sc.scrollHeight; });
       return cleaned;
+
     },
+
+
+
+
+
+
+
 
     _dotsStart() {
       const wrap = document.createElement('div'); wrap.className = 'iad-msg iad-bot iad-loading';
       wrap.innerHTML = `Aguardando <span class="iad-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
-      this._outBox().appendChild(wrap); let t = 0;
-      const int = setInterval(() => { wrap.querySelectorAll('.dot').forEach(x => x.classList.remove('on')); wrap.querySelectorAll('.dot')[t % 3].classList.add('on'); t++; const sc = this._panel().querySelector('.body'); sc.scrollTop = sc.scrollHeight; }, 260);
+      this._outBox().appendChild(wrap);
+      let t = 0;
+      const int = setInterval(() => {
+        wrap.querySelectorAll('.dot').forEach(x => x.classList.remove('on'));
+        wrap.querySelectorAll('.dot')[t % 3].classList.add('on'); t++;
+        const sc = this._panel().querySelector('.body'); sc.scrollTop = sc.scrollHeight;
+      }, 260);
       this._dotsStop._int = int; this._dotsStop._el = wrap;
     },
-    _dotsStop() { if (this._dotsStop._int) { clearInterval(this._dotsStop._int); this._dotsStop._int = null; } if (this._dotsStop._el) { this._dotsStop._el.remove(); this._dotsStop._el = null; } },
+    _dotsStop() {
+      if (this._dotsStop._int) { clearInterval(this._dotsStop._int); this._dotsStop._int = null; }
+      if (this._dotsStop._el) { this._dotsStop._el.remove(); this._dotsStop._el = null; }
+    },
 
-    /* ===================== Estrutura de envio ===================== */
+    /* ===================== Envio ===================== */
     async _sendToIA(userQuery, { force = false } = {}) {
-      // helper de uma tentativa: mostra “Aguardando…”, chama API, guarda raw, pensa 2s e pós-processa
-      const tryOnce = async (payload, timeout) => {
-        this._dotsStart();
-        const out = await this._callIA(payload, timeout || this._state.opts.timeoutMs);
-        this._dotsStop();
-        this._state.lastRaw = String(out || '');
-        await this._thinking2s();
-        const cleaned = this._postProcess(this._state.lastRaw);
-        return this._appendBotStreaming(cleaned);
-      };
-
+      this._dotsStart();
       try {
-        const snapshot = await this._state.opts.getPayload({ userQuery });
-        const now = Date.now();
-        const hash = this._stableHash(snapshot);
-        const ageMin = (now - this._state.lastSnapshotAt) / 60000;
+        // 1) sempre envia o snapshot completo
+        const basePayload = await this._state.opts.getPayload({ userQuery });
 
-        const mustFull = this._CFG.ALWAYS_FULL || this._state.forceFullNext || force || !this._state.lastSnapshotHash || hash !== this._state.lastSnapshotHash || ageMin >= this._CFG.REFRESH_FULL_AFTER_MIN;
+        // 2) chamada principal
+        const raw = await this._callIA(basePayload, this._state.opts.timeoutMs);
+        this._dotsStop();
 
-        this._state.forceFullNext = false;
-        this._state.lastSnapshotAt = now;
-        this._state.lastSnapshotHash = hash;
+        // 3) normaliza texto. Se vier JSON, extrai campos úteis.
+        const fullText = this._coerceText(raw);
+        const shownFull = this._appendBotStreaming(fullText);
 
-        // monta payload base e com resumo
-        const basePayload = snapshot;
-        const briefPayload = this._state.brief ? this._mergeBriefInstruction(structuredClone(basePayload), this._state.opts.briefInstruction, 340) : structuredClone(basePayload);
-
-        // função para decidir payload “inteligente”
-        const sendMinimal = async () => {
-          const minimal = {
-            prompt: (snapshot.prompt || ''),
-            qa: snapshot.qa || null,
-            contexto: 'qa',
-            meta: Object.assign({}, snapshot.meta || {}, { snapshot_hash: hash, page: (snapshot.meta && snapshot.meta.page) || 'kpi_v2' }),
-            prefs: Object.assign({}, snapshot.prefs || {})
-          };
-          if (this._state.brief) this._mergeBriefInstruction(minimal, this._state.opts.briefInstruction, 340);
-          return tryOnce(minimal);
-        };
-
-        // Estratégia de envio com retentativas 5+5 alternando IA Resumida
-        const runWithRetries = async (payloadA, payloadB) => {
-          // 5 tentativas com A
-          for (let i = 0; i < this._CFG.MAX_RETRIES; i++) {
-            try { const t = await tryOnce(payloadA); if (t?.trim()) return true; } catch {}
-            await this._sleep(this._CFG.RETRY_DELAY_MS);
-          }
-          // alterna flag visual
-          const briefChk = this._q('#iadBriefChk');
-          if (briefChk) briefChk.checked = !briefChk.checked;
-          this._state.brief = !this._state.brief;
-          this._append('bot', `<span class="iad-hint">Alternando modo de resposta.</span>`);
-          // 5 tentativas com B
-          for (let i = 0; i < this._CFG.MAX_RETRIES; i++) {
-            try { const t = await tryOnce(payloadB); if (t?.trim()) return true; } catch {}
-            await this._sleep(this._CFG.RETRY_DELAY_MS);
-          }
-          return false;
-        };
-
-        // full snapshot vs minimal inteligente
-        if (mustFull) {
-          const ok = await runWithRetries(briefPayload, basePayload);
-          if (!ok) this._append('bot', `<span class="text-warning">Não foi possível obter resposta após ${this._CFG.MAX_RETRIES * 2} tentativas.</span>`);
-        } else {
-          const ok = await runWithRetries(await (async () => {
-            const m = {
-              prompt: (snapshot.prompt || ''),
-              qa: snapshot.qa || null,
-              contexto: 'qa',
-              meta: Object.assign({}, snapshot.meta || {}, { snapshot_hash: hash, page: (snapshot.meta && snapshot.meta.page) || 'kpi_v2' }),
-              prefs: Object.assign({}, snapshot.prefs || {})
-            };
-            return this._state.brief ? this._mergeBriefInstruction(m, this._state.opts.briefInstruction, 340) : m;
-          })(), basePayload);
-          if (!ok) this._append('bot', `<span class="text-warning">Sem retorno consistente no modo inteligente.</span>`);
+        // 4) se IA Resumida marcada, dispara um segundo round para resumir o texto já obtido
+        if (this._state.brief) {
+          const resumo = await this._summarizeText(fullText);
+          this._append('bot', `<span class="iad-hint">Resumo gerado a partir da resposta integral.</span>`);
+          this._appendBotStreaming(resumo);
         }
+
+          function typeReveal(el, baseMs = 25){
+            const chars = (el.textContent || '').length || 1;
+            const dur = Math.min(8000, Math.max(600, chars * baseMs));
+            el.classList.add('iad-type','caret');
+            const anim = el.animate(
+             [{ '--reveal': '0%' }, { '--reveal': '100%' }],
+             { duration: dur, easing: `steps(${Math.min(chars, 2000)}, end)` }
+           );
+           anim.onfinish = () => el.classList.remove('caret');
+          }
+
       } catch (err) {
         this._dotsStop();
         const msg = `Não foi possível responder${err?.message ? ` — possível motivo: ${err.message}` : ''}.`;
@@ -341,105 +312,110 @@
       }
     },
 
-    async _sendPossiblyChunked(fullPayload) {
-      const basePrefs = Object.assign({}, fullPayload.prefs || {});
-      const full = this._state.brief ? this._mergeBriefInstruction(fullPayload, this._state.opts.briefInstruction, 340) : fullPayload;
-
-      const approx = this._approxSize(full);
-      const blocks = Array.isArray(full.blocks) ? full.blocks : [];
-
-      if (approx <= this._CFG.MAX_PAYLOAD_CHARS || blocks.length <= this._CFG.CHUNK_BLOCKS) {
-        this._dotsStart();
-        const out = await this._callIA(full, this._state.opts.timeoutMs);
-        this._dotsStop();
-        this._state.lastRaw = String(out || '');
-        await this._thinking2s();
-        const cleaned = this._postProcess(this._state.lastRaw);
-        this._appendBotStreaming(cleaned);
-        return;
-      }
-
-      const groups = [];
-      for (let i = 0; i < blocks.length; i += this._CFG.CHUNK_BLOCKS) groups.push(blocks.slice(i, i + this._CFG.CHUNK_BLOCKS));
-
-      const partialTexts = [];
-      for (let i = 0; i < groups.length; i++) {
-        const p = Object.assign({}, full, { blocks: groups[i] });
-        p.prompt = `${full.prompt || ''}\n\n[Parte ${i + 1}/${groups.length}]`;
-        p.prefs = Object.assign({}, basePrefs);
-        if (this._state.brief) this._mergeBriefInstruction(p, this._state.opts.briefInstruction, 420);
-        this._dotsStart();
-        const out = await this._callIA(p, this._state.opts.timeoutMs * 1.5);
-        this._dotsStop();
-        this._state.lastRaw = String(out || '');
-        await this._thinking2s();
-        const cleaned = this._postProcess(this._state.lastRaw);
-        partialTexts.push(cleaned);
-        this._append('bot', `<span class="iad-hint">Parcial ${i + 1}/${groups.length} recebida.</span>`);
-        this._appendBotStreaming(cleaned);
-      }
-
-      const synthPayload = {
-        prompt: (this._state.brief
-          ? `${this._state.opts.briefInstruction}\n\nResuma os trechos abaixo em UMA única resposta com foco executivo.`
-          : 'Consolide os trechos abaixo em UMA resposta coerente, integrando tendências, riscos e oportunidades.'),
-        contexto: 'sintese',
-        parts: partialTexts.slice(0, this._CFG.SYNTH_PARTS_LIMIT)
+    async _summarizeText(text) {
+      // prompt enxuto para sumarização e formatação em PT-BR
+      const p = {
+        prompt:
+          `[RESUMO-ESTRITO]: ${this._state.opts.briefInstruction}\n` +
+          `Formate em PT-BR com parágrafos curtos. Use "###" para subtítulos quando fizer sentido.\n\n` +
+          `Texto-base:\n"""${text}"""`,
+        prefs: { accept_format: 'free_text', temperature: 0.2, max_tokens: 600 }
       };
       this._dotsStart();
-      const outS = await this._callIA(synthPayload, this._state.opts.timeoutMs * 2);
-      this._dotsStop();
-      this._state.lastRaw = String(outS || '');
-      await this._thinking2s();
-      const cleanedS = this._postProcess(this._state.lastRaw);
-      this._append('bot', '<span class="iad-hint">Síntese final:</span>');
-      this._appendBotStreaming(cleanedS);
+      try {
+        const out = await this._callIA(p, Math.round(this._state.opts.timeoutMs * 0.8));
+        return this._coerceText(out);
+      } finally {
+        this._dotsStop();
+      }
     },
 
-    /* ===================== Utilidades ===================== */
-    _stableHash(obj) {
-      const s = typeof obj === 'string' ? obj : JSON.stringify(obj, Object.keys(obj).sort());
-      let h = 2166136261 >>> 0; // FNV-1a 32-bit
-      for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
-      return ('0000000' + h.toString(16)).slice(-8);
+    /* ===================== Normalização de saída ===================== */
+    _coerceText(out) {
+      // 1) se já veio string, tenta detectar JSON e extrair campos relevantes
+      const s = String(out ?? '').trim();
+      if (this._looksLikeJson(s)) {
+        try {
+          const obj = JSON.parse(s);
+          const picked = this._pickFields(obj, [
+            'html','livre','text','analysis','resumo','summary','conteudo','content','answer'
+          ]);
+          if (picked) return this._sanitizeText(picked);
+          return this._sanitizeText(JSON.stringify(obj)); // fallback legível
+        } catch { /* segue fluxo */ }
+      }
+      return this._sanitizeText(s);
     },
-
-    _approxSize(obj) {
-      try { return JSON.stringify(obj).length; } catch { return 0; }
+    _looksLikeJson(s) { return s.startsWith('{') || s.startsWith('['); },
+    _pickFields(obj, keys) {
+      if (obj == null) return '';
+      for (const k of keys) if (typeof obj?.[k] === 'string' && obj[k].trim()) return obj[k];
+      // merge básico de valores string em 1º nível
+      const parts = [];
+      Object.entries(obj).forEach(([k, v]) => { if (typeof v === 'string' && v.trim()) parts.push(v.trim()); });
+      return parts.length ? parts.join('\n\n') : '';
     },
-
-    _mergeBriefInstruction(payload, instruction, maxTokens) {
-      const p = Object.assign({}, payload);
-      const inst = `[RESUMO-ESTRITO]: ${instruction} Priorize síntese.`;
-      if (typeof p.prompt === 'string') p.prompt = `${inst}\n\n${p.prompt}`; else p.prompt = inst;
-      p.prefs = Object.assign({}, p.prefs, { max_tokens: Math.max(120, Math.min(700, maxTokens || 340)), temperature: 0.2 });
-      return p;
+    _sanitizeText(s) {
+      let t = String(s || '');
+      t = t.replace(/\r\n/g, '\n').replace(/\u00A0/g, ' ');
+      t = t.replace(/```[\s\S]*?```/g, ' ');
+      t = t.replace(/^\s*\|.*\|\s*$/gm, ' ');
+      t = t.replace(/[ \t]+\n/g, '\n');
+      t = t.replace(/([.,;:!?])(?!\s|$)/g, '$1 ');
+      t = t.replace(/\n{3,}/g, '\n\n').trim();
+      return t;
     },
 
     /* ===================== Networking ===================== */
+    // Efeito “digitar” sem stream: revela o texto completo usando máscara em steps
+    _typeReveal(el, baseMs = 25) {
+      if (!el) return;
+      const chars = (el.textContent || '').length || 1;
+      const dur = Math.min(8000, Math.max(600, chars * baseMs));
+      el.classList.add('iad-type', 'caret');
+      const anim = el.animate(
+        [{ '--reveal': '0%' }, { '--reveal': '100%' }],
+        { duration: dur, easing: `steps(${Math.min(chars, 2000)}, end)` }
+      );
+      anim.onfinish = () => el.classList.remove('caret');
+    },
+    
+    
+    
+    
     async _callIA(payload, timeout) {
       const API = this._state.opts.apiUrl;
       const controller = new AbortController();
       const to = setTimeout(() => controller.abort(), timeout || this._state.opts.timeoutMs);
       let r; try {
-        r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(typeof payload === 'string' ? { prompt: payload } : payload), signal: controller.signal });
+        r = await fetch(API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(typeof payload === 'string' ? { prompt: payload } : payload),
+          signal: controller.signal
+        });
       } finally { clearTimeout(to); }
       if (!r.ok) { let t = ''; try { t = await r.text(); } catch { } throw new Error(`HTTP ${r.status}${t ? ' — ' + t : ''}`); }
       let resText = await r.text(); let res = null; try { res = JSON.parse(resText); } catch { }
       if (!res) return resText;
       if (res && res.content_mode === 'free_text') return res.text || '';
-      if (res && res.content_mode === 'json') return (res.data && (res.data.html || res.data.livre)) || JSON.stringify(res.data);
+      if (res && res.content_mode === 'json') return (res.data && (res.data.html || res.data.livre || res.data.text)) || JSON.stringify(res.data);
       return typeof res === 'string' ? res : (res.html || res.livre || JSON.stringify(res));
     },
 
     _exportToPDF() {
       if (typeof html2pdf === 'undefined') { alert('html2pdf.js não carregado.'); return; }
       const node = document.getElementById('iadOut'); if (!node) return;
-      const opt = { margin: [0, 0, 0, 0], filename: `IA-Conversa_${new Date().toISOString().slice(0, 10)}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: null, windowWidth: node.scrollWidth, windowHeight: node.scrollHeight }, jsPDF: { unit: 'px', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css', 'legacy'] } };
+      const opt = { margin: [0, 0, 0, 0], filename: `IA-Conversa_${new Date().toISOString().slice(0, 10)}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: null, windowWidth: node.scrollWidth, windowHeight: node.scrollHeight },
+        jsPDF: { unit: 'px', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'] } };
       html2pdf().set(opt).from(node).save();
     },
 
-    /* ===================== Sanitização ===================== */
+    /* ===================== Sanitização base p/ render ===================== */
     _cleanGroq(raw) {
       let s = String(raw || '');
       s = s.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '  ');
@@ -455,31 +431,6 @@
       s = s.replace(/###\s*/g, '\n\n### ');
       s = s.replace(/\n{3,}/g, '\n\n');
       return s.trim();
-    },
-
-    /* ===================== Pós-processamento local ===================== */
-    async _thinking2s() {
-      const row = document.createElement('div');
-      row.className = 'd-flex flex-column';
-      const b = document.createElement('div');
-      b.className = 'iad-msg iad-bot';
-      b.textContent = 'Pensando...';
-      row.appendChild(b);
-      this._outBox().appendChild(row);
-      const sc = this._panel().querySelector('.body'); sc.scrollTop = sc.scrollHeight;
-      await this._sleep(2000);
-      row.remove();
-    },
-    _postProcess(txt) {
-      let s = String(txt || '');
-      s = s.replace(/```[\s\S]*?```/g, ' ');
-      s = s.replace(/^\s*\|.*\|\s*$/gm, ' ');
-      s = s.replace(/\u00A0/g, ' ');
-      s = s.replace(/\s{2,}/g, ' ');
-      s = s.replace(/([.,;:!?])(?!\s|$)/g, '$1 ');
-      s = s.replace(/\s*[-–—]\s+/g, '\n- ');
-      s = s.replace(/\n{3,}/g, '\n\n').trim();
-      return s;
     }
   };
 

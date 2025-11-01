@@ -173,6 +173,30 @@
     .lg-neg {
         background: rgba(220, 53, 69, 1)
     }
+
+    /* aplica na bolha do bot */
+    .iad-type {
+        --reveal: 0%;
+        -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--reveal)), transparent 0);
+        mask-image: linear-gradient(90deg, #000 calc(var(--reveal)), transparent 0);
+    }
+
+    .iad-type.caret::after {
+        content: '';
+        display: inline-block;
+        width: 2px;
+        height: 1em;
+        vertical-align: baseline;
+        background: #ddd;
+        margin-left: 2px;
+        animation: iadBlink 1s step-end infinite;
+    }
+
+    @keyframes iadBlink {
+        50% {
+            opacity: 0;
+        }
+    }
 </style>
 
 <body class="hold-transition sidebar-mini">
@@ -426,30 +450,6 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     <!-- PROMPTS (compartilhado) -->
     <script>
         (function () {
@@ -562,11 +562,14 @@
         })();
     </script>
 
-    <!-- Script principal -->
+    <!-- Script principal com IPCA/IGP-M/PTAX -->
     <script>
         const BASE = new URL('.', location.href);
         const URL_GERAL = new URL('json_consolidado/consolidado_mensal.json', BASE).href;
         const URL_POR_POSTO = new URL('json_consolidado/consolidado_mensal_por_posto.json', BASE).href;
+        const URL_IPCA = new URL('json_consolidado/ipca_monthly.json', BASE).href;
+        const URL_IGPM = new URL('json_consolidado/igpm_monthly.json', BASE).href;
+        const URL_PTAX = new URL('json_consolidado/ptax_daily.json', BASE).href;
 
         const el = s => document.querySelector(s);
         const showErr = e => { console.error(e); const er = el('#err'); if (er) er.textContent = e?.message || e; };
@@ -585,38 +588,53 @@
         const sum = arr => arr.reduce((a, b) => a + (b || 0), 0);
         const wavg = (vals, weights) => { let sW = 0, s = 0; for (let i = 0; i < vals.length; i++) { const w = weights[i] ?? 0; const v = vals[i]; if (v == null) continue; s += v * w; sW += w; } return sW ? s / sW : null; };
 
-        function setPressed(btn, on, variant = 'primary') {
-            btn.classList.toggle(`btn-outline-${variant}`, !on);
-            btn.classList.toggle(`btn-${variant}`, on);
-            btn.classList.toggle('active', on);
-            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        // ====== NOVOS HELPERS: macro ======
+        function ymFromDate(dstr) { const d = new Date(dstr); if (Number.isNaN(d)) return null; return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+        function asNumber(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
+        function normalizeMonthly(objOrArr, keyDate = 'date', keyVal = 'value') {
+            if (Array.isArray(objOrArr)) {
+                const o = {};
+                for (const r of objOrArr) {
+                    const ym = ymFromDate(r[keyDate] ?? r.ref_date ?? r.data ?? r.dt ?? r.mes);
+                    const v = asNumber(r[keyVal] ?? r.valor ?? r.v ?? r.value);
+                    if (ym && v != null) o[ym] = v;
+                }
+                return o;
+            }
+            return {};
         }
 
+        function ptaxMonthlyAvg(dailies) {
+            const map = new Map();
+            for (const r of dailies || []) {
+                const ym = ymFromDate(r.date || r.data || r.dt);
+                const val = asNumber(r.mid ?? ((r.buy != null && r.sell != null) ? (Number(r.buy) + Number(r.sell)) / 2 : null));
+                if (!ym || val == null) continue;
+                (map.get(ym) || map.set(ym, []).get(ym)).push(val);
+            }
+            const out = {};
+            for (const [ym, arr] of map) out[ym] = arr.reduce((a, b) => a + b, 0) / arr.length;
+            return out;
+        }
+
+        function macroSeriesFor(meses, ipcaMap, igpmMap, ptaxMap) {
+            return meses.map(ym => ({ mes: ym, ipca: ipcaMap[ym] ?? null, igpm: igpmMap[ym] ?? null, ptax_avg: ptaxMap[ym] ?? null }));
+        }
+
+        // ====== Estado ======
         let MESES = [], geral = {}, porPosto = {}, POSTOS = [];
         let sel1 = 'ALL', sel2 = 'ALL';
+        let ipcaMonthly = {}; let igpmMonthly = {}; let ptaxDaily = [];
 
+        // ====== Info de headers ======
         const LM = {};
-        function renderJsonInfo() {
-            const elInfo = document.querySelector('#jsonInfo'); if (!elInfo) return;
-            const entries = Object.values(LM).filter(Boolean);
-            if (!entries.length) { elInfo.textContent = ''; elInfo.removeAttribute('title'); return; }
-            const newest = entries.slice().sort((a, b) => b.date - a.date)[0];
-            const fmt = d => d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-            elInfo.textContent = `• dados gerados em ${fmt(newest.date)}`;
-            elInfo.title = entries.map(e => `${e.label}: ${fmt(e.date)}`).join(' | ');
-        }
+        function renderJsonInfo() { const elInfo = document.querySelector('#jsonInfo'); if (!elInfo) return; const entries = Object.values(LM).filter(Boolean); if (!entries.length) { elInfo.textContent = ''; elInfo.removeAttribute('title'); return; } const newest = entries.slice().sort((a, b) => b.date - a.date)[0]; const fmt = d => d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); elInfo.textContent = `• dados gerados em ${fmt(newest.date)}`; elInfo.title = entries.map(e => `${e.label}: ${fmt(e.date)}`).join(' | '); }
         function setJsonInfoFromHeaders(resp, key, label) { try { const lm = resp.headers.get('Last-Modified'); if (!lm) return false; LM[key] = { date: new Date(lm), label }; renderJsonInfo(); return true; } catch { return false; } }
         async function tryHead(url, key, label) { try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); setJsonInfoFromHeaders(r, key, label); } catch { } }
 
+        // ====== Agregação e KPIs ======
         function srcMens(g) {
-            return {
-                valor: num(g.mensalidade), qtd: num(g.mensalidade_qtd),
-                ticket: maybe(g.ticket_medio), perf: maybe(g.performance),
-                r_mom: maybe(g.receita_mom_pct), q_mom: maybe(g.qtd_mom_pct), t_mom: maybe(g.ticket_mom_pct),
-                r_yoy: maybe(g.receita_yoy_pct), q_yoy: maybe(g.qtd_yoy_pct), t_yoy: maybe(g.ticket_yoy_pct),
-                logret: maybe(g.receita_logret),
-                mix_p: maybe(g.mix_delta_receita_preco), mix_v: maybe(g.mix_delta_receita_volume), mix_i: maybe(g.mix_delta_receita_interacao)
-            };
+            return { valor: num(g.mensalidade), qtd: num(g.mensalidade_qtd), ticket: maybe(g.ticket_medio), perf: maybe(g.performance), r_mom: maybe(g.receita_mom_pct), q_mom: maybe(g.qtd_mom_pct), t_mom: maybe(g.ticket_mom_pct), r_yoy: maybe(g.receita_yoy_pct), q_yoy: maybe(g.qtd_yoy_pct), t_yoy: maybe(g.ticket_yoy_pct), logret: maybe(g.receita_logret), mix_p: maybe(g.mix_delta_receita_preco), mix_v: maybe(g.mix_delta_receita_volume), mix_i: maybe(g.mix_delta_receita_interacao) };
         }
         function aggMens(ym, selection) {
             if (selection === 'ALL') return srcMens(geral[ym] || {});
@@ -641,38 +659,20 @@
         function kpiCard(title, val, fmt = 'text') {
             const isNull = (val == null || Number.isNaN(val));
             const neg = (!isNull && fmt === 'pct' && val < 0);
-            const out = isNull ? '<span class="muted">-</span>' :
-                (fmt === 'moeda' ? fmtInt.format(val) :
-                    fmt === '2' ? fmt2.format(val) :
-                        fmt === '4' ? fmt4.format(val) :
-                            fmt === 'pct' ? (fmtPct.format(val) + '%') : String(val));
+            const out = isNull ? '<span class="muted">-</span>' : (fmt === 'moeda' ? fmtInt.format(val) : fmt === '2' ? fmt2.format(val) : fmt === '4' ? fmt4.format(val) : fmt === 'pct' ? (fmtPct.format(val) + '%') : String(val));
             return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0 ${neg ? 'text-danger' : ''}">${out}</div></div></div>`;
         }
         function maxDrawdown(vals) { let peak = -Infinity, mdd = 0; for (const v of vals) { if (v == null) continue; if (v > peak) peak = v; if (peak > 0) { const dd = (v - peak) / peak * 100; if (dd < mdd) mdd = dd; } } return mdd || 0; }
         function buildKPIs(containerId, meses, selection) {
-            const box = el(containerId); if (!box) return;
-            const rows = meses.map(m => aggMens(m, selection));
-            const receita = sum(rows.map(v => v.valor));
-            const qtd = sum(rows.map(v => v.qtd));
-            const ticketPond = qtd ? receita / qtd : null;
-
-            const perfs = rows.map(v => v.perf).filter(v => v != null);
-            const perfMA = perfs.length ? perfs.reduce((a, b) => a + b, 0) / perfs.length : null;
-            let perfMG = null, perfAc = null;
-            if (perfs.length) { const mult = perfs.reduce((a, p) => a * (1 + p / 100), 1); perfAc = (mult - 1) * 100; perfMG = (Math.pow(mult, 1 / perfs.length) - 1) * 100; }
+            const box = el(containerId); if (!box) return; const rows = meses.map(m => aggMens(m, selection));
+            const receita = sum(rows.map(v => v.valor)); const qtd = sum(rows.map(v => v.qtd)); const ticketPond = qtd ? receita / qtd : null;
+            const perfs = rows.map(v => v.perf).filter(v => v != null); const perfMA = perfs.length ? perfs.reduce((a, b) => a + b, 0) / perfs.length : null;
+            let perfMG = null, perfAc = null; if (perfs.length) { const mult = perfs.reduce((a, p) => a * (1 + p / 100), 1); perfAc = (mult - 1) * 100; perfMG = (Math.pow(mult, 1 / perfs.length) - 1) * 100; }
             let cagr = null; if (meses.length >= 2) { const first = aggMens(meses[0], selection).valor || 0; const last = aggMens(meses.at(-1), selection).valor || 0; if (first > 0) cagr = (Math.pow(last / first, 1 / (meses.length - 1)) - 1) * 100; }
             const runRate = meses.length ? (receita / meses.length) * 12 : null;
-
-            const moms = rows.map(v => v.r_mom).filter(v => v != null);
-            const hit = moms.length ? (moms.filter(x => x > 0).length / moms.length) * 100 : null;
-
-            const logrets = rows.map(v => v.logret).filter(v => v != null);
-            let vol = null; if (logrets.length) { const mean = logrets.reduce((a, b) => a + b, 0) / logrets.length; const vr = logrets.reduce((a, x) => a + (x - mean) * (x - mean), 0) / logrets.length; vol = Math.sqrt(vr); }
-            const volPct = (vol == null) ? null : (vol * 100);
-
-            const receitaSerie = meses.map(m => aggMens(m, selection).valor || null);
-            const mdd = maxDrawdown(receitaSerie);
-
+            const moms = rows.map(v => v.r_mom).filter(v => v != null); const hit = moms.length ? (moms.filter(x => x > 0).length / moms.length) * 100 : null;
+            const logrets = rows.map(v => v.logret).filter(v => v != null); let vol = null; if (logrets.length) { const mean = logrets.reduce((a, b) => a + b, 0) / logrets.length; const vr = logrets.reduce((a, x) => a + (x - mean) * (x - mean), 0) / logrets.length; vol = Math.sqrt(vr); }
+            const volPct = (vol == null) ? null : (vol * 100); const receitaSerie = meses.map(m => aggMens(m, selection).valor || null); const mdd = maxDrawdown(receitaSerie);
             box.innerHTML = '';
             box.insertAdjacentHTML('beforeend', kpiCard('Receita total', receita, 'moeda'));
             box.insertAdjacentHTML('beforeend', kpiCard('Qtd total', qtd, 'moeda'));
@@ -686,12 +686,166 @@
             box.insertAdjacentHTML('beforeend', kpiCard('Volatilidade logret', volPct, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('Max Drawdown receita', mdd, 'pct'));
         }
+
+        // ====== Gráficos ======
+        let chValores, chQtdTicket, chPerf, chVol, chYoY, chMix, chScatter, chPareto, chYoYPosto;
+        function initCharts() {
+            const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
+            chValores = new Chart(document.getElementById('chartValores'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
+            chQtdTicket = new Chart(document.getElementById('chartQtdTicket'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
+            chPerf = new Chart(document.getElementById('chartPerf'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+            chVol = new Chart(document.getElementById('chartVol'), { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: false } } } });
+            chYoY = new Chart(document.getElementById('chartYoY'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+            chMix = new Chart(document.getElementById('chartMix'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+            chScatter = new Chart(document.getElementById('chartScatter'), { type: 'scatter', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'ΔVolume' } }, y: { title: { display: true, text: 'ΔPreço' } } } } });
+            chPareto = new Chart(document.getElementById('chartPareto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+            chYoYPosto = new Chart(document.getElementById('chartYoYPosto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+        }
+        function labelSelec(selection) { if (selection === 'ALL') return 'Todos'; const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos'; }
+        function postoShares(meses, selection) {
+            const map = new Map(); meses.forEach(m => { const row = porPosto[m] || {}; Object.keys(row).forEach(p => { if (selection !== 'ALL' && !selection.has(p)) return; const v = num(row[p]?.mensalidade); map.set(p, (map.get(p) || 0) + v); }); });
+            const entries = [...map.entries()].sort((a, b) => b[1] - a[1]); return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]), total: sum(entries.map(e => e[1])) };
+        }
+        function updateCharts(meses, selection) {
+            const labels = meses.map(mFmt); const tag = labelSelec(selection); const rows = meses.map(m => aggMens(m, selection));
+            const receita = rows.map(v => v.valor); const mm3 = receita.map((_, i) => { const s = receita.slice(Math.max(0, i - 2), i + 1).filter(x => x != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; });
+            chValores.data.labels = labels; chValores.data.datasets = [{ label: `Mensalidade (${tag})`, data: receita, tension: .2 }, { label: 'Média móvel 3m', data: mm3, tension: .2 }]; chValores.update();
+
+            chQtdTicket.data.labels = labels; chQtdTicket.data.datasets = [{ label: 'Qtd', data: rows.map(v => v.qtd), tension: .2, yAxisID: 'y' }, { label: 'Ticket', data: rows.map(v => v.ticket || 0), tension: .2, yAxisID: 'y1' }];
+            chQtdTicket.options = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true }, y1: { beginAtZero: true, position: 'right' } } }; chQtdTicket.update();
+
+            const perfVals = rows.map(v => v.perf); const colors = perfVals.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)'); const borders = perfVals.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
+            chPerf.data.labels = labels; chPerf.data.datasets = [{ label: `Performance MoM (${tag})`, data: perfVals, backgroundColor: colors, borderColor: borders, borderWidth: 1 }]; chPerf.update();
+
+            const logs = rows.map(v => v.logret); const vol3 = (function (arr, w) { const out = []; for (let i = 0; i < arr.length; i++) { if (i + 1 < w) { out.push(null); continue; } const s = arr.slice(i + 1 - w, i + 1).filter(v => v != null); if (!s.length) { out.push(null); continue; } const mean = s.reduce((a, b) => a + b, 0) / s.length; const vr = s.reduce((a, x) => a + (x - mean) * (x - mean), 0) / s.length; out.push(Math.sqrt(vr)); } return out; })(logs, 3).map(v => v == null ? null : v * 100);
+            chVol.data.labels = labels; chVol.data.datasets = [{ label: `LogRet (${tag})`, data: logs, tension: .2 }, { label: 'Vol. móvel 3m (%)', data: vol3, tension: .2 }]; chVol.update();
+
+            const yoyVals = rows.map(v => v.r_yoy); const yoyColors = yoyVals.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)'); const yoyBorders = yoyVals.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
+            chYoY.data.labels = labels; chYoY.data.datasets = [{ label: `Receita YoY (${tag})`, data: yoyVals, backgroundColor: yoyColors, borderColor: yoyBorders, borderWidth: 1 }]; chYoY.update();
+
+            chMix.data.labels = labels; chMix.data.datasets = [{ label: 'ΔPreço', data: rows.map(v => v.mix_p) }, { label: 'ΔVolume', data: rows.map(v => v.mix_v) }]; chMix.update();
+
+            chScatter.data.datasets = [{ label: 'Meses', data: rows.map(v => ({ x: v.mix_v || 0, y: v.mix_p || 0 })) }]; chScatter.update();
+
+            const shares = postoShares(meses, selection); chPareto.data.labels = shares.labels; chPareto.data.datasets = [{ label: 'Receita (período)', data: shares.valores }]; chPareto.update();
+
+            const mapYoY = new Map(); meses.forEach(m => { const row = porPosto[m] || {}; Object.keys(row).forEach(p => { if (selection !== 'ALL' && !selection.has(p)) return; const yoy = maybe(row[p]?.receita_yoy_pct); if (yoy == null) return; const obj = mapYoY.get(p) || { sum: 0, count: 0 }; obj.sum += yoy; obj.count += 1; mapYoY.set(p, obj); }); });
+            const postos = [...mapYoY.keys()].sort(); const yoyMed = postos.map(p => mapYoY.get(p).count ? mapYoY.get(p).sum / mapYoY.get(p).count : null);
+            const yoyPostoColors = yoyMed.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)'); const yoyPostoBorders = yoyMed.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
+            chYoYPosto.data.labels = postos; chYoYPosto.data.datasets = [{ label: 'YoY médio (12m)', data: yoyMed, backgroundColor: yoyPostoColors, borderColor: yoyPostoBorders, borderWidth: 1 }]; chYoYPosto.update();
+        }
+
+        function markActiveMulti(scopeId, selection) { const isAll = selection === 'ALL'; document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => { const p = a.dataset.posto; if (p === 'ALL') { a.classList.toggle('active', isAll); } else { a.classList.toggle('active', !isAll && selection.has(p)); } }); }
+        function buildPostoTabs(ulId, getSel, setSel, onChange) {
+            const ul = el(ulId); if (!ul) return; ul.innerHTML = ''; ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="ALL" class="nav-link" href="#">Todos</a></li>`);
+            POSTOS.forEach(p => ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`));
+            markActiveMulti(ulId, getSel());
+            ul.addEventListener('click', e => {
+                if (!e.target.matches('.nav-link')) return; e.preventDefault(); const p = e.target.dataset.posto; let sel = getSel();
+                if (p === 'ALL') { sel = 'ALL'; }
+                else { if (sel === 'ALL') sel = new Set(); if (sel.has(p)) sel.delete(p); else sel.add(p); if (sel.size === POSTOS.length || sel.size === 0) sel = 'ALL'; }
+                setSel(sel); markActiveMulti(ulId, sel); onChange();
+            });
+        }
+
+        // ====== Prompts ======
+        Prompts.init({
+            pageId: 'mensalidades',
+            defaults: [
+                { name: 'Padrão', template: `Analise receita, quantidade, ticket, performance e mix (ΔPreço/ΔVolume) para {posto} de {from} a {to}. Foque nos gráficos {scopes}. Liste até 5 insights e 3 alertas. Tom assertivo.` },
+                { name: 'Executivo', template: `Resumo executivo para {produto} no período {from}→{to}, posto {posto}. Destaque riscos e oportunidades. Cite {scopes}. Texto conciso.` }
+            ],
+            mountAfter: '#btnComparar'
+        });
+
+        // ====== Carregamento de dados (agora com macro) ======
+        Promise.all([
+            fetch(URL_GERAL, { cache: 'no-store' }),
+            fetch(URL_POR_POSTO, { cache: 'no-store' }),
+            fetch(URL_IPCA, { cache: 'no-store' }),
+            fetch(URL_IGPM, { cache: 'no-store' }),
+            fetch(URL_PTAX, { cache: 'no-store' })
+        ])
+            .then(async ([rg, rp, ri, rgpm, rpx]) => {
+                if (!rg.ok) throw new Error(`HTTP ${rg.status} em ${URL_GERAL}`);
+                if (!rp.ok) throw new Error(`HTTP ${rp.status} em ${URL_POR_POSTO}`);
+                if (!ri.ok) throw new Error(`HTTP ${ri.status} em ${URL_IPCA}`);
+                if (!rgpm.ok) throw new Error(`HTTP ${rgpm.status} em ${URL_IGPM}`);
+                if (!rpx.ok) throw new Error(`HTTP ${rpx.status} em ${URL_PTAX}`);
+
+                const gotG = setJsonInfoFromHeaders(rg, 'geral', 'consolidado_mensal.json');
+                const gotP = setJsonInfoFromHeaders(rp, 'postos', 'consolidado_mensal_por_posto.json');
+                const gotI = setJsonInfoFromHeaders(ri, 'ipca', 'ipca_monthly.json');
+                const gotM = setJsonInfoFromHeaders(rgpm, 'igpm', 'igpm_monthly.json');
+                const gotX = setJsonInfoFromHeaders(rpx, 'ptax', 'ptax_daily.json');
+                if (!gotG) tryHead(URL_GERAL, 'geral', 'consolidado_mensal.json');
+                if (!gotP) tryHead(URL_POR_POSTO, 'postos', 'consolidado_mensal_por_posto.json');
+                if (!gotI) tryHead(URL_IPCA, 'ipca', 'ipca_monthly.json');
+                if (!gotM) tryHead(URL_IGPM, 'igpm', 'igpm_monthly.json');
+                if (!gotX) tryHead(URL_PTAX, 'ptax', 'ptax_daily.json');
+
+                geral = await rg.json();
+                porPosto = await rp.json();
+                const ipca = await ri.json();
+                const igpm = await rgpm.json();
+                const ptax = await rpx.json();
+
+                ipcaMonthly = normalizeMonthly(ipca, 'ref_date', 'value');
+                igpmMonthly = normalizeMonthly(igpm, 'ref_date', 'value');
+
+                ptaxDaily = Array.isArray(ptax) ? ptax : (ptax.rows || ptax.data || []);
+                const ptaxMonthly = ptaxMonthlyAvg(ptaxDaily);
+
+                MESES = Object.keys(geral).filter(k => !k.startsWith('_')).sort();
+                if (!MESES.length) throw new Error('JSON consolidado sem meses.');
+                const lastFull = lastCompleteMonth(MESES);
+
+                const ultimo = porPosto[lastFull] || {};
+                POSTOS = Object.keys(ultimo).filter(x => /^[A-Z]$/.test(x)).sort();
+
+                if (el('#from1')) el('#from1').value = MESES[0];
+                if (el('#to1')) el('#to1').value = lastFull;
+
+                const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
+                if (el('#from2')) el('#from2').value = d.toISOString().slice(0, 7);
+                if (el('#to2')) el('#to2').value = lastFull;
+
+                sel1 = 'ALL'; sel2 = 'ALL';
+                buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
+                buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; window.sel2 = sel2; }, () => renderSel2());
+
+                window.MESES = MESES; window.sel2 = sel2; window._PTAX_MONTHLY = ptaxMonthly; // expõe PTAX mensal
+
+                initCharts(); attachHandlers(lastFull);
+                renderSel1(); renderSel2();
+
+                if (el('#compareBlock')) el('#compareBlock').style.display = 'none';
+                if (el('#btnComparar')) setPressed(el('#btnComparar'), false, 'secondary');
+            })
+            .catch(err => { showErr(err); alert('Falha ao carregar JSONs. Veja o console.'); });
+
+        function renderSel1() { const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null); buildKPIs('#kpisSel1', meses, sel1); }
+        function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
+
+        function setPressed(btn, on, variant = 'primary') { btn.classList.toggle(`btn-outline-${variant}`, !on); btn.classList.toggle(`btn-${variant}`, on); btn.classList.toggle('active', on); btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+
+        function attachHandlers(lastFull) {
+            if (el('#from1')) el('#from1').addEventListener('change', () => { renderSel1(); });
+            if (el('#to1')) el('#to1').addEventListener('change', () => { renderSel1(); });
+            if (el('#reset1')) el('#reset1').addEventListener('click', () => { el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1(); });
+
+            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); });
+            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); });
+            if (el('#reset2')) el('#reset2').addEventListener('click', () => { const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11); el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL'; window.sel2 = sel2; markActiveMulti('#postoTabs2', sel2); renderSel2(); });
+
+            const btnCmp = el('#btnComparar'); if (btnCmp) btnCmp.addEventListener('click', () => { const box = el('#compareBlock'); if (!box) return; const show = (box.style.display === 'none' || box.style.display === ''); box.style.display = show ? 'block' : 'none'; setPressed(btnCmp, show, 'secondary'); });
+        }
+
+        // ====== Tabela ======
         function buildTable(meses, selection) {
-            const tb = el('#tblBody'); if (!tb) return;
-            tb.innerHTML = ''; let sumMens = 0, sumQtd = 0, tickets = [];
+            const tb = el('#tblBody'); if (!tb) return; tb.innerHTML = ''; let sumMens = 0, sumQtd = 0, tickets = [];
             meses.forEach(m => {
-                const v = aggMens(m, selection);
-                sumMens += v.valor; sumQtd += v.qtd; if (v.ticket != null) tickets.push(v.ticket);
+                const v = aggMens(m, selection); sumMens += v.valor; sumQtd += v.qtd; if (v.ticket != null) tickets.push(v.ticket);
                 tb.insertAdjacentHTML('beforeend', `
 <tr>
   <td>${mFmt(m)}</td>
@@ -711,9 +865,7 @@
   <td class="text-right">${v.mix_i == null ? '-' : fmt2.format(v.mix_i)}</td>
 </tr>`);
             });
-            const avgMens = meses.length ? Math.round(sumMens / meses.length) : 0;
-            const avgQtd = meses.length ? Math.round(sumQtd / meses.length) : 0;
-            const avgTk = tickets.length ? tickets.reduce((a, b) => a + b, 0) / tickets.length : null;
+            const avgMens = meses.length ? Math.round(sumMens / meses.length) : 0; const avgQtd = meses.length ? Math.round(sumQtd / meses.length) : 0; const avgTk = tickets.length ? tickets.reduce((a, b) => a + b, 0) / tickets.length : null;
             tb.insertAdjacentHTML('beforeend', `
 <tr>
   <td><b>Média</b></td>
@@ -731,320 +883,53 @@
   <td class="text-right" colspan="12"><b>-</b></td>
 </tr>`);
         }
-
-        /* Gráficos */
-        let chValores, chQtdTicket, chPerf, chVol, chYoY, chMix, chScatter, chPareto, chYoYPosto;
-        function initCharts() {
-            const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
-            chValores = new Chart(document.getElementById('chartValores'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
-            chQtdTicket = new Chart(document.getElementById('chartQtdTicket'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
-            chPerf = new Chart(document.getElementById('chartPerf'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
-            chVol = new Chart(document.getElementById('chartVol'), { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: false } } } });
-            chYoY = new Chart(document.getElementById('chartYoY'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
-            chMix = new Chart(document.getElementById('chartMix'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
-            chScatter = new Chart(document.getElementById('chartScatter'), { type: 'scatter', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'ΔVolume' } }, y: { title: { display: true, text: 'ΔPreço' } } } } });
-            chPareto = new Chart(document.getElementById('chartPareto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
-            chYoYPosto = new Chart(document.getElementById('chartYoYPosto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
-        }
-        function labelSelec(selection) { if (selection === 'ALL') return 'Todos'; const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'Todos'; }
-        function postoShares(meses, selection) {
-            const map = new Map();
-            meses.forEach(m => {
-                const row = porPosto[m] || {};
-                Object.keys(row).forEach(p => {
-                    if (selection !== 'ALL' && !selection.has(p)) return;
-                    const v = num(row[p]?.mensalidade);
-                    map.set(p, (map.get(p) || 0) + v);
-                });
-            });
-            const entries = [...map.entries()].sort((a, b) => b[1] - a[1]);
-            return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]), total: sum(entries.map(e => e[1])) };
-        }
-        function updateCharts(meses, selection) {
-            const labels = meses.map(mFmt);
-            const tag = labelSelec(selection);
-            const rows = meses.map(m => aggMens(m, selection));
-
-            const receita = rows.map(v => v.valor);
-            const mm3 = receita.map((_, i) => { const s = receita.slice(Math.max(0, i - 2), i + 1).filter(x => x != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; });
-            chValores.data.labels = labels;
-            chValores.data.datasets = [{ label: `Mensalidade (${tag})`, data: receita, tension: .2 }, { label: 'Média móvel 3m', data: mm3, tension: .2 }];
-            chValores.update();
-
-            chQtdTicket.data.labels = labels;
-            chQtdTicket.data.datasets = [{ label: 'Qtd', data: rows.map(v => v.qtd), tension: .2, yAxisID: 'y' }, { label: 'Ticket', data: rows.map(v => v.ticket || 0), tension: .2, yAxisID: 'y1' }];
-            chQtdTicket.options = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true }, y1: { beginAtZero: true, position: 'right' } } };
-            chQtdTicket.update();
-
-            const perfVals = rows.map(v => v.perf);
-            const colors = perfVals.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)');
-            const borders = perfVals.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
-            chPerf.data.labels = labels;
-            chPerf.data.datasets = [{ label: `Performance MoM (${tag})`, data: perfVals, backgroundColor: colors, borderColor: borders, borderWidth: 1 }];
-            chPerf.update();
-
-            const logs = rows.map(v => v.logret);
-            const vol3 = (function (arr, w) { const out = []; for (let i = 0; i < arr.length; i++) { if (i + 1 < w) { out.push(null); continue; } const s = arr.slice(i + 1 - w, i + 1).filter(v => v != null); if (!s.length) { out.push(null); continue; } const mean = s.reduce((a, b) => a + b, 0) / s.length; const vr = s.reduce((a, x) => a + (x - mean) * (x - mean), 0) / s.length; out.push(Math.sqrt(vr)); } return out; })(logs, 3).map(v => v == null ? null : v * 100);
-            chVol.data.labels = labels;
-            chVol.data.datasets = [{ label: `LogRet (${tag})`, data: logs, tension: .2 }, { label: 'Vol. móvel 3m (%)', data: vol3, tension: .2 }];
-            chVol.update();
-
-            const yoyVals = rows.map(v => v.r_yoy);
-            const yoyColors = yoyVals.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)');
-            const yoyBorders = yoyVals.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
-            chYoY.data.labels = labels;
-            chYoY.data.datasets = [{ label: `Receita YoY (${tag})`, data: yoyVals, backgroundColor: yoyColors, borderColor: yoyBorders, borderWidth: 1 }];
-            chYoY.update();
-
-            chMix.data.labels = labels;
-            chMix.data.datasets = [{ label: 'ΔPreço', data: rows.map(v => v.mix_p) }, { label: 'ΔVolume', data: rows.map(v => v.mix_v) }];
-            chMix.update();
-
-            chScatter.data.datasets = [{ label: 'Meses', data: rows.map(v => ({ x: v.mix_v || 0, y: v.mix_p || 0 })) }];
-            chScatter.update();
-
-            const shares = postoShares(meses, selection);
-            chPareto.data.labels = shares.labels;
-            chPareto.data.datasets = [{ label: 'Receita (período)', data: shares.valores }];
-            chPareto.update();
-
-            const mapYoY = new Map();
-            meses.forEach(m => {
-                const row = porPosto[m] || {};
-                Object.keys(row).forEach(p => {
-                    if (selection !== 'ALL' && !selection.has(p)) return;
-                    const yoy = maybe(row[p]?.receita_yoy_pct); if (yoy == null) return;
-                    const obj = mapYoY.get(p) || { sum: 0, count: 0 }; obj.sum += yoy; obj.count += 1; mapYoY.set(p, obj);
-                });
-            });
-            const postos = [...mapYoY.keys()].sort();
-            const yoyMed = postos.map(p => mapYoY.get(p).count ? mapYoY.get(p).sum / mapYoY.get(p).count : null);
-            const yoyPostoColors = yoyMed.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)');
-            const yoyPostoBorders = yoyMed.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
-            chYoYPosto.data.labels = postos;
-            chYoYPosto.data.datasets = [{ label: 'YoY médio (12m)', data: yoyMed, backgroundColor: yoyPostoColors, borderColor: yoyPostoBorders, borderWidth: 1 }];
-            chYoYPosto.update();
-        }
-
-        function markActiveMulti(scopeId, selection) {
-            const isAll = selection === 'ALL';
-            document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
-                const p = a.dataset.posto;
-                if (p === 'ALL') { a.classList.toggle('active', isAll); }
-                else { a.classList.toggle('active', !isAll && selection.has(p)); }
-            });
-        }
-        function buildPostoTabs(ulId, getSel, setSel, onChange) {
-            const ul = el(ulId); if (!ul) return;
-            ul.innerHTML = '';
-            ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="ALL" class="nav-link" href="#">Todos</a></li>`);
-            POSTOS.forEach(p => ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`));
-            markActiveMulti(ulId, getSel());
-            ul.addEventListener('click', e => {
-                if (!e.target.matches('.nav-link')) return; e.preventDefault();
-                const p = e.target.dataset.posto; let sel = getSel();
-                if (p === 'ALL') { sel = 'ALL'; }
-                else {
-                    if (sel === 'ALL') sel = new Set();
-                    if (sel.has(p)) sel.delete(p); else sel.add(p);
-                    if (sel.size === POSTOS.length || sel.size === 0) sel = 'ALL';
-                }
-                setSel(sel); markActiveMulti(ulId, sel); onChange();
-            });
-        }
-
-        Prompts.init({
-            pageId: 'mensalidades',
-            defaults: [
-                { name: 'Padrão', template: `Analise receita, quantidade, ticket, performance e mix (ΔPreço/ΔVolume) para {posto} de {from} a {to}. Foque nos gráficos {scopes}. Liste até 5 insights e 3 alertas. Tom assertivo.` },
-                { name: 'Executivo', template: `Resumo executivo para {produto} no período {from}→{to}, posto {posto}. Destaque riscos e oportunidades. Cite {scopes}. Texto conciso.` }
-            ],
-            mountAfter: '#btnComparar'
-        });
-
-        Promise.all([fetch(URL_GERAL, { cache: 'no-store' }), fetch(URL_POR_POSTO, { cache: 'no-store' })])
-            .then(async ([rg, rp]) => {
-                if (!rg.ok) throw new Error(`HTTP ${rg.status} em ${URL_GERAL}`);
-                if (!rp.ok) throw new Error(`HTTP ${rp.status} em ${URL_POR_POSTO}`);
-
-                const gotG = setJsonInfoFromHeaders(rg, 'geral', 'consolidado_mensal.json');
-                const gotP = setJsonInfoFromHeaders(rp, 'postos', 'consolidado_mensal_por_posto.json');
-                if (!gotG) tryHead(URL_GERAL, 'geral', 'consolidado_mensal.json');
-                if (!gotP) tryHead(URL_POR_POSTO, 'postos', 'consolidado_mensal_por_posto.json');
-
-                geral = await rg.json();
-                porPosto = await rp.json();
-
-                MESES = Object.keys(geral).filter(k => !k.startsWith('_')).sort();
-                if (!MESES.length) throw new Error('JSON consolidado sem meses.');
-                const lastFull = lastCompleteMonth(MESES);
-
-                const ultimo = porPosto[lastFull] || {};
-                POSTOS = Object.keys(ultimo).filter(x => /^[A-Z]$/.test(x)).sort();
-
-                if (el('#from1')) el('#from1').value = MESES[0];
-                if (el('#to1')) el('#to1').value = lastFull;
-
-                const [y, m] = lastFull.split('-').map(Number);
-                const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
-                if (el('#from2')) el('#from2').value = d.toISOString().slice(0, 7);
-                if (el('#to2')) el('#to2').value = lastFull;
-
-                sel1 = 'ALL'; sel2 = 'ALL';
-                buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
-                buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; window.sel2 = sel2; }, () => renderSel2());
-
-                window.MESES = MESES; window.sel2 = sel2;
-
-                initCharts(); attachHandlers(lastFull);
-                renderSel1(); renderSel2();
-
-                if (el('#compareBlock')) el('#compareBlock').style.display = 'none';
-                if (el('#btnComparar')) setPressed(el('#btnComparar'), false, 'secondary');
-            })
-            .catch(err => { showErr(err); alert('Falha ao carregar JSONs. Veja o console.'); });
-
-        function renderSel1() { const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null); buildKPIs('#kpisSel1', meses, sel1); }
-        function renderSel2() { const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null); buildKPIs('#kpisSel2', meses, sel2); buildTable(meses, sel2); updateCharts(meses, sel2); }
-
-        function attachHandlers(lastFull) {
-            if (el('#from1')) el('#from1').addEventListener('change', () => { renderSel1(); });
-            if (el('#to1')) el('#to1').addEventListener('change', () => { renderSel1(); });
-            if (el('#reset1')) el('#reset1').addEventListener('click', () => { el('#from1').value = MESES[0]; el('#to1').value = lastFull; sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1(); });
-
-            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); });
-            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); });
-            if (el('#reset2')) el('#reset2').addEventListener('click', () => {
-                const [y, m] = lastFull.split('-').map(Number); const d = new Date(y, m - 1, 1); d.setMonth(d.getMonth() - 11);
-                el('#from2').value = d.toISOString().slice(0, 7); el('#to2').value = lastFull; sel2 = 'ALL'; window.sel2 = sel2; markActiveMulti('#postoTabs2', sel2); renderSel2();
-            });
-
-            const btnCmp = el('#btnComparar');
-            if (btnCmp) btnCmp.addEventListener('click', () => {
-                const box = el('#compareBlock'); if (!box) return;
-                const show = (box.style.display === 'none' || box.style.display === '');
-                box.style.display = show ? 'block' : 'none';
-                setPressed(btnCmp, show, 'secondary');
-            });
-        }
     </script>
 
-
-
-
-
-
-
-
-
-    <!-- Função de payload para a IA -->
-    <!-- === SNAPSHOT COMPLETO PARA A IA === -->
+    <!-- SNAPSHOT COMPLETO PARA A IA, incluindo macro -->
     <script>
-        // Helpers já existentes no seu arquivo são reutilizados: aggMens, mesesSel, etc.
-
         function media(arr) { const v = arr.filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; }
         function serieMM3(arr) { return arr.map((_, i) => { const s = arr.slice(Math.max(0, i - 2), i + 1).filter(x => x != null); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null; }); }
         function volMovelPct(logrets, w = 3) { const out = []; for (let i = 0; i < logrets.length; i++) { if (i + 1 < w) { out.push(null); continue; } const s = logrets.slice(i + 1 - w, i + 1).filter(v => v != null); if (!s.length) { out.push(null); continue; } const mean = s.reduce((a, b) => a + b, 0) / s.length; const vr = s.reduce((a, x) => a + (x - mean) * (x - mean), 0) / s.length; out.push(Math.sqrt(vr) * 100); } return out; }
-
-        function postoSharesPeriodo(meses, selection) {
-            const map = new Map();
-            meses.forEach(m => {
-                const row = porPosto[m] || {};
-                Object.keys(row).forEach(p => {
-                    if (selection !== 'ALL' && !selection.has(p)) return;
-                    const v = Number(row[p]?.mensalidade) || 0;
-                    map.set(p, (map.get(p) || 0) + v);
-                });
-            });
-            const entries = [...map.entries()].sort((a, b) => b[1] - a[1]);
-            return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]), total: entries.reduce((a, [, v]) => a + v, 0) };
-        }
-        function yoyMedioPorPosto(meses, selection) {
-            const map = new Map();
-            meses.forEach(m => {
-                const row = porPosto[m] || {};
-                Object.keys(row).forEach(p => {
-                    if (selection !== 'ALL' && !selection.has(p)) return;
-                    const yoy = Number(row[p]?.receita_yoy_pct); if (!Number.isFinite(yoy)) return;
-                    const o = map.get(p) || { sum: 0, count: 0 }; o.sum += yoy; o.count += 1; map.set(p, o);
-                });
-            });
-            const postos = [...map.keys()].sort();
-            return { postos, yoyMed: postos.map(p => map.get(p).sum / map.get(p).count) };
-        }
+        function postoSharesPeriodo(meses, selection) { const map = new Map(); meses.forEach(m => { const row = porPosto[m] || {}; Object.keys(row).forEach(p => { if (selection !== 'ALL' && !selection.has(p)) return; const v = Number(row[p]?.mensalidade) || 0; map.set(p, (map.get(p) || 0) + v); }); }); const entries = [...map.entries()].sort((a, b) => b[1] - a[1]); return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]), total: entries.reduce((a, [, v]) => a + v, 0) }; }
+        function yoyMedioPorPosto(meses, selection) { const map = new Map(); meses.forEach(m => { const row = porPosto[m] || {}; Object.keys(row).forEach(p => { if (selection !== 'ALL' && !selection.has(p)) return; const yoy = Number(row[p]?.receita_yoy_pct); if (!Number.isFinite(yoy)) return; const o = map.get(p) || { sum: 0, count: 0 }; o.sum += yoy; o.count += 1; map.set(p, o); }); }); const postos = [...map.keys()].sort(); return { postos, yoyMed: postos.map(p => map.get(p).sum / map.get(p).count) }; }
         function maxDrawdown(vals) { let peak = -Infinity, mdd = 0; for (const v of vals) { if (v == null) continue; if (v > peak) peak = v; if (peak > 0) { const dd = (v - peak) / peak * 100; if (dd < mdd) mdd = dd; } } return mdd || 0; }
         function labelSelec(selection) { if (selection === 'ALL') return 'ALL'; const arr = [...selection].sort(); return arr.length ? arr.join('+') : 'ALL'; }
 
         function computeKPIs(meses, selection) {
-            const rows = meses.map(m => aggMens(m, selection));
-            const receita = rows.reduce((a, b) => a + (b.valor || 0), 0);
-            const qtd = rows.reduce((a, b) => a + (b.qtd || 0), 0);
-            const ticketPond = qtd ? receita / qtd : null;
-            const perfs = rows.map(v => v.perf).filter(v => v != null);
-            const perfMA = media(perfs);
-            let perfMG = null, perfAc = null;
-            if (perfs.length) { const mult = perfs.reduce((a, p) => a * (1 + p / 100), 1); perfAc = (mult - 1) * 100; perfMG = (Math.pow(mult, 1 / perfs.length) - 1) * 100; }
+            const rows = meses.map(m => aggMens(m, selection)); const receita = rows.reduce((a, b) => a + (b.valor || 0), 0); const qtd = rows.reduce((a, b) => a + (b.qtd || 0), 0); const ticketPond = qtd ? receita / qtd : null;
+            const perfs = rows.map(v => v.perf).filter(v => v != null); const perfMA = media(perfs); let perfMG = null, perfAc = null; if (perfs.length) { const mult = perfs.reduce((a, p) => a * (1 + p / 100), 1); perfAc = (mult - 1) * 100; perfMG = (Math.pow(mult, 1 / perfs.length) - 1) * 100; }
             let cagr = null; if (meses.length >= 2) { const first = (aggMens(meses[0], selection).valor || 0); const last = (aggMens(meses.at(-1), selection).valor || 0); if (first > 0) cagr = (Math.pow(last / first, 1 / (meses.length - 1)) - 1) * 100; }
-            const moms = rows.map(v => v.r_mom).filter(v => v != null);
-            const hit = moms.length ? (moms.filter(x => x > 0).length / moms.length) * 100 : null;
-            const logrets = rows.map(v => v.logret).filter(v => v != null);
+            const moms = rows.map(v => v.r_mom).filter(v => v != null); const hit = moms.length ? (moms.filter(x => x > 0).length / moms.length) * 100 : null; const logrets = rows.map(v => v.logret).filter(v => v != null);
             let volPct = null; if (logrets.length) { const mean = media(logrets); const vr = logrets.reduce((a, x) => a + (x - mean) * (x - mean), 0) / logrets.length; volPct = Math.sqrt(vr) * 100; }
-            const receitaSerie = meses.map(m => aggMens(m, selection).valor || null);
-            const mdd = maxDrawdown(receitaSerie);
+            const receitaSerie = meses.map(m => aggMens(m, selection).valor || null); const mdd = maxDrawdown(receitaSerie);
             return { receita_total: receita, qtd_total: qtd, ticket_ponderado: ticketPond, perf_ma: perfMA, perf_mg: perfMG, perf_acumulada: perfAc, cagr_receita: cagr, run_rate_12m: (meses.length ? (receita / meses.length) * 12 : null), hit_rate: hit, volatilidade_logret_pct: volPct, max_drawdown_receita_pct: mdd };
         }
 
         function buildTableSnapshot(meses, selection) {
-            const rows = meses.map(m => {
-                const v = aggMens(m, selection); return {
-                    mes: m, qtd: v.qtd ?? null, receita: v.valor ?? null, ticket: v.ticket ?? null, perf_mom: v.perf ?? null,
-                    receita_mom: v.r_mom ?? null, qtd_mom: v.q_mom ?? null, ticket_mom: v.t_mom ?? null,
-                    receita_yoy: v.r_yoy ?? null, qtd_yoy: v.q_yoy ?? null, ticket_yoy: v.t_yoy ?? null,
-                    logret: v.logret ?? null, dpreco: v.mix_p ?? null, dvol: v.mix_v ?? null, dinter: v.mix_i ?? null
-                };
-            });
-            const sumR = rows.reduce((a, b) => a + (b.receita || 0), 0);
-            const sumQ = rows.reduce((a, b) => a + (b.qtd || 0), 0);
-            const tk = rows.map(r => r.ticket).filter(x => x != null);
-            return {
-                rows,
-                avg: { qtd: Math.round(sumQ / (meses.length || 1)) || 0, receita: Math.round(sumR / (meses.length || 1)) || 0, ticket: tk.length ? tk.reduce((a, b) => a + b, 0) / tk.length : null },
-                totals: { qtd: sumQ, receita: sumR }
-            };
+            const rows = meses.map(m => { const v = aggMens(m, selection); return { mes: m, qtd: v.qtd ?? null, receita: v.valor ?? null, ticket: v.ticket ?? null, perf_mom: v.perf ?? null, receita_mom: v.r_mom ?? null, qtd_mom: v.q_mom ?? null, ticket_mom: v.t_mom ?? null, receita_yoy: v.r_yoy ?? null, qtd_yoy: v.q_yoy ?? null, ticket_yoy: v.t_yoy ?? null, logret: v.logret ?? null, dpreco: v.mix_p ?? null, dvol: v.mix_v ?? null, dinter: v.mix_i ?? null }; });
+            const sumR = rows.reduce((a, b) => a + (b.receita || 0), 0); const sumQ = rows.reduce((a, b) => a + (b.qtd || 0), 0); const tk = rows.map(r => r.ticket).filter(x => x != null);
+            return { rows, avg: { qtd: Math.round(sumQ / (meses.length || 1)) || 0, receita: Math.round(sumR / (meses.length || 1)) || 0, ticket: tk.length ? tk.reduce((a, b) => a + b, 0) / tk.length : null }, totals: { qtd: sumQ, receita: sumR } };
         }
 
         function buildChartsSnapshot(meses, selection) {
-            const rows = meses.map(m => aggMens(m, selection)); const lbls = [...meses];
-            const receita = rows.map(v => v.valor ?? null); const mm3 = serieMM3(receita);
-            const qtd = rows.map(v => v.qtd ?? null); const ticket = rows.map(v => v.ticket ?? null);
-            const perf = rows.map(v => v.perf ?? null); const yoy = rows.map(v => v.r_yoy ?? null);
-            const logret = rows.map(v => v.logret ?? null); const vol3pct = volMovelPct(logret, 3);
-            const dpreco = rows.map(v => v.mix_p ?? null); const dvol = rows.map(v => v.mix_v ?? null);
-            const scatter = rows.map(v => ({ x: v.mix_v ?? 0, y: v.mix_p ?? 0 }));
-            const pareto = postoSharesPeriodo(meses, selection); const yoyp = yoyMedioPorPosto(meses, selection);
-            return {
-                chart_valores: { labels: lbls, receita, media_movel_3m: mm3 },
-                chart_qtd_ticket: { labels: lbls, qtd, ticket },
-                chart_perf: { labels: lbls, perf, yoy },
-                chart_vol: { labels: lbls, logret, vol_movel_3m_pct: vol3pct },
-                chart_yoy: { labels: lbls, yoy },
-                chart_mix: { labels: lbls, dpreco, dvol },
-                chart_scatter: { pontos: scatter },
-                chart_pareto: { postos: pareto.labels, receita: pareto.valores, total: pareto.total },
-                chart_yoy_posto: { postos: yoyp.postos, yoy_medio: yoyp.yoyMed }
-            };
+            const rows = meses.map(m => aggMens(m, selection)); const lbls = [...meses]; const receita = rows.map(v => v.valor ?? null); const mm3 = serieMM3(receita);
+            const qtd = rows.map(v => v.qtd ?? null); const ticket = rows.map(v => v.ticket ?? null); const perf = rows.map(v => v.perf ?? null); const yoy = rows.map(v => v.r_yoy ?? null);
+            const logret = rows.map(v => v.logret ?? null); const vol3pct = volMovelPct(logret, 3); const dpreco = rows.map(v => v.mix_p ?? null); const dvol = rows.map(v => v.mix_v ?? null);
+            const scatter = rows.map(v => ({ x: v.mix_v ?? 0, y: v.mix_p ?? 0 })); const pareto = postoSharesPeriodo(meses, selection); const yoyp = yoyMedioPorPosto(meses, selection);
+            return { chart_valores: { labels: lbls, receita, media_movel_3m: mm3 }, chart_qtd_ticket: { labels: lbls, qtd, ticket }, chart_perf: { labels: lbls, perf, yoy }, chart_vol: { labels: lbls, logret, vol_movel_3m_pct: vol3pct }, chart_yoy: { labels: lbls, yoy }, chart_mix: { labels: lbls, dpreco, dvol }, chart_scatter: { pontos: scatter }, chart_pareto: { postos: pareto.labels, receita: pareto.valores, total: pareto.total }, chart_yoy_posto: { postos: yoyp.postos, yoy_medio: yoyp.yoyMed } };
         }
 
         function snapshotPageState({ userQuery }) {
             const meses1 = MESES.filter(m => (!from1?.value || m >= from1.value) && (!to1?.value || m <= to1.value));
             const meses2 = MESES.filter(m => (!from2?.value || m >= from2.value) && (!to2?.value || m <= to2.value));
-            const scopes = ['chart_valores', 'chart_qtd_ticket', 'chart_perf', 'chart_vol', 'chart_yoy', 'chart_mix', 'chart_scatter', 'chart_pareto', 'chart_yoy_posto'].join(', ');
-            const basePrompt = (window.Prompts?.render?.({
-                produto: 'mensalidades', from: meses2[0], to: meses2.at(-1), posto: labelSelec(sel2),
-                contexto: userQuery ? 'qa' : 'relatorio', scopes
-            })) || `Relatório técnico de mensalidades ${meses2[0]}→${meses2.at(-1)} posto ${labelSelec(sel2)}. Foque em ${scopes}. Sem tabelas ASCII.`;
 
-            const kpis_sel1 = computeKPIs(meses1, sel1);
+            // Macro alinhada
+            const macro = macroSeriesFor(meses2, ipcaMonthly, igpmMonthly, (window._PTAX_MONTHLY || {})); const macroSafe = sane(media(macro.map(x => x.ipca))) ? macro : macro.map(x => ({ ...x, ipca: null }));
+            const scopes = ['chart_valores', 'chart_qtd_ticket', 'chart_perf', 'chart_vol', 'chart_yoy', 'chart_mix', 'chart_scatter', 'chart_pareto', 'chart_yoy_posto', 'macro_indices'].join(', ');
+            const basePrompt = (window.Prompts?.render?.({ produto: 'mensalidades', from: meses2[0], to: meses2.at(-1), posto: labelSelec(sel2), contexto: userQuery ? 'qa' : 'relatorio', scopes }))
+                || `Relatório técnico de mensalidades ${meses2[0]}→${meses2.at(-1)} posto ${labelSelec(sel2)}. Considere também IPCA, IGP-M e PTAX (média mensal) para perdas reais e efeito cambial. Sem tabelas ASCII.`;
+
+            const kpis_sel1_comp = computeKPIs(meses1, sel1);
             const kpis_sel2 = computeKPIs(meses2, sel2);
             const tabela_sel2 = buildTableSnapshot(meses2, sel2);
             const charts = buildChartsSnapshot(meses2, sel2);
@@ -1052,13 +937,11 @@
             const meta = {
                 page: 'kpi_v2', title: document.title || '', when: Date.now(),
                 json_info_text: document.querySelector('#jsonInfo')?.textContent || '',
-                urls: { geral: URL_GERAL || null, por_posto: URL_POR_POSTO || null },
+                urls: { geral: URL_GERAL || null, por_posto: URL_POR_POSTO || null, ipca: URL_IPCA || null, igpm: URL_IGPM || null, ptax: URL_PTAX || null },
                 datasets: { MESES, POSTOS }
             };
-            const filtros = {
-                compare: { from: from1?.value || null, to: to1?.value || null, posto: labelSelec(sel1) },
-                deep: { from: from2?.value || null, to: to2?.value || null, posto: labelSelec(sel2) }
-            };
+
+            const filtros = { compare: { from: from1?.value || null, to: to1?.value || null, posto: labelSelec(sel1) }, deep: { from: from2?.value || null, to: to2?.value || null, posto: labelSelec(sel2) } };
 
             const blocks = [
                 { scope: 'chart_valores', periodo: filtros.deep, posto: filtros.deep.posto, series: { labels: charts.chart_valores.labels, receita: charts.chart_valores.receita, mm3: charts.chart_valores.media_movel_3m } },
@@ -1070,29 +953,28 @@
                 { scope: 'chart_scatter', periodo: filtros.deep, posto: filtros.deep.posto, series: { pontos: charts.chart_scatter.pontos } },
                 { scope: 'chart_pareto', periodo: filtros.deep, posto: filtros.deep.posto, series: { postos: charts.chart_pareto.postos, receita: charts.chart_pareto.receita, total: charts.chart_pareto.total } },
                 { scope: 'chart_yoy_posto', periodo: filtros.deep, posto: filtros.deep.posto, series: { postos: charts.chart_yoy_posto.postos, yoy_medio: charts.chart_yoy_posto.yoy_medio } },
+                // NOVO bloco macro
+                { scope: 'macro_indices', periodo: filtros.deep, series: { meses: meses2, ipca: macro.map(x => x.ipca), igpm: macro.map(x => x.igpm), ptax_avg: macro.map(x => x.ptax_avg) } },
                 { scope: 'tabela_kpis', periodo: filtros.deep, posto: filtros.deep.posto, kpis: kpis_sel2, tabela: tabela_sel2 }
             ];
 
-            const scopesTxt = 'chart_valores, chart_qtd_ticket, chart_perf, chart_vol, chart_yoy, chart_mix, chart_scatter, chart_pareto, chart_yoy_posto';
             return {
-                meta, filtros, produto: 'mensalidades',
-                contexto: userQuery ? 'qa' : 'relatorio',
-                qa: userQuery || null,
+                meta, filtros, produto: 'mensalidades', contexto: userQuery ? 'qa' : 'relatorio', qa: userQuery || null,
+                macro: { series: macro },
                 prefs: { output: 'livre', assertivo: true, accept_format: 'free_text', temperature: 0.2, max_tokens: 7000 },
-                defs: { receita: 'Somatório de mensalidade no mês', qtd: 'Quantidade de mensalidades', ticket: 'Receita / Qtd', perf: 'Variação % MoM da receita', yoy: 'Variação % YoY da receita', dpreco: 'ΔPreço', dvol: 'ΔVolume' },
+                defs: { receita: 'Somatório de mensalidade no mês', qtd: 'Quantidade de mensalidades', ticket: 'Receita / Qtd', perf: 'Variação % MoM da receita', yoy: 'Variação % YoY da receita', dpreco: 'ΔPreço', dvol: 'ΔVolume', ipca: 'Inflação oficial mensal', igpm: 'IGP-M mensal', ptax: 'Média mensal PTAX USD/BRL' },
                 prompt: userQuery ? `${basePrompt}\nPergunta: ${userQuery}` : basePrompt,
-                kpis: { comparacao: kpis_sel1, mensalidades: kpis_sel2 },
+                kpis: { comparacao: kpis_sel1_comp, mensalidades: kpis_sel2 },
                 tabela: tabela_sel2,
                 charts, blocks
             };
         }
 
-        // Export público para o chat
         window.snapshotPageState = snapshotPageState;
         window.buildPayloadDeep = ({ userQuery }) => snapshotPageState({ userQuery });
     </script>
 
-    <!-- === CHAT: envia snapshot a cada envio === -->
+    <!-- CHAT: envia snapshot a cada envio -->
     <script>
         ChatIA.init({
             apiUrl: (window.IA_API_URL || '/ia/analisar'),
@@ -1108,8 +990,8 @@
                     produto: 'mensalidades', from: meses2[0], to: meses2.at(-1),
                     posto: (window.sel2 === 'ALL' ? 'ALL' : [...window.sel2].sort().join('+')) || 'ALL',
                     contexto: userQuery ? 'qa' : 'relatorio',
-                    scopes: 'chart_valores, chart_qtd_ticket, chart_perf, chart_vol, chart_yoy, chart_mix, chart_scatter, chart_pareto, chart_yoy_posto'
-                })) || 'Relatório técnico de mensalidades. Foque em valores, quantidade, ticket, performance, volatilidade, yoy e mix.';
+                    scopes: 'chart_valores, chart_qtd_ticket, chart_perf, chart_vol, chart_yoy, chart_mix, chart_scatter, chart_pareto, chart_yoy_posto, macro_indices'
+                })) || 'Relatório técnico de mensalidades com macro. Foque em valores, quantidade, ticket, performance, volatilidade, yoy, mix e índices macro.';
                 return {
                     meta: { page: 'kpi_v2', title: document.title || '' },
                     produto: 'mensalidades',
@@ -1122,6 +1004,29 @@
             }
         });
     </script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
