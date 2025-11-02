@@ -28,6 +28,12 @@ jobs:
           install -m 600 -D /dev/null ~/.ssh/id_vm
           echo "$SSH_KEY_B64" | base64 -d > ~/.ssh/id_vm
           chmod 600 ~/.ssh/id_vm
+          # sanity check: a primeira e última linha precisam existir
+          head -n1 ~/.ssh/id_vm
+          tail -n1 ~/.ssh/id_vm
+          # deve imprimir:
+          # -----BEGIN OPENSSH PRIVATE KEY-----
+          # -----END OPENSSH PRIVATE KEY-----
           ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
 
       - name: WEB -> /var/www
