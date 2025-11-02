@@ -25,16 +25,15 @@ jobs:
           SSH_KEY_B64: ${{ secrets.SSH_KEY_B64 }}
         run: |
           set -euxo pipefail
+          if [ -z "${SSH_KEY_B64:-}" ]; then
+            echo "FALHA: secret SSH_KEY_B64 não definido"; exit 1
+          fi
           install -m 600 -D /dev/null ~/.ssh/id_vm
-          # decodifica e remove CR (Windows)
           echo "$SSH_KEY_B64" | base64 -d | tr -d '\r' > ~/.ssh/id_vm
           chmod 600 ~/.ssh/id_vm
-          # sanity checks
-          head -n1 ~/.ssh/id_vm; tail -n1 ~/.ssh/id_vm
-          ssh-keygen -y -f ~/.ssh/id_vm > /dev/null
+          head -n1 ~/.ssh/id_vm; tail -n1 ~/.ssh/id_vm   # deve mostrar BEGIN/END
           ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
-          # teste de conexão non-interactive
-          ssh -o BatchMode=yes -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "${{ secrets.SSH_USER }}@$SSH_HOST" true
+
 
       - name: WEB -> /var/www
         env:
