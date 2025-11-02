@@ -16,15 +16,13 @@ jobs:
         run: |
           set -euxo pipefail
           pwd
-          ls -lah
-          echo "---- primeiros 200 paths versionados ----"
           git ls-files | head -n 200 || true
 
       - name: Setup SSH
         env:
-        SSH_HOST: ${{ secrets.SSH_HOST }}
-        SSH_PORT: ${{ secrets.SSH_PORT }}
-        SSH_KEY_B64: ${{ secrets.SSH_KEY_B64 }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_KEY_B64: ${{ secrets.SSH_KEY_B64 }}
         run: |
           set -euxo pipefail
           install -m 600 -D /dev/null ~/.ssh/id_vm
@@ -52,10 +50,9 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
           set -euxo pipefail
-          # localiza o arquivo em qualquer subpasta
           ANALYZE_PATH="$(git ls-files | grep -E '(^|/)+analyze_groq\.py$' | head -n1 || true)"
           if [ -z "$ANALYZE_PATH" ]; then
-            echo "WARN: analyze_groq.py não encontrado no repo; step será pulado."
+            echo "WARN: analyze_groq.py não encontrado; pulando step."
             exit 0
           fi
           for d in /opt/ia-groq /opt/ia-groq/app; do
@@ -73,8 +70,6 @@ jobs:
           set -euxo pipefail
           DEST=/opt/relatorio_h_t
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
-
-          # sincroniza todos os .py exceto analyze_groq.py independentemente da subpasta
           rsync -avz -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
             --include='*/' --include='*.py' --exclude='analyze_groq.py' --exclude='*' \
             ./ "$SSH_USER@$SSH_HOST:$DEST/"
