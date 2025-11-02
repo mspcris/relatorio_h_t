@@ -22,19 +22,17 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_KEY_B64: ${{ secrets.SSH_KEY_B64 }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
         run: |
           set -euxo pipefail
           install -m 600 -D /dev/null ~/.ssh/id_vm
-          echo "$SSH_KEY_B64" | base64 -d > ~/.ssh/id_vm
+          cat > ~/.ssh/id_vm <<'EOF'
+${SSH_KEY}
+EOF
           chmod 600 ~/.ssh/id_vm
-          # sanity check: a primeira e última linha precisam existir
-          head -n1 ~/.ssh/id_vm
-          tail -n1 ~/.ssh/id_vm
-          # deve imprimir:
-          # -----BEGIN OPENSSH PRIVATE KEY-----
-          # -----END OPENSSH PRIVATE KEY-----
+          head -n1 ~/.ssh/id_vm && tail -n1 ~/.ssh/id_vm
           ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+
 
       - name: WEB -> /var/www
         env:
