@@ -1,5 +1,4 @@
 name: Deploy to VM
-
 on:
   push:
     branches: [ "main" ]
@@ -8,9 +7,18 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions: { contents: read }
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Debug repo tree
+        run: |
+          set -euxo pipefail
+          pwd
+          ls -lah
+          echo "---- primeiros 200 paths versionados ----"
+          git ls-files | head -n 200 || true
 
       - name: Setup SSH
         env:
@@ -18,46 +26,54 @@ jobs:
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_KEY:  ${{ secrets.SSH_KEY }}
         run: |
+          set -euxo pipefail
           install -m 600 -D /dev/null ~/.ssh/id_vm
           printf "%s" "$SSH_KEY" > ~/.ssh/id_vm
           ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
 
-      - name: Deploy WEB -> /var/www
+      - name: WEB -> /var/www
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
+          set -euxo pipefail
           DEST=/var/www
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
-            --exclude='*.py' \
-            --exclude='.git/' --exclude='.github/' \
+          rsync -avz --delete -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+            --exclude='*.py' --exclude='.git/' --exclude='.github/' \
             ./ "$SSH_USER@$SSH_HOST:$DEST/"
 
-      - name: Deploy analyze_groq.py para /opt/ia-groq e /opt/ia-groq/app
+      - name: analyze_groq.py -> /opt/ia-groq e /opt/ia-groq/app
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
+          set -euxo pipefail
+          # localiza o arquivo em qualquer subpasta
+          ANALYZE_PATH="$(git ls-files | grep -E '(^|/)+analyze_groq\.py$' | head -n1 || true)"
+          if [ -z "$ANALYZE_PATH" ]; then
+            echo "WARN: analyze_groq.py não encontrado no repo; step será pulado."
+            exit 0
+          fi
           for d in /opt/ia-groq /opt/ia-groq/app; do
             ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$d'"
             rsync -avz -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
-              "analyze_groq.py" "$SSH_USER@$SSH_HOST:$d/"
+              "$ANALYZE_PATH" "$SSH_USER@$SSH_HOST:$d/"
           done
 
-      - name: Deploy demais .py -> /opt/relatorio_h_t
+      - name: demais *.py -> /opt/relatorio_h_t
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
+          set -euxo pipefail
           DEST=/opt/relatorio_h_t
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
-          # só .py, exceto analyze_groq.py
-          rsync -avz \
-            -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+
+          # sincroniza todos os .py exceto analyze_groq.py independentemente da subpasta
+          rsync -avz -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
             --include='*/' --include='*.py' --exclude='analyze_groq.py' --exclude='*' \
             ./ "$SSH_USER@$SSH_HOST:$DEST/"
