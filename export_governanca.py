@@ -3,13 +3,12 @@
 # Função: executa SQL por posto e mês, salva CSVs em /dados,
 #         gera JSON consolidado global e por posto em /json_consolidado.
 #         Adiciona mensalidade_qtd, ticket_medio e performance aos JSONs.
-#         NOVO: KPIs mensais e de período (rodapé) com médias geométricas, mix e estatísticas.
-
+#         KPIs mensais e de período (rodapé) com médias geométricas, mix e estatísticas.
+#         Inclui agregados de PRESCRIÇÃO nos JSONs legados e publica JSONs enriquecidos específicos de prescrição.
 import os, re, sys, glob, json, argparse, shutil, math
 from datetime import date
 from urllib.parse import quote_plus
-
-import numpy as pd
+import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
@@ -17,12 +16,11 @@ from dotenv import load_dotenv
 # =========================
 # Constantes e Defaults
 # =========================
-
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 SQL_DIR    = os.path.join(BASE_DIR, "SQL")
 DADOS_DIR  = os.path.join(BASE_DIR, "dados")
-JSON_DIR = os.path.join(BASE_DIR, "json_consolidado")
-SRC_TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")  # opcional: front estático
+JSON_DIR   = os.path.join(BASE_DIR, "json_consolidado")
+SRC_TEMPLATES_DIR   = os.path.join(BASE_DIR, "templates")  # opcional: front estático
 TARGET_TEMPLATES_DIR = os.getenv("TARGET_TEMPLATES_DIR", os.path.join(BASE_DIR, "public"))
 
 EARLIEST_ALLOWED = date(2020, 1, 1)
@@ -33,12 +31,14 @@ KEY_PATTERNS = {
     "mensalidade": re.compile(r"(mensal|mensalid|receita|fin_?receita)", re.I),
     "medico":      re.compile(r"(medic|custo_?med|assist|sinistral)", re.I),
     "alimentacao": re.compile(r"(alimenta|refeic|cozinha|posto)", re.I),
+    "prescricao":  re.compile(r"\bprescri(ção|cao|c)(es|o|oes)?\b", re.I),
 }
 
 PREFER_NOMES = {
     "mensalidade": ["ValorPago", "Mensalidades", "valor", "total"],
     "medico":      ["medicos", "valor", "total"],
     "alimentacao": ["alimentacao", "valor", "total"],
+    "prescricao":  ["valor", "total", "qtd"],
     "desconhecido":["valor", "total"]
 }
 
@@ -52,6 +52,13 @@ def month_bounds(dt: date):
     ini = date(dt.year, dt.month, 1)
     nxt = date(dt.year + (dt.month == 12), (dt.month % 12) + 1, 1)
     return ini, nxt, f"{ini.year:04d}-{ini.month:02d}"
+
+def previous_month_bounds(dt: date):
+    m = 12 if dt.month == 1 else dt.month - 1
+    y = dt.year - 1 if dt.month == 1 else dt.year
+    ini = date(y, m, 1)
+    nxt = date(dt.year, dt.month, 1)
+    return ini, nxt, f"{y:04d}-{m:02d}"
 
 def current_month_bounds():
     return month_bounds(date.today())
@@ -77,7 +84,9 @@ def load_sql_strip_go(path):
     return txt.strip()
 
 def infer_key_from_filename(fn):
-    name = os.path.basename(fn)
+    name = os.path.basename(fn).lower()
+    if name.startswith("prescricao"):
+        return "prescricao"
     for key, pat in KEY_PATTERNS.items():
         if pat.search(name):
             return key
@@ -154,28 +163,10 @@ def collect_sql_files(validate=True):
 def _ensure_nocount(sql_text: str) -> str:
     return sql_text if sql_text.lstrip().upper().startswith("SET NOCOUNT ON") else "SET NOCOUNT ON;\n" + sql_text
 
-def _has_named_params(sql_text: str) -> bool:
-    return (":ini" in sql_text) and (":fim" in sql_text)
-
-def _has_positional_q(sql_text: str) -> bool:
-    return ("?" in sql_text) and not _has_named_params(sql_text)
-
-def run_query(engine, sql_text, ini, fim):
-    body = _ensure_nocount(sql_text)
-    if _has_named_params(body):
-        with engine.connect() as con:
-            stmt = text(body)
-            return pd.read_sql_query(stmt, con, params={"ini": ini, "fim": fim})
-    elif _has_positional_q(body):
-        conn = engine.raw_connection()
-        try:
-            return pd.read_sql_query(body, conn, params=[ini, fim])
-        finally:
-            conn.close()
-    else:
-        with engine.connect() as con:
-            stmt = text(body)
-            return pd.read_sql_query(stmt, con)
+def run_query(engine, sql_txt, ini, fim):
+    body = _ensure_nocount(sql_txt)
+    with engine.connect() as con:
+        return pd.read_sql_query(text(body), con, params={"ini": ini, "fim": fim})
 
 # =========================
 # Funções de cálculo (KPIs)
@@ -193,7 +184,6 @@ def geometric_mean(values):
     return math.exp(sum(math.log(v) for v in vals) / len(vals))
 
 def gm_rate_from_percents(perc_list):
-    """MG de fatores 1+p/100 -> retorna taxa média em %."""
     facs = []
     for p in perc_list:
         try:
@@ -226,7 +216,6 @@ def log_return(curr, prev):
     return math.log(curr/prev)
 
 def mix_decomposition(rt, rt_1, qt, qt_1, tk, tk_1):
-    """ΔR ≈ ΔQ*Tk_avg + ΔTk*Q_avg + interação. Usa médias simples entre t e t-1."""
     if None in (rt, rt_1, qt, qt_1, tk, tk_1):
         return None, None, None
     dQ = qt - qt_1
@@ -266,10 +255,10 @@ def target_csv_path(posto, ym, key):
     safe_key = key or "desconhecido"
     return os.path.join(DADOS_DIR, f"{posto}_{ym}_{safe_key}.csv")
 
-def should_write_file(path, ym_current, ym_target, force=False):
+def should_write_file(path, ym_current, ym_target, force=False, forced_months=None):
     if force:
         return True
-    if ym_target == ym_current:
+    if forced_months and ym_target in forced_months:
         return True
     return not os.path.exists(path)
 
@@ -297,15 +286,18 @@ def count_rows(df) -> int:
 def _sorted_ym(keys):
     return sorted(keys)
 
+# =========================
+# CONSOLIDADO GLOBAL (inclui prescrição)
+# =========================
 def build_monthly_json():
-    """Agregado global por mês. Adiciona campos derivados, deltas, mix e KPIs de período (_kpis_periodo)."""
+    """Agregado global por mês. Adiciona campos derivados, deltas, mix, KPIs de período e agrega PRESCRIÇÃO."""
     ensure_dir(JSON_DIR)
     pattern = re.compile(r"^(?P<posto>[A-Z])_(?P<ym>\d{4}-\d{2})_(?P<key>[a-z_]+)\.csv$", re.I)
 
-    totals = {}           # {ym: {key: total}}
-    mensalidade_qtd = {}  # {ym: int}
+    totals = {}
+    mensalidade_qtd = {}
+    prescricao_qtd = {}
 
-    # varre CSVs mensais por posto e soma para o global
     for fn in os.listdir(DADOS_DIR):
         m = pattern.match(fn)
         if not m:
@@ -325,21 +317,25 @@ def build_monthly_json():
         if key == "mensalidade":
             mensalidade_qtd[ym] = mensalidade_qtd.get(ym, 0) + count_rows(df)
 
-    # injeta quantidade
+        if key == "prescricao":
+            prescricao_qtd[ym] = prescricao_qtd.get(ym, 0) + count_rows(df)
+
     for ym, qtd in mensalidade_qtd.items():
         totals.setdefault(ym, {})
         totals[ym]["mensalidade_qtd"] = int(qtd)
 
+    for ym, qtd in prescricao_qtd.items():
+        totals.setdefault(ym, {})
+        totals[ym]["prescricao_qtd"] = int(qtd)
+
     months = _sorted_ym(totals.keys())
 
-    # campos mensais derivados + deltas e mix
     for i, ym in enumerate(months):
         mens = float(totals[ym].get("mensalidade", 0) or 0)
         qtd  = int(totals[ym].get("mensalidade_qtd", 0) or 0)
         ticket = (mens / qtd) if qtd > 0 else None
         totals[ym]["ticket_medio"] = round(ticket, 2) if ticket is not None else None
 
-        # performance de QTD mês a mês (%)
         if i > 0:
             prev_ym = months[i-1]
             prev_qtd = int(totals[prev_ym].get("mensalidade_qtd", 0) or 0)
@@ -348,7 +344,6 @@ def build_monthly_json():
             perf = None
         totals[ym]["performance"] = round(perf, 2) if perf is not None else None
 
-        # deltas MoM e logret da receita
         if i > 0:
             prev_mens   = float(totals[prev_ym].get("mensalidade", 0) or 0)
             prev_ticket = totals[prev_ym].get("ticket_medio", None)
@@ -374,7 +369,6 @@ def build_monthly_json():
             totals[ym]["mix_delta_receita_volume"] = None
             totals[ym]["mix_delta_receita_interacao"] = None
 
-        # YoY quando existir base (t e t-12) — no agregado global
         idx_yoy = i - 12
         if idx_yoy >= 0:
             base_ym   = months[idx_yoy]
@@ -392,7 +386,6 @@ def build_monthly_json():
             totals[ym]["qtd_yoy_pct"]     = None
             totals[ym]["ticket_yoy_pct"]  = None
 
-    # KPIs de período (_kpis_periodo)
     receita_series = [safe_float(totals[m].get("mensalidade", 0)) for m in months]
     qtd_series     = [float(totals[m].get("mensalidade_qtd", 0) or 0) for m in months]
     tk_series      = [totals[m].get("ticket_medio") for m in months]
@@ -405,10 +398,9 @@ def build_monthly_json():
 
     gm_ticket = geometric_mean([t for t in tk_series if t is not None])
     gm_qtd    = geometric_mean([q for q in qtd_series if q > 0])
-    gm_perf_mensal = gm_rate_from_percents(perf_series)       # %
-    perf_acumulada = accumulated_from_percents(perf_series)   # %
+    gm_perf_mensal = gm_rate_from_percents(perf_series)
+    perf_acumulada = accumulated_from_percents(perf_series)
 
-    # CAGR receita entre primeiro e último mês
     cagr = None
     if receita_series and receita_series[0] > 0 and receita_series[-1] > 0:
         n = max(1, len(receita_series)-1)
@@ -418,7 +410,6 @@ def build_monthly_json():
     hit_rate     = hit_rate_growth(receita_series)
     vol_logret   = volatility(logrets)
 
-    # outliers de receita por z-score simples
     if len(receita_series) >= 3:
         s = pd.Series(receita_series, dtype="float64")
         sd = float(s.std(ddof=1))
@@ -432,7 +423,6 @@ def build_monthly_json():
     else:
         outliers = []
 
-    # sazonalidade simples: média por mês-calendário / média geral - 1
     sazonalidade = {}
     if months:
         df_aux = pd.DataFrame({"ym": months, "receita": receita_series})
@@ -448,6 +438,7 @@ def build_monthly_json():
             "receita_total": round(total_receita, 2),
             "qtd_total": int(total_qtd),
             "ticket_ponderado": round(tk_ponderado, 2) if tk_ponderado is not None else None,
+            "prescricao_qtd_total": 0  # preenchido abaixo
         },
         "medias_geometricas": {
             "ticket_medio_gm": round(gm_ticket, 2) if gm_ticket is not None else None,
@@ -466,6 +457,7 @@ def build_monthly_json():
         },
         "sazonalidade_idx": sazonalidade
     }
+    kpis_periodo["totais"]["prescricao_qtd_total"] = int(sum([v.get("prescricao_qtd",0) for v in totals.values() if isinstance(v, dict)]))
 
     totals["_kpis_periodo"] = kpis_periodo
 
@@ -474,16 +466,18 @@ def build_monthly_json():
         json.dump(totals, f, ensure_ascii=False, indent=2)
     print(f"[ETAPA 4/6] JSON consolidado -> {os.path.relpath(out_path, BASE_DIR)}")
 
-
+# =========================
+# CONSOLIDADO POR POSTO (inclui prescrição)
+# =========================
 def build_monthly_json_by_posto():
-    """Detalhe por mês e por posto. Adiciona mensalidade_qtd, ticket_medio, performance, deltas MoM, logret, mix e YoY."""
+    """Detalhe por mês e por posto. Adiciona mensalidade_qtd, ticket_medio, performance, deltas MoM, logret, mix, YoY e PRESCRIÇÃO_QTD."""
     ensure_dir(JSON_DIR)
     pattern = re.compile(r"^(?P<posto>[A-Z])_(?P<ym>\d{4}-\d{2})_(?P<key>[a-z_]+)\.csv$", re.I)
 
-    out = {}              # {ym: {posto: {key: total}}}
-    mensalidade_qtd = {}  # {ym: {posto: int}}
+    out = {}
+    mensalidade_qtd = {}
+    prescricao_qtd = {}
 
-    # ingestão
     for fn in os.listdir(DADOS_DIR):
         m = pattern.match(fn)
         if not m:
@@ -505,15 +499,21 @@ def build_monthly_json_by_posto():
             mensalidade_qtd.setdefault(ym, {}).setdefault(posto, 0)
             mensalidade_qtd[ym][posto] += count_rows(df)
 
-    # injeta quantidade
+        if key == "prescricao":
+            prescricao_qtd.setdefault(ym, {}).setdefault(posto, 0)
+            prescricao_qtd[ym][posto] += count_rows(df)
+
     for ym, postos in mensalidade_qtd.items():
         for p, qtd in postos.items():
             out.setdefault(ym, {}).setdefault(p, {})
             out[ym][p]["mensalidade_qtd"] = int(qtd)
+    for ym, postos in prescricao_qtd.items():
+        for p, qtd in postos.items():
+            out.setdefault(ym, {}).setdefault(p, {})
+            out[ym][p]["prescricao_qtd"] = int(qtd)
 
     months = _sorted_ym(out.keys())
 
-    # derivados por posto
     for i, ym in enumerate(months):
         prev_ym = months[i - 1] if i > 0 else None
         yoy_idx = i - 12
@@ -525,7 +525,6 @@ def build_monthly_json_by_posto():
             tk = (mens / qtd) if qtd > 0 else None
             out[ym][posto]["ticket_medio"] = round(tk, 2) if tk is not None else None
 
-            # MoM + logret + mix
             if prev_ym:
                 prev_vals = out.get(prev_ym, {}).get(posto, {}) or {}
                 prev_mens = float(prev_vals.get("mensalidade", 0) or 0)
@@ -555,7 +554,6 @@ def build_monthly_json_by_posto():
                 out[ym][posto]["mix_delta_receita_volume"] = None
                 out[ym][posto]["mix_delta_receita_interacao"] = None
 
-            # YoY por posto
             if base_ym:
                 base_vals = out.get(base_ym, {}).get(posto, {}) or {}
                 base_mens = float(base_vals.get("mensalidade", 0) or 0)
@@ -567,10 +565,9 @@ def build_monthly_json_by_posto():
                 out[ym][posto]["ticket_yoy_pct"] = round(pct_change(tk, base_tk), 4) if base_tk else None
             else:
                 out[ym][posto]["receita_yoy_pct"] = None
-                out[ym][posto]["qtd_yoy_pct"] = None
-                out[ym][posto]["ticket_yoy_pct"] = None
+                out[ym][posto]["qtd_yoy_pct"]     = None
+                out[ym][posto]["ticket_yoy_pct"]  = None
 
-    # KPI por posto no mês corrente
     cur_ym = month_bounds(date.today())[2]
     kpis_por_posto = {}
     if cur_ym in out:
@@ -584,6 +581,7 @@ def build_monthly_json_by_posto():
                 "receita": mens,
                 "qtd": qtd,
                 "ticket_medio": tk,
+                "prescricao_qtd": int(vals.get("prescricao_qtd", 0) or 0),
                 "participacao_receita_pct": None,
             }
         total_cur = sum(v["receita"] for v in kpis_por_posto.values())
@@ -600,6 +598,9 @@ def build_monthly_json_by_posto():
         json.dump(out, f, ensure_ascii=False, indent=2)
     print(f"[ETAPA 5/6] JSON por posto -> {os.path.relpath(out_path, BASE_DIR)}")
 
+# =========================
+# PERCENTUAIS
+# =========================
 def build_percent_by_posto():
     """Percentuais por posto no mês corrente: medico/mensalidade e alimentacao/mensalidade."""
     ensure_dir(JSON_DIR)
@@ -636,9 +637,10 @@ def build_percent_by_posto():
         json.dump(out_rows, f, ensure_ascii=False, indent=2)
     print(f"[ETAPA 6/6] JSON percentuais -> {os.path.relpath(out_path, BASE_DIR)}")
 
-
+# =========================
+# Templates estáticos
+# =========================
 def copy_templates():
-    """Copia templates/ para a pasta pública do site estático, se configurado."""
     src, dst = SRC_TEMPLATES_DIR, TARGET_TEMPLATES_DIR
     if not os.path.isdir(src):
         print(f"[INFO] SKIP cópia: origem inexistente -> {src}")
@@ -646,6 +648,222 @@ def copy_templates():
     os.makedirs(dst, exist_ok=True)
     shutil.copytree(src, dst, dirs_exist_ok=True)
     print(f"[INFO] Templates copiados -> {dst}")
+
+# =========================
+# PRESCRIÇÃO: JSONs enriquecidos
+# =========================
+def _read_csv_flex(path):
+    try:
+        df = pd.read_csv(path, dtype=str)
+        if df.shape[1] >= 3:
+            return df
+    except Exception:
+        pass
+    df = pd.read_csv(path, header=None, dtype=str, names=["data_consulta", "medico", "tipo_prescricao", "valor"])
+    return df
+
+def _first_existing_col(df, candidates):
+    cols = {c.lower(): c for c in df.columns}
+    for name in candidates:
+        if name.lower() in cols:
+            return cols[name.lower()]
+    return None
+
+def _normalize_presc_df(df, posto_hint):
+    c_data  = _first_existing_col(df, ["data_consulta", "data", "dt"])
+    c_med   = _first_existing_col(df, ["medico", "Medico", "nome_medico"])
+    c_tipo  = _first_existing_col(df, ["tipo_prescricao", "tipo", "Tipo"])
+    c_valor = _first_existing_col(df, ["valor", "quantidade", "qtd"])
+    out = pd.DataFrame({
+        "data_consulta": (df[c_data] if c_data else "").astype(str).str.strip(),
+        "medico": (df[c_med] if c_med else "").astype(str).str.strip(),
+        "tipo_prescricao": (df[c_tipo] if c_tipo else "").astype(str).str.strip(),
+        "valor": pd.to_numeric(df[c_valor], errors="coerce").fillna(1).astype(int) if c_valor else 1,
+        "posto": str(posto_hint or "").upper()
+    })
+    out["data_consulta"] = out["data_consulta"].where(out["data_consulta"].ne(""), None)
+    return out
+
+def _count_series(series):
+    vc = series.fillna("").astype(str).value_counts()
+    return {str(k): int(v) for k, v in vc.items()}
+
+def _dict_add_inplace(target, key, inc=1):
+    target[key] = int(target.get(key, 0)) + int(inc)
+
+def _sorted_dict(d):
+    return dict(sorted(d.items(), key=lambda kv: (-kv[1], kv[0])))
+
+def build_prescricao_jsons_enriquecidos():
+    """
+    Gera:
+      - json_consolidado/prescricao_hoje.json  -> CONTÉM TODOS OS REGISTROS DE TODOS OS CSVs
+      - json_consolidado/prescricao_mensal.json
+    Fontes: dados/{POSTO}_{YYYY-MM}_prescricao.csv
+    """
+    ensure_dir(JSON_DIR)
+    pat = re.compile(r"^(?P<posto>[A-Z])_(?P<ym>\d{4}-\d{2})_prescricao\.csv$", re.I)
+
+    today = date.today()
+    ym_today = f"{today.year:04d}-{today.month:02d}"
+    d_today = f"{today.year:04d}-{today.month:02d}-{today.day:02d}"
+
+    postos = set()
+    meses_all = {}
+    por_posto = {}
+
+    mes_atual_por_dia = {}
+    mes_atual_por_medico = {}
+    mes_atual_por_tipo = {}
+    mes_atual_por_posto = {}
+    mes_atual_medico_por_tipo = {}
+    mes_atual_posto_por_medico = {}
+    mes_atual_rows = []
+
+    # NOVO: todos os registros de todos os CSVs
+    all_rows = []
+
+    linhas_hoje = []
+    por_tipo_hoje = {}
+    por_medico_hoje = {}
+    por_posto_hoje = {}
+
+    for fn in os.listdir(DADOS_DIR):
+        m = pat.match(fn)
+        if not m:
+            continue
+        posto = m.group("posto").upper()
+        ym    = m.group("ym")
+        path  = os.path.join(DADOS_DIR, fn)
+        try:
+            raw = _read_csv_flex(path)
+        except Exception:
+            continue
+        df = _normalize_presc_df(raw, posto_hint=posto)
+        postos.add(posto)
+
+        # push nos ALL ROWS
+        all_rows.extend(df.to_dict("records"))
+
+        meses_all.setdefault(ym, {"total": 0, "medicos_ativos": 0, "tipos": {}})
+        meses_all[ym]["total"] += int(len(df))
+        meses_all[ym]["medicos_ativos"] = int(max(meses_all[ym]["medicos_ativos"], df["medico"].nunique()))
+        mix = _count_series(df["tipo_prescricao"])
+        for k, v in mix.items():
+            k2 = k if k else "Sem tipo"
+            _dict_add_inplace(meses_all[ym]["tipos"], k2, v)
+
+        por_posto.setdefault(posto, {})
+        _dict_add_inplace(por_posto[posto], ym, len(df))
+
+        if ym == ym_today:
+            dias = df["data_consulta"].fillna("").astype(str).str[:10]
+            for dstr in dias:
+                if dstr: _dict_add_inplace(mes_atual_por_dia, dstr, 1)
+            for med, v in _count_series(df["medico"]).items():
+                if med: _dict_add_inplace(mes_atual_por_medico, med, v)
+            for tp, v in _count_series(df["tipo_prescricao"]).items():
+                _dict_add_inplace(mes_atual_por_tipo, (tp if tp else "Sem tipo"), v)
+            for po, v in _count_series(df["posto"]).items():
+                if po: _dict_add_inplace(mes_atual_por_posto, po, v)
+
+            for _, r in df.iterrows():
+                med = (r.get("medico") or "").strip()
+                tp  = (r.get("tipo_prescricao") or "Sem tipo").strip() or "Sem tipo"
+                po  = (r.get("posto") or "").strip()
+                if med:
+                    mes_atual_medico_por_tipo.setdefault(med, {})
+                    _dict_add_inplace(mes_atual_medico_por_tipo[med], tp, 1)
+                if po and med:
+                    mes_atual_posto_por_medico.setdefault(po, {})
+                    _dict_add_inplace(mes_atual_posto_por_medico[po], med, 1)
+
+            mes_atual_rows.extend(df.to_dict("records"))
+
+        # linhas de HOJE
+        if ym == ym_today:
+            mask_hoje = df["data_consulta"].fillna("").astype(str).str[:10] == d_today
+            if mask_hoje.any():
+                hoje_df = df.loc[mask_hoje, ["data_consulta", "medico", "tipo_prescricao", "valor", "posto"]]
+                linhas = hoje_df.to_dict("records")
+                linhas_hoje.extend(linhas)
+                for r in linhas:
+                    _dict_add_inplace(por_tipo_hoje, (r.get("tipo_prescricao") or "Sem tipo"), 1)
+                    if r.get("medico"): _dict_add_inplace(por_medico_hoje, r["medico"], 1)
+                    if r.get("posto"): _dict_add_inplace(por_posto_hoje, r["posto"], 1)
+
+    serie_mensal = []
+    for ym in sorted(meses_all.keys()):
+        serie_mensal.append({
+            "mes": ym,
+            "total": int(meses_all[ym]["total"]),
+            "medicos_ativos": int(meses_all[ym]["medicos_ativos"]),
+            "tipos": _sorted_dict(meses_all[ym]["tipos"])
+        })
+
+    total_hoje = len(linhas_hoje)
+    medicos_ativos_hoje = len(por_medico_hoje.keys())
+    tipos_ativos_hoje = len(por_tipo_hoje.keys())
+    top10 = sorted(por_medico_hoje.items(), key=lambda kv: kv[1], reverse=True)[:10]
+    top10_qtd = sum(v for _, v in top10) if top10 else 0
+    top10_share = round(100.0 * top10_qtd / total_hoje, 2) if total_hoje > 0 else None
+
+    # Saída HOJE: agora com TODOS os registros em "linhas"
+    out_hoje = {
+        "data": d_today,
+        "postos": sorted(list(postos)),
+        "kpis": {
+            "total_hoje": total_hoje,
+            "medicos_ativos_hoje": medicos_ativos_hoje,
+            "tipos_ativos_hoje": tipos_ativos_hoje,
+            "top10_share_hoje_pct": top10_share,
+            "atualizado_em": date.today().isoformat()
+        },
+        "agregados_hoje": {
+            "por_tipo": _sorted_dict(por_tipo_hoje),
+            "por_medico": _sorted_dict(por_medico_hoje),
+            "por_posto": _sorted_dict(por_posto_hoje)
+        },
+        # Compat: mantém linhas_hoje, e adiciona "linhas" com TUDO
+        "linhas_hoje": linhas_hoje,
+        "linhas": all_rows
+    }
+    with open(os.path.join(JSON_DIR, "prescricao_hoje.json"), "w", encoding="utf-8") as f:
+        json.dump(out_hoje, f, ensure_ascii=False, indent=2)
+
+    ym_now = ym_today
+    dia_corrente = today.day
+    total_mes_atual = int(sum(mes_atual_por_dia.values()))
+    media_diaria_atual = float(total_mes_atual / max(1, dia_corrente))
+
+    out_mensal = {
+        "periodo": {
+            "inicio": serie_mensal[0]["mes"] if serie_mensal else None,
+            "fim": serie_mensal[-1]["mes"] if serie_mensal else None,
+            "n_meses": len(serie_mensal),
+            "atualizado_em": date.today().isoformat()
+        },
+        "postos": sorted(list(postos)),
+        "serie_mensal": serie_mensal,
+        "por_posto": por_posto,
+        "mes_atual": {
+            "ym": ym_now,
+            "media_diaria_atual": round(media_diaria_atual, 2),
+            "dia_corrente": dia_corrente,
+            "por_dia": dict(sorted({k: int(v) for k, v in mes_atual_por_dia.items()}.items())),
+            "por_medico": _sorted_dict({k: int(v) for k, v in mes_atual_por_medico.items()}),
+            "por_tipo": _sorted_dict({k: int(v) for k, v in mes_atual_por_tipo.items()}),
+            "por_posto": _sorted_dict({k: int(v) for k, v in mes_atual_por_posto.items()}),
+            "por_medico_por_tipo": {m: _sorted_dict(t) for m, t in mes_atual_medico_por_tipo.items()},
+            "por_posto_por_medico": {p: _sorted_dict(m) for p, m in mes_atual_posto_por_medico.items()},
+            "rows": mes_atual_rows
+        }
+    }
+    with open(os.path.join(JSON_DIR, "prescricao_mensal.json"), "w", encoding="utf-8") as f:
+        json.dump(out_mensal, f, ensure_ascii=False, indent=2)
+
+    print(f"[EXTRA] Prescrição HOJE   -> json_consolidado/prescricao_hoje.json  linhas_all={len(all_rows)}  linhas_hoje={len(linhas_hoje)}")
+    print(f"[EXTRA] Prescrição MENSAL -> json_consolidado/prescricao_mensal.json  meses={len(serie_mensal)}  rows_mes_atual={len(out_mensal['mes_atual']['rows'])}")
 
 # =========================
 # CLI
@@ -660,6 +878,7 @@ def parse_args():
     p.add_argument("--only-month", dest="only_month", default=None, help="Executa só um mês YYYY-MM.")
     p.add_argument("--postos", default="".join(POSTOS), help="Subset de postos. Ex: ANX.")
     p.add_argument("--force", action="store_true", help="Sobrescreve arquivos existentes.")
+    p.add_argument("--outubro", action="store_true", help="Regera o mês imediatamente anterior ao atual.")
     p.add_argument("--no-validate", action="store_true", help="Não valida o conteúdo dos .sql.")
     p.add_argument("--dry-run", action="store_true", help="Executa sem gravar CSV/JSON.")
     p.add_argument("--copy-templates", action="store_true", help="Copia templates/ para TARGET_TEMPLATES_DIR.")
@@ -677,6 +896,21 @@ def run():
     ensure_dir(JSON_DIR)
 
     ini_cur, fim_cur, ym_current = current_month_bounds()
+    _, _, ym_prev = previous_month_bounds(date.today())
+    forced_months = {ym_current}
+
+    if args.outubro:
+        forced_months.add(ym_prev)
+        pat_prev = re.compile(rf"^[A-Z]_{ym_prev}_[a-z_]+\.csv$", re.I)
+        removed = 0
+        for fn in os.listdir(DADOS_DIR):
+            if pat_prev.match(fn):
+                try:
+                    os.remove(os.path.join(DADOS_DIR, fn))
+                    removed += 1
+                except Exception as e:
+                    print(f"[WARN] Falha ao remover {fn}: {e}")
+        print(f"[INFO] --outubro: {removed} CSV(s) de {ym_prev} removidos para reprocessamento.")
 
     if args.only_month:
         start = ym_to_date(args.only_month)
@@ -702,7 +936,7 @@ def run():
     print(f"- Mês corrente: {ym_current}")
     print(f"- Postos: {list(conns.keys())}")
     print(f"- SQLs: {[os.path.basename(s['path']) for s in sqls]}")
-    print(f"- Force={args.force}  DryRun={args.dry_run}  Validate={not args.no_validate}")
+    print(f"- Force={args.force}  DryRun={args.dry_run}  Validate={not args.no_validate}  Outubro={args.outubro}")
 
     print("\n[ETAPA 2/6] Execução por mês/posto/sql")
     for month_start in month_iter(start, end_exclusive):
@@ -721,7 +955,7 @@ def run():
                 sql_txt = entry["sql"]
                 out_path = target_csv_path(posto, ym, key)
 
-                if not should_write_file(out_path, ym_current, ym, force=args.force):
+                if not should_write_file(out_path, ym_current, ym, force=args.force, forced_months=forced_months):
                     print(f"   [{posto}] SKIP {os.path.basename(out_path)} (existe)")
                     continue
 
@@ -737,7 +971,7 @@ def run():
 
                 try:
                     df.to_csv(out_path, index=False, encoding="utf-8-sig")
-                    action = "sobrescrito" if ym == ym_current or args.force else "criado"
+                    action = "sobrescrito" if ym in forced_months or args.force else "criado"
                     print(f"   [{posto}] OK {action}  linhas={len(df)}")
                 except Exception as e:
                     print(f"   [{posto}] ERRO salvar: {e}")
@@ -762,14 +996,15 @@ def run():
     print("\n[ETAPA 6/6] JSON de percentuais do mês corrente")
     build_percent_by_posto()
 
+    # EXTRA: JSONs específicos de prescrição
+    print("\n[EXTRA] JSONs de prescrição (enriquecidos)")
+    build_prescricao_jsons_enriquecidos()
+
     if args.copy_templates:
         print("\n[EXTRA] Cópia de templates")
         copy_templates()
 
     print("\n✅ Finalizado.")
 
-# =========================
-# Main
-# =========================
 if __name__ == "__main__":
     run()

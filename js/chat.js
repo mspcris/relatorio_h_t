@@ -1,32 +1,15 @@
-/* chat.js — Painel de IA reutilizável (v2)
- * Objetivo: enviar SEMPRE o snapshot completo por padrão
- *  - "IA Resumida": agora resume após receber a resposta completa
- *  - Parseia respostas JSON e evita mostrar { ... } no chat
- *  - Parágrafos e títulos para leitura fluida
- * API: ChatIA.init({
- *   getPayload, apiUrl, mountAfterSelector, title, briefInstruction,
- *   timeoutMs, briefDefault
- * })
+/* chat.js — Painel de IA reutilizável (v3: spinner + resumo por mensagem)
+ * Objetivo:
+ *  1) Sempre pedir o COMPLETO à IA.
+ *  2) Se “IA Resumida” estiver ativo, gerar RESUMO do COMPLETO e exibir só o resumo.
+ *  3) Cada bolha tem seu próprio toggle “Resumo [ ]”.
+ *  4) Bolha do bot só aparece quando o conteúdo está pronto.
+ *  5) Spinner redondo substitui “CARREGANDO”.
  */
 (function () {
   const ChatIA = {
-    _CFG: {
-      MAX_RETRIES: 5,
-      RETRY_DELAY_MS: 1200,
-      MAX_PAYLOAD_CHARS: 120_000,
-      CHUNK_BLOCKS: 4,
-      SYNTH_PARTS_LIMIT: 12,
-      REFRESH_FULL_AFTER_MIN: 5
-    },
-
-    _state: {
-      mounted: false,
-      brief: true,
-      opts: null,
-      lastRaw: '',
-      lastSnapshotHash: null,
-      lastSnapshotAt: 0
-    },
+    _CFG: { TIMEOUT_MS: 180000 },
+    _state: { mounted: false, brief: true, opts: null },
 
     init(options) {
       const defaults = {
@@ -45,6 +28,7 @@
       this._injectUI();
       this._wireUI();
       this._state.mounted = true;
+
       this._ensureBtnTimer = setInterval(() => this._ensureLauncher(), 1500);
     },
 
@@ -64,11 +48,36 @@
 #iaDeepPanel .btn.btn-outline-secondary{color:#ddd;border-color:#5a5a5a}
 #iaDeepPanel .btn.btn-outline-secondary:hover{background:#333}
 #iaDeep.btn{margin-left:.5rem}
-.iad-loading .dot{opacity:.35}.iad-loading .dot.on{opacity:1}
 #iadBrief{display:inline-flex;align-items:center;gap:6px}
 #iadBrief input{margin:0}
 .iad-hint{font-style:italic;color:#cfcfcf}
-      `.trim();
+
+/* toolbar da bolha */
+.iad-toolbar{opacity:.9; display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:6px}
+.iad-toolbar label{cursor:pointer; user-select:none}
+.iad-toolbar .iad-view-hint{opacity:.8}
+
+/* texto: título e parágrafo com a MESMA fonte para evitar “zoom” no resumo */
+.iad-content h5{font-size:1em; font-weight:600; margin:.2em 0}
+.iad-content p{font-size:1em; margin:.35em 0}
+
+/* efeito type-reveal por CSS mask */
+.iad-type{ --reveal:0%; -webkit-mask-image:linear-gradient(90deg,#000 calc(var(--reveal)),transparent 0); mask-image:linear-gradient(90deg,#000 calc(var(--reveal)),transparent 0); }
+.iad-type.caret::after{content:''; display:inline-block; width:2px; height:1em; vertical-align:baseline; background:#ddd; margin-left:2px; animation:iadBlink 1s step-end infinite;}
+@keyframes iadBlink{50%{opacity:0}}
+
+/* Spinner redondo */
+.iad-loading { display:flex; align-items:center; gap:8px }
+.iad-spinner{
+  width:20px; height:20px;
+  border-radius:50%;
+  border:3px solid rgba(255,255,255,.25);
+  border-top-color:#fff;
+  animation: iadSpin .8s linear infinite;
+  display:inline-block; vertical-align:middle;
+}
+@keyframes iadSpin{ to { transform: rotate(360deg); } }
+`.trim();
       const s = document.createElement('style');
       s.id = 'chatia-styles';
       s.textContent = css;
@@ -106,9 +115,9 @@
 <div class="card-header d-flex align-items-center justify-content-between">
   <b class="mb-0">${this._state.opts.title}</b>
   <div class="d-flex" style="gap:8px">
-    <label id="iadBrief" class="btn btn-sm btn-outline-secondary mb-0" title="Respostas curtas">
+    <label id="iadBrief" class="btn btn-sm btn-outline-secondary mb-0" title="Padrão para PRÓXIMAS mensagens">
       <input id="iadBriefChk" type="checkbox"${this._state.brief ? ' checked' : ''}/>
-      <span>IA Resumida</span>
+      <span>IA Resumida (padrão)</span>
     </label>
     <button id="iadPDF" class="btn btn-sm btn-outline-secondary">PDF</button>
     <button id="iadRefresh" class="btn btn-sm btn-outline-secondary">Regerar</button>
@@ -126,7 +135,7 @@
   <small class="text-muted">Mensagens usam o recorte atual. Texto corrido, sem tabelas ASCII.</small>
 </div>`;
         document.body.appendChild(wrap);
-        this._append('bot', 'Olá, eu sou a Camila.AI e vou te ajudar a analisar os dados que estão nesta página. Toque em Iniciar ou digite algo sobre os dados aqui constantes.');
+        this._append('bot', 'Olá, eu sou a Camila.AI e vou te ajudar a analisar os dados desta página. Toque em Iniciar ou digite sua pergunta.');
         this._prefillInput();
       }
     },
@@ -163,10 +172,13 @@
       regen.addEventListener('click', async () => { await this._sendToIA(null, { force: true }); });
       pdfBtn.addEventListener('click', () => this._exportToPDF());
 
+      // Global = padrão para próximas mensagens
       briefLbl.addEventListener('click', (e) => {
         if (e.target.id !== 'iadBriefChk') { e.preventDefault(); briefChk.checked = !briefChk.checked; }
         this._state.brief = !!briefChk.checked;
-        const msg = this._state.brief ? 'IA Resumida: respostas serão consolidadas e resumidas.' : 'IA Completa: respostas integrais.';
+        const msg = this._state.brief
+          ? 'Padrão atualizado: novas mensagens abrirão em RESUMO.'
+          : 'Padrão atualizado: novas mensagens abrirão em COMPLETO.';
         this._append('bot', `<span class="iad-hint">${msg}</span>`);
       });
 
@@ -195,7 +207,7 @@
       el.setAttribute('aria-pressed', on ? 'true' : 'false');
     },
 
-    /* ===================== Helpers ===================== */
+    /* ===================== Helpers visuais ===================== */
     _displayNameFromEmail() {
       const email = (window.USER_EMAIL || '').trim();
       if (!email || !/@/.test(email)) return 'Você';
@@ -212,130 +224,123 @@
       const sc = this._panel().querySelector('.body'); sc.scrollTop = sc.scrollHeight;
     },
 
-    _appendBotStreaming(raw) {
-      const cleaned = this._cleanGroq(raw);
-      if (!cleaned || !cleaned.trim()) return '';
-
-      const blocks = cleaned.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+    /* ===================== Renderer da bolha do bot ===================== */
+    _renderBotCard({ fullText, defaultBrief }) {
       const row = document.createElement('div'); row.className = 'd-flex flex-column';
       const box = document.createElement('div'); box.className = 'iad-msg iad-bot';
       const meta = document.createElement('div'); meta.className = 'iad-meta'; meta.textContent = 'Camila.AI';
-      row.appendChild(box); row.appendChild(meta); this._outBox().appendChild(row);
 
+      const toolbar = document.createElement('div');
+      toolbar.className = 'iad-toolbar';
+      toolbar.innerHTML = `
+        <label class="small mb-0">
+          <input type="checkbox" class="iad-brief-toggle"${defaultBrief ? ' checked' : ''}/>
+          <span>Resumo</span>
+        </label>
+        <small class="muted iad-view-hint"></small>
+      `;
 
+      const content = document.createElement('div'); content.className = 'iad-content';
+      box.dataset.full = this._cleanGroq(fullText || '');
+      box.dataset.summary = '';
+      box.dataset.mode = defaultBrief ? 'summary' : 'full';
 
+      box.appendChild(toolbar);
+      box.appendChild(content);
+      row.appendChild(box);
+      row.appendChild(meta);
+      this._outBox().appendChild(row);
 
+      const toggle = toolbar.querySelector('.iad-brief-toggle');
+      const hint = toolbar.querySelector('.iad-view-hint');
 
+      toggle.addEventListener('change', async () => {
+        const wantSummary = !!toggle.checked;
+        if (wantSummary) {
+          if (!box.dataset.summary) {
+            try {
+              const sum = await this._summarizeText(box.dataset.full || '');
+              this._attachSummaryToCard(box, sum);
+            } catch { toggle.checked = false; }
+          }
+          if (!box.dataset.summary) { // resumo vazio => força COMPLETO
+            toggle.checked = false;
+            this._renderCardContent(box, 'full');
+            return;
+          }
+          this._renderCardContent(box, 'summary');
+        } else {
+          this._renderCardContent(box, 'full');
+        }
+      });
 
+      hint.textContent = defaultBrief ? 'mostrando resumo' : 'mostrando completo';
+      return box;
+    },
 
+    _attachSummaryToCard(box, summaryText) {
+      if (!box) return;
+      const cleaned = this._cleanGroq(summaryText || '');
+      if (cleaned) box.dataset.summary = cleaned;
+    },
 
-      
+    _renderCardContent(box, mode) {
+      if (!box) return;
+      const content = box.querySelector('.iad-content');
+      const hint = box.querySelector('.iad-view-hint');
+      const isSummary = (mode === 'summary');
+      box.dataset.mode = isSummary ? 'summary' : 'full';
+
+      let txt = isSummary ? (box.dataset.summary || '') : (box.dataset.full || '');
+      if (isSummary && !txt) { // fail-safe
+        mode = 'full';
+        txt = box.dataset.full || '';
+        const tgl = box.querySelector('.iad-brief-toggle'); if (tgl) tgl.checked = false;
+      }
+
+      content.innerHTML = '';
+      const cleaned = this._cleanGroq(txt);
+      const blocks = cleaned.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
       blocks.forEach(b => {
         const isTitle = /^###\s*/.test(b);
         const text = b.replace(/^###\s*/, '');
         const el = document.createElement(isTitle ? 'h5' : 'p');
         if (isTitle) el.className = 'iad-h';
         el.textContent = text;
-        box.appendChild(el);
+        content.appendChild(el);
       });
 
-      // dispara o efeito de revelar após montar todo o conteúdo
-      requestAnimationFrame(() => this._typeReveal(box));
-
-      // ...cria 'box', adiciona blocos...
-      // dispare a animação CSS após montar o conteúdo
-      requestAnimationFrame(() => this._typeReveal(box));
-
-      const sc = this._panel().querySelector('.body');
-      requestAnimationFrame(() => { sc.scrollTop = sc.scrollHeight; });
-      return cleaned;
-
-    },
-
-
-
-
-
-    // Efeito “digitar” por CSS mask (sem stream): anima a var CSS --reveal
-_typeReveal(container, baseMs = 25) {
-  if (!container) return;
-  // aplica nos filhos (h5, p) da bolha do bot, para revelar bloco a bloco
-  const targets = container.querySelectorAll('h5, p');
-  targets.forEach((el) => {
-    // seta estado inicial
-    el.classList.add('iad-type', 'caret');
-    el.style.setProperty('--reveal', '0%');
-
-    // calcula duração em função do tamanho do texto
-    const chars = (el.textContent || '').length || 1;
-    const dur = Math.min(8000, Math.max(600, chars * baseMs));
-
-    // anima a variável CSS --reveal de 0% a 100% em "steps"
-    const anim = el.animate(
-      [{ '--reveal': '0%' }, { '--reveal': '100%' }],
-      { duration: dur, easing: `steps(${Math.min(chars, 2000)}, end)` }
-    );
-
-    anim.onfinish = () => {
-      el.classList.remove('caret');
-      el.style.setProperty('--reveal', '100%'); // mantém visível após a animação
-    };
-  });
-},
-
-
-
-
-
-    _dotsStart() {
-      const wrap = document.createElement('div'); wrap.className = 'iad-msg iad-bot iad-loading';
-      wrap.innerHTML = `Aguardando <span class="iad-dots"><span class="dot on">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
-      this._outBox().appendChild(wrap);
-      let t = 0;
-      const int = setInterval(() => {
-        wrap.querySelectorAll('.dot').forEach(x => x.classList.remove('on'));
-        wrap.querySelectorAll('.dot')[t % 3].classList.add('on'); t++;
-        const sc = this._panel().querySelector('.body'); sc.scrollTop = sc.scrollHeight;
-      }, 260);
-      this._dotsStop._int = int; this._dotsStop._el = wrap;
-    },
-    _dotsStop() {
-      if (this._dotsStop._int) { clearInterval(this._dotsStop._int); this._dotsStop._int = null; }
-      if (this._dotsStop._el) { this._dotsStop._el.remove(); this._dotsStop._el = null; }
+      if (hint) hint.textContent = mode === 'summary' ? 'mostrando resumo' : 'mostrando completo';
+      requestAnimationFrame(() => this._typeReveal(content));
+      const sc = this._panel()?.querySelector('.body');
+      if (sc) requestAnimationFrame(() => { sc.scrollTop = sc.scrollHeight; });
     },
 
     /* ===================== Envio ===================== */
     async _sendToIA(userQuery, { force = false } = {}) {
       this._dotsStart();
       try {
-        // 1) sempre envia o snapshot completo
-        const basePayload = await this._state.opts.getPayload({ userQuery });
+        const payload = await this._state.opts.getPayload({ userQuery });
 
-        // 2) chamada principal
-        const raw = await this._callIA(basePayload, this._state.opts.timeoutMs);
+        // chamada principal: sempre COMPLETO
+        const raw = await this._callIA(payload, this._state.opts.timeoutMs);
         this._dotsStop();
 
-        // 3) normaliza texto. Se vier JSON, extrai campos úteis.
         const fullText = this._coerceText(raw);
-        const shownFull = this._appendBotStreaming(fullText);
+        const card = this._renderBotCard({ fullText, defaultBrief: this._state.brief });
 
-        // 4) se IA Resumida marcada, dispara um segundo round para resumir o texto já obtido
         if (this._state.brief) {
-          const resumo = await this._summarizeText(fullText);
-          this._append('bot', `<span class="iad-hint">Resumo gerado a partir da resposta integral.</span>`);
-          this._appendBotStreaming(resumo);
+          (async () => {
+            try {
+              const sum = await this._summarizeText(fullText);
+              this._attachSummaryToCard(card, sum);
+              if (card.dataset.summary) this._renderCardContent(card, 'summary');
+              else this._renderCardContent(card, 'full'); // resumo vazio => full
+            } catch { this._renderCardContent(card, 'full'); }
+          })();
+        } else {
+          this._renderCardContent(card, 'full');
         }
-
-          function typeReveal(el, baseMs = 25){
-            const chars = (el.textContent || '').length || 1;
-            const dur = Math.min(8000, Math.max(600, chars * baseMs));
-            el.classList.add('iad-type','caret');
-            const anim = el.animate(
-             [{ '--reveal': '0%' }, { '--reveal': '100%' }],
-             { duration: dur, easing: `steps(${Math.min(chars, 2000)}, end)` }
-           );
-           anim.onfinish = () => el.classList.remove('caret');
-          }
 
       } catch (err) {
         this._dotsStop();
@@ -344,8 +349,8 @@ _typeReveal(container, baseMs = 25) {
       }
     },
 
+    /* ===================== Summarização — sempre a partir do FULL ===================== */
     async _summarizeText(text) {
-      // prompt enxuto para sumarização e formatação em PT-BR
       const p = {
         prompt:
           `[RESUMO-ESTRITO]: ${this._state.opts.briefInstruction}\n` +
@@ -364,7 +369,6 @@ _typeReveal(container, baseMs = 25) {
 
     /* ===================== Normalização de saída ===================== */
     _coerceText(out) {
-      // 1) se já veio string, tenta detectar JSON e extrair campos relevantes
       const s = String(out ?? '').trim();
       if (this._looksLikeJson(s)) {
         try {
@@ -373,8 +377,8 @@ _typeReveal(container, baseMs = 25) {
             'html','livre','text','analysis','resumo','summary','conteudo','content','answer'
           ]);
           if (picked) return this._sanitizeText(picked);
-          return this._sanitizeText(JSON.stringify(obj)); // fallback legível
-        } catch { /* segue fluxo */ }
+          return this._sanitizeText(JSON.stringify(obj));
+        } catch { /* segue */ }
       }
       return this._sanitizeText(s);
     },
@@ -382,7 +386,6 @@ _typeReveal(container, baseMs = 25) {
     _pickFields(obj, keys) {
       if (obj == null) return '';
       for (const k of keys) if (typeof obj?.[k] === 'string' && obj[k].trim()) return obj[k];
-      // merge básico de valores string em 1º nível
       const parts = [];
       Object.entries(obj).forEach(([k, v]) => { if (typeof v === 'string' && v.trim()) parts.push(v.trim()); });
       return parts.length ? parts.join('\n\n') : '';
@@ -398,27 +401,31 @@ _typeReveal(container, baseMs = 25) {
       return t;
     },
 
-    /* ===================== Networking ===================== */
-    // Efeito “digitar” sem stream: revela o texto completo usando máscara em steps
-    _typeReveal(el, baseMs = 25) {
-      if (!el) return;
-      const chars = (el.textContent || '').length || 1;
-      const dur = Math.min(8000, Math.max(600, chars * baseMs));
-      el.classList.add('iad-type', 'caret');
-      const anim = el.animate(
-        [{ '--reveal': '0%' }, { '--reveal': '100%' }],
-        { duration: dur, easing: `steps(${Math.min(chars, 2000)}, end)` }
-      );
-      anim.onfinish = () => el.classList.remove('caret');
+    /* ===================== Efeito “digitar” via CSS mask ===================== */
+    _typeReveal(container, baseMs = 25) {
+      if (!container) return;
+      const targets = container.querySelectorAll('h5, p');
+      targets.forEach((el) => {
+        el.classList.add('iad-type','caret');
+        el.style.setProperty('--reveal','0%');
+        const chars = (el.textContent || '').length || 1;
+        const dur = Math.min(8000, Math.max(600, chars * baseMs));
+        const anim = el.animate(
+          [{ '--reveal': '0%' }, { '--reveal': '100%' }],
+          { duration: dur, easing: `steps(${Math.min(chars, 2000)}, end)` }
+        );
+        anim.onfinish = () => {
+          el.classList.remove('caret');
+          el.style.setProperty('--reveal','100%');
+        };
+      });
     },
-    
-    
-    
-    
+
+    /* ===================== Networking ===================== */
     async _callIA(payload, timeout) {
       const API = this._state.opts.apiUrl;
       const controller = new AbortController();
-      const to = setTimeout(() => controller.abort(), timeout || this._state.opts.timeoutMs);
+      const to = setTimeout(() => controller.abort(), timeout || this._state.opts.timeoutMs || this._CFG.TIMEOUT_MS);
       let r; try {
         r = await fetch(API, {
           method: 'POST',
@@ -436,6 +443,27 @@ _typeReveal(container, baseMs = 25) {
       return typeof res === 'string' ? res : (res.html || res.livre || JSON.stringify(res));
     },
 
+    /* ===================== Spinner ===================== */
+    _dotsStart() {
+      const wrap = document.createElement('div');
+      wrap.className = 'iad-msg iad-bot iad-loading';
+      wrap.innerHTML = `<span class="iad-spinner" aria-hidden="true"></span>`;
+      this._outBox().appendChild(wrap);
+
+      const int = setInterval(() => {
+        const sc = this._panel().querySelector('.body');
+        sc.scrollTop = sc.scrollHeight;
+      }, 260);
+
+      this._dotsStop._int = int;
+      this._dotsStop._el = wrap;
+    },
+
+    _dotsStop() {
+      if (this._dotsStop._int) { clearInterval(this._dotsStop._int); this._dotsStop._int = null; }
+      if (this._dotsStop._el) { this._dotsStop._el.remove(); this._dotsStop._el = null; }
+    },
+
     _exportToPDF() {
       if (typeof html2pdf === 'undefined') { alert('html2pdf.js não carregado.'); return; }
       const node = document.getElementById('iadOut'); if (!node) return;
@@ -447,7 +475,7 @@ _typeReveal(container, baseMs = 25) {
       html2pdf().set(opt).from(node).save();
     },
 
-    /* ===================== Sanitização base p/ render ===================== */
+    /* ===================== Sanitização bruta vinda da IA ===================== */
     _cleanGroq(raw) {
       let s = String(raw || '');
       s = s.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '  ');
