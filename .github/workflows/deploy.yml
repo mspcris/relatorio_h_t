@@ -35,7 +35,7 @@ jobs:
           head -n1 ~/.ssh/id_vm; tail -n1 ~/.ssh/id_vm
           ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
 
-      # COPIA SOMENTE assets web específicos para /var/www
+      # 1) Somente js/css/fonts/images -> /var/www
       - name: WEB (js,css,fonts,images) -> /var/www
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -53,6 +53,7 @@ jobs:
             fi
           done
 
+      # 2) analyze_groq.py -> /opt/ia-groq e /opt/ia-groq/app
       - name: analyze_groq.py -> /opt/ia-groq e /opt/ia-groq/app
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -71,8 +72,8 @@ jobs:
               "$ANALYZE_PATH" "$SSH_USER@$SSH_HOST:$d/"
           done
 
-      # LIMPA eventuais pastas web antigas e envia SOMENTE *.py para /opt/relatorio_h_t
-      - name: *.py -> /opt/relatorio_h_t (somente arquivos)
+      # 3) Somente .py (exceto analyze_groq.py) + requirements* -> /opt/relatorio_h_t com venv
+      - name: Código e requirements -> /opt/relatorio_h_t
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
@@ -80,15 +81,29 @@ jobs:
         run: |
           set -euxo pipefail
           DEST=/opt/relatorio_h_t
+
+          # garante destino e remove sobras de pastas web
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "\
             mkdir -p '$DEST' && rm -rf '$DEST/js' '$DEST/css' '$DEST/fonts' '$DEST/images' || true"
 
-          # lista somente .py, exclui analyze_groq.py
-          PY_LIST="$(git ls-files '*.py' | grep -v -E '(^|/)analyze_groq\.py$' || true)"
-          if [ -z "$PY_LIST" ]; then
-            echo 'WARN: nenhum .py para enviar'; exit 0
-          fi
+          # sincroniza apenas .py e requirements*, exclui analyze_groq.py
+          rsync -avz --relative -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+            --include='*/' \
+            --include='*.py' \
+            --include='requirements*.txt' \
+            --exclude='analyze_groq.py' \
+            --exclude='.git/' --exclude='.github/' \
+            --exclude='*' \
+            ./ "$SSH_USER@$SSH_HOST:$DEST/"
 
-          # envia apenas os arquivos listados, preservando estrutura de pastas necessária
-          printf '%s\n' "$PY_LIST" | rsync -avz --relative -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
-            --files-from=- . "$SSH_USER@$SSH_HOST:$DEST/"
+          # prepara venv e instala dependências se houver requirements*
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "\
+            set -euxo pipefail; \
+            cd '$DEST'; \
+            python3 -m venv .venv; \
+            source .venv/bin/activate; \
+            python -m pip install --upgrade pip setuptools wheel; \
+            if ls requirements*.txt >/dev/null 2>&1; then \
+              (python -m pip install -r requirements.txt) || \
+              (python -m pip install -r requirements-dev.txt); \
+            fi"
