@@ -1,3 +1,6 @@
+# API para página admin (CRUD usuários) 
+
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 from passlib.apache import HtpasswdFile
