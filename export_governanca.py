@@ -102,7 +102,7 @@ def build_conn_str(host, base, user, pwd, port, encrypt, trust_cert, timeout):
         f"DRIVER={{{ODBC_DRIVER}}};"
         f"SERVER={server};DATABASE={base};"
         f"Encrypt={encrypt};TrustServerCertificate={trust_cert};"
-        f"Connection Timeout={timeout or '20'};"
+        f"Connection Timeout={timeout or '5'};"
     )
     if user:
         return common + f"UID={user};PWD={pwd}"
