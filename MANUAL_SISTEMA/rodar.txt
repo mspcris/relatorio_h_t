@@ -1,5 +1,67 @@
 1) export_harvest.py
+- bash: 
+cd /opt/relatorio_h_t
+source .venv/bin/activate
+python export_harvest.py --out export_harvest
+
+# publicar no webroot
+LATEST="$(ls -1t /opt/relatorio_h_t/export_harvest/* 2>/dev/null | head -1)"
+[ -n "$LATEST" ] || { echo "Nenhum arquivo em export_harvest"; exit 1; }
+
+sudo install -d -m 755 -o www-data -g www-data /var/www/export_harvest
+sudo find /var/www/export_harvest -type f -delete
+sudo cp -a "$LATEST" /var/www/export_harvest/
+sudo chown www-data:www-data /var/www/export_harvest/$(basename "$LATEST")
+
+# verificação rápida
+ls -l /var/www/export_harvest | head
+www/export_harvest
+
+
 2) export_trello.py
+- bash:
+python export_trello.py --board 1lAOxrLe  --out /var/www/export_trello
+
+OU 
+
+cd /opt/relatorio_h_t
+source .venv/bin/activate
+python export_harvest.py --out export_harvest
+
+# copiar somente o mais recente para o webroot
+LATEST="$(ls -1t export_harvest/* 2>/dev/null | head -1)"
+[ -n "$LATEST" ] || { echo "Nenhum arquivo em export_harvest"; exit 1; }
+
+sudo rm -rf /var/www/export_harvest
+sudo install -d -m 755 -o www-data -g www-data /var/www/export_harvest
+sudo cp -a "$LATEST" /var/www/export_harvest/
+sudo chown www-data:www-data /var/www/export_harvest/$(basename "$LATEST")
+
+# sanity check
+ls -l /var/www/export_harvest
+
+
 3) build_relatorio_html.py - Gera página harvest_trello.html
+- BASH: 
+python build_relatorio_html.py
+
+# 3.1) promover o CSV mais recente do Harvest
+LATEST_H="$(ls -1t /opt/relatorio_h_t/export_harvest/* 2>/dev/null | head -1)"
+[ -n "$LATEST_H" ] || { echo "Sem CSV novo em export_harvest"; exit 1; }
+sudo install -d -m 755 -o www-data -g www-data /var/www/export_harvest
+sudo cp -a "$LATEST_H" /var/www/export_harvest/
+sudo chown www-data:www-data "/var/www/export_harvest/$(basename "$LATEST_H")"
+
+# 3.2) (já ok) Trello exporta direto em /var/www/export_trello/export_YYYYmmdd_HHMMSS
+#    apenas confira o mais recente:
+ls -1dt /var/www/export_trello/export_* | head -1
+
+# 3.3) publicar o HTML que foi sobrescrito em /opt
+sudo install -m 644 -o www-data -g www-data \
+  /opt/relatorio_h_t/trello_harvest.html /var/www/trello_harvest.html
+
+
 4) indicadores_etl.py
+
+
 5) Copiar os arquivos para os locais corretos. 
