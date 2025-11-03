@@ -1,7 +1,7 @@
 name: Deploy to VM
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch: {}
 
 jobs:
@@ -18,6 +18,15 @@ jobs:
           set -euxo pipefail
           pwd
           git ls-files | head -n 200 || true
+
+      - name: Debug sql no checkout
+        run: |
+          set -euxo pipefail
+          echo "Arquivos rastreados em sql/:"
+          git ls-files 'sql/**' || true
+          echo "Listagem local:"
+          ls -la sql || true
+          find sql -maxdepth 1 -type f -printf "%P\n" || true
 
       - name: Setup SSH
         env:
@@ -72,8 +81,52 @@ jobs:
               "$ANALYZE_PATH" "$SSH_USER@$SSH_HOST:$d/"
           done
 
-      # 3) Somente .py (exceto analyze_groq.py) + sql/** + requirements* -> /opt/relatorio_h_t
-      - name: Código + sql + requirements -> /opt/relatorio_h_t
+      # 3) Código .py + requirements* -> /opt/relatorio_h_t
+      - name: Código + requirements -> /opt/relatorio_h_t
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          DEST=/opt/relatorio_h_t
+
+          # garante destino e remove sobras web
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "\
+            mkdir -p '$DEST' && rm -rf '$DEST/js' '$DEST/css' '$DEST/fonts' '$DEST/images' '$DEST/public' '$DEST/prompt' || true"
+
+          # sync apenas .py e requirements*
+          rsync -avz --prune-empty-dirs -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+            --include='*/' \
+            --include='*.py' \
+            --include='requirements*.txt' \
+            --exclude='analyze_groq.py' \
+            --exclude='/css/***' --exclude='/fonts/***' --exclude='/images/***' \
+            --exclude='/js/***'  --exclude='/public/***' --exclude='/prompt/***' \
+            --exclude='*' \
+            ./ "$SSH_USER@$SSH_HOST:$DEST/"
+
+      # 4) Sync dedicado do diretório sql/
+      - name: Sync sql -> /opt/relatorio_h_t/sql
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          DEST=/opt/relatorio_h_t/sql
+          if [ -d sql ]; then
+            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
+            rsync -avz --delete -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+              ./sql/ "$SSH_USER@$SSH_HOST:$DEST/"
+          else
+            echo "WARN: diretório sql não existe no checkout"
+          fi
+          # opcional: symlink para compatibilidade com código que usa 'SQL'
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "ln -sfn /opt/relatorio_h_t/sql /opt/relatorio_h_t/SQL || true"
+
+      # 5) Provisiona venv, instala deps e injeta .env
+      - name: Venv + deps + .env
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
@@ -83,37 +136,31 @@ jobs:
           set -euxo pipefail
           DEST=/opt/relatorio_h_t
 
-          # garante destino e remove sobras web
-          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "\
-            mkdir -p '$DEST' && rm -rf '$DEST/js' '$DEST/css' '$DEST/fonts' '$DEST/images' '$DEST/public' '$DEST/prompt' || true"
-
-          # sincroniza apenas .py, sql/** e requirements*
-          rsync -avz -m --relative -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
-            --include='*/' \
-            --include='sql/***' \
-            --include='*.py' \
-            --include='requirements*.txt' \
-            --exclude='analyze_groq.py' \
-            --exclude='/css/***' --exclude='/fonts/***' --exclude='/images/***' \
-            --exclude='/js/***'  --exclude='/public/***' --exclude='/prompt/***' \
-            --exclude='*' \
-            ./ "$SSH_USER@$SSH_HOST:$DEST/"
-
-          # venv e deps
+          # venv e deps (robusto)
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "\
             set -euxo pipefail; cd '$DEST'; \
             python3 -m venv .venv || true; \
             source .venv/bin/activate; \
             python -m pip install --upgrade pip setuptools wheel; \
-            if ls requirements*.txt >/dev/null 2>&1; then \
-              (python -m pip install -r requirements.txt) || \
-              (python -m pip install -r requirements-dev.txt); \
-            fi"
+            if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi; \
+            if [ -f requirements-dev.txt ]; then python -m pip install -r requirements-dev.txt; fi"
 
-          # provisiona .env a partir do secret base64
+          # provisiona .env a partir do secret base64 (opcional)
           if [ -n "${ENV_FILE_B64:-}" ]; then
-            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "\
-              install -m 600 -D /dev/null '$DEST/.env'"
+            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "install -m 600 -D /dev/null '$DEST/.env'"
             echo "$ENV_FILE_B64" | base64 -d | tr -d '\r' | \
               ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "cat > '$DEST/.env'"
           fi
+
+      # 6) Sanidade pós-deploy
+      - name: Sanidade na VM
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "\
+            ls -la /opt/relatorio_h_t/sql || true; \
+            test -d /opt/relatorio_h_t/SQL && echo 'Symlink SQL presente' || echo 'Sem symlink SQL'; \
+            . /opt/relatorio_h_t/.venv/bin/activate; python -V; pip -V"
