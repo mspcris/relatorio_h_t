@@ -35,46 +35,18 @@ jobs:
           SSH_KEY_B64: ${{ secrets.SSH_KEY_B64 }}
         run: |
           set -euxo pipefail
-          if [ -z "${SSH_KEY_B64:-}" ]; then
-            echo "FALHA: secret SSH_KEY_B64 não definido"; exit 1
-          fi
+          [ -n "${SSH_KEY_B64:-}" ] || { echo "FALHA: SSH_KEY_B64"; exit 1; }
           install -m 600 -D /dev/null ~/.ssh/id_vm
           echo "$SSH_KEY_B64" | base64 -d | tr -d '\r' > ~/.ssh/id_vm
           chmod 600 ~/.ssh/id_vm
-          head -n1 ~/.ssh/id_vm; tail -n1 ~/.ssh/id_vm
           ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
 
-      # Permissões base para ambos usuários (deploy/appuser) via grupo www-data
-      - name: Permissões base (grupo www-data para /var/www e /opt/relatorio_h_t)
-        if: always()
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: |
-          set -euxo pipefail
-          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" '
-            set -euxo pipefail
-            # prepara pastas
-            sudo install -d -m 2775 -g www-data /var/www /opt/relatorio_h_t
-            # owner padrão para appuser; deploy mantém acesso via grupo
-            sudo chown -R appuser:www-data /var/www /opt/relatorio_h_t || true
-            # diretórios 2775, arquivos 664
-            sudo find /var/www /opt/relatorio_h_t -type d -exec chmod 2775 {} \;
-            sudo find /var/www /opt/relatorio_h_t -type f -exec chmod 664 {} \; || true
-            # ACL de acesso e herança para grupo www-data
-            if command -v setfacl >/dev/null 2>&1; then
-              sudo setfacl -R -m g:www-data:rwx /var/www /opt/relatorio_h_t
-              sudo setfacl -R -d -m g:www-data:rwx /var/www /opt/relatorio_h_t
-            fi
-          '
-
-      # 1) Só assets web -> /var/www
+      # 1) Assets web -> /var/www
       - name: WEB (js,css,fonts,images) -> /var/www
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_USER: ${{ secrets.SSH_USER }}   # use 'deploy'
         run: |
           set -euxo pipefail
           DEST=/var/www
@@ -84,7 +56,6 @@ jobs:
               ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST/$d'"
               rsync -rlvz --delete \
                 --omit-dir-times --no-perms --no-owner --no-group \
-                --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
                 -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
                 "./$d/" "$SSH_USER@$SSH_HOST:$DEST/$d/"
             fi
@@ -107,7 +78,6 @@ jobs:
             ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$d'"
             rsync -rlvz \
               --omit-dir-times --no-perms --no-owner --no-group \
-              --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
               -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
               "$ANALYZE_PATH" "$SSH_USER@$SSH_HOST:$d/"
           done
@@ -125,7 +95,6 @@ jobs:
             mkdir -p '$DEST' && rm -rf '$DEST/js' '$DEST/css' '$DEST/fonts' '$DEST/images' '$DEST/public' '$DEST/prompt' || true"
           rsync -rlvz --prune-empty-dirs \
             --omit-dir-times --no-perms --no-owner --no-group \
-            --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
             -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
             --include='*/' \
             --include='*.py' \
@@ -149,7 +118,6 @@ jobs:
             ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
             rsync -rlvz --delete \
               --omit-dir-times --no-perms --no-owner --no-group \
-              --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
               -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
               ./sql/ "$SSH_USER@$SSH_HOST:$DEST/"
           else
@@ -157,7 +125,7 @@ jobs:
           fi
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "ln -sfn /opt/relatorio_h_t/sql /opt/relatorio_h_t/SQL || true"
 
-      # 5) Provisiona venv, instala deps e injeta .env
+      # 5) Venv + deps + .env (sem sudo)
       - name: Venv + deps + .env
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -180,7 +148,7 @@ jobs:
               ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "cat > '$DEST/.env'"
           fi
 
-      # 6) Sanidade pós-deploy
+      # 6) Sanidade
       - name: Sanidade na VM
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
