@@ -327,12 +327,36 @@
                             <h3 class="card-title">Sobre e integrações</h3>
                         </div>
                         <div class="card-body">
-                            <p class="small">
-                                Os gráficos consomem JSONs padronizados do ETL em <code>/json_consolidado</code>.
+                            <p class="small mb-3">
+                                Os gráficos consomem JSONs/CSVs gerados pelo ETL <code>indicadores_etl.py</code> em
+                                <code>/opt/relatorio_h_t/json_consolidado</code>.
+                                Após a geração no servidor, o deploy publica em <code>/var/www/json_consolidado</code>,
+                                que é onde este HTML lê.
+                            </p>
+
+                            <div class="table-responsive">
+                                <table id="dt_assets" class="table table-sm table-striped w-100">
+                                    <thead>
+                                        <tr>
+                                            <th>Arquivo</th>
+                                            <th>Tipo</th>
+                                            <th>Última atualização</th>
+                                            <th>Tamanho</th>
+                                            <th>Linhas</th>
+                                            <th>Download</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+
+                            <p class="small mt-3" id="etl_hint">
                                 Campos esperados: PTAX(<code>date, buy, sell, mid, source, as_of</code>),
-                                IPCA/IGP-M(<code>ref_date, value</code>).
+                                IPCA/IGP-M(<code>ref_date, value</code>). Use o script:
+                                <code>python indicadores_etl.py --ptax 2020-01-01 today --ipca 2020-01 thismonth --igpm 2020-01 thismonth --out /opt/relatorio_h_t/json_consolidado</code>
                             </p>
                         </div>
+
                     </div>
                 </div>
             </section>
@@ -653,6 +677,95 @@
 
 
 
+    <script>
+        // ====== Inventário de arquivos publicados ======
+        const FILES = [
+            { name: "PTAX diário (JSON)", url: "json_consolidado/ptax_daily.json", kind: "json" },
+            { name: "PTAX diário (CSV)", url: "json_consolidado/ptax_daily.csv", kind: "csv" },
+            { name: "IPCA mensal (JSON)", url: "json_consolidado/ipca_monthly.json", kind: "json" },
+            { name: "IPCA mensal (CSV)", url: "json_consolidado/ipca_monthly.csv", kind: "csv" },
+            { name: "IGP-M mensal (JSON)", url: "json_consolidado/igpm_monthly.json", kind: "json" },
+            { name: "IGP-M mensal (CSV)", url: "json_consolidado/igpm_monthly.csv", kind: "csv" },
+        ];
+
+        async function headInfo(url) {
+            try {
+                const r = await fetch(url, { method: "HEAD", cache: "no-cache" });
+                if (!r.ok) throw new Error();
+                const lm = r.headers.get("Last-Modified") || r.headers.get("Date");
+                const sz = r.headers.get("Content-Length");
+                return { lastModified: lm ? new Date(lm) : null, size: sz ? Number(sz) : null };
+            } catch { return { lastModified: null, size: null }; }
+        }
+
+        async function countRows(url, kind) {
+            try {
+                if (kind === "json") {
+                    const r = await fetch(url, { cache: "no-cache" });
+                    const data = await r.json();
+                    return Array.isArray(data) ? data.length : 0;
+                } else {
+                    // CSV: conta quebras de linha sem baixar tudo via streaming simples
+                    const r = await fetch(url, { cache: "no-cache" });
+                    const txt = await r.text();
+                    const lines = txt.split(/\r?\n/).filter(x => x.trim() !== "");
+                    // desconta header se existir
+                    return lines.length > 0 ? lines.length - 1 : 0;
+                }
+            } catch { return null; }
+        }
+
+        function fmtBytes(b) {
+            if (b == null) return "—";
+            const u = ["B", "KB", "MB", "GB"]; let i = 0, v = b;
+            while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+            return `${v.toFixed(1)} ${u[i]}`;
+        }
+        function fmtDate(d) {
+            if (!d) return "—";
+            // PT-BR curto
+            return d.toLocaleString("pt-BR", { dateStyle: "medium", timeStyle: "short" });
+        }
+
+        async function buildAssetsTable() {
+            const tbody = document.querySelector("#dt_assets tbody");
+            tbody.innerHTML = "";
+            let maxLM = null;
+
+            for (const f of FILES) {
+                const [hi, rows] = await Promise.all([headInfo(f.url), countRows(f.url, f.kind === "json" ? "json" : "csv")]);
+                if (hi.lastModified && (!maxLM || hi.lastModified > maxLM)) maxLM = hi.lastModified;
+
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+        <td class="nowrap">${f.name}</td>
+        <td>${f.kind.toUpperCase()}</td>
+        <td class="nowrap">${fmtDate(hi.lastModified)}</td>
+        <td>${fmtBytes(hi.size)}</td>
+        <td>${rows ?? "—"}</td>
+        <td><a href="${f.url}" download>baixar</a></td>
+      `;
+                tbody.appendChild(tr);
+            }
+
+            if (maxLM) {
+                document.querySelector("#etl_hint").insertAdjacentHTML(
+                    "afterend",
+                    `<p class="small mt-2">Última publicação detectada: <strong>${fmtDate(maxLM)}</strong>.</p>`
+                );
+            }
+
+            // inicializa DataTable se quiser paginação/ordenar (já está carregado no HTML)
+            if ($.fn.DataTable.isDataTable("#dt_assets")) $("#dt_assets").DataTable().destroy();
+            $("#dt_assets").DataTable({ pageLength: 10, order: [[2, "desc"]] });
+        }
+
+        // Hooka no fluxo existente
+        (async function () {
+            // já existe um init principal; chamamos a tabela depois do carregamento inicial
+            await buildAssetsTable();
+        })();
+    </script>
 
 
 

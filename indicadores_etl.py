@@ -1,12 +1,12 @@
 """
 Indicadores ETL: PTAX (USD/BRL), IPCA (IBGE) e IGP-M (FGV via Ipeadata).
-- Saída direta em um diretório (ex.: ./public): CSV + JSON no próprio diretório.
+- Saída direta em um diretório (ex.: ./public ou ./json_consolidado): CSV + JSON no próprio diretório.
 - Geração opcional de site estático simples (index.html + assets/style.css).
 
-Uso típico (Windows/PowerShell):
+Uso (exemplos):
   pip install -U requests pandas ipeadatapy
-  python .\indicadores_etl.py --ptax 2020-01-01 today --ipca 2020-01 thismonth --igpm 2020-01 thismonth --out .\public
-  python .\indicadores_etl.py --site --out .\public
+  python indicadores_etl.py --ptax 2020-01-01 today --ipca 2020-01 thismonth --igpm 2020-01 thismonth --out ./public
+  python indicadores_etl.py --site --out ./public
 """
 from __future__ import annotations
 
@@ -19,6 +19,16 @@ from typing import Any, Dict, Optional, Tuple
 
 import pandas as pd
 import requests
+
+# -------------------- util: ajustar mtime --------------------
+from datetime import datetime, timezone
+def _set_mtime(path: str) -> None:
+    """Ajusta atime/mtime do arquivo para 'agora' no timezone local."""
+    try:
+        ts = datetime.now(timezone.utc).astimezone().timestamp()
+        os.utime(path, (ts, ts))
+    except Exception:
+        pass
 
 # -------------------- Constantes e bases --------------------
 OLINDA_PTAX_BASE = "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/"
@@ -82,8 +92,8 @@ def _parse_bcb_datetime(raw: Any) -> dt.datetime:
 
 def fetch_ptax_period(start_date: dt.date, end_date: dt.date) -> pd.DataFrame:
     di = start_date.strftime("%d-%m-%Y")
-    df = end_date.strftime("%d-%m-%Y")
-    url = f"{OLINDA_PTAX_BASE}CotacaoDolarPeriodo(dataInicial='{di}',dataFinalCotacao='{df}')"
+    df_ = end_date.strftime("%d-%m-%Y")
+    url = f"{OLINDA_PTAX_BASE}CotacaoDolarPeriodo(dataInicial='{di}',dataFinalCotacao='{df_}')"
     r = http_get(url, params={"$format": "json"})
     data = r.json().get("value", [])
     if not data:
@@ -213,7 +223,6 @@ def fetch_igpm_period(start: Tuple[int, int], end: Tuple[int, int], sercodigo: s
 
     # Tentativa 2: OData direto, precisa de SERCODIGO
     if not sercodigo:
-        # alguns códigos comuns; tente em ordem
         candidate_codes = ("IGP12_IGPMG12", "IGPM12_IGPMG12", "IGPM12_IGPM12")
     else:
         candidate_codes = (sercodigo,)
@@ -245,7 +254,9 @@ def write_outputs(df: pd.DataFrame, out_dir: str, name: str) -> None:
     csv_path = os.path.join(out_dir, f"{name}.csv")
     json_path = os.path.join(out_dir, f"{name}.json")
     df.to_csv(csv_path, index=False)
+    _set_mtime(csv_path)
     df.to_json(json_path, orient="records", force_ascii=False)
+    _set_mtime(json_path)
     print(f"wrote {csv_path} & {json_path} ({len(df)} rows)")
 
 def build_site(out_dir: str) -> None:
@@ -264,8 +275,10 @@ th,td{padding:.5rem;border-bottom:1px solid #e2e8f0;text-align:left}
 .downloads a{margin-right:.75rem}
 footer{color:#64748b;font-size:.9rem;margin-top:1rem}
 """
-    with open(os.path.join(assets, "style.css"), "w", encoding="utf-8") as f:
+    style_path = os.path.join(assets, "style.css")
+    with open(style_path, "w", encoding="utf-8") as f:
         f.write(css)
+    _set_mtime(style_path)
 
     html = """<!doctype html>
 <html lang="pt-br"><meta charset="utf-8"/>
@@ -311,9 +324,11 @@ load('ipca','ipca_monthly.json');
 load('igpm','igpm_monthly.json');
 </script>
 </body></html>"""
-    with open(os.path.join(out_dir, "index.html"), "w", encoding="utf-8") as f:
+    index_path = os.path.join(out_dir, "index.html")
+    with open(index_path, "w", encoding="utf-8") as f:
         f.write(html)
-    print(f"wrote {os.path.join(out_dir, 'index.html')} and assets/style.css")
+    _set_mtime(index_path)
+    print(f"wrote {index_path} and {style_path}")
 
 # -------------------- Runners --------------------
 def run_ptax(args: argparse.Namespace) -> Optional[pd.DataFrame]:
