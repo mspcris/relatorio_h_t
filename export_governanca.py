@@ -6,10 +6,14 @@
 #         KPIs mensais e de período (rodapé) com médias geométricas, mix e estatísticas.
 #         Inclui agregados de PRESCRIÇÃO nos JSONs legados e publica JSONs enriquecidos específicos de prescrição.
 import os, re, sys, glob, json, argparse, shutil, math
-from datetime import date
+from datetime import date, datetime, timezone
 from urllib.parse import quote_plus
 import numpy as np
 import pandas as pd
+def _set_mtime(path: str) -> None:
+    """Ajusta atime/mtime do arquivo para 'agora' com timezone local."""
+    ts = datetime.now(timezone.utc).astimezone().timestamp()
+    os.utime(path, (ts, ts))
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
@@ -464,6 +468,7 @@ def build_monthly_json():
     out_path = os.path.join(JSON_DIR, "consolidado_mensal.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(totals, f, ensure_ascii=False, indent=2)
+    _set_mtime(out_path)
     print(f"[ETAPA 4/6] JSON consolidado -> {os.path.relpath(out_path, BASE_DIR)}")
 
 # =========================
@@ -596,6 +601,7 @@ def build_monthly_json_by_posto():
     out_path = os.path.join(JSON_DIR, "consolidado_mensal_por_posto.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
+        _set_mtime(out_path)
     print(f"[ETAPA 5/6] JSON por posto -> {os.path.relpath(out_path, BASE_DIR)}")
 
 # =========================
@@ -635,6 +641,7 @@ def build_percent_by_posto():
     out_path = os.path.join(JSON_DIR, "percentuais_mensais_por_posto.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(out_rows, f, ensure_ascii=False, indent=2)
+        _set_mtime(out_path)
     print(f"[ETAPA 6/6] JSON percentuais -> {os.path.relpath(out_path, BASE_DIR)}")
 
 # =========================
@@ -830,6 +837,7 @@ def build_prescricao_jsons_enriquecidos():
     }
     with open(os.path.join(JSON_DIR, "prescricao_hoje.json"), "w", encoding="utf-8") as f:
         json.dump(out_hoje, f, ensure_ascii=False, indent=2)
+        _set_mtime(os.path.join(JSON_DIR, "prescricao_hoje.json"))
 
     ym_now = ym_today
     dia_corrente = today.day
@@ -861,6 +869,7 @@ def build_prescricao_jsons_enriquecidos():
     }
     with open(os.path.join(JSON_DIR, "prescricao_mensal.json"), "w", encoding="utf-8") as f:
         json.dump(out_mensal, f, ensure_ascii=False, indent=2)
+        _set_mtime(os.path.join(JSON_DIR, "prescricao_mensal.json"))
 
     print(f"[EXTRA] Prescrição HOJE   -> json_consolidado/prescricao_hoje.json  linhas_all={len(all_rows)}  linhas_hoje={len(linhas_hoje)}")
     print(f"[EXTRA] Prescrição MENSAL -> json_consolidado/prescricao_mensal.json  meses={len(serie_mensal)}  rows_mes_atual={len(out_mensal['mes_atual']['rows'])}")

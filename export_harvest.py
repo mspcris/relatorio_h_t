@@ -1,7 +1,9 @@
+#Teste Deploy 8h07m 04/11/25
+
 import os
 import requests
 import pandas as pd
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta, datetime, timezone
 from dotenv import load_dotenv
 
 load_dotenv()  # carrega o .env da raiz do projeto
@@ -22,6 +24,11 @@ HEADERS = {
 
 EXPORT_DIR = "export_harvest"
 
+def _set_mtime(path: str, dt: datetime | None = None) -> None:
+    """Ajusta atime/mtime do arquivo para dt (ou agora) no timezone local."""
+    when = dt or datetime.now(timezone.utc).astimezone()
+    ts = when.timestamp()
+    os.utime(path, (ts, ts))
 
 def fetch_time_entries(dt_from: str, dt_to: str) -> list[dict]:
     page, rows = 1, []
@@ -77,6 +84,7 @@ def export_last_7_days(out_dir: str = EXPORT_DIR) -> str:
     out_path = os.path.join(out_dir, fname)
 
     table.to_csv(out_path, index=False)
+    _set_mtime(out_path)
     return f"OK: {len(table)} linhas > {out_path}"
 
 

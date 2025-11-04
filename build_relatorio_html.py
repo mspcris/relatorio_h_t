@@ -8,15 +8,23 @@ Gera relatório HTML consolidando Trello + Harvest.
   relatorio/relatorio_YYYYMMDD_HHMMSS.html
   trello_harvest.html  (sempre sobrescrito)
 """
+#Teste de Deploy em  04/11/25 - 7h:40m
 from __future__ import annotations
-
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
+import os
 import argparse
 import pandas as pd
 import re
 from typing import Iterable
 from string import Template
+
+
+
+def set_mtime(path: Path, dt: datetime) -> None:
+    """Ajusta atime/mtime do arquivo para dt."""
+    ts = dt.timestamp()
+    os.utime(path, (ts, ts))
 
 # -------------------- utils --------------------
 def read_csv_safe(p: Path | None):
@@ -439,9 +447,12 @@ def main():
         tbl_by_project=df_to_html_table(pivots.get("by_project"), "tbl_by_project"),
         tbl_by_user=df_to_html_table(pivots.get("by_user"), "tbl_by_user"),
     )
-
+    
+    gen_dt = datetime.now(timezone.utc).astimezone()
     out_html.write_text(html, encoding="utf-8")
     out_index.write_text(html, encoding="utf-8")
+    set_mtime(out_html, gen_dt)
+    set_mtime(out_index, gen_dt)
     print(f"OK: {out_html}")
     print(f"OK: {out_index} (sobrescrito)")
 

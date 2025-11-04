@@ -5,6 +5,7 @@ Exporta um quadro do Trello para CSVs.
 Requer env vars: TRELLO_KEY, TRELLO_TOKEN
 Uso: python export_trello.py --board <BOARD_ID> --out ./export_trello
 """
+#Teste Deploy 8h07m 04/11/25
 from dotenv import load_dotenv; load_dotenv()
 from pathlib import Path
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))  # carrega ./.env
@@ -13,10 +14,16 @@ import os, csv, json, time, argparse, pathlib
 from urllib.parse import urlencode
 import requests
 from dateutil import parser as dtp
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo  # Python 3.9+
 
 API = "https://api.trello.com/1"
+
+def _set_mtime(path: Path | os.PathLike | str, dt: datetime | None = None) -> None:
+    """Ajusta atime/mtime para dt (ou agora) no timezone local."""
+    when = dt or datetime.now(timezone.utc).astimezone()
+    ts = when.timestamp()
+    os.utime(path, (ts, ts))
 
 def env(name: str) -> str:
     v = os.getenv(name)
@@ -35,13 +42,14 @@ def trello_get(path: str, **params):
         raise SystemExit(f"Falha {r.status_code} em {url}\n{r.text}")
     return r.json()
 
-def write_csv(path, rows, fieldnames):
+def write_csv(path, rows, fieldnames, mtime_dt: datetime | None = None):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         for row in rows:
             w.writerow({k: row.get(k, "") for k in fieldnames})
+    _set_mtime(path, mtime_dt)
 
 def iso(s):
     if not s: return ""
@@ -158,16 +166,35 @@ def main():
 
     t0 = time.time()
     data = fetch_board(args.board)
+    # timestamp de referência: máximo entre board e cards/attachments
+cand = []
+try:
+    cand.append(dtp.parse(data["board"].get("dateLastActivity") or ""))
+except Exception:
+    pass
+for c in data.get("cards", []):
+    try:
+        cand.append(dtp.parse(c.get("dateLastActivity") or ""))
+    except Exception:
+        pass
+    for a in c.get("attachments", []) or []:
+        try:
+            cand.append(dtp.parse(a.get("date") or ""))
+        except Exception:
+            pass
+    ref_dt = max([d for d in cand if isinstance(d, datetime)], default=datetime.now(timezone.utc))
+    ref_dt_local = ref_dt.astimezone(ZoneInfo("America/Sao_Paulo"))
 
     write_csv(
         outdir / "board.csv",
         [data["board"]],
-        fieldnames=["id","name","url","desc","closed","dateLastActivity"]
-    )
+        fieldnames=["id","name","url","desc","closed","dateLastActivity"],
+        mtime_dt=ref_dt_local
     write_csv(
         outdir / "lists.csv",
         data["lists"],
-        fieldnames=["id","name","pos","closed","idBoard"]
+        fieldnames=["id","name","pos","closed","idBoard"],
+        mtime_dt=ref_dt_local
     )
     write_csv(
         outdir / "members.csv",
@@ -177,21 +204,24 @@ def main():
     write_csv(
         outdir / "labels.csv",
         [{"id": l["id"], "name": l.get("name",""), "color": l.get("color","")} for l in data["labels"]],
-        fieldnames=["id","name","color"]
+        fieldnames=["id","name","color"],
+        mtime_dt=ref_dt_local
     )
 
     card_rows = flatten_cards(data)
     write_csv(
         outdir / "cards.csv",
         card_rows,
-        fieldnames=["card_id","card","list","labels","members","due","start","due_complete","url","short_link","closed","updated","desc","attachments_count","attachments_urls"]
+        fieldnames=["card_id","card","list","labels","members","due","start","due_complete","url","short_link","closed","updated","desc","attachments_count","attachments_urls"],
+        mtime_dt=ref_dt_local
     )
 
     chk_rows = flatten_checklists(data)
     write_csv(
         outdir / "checklists.csv",
         chk_rows,
-        fieldnames=["checklist_id","checklist","card_id","item_id","item","state","pos","due","member_id"]
+        fieldnames=["checklist_id","checklist","card_id","item_id","item","state","pos","due","member_id"],
+        mtime_dt=ref_dt_local
     )
 
     att_rows = []
@@ -211,14 +241,16 @@ def main():
     write_csv(
         outdir / "attachments.csv",
         att_rows,
-        fieldnames=["card_id","card","attachment_id","name","url","bytes","mimeType","date","isUpload"]
+        fieldnames=["card_id","card","attachment_id","name","url","bytes","mimeType","date","isUpload"],
+        mtime_dt=ref_dt_local
     )
 
     if data["custom_fields"]:
         write_csv(
             outdir / "custom_fields.csv",
             data["custom_fields"],
-            fieldnames=["id","name","type","idModel","modelType","pos","options"]
+            fieldnames=["id","name","type","idModel","modelType","pos","options"],
+            mtime_dt=ref_dt_local
         )
 
     print(f"Export OK: {outdir}  ({time.time()-t0:.1f}s)")
