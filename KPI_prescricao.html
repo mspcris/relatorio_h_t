@@ -345,10 +345,19 @@
             return out;
         }
         function kpiCard(title, val, kind = 'int') {
+            if (kind === 'txt') {
+                const out = (val == null || String(val).trim() === '')
+                    ? '<span class="muted">-</span>'
+                    : String(val);
+                return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0">${out}</div></div></div>`;
+            }
             const isNull = val == null || Number.isNaN(val);
-            const out = isNull ? '<span class="muted">-</span>' : (kind === 'pct' ? (fmt2.format(val) + '%') : fmtInt.format(val));
+            const out = isNull
+                ? '<span class="muted">-</span>'
+                : (kind === 'pct' ? (fmt2.format(val) + '%') : fmtInt.format(val));
             return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0">${out}</div></div></div>`;
         }
+
 
         /* =================== Estado =================== */
         let H = null;
