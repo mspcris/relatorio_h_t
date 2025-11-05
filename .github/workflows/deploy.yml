@@ -61,6 +61,23 @@ jobs:
             fi
           done
 
+      # 1.1) HTMLs na raiz do repo -> /var/www
+      - name: HTML raiz -> /var/www
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          DEST=/var/www
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
+          # Copia apenas *.html da raiz do projeto, sem deletar outros assets já publicados
+          rsync -rlvz \
+            --omit-dir-times --no-perms --no-owner --no-group \
+            -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+            --include='*.html' --exclude='*' \
+            ./ "$SSH_USER@$SSH_HOST:$DEST/"
+
       # 2) analyze_groq.py -> /opt/ia-groq e /opt/ia-groq/app
       - name: analyze_groq.py -> /opt/ia-groq e /opt/ia-groq/app
         env:
