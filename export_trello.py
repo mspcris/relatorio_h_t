@@ -5,7 +5,7 @@ Exporta um quadro do Trello para CSVs.
 Requer env vars: TRELLO_KEY, TRELLO_TOKEN
 Uso: python export_trello.py --board <BOARD_ID> --out ./export_trello
 """
-#Teste Deploy 8h07m 04/11/25
+# Teste Deploy 8h07m 04/11/25
 from dotenv import load_dotenv; load_dotenv()
 from pathlib import Path
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))  # carrega ./.env
@@ -155,7 +155,7 @@ def main():
     ap.add_argument(
         "--out",
         default="./export_trello",
-        help="pasta PAI de saída; será criada subpasta export_YYYYMMDD_HHMMSS"
+        help="pasta PAI de saída; será criada subpasta export_YYYYMMDD_%H%M%S"
     )
     args = ap.parse_args()
 
@@ -166,40 +166,44 @@ def main():
 
     t0 = time.time()
     data = fetch_board(args.board)
+
     # timestamp de referência: máximo entre board e cards/attachments
-cand = []
-try:
-    cand.append(dtp.parse(data["board"].get("dateLastActivity") or ""))
-except Exception:
-    pass
-for c in data.get("cards", []):
+    cand = []
     try:
-        cand.append(dtp.parse(c.get("dateLastActivity") or ""))
+        cand.append(dtp.parse(data["board"].get("dateLastActivity") or ""))
     except Exception:
         pass
-    for a in c.get("attachments", []) or []:
+    for c in data.get("cards", []):
         try:
-            cand.append(dtp.parse(a.get("date") or ""))
+            cand.append(dtp.parse(c.get("dateLastActivity") or ""))
         except Exception:
             pass
+        for a in c.get("attachments", []) or []:
+            try:
+                cand.append(dtp.parse(a.get("date") or ""))
+            except Exception:
+                pass
     ref_dt = max([d for d in cand if isinstance(d, datetime)], default=datetime.now(timezone.utc))
     ref_dt_local = ref_dt.astimezone(ZoneInfo("America/Sao_Paulo"))
 
+    # CSVs
     write_csv(
         outdir / "board.csv",
         [data["board"]],
         fieldnames=["id","name","url","desc","closed","dateLastActivity"],
         mtime_dt=ref_dt_local
+    )
     write_csv(
         outdir / "lists.csv",
         data["lists"],
-        fieldnames=["id","name","pos","closed","idBoard"],
+        fieldnames=["id","name","pos","closed"],
         mtime_dt=ref_dt_local
     )
     write_csv(
         outdir / "members.csv",
         [{"id": m["id"], "username": m["username"], "fullName": m["fullName"]} for m in data["members"]],
-        fieldnames=["id","username","fullName"]
+        fieldnames=["id","username","fullName"],
+        mtime_dt=ref_dt_local
     )
     write_csv(
         outdir / "labels.csv",
