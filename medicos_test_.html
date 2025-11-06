@@ -5,95 +5,27 @@
     <meta charset="UTF-8" />
     <title>CAMIM — KPI de Custo Médico x Mensalidades (com IA)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-    <!-- AdminLTE + FontAwesome -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+    <link rel="shortcut icon" href="images/Logo Camim-01_50px.png" type="image/x-icon">
+    <link rel="stylesheet" href="style2.css">
 
-    <!-- Fonte padrão AdminLTE -->
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
-
-    <!-- CSS do projeto -->
-    <link rel="stylesheet" href="/css/style2.css">
-    <link rel="shortcut icon" href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png
-" type="image/x-icon">
-
-    <!-- Libs JS (ordem importa) -->
+    <!-- Libs -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="/js/chat.js"></script>
 
-    <!-- Config de IA -->
+
     <script>
+        // backend no mesmo host (proxy reverso)
         window.IA_API_URL = '/ia/analisar';
         window.PROMPTS_API_BASE = '/prompts';
     </script>
-    <script src="/js/chat.js"></script>
 
-    <!-- Normalização tipográfica -->
-    <style id="normalize-adminlte">
-        html {
-            font-size: 16px;
-        }
-
-        body {
-            font-size: 1rem;
-            -webkit-text-size-adjust: 100%;
-            -webkit-font-smoothing: antialiased;
-            font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        }
-
-        body.text-sm {
-            font-size: 1rem;
-        }
-
-        .text-sm .btn,
-        .text-sm .form-control,
-        .text-sm .custom-select,
-        .text-sm .page-link,
-        .text-sm .breadcrumb,
-        .text-sm .nav-link,
-        .text-sm .card-title {
-            font-size: 1rem;
-        }
-
-        h1,
-        h2,
-        h3 {
-            margin-top: 0;
-            margin-bottom: .5rem;
-            font-weight: 600;
-            line-height: 1.25;
-        }
-
-        h1 {
-            font-size: 2rem;
-        }
-
-        h2 {
-            font-size: 1.5rem;
-        }
-
-        h3,
-        .card-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-
-        .sidebar .nav-link {
-            font-size: .95rem;
-        }
-
-        .brand-link .brand-text {
-            font-size: 1rem;
-        }
-    </style>
-
-    <!-- Estilos locais -->
     <style>
         :root {
             --cor0: #F2F2F2;
@@ -105,6 +37,10 @@
             --cor6: #0099ab;
             --cor7: #092019;
             --cor8: #444444
+        }
+
+        body {
+            -webkit-font-smoothing: antialiased
         }
 
         .muted {
@@ -232,21 +168,51 @@
         .lg-neg {
             background: rgba(220, 53, 69, 1)
         }
+
+        html {
+            font-size: 14px;
+        }
+
+        /* 14px deixa tudo igual ao “text-sm” */
+        @media (min-width: 992px) {
+
+            .card-title.h3,
+            .card-title .h3 {
+                font-size: 1.25rem;
+            }
+        }
+
+        .card .h5 {
+            font-size: 1.15rem;
+            line-height: 1.2;
+        }
+
+        .small,
+        .muted,
+        .text-muted {
+            font-size: .875rem;
+        }
     </style>
+
+
+
 </head>
 
-<body class="hold-transition sidebar-mini">
+<!-- <body class="hold-transition sidebar-mini">
+ -->
+
+<body class="hold-transition sidebar-mini text-sm">
+
+
     <div class="wrapper">
         <!-- NAV -->
         <nav class="main-header navbar navbar-expand navbar-white navbar-light">
             <ul class="navbar-nav">
-                <li class="nav-item">
-                    <a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
+                <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
                 </li>
             </ul>
             <span class="ml-2 font-weight-bold d-flex align-items-center">
-                <img src="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png
-" alt="Logo Camim">
+                <img src="./images/Logo Camim-01_50px.png" alt="Logo Camim">
                 <span class="ml-2">Quem tem saúde é mais feliz!</span>
                 <span id="jsonInfo" class="ml-3 text-muted mini"></span>
             </span>
@@ -261,34 +227,49 @@
                         <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
                                 <p>Home Page</p>
                             </a></li>
+
+
                         <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i
                                     class="nav-icon fas fa-book-open"></i>
                                 <p>Leia-me</p>
                             </a></li>
+
+
                         <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i
                                     class="nav-icon fas fa-utensils"></i>
                                 <p>KPI Custo Alimentação</p>
                             </a></li>
+
+
                         <li class="nav-item"><a href="medicos.html" class="nav-link active"><i
                                     class="nav-icon fas fa-notes-medical"></i>
                                 <p>KPI Custo Médico</p>
                             </a></li>
+
+
                         <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i
                                     class="nav-icon fas fa-chart-line"></i>
                                 <p>KPI Mensalidades</p>
                             </a></li>
+
                         <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i
                                     class="nav-icon fas fa-chart-line"></i>
                                 <p>KPI Prescrições</p>
                             </a></li>
-                        <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i
-                                    class="nav-icon fas fa-landmark"></i>
+
+
+                        <li class="nav-item">
+                            <a href="kpi_governo.html" class="nav-link">
+                                <i class="nav-icon fas fa-landmark"></i>
                                 <p>KPI Índices Oficiais</p>
-                            </a></li>
+                            </a>
+                        </li>
+
+
                         <li class="nav-item">
                             <form method="POST" action="/session/logout" style="display:inline">
-                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
-                                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left"><i
+                                        class="nav-icon fas fa-sign-out-alt"></i>
                                     <p>Sair</p>
                                 </button>
                             </form>
@@ -327,7 +308,8 @@
                             </div>
                             <div class="flex-grow-1">
                                 <label class="mb-0 small d-block">Posto</label>
-                                <ul id="postoTabs1" class="nav nav-pills scroll-tabs"></ul>
+                                <ul id="postoTabs1" class="nav nav-pills scroll-tabs">
+                                </ul>
                             </div>
                         </div>
                     </div>
@@ -352,7 +334,8 @@
                         </div>
                         <div class="flex-grow-1">
                             <label class="mb-0 small d-block">Posto</label>
-                            <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
+                            <ul id="postoTabs2" class="nav nav-pills scroll-tabs">
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -399,47 +382,40 @@
                     </div>
                     <div class="card-body"><canvas id="chartPct"></canvas></div>
                 </div>
-
                 <div class="card chart-card">
                     <div class="card-header">
                         <h3 class="card-title mb-0">Evolução: Mensalidade e Médico</h3>
                     </div>
                     <div class="card-body"><canvas id="chartValores"></canvas></div>
                 </div>
-
                 <div class="card chart-card">
                     <div class="card-header">
                         <h3 class="card-title mb-0">Composição: Médico × Margem</h3>
                     </div>
                     <div class="card-body"><canvas id="chartStack"></canvas></div>
                 </div>
-
                 <div class="card chart-card">
                     <div class="card-header">
                         <h3 class="card-title mb-0">Variação YoY de % Médico (p.p.)
-                            <span class="mini muted" style="margin-left:8px">
-                                <span class="lg-box lg-pos"></span>Positivo&nbsp;&nbsp;
-                                <span class="lg-box lg-neg"></span>Negativo
-                            </span>
+                            <span class="mini muted" style="margin-left:8px"><span
+                                    class="lg-box lg-pos"></span>Positivo&nbsp;&nbsp;<span
+                                    class="lg-box lg-neg"></span>Negativo</span>
                         </h3>
                     </div>
                     <div class="card-body"><canvas id="chartYoYpp"></canvas></div>
                 </div>
-
                 <div class="card chart-card">
                     <div class="card-header">
                         <h3 class="card-title mb-0">% Médico médio por Posto (12m)</h3>
                     </div>
                     <div class="card-body"><canvas id="chartPctPosto"></canvas></div>
                 </div>
-
                 <div class="card chart-card">
                     <div class="card-header">
                         <h3 class="card-title mb-0">Pareto de Custo Médico por Posto</h3>
                     </div>
                     <div class="card-body"><canvas id="chartParetoMed"></canvas></div>
                 </div>
-
                 <div class="card chart-card">
                     <div class="card-header">
                         <h3 class="card-title mb-0">Dispersão: Mensalidade × % Médico</h3>
@@ -458,29 +434,6 @@
         </div>
     </div>
 
-    <!-- AQUI A LOUCURA COMEÇA  -->
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    <!-- AQUI A LOUCURA COMEÇA  -->
 
     <script>
         /* ===================== PROMPTS (compartilhado) ===================== */

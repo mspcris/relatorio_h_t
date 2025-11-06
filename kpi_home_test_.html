@@ -6,88 +6,16 @@
     <title>CAMIM — KPI_Home: Guia completo de métricas (com IA)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <!-- AdminLTE + FontAwesome -->
+    <!-- CSS -->
+    <link rel="stylesheet" href="/css/style2.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
-    <!-- Fonte padrão AdminLTE -->
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
-    <!-- Seu CSS (depois para ajustes locais) -->
-    <link rel="stylesheet" href="/css/style2.css">
-    <link rel="shortcut icon" href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png
-" type="image/x-icon">
-
-    <!-- JS base -->
+    <link rel="shortcut icon" href="images/Logo Camim-01_50px.png" type="image/x-icon">
+    <!-- JS (ordem importa) -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
 
-    <!-- Normalização para consistência entre páginas -->
-    <style id="normalize-adminlte">
-        html {
-            font-size: 16px;
-        }
-
-        body {
-            font-size: 1rem;
-            -webkit-text-size-adjust: 100%;
-            font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        }
-
-        body.text-sm {
-            font-size: 1rem;
-        }
-
-        .text-sm .btn,
-        .text-sm .form-control,
-        .text-sm .custom-select,
-        .text-sm .page-link,
-        .text-sm .breadcrumb,
-        .text-sm .nav-link,
-        .text-sm .card-title {
-            font-size: 1rem;
-        }
-
-        h1,
-        h2,
-        h3 {
-            margin-top: 0;
-            margin-bottom: .5rem;
-            font-weight: 600;
-            line-height: 1.25;
-        }
-
-        h1 {
-            font-size: 2rem;
-        }
-
-        /* 32px */
-        h2 {
-            font-size: 1.5rem;
-        }
-
-        /* 24px */
-        h3 {
-            font-size: 1.25rem;
-        }
-
-        /* 20px */
-
-        .card-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-
-        .sidebar .nav-link {
-            font-size: .95rem;
-        }
-
-        .brand-link .brand-text {
-            font-size: 1rem;
-        }
-    </style>
-
-    <!-- Estilos locais desta página -->
     <style>
         .stack {
             display: flex;
@@ -166,9 +94,7 @@
         }
 
         .tbl {
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: auto
+            width: 100%
         }
 
         .tbl td,
@@ -198,7 +124,7 @@
         }
 
         .ref a {
-            text-decoration: underline
+            text-decoration: underline;
         }
 
         .kbd {
@@ -213,25 +139,32 @@
         html,
         body {
             max-width: 100%;
-            overflow-x: hidden
+            overflow-x: hidden;
         }
 
         .table-wrap {
             width: 100%;
             max-width: 100vw;
             overflow-x: auto;
-            -webkit-overflow-scrolling: touch
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .tbl {
+            border-collapse: collapse;
+            table-layout: auto;
         }
 
         @media (max-width:576px) {
             .tbl {
-                min-width: 720px
+                min-width: 720px;
             }
 
+            /* ajuste conforme colunas */
             .tbl th:first-child,
             .tbl td:first-child {
                 position: static;
-                box-shadow: none
+                box-shadow: none;
+                /* evita empurrar a página */
             }
         }
     </style>
@@ -239,19 +172,18 @@
 
 <body class="hold-transition sidebar-mini">
     <div class="wrapper">
+
         <!-- NAVBAR -->
         <nav class="main-header navbar navbar-expand navbar-white navbar-light">
             <ul class="navbar-nav">
-                <li class="nav-item">
-                    <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
-                </li>
+                <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i
+                            class="fas fa-bars"></i></a></li>
             </ul>
-            <span class="ml-2 font-weight-bold d-flex align-items-center">
-                <img src="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png
-" alt="Logo Camim" style="height:28px;width:auto">
-                <span class="ml-2">Quem tem saúde é mais feliz!</span>
+            <span class="ml-2 font-weight-bold">
+                <img src="/images/Logo Camim-01_50px.png" alt="Logo Camim"> Quem tem saúde é mais feliz!
             </span>
         </nav>
+
 
         <!-- SIDEBAR -->
         <aside class="main-sidebar sidebar-dark-primary elevation-4">
@@ -263,34 +195,49 @@
                         <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
                                 <p>Home Page</p>
                             </a></li>
+
+
                         <li class="nav-item"><a href="kpi_home.html" class="nav-link active"><i
                                     class="nav-icon fas fa-book-open"></i>
                                 <p>Leia-me</p>
                             </a></li>
+
+
                         <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i
                                     class="nav-icon fas fa-utensils"></i>
                                 <p>KPI Custo Alimentação</p>
                             </a></li>
+
+
                         <li class="nav-item"><a href="medicos.html" class="nav-link"><i
                                     class="nav-icon fas fa-notes-medical"></i>
                                 <p>KPI Custo Médico</p>
                             </a></li>
+
+
                         <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i
                                     class="nav-icon fas fa-chart-line"></i>
                                 <p>KPI Mensalidades</p>
                             </a></li>
+
                         <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i
                                     class="nav-icon fas fa-chart-line"></i>
                                 <p>KPI Prescrições</p>
                             </a></li>
-                        <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i
-                                    class="nav-icon fas fa-landmark"></i>
+
+                        <li class="nav-item">
+                            <a href="kpi_governo.html" class="nav-link">
+                                <i class="nav-icon fas fa-landmark"></i>
                                 <p>KPI Índices Oficiais</p>
-                            </a></li>
+                            </a>
+                        </li>
+
+
+
                         <li class="nav-item">
                             <form method="POST" action="/session/logout" style="display:inline">
-                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left"><i
-                                        class="nav-icon fas fa-sign-out-alt"></i>
+                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                                    <i class="nav-icon fas fa-sign-out-alt"></i>
                                     <p>Sair</p>
                                 </button>
                             </form>
@@ -387,7 +334,8 @@
                         <h3 class="card-title mb-0">2) Dicionário: nome → fórmula → leitura</h3>
                     </div>
                     <div class="table-wrap">
-                        <div class="card-body p-0">
+                        <table class="tbl"> ... </table>
+                        <div class="card-body">
                             <table class="tbl">
                                 <thead>
                                     <tr>
@@ -445,18 +393,22 @@
                                         <td>
                                             <div class="formula"><span class="code">pct_medico</span> = (<span
                                                     class="code">medico</span> ÷ <span class="code">mensalidade</span>)
-                                                × 100</div>
+                                                ×
+                                                100</div>
                                         </td>
                                         <td>Quanto da receita vira custo médico.</td>
                                         <td><span class="ok">&lt;30%</span> ok, <span class="warn">30–50%</span>
-                                            atenção, <span class="bad">&gt;50%</span> alerta.</td>
+                                            atenção,
+                                            <span class="bad">&gt;50%</span> alerta.
+                                        </td>
                                     </tr>
                                     <tr>
                                         <td><b>% Alimentação sobre Mensalidade</b></td>
                                         <td>
                                             <div class="formula"><span class="code">pct_alim</span> = (<span
                                                     class="code">alimentacao</span> ÷ <span
-                                                    class="code">mensalidade</span>) × 100</div>
+                                                    class="code">mensalidade</span>)
+                                                × 100</div>
                                         </td>
                                         <td>Proporção do custo de alimentação.</td>
                                         <td>Útil em Pareto e heatmap.</td>
@@ -505,7 +457,8 @@
                                         <td><b>Média móvel 3 meses</b> (MM3)</td>
                                         <td>
                                             <div class="formula">MM3 em <i>t</i> = média de <span class="code">x[t],
-                                                    x[t-1], x[t-2]</span></div>
+                                                    x[t-1],
+                                                    x[t-2]</span></div>
                                         </td>
                                         <td>Suaviza ruídos.</td>
                                         <td>Usada em % Médico e Receita.</td>
@@ -515,7 +468,8 @@
                                         <td>
                                             <div class="formula"><span class="code">receita_logret</span> = ln(<span
                                                     class="code">receita_t</span> ÷ <span
-                                                    class="code">receita_{t-1}</span>)</div>
+                                                    class="code">receita_{t-1}</span>)
+                                            </div>
                                         </td>
                                         <td>Mede crescimento de forma aditiva.</td>
                                         <td>Indica aceleração/desaceleração.</td>
@@ -545,6 +499,7 @@
                     </div>
                 </div>
 
+
                 <!-- Médias: aritmética x geométrica -->
                 <div class="card">
                     <div class="card-header">
@@ -552,176 +507,227 @@
                     </div>
                     <div class="card-body">
                         <div class="formula"><b>Média aritmética</b> de valores <span class="code">x₁, x₂, …,
-                                xₙ</span>:<br>
-                            <span class="code">(x₁ + x₂ + … + xₙ) ÷ n</span>
+                                xₙ</span>:
+                            <br> <span class="code">(x₁ + x₂ + … + xₙ) ÷ n</span>
                         </div>
-                        <div class="hint">Uso típico: valores “no mesmo nível” que somam bem. Ex.: <b>ticket médio</b>,
+                        <div class="hint">Uso típico: valores “no mesmo nível” que somam bem. Ex.: <b>ticket
+                                médio</b>,
                             <b>MM3</b>, média simples de % por mês.
                         </div>
 
                         <div class="formula"><b>Média geométrica</b> de razões/índices positivos <span class="code">r₁,
-                                r₂, …, rₙ</span>:<br>
-                            <span class="code">(r₁ × r₂ × … × rₙ)^(1/n) − 1</span> &nbsp; quando <span
-                                class="code">rᵢ</span> são <b>taxas</b> (use 1+taxa na multiplicação).
+                                r₂, …, rₙ</span>:
+                            <br> <span class="code">(r₁ × r₂ × … × rₙ)^(1/n) − 1</span> &nbsp; quando <span
+                                class="code">rᵢ</span> são <b>taxas</b> do tipo 5% = 0,05 (use 1+taxa na
+                            multiplicação).
                         </div>
-                        <div class="hint">Uso típico: <b>crescimentos sucessivos</b>. No painel, a “Perf. mensal (MG)”
-                            calcula a taxa média que, se aplicada todo mês, gera o mesmo acumulado.</div>
+                        <div class="hint">Uso típico: <b>crescimentos sucessivos</b>. No painel, a “Perf. mensal
+                            (MG)”
+                            calcula a taxa média que, se aplicada todo mês, geraria o mesmo resultado acumulado.
+                        </div>
 
-                        <div class="ex"><b>Exemplo 1 — Ticket médio (aritmética):</b><br>Tickets = 140, 160, 170 → média
-                            = (140+160+170)/3 = <b>156,67</b>.</div>
-                        <div class="ex"><b>Exemplo 2 — Crescimento mensal (geométrica):</b><br>Taxas: +2%, +1%, −1% →
-                            índices: 1,02 × 1,01 × 0,99 → média geométrica ≈ <b>+0,66% ao mês</b>.</div>
-                    </div>
-                </div>
+                        <div class="ex">
+                            <b>Exemplo 1 — Ticket médio (aritmética):</b><br>
+                            Tickets = 140, 160, 170 → média = (140+160+170)/3 = <b>156,67</b>.
+                        </div>
+                        <div class="ex">
+                            <b>Exemplo 2 — Crescimento mensal (geométrica):</b><br>
+                            Taxas mensais: +2%, +1%, −1% → índices: 1,02 × 1,01 × 0,99 = 1,019898…<br>
+                            Média geométrica = 1,019898^(1/3) − 1 ≈ <b>+0,66% ao mês</b>.
+                        </div>
 
-                <!-- Agregações e seleção de postos -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title mb-0">3) Agregações usadas nos painéis</h3>
+                        <!-- <div class="ref mt-2">
+                            Leituras recomendadas:
+                            <ul class="mb-0">
+                                <li><a href="https://giovanidacruz.com.br/diferenca-entre-medias-aritmeticas-e-geometricas-qual-usar-e-quando/#comment-4463"
+                                        target="_blank" rel="noopener">Giovani da Cruz — Diferença entre médias
+                                        aritméticas e geométricas</a></li>
+                                <li><a href="https://www.topinvest.com.br/tipos-de-media-quais-sao-e-como-calcular"
+                                        target="_blank" rel="noopener">TopInvest — Tipos de média e como calcular</a>
+                                </li>
+                                <li><a href="https://pt.wikipedia.org/wiki/M%C3%A9dia_aritm%C3%A9tica" target="_blank"
+                                        rel="noopener">Wikipedia — Média aritmética</a> e <a
+                                        href="https://pt.wikipedia.org/wiki/M%C3%A9dia_geom%C3%A9trica" target="_blank"
+                                        rel="noopener">Média geométrica</a></li>
+                                <li><a href="https://pt.khanacademy.org/math/statistics-probability" target="_blank"
+                                        rel="noopener">Khan Academy — Estatística básica</a></li>
+                                <li><a href="https://edisciplinas.usp.br/" target="_blank" rel="noopener">USP
+                                        e-Disciplinas — materiais de estatística e finanças</a></li>
+                            </ul>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <details open class="mb-2">
-                            <summary>3.1 Ponderações e médias</summary>
-                            <div class="mt-2">
-                                <div class="formula"><b>% Médico ponderado (12m)</b> = (Σ Médico_12m ÷ Σ
-                                    Mensalidade_12m) × 100</div>
-                                <div class="hint">Meses maiores pesam mais.</div>
-                                <div class="formula"><b>% Médico — média simples (12m)</b> = média de % mês a mês</div>
-                                <div class="hint">Todos os meses pesam igual.</div>
+                </div> -->
+
+                        <!-- Agregações e seleção de postos -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">3) Agregações usadas nos painéis</h3>
                             </div>
-                        </details>
-                        <details class="mb-2">
-                            <summary>3.2 Seleção de 2+ postos</summary>
-                            <div class="mt-2">
-                                <div class="formula">Ao clicar em duas letras de posto, <b>somamos</b> valores por mês e
-                                    recalculamos tickets e percentuais sobre os somatórios.</div>
-                                <div class="hint">Pense como “juntar caixas d’água e medir de novo”.</div>
+                            <div class="card-body">
+                                <details open class="mb-2">
+                                    <summary>3.1 Ponderações e médias</summary>
+                                    <div class="mt-2">
+                                        <div class="formula"><b>% Médico ponderado (12m)</b> = (Σ Médico_12m ÷ Σ
+                                            Mensalidade_12m) × 100</div>
+                                        <div class="hint">Meses maiores pesam mais.</div>
+                                        <div class="formula"><b>% Médico — média simples (12m)</b> = média de % mês
+                                            a
+                                            mês</div>
+                                        <div class="hint">Todos os meses pesam igual.</div>
+                                    </div>
+                                </details>
+                                <details class="mb-2">
+                                    <summary>3.2 Seleção de 2+ postos</summary>
+                                    <div class="mt-2">
+                                        <div class="formula">Ao clicar em duas letras de posto, <b>somamos</b>
+                                            valores
+                                            em cada
+                                            mês e
+                                            recalculamos tickets e percentuais sobre os somatórios.</div>
+                                        <div class="hint">Pense como “juntar caixas d’água e medir de novo”.</div>
+                                    </div>
+                                </details>
+                                <details>
+                                    <summary>3.3 Δ p.p. YoY para % Médico</summary>
+                                    <div class="mt-2">
+                                        <div class="formula"><b>Δ YoY p.p.</b> = % Médico(t) − % Médico(t−12)</div>
+                                        <div class="hint">Diferença em <b>pontos percentuais</b>, não em porcentagem
+                                            relativa.
+                                        </div>
+                                    </div>
+                                </details>
                             </div>
-                        </details>
-                        <details>
-                            <summary>3.3 Δ p.p. YoY para % Médico</summary>
-                            <div class="mt-2">
-                                <div class="formula"><b>Δ YoY p.p.</b> = % Médico(t) − % Médico(t−12)</div>
-                                <div class="hint">Diferença em <b>pontos percentuais</b>, não em porcentagem relativa.
+                        </div>
+
+                        <!-- Leituras rápidas -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">4) Leituras rápidas</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="grid-3">
+                                    <div class="ex"><b>Receita ↑ e % Médico ↓</b><br>Margem melhora.</div>
+                                    <div class="ex"><b>Receita ↑ por Ticket ↑ e Qtd ↓</b><br>Crescimento por preço.
+                                    </div>
+                                    <div class="ex"><b>% Médico ↑ com Médico estável</b><br>Receita pode ter caído.
+                                    </div>
                                 </div>
                             </div>
-                        </details>
-                    </div>
-                </div>
+                        </div>
 
-                <!-- Leituras rápidas -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title mb-0">4) Leituras rápidas</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="grid-3">
-                            <div class="ex"><b>Receita ↑ e % Médico ↓</b><br>Margem melhora.</div>
-                            <div class="ex"><b>Receita ↑ por Ticket ↑ e Qtd ↓</b><br>Crescimento por preço.</div>
-                            <div class="ex"><b>% Médico ↑ com Médico estável</b><br>Receita pode ter caído.</div>
+                        <!-- Exemplos -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">5) Exemplos passo a passo</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="ex">
+                                    <b>Exemplo A — % Médico e Margem</b>
+                                    <ol class="mt-1 mb-0">
+                                        <li>Mensalidade = R$ <span class="num">800.000</span></li>
+                                        <li>Médico = R$ <span class="num">120.000</span></li>
+                                        <li>% Médico = 120.000 ÷ 800.000 × 100 = <b>15,00%</b></li>
+                                        <li>Margem ≈ 800.000 − 120.000 = <b>R$ 680.000</b></li>
+                                    </ol>
+                                </div>
+                                <div class="ex">
+                                    <b>Exemplo B — Δ MoM de Receita</b>
+                                    <ol class="mt-1 mb-0">
+                                        <li>Mês t−1: R$ <span class="num">1.000.000</span></li>
+                                        <li>Mês t: R$ <span class="num">1.060.000</span></li>
+                                        <li>Δ MoM = (1.060.000 − 1.000.000) ÷ 1.000.000 × 100 = <b>+6%</b></li>
+                                    </ol>
+                                </div>
+                                <div class="ex">
+                                    <b>Exemplo C — Média geométrica de 12 meses</b><br>
+                                    Se a performance mensal variou: +1,2%, +0,8%, −0,5%, … ao longo de 12 meses,
+                                    a “Perf. mensal (MG)” é a taxa constante que reproduz o mesmo acumulado quando
+                                    aplicada 12
+                                    vezes.
+                                </div>
+                                <div class="ex">
+                                    <b>Exemplo D — Comparar dois postos</b><br>
+                                    Selecione os postos <b>A</b> e <b>B</b>. Observe se a alta de % Médico vem de
+                                    aumento real
+                                    do custo médico ou de queda de receita em um dos postos.
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Exemplos -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title mb-0">5) Exemplos passo a passo</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="ex">
-                            <b>Exemplo A — % Médico e Margem</b>
-                            <ol class="mt-1 mb-0">
-                                <li>Mensalidade = R$ <span class="num">800.000</span></li>
-                                <li>Médico = R$ <span class="num">120.000</span></li>
-                                <li>% Médico = 120.000 ÷ 800.000 × 100 = <b>15,00%</b></li>
-                                <li>Margem ≈ 800.000 − 120.000 = <b>R$ 680.000</b></li>
-                            </ol>
+                        <!-- FAQ -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">6) Dúvidas frequentes</h3>
+                            </div>
+                            <div class="card-body">
+                                <details class="mb-2" open>
+                                    <summary>IA Auto faz o quê?</summary>
+                                    <div class="mt-1">Gera um <b>resumo comentado</b> dos dados filtrados:
+                                        tendências,
+                                        alertas e
+                                        hipóteses. O texto muda conforme período, postos e métricas escolhidos.
+                                    </div>
+                                </details>
+                                <details class="mb-2">
+                                    <summary>Comparar serve para quê?</summary>
+                                    <div class="mt-1">Comparar dois postos ou o mesmo posto em dois períodos. Útil
+                                        para
+                                        ver
+                                        efeito de campanhas, reajustes e sazonalidade.</div>
+                                </details>
+                                <details class="mb-2">
+                                    <summary>Por que MM3 difere do mês?</summary>
+                                    <div class="mt-1">Porque é a média dos últimos 3 meses. Mostra tendência, não o
+                                        valor
+                                        pontual.</div>
+                                </details>
+                                <details>
+                                    <summary>“Ponto percentual” vs “porcentagem”</summary>
+                                    <div class="mt-1">30% → 33% = <b>+3 p.p.</b> Não confundir com +10% de 30.</div>
+                                </details>
+                            </div>
                         </div>
-                        <div class="ex">
-                            <b>Exemplo B — Δ MoM de Receita</b>
-                            <ol class="mt-1 mb-0">
-                                <li>Mês t−1: R$ <span class="num">1.000.000</span></li>
-                                <li>Mês t: R$ <span class="num">1.060.000</span></li>
-                                <li>Δ MoM = (1.060.000 − 1.000.000) ÷ 1.000.000 × 100 = <b>+6%</b></li>
-                            </ol>
-                        </div>
-                        <div class="ex">
-                            <b>Exemplo C — Média geométrica de 12 meses</b><br>
-                            Se a performance mensal variou: +1,2%, +0,8%, −0,5%, … ao longo de 12 meses,
-                            a “Perf. mensal (MG)” é a taxa constante que reproduz o mesmo acumulado quando aplicada 12
-                            vezes.
-                        </div>
-                        <div class="ex">
-                            <b>Exemplo D — Comparar dois postos</b><br>
-                            Selecione os postos <b>A</b> e <b>B</b>. Veja se a alta de % Médico vem de aumento real do
-                            custo médico ou de queda de receita.
-                        </div>
-                    </div>
-                </div>
 
-                <!-- FAQ -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title mb-0">6) Dúvidas frequentes</h3>
-                    </div>
-                    <div class="card-body">
-                        <details class="mb-2" open>
-                            <summary>IA Auto faz o quê?</summary>
-                            <div class="mt-1">Gera um <b>resumo comentado</b> dos dados filtrados: tendências, alertas e
-                                hipóteses. O texto muda conforme período, postos e métricas.</div>
-                        </details>
-                        <details class="mb-2">
-                            <summary>Comparar serve para quê?</summary>
-                            <div class="mt-1">Comparar dois postos ou o mesmo posto em dois períodos. Útil para avaliar
-                                campanhas, reajustes e sazonalidade.</div>
-                        </details>
-                        <details class="mb-2">
-                            <summary>Por que MM3 difere do mês?</summary>
-                            <div class="mt-1">Porque é a média dos últimos 3 meses. Mostra tendência, não o valor
-                                pontual.</div>
-                        </details>
-                        <details>
-                            <summary>“Ponto percentual” vs “porcentagem”</summary>
-                            <div class="mt-1">30% → 33% = <b>+3 p.p.</b> Não confundir com +10% de 30.</div>
-                        </details>
-                    </div>
-                </div>
-
-                <!-- Referências gerais -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title mb-0">7) Referências para aprender os cálculos</h3>
-                    </div>
-                    <div class="card-body ref">
-                        <ul class="mb-0">
-                            <li><a href="https://giovanidacruz.com.br/diferenca-entre-medias-aritmeticas-e-geometricas-qual-usar-e-quando/#comment-4463"
-                                    target="_blank" rel="noopener">Giovani da Cruz — Diferença entre médias aritméticas
-                                    e geométricas</a></li>
-                            <li><a href="https://www.topinvest.com.br/tipos-de-media-quais-sao-e-como-calcular"
-                                    target="_blank" rel="noopener">TopInvest — Tipos de média e como calcular</a></li>
-                            <li><a href="https://pt.wikipedia.org/wiki/Estat%C3%ADstica" target="_blank"
-                                    rel="noopener">Wikipedia — Estatística</a> | <a
-                                    href="https://pt.wikipedia.org/wiki/M%C3%A9dia_m%C3%B3vel" target="_blank"
-                                    rel="noopener">Média móvel</a> | <a
-                                    href="https://pt.wikipedia.org/wiki/Retorno_logar%C3%ADtmico" target="_blank"
-                                    rel="noopener">Retorno logarítmico</a></li>
-                            <li><a href="https://pt.khanacademy.org/math/statistics-probability" target="_blank"
-                                    rel="noopener">Khan Academy — Estatística e probabilidade</a></li>
-                            <li><a href="https://edisciplinas.usp.br/" target="_blank" rel="noopener">USP e-Disciplinas
-                                    — materiais de estatística/finanças</a></li>
-                        </ul>
-                    </div>
-                </div>
-
-                <!-- Rodapé -->
-                <div class="card">
-                    <div class="card-body">
-                        <div class="muted">Este guia acompanha os KPI e reflete os campos dos JSONs de base. Ajuste
-                            filtros, selecione 2 postos quando fizer sentido, use IA e Comparar para ganhar contexto.
+                        <!-- Referências gerais -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">7) Referências para aprender os cálculos</h3>
+                            </div>
+                            <div class="card-body ref">
+                                <ul class="mb-0">
+                                    <li><a href="https://giovanidacruz.com.br/diferenca-entre-medias-aritmeticas-e-geometricas-qual-usar-e-quando/#comment-4463"
+                                            target="_blank" rel="noopener">Giovani da Cruz — Diferença entre médias
+                                            aritméticas
+                                            e geométricas</a></li>
+                                    <li><a href="https://www.topinvest.com.br/tipos-de-media-quais-sao-e-como-calcular"
+                                            target="_blank" rel="noopener">TopInvest — Tipos de média e como
+                                            calcular</a></li>
+                                    <li><a href="https://pt.wikipedia.org/wiki/Estat%C3%ADstica" target="_blank"
+                                            rel="noopener">Wikipedia — Estatística</a> | <a
+                                            href="https://pt.wikipedia.org/wiki/M%C3%A9dia_m%C3%B3vel" target="_blank"
+                                            rel="noopener">Média móvel</a> | <a
+                                            href="https://pt.wikipedia.org/wiki/Retorno_logar%C3%ADtmico"
+                                            target="_blank" rel="noopener">Retorno logarítmico</a></li>
+                                    <li><a href="https://pt.khanacademy.org/math/statistics-probability" target="_blank"
+                                            rel="noopener">Khan Academy — Estatística e
+                                            probabilidade</a></li>
+                                    <li><a href="https://edisciplinas.usp.br/" target="_blank" rel="noopener">USP
+                                            e-Disciplinas
+                                            — materiais de estatística/finanças</a></li>
+                                </ul>
+                            </div>
                         </div>
-                    </div>
-                </div>
+
+                        <!-- Rodapé -->
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="muted">Este guia acompanha os KPI e reflete os campos dos JSONs de base.
+                                    Ajuste
+                                    filtros, selecione 2 postos quando fizer sentido, use IA e Comparar para ganhar
+                                    contexto.
+                                </div>
+                            </div>
+                        </div>
 
             </section>
         </div>
