@@ -373,8 +373,6 @@
     <!-- AQUI COMEÇA A LOUCURA -->
 
 
-    <!-- AQUI COMEÇA A LOUCURA -->
-
 
     <script>
         /* =================== Constantes e helpers =================== */
@@ -384,13 +382,42 @@
         const el = s => document.querySelector(s);
         const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
         const fmt2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const todayISO = () => new Date().toISOString().slice(0, 10);
+
+        // ======== TZ São Paulo ========
+        const TZ = 'America/Sao_Paulo';
+
+        // 'YYYY-MM-DD' no fuso de SP
+        const ymdBR = (dateObj) =>
+            new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
+                .format(dateObj); // ex: '2025-11-08'
+
+        const todayKey = () => ymdBR(new Date());
+
+        // shift sobre chave 'YYYY-MM-DD'
+        function shiftYMD(ymd, days) {
+            const [y, m, d] = ymd.split('-').map(Number);
+            const dt = new Date(Date.UTC(y, m - 1, d));
+            dt.setUTCDate(dt.getUTCDate() + days);
+            return dt.toISOString().slice(0, 10);
+        }
+
+        // weekday 0..6 considerando SP (segunda = 0)
+        function weekdayBR(ymd) {
+            const [y, m, d] = ymd.split('-').map(Number);
+            const dt = new Date(Date.UTC(y, m - 1, d));
+            return (dt.getUTCDay() + 6) % 7;
+        }
+        const mondayYMD = (ymd) => shiftYMD(ymd, -weekdayBR(ymd));
+        const sundayYMD = (ymd) => shiftYMD(mondayYMD(ymd), 6);
+
+        function datesBetweenYMD(a, b) {
+            const out = [];
+            for (let cur = a; cur <= b; cur = shiftYMD(cur, 1)) out.push(cur);
+            return out;
+        }
 
         function showErr(e) { console.error(e); const er = el('#err'); if (er) er.textContent = e?.message || e; }
         function sum(arr) { return arr.reduce((a, b) => a + (Number(b) || 0), 0); }
-        function ymd(d) { return d.toISOString().slice(0, 10); }
-        function monday(d) { const c = new Date(d); const day = (c.getDay() + 6) % 7; c.setDate(c.getDate() - day); return c; }
-        function sunday(d) { const m = monday(d); m.setDate(m.getDate() + 6); return m; }
         function maxISO(a, b) { return a && b ? (a > b ? a : b) : (a || b); }
         function minISO(a, b) { return a && b ? (a < b ? a : b) : (a || b); }
 
@@ -419,12 +446,6 @@
                 return true;
             });
         }
-        function datesBetweenISO(d1, d2) {
-            const out = []; const a = new Date(d1), b = new Date(d2);
-            a.setHours(0, 0, 0, 0); b.setHours(0, 0, 0, 0);
-            for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) out.push(ymd(d));
-            return out;
-        }
         function kpiCard(title, val, kind = 'int') {
             if (kind === 'txt') {
                 const out = (val == null || String(val).trim() === '')
@@ -438,7 +459,6 @@
                 : (kind === 'pct' ? (fmt2.format(val) + '%') : fmtInt.format(val));
             return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0">${out}</div></div></div>`;
         }
-
 
         /* =================== Estado =================== */
         let H = null;
@@ -463,13 +483,11 @@
 
             POSTOS = [...new Set(all.map(r => r.posto).filter(x => /^[A-Z]$/.test(x)))].sort();
 
-            // datas default: mês atual 1º dia -> hoje
-            const ym = todayISO().slice(0, 7);
-            const [y, m] = ym.split('-').map(Number);
-            const d1 = new Date(y, m - 1, 1);
-            const d2 = new Date();
-            el('#fromD').value = ymd(d1);
-            el('#toD').value = ymd(d2);
+            // datas default: mês atual 1º dia -> hoje (sempre em SP)
+            const tKey = todayKey();
+            const ym = tKey.slice(0, 7);
+            el('#fromD').value = `${ym}-01`;
+            el('#toD').value = tKey;
             dateFrom = el('#fromD').value;
             dateTo = el('#toD').value;
 
@@ -483,7 +501,8 @@
             try {
                 const lm = resp.headers.get('Last-Modified'); if (!lm) return;
                 const elInfo = el('#jsonInfo');
-                const t = new Date(lm).toLocaleString('pt-BR'); elInfo.textContent = `• dados (${label}) ${t}`;
+                const t = new Date(lm).toLocaleString('pt-BR', { timeZone: TZ });
+                elInfo.textContent = `• dados (${label}) ${t}`;
             } catch { }
         }
 
@@ -512,10 +531,9 @@
             el('#fromD')?.addEventListener('change', () => { dateFrom = el('#fromD').value; renderAll(); });
             el('#toD')?.addEventListener('change', () => { dateTo = el('#toD').value; renderAll(); });
             el('#resetD')?.addEventListener('click', () => {
-                const ym = todayISO().slice(0, 7);
-                const [y, m] = ym.split('-').map(Number);
-                const d1 = new Date(y, m - 1, 1), d2 = new Date();
-                el('#fromD').value = ymd(d1); el('#toD').value = ymd(d2);
+                const tKey2 = todayKey();
+                const ym2 = tKey2.slice(0, 7);
+                el('#fromD').value = `${ym2}-01`; el('#toD').value = tKey2;
                 dateFrom = el('#fromD').value; dateTo = el('#toD').value;
                 selPosto = 'ALL'; postoSet = null;
                 buildPostoTabs();
@@ -550,28 +568,30 @@
             const filtroTxt = `${dateFrom || '-'} → ${dateTo || '-'} | ${selPosto === 'ALL' ? 'Todos' : selPosto}`;
             el('#selResumo').textContent = filtroTxt;
 
-            // Datas de apoio
-            const dNow = new Date(todayISO());
-            const dOnt = new Date(dNow); dOnt.setDate(dOnt.getDate() - 1);
-            const segAtual = monday(dNow), domAtual = dNow;
-            const domPass = new Date(monday(dNow)); domPass.setDate(domPass.getDate() - 1);
-            const segPass = new Date(domPass); segPass.setDate(segPass.getDate() - 6);
+            // Datas de apoio (tudo por chave Y-M-D)
+            const tKey = todayKey();
+            const yKey = shiftYMD(tKey, -1);
+            const segAtual = mondayYMD(tKey);
+            const domAtual = sundayYMD(segAtual);
+            const domPass = shiftYMD(segAtual, -1);
+            const segPass = mondayYMD(domPass);
 
-            // Funções em cima do recorte já filtrado
-            const temHojeNoFiltro = (!dateFrom || todayISO() >= dateFrom) && (!dateTo || todayISO() <= dateTo);
-            const temOntemNoFiltro = (!dateFrom || ymd(dOnt) >= dateFrom) && (!dateTo || ymd(dOnt) <= dateTo);
+            // visibilidade no filtro
+            const temHojeNoFiltro = (!dateFrom || tKey >= dateFrom) && (!dateTo || tKey <= dateTo);
+            const temOntemNoFiltro = (!dateFrom || yKey >= dateFrom) && (!dateTo || yKey <= dateTo);
 
-            const hoje = temHojeNoFiltro ? sum(rowsSel.filter(r => r.data_consulta === todayISO()).map(r => r.valor)) : 0;
-            const ontem = temOntemNoFiltro ? sum(rowsSel.filter(r => r.data_consulta === ymd(dOnt)).map(r => r.valor)) : 0;
+            // contagens
+            const hoje = temHojeNoFiltro ? sum(rowsSel.filter(r => r.data_consulta === tKey).map(r => r.valor)) : 0;
+            const ontem = temOntemNoFiltro ? sum(rowsSel.filter(r => r.data_consulta === yKey).map(r => r.valor)) : 0;
 
-            const semAtualIni = maxISO(ymd(segAtual), dateFrom);
-            const semAtualFim = minISO(ymd(domAtual), dateTo);
+            const semAtualIni = maxISO(segAtual, dateFrom);
+            const semAtualFim = minISO(domAtual, dateTo);
             const semanaAtual = (semAtualIni && semAtualFim && semAtualIni <= semAtualFim)
                 ? sum(rowsSel.filter(r => r.data_consulta >= semAtualIni && r.data_consulta <= semAtualFim).map(r => r.valor))
                 : 0;
 
-            const semPassIni = maxISO(ymd(segPass), dateFrom);
-            const semPassFim = minISO(ymd(domPass), dateTo);
+            const semPassIni = maxISO(segPass, dateFrom);
+            const semPassFim = minISO(domPass, dateTo);
             const semanaPassada = (semPassIni && semPassFim && semPassIni <= semPassFim)
                 ? sum(rowsSel.filter(r => r.data_consulta >= semPassIni && r.data_consulta <= semPassFim).map(r => r.valor))
                 : 0;
@@ -579,14 +599,14 @@
             // Média diária do PERÍODO FILTRADO
             let diasNoPeriodo = 0;
             if (dateFrom && dateTo && dateFrom <= dateTo) {
-                diasNoPeriodo = datesBetweenISO(dateFrom, dateTo).length;
+                diasNoPeriodo = datesBetweenYMD(dateFrom, dateTo).length;
             }
             const totalPeriodo = sum(rowsSel.map(r => r.valor));
             const mediaDiaria = diasNoPeriodo ? Math.round(totalPeriodo / diasNoPeriodo) : 0;
 
             // Médicos ativos HOJE no filtro
             const medicosAtivosHoje = temHojeNoFiltro
-                ? new Set(rowsSel.filter(r => r.data_consulta === todayISO()).map(r => r.medico).filter(Boolean)).size
+                ? new Set(rowsSel.filter(r => r.data_consulta === tKey).map(r => r.medico).filter(Boolean)).size
                 : 0;
 
             // Cartões principais
@@ -597,7 +617,6 @@
                 kpiCard('Semana passada', semanaPassada),
                 kpiCard('Média diária', mediaDiaria),
                 kpiCard('Médicos ativos hoje', medicosAtivosHoje),
-                // Cartão “Totais por posto” quando TODOS estiver selecionado
                 (selPosto === 'ALL' ? (() => {
                     const porPosto = groupCount(rowsSel, 'posto');
                     const txt = porPosto.map(([p, q]) => `${p}:${fmtInt.format(q)}`).join(' ');
@@ -693,8 +712,10 @@
 
             // média diária no período filtrado
             let dias = 0;
-            if (dateFrom && dateTo && dateFrom <= dateTo) dias = datesBetweenISO(dateFrom, dateTo).length;
+            if (dateFrom && dateTo && dateFrom <= dateTo) dias = datesBetweenYMD(dateFrom, dateTo).length;
             const mediaDiaria = dias ? Math.round(sum(rowsSel.map(r => r.valor)) / dias) : 0;
+
+            const tKey = todayKey();
 
             const payload = {
                 page: 'kpi_prescricao',
@@ -702,8 +723,8 @@
                 prefs: { output: 'livre', assertivo: true, accept_format: 'free_text', temperature: 0.2, max_tokens: 1200 },
                 filtros: { from: dateFrom, to: dateTo, posto: (selPosto === 'ALL' ? 'Todos' : selPosto) },
                 kpis: {
-                    hoje: sum(rowsSel.filter(r => r.data_consulta === todayISO()).map(r => r.valor)),
-                    medicos_ativos_hoje: new Set(rowsSel.filter(r => r.data_consulta === todayISO()).map(r => r.medico).filter(Boolean)).size,
+                    hoje: sum(rowsSel.filter(r => r.data_consulta === tKey).map(r => r.valor)),
+                    medicos_ativos_hoje: new Set(rowsSel.filter(r => r.data_consulta === tKey).map(r => r.medico).filter(Boolean)).size,
                     media_diaria: mediaDiaria
                 }
             };
@@ -719,6 +740,12 @@
             getPayload: async ({ userQuery }) => window.buildPayloadDeep({ userQuery })
         });
     </script>
+
+
+
+
+
+
 </body>
 
 </html>
