@@ -887,7 +887,6 @@ def parse_args():
     p.add_argument("--only-month", dest="only_month", default=None, help="Executa só um mês YYYY-MM.")
     p.add_argument("--postos", default="".join(POSTOS), help="Subset de postos. Ex: ANX.")
     p.add_argument("--force", action="store_true", help="Sobrescreve arquivos existentes.")
-    p.add_argument("--outubro", action="store_true", help="Regera o mês imediatamente anterior ao atual.")
     p.add_argument("--no-validate", action="store_true", help="Não valida o conteúdo dos .sql.")
     p.add_argument("--dry-run", action="store_true", help="Executa sem gravar CSV/JSON.")
     p.add_argument("--copy-templates", action="store_true", help="Copia templates/ para TARGET_TEMPLATES_DIR.")
