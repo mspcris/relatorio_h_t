@@ -906,7 +906,7 @@ def run():
 
     ini_cur, fim_cur, ym_current = current_month_bounds()
     _, _, ym_prev = previous_month_bounds(date.today())
-    forced_months = {ym_current}
+    forced_months = {ym_current, ym_prev}
 
     if args.outubro:
         forced_months.add(ym_prev)
