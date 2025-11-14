@@ -474,7 +474,29 @@
 
 
 
+    <!-- Variáveis de sessão injetadas pelo backend -->
+    <script>
+        window.USER_EMAIL = "{{ USER_EMAIL }}";
+        window.USER_POSTOS = {{ USER_POSTOS | safe }};
+    </script>
 
+    <script>
+        // Filtro automático baseado no ACL
+        document.addEventListener("DOMContentLoaded", () => {
+            if (!window.USER_POSTOS || !Array.isArray(window.USER_POSTOS)) return;
+
+            // POSTOS disponíveis (vindos dos JSONs)
+            const allowed = new Set(window.USER_POSTOS);
+
+            // intercepta após carga dos JSONs
+            const orig = window.POSTOS;
+            if (orig && Array.isArray(orig)) {
+                window.POSTOS = orig.filter(p => allowed.has(p));
+            }
+
+            // se você quiser forçar ao backend que só mostre permitted postos no menu, pode filtrar aqui também
+        });
+    </script>
 
 
 
