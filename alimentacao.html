@@ -43,6 +43,11 @@
         // window.PROMPTS_API_BASE = 'http://127.0.0.1:8011/prompts';
     </script>
 </head>
+<script>
+    window.USER_EMAIL = window.USER_EMAIL; // manter compatibilidade com o backend
+</script>
+
+
 
 <body class="hold-transition sidebar-mini layout-fixed">
     <div class="wrapper">
@@ -447,10 +452,14 @@
             window.Prompts = Prompts;
         })();
     </script>
-
-
-    <!-- FILTRO DE POSTOS POR USUÁRIO -->
+    <!-- INJEÇÃO DO BACKEND (obrigatório para filtrar postos) -->
     <script>
+        window.USER_EMAIL = "{{USER_EMAIL}}";   // backend substitui
+
+
+
+        // <!-- FILTRO DE POSTOS POR USUÁRIO -->
+
         /**
          * Filtra a lista de postos de acordo com o usuário logado.
          * Usa window.USER_EMAIL, que vem do backend (mesmo esquema da kpi_v2.html).
