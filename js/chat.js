@@ -241,6 +241,9 @@
       `;
 
       const content = document.createElement('div'); content.className = 'iad-content';
+
+      // guarda texto bruto e texto limpo
+      box.dataset.raw = fullText || '';
       box.dataset.full = this._cleanGroq(fullText || '');
       box.dataset.summary = '';
       box.dataset.mode = defaultBrief ? 'summary' : 'full';
@@ -259,7 +262,7 @@
         if (wantSummary) {
           if (!box.dataset.summary) {
             try {
-              const sum = await this._summarizeText(box.dataset.full || '');
+              const sum = await this._summarizeText(box.dataset.full || box.dataset.raw || '');
               this._attachSummaryToCard(box, sum);
             } catch { toggle.checked = false; }
           }
@@ -292,9 +295,21 @@
       box.dataset.mode = isSummary ? 'summary' : 'full';
 
       let txt = isSummary ? (box.dataset.summary || '') : (box.dataset.full || '');
-      if (isSummary && !txt) { // fail-safe
+
+      // fallback agressivo: se ficar vazio, usa texto bruto
+      if (!txt || !txt.trim()) {
+        const raw = isSummary
+          ? (box.dataset.full || box.dataset.raw || '')
+          : (box.dataset.raw || '');
+        txt = String(raw || '').trim();
+        if (!txt) {
+          txt = '[A IA retornou apenas tabela/código ou conteúdo vazio. Ajuste o prompt ou verifique o backend.]';
+        }
+      }
+
+      if (isSummary && !txt) {
         mode = 'full';
-        txt = box.dataset.full || '';
+        txt = box.dataset.full || box.dataset.raw || '';
         const tgl = box.querySelector('.iad-brief-toggle'); if (tgl) tgl.checked = false;
       }
 
@@ -390,14 +405,24 @@
       Object.entries(obj).forEach(([k, v]) => { if (typeof v === 'string' && v.trim()) parts.push(v.trim()); });
       return parts.length ? parts.join('\n\n') : '';
     },
+
     _sanitizeText(s) {
       let t = String(s || '');
+      const original = t;
+
       t = t.replace(/\r\n/g, '\n').replace(/\u00A0/g, ' ');
-      t = t.replace(/```[\s\S]*?```/g, ' ');
-      t = t.replace(/^\s*\|.*\|\s*$/gm, ' ');
+
+      // Mantém conteúdo dentro de blocos de código
+      t = t.replace(/```([\s\S]*?)```/g, '$1');
+
+      // Remove apenas linhas de separador de tabela tipo |----|
+      t = t.replace(/^\s*\|[- :]+\|\s*$/gm, ' ');
+
       t = t.replace(/[ \t]+\n/g, '\n');
       t = t.replace(/([.,;:!?])(?!\s|$)/g, '$1 ');
       t = t.replace(/\n{3,}/g, '\n\n').trim();
+
+      if (!t || t.length < 5) return original.trim();
       return t;
     },
 
@@ -424,23 +449,51 @@
     /* ===================== Networking ===================== */
     async _callIA(payload, timeout) {
       const API = this._state.opts.apiUrl;
-      const controller = new AbortController();
-      const to = setTimeout(() => controller.abort(), timeout || this._state.opts.timeoutMs || this._CFG.TIMEOUT_MS);
-      let r; try {
-        r = await fetch(API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify(typeof payload === 'string' ? { prompt: payload } : payload),
-          signal: controller.signal
-        });
-      } finally { clearTimeout(to); }
-      if (!r.ok) { let t = ''; try { t = await r.text(); } catch { } throw new Error(`HTTP ${r.status}${t ? ' — ' + t : ''}`); }
-      let resText = await r.text(); let res = null; try { res = JSON.parse(resText); } catch { }
-      if (!res) return resText;
-      if (res && res.content_mode === 'free_text') return res.text || '';
-      if (res && res.content_mode === 'json') return (res.data && (res.data.html || res.data.livre || res.data.text)) || JSON.stringify(res.data);
-      return typeof res === 'string' ? res : (res.html || res.livre || JSON.stringify(res));
+      const maxAttempts = 2; // pode subir se quiser mais resiliência
+      let lastError = null;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const controller = new AbortController();
+        const to = setTimeout(
+          () => controller.abort(),
+          timeout || this._state.opts.timeoutMs || this._CFG.TIMEOUT_MS
+        );
+
+        try {
+          const r = await fetch(API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(typeof payload === 'string' ? { prompt: payload } : payload),
+            signal: controller.signal
+          });
+
+          clearTimeout(to);
+
+          if (!r.ok) {
+            const t = await r.text().catch(() => '');
+            throw new Error(`HTTP ${r.status}${t ? ' — ' + t : ''}`);
+          }
+
+          let resText = await r.text(); let res = null;
+          try { res = JSON.parse(resText); } catch { }
+
+          if (!res) return resText;
+          if (res && res.content_mode === 'free_text') return res.text || '';
+          if (res && res.content_mode === 'json') {
+            return (res.data && (res.data.html || res.data.livre || res.data.text)) || JSON.stringify(res.data);
+          }
+          return typeof res === 'string' ? res : (res.html || res.livre || JSON.stringify(res));
+
+        } catch (err) {
+          lastError = err;
+          // tenta de novo até maxAttempts
+          if (attempt === maxAttempts) throw lastError;
+        }
+      }
+
+      // fallback extremo — não deveria chegar aqui
+      throw lastError || new Error('Falha desconhecida na chamada de IA');
     },
 
     /* ===================== Spinner ===================== */
@@ -467,30 +520,43 @@
     _exportToPDF() {
       if (typeof html2pdf === 'undefined') { alert('html2pdf.js não carregado.'); return; }
       const node = document.getElementById('iadOut'); if (!node) return;
-      const opt = { margin: [0, 0, 0, 0], filename: `IA-Conversa_${new Date().toISOString().slice(0, 10)}.pdf`,
+      const opt = {
+        margin: [0, 0, 0, 0],
+        filename: `IA-Conversa_${new Date().toISOString().slice(0, 10)}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: null, windowWidth: node.scrollWidth, windowHeight: node.scrollHeight },
         jsPDF: { unit: 'px', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'] } };
+        pagebreak: { mode: ['css', 'legacy'] }
+      };
       html2pdf().set(opt).from(node).save();
     },
 
     /* ===================== Sanitização bruta vinda da IA ===================== */
     _cleanGroq(raw) {
       let s = String(raw || '');
+      const original = s;
+
       s = s.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '  ');
-      s = s.replace(/```[\s\S]*?```/g, ' ');
-      s = s.replace(/^\s*[|+\-─═┌┐└┘┼┤├┬┴]+.*$/gm, ' ');
-      s = s.replace(/^\s*\|\s*(?:[^|\n]+\|)+\s*$/gm, ' ');
-      s = s.replace(/^.*\|.*\|.*$/gm, ' ');
+
+      // mantém conteúdo dos blocos de código
+      s = s.replace(/```([\s\S]*?)```/g, '$1');
+
+      // remove apenas linhas de borda/desenho, sem apagar tabelas inteiras
+      s = s.replace(/^\s*[+\-─═┌┐└┘┼┤├┬┴]+.*$/gm, ' ');
+
+      // remove LaTeX pesado
       s = s.replace(/\\begin\{aligned\}[\s\S]*?\\end\{aligned\}/g, ' ');
       s = s.replace(/\$\$[\s\S]*?\$\$/g, ' ');
       s = s.replace(/\\\[[\s\S]*?\\\]/g, ' ');
       s = s.replace(/\\\([\s\S]*?\\\)/g, ' ');
+
       s = s.replace(/[ \t]+\n/g, '\n');
       s = s.replace(/###\s*/g, '\n\n### ');
       s = s.replace(/\n{3,}/g, '\n\n');
-      return s.trim();
+      s = s.trim();
+
+      if (!s) return original.trim();
+      return s;
     }
   };
 
