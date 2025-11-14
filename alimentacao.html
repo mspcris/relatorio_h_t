@@ -20,224 +20,9 @@
     <!-- Seu CSS (se existir) -->
     <link rel="stylesheet" href="style2.css">
 
-    <!-- Normalização pós-AdminLTE: garante mesmas medidas em todas as páginas -->
-    <style id="normalize-adminlte">
-        /* Base consistente: 1rem = 16px */
-        html {
-            font-size: 16px;
-        }
 
-        body {
-            font-size: 1rem;
-            -webkit-text-size-adjust: 100%;
-            font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        }
+    <link rel="stylesheet" href="css/style_kpi.css">
 
-        /* Evita downsizing global se alguma página usar text-sm */
-        body.text-sm {
-            font-size: 1rem;
-        }
-
-        .text-sm .btn,
-        .text-sm .form-control,
-        .text-sm .custom-select,
-        .text-sm .page-link,
-        .text-sm .breadcrumb,
-        .text-sm .nav-link,
-        .text-sm .card-title {
-            font-size: 1rem;
-        }
-
-        /* Títulos coerentes */
-        h1,
-        h2,
-        h3 {
-            margin-top: 0;
-            margin-bottom: .5rem;
-            font-weight: 600;
-            line-height: 1.25;
-        }
-
-        h1 {
-            font-size: 2rem;
-        }
-
-        /* 32px */
-        h2 {
-            font-size: 1.5rem;
-        }
-
-        /* 24px */
-        h3 {
-            font-size: 1.25rem;
-        }
-
-        /* 20px */
-
-        /* Componentes comuns */
-        .card-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-
-        .sidebar .nav-link {
-            font-size: .95rem;
-        }
-
-        .brand-link .brand-text {
-            font-size: 1rem;
-        }
-
-        /* Evita zoom acidental */
-        html,
-        body {
-            zoom: 1;
-        }
-    </style>
-
-    <style>
-        :root {
-            --cor0: #F2F2F2;
-            --cor1: #afbfa5;
-            --cor2: #91b62f;
-            --cor3: #009402;
-            --cor4: #1c7932;
-            --cor5: #003f0a;
-            --cor6: #0099ab;
-            --cor7: #092019;
-            --cor8: #444444
-        }
-
-        body {
-            -webkit-font-smoothing: antialiased
-        }
-
-        .muted {
-            color: #6b7280
-        }
-
-        .mini {
-            font-size: .85rem
-        }
-
-        .text-right {
-            text-align: right
-        }
-
-        .small-td {
-            white-space: nowrap
-        }
-
-        .table-responsive {
-            width: 100%
-        }
-
-        .stack>*+* {
-            margin-top: 14px
-        }
-
-        .filter-bar {
-            display: flex;
-            gap: 12px;
-            align-items: flex-end;
-            flex-wrap: wrap;
-            padding: 10px
-        }
-
-        .month-inputs {
-            display: flex;
-            gap: 6px;
-            align-items: center
-        }
-
-        .scroll-tabs {
-            display: flex;
-            gap: 6px;
-            overflow: auto;
-            white-space: nowrap;
-            padding: 6px 0
-        }
-
-        .scroll-tabs .nav-link {
-            display: inline-block;
-            min-width: 52px;
-            text-align: center;
-            cursor: pointer
-        }
-
-        .kpi {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-            gap: 8px
-        }
-
-        .kpi .card {
-            border-radius: 12px;
-            margin: 0
-        }
-
-        .card-body.kpi {
-            display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-            gap: 8px
-        }
-
-        .card-body.kpi .card {
-            margin: 0;
-            border-radius: 12px
-        }
-
-        .card-body.kpi .card .card-body {
-            padding: .5rem .75rem
-        }
-
-        .chart-card .card-body {
-            height: 360px
-        }
-
-        .heatmap {
-            overflow: auto;
-            max-height: 420px
-        }
-
-        .heatmap table {
-            border-collapse: separate;
-            border-spacing: 2px;
-            width: 100%
-        }
-
-        .heatmap th,
-        .heatmap td {
-            text-align: center;
-            padding: 6px;
-            font-size: 12px
-        }
-
-        .heatmap .cell {
-            padding: 6px 8px;
-            border-radius: 8px;
-            text-align: right;
-            font-variant-numeric: tabular-nums;
-            color: #111
-        }
-
-        .lg-box {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 2px;
-            margin-right: 4px;
-            vertical-align: middle
-        }
-
-        .lg-pos {
-            background: rgba(54, 162, 235, 1)
-        }
-
-        .lg-neg {
-            background: rgba(220, 53, 69, 1)
-        }
-    </style>
 
     <!-- JS de terceiros (ordem padrão) -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
@@ -246,37 +31,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-
-    <!-- App / Usuário -->
-    <script>
-        window.USER_EMAIL = window.USER_EMAIL || "cristiano@camim.com.br";
-
-        // Regras de visibilidade de postos por usuário
-        const POSTOS_PER_USER = {
-            // Exemplo: usuário vê somente alguns postos
-            // "usuario@empresa.com": ["A", "B", "C"],
-
-            // Cristiano com acesso total
-            "cristiano@camim.com.br": "ALL",
-
-            // fallback
-            "default": "ALL"
-        };
-
-        function applyPostoPermissions(listaPostos) {
-            const email = (window.USER_EMAIL || "").toLowerCase();
-            const rule = POSTOS_PER_USER[email] ?? POSTOS_PER_USER["default"];
-
-            if (rule === "ALL") return listaPostos;
-
-            if (Array.isArray(rule)) {
-                const allowed = new Set(rule.map(p => String(p).toUpperCase()));
-                return listaPostos.filter(p => allowed.has(String(p).toUpperCase()));
-            }
-
-            return listaPostos;
-        }
-    </script>
 
     <!-- Chat / IA -->
     <script src="/js/chat.js"></script>
@@ -699,20 +453,20 @@
     <script>
         /**
          * Filtra a lista de postos de acordo com o usuário logado.
-         * Usa window.USER_EMAIL, que já vem do backend.
+         * Usa window.USER_EMAIL, que vem do backend (mesmo esquema da kpi_v2.html).
          * Se o e-mail não estiver mapeado, mantém todos os postos.
          */
         function filtrarPostosPorUsuario(listaPostos) {
             try {
-                const email = (window.USER_EMAIL || '').toLowerCase();
+                const email = String(window.USER_EMAIL || '')
+                    .trim()
+                    .toLowerCase();
 
-                // Mapa de e-mail -> postos permitidos
-                // AJUSTE AQUI de acordo com a mesma lógica que você já usa no kpi_v2.html
+                // COPIE DA kpi_v2.html o mesmo mapa que já está funcionando lá
                 const mapaPostos = {
-                    // Exemplo:
                     'deangelo@camim.com.br': ['J', 'P'],
                     'derlana@camim.com.br': ['J'],
-                    // 'outro@camim.com.br': ['A', 'B', 'C'],
+                    // acrescente aqui os demais usuários...
                 };
 
                 const postosPermitidos = mapaPostos[email];
@@ -721,15 +475,19 @@
                     return listaPostos;
                 }
 
-                const setPermitidos = new Set(postosPermitidos.map(String));
-                return listaPostos.filter(p => setPermitidos.has(String(p)));
+                const setPermitidos = new Set(
+                    postosPermitidos.map(p => String(p).toUpperCase())
+                );
+
+                return listaPostos.filter(p =>
+                    setPermitidos.has(String(p).toUpperCase())
+                );
             } catch (e) {
                 console.error('Falha ao aplicar filtro de postos por usuário', e);
                 return listaPostos;
             }
         }
 
-        // Deixa disponível em window, se quiser reaproveitar em outras páginas
         window.filtrarPostosPorUsuario = filtrarPostosPorUsuario;
     </script>
 
