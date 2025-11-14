@@ -694,6 +694,46 @@
         })();
     </script>
 
+
+    <!-- FILTRO DE POSTOS POR USUÁRIO -->
+    <script>
+        /**
+         * Filtra a lista de postos de acordo com o usuário logado.
+         * Usa window.USER_EMAIL, que já vem do backend.
+         * Se o e-mail não estiver mapeado, mantém todos os postos.
+         */
+        function filtrarPostosPorUsuario(listaPostos) {
+            try {
+                const email = (window.USER_EMAIL || '').toLowerCase();
+
+                // Mapa de e-mail -> postos permitidos
+                // AJUSTE AQUI de acordo com a mesma lógica que você já usa no kpi_v2.html
+                const mapaPostos = {
+                    // Exemplo:
+                    'deangelo@camim.com.br': ['J', 'P'],
+                    'derlana@camim.com.br': ['J'],
+                    // 'outro@camim.com.br': ['A', 'B', 'C'],
+                };
+
+                const postosPermitidos = mapaPostos[email];
+                if (!postosPermitidos || !postosPermitidos.length) {
+                    // Se o usuário não estiver no mapa, retorna tudo (comportamento atual)
+                    return listaPostos;
+                }
+
+                const setPermitidos = new Set(postosPermitidos.map(String));
+                return listaPostos.filter(p => setPermitidos.has(String(p)));
+            } catch (e) {
+                console.error('Falha ao aplicar filtro de postos por usuário', e);
+                return listaPostos;
+            }
+        }
+
+        // Deixa disponível em window, se quiser reaproveitar em outras páginas
+        window.filtrarPostosPorUsuario = filtrarPostosPorUsuario;
+    </script>
+
+
     <!-- APP PRINCIPAL -->
     <script>
         window.addEventListener('error', e => { const b = document.querySelector('#err'); if (b) b.textContent = 'Erro: ' + e.message; console.error(e.error || e.message); });
@@ -918,16 +958,20 @@
             const rxPosto = /^[A-Z]{1,3}$/;
             const BLOCK = new Set(['MES', 'SUMARIO', 'MÊS', 'SUMÁRIO']);
 
-            POSTOS = Array.from(
+            // Lista bruta de postos a partir do JSON
+            let postosBrutos = Array.from(
                 new Set(MESES.flatMap(m => Object.keys(porPosto[m] || {})))
             )
                 .map(p => String(p).toUpperCase())
                 .filter(p => rxPosto.test(p) && !BLOCK.has(p))
                 .sort();
 
-            // APLICA REGRA DE VISIBILIDADE POR USUÁRIO
-            POSTOS = applyPostoPermissions(POSTOS);
+            // >>> AQUI entra o filtro por usuário
+            POSTOS = filtrarPostosPorUsuario(postosBrutos);
+
+            // Expondo para o resto da página (abas, KPIs, etc.)
             window.POSTOS = POSTOS;
+
 
             // 3) Default: últimos 12 meses completos
             function ym(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
