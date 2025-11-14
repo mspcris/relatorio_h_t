@@ -120,21 +120,43 @@
         wrap.innerHTML = `
 <div class="card-header d-flex align-items-center justify-content-between">
   <b class="mb-0">${this._state.opts.title}</b>
-  <div class="d-flex" style="gap:8px">
 
-    <label id="iadBrief" class="btn btn-sm btn-outline-secondary mb-0">
-      <input id="iadBriefChk" type="checkbox"${this._state.brief ? ' checked':''}/>
-      <span>IA Resumida (padrão)</span>
-    </label>
+  <div class="d-flex" style="gap:0; margin-left:auto;">
 
-    <label id="iadObjetivaToggle" style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 8px;border:1px solid #555;border-radius:6px;">
-      <input type="checkbox" id="chkObjetiva" checked style="transform:scale(1.3);">
-      <img src="SEU_ICONE_AQUI.png" style="width:20px;height:auto;">
-      <span style="font-size:13px;">Resposta Objetiva</span>
-    </label>
+    <!-- Engrenagem -->
+    <button id="iadSettings" 
+            class="btn btn-sm btn-outline-secondary"
+            style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;">
+      ⚙️
+    </button>
 
-    <button id="iadSave" class="btn btn-sm btn-outline-secondary">Salvar conversa</button>
-    <button id="iadClose" class="btn btn-sm btn-outline-secondary">Fechar</button>
+    <!-- Fechar (X) -->
+    <button id="iadClose" 
+            class="btn btn-sm btn-outline-secondary"
+            style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;">
+      ✕
+    </button>
+  </div>
+</div>
+
+<div id="iadSettingsMenu" 
+     style="display:none; background:#1e1e1e; border-bottom:1px solid #333; padding:10px 14px;">
+  
+  <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;">
+    <input id="iadBriefChk" type="checkbox" checked>
+    <span>IA Resumida (padrão)</span>
+  </label>
+
+  <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;">
+    <input type="checkbox" id="chkObjetiva" checked>
+    <span>Resposta Objetiva</span>
+  </label>
+
+  <button id="iadSave" class="btn btn-sm btn-outline-secondary">
+    Salvar conversa
+  </button>
+</div>
+
 
   </div>
 </div>
@@ -180,8 +202,17 @@
       const close = this._q('#iadClose');
       const saveBtn = this._q('#iadSave');
       const send = this._q('#iadSend');
+      
       const input = this._q('#iadInput');
       const objetiva = this._q('#chkObjetiva');
+      const settingsBtn = this._q('#iadSettings');
+      const settingsMenu = this._q('#iadSettingsMenu');
+
+            settingsBtn.addEventListener('click', () => {
+      const visible = settingsMenu.style.display === 'block';
+            settingsMenu.style.display = visible ? 'none' : 'block';
+      });
+
 
       close.addEventListener('click', () => {
         panel.style.display = 'none';
