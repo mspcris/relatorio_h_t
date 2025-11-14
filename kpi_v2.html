@@ -699,6 +699,22 @@
         // ====== Estado ======
         let MESES = [], geral = {}, porPosto = {}, POSTOS = [];
         let sel1 = 'ALL', sel2 = 'ALL';
+        async function carregarPostosDoUsuario() {
+            try {
+                const r = await fetch('/session/me', { credentials: 'same-origin' });
+                if (!r.ok) {
+                    console.warn('Falha ao obter postos do usuário.');
+                    return [];
+                }
+                const data = await r.json();
+                return Array.isArray(data.postos) ? data.postos : [];
+            } catch (e) {
+                console.error('Erro ao carregar postos do usuário:', e);
+                return [];
+            }
+        }
+
+
         let ipcaMonthly = {}; let igpmMonthly = {}; let ptaxDaily = [];
 
         // ====== Info de headers ======
@@ -1197,7 +1213,15 @@
                 const lastFull = lastCompleteMonth(MESES);
 
                 const ultimo = porPosto[lastFull] || {};
-                POSTOS = Object.keys(ultimo).filter(x => /^[A-Z]$/.test(x)).sort();
+                const postosDisponiveis = Object.keys(ultimo).filter(x => /^[A-Z]$/.test(x)).sort();
+
+                const postosUsuario = await carregarPostosDoUsuario();
+                if (postosUsuario.length) {
+                    POSTOS = postosDisponiveis.filter(p => postosUsuario.includes(p));
+                } else {
+                    POSTOS = postosDisponiveis; // fallback seguro
+                }
+
 
                 if (el('#from1')) el('#from1').value = MESES[0];
                 if (el('#to1')) el('#to1').value = lastFull;
