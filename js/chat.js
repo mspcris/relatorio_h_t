@@ -119,7 +119,7 @@
       <input id="iadBriefChk" type="checkbox"${this._state.brief ? ' checked' : ''}/>
       <span>IA Resumida (padrão)</span>
     </label>
-    <button id="iadPDF" class="btn btn-sm btn-outline-secondary">PDF</button>
+    <button id="iadSave" class="btn btn-sm btn-outline-secondary">Salvar conversa</button>
     <button id="iadRefresh" class="btn btn-sm btn-outline-secondary">Regerar</button>
     <button id="iadClose" class="btn btn-sm btn-outline-secondary">Fechar</button>
   </div>
@@ -154,7 +154,7 @@
       const briefChk = this._q('#iadBriefChk');
       const close = this._q('#iadClose');
       const regen = this._q('#iadRefresh');
-      const pdfBtn = this._q('#iadPDF');
+      const saveBtn = this._q('#iadSave');
       const send = this._q('#iadSend');
       const input = this._q('#iadInput');
 
@@ -170,7 +170,10 @@
 
       close.addEventListener('click', () => { panel.style.display = 'none'; this._toggleBtn(btn, false); });
       regen.addEventListener('click', async () => { await this._sendToIA(null, { force: true }); });
-      pdfBtn.addEventListener('click', () => this._exportToPDF());
+
+      if (saveBtn) {
+        saveBtn.addEventListener('click', () => this._exportToHTML());
+      }
 
       // Global = padrão para próximas mensagens
       briefLbl.addEventListener('click', (e) => {
@@ -215,6 +218,15 @@
       return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'Você';
     },
 
+    _escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    },
+
     _append(role, html) {
       const row = document.createElement('div'); row.className = 'd-flex flex-column';
       const b = document.createElement('div'); b.className = 'iad-msg ' + (role === 'user' ? 'iad-user' : 'iad-bot');
@@ -242,7 +254,6 @@
 
       const content = document.createElement('div'); content.className = 'iad-content';
 
-      // guarda texto bruto e texto limpo
       box.dataset.raw = fullText || '';
       box.dataset.full = this._cleanGroq(fullText || '');
       box.dataset.summary = '';
@@ -266,7 +277,7 @@
               this._attachSummaryToCard(box, sum);
             } catch { toggle.checked = false; }
           }
-          if (!box.dataset.summary) { // resumo vazio => força COMPLETO
+          if (!box.dataset.summary) {
             toggle.checked = false;
             this._renderCardContent(box, 'full');
             return;
@@ -296,7 +307,6 @@
 
       let txt = isSummary ? (box.dataset.summary || '') : (box.dataset.full || '');
 
-      // fallback agressivo: se ficar vazio, usa texto bruto
       if (!txt || !txt.trim()) {
         const raw = isSummary
           ? (box.dataset.full || box.dataset.raw || '')
@@ -315,11 +325,9 @@
 
       content.innerHTML = '';
 
-      // normaliza para HTML ou markdown/texto
       const norm = this._normalizeForView(txt);
 
       if (norm.mode === 'html') {
-        // Aproveita o HTML estruturado vindo da IA (relatório executivo etc.)
         content.innerHTML = this._safeHtml(norm.html);
         if (hint) hint.textContent = mode === 'summary'
           ? 'mostrando resumo (HTML)'
@@ -350,7 +358,6 @@
       try {
         const payload = await this._state.opts.getPayload({ userQuery });
 
-        // chamada principal: sempre COMPLETO
         const raw = await this._callIA(payload, this._state.opts.timeoutMs);
         this._dotsStop();
 
@@ -363,7 +370,7 @@
               const sum = await this._summarizeText(fullText);
               this._attachSummaryToCard(card, sum);
               if (card.dataset.summary) this._renderCardContent(card, 'summary');
-              else this._renderCardContent(card, 'full'); // resumo vazio => full
+              else this._renderCardContent(card, 'full');
             } catch { this._renderCardContent(card, 'full'); }
           })();
         } else {
@@ -427,18 +434,14 @@
 
       t = t.replace(/\r\n/g, '\n').replace(/\u00A0/g, ' ');
 
-      // Mantém conteúdo dentro de blocos de código
       t = t.replace(/```([\s\S]*?)```/g, '$1');
 
-      // Remove apenas linhas de separador de tabela tipo |----|
       t = t.replace(/^\s*\|[- :]+\|\s*$/gm, ' ');
 
-      // Remove marcações de negrito/itálico markdown
       t = t.replace(/\*\*(.*?)\*\*/g, '$1');
       t = t.replace(/__([^_]+)__/g, '$1');
       t = t.replace(/_(.*?)_/g, '$1');
 
-      // Achata linhas de tabela markdown em texto corrido
       t = t.replace(/^\s*\|(.+?)\|\s*$/gm, (m, inner) => {
         const cols = inner.split('|').map(c => c.trim()).filter(Boolean);
         if (!cols.length) return '';
@@ -528,7 +531,7 @@
     /* ===================== Networking ===================== */
     async _callIA(payload, timeout) {
       const API = this._state.opts.apiUrl;
-      const maxAttempts = 2; // pode subir se quiser mais resiliência
+      const maxAttempts = 2;
       let lastError = null;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -566,12 +569,10 @@
 
         } catch (err) {
           lastError = err;
-          // tenta de novo até maxAttempts
           if (attempt === maxAttempts) throw lastError;
         }
       }
 
-      // fallback extremo — não deveria chegar aqui
       throw lastError || new Error('Falha desconhecida na chamada de IA');
     },
 
@@ -596,18 +597,91 @@
       if (this._dotsStop._el) { this._dotsStop._el.remove(); this._dotsStop._el = null; }
     },
 
-    _exportToPDF() {
-      if (typeof html2pdf === 'undefined') { alert('html2pdf.js não carregado.'); return; }
-      const node = document.getElementById('iadOut'); if (!node) return;
-      const opt = {
-        margin: [0, 0, 0, 0],
-        filename: `IA-Conversa_${new Date().toISOString().slice(0, 10)}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: null, windowWidth: node.scrollWidth, windowHeight: node.scrollHeight },
-        jsPDF: { unit: 'px', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'] }
-      };
-      html2pdf().set(opt).from(node).save();
+    /* ===================== Exportar conversa em HTML ===================== */
+    _exportToHTML() {
+      const out = document.getElementById('iadOut');
+      if (!out) {
+        alert('Não encontrei o conteúdo da conversa para salvar.');
+        return;
+      }
+
+      const cssNode = document.getElementById('chatia-styles');
+      const cssChat = cssNode ? cssNode.textContent : '';
+      const titulo = this._state.opts.title || 'Conversa com a IA';
+      const usuario = this._displayNameFromEmail();
+      const agora = new Date();
+      const dataStr = agora.toLocaleString('pt-BR');
+      const nomeArquivo = `conversa_ia_${agora.toISOString().slice(0,10)}.html`;
+
+      const htmlDoc = `
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>${this._escapeHtml(titulo)} — ${this._escapeHtml(usuario)}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{
+      margin:0;
+      padding:16px;
+      background:#111827;
+      color:#e5e7eb;
+      font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+      font-size:14px;
+      line-height:1.5;
+    }
+    h1{
+      font-size:1.2rem;
+      margin:0 0 4px 0;
+    }
+    .meta-header{
+      font-size:.8rem;
+      color:#9ca3af;
+      margin-bottom:12px;
+    }
+    hr{
+      border:none;
+      border-top:1px solid #374151;
+      margin:12px 0;
+    }
+    .card{
+      background:#111827;
+      border:1px solid #1f2933;
+      border-radius:8px;
+      padding:12px;
+    }
+    .body{
+      max-height:none;
+      overflow:visible;
+      padding-bottom:0;
+    }
+    ${cssChat}
+  </style>
+</head>
+<body>
+  <h1>${this._escapeHtml(titulo)}</h1>
+  <div class="meta-header">
+    Exportado em ${this._escapeHtml(dataStr)} — Usuário: ${this._escapeHtml(usuario)}
+  </div>
+  <hr>
+  <div id="iaDeepPanel" class="card">
+    <div class="card-body body">
+      <div id="iadOut" class="iad-chat ia-clean">
+${out.innerHTML}
+      </div>
+    </div>
+  </div>
+</body>
+</html>`.trim();
+
+      const blob = new Blob([htmlDoc], { type: 'text/html;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = nomeArquivo;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
     },
 
     /* ===================== Sanitização bruta vinda da IA ===================== */
@@ -617,13 +691,10 @@
 
       s = s.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '  ');
 
-      // mantém conteúdo dos blocos de código
       s = s.replace(/```([\s\S]*?)```/g, '$1');
 
-      // remove apenas linhas de borda/desenho, sem apagar tabelas inteiras
       s = s.replace(/^\s*[+\-─═┌┐└┘┼┤├┬┴]+.*$/gm, ' ');
 
-      // remove LaTeX pesado
       s = s.replace(/\\begin\{aligned\}[\s\S]*?\\end\{aligned\}/g, ' ');
       s = s.replace(/\$\$[\s\S]*?\$\$/g, ' ');
       s = s.replace(/\\\[[\s\S]*?\\\]/g, ' ');
