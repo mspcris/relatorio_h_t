@@ -315,7 +315,7 @@
 
       content.innerHTML = '';
 
-      // NOVO: normaliza para HTML ou markdown/texto
+      // normaliza para HTML ou markdown/texto
       const norm = this._normalizeForView(txt);
 
       if (norm.mode === 'html') {
@@ -433,6 +433,18 @@
       // Remove apenas linhas de separador de tabela tipo |----|
       t = t.replace(/^\s*\|[- :]+\|\s*$/gm, ' ');
 
+      // Remove marcações de negrito/itálico markdown
+      t = t.replace(/\*\*(.*?)\*\*/g, '$1');
+      t = t.replace(/__([^_]+)__/g, '$1');
+      t = t.replace(/_(.*?)_/g, '$1');
+
+      // Achata linhas de tabela markdown em texto corrido
+      t = t.replace(/^\s*\|(.+?)\|\s*$/gm, (m, inner) => {
+        const cols = inner.split('|').map(c => c.trim()).filter(Boolean);
+        if (!cols.length) return '';
+        return cols.join(' — ');
+      });
+
       t = t.replace(/[ \t]+\n/g, '\n');
       t = t.replace(/([.,;:!?])(?!\s|$)/g, '$1 ');
       t = t.replace(/\n{3,}/g, '\n\n').trim();
@@ -441,7 +453,7 @@
       return t;
     },
 
-    /* ===================== Novo: detecção/normalização HTML x markdown ===================== */
+    /* ===================== Detecção/normalização HTML x markdown ===================== */
     _looksLikeHtmlFragment(s) {
       const txt = String(s || '').trim();
       if (!txt) return false;
