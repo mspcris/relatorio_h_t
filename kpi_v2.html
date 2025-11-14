@@ -4,36 +4,57 @@
 <head>
     <meta charset="UTF-8" />
     <title>CAMIM — KPI de Mensalidades (com IA)</title>
+
+    <!-- Responsividade -->
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <!-- AdminLTE + FontAwesome -->
+    <!-- ============================================================
+         CORE CSS — AdminLTE + FontAwesome
+         (carregados primeiro, para permitir overwrite pelos CSS do projeto)
+       ============================================================ -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
 
-    <!-- Fonte padrão AdminLTE -->
+    <!-- Fonte principal utilizada pelo AdminLTE -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap">
 
-    <!-- CSS do projeto -->
-    <link rel="stylesheet" href="/css/style2.css">
-    <link rel="shortcut icon" href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png
-" type="image/x-icon">
+    <!-- ============================================================
+         CSS DO PROJETO — carregados após AdminLTE
+         Garantem overwrite dos estilos padrão.
+       ============================================================ -->
+
+    <!-- CSS genérico do projeto -->
+    <link rel="stylesheet" href="/css/style2.css?v=20251114">
+
+    <!-- CSS específico da página KPI -->
     <link rel="stylesheet" href="/css/style_kpi.css?v=20251114">
 
+    <!-- Favicon institucional -->
+    <link rel="shortcut icon"
+        href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png"
+        type="image/x-icon">
 
-    <!-- JS base (ordem importa) -->
+    <!-- ============================================================
+         JS BASE — jQuery → Bootstrap → AdminLTE → Libs externas
+         Ordem crítica para comportamento da UI
+       ============================================================ -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
-    <!-- Config de IA -->
+    <!-- ============================================================
+         CONFIGURAÇÃO DE CONTEXTO (IA + Sessão do usuário)
+         Carrega USER_EMAIL e USER_POSTOS dinamicamente
+       ============================================================ -->
     <script>
         window.IA_API_URL = '/ia/analisar';
         window.PROMPTS_API_BASE = '/prompts';
 
-        // carrega email e postos direto do backend
+        // Carrega email e postos direto do backend após login
         fetch("/session/me", { credentials: 'same-origin' })
             .then(r => r.json())
             .then(data => {
@@ -46,11 +67,10 @@
             });
     </script>
 
-    <script src="/js/chat.js"></script>
-
-
-
+    <!-- Chat / IA -->
+    <script src="/js/chat.js?v=20251114"></script>
 </head>
+
 
 <body class="hold-transition sidebar-mini">
     <div class="wrapper">
