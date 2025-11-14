@@ -16,7 +16,7 @@ TTL_SECONDS = 3600 * 8   # 8h
 
 ht = HtpasswdFile(HTPASS_PATH)
 signer = TimestampSigner(SECRET)
-app = Flask(__name__, template_folder="/var/www")
+app = Flask(__name__, template_folder="/opt/camim-auth/templates")
 
 
 # ===============================
