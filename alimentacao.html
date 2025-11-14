@@ -5,8 +5,9 @@
     <meta charset="UTF-8" />
     <title>CAMIM — KPI de Custo Alimentação x Mensalidades (com IA)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="shortcut icon" href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png
-" type="image/x-icon">
+    <link rel="shortcut icon"
+        href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png"
+        type="image/x-icon">
 
     <!-- AdminLTE e dependências (CSS) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
@@ -94,6 +95,150 @@
         }
     </style>
 
+    <style>
+        :root {
+            --cor0: #F2F2F2;
+            --cor1: #afbfa5;
+            --cor2: #91b62f;
+            --cor3: #009402;
+            --cor4: #1c7932;
+            --cor5: #003f0a;
+            --cor6: #0099ab;
+            --cor7: #092019;
+            --cor8: #444444
+        }
+
+        body {
+            -webkit-font-smoothing: antialiased
+        }
+
+        .muted {
+            color: #6b7280
+        }
+
+        .mini {
+            font-size: .85rem
+        }
+
+        .text-right {
+            text-align: right
+        }
+
+        .small-td {
+            white-space: nowrap
+        }
+
+        .table-responsive {
+            width: 100%
+        }
+
+        .stack>*+* {
+            margin-top: 14px
+        }
+
+        .filter-bar {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            padding: 10px
+        }
+
+        .month-inputs {
+            display: flex;
+            gap: 6px;
+            align-items: center
+        }
+
+        .scroll-tabs {
+            display: flex;
+            gap: 6px;
+            overflow: auto;
+            white-space: nowrap;
+            padding: 6px 0
+        }
+
+        .scroll-tabs .nav-link {
+            display: inline-block;
+            min-width: 52px;
+            text-align: center;
+            cursor: pointer
+        }
+
+        .kpi {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 8px
+        }
+
+        .kpi .card {
+            border-radius: 12px;
+            margin: 0
+        }
+
+        .card-body.kpi {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 8px
+        }
+
+        .card-body.kpi .card {
+            margin: 0;
+            border-radius: 12px
+        }
+
+        .card-body.kpi .card .card-body {
+            padding: .5rem .75rem
+        }
+
+        .chart-card .card-body {
+            height: 360px
+        }
+
+        .heatmap {
+            overflow: auto;
+            max-height: 420px
+        }
+
+        .heatmap table {
+            border-collapse: separate;
+            border-spacing: 2px;
+            width: 100%
+        }
+
+        .heatmap th,
+        .heatmap td {
+            text-align: center;
+            padding: 6px;
+            font-size: 12px
+        }
+
+        .heatmap .cell {
+            padding: 6px 8px;
+            border-radius: 8px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            color: #111
+        }
+
+        .lg-box {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            margin-right: 4px;
+            vertical-align: middle
+        }
+
+        .lg-pos {
+            background: rgba(54, 162, 235, 1)
+        }
+
+        .lg-neg {
+            background: rgba(220, 53, 69, 1)
+        }
+    </style>
+
     <!-- JS de terceiros (ordem padrão) -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -102,10 +247,39 @@
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
-    <!-- App -->
-    <script>window.USER_EMAIL = "cristiano@camim.com.br";</script>
-    <script src="/js/chat.js"></script>
+    <!-- App / Usuário -->
+    <script>
+        window.USER_EMAIL = window.USER_EMAIL || "cristiano@camim.com.br";
 
+        // Regras de visibilidade de postos por usuário
+        const POSTOS_PER_USER = {
+            // Exemplo: usuário vê somente alguns postos
+            // "usuario@empresa.com": ["A", "B", "C"],
+
+            // Cristiano com acesso total
+            "cristiano@camim.com.br": "ALL",
+
+            // fallback
+            "default": "ALL"
+        };
+
+        function applyPostoPermissions(listaPostos) {
+            const email = (window.USER_EMAIL || "").toLowerCase();
+            const rule = POSTOS_PER_USER[email] ?? POSTOS_PER_USER["default"];
+
+            if (rule === "ALL") return listaPostos;
+
+            if (Array.isArray(rule)) {
+                const allowed = new Set(rule.map(p => String(p).toUpperCase()));
+                return listaPostos.filter(p => allowed.has(String(p).toUpperCase()));
+            }
+
+            return listaPostos;
+        }
+    </script>
+
+    <!-- Chat / IA -->
+    <script src="/js/chat.js"></script>
     <script>
         // A) mesmo host com proxy reverso
         window.IA_API_URL = '/ia/analisar';
@@ -116,150 +290,6 @@
     </script>
 </head>
 
-<style>
-    :root {
-        --cor0: #F2F2F2;
-        --cor1: #afbfa5;
-        --cor2: #91b62f;
-        --cor3: #009402;
-        --cor4: #1c7932;
-        --cor5: #003f0a;
-        --cor6: #0099ab;
-        --cor7: #092019;
-        --cor8: #444444
-    }
-
-    body {
-        -webkit-font-smoothing: antialiased
-    }
-
-    .muted {
-        color: #6b7280
-    }
-
-    .mini {
-        font-size: .85rem
-    }
-
-    .text-right {
-        text-align: right
-    }
-
-    .small-td {
-        white-space: nowrap
-    }
-
-    .table-responsive {
-        width: 100%
-    }
-
-    .stack>*+* {
-        margin-top: 14px
-    }
-
-    .filter-bar {
-        display: flex;
-        gap: 12px;
-        align-items: flex-end;
-        flex-wrap: wrap;
-        padding: 10px
-    }
-
-    .month-inputs {
-        display: flex;
-        gap: 6px;
-        align-items: center
-    }
-
-    .scroll-tabs {
-        display: flex;
-        gap: 6px;
-        overflow: auto;
-        white-space: nowrap;
-        padding: 6px 0
-    }
-
-    .scroll-tabs .nav-link {
-        display: inline-block;
-        min-width: 52px;
-        text-align: center;
-        cursor: pointer
-    }
-
-    .kpi {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 8px
-    }
-
-    .kpi .card {
-        border-radius: 12px;
-        margin: 0
-    }
-
-    .card-body.kpi {
-        display: grid !important;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 8px
-    }
-
-    .card-body.kpi .card {
-        margin: 0;
-        border-radius: 12px
-    }
-
-    .card-body.kpi .card .card-body {
-        padding: .5rem .75rem
-    }
-
-    .chart-card .card-body {
-        height: 360px
-    }
-
-    .heatmap {
-        overflow: auto;
-        max-height: 420px
-    }
-
-    .heatmap table {
-        border-collapse: separate;
-        border-spacing: 2px;
-        width: 100%
-    }
-
-    .heatmap th,
-    .heatmap td {
-        text-align: center;
-        padding: 6px;
-        font-size: 12px
-    }
-
-    .heatmap .cell {
-        padding: 6px 8px;
-        border-radius: 8px;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-        color: #111
-    }
-
-    .lg-box {
-        display: inline-block;
-        width: 10px;
-        height: 10px;
-        border-radius: 2px;
-        margin-right: 4px;
-        vertical-align: middle
-    }
-
-    .lg-pos {
-        background: rgba(54, 162, 235, 1)
-    }
-
-    .lg-neg {
-        background: rgba(220, 53, 69, 1)
-    }
-</style>
-
 <body class="hold-transition sidebar-mini layout-fixed">
     <div class="wrapper">
         <!-- NAVBAR -->
@@ -269,8 +299,8 @@
                 </li>
             </ul>
             <span class="ml-2 font-weight-bold d-flex align-items-center">
-                <img src="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png
-" alt="Logo Camim">
+                <img src="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png"
+                    alt="Logo Camim">
                 <span class="ml-2">Quem tem saúde é mais feliz!</span>
                 <span id="jsonInfo" class="ml-3 text-muted mini"></span>
             </span>
@@ -490,10 +520,6 @@
     </div>
     <!-- /div antes de: helpers de abas -->
 
-
-
-
-
     <!-- helpers de abas -->
     <script>
         function markActiveMulti(scopeId, selection) {
@@ -505,8 +531,6 @@
             });
         }
 
-
-
         // MONTAGEM E SELEÇÃO DOS POSTOS NO PAINEL
         function buildPostoTabs(ulId, getSel, setSel, onChange) {
             const ul = document.querySelector(ulId); if (!ul) return;
@@ -517,12 +541,6 @@
                 ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`);
             });
             markActiveMulti(ulId, getSel());
-
-
-
-
-
-
 
             ul.addEventListener('click', e => {
                 if (!e.target.matches('.nav-link')) return; e.preventDefault();
@@ -676,8 +694,6 @@
         })();
     </script>
 
-
-
     <!-- APP PRINCIPAL -->
     <script>
         window.addEventListener('error', e => { const b = document.querySelector('#err'); if (b) b.textContent = 'Erro: ' + e.message; console.error(e.error || e.message); });
@@ -811,7 +827,6 @@
             buildHeatmap(meses, selection);
         }
 
-
         // meses selecionados no filtro principal
         function mesesSel2DeepAli() {
             const from = document.querySelector('#from2')?.value || null;
@@ -865,26 +880,23 @@
                     { scope: 'chart_pct', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: labs, pct_ali } },
                     { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: labs, mensalidade, alimentacao } },
                     { scope: 'chart_stack', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { labels: labs, alimentacao, margem } },
-                    { scope: 'chart_pct_posto', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { /* opcional: médios por posto se já tiver */ } },
+                    { scope: 'chart_pct_posto', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: {} },
                     { scope: 'chart_pareto_ali', periodo: { from: meses[0], to: meses.at(-1) }, posto: sel, series: { postos: pareto.postos, valores: pareto.valores } }
                 ]
             };
         }
     </script>
+
     <script>
         ChatIA.init({
             apiUrl: (window.IA_API_URL || '/ia/analisar'),
             mountAfterSelector: '#btnComparar',
             title: 'IA — Análise Completa & Chat',
             briefInstruction: 'Responda em 200–300 caracteres. Texto corrido. Sem listas.',
-            briefDefault: true,                  // bit IA Resumida já marcado
+            briefDefault: true,
             getPayload: async ({ userQuery }) => buildPayloadDeepAli({ userQuery })
         });
     </script>
-
-
-
-
 
     <script>
         (async function boot() {
@@ -913,6 +925,8 @@
                 .filter(p => rxPosto.test(p) && !BLOCK.has(p))
                 .sort();
 
+            // APLICA REGRA DE VISIBILIDADE POR USUÁRIO
+            POSTOS = applyPostoPermissions(POSTOS);
             window.POSTOS = POSTOS;
 
             // 3) Default: últimos 12 meses completos
@@ -922,7 +936,6 @@
             const startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 11, 1);
             const startYM = ym(startDate), endYM = ym(endDate);
 
-            // >>> adicione de volta:
             const last12 = inRange(MESES, startYM, endYM);
             if (last12.length) {
                 setMonth('#from2', last12[0]);
@@ -930,8 +943,6 @@
                 setMonth('#from1', last12[0]);
                 setMonth('#to1', last12.at(-1));
             }
-
-
 
             // 4) Abas de posto (multi)
             buildPostoTabs('#postoTabs2', () => sel2, v => sel2 = v, refreshMain);
@@ -1032,16 +1043,6 @@
             } catch { }
         })();
     </script>
-
-
-
-
-
-
-
-
-
-
 </body>
 
 </html>
