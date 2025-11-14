@@ -5,6 +5,7 @@
 #         Adiciona mensalidade_qtd, ticket_medio e performance aos JSONs.
 #         KPIs mensais e de período (rodapé) com médias geométricas, mix e estatísticas.
 #         Inclui agregados de PRESCRIÇÃO nos JSONs legados e publica JSONs enriquecidos específicos de prescrição.
+#teste1 deploy
 import os, re, sys, glob, json, argparse, shutil, math
 from datetime import date, datetime, timezone
 from urllib.parse import quote_plus
