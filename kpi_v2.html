@@ -31,8 +31,20 @@
     <script>
         window.IA_API_URL = '/ia/analisar';
         window.PROMPTS_API_BASE = '/prompts';
-        window.USER_EMAIL = "{{ USER_EMAIL }}";
+
+        // carrega email e postos direto do backend
+        fetch("/session/me", { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(data => {
+                window.USER_EMAIL = data.email;
+                window.USER_POSTOS = data.postos;
+            })
+            .catch(() => {
+                window.USER_EMAIL = null;
+                window.USER_POSTOS = [];
+            });
     </script>
+
     <script src="/js/chat.js"></script>
 
 
