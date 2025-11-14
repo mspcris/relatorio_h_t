@@ -144,6 +144,37 @@ jobs:
             echo "WARN: postos_acl.json não encontrado no repo"
           fi
       
+
+
+      # 3.2) app.py -> /opt/camim-auth
+      - name: app.py -> /opt/camim-auth
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          DEST=/opt/camim-auth
+          FILE="app.py"
+
+          if [ -f "$FILE" ]; then
+            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
+              "mkdir -p '$DEST'"
+            rsync -rlvz \
+              --omit-dir-times --no-perms --no-owner --no-group \
+              -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+              "$FILE" "$SSH_USER@$SSH_HOST:$DEST/"
+          else
+            echo "WARN: app.py não encontrado no repo"
+          fi
+
+          # Reinicia backend de auth automaticamente
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
+            "sudo systemctl restart camim-auth || true"
+
+
+
+
       # 4) Sync dedicado do diretório sql/
       - name: Sync sql -> /opt/relatorio_h_t/sql
         env:
