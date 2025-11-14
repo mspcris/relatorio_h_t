@@ -197,8 +197,19 @@
     _wireUI() {
       const panel = this._panel();
       const btn = this._btn();
-      const briefLbl = this._q('#iadBrief');
       const briefChk = this._q('#iadBriefChk');
+
+      // Agora o clique é diretamente no checkbox:
+    briefChk.addEventListener('change', () => {
+    this._state.brief = !!briefChk.checked;
+
+    const msg = this._state.brief
+      ? 'Padrão atualizado: novas mensagens abrirão em RESUMO.'
+      : 'Padrão atualizado: novas mensagens abrirão em COMPLETO.';
+
+    this._append('bot', `<span class="iad-hint">${msg}</span>`);
+});
+
       const close = this._q('#iadClose');
       const saveBtn = this._q('#iadSave');
       const send = this._q('#iadSend');
@@ -225,18 +236,18 @@
         window.__IA_OBJETIVA__ = this.checked;
       });
 
-      briefLbl.addEventListener('click', (e) => {
-        if (e.target.id !== 'iadBriefChk') {
-          e.preventDefault();
-          briefChk.checked = !briefChk.checked;
-        }
-        this._state.brief = !!briefChk.checked;
-        const msg = this._state.brief
-          ? 'Padrão atualizado: novas mensagens abrirão em RESUMO.'
-          : 'Padrão atualizado: novas mensagens abrirão em COMPLETO.';
+      // briefLbl.addEventListener('click', (e) => {
+      //   if (e.target.id !== 'iadBriefChk') {
+      //     e.preventDefault();
+      //     briefChk.checked = !briefChk.checked;
+      //   }
+      //   this._state.brief = !!briefChk.checked;
+      //   const msg = this._state.brief
+      //     ? 'Padrão atualizado: novas mensagens abrirão em RESUMO.'
+      //     : 'Padrão atualizado: novas mensagens abrirão em COMPLETO.';
 
-        this._append('bot', `<span class="iad-hint">${msg}</span>`);
-      });
+      //   this._append('bot', `<span class="iad-hint">${msg}</span>`);
+      // });
 
       send.addEventListener('click', async () => {
         const q = (input.value || '').trim();
