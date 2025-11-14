@@ -314,19 +314,32 @@
       }
 
       content.innerHTML = '';
-      const cleaned = this._cleanGroq(txt);
-      const blocks = cleaned.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
-      blocks.forEach(b => {
-        const isTitle = /^###\s*/.test(b);
-        const text = b.replace(/^###\s*/, '');
-        const el = document.createElement(isTitle ? 'h5' : 'p');
-        if (isTitle) el.className = 'iad-h';
-        el.textContent = text;
-        content.appendChild(el);
-      });
 
-      if (hint) hint.textContent = mode === 'summary' ? 'mostrando resumo' : 'mostrando completo';
-      requestAnimationFrame(() => this._typeReveal(content));
+      // NOVO: normaliza para HTML ou markdown/texto
+      const norm = this._normalizeForView(txt);
+
+      if (norm.mode === 'html') {
+        // Aproveita o HTML estruturado vindo da IA (relatório executivo etc.)
+        content.innerHTML = this._safeHtml(norm.html);
+        if (hint) hint.textContent = mode === 'summary'
+          ? 'mostrando resumo (HTML)'
+          : 'mostrando completo (HTML)';
+      } else {
+        const cleaned = norm.text;
+        const blocks = cleaned.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+        blocks.forEach(b => {
+          const isTitle = /^###\s*/.test(b);
+          const text = b.replace(/^###\s*/, '');
+          const el = document.createElement(isTitle ? 'h5' : 'p');
+          if (isTitle) el.className = 'iad-h';
+          el.textContent = text;
+          content.appendChild(el);
+        });
+
+        if (hint) hint.textContent = mode === 'summary' ? 'mostrando resumo' : 'mostrando completo';
+        requestAnimationFrame(() => this._typeReveal(content));
+      }
+
       const sc = this._panel()?.querySelector('.body');
       if (sc) requestAnimationFrame(() => { sc.scrollTop = sc.scrollHeight; });
     },
@@ -397,7 +410,9 @@
       }
       return this._sanitizeText(s);
     },
+
     _looksLikeJson(s) { return s.startsWith('{') || s.startsWith('['); },
+
     _pickFields(obj, keys) {
       if (obj == null) return '';
       for (const k of keys) if (typeof obj?.[k] === 'string' && obj[k].trim()) return obj[k];
@@ -424,6 +439,58 @@
 
       if (!t || t.length < 5) return original.trim();
       return t;
+    },
+
+    /* ===================== Novo: detecção/normalização HTML x markdown ===================== */
+    _looksLikeHtmlFragment(s) {
+      const txt = String(s || '').trim();
+      if (!txt) return false;
+      if (this._looksLikeJson(txt) || /```/.test(txt)) return false;
+      return /<\/?(p|h[1-6]|ul|ol|li|table|thead|tbody|tr|th|td|strong|em|b|i|div|span)[\s>]/i.test(txt);
+    },
+
+    _safeHtml(html) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+
+      const allowedTags = new Set([
+        'P','BR','B','STRONG','I','EM',
+        'UL','OL','LI',
+        'H1','H2','H3','H4','H5','H6',
+        'TABLE','THEAD','TBODY','TR','TH','TD',
+        'HR','SPAN','DIV','CODE','PRE'
+      ]);
+
+      const walk = (node) => {
+        const children = Array.from(node.childNodes);
+        for (const c of children) {
+          if (c.nodeType === Node.ELEMENT_NODE) {
+            const tag = c.tagName.toUpperCase();
+            if (!allowedTags.has(tag)) {
+              while (c.firstChild) node.insertBefore(c.firstChild, c);
+              node.removeChild(c);
+              continue;
+            }
+            [...c.attributes].forEach(attr => {
+              const name = attr.name.toLowerCase();
+              if (name.startsWith('on') || name === 'style' || name === 'srcdoc') {
+                c.removeAttribute(attr.name);
+              }
+            });
+            walk(c);
+          }
+        }
+      };
+      walk(tmp);
+      return tmp.innerHTML;
+    },
+
+    _normalizeForView(rawText) {
+      const cleaned = this._cleanGroq(rawText || '');
+      if (this._looksLikeHtmlFragment(cleaned)) {
+        return { mode: 'html', html: cleaned };
+      }
+      return { mode: 'markdown', text: cleaned };
     },
 
     /* ===================== Efeito “digitar” via CSS mask ===================== */
