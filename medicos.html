@@ -283,24 +283,6 @@
         window.USER_POSTOS = {{ USER_POSTOS | safe }};
     </script>
 
-    <script>
-        // Filtro automático baseado no ACL
-        document.addEventListener("DOMContentLoaded", () => {
-            if (!window.USER_POSTOS || !Array.isArray(window.USER_POSTOS)) return;
-
-            // POSTOS disponíveis (vindos dos JSONs)
-            const allowed = new Set(window.USER_POSTOS);
-
-            // intercepta após carga dos JSONs
-            const orig = window.POSTOS;
-            if (orig && Array.isArray(orig)) {
-                window.POSTOS = orig.filter(p => allowed.has(p));
-            }
-
-            // se você quiser forçar ao backend que só mostre permitted postos no menu, pode filtrar aqui também
-        });
-    </script>
-
 
 
 
@@ -649,7 +631,15 @@ Não comece com “Visão executiva”. Títulos iniciam com “### ”.`;
                     const setP = new Set();
                     for (const m of MESES) for (const p of Object.keys(POR_POSTO[m] || {})) if (/^[A-Z]{1,3}$/.test(p)) setP.add(p);
                     POSTOS = [...setP].sort();
+                    // ACL aplicado aqui, após JSON e definição de POSTOS.
+                    if (window.USER_POSTOS && Array.isArray(window.USER_POSTOS)) {
+                        const allowed = new Set(window.USER_POSTOS);
+                        POSTOS = POSTOS.filter(p => allowed.has(p));
+                    }
+
+                    // expor global para os tabs
                     window.POSTOS = POSTOS;
+
 
                     // Default UI: últimos 12 meses completos (até o mês anterior à data atual)
                     function ym(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
