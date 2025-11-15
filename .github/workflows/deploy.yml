@@ -78,6 +78,17 @@ jobs:
             --include='*.html' --exclude='*' \
             ./ "$SSH_USER@$SSH_HOST:$DEST/"
 
+
+      - name: HTML templates -> /opt/camim-auth/templates
+        run: |
+            rsync -rlvz \
+              --include='*/' \
+              --include='*.html' \
+              --exclude='*' \
+              -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT}" \
+              ./ "$SSH_USER@$SSH_HOST:/opt/camim-auth/templates/"
+
+
       # 2) analyze_groq.py -> /opt/ia-groq e /opt/ia-groq/app
       - name: analyze_groq.py -> /opt/ia-groq e /opt/ia-groq/app
         env:
