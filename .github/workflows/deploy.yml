@@ -72,7 +72,7 @@ jobs:
           DEST=/var/www
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
           # Copia apenas *.html da raiz do projeto, sem deletar outros assets já publicados
-          rsync -rlvz \
+          rsync -rlvz --delete \
             --omit-dir-times --no-perms --no-owner --no-group \
             -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
             --include='*.html' --exclude='*' \
