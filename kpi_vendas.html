@@ -1160,10 +1160,17 @@
             chPareto.update();
 
             const mapYoY = new Map();
+            const allowed = new Set(POSTOS);
+
             meses.forEach(m => {
                 const row = porPosto[m] || {};
                 Object.keys(row).forEach(p => {
+                    // 1) Filtra por ACL
+                    if (!allowed.has(p)) return;
+
+                    // 2) Se não for ALL, filtra pela seleção manual
                     if (selection !== 'ALL' && !selection.has(p)) return;
+
                     const yoy = maybe(row[p]?.receita_yoy_pct);
                     if (yoy == null) return;
                     const obj = mapYoY.get(p) || { sum: 0, count: 0 };
@@ -1172,6 +1179,8 @@
                     mapYoY.set(p, obj);
                 });
             });
+
+
             const postos = [...mapYoY.keys()].sort();
             const yoyMed = postos.map(p => {
                 const o = mapYoY.get(p);
@@ -1687,6 +1696,16 @@
             const arr = [...selection].sort();
             return arr.length ? arr.join('+') : 'ALL';
         }
+
+        function postosFromSelection(selection) {
+            // Para ALL, usa somente os postos permitidos para o usuário
+            if (selection === 'ALL') {
+                return POSTOS.slice(); // cópia do array global filtrado por ACL
+            }
+            // Para seleção manual (Set), converte em array
+            return [...selection];
+        }
+
 
         function computeKPIs(meses, selection) {
             const rows = meses.map(m => aggMens(m, selection));
