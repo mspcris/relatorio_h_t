@@ -153,10 +153,10 @@
                         <div class="d-flex align-items-center justify-content-between flex-wrap">
                             <div class="mb-2">
                                 <h3 class="card-title mb-0">Dashboard Consolidado — Clientes</h3>
-                                <small class="text-muted">Filtro por posto (multi-seleção)</small>
+                                <!-- <small class="text-muted">Filtro por posto (multi-seleção)</small> -->
                             </div>
                             <div class="flex-grow-1 ml-3">
-                                <label class="mb-0 small d-block">Posto</label>
+                                <label class="mb-0 small d-block">Filtro por posto (multi-seleção)</label>
                                 <ul id="postoTabsClientes" class="nav nav-pills scroll-tabs"></ul>
                             </div>
                         </div>
@@ -222,168 +222,76 @@
         </div>
     </div>
 
+
+
+
+
+
     <script>
         // =====================================================================
-        // CONFIGURAÇÃO DE CAMPOS DO JSON
+        // CONFIG
         // =====================================================================
-        // Ajuste estes nomes se o JSON tiver campos diferentes.
-        // Ex: se no JSON estiver "faixa_etaria", use FIELD_FAIXA = 'faixa_etaria';
-        const FIELD_POSTO = 'posto';
-        const FIELD_FAIXA = 'faixa_etaria'; // <-- seu JSON usa "faixa_etaria"
+        const MATRICULA_URL = 'json_cadastro/pormatricula.json';
+        const VIDA_URL = 'json_cadastro/porvida.json';
 
-        // Caminhos corretos dos JSONs (pasta /json_cadastro)
-        const MATRICULA_DATA_URL = 'json_cadastro/pormatricula.json';
-        const VIDA_DATA_URL = 'json_cadastro/porvida.json';
-
-        // =====================================================================
-        // ESTADO
-        // =====================================================================
-        // Vamos trabalhar sempre com esta estrutura consolidada:
-        // { posto, faixa, matriculas, vidas }
         let RAW_CLIENTES = [];
         let POSTOS = [];
-        // 'ALL' = todos os postos; ou Set(['A','B',...]) para multiseleção
         let selPostos = 'ALL';
 
         let chFaixaBar = null;
         let chFaixaDonut = null;
 
-        const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+        const fmtInt = new Intl.NumberFormat('pt-BR');
         const fmtPct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
         // =====================================================================
-        // HELPERS
-        // =====================================================================
-        // =====================================================================
-        // FILTRO DE POSTOS POR USUÁRIO (mesmo código de alimentacao.html)
-        // =====================================================================
-        function filtrarPostosPorUsuario(listaPostos) {
-            const email = String(window.USER_EMAIL || '').trim().toLowerCase();
-
-            // Mapeamento corporativo dos postos permitidos por usuário
-            const mapaPostos = {
-                'deangelo@camim.com.br': ['J', 'P'],
-                'derlana@camim.com.br': ['J'],
-                // adicionar outros usuários conforme necessidade
-            };
-
-            const postosPermitidos = mapaPostos[email];
-            if (!postosPermitidos) {
-                // Usuário sem restrição → vê tudo
-                return listaPostos;
-            }
-
-            return listaPostos.filter(p => postosPermitidos.includes(p));
-        }
-
-        // Aceita:
-        // - array direto
-        // - objeto do tipo { "A": [...], "B": [...], ... }
-        function normalizeArray(data) {
-            if (Array.isArray(data)) return data;
-
-            if (data && typeof data === 'object') {
-                let out = [];
-                Object.values(data).forEach(v => {
-                    if (Array.isArray(v)) out = out.concat(v);
-                });
-                return out;
-            }
-            return [];
-        }
-
-        const normPosto = v => String(v ?? '').trim();
-        const normFaixa = v => {
-            const f = String(v ?? 'Sem faixa').trim();
-            return f || 'Sem faixa';
-        };
-
-        function isAllPostos() {
-            return selPostos === 'ALL';
-        }
-
-        function isPostoSelected(posto) {
-            if (selPostos === 'ALL') return true;
-            return selPostos.has(posto);
-        }
-
-        // =====================================================================
-        // LOAD JSONS (pormatricula + porvida)
+        // LOAD JSONS (NOVO FORMATO)
         // =====================================================================
         async function loadClientes() {
             const errBox = document.getElementById('err');
             errBox.textContent = '';
 
             try {
-                const [rMat, rVid] = await Promise.all([
-                    fetch(MATRICULA_DATA_URL, { cache: 'no-store' }),
-                    fetch(VIDA_DATA_URL, { cache: 'no-store' })
+                const [mRes, vRes] = await Promise.all([
+                    fetch(MATRICULA_URL, { cache: 'no-store' }),
+                    fetch(VIDA_URL, { cache: 'no-store' })
                 ]);
 
-                if (!rMat.ok || !rVid.ok) {
-                    throw new Error(
-                        'Falha ao carregar JSON de matrículas ou vidas (' +
-                        rMat.status + '/' + rVid.status + ')'
-                    );
+                if (!mRes.ok || !vRes.ok)
+                    throw new Error("Falha carregando JSONs de matrícula/vida");
+
+                const jsonMat = await mRes.json();  // { posto: total }
+                const jsonVid = await vRes.json();  // { posto: {faixa: total} }
+                window.PORMAT = jsonMat;
+
+
+                const postosMat = Object.keys(jsonMat);
+                const postosVid = Object.keys(jsonVid);
+
+                const todosPostos = Array.from(new Set([...postosMat, ...postosVid])).sort();
+
+                RAW_CLIENTES = [];
+
+                // ==========================================================
+                // CONSTRUIR RAW_CLIENTES NO NOVO MODELO
+                // ==========================================================
+                for (const posto of todosPostos) {
+                    const totalMat = jsonMat[posto] ?? 0;
+                    const mapaFaixas = jsonVid[posto] ?? {};
+
+                    // vidas por faixa
+                    for (const faixa in mapaFaixas) {
+                        RAW_CLIENTES.push({
+                            posto,
+                            faixa,
+                            vidas: mapaFaixas[faixa],
+                            matriculas: totalMat
+                        });
+                    }
                 }
 
-                const dadosMat = await rMat.json();
-                const dadosVid = await rVid.json();
-
-                const arrMat = normalizeArray(dadosMat);
-                const arrVid = normalizeArray(dadosVid);
-
-                if (!arrMat.length && !arrVid.length) {
-                    throw new Error('JSONs vazios ou formato inesperado (esperado: array ou objeto com arrays por posto).');
-                }
-
-                // Mapa por chave (posto|faixa) para juntar matrícula + vidas
-                const map = new Map();
-
-                // -----------------------------
-                // Matrículas: 1 linha = 1 matrícula
-                // -----------------------------
-                arrMat.forEach(row => {
-                    const posto = normPosto(row[FIELD_POSTO]);
-                    if (!posto) return;
-                    const faixa = normFaixa(row[FIELD_FAIXA]);
-                    const key = posto + '|' + faixa;
-
-                    let obj = map.get(key);
-                    if (!obj) {
-                        obj = { posto, faixa, matriculas: 0, vidas: 0 };
-                    }
-                    obj.matriculas += 1;
-                    map.set(key, obj);
-                });
-
-                // -----------------------------
-                // Vidas: 1 linha = 1 vida
-                // -----------------------------
-                arrVid.forEach(row => {
-                    const posto = normPosto(row[FIELD_POSTO]);
-                    if (!posto) return;
-                    const faixa = normFaixa(row[FIELD_FAIXA]);
-                    const key = posto + '|' + faixa;
-
-                    let obj = map.get(key);
-                    if (!obj) {
-                        obj = { posto, faixa, matriculas: 0, vidas: 0 };
-                    }
-                    obj.vidas += 1;
-                    map.set(key, obj);
-                });
-
-                RAW_CLIENTES = Array.from(map.values());
-
-                // Lista de postos disponíveis
-                // Postos brutos
-                let postosBrutos = Array.from(new Set(RAW_CLIENTES.map(r => r.posto))).sort();
-
-                // Aplicar filtro por usuário
-                POSTOS = filtrarPostosPorUsuario(postosBrutos);
-
-                // Garantir compatibilidade
+                // Aplicar regra por usuário (mesmo do KPI alimentacao)
+                POSTOS = filtrarPostosPorUsuario(todosPostos);
                 window.POSTOS = POSTOS;
 
                 selPostos = 'ALL';
@@ -391,109 +299,132 @@
                 buildPostoTabs();
                 refreshDashboard();
 
-                document.getElementById('jsonInfo').textContent =
-                    `Fontes: ${MATRICULA_DATA_URL}, ${VIDA_DATA_URL}`;
-            } catch (e) {
-                console.error(e);
-                errBox.textContent = 'Erro ao carregar dados de clientes: ' + e.message;
+            } catch (err) {
+                console.error(err);
+                document.getElementById('err').textContent =
+                    'Erro ao carregar dados: ' + err.message;
             }
         }
 
         // =====================================================================
-        // UI: POSTOS (TABS COM MULTI-SELEÇÃO)
+        // FILTRO DE POSTOS POR USUÁRIO
         // =====================================================================
+        function filtrarPostosPorUsuario(listaPostos) {
+            const email = String(window.USER_EMAIL || '').trim().toLowerCase();
+            const mapa = {
+                'deangelo@camim.com.br': ['J', 'P'],
+                'derlana@camim.com.br': ['J'],
+            };
+            return mapa[email] ?? listaPostos;
+        }
 
+        // =====================================================================
+        // POSTOS (UI)
+        // =====================================================================
         function buildPostoTabs() {
             const ul = document.getElementById('postoTabsClientes');
             ul.innerHTML = '';
 
-            // Botão "Todos"
+            // TODOS
             const liAll = document.createElement('li');
             liAll.className = 'nav-item';
-
             const aAll = document.createElement('a');
             aAll.href = '#';
             aAll.textContent = 'Todos';
-            aAll.className = 'nav-link' + (isAllPostos() ? ' active' : '');
-            aAll.dataset.value = 'ALL';
-            aAll.addEventListener('click', e => {
+            aAll.className = 'nav-link' + (selPostos === 'ALL' ? ' active' : '');
+            aAll.onclick = e => {
                 e.preventDefault();
                 selPostos = 'ALL';
                 buildPostoTabs();
                 refreshDashboard();
-            });
-
+            };
             liAll.appendChild(aAll);
             ul.appendChild(liAll);
 
-            // Demais postos
-            POSTOS.forEach(posto => {
+            // POSTOS INDIVIDUAIS
+            POSTOS.forEach(p => {
                 const li = document.createElement('li');
                 li.className = 'nav-item';
 
                 const a = document.createElement('a');
                 a.href = '#';
-                a.textContent = posto;
-                a.dataset.value = posto;
+                a.textContent = p;
+                a.dataset.value = p;
 
-                const isActive = !isAllPostos() && isPostoSelected(posto);
-                a.className = 'nav-link' + (isActive ? ' active' : '');
+                const active = selPostos !== 'ALL' && selPostos.has(p);
+                a.className = 'nav-link' + (active ? ' active' : '');
 
-                a.addEventListener('click', e => {
+                a.onclick = e => {
                     e.preventDefault();
-                    togglePostoSelecao(posto);
-                });
+                    togglePostoSelecao(p);
+                };
 
                 li.appendChild(a);
                 ul.appendChild(li);
             });
         }
 
-        function togglePostoSelecao(posto) {
+        function togglePostoSelecao(p) {
             if (selPostos === 'ALL') {
-                selPostos = new Set([posto]);
+                selPostos = new Set([p]);
             } else {
-                if (selPostos.has(posto)) {
-                    selPostos.delete(posto);
-                    if (!selPostos.size) {
-                        selPostos = 'ALL';
-                    }
+                if (selPostos.has(p)) {
+                    selPostos.delete(p);
+                    if (selPostos.size === 0) selPostos = 'ALL';
                 } else {
-                    selPostos.add(posto);
+                    selPostos.add(p);
                 }
             }
             buildPostoTabs();
             refreshDashboard();
         }
 
+        function isPostoEnabled(p) {
+            return selPostos === 'ALL' || selPostos.has(p);
+        }
+
         // =====================================================================
         // DASHBOARD
         // =====================================================================
-
-        function getFilteredData() {
-            if (isAllPostos()) return RAW_CLIENTES;
-            return RAW_CLIENTES.filter(r => selPostos.has(r.posto));
-        }
-
         function refreshDashboard() {
-            const data = getFilteredData();
+            const data = RAW_CLIENTES.filter(r => isPostoEnabled(r.posto));
 
+            // -------------------------------
+            // TOTAL DE MATRÍCULAS — correto
+            // pega apenas 1 vez por posto
+            // -------------------------------
             let totalMatriculas = 0;
+            if (selPostos === 'ALL') {
+                // todos os postos
+                const postosUnicos = Array.from(new Set(RAW_CLIENTES.map(r => r.posto)));
+                postosUnicos.forEach(p => {
+                    if (window.PORMAT && window.PORMAT[p]) {
+                        totalMatriculas += window.PORMAT[p];
+                    }
+                });
+            } else {
+                selPostos.forEach(p => {
+                    if (window.PORMAT && window.PORMAT[p]) {
+                        totalMatriculas += window.PORMAT[p];
+                    }
+                });
+            }
+
+            // -------------------------------
+            // TOTAL DE VIDAS — soma normal
+            // -------------------------------
             let totalVidas = 0;
             const byFaixa = new Map();
 
             data.forEach(r => {
-                totalMatriculas += r.matriculas;
                 totalVidas += r.vidas;
 
-                const faixaKey = r.faixa || 'Sem faixa';
-                let obj = byFaixa.get(faixaKey);
-                if (!obj) {
-                    obj = { faixa: faixaKey, matriculas: 0, vidas: 0 };
-                }
-                obj.matriculas += r.matriculas;
+                const fx = r.faixa;
+                let obj = byFaixa.get(fx);
+                if (!obj) obj = { faixa: fx, matriculas: 0, vidas: 0 };
+
                 obj.vidas += r.vidas;
-                byFaixa.set(faixaKey, obj);
+                byFaixa.set(fx, obj);
             });
 
             const faixasAgg = Array.from(byFaixa.values())
@@ -504,43 +435,37 @@
             document.getElementById('kpiTotalVidas').textContent = fmtInt.format(totalVidas);
             document.getElementById('kpiQtdFaixas').textContent = fmtInt.format(faixasAgg.length);
 
-            // Cards e gráficos
             buildFaixasCards(faixasAgg, totalVidas);
             buildCharts(faixasAgg, totalVidas);
         }
 
-        // =====================================================================
-        // CARDS DE FAIXA
-        // =====================================================================
 
-        function buildFaixasCards(faixasAgg, totalVidas) {
+        // =====================================================================
+        // CARDS
+        // =====================================================================
+        function buildFaixasCards(list, totalVidas) {
             const row = document.getElementById('faixasCardsRow');
             row.innerHTML = '';
 
-            if (!faixasAgg.length) return;
-
-            faixasAgg.forEach(f => {
+            list.forEach(f => {
                 const pct = totalVidas ? (f.vidas / totalVidas * 100) : 0;
 
                 const col = document.createElement('div');
                 col.className = 'col-md-3 col-sm-6 mb-2';
-
                 col.innerHTML = `
-                <div class="card faixa-card bg-light">
-                    <div class="card-body py-2">
-                        <div class="d-flex justify-content-between align-items-baseline">
-                            <div>
-                                <div class="faixa-card-title">${f.faixa}</div>
-                                <div class="text-muted small">Vidas: ${fmtInt.format(f.vidas)}</div>
-                                <div class="text-muted small">Matrículas: ${fmtInt.format(f.matriculas)}</div>
-                            </div>
-                            <div class="text-right">
-                                <div class="faixa-card-value">${fmtPct.format(pct)}%</div>
-                            </div>
-                        </div>
+        <div class="card faixa-card bg-light">
+            <div class="card-body py-2">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <div class="faixa-card-title">${f.faixa}</div>
+                        <div class="text-muted small">Vidas: ${fmtInt.format(f.vidas)}</div>
+
                     </div>
+                    <div class="faixa-card-value">${fmtPct.format(pct)}%</div>
                 </div>
-            `;
+            </div>
+        </div>
+        `;
                 row.appendChild(col);
             });
         }
@@ -548,63 +473,36 @@
         // =====================================================================
         // GRÁFICOS
         // =====================================================================
-
-        function buildCharts(faixasAgg, totalVidas) {
-            const labels = faixasAgg.map(f => f.faixa);
-            const vidas = faixasAgg.map(f => f.vidas);
-            const pct = faixasAgg.map(f => totalVidas ? (f.vidas / totalVidas * 100) : 0);
-
-            const barCtx = document.getElementById('chartFaixaBar').getContext('2d');
-            const donutCtx = document.getElementById('chartFaixaDonut').getContext('2d');
+        function buildCharts(list, totalVidas) {
+            const labels = list.map(f => f.faixa);
+            const vidas = list.map(f => f.vidas);
+            const pct = list.map(f => totalVidas ? (f.vidas / totalVidas * 100) : 0);
 
             if (chFaixaBar) chFaixaBar.destroy();
             if (chFaixaDonut) chFaixaDonut.destroy();
 
-            chFaixaBar = new Chart(barCtx, {
+            chFaixaBar = new Chart(document.getElementById('chartFaixaBar'), {
                 type: 'bar',
-                data: {
-                    labels,
-                    datasets: [{
-                        label: 'Vidas',
-                        data: vidas
-                    }]
-                },
+                data: { labels, datasets: [{ label: 'Vidas', data: vidas }] },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: { mode: 'index', intersect: false }
-                    },
                     scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: { precision: 0 }
-                        }
+                        y: { beginAtZero: true }
                     }
                 }
             });
 
-            chFaixaDonut = new Chart(donutCtx, {
+            chFaixaDonut = new Chart(document.getElementById('chartFaixaDonut'), {
                 type: 'doughnut',
-                data: {
-                    labels,
-                    datasets: [{
-                        data: pct
-                    }]
-                },
+                data: { labels, datasets: [{ data: pct }] },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
                     plugins: {
                         tooltip: {
                             callbacks: {
                                 label: ctx => {
                                     const i = ctx.dataIndex;
-                                    const label = labels[i] || '';
-                                    const valPct = pct[i];
-                                    const v = vidas[i];
-                                    return `${label}: ${fmtPct.format(valPct)}% (${fmtInt.format(v)} vidas)`;
+                                    return `${labels[i]}: ${fmtPct.format(pct[i])}% (${fmtInt.format(vidas[i])} vidas)`;
                                 }
                             }
                         }
@@ -614,9 +512,10 @@
         }
 
         // =====================================================================
-        // BOOTSTRAP
+        // START
         // =====================================================================
         document.addEventListener('DOMContentLoaded', loadClientes);
+
     </script>
 
 

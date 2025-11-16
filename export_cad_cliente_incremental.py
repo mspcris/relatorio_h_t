@@ -1,19 +1,21 @@
-# export_cadastro_incremental.py
-# Pipeline incremental para cadastros:
-#   - sql_pormatricula.sql  -> json_cadastro/pormatricula.json
-#   - sql_porvida.sql       -> json_cadastro/porvida.json
+# export_cad_cliente_incremental.py
+# --------------------------------------------------------
+# Gera JSONs simplificados, sem incremental.
 #
-# Estratégia:
-#   - Para cada posto:
-#       - ler JSON atual
-#       - achar max(idcliente) daquele posto
-#       - buscar somente idcliente > max
-#       - append no JSON e salvar
+# pormatricula.json:
+#   { "A": 1234, "B": 455, ... }
 #
+# porvida.json:
+#   { "A": { "0 a 18": 200, "19 a 23": 120 }, "B": {...} }
+#
+# Os SQLs devem retornar:
+#   Matrícula → posto, total
+#   Vidas     → posto, faixa_etaria, total
+# --------------------------------------------------------
+
 import os
 import json
 import argparse
-from datetime import datetime, timezone  # para carimbo de data/hora
 
 import pandas as pd
 from sqlalchemy import text
@@ -23,8 +25,12 @@ from export_governanca import (
     ensure_dir,
     make_engine,
     POSTOS,
-    load_sql_strip_go,  # reaproveitado do export_governanca
+    load_sql_strip_go,
 )
+
+# --------------------------------------------------------
+# PATHS
+# --------------------------------------------------------
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 SQL_DIR    = os.path.join(BASE_DIR, "SQL_cadastro")
@@ -34,207 +40,159 @@ SQL_POR_MATRICULA = os.path.join(SQL_DIR, "sql_pormatricula.sql")
 SQL_POR_VIDA      = os.path.join(SQL_DIR, "sql_porvida.sql")
 
 
-def load_json(path: str):
-    """Carrega JSON existente (dict posto -> lista de registros + meta)."""
-    if not os.path.exists(path):
-        return {}
-    with open(path, "r", encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-        except Exception:
-            # fallback hard se o arquivo estiver corrompido
-            return {}
-    if not isinstance(data, dict):
-        return {}
-    return data
-
-
-def _normalize_for_json(obj):
-    """
-    Converte objetos não-serializáveis (Timestamp, datetime64, etc.)
-    em tipos nativos serializáveis em JSON.
-    """
-    # dict
-    if isinstance(obj, dict):
-        return {k: _normalize_for_json(v) for k, v in obj.items()}
-
-    # lista
-    if isinstance(obj, list):
-        return [_normalize_for_json(v) for v in obj]
-
-    # pandas.Timestamp
-    if isinstance(obj, pd.Timestamp):
-        return obj.isoformat()
-
-    # numpy.datetime64, se aparecer
-    try:
-        import numpy as np  # type: ignore
-        if isinstance(obj, np.datetime64):
-            return pd.to_datetime(obj).isoformat()
-    except ImportError:
-        pass
-
-    return obj
-
+# --------------------------------------------------------
+# UTIL
+# --------------------------------------------------------
 
 def save_json(path: str, data):
+    """Salva JSON de forma segura."""
     ensure_dir(os.path.dirname(path))
-    safe_data = _normalize_for_json(data)
-
-    tmp_path = path + ".tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(safe_data, f, ensure_ascii=False, indent=2)
-
-    # troca atômica (na prática, "commit" do arquivo)
-    os.replace(tmp_path, path)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
 
 
-def get_last_idcliente(data: dict, posto: str) -> int:
-    """Retorna o maior idcliente já persistido para o posto."""
-    registros = data.get(posto, [])
-    if not registros:
-        return 0
-    max_id = 0
-    for r in registros:
-        try:
-            val = int(r.get("idcliente", 0) or 0)
-        except Exception:
-            val = 0
-        if val > max_id:
-            max_id = val
-    return max_id
+# --------------------------------------------------------
+# EXPORTAÇÃO — MATRÍCULAS
+# --------------------------------------------------------
 
-
-def fetch_incremental(engine, sql_text: str, last_id: int) -> pd.DataFrame:
-    """Executa o SELECT incremental com last_idcliente como parâmetro."""
-    with engine.connect() as con:
-        df = pd.read_sql_query(text(sql_text), con, params={"last_id": last_id})
-    return df
-
-
-def process_dataset(nome: str, sql_path: str, json_name: str, conns: dict,
-                    postos, reset: bool = False):
-    """
-    nome: rótulo para logs (pormatricula / porvida)
-    sql_path: caminho do arquivo .sql
-    json_name: nome do arquivo JSON final
-    conns: dict posto -> conn_str
-    postos: lista de postos a processar
-    reset: se True, ignora incremental (last_id = 0 sempre)
-    """
-    print(f"\n=== DATASET {nome} ===")
+def export_matriculas(sql_path: str, json_out: str, conns: dict, postos: list):
+    print(f"\n=== EXPORTANDO {json_out} ===")
 
     sql_text = load_sql_strip_go(sql_path)
     if not sql_text:
-        print(f"[ERRO] SQL vazio em {sql_path}")
+        print(f"[ERRO] SQL vazio: {sql_path}")
         return
 
-    json_path = os.path.join(JSON_DIR, json_name)
-    data = {} if reset else load_json(json_path)
+    final = {}
 
-    # loop de postos
     for posto, conn_str in conns.items():
         if posto not in postos:
             continue
 
-        print(f"[{nome}] Posto {posto} -> conectando...")
+        print(f"[{json_out}] Posto {posto} → consultando...")
+
         try:
             engine = make_engine(conn_str)
+            with engine.connect() as con:
+                df = pd.read_sql_query(text(sql_text), con)
         except Exception as e:
-            print(f"[{nome}] Posto {posto} ERRO engine: {e}")
+            print(f"[ERRO] Exec SQL {posto}: {e}")
             continue
 
-        last_id = 0 if reset else get_last_idcliente(data, posto)
-        print(f"[{nome}] Posto {posto} last_idcliente atual = {last_id}")
-
-        try:
-            df = fetch_incremental(engine, sql_text, last_id)
-        except Exception as e:
-            print(f"[{nome}] Posto {posto} ERRO exec: {e}")
-            continue
+        # SQL deve trazer: posto, total
+        required = {"posto", "total"}
+        if not required.issubset(df.columns):
+            print(f"[ERRO] SQL de matrículas deve retornar: posto, total")
+            print(f"Colunas recebidas: {df.columns.tolist()}")
+            return
 
         if df.empty:
-            print(f"[{nome}] Posto {posto} sem novos registros.")
+            final[posto] = 0
             continue
 
-        # garante posto no payload
-        df.insert(0, "posto", posto)
+        total_post = int(df["total"].sum())
+        final[posto] = total_post
 
-        # Conversão segura para JSON: datas em ISO, tipos nativos
-        registros_json = json.loads(
-            df.to_json(orient="records", date_format="iso")
+        print(f"[{json_out}] Posto {posto}: total = {total_post}")
+
+    save_json(json_out, final)
+    print(f"[OK] Gerado: {json_out}")
+
+
+# --------------------------------------------------------
+# EXPORTAÇÃO — VIDAS
+# --------------------------------------------------------
+
+def export_vidas(sql_path: str, json_out: str, conns: dict, postos: list):
+    print(f"\n=== EXPORTANDO {json_out} ===")
+
+    sql_text = load_sql_strip_go(sql_path)
+    if not sql_text:
+        print(f"[ERRO] SQL vazio: {sql_path}")
+        return
+
+    final = {}
+
+    for posto, conn_str in conns.items():
+        if posto not in postos:
+            continue
+
+        print(f"[{json_out}] Posto {posto} → consultando...")
+
+        try:
+            engine = make_engine(conn_str)
+            with engine.connect() as con:
+                df = pd.read_sql_query(text(sql_text), con)
+        except Exception as e:
+            print(f"[ERRO] Exec SQL {posto}: {e}")
+            continue
+
+        # SQL deve trazer: posto, faixa_etaria, total
+        required = {"posto", "faixa_etaria", "total"}
+        if not required.issubset(df.columns):
+            print(f"[ERRO] SQL de vidas deve retornar: posto, faixa_etaria, total")
+            print(f"Colunas recebidas: {df.columns.tolist()}")
+            return
+
+        if df.empty:
+            final[posto] = {}
+            continue
+
+        mapa = (
+            df.set_index("faixa_etaria")["total"]
+              .astype(int)
+              .to_dict()
         )
 
-        data.setdefault(posto, []).extend(registros_json)
-        print(
-            f"[{nome}] Posto {posto} +{len(registros_json)} registros "
-            f"(total agora = {len(data[posto])})"
-        )
+        final[posto] = mapa
+        print(f"[{json_out}] Posto {posto}: {len(mapa)} faixas.")
 
-    # carimbo de data/hora do último incremento deste dataset
-    data["_last_increment"] = datetime.now(timezone.utc).astimezone().isoformat()
+    save_json(json_out, final)
+    print(f"[OK] Gerado: {json_out}")
 
-    # persistência única ao final do dataset
-    save_json(json_path, data)
-    print(f"[{nome}] JSON atualizado -> {json_path}")
 
+# --------------------------------------------------------
+# MAIN
+# --------------------------------------------------------
 
 def parse_args():
-    p = argparse.ArgumentParser(
-        description="Export incremental de cadastros (pormatricula / porvida)",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    p.add_argument(
-        "--postos",
-        default="".join(POSTOS),
-        help="Subset de postos. Ex.: ANX"
-    )
-    p.add_argument(
-        "--reset",
-        action="store_true",
-        help="Ignora incremental: recarrega tudo (last_id=0 para todos)."
-    )
-    return p.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--postos", default="".join(POSTOS))
+    return parser.parse_args()
 
 
 def run():
     args = parse_args()
-    ensure_dir(SQL_DIR)
+
     ensure_dir(JSON_DIR)
 
     postos = [c for c in args.postos if c.isalpha()]
-    conns = build_conns_from_env(postos)
+    conns  = build_conns_from_env(postos)
+
     if not conns:
-        print("ERRO: .env sem DB_HOST_*/DB_BASE_* configurados para os postos informados.")
+        print("ERRO: Nenhuma conexão configurada no .env")
         return
 
-    print("========== EXPORT CADASTRO INCREMENTAL ==========")
-    print(f"- Postos: {list(conns.keys())}")
-    print(f"- SQL dir: {SQL_DIR}")
-    print(f"- JSON dir: {JSON_DIR}")
-    print(f"- Reset={bool(args.reset)}")
+    print("========== EXPORT CADASTRO TOTALIZADO ==========")
+    print(f"Postos: {list(conns.keys())}")
 
-    # Dataset 1: por matrícula
-    process_dataset(
-        nome="pormatricula",
+    export_matriculas(
         sql_path=SQL_POR_MATRICULA,
-        json_name="pormatricula.json",
+        json_out=os.path.join(JSON_DIR, "pormatricula.json"),
         conns=conns,
         postos=postos,
-        reset=bool(args.reset),
     )
 
-    # Dataset 2: por vida
-    process_dataset(
-        nome="porvida",
+    export_vidas(
         sql_path=SQL_POR_VIDA,
-        json_name="porvida.json",
+        json_out=os.path.join(JSON_DIR, "porvida.json"),
         conns=conns,
         postos=postos,
-        reset=bool(args.reset),
     )
 
-    print("\n✅ Concluído export_cadastro_incremental.py.")
+    print("\n✔ Concluído.")
 
 
 if __name__ == "__main__":
