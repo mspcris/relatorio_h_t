@@ -847,23 +847,37 @@
             };
         }
         function aggMens(ym, selection) {
-            if (selection === 'ALL') return srcMens(geral[ym] || {});
-            const postos = [...selection];
-            const rows = postos.map(p => ((porPosto[ym] || {})[p]) || {});
+            const base = porPosto[ym] || {};
+            // normaliza seleção: quando "ALL", usa apenas os postos permitidos (POSTOS)
+            const postos = (selection === 'ALL')
+                ? POSTOS
+                : [...selection];
+
+            // se por algum motivo não tiver posto permitido, cai para o consolidado geral como fallback
+            if (!postos || !postos.length) {
+                return srcMens(geral[ym] || {});
+            }
+
+            const rows = postos.map(p => base[p] || {});
+
             const valor = sum(rows.map(r => num(r.mensalidade)));
             const qtd = sum(rows.map(r => num(r.mensalidade_qtd)));
             const ticket = (qtd ? valor / qtd : null);
+
             const perf = wavg(rows.map(r => maybe(r.performance)), rows.map(r => num(r.mensalidade)));
             const r_mom = wavg(rows.map(r => maybe(r.receita_mom_pct)), rows.map(r => num(r.mensalidade)));
             const r_yoy = wavg(rows.map(r => maybe(r.receita_yoy_pct)), rows.map(r => num(r.mensalidade)));
             const logret = wavg(rows.map(r => maybe(r.receita_logret)), rows.map(r => num(r.mensalidade)));
+
             const q_mom = wavg(rows.map(r => maybe(r.qtd_mom_pct)), rows.map(r => num(r.mensalidade_qtd)));
             const q_yoy = wavg(rows.map(r => maybe(r.qtd_yoy_pct)), rows.map(r => num(r.mensalidade_qtd)));
             const t_mom = wavg(rows.map(r => maybe(r.ticket_mom_pct)), rows.map(r => num(r.mensalidade_qtd)));
             const t_yoy = wavg(rows.map(r => maybe(r.ticket_yoy_pct)), rows.map(r => num(r.mensalidade_qtd)));
+
             const mix_p = sum(rows.map(r => maybe(r.mix_delta_receita_preco) || 0));
             const mix_v = sum(rows.map(r => maybe(r.mix_delta_receita_volume) || 0));
             const mix_i = sum(rows.map(r => maybe(r.mix_delta_receita_interacao) || 0));
+
             return { valor, qtd, ticket, perf, r_mom, q_mom, t_mom, r_yoy, q_yoy, t_yoy, logret, mix_p, mix_v, mix_i };
         }
 
@@ -1030,14 +1044,17 @@
         }
         function postoShares(meses, selection) {
             const map = new Map();
+            const allowed = (selection === 'ALL') ? new Set(POSTOS) : selection;
+
             meses.forEach(m => {
                 const row = porPosto[m] || {};
                 Object.keys(row).forEach(p => {
-                    if (selection !== 'ALL' && !selection.has(p)) return;
+                    if (!allowed.has(p)) return;  // sempre passa pelo filtro de postos permitidos
                     const v = num(row[p]?.mensalidade);
                     map.set(p, (map.get(p) || 0) + v);
                 });
             });
+
             const entries = [...map.entries()].sort((a, b) => b[1] - a[1]);
             return {
                 labels: entries.map(e => e[0]),
@@ -1045,6 +1062,7 @@
                 total: sum(entries.map(e => e[1]))
             };
         }
+
         function updateCharts(meses, selection) {
             const labels = meses.map(mFmt);
             const tag = labelSelec(selection);
@@ -1462,14 +1480,17 @@
         }
         function postoSharesPeriodo(meses, selection) {
             const map = new Map();
+            const allowed = (selection === 'ALL') ? new Set(POSTOS) : selection;
+
             meses.forEach(m => {
                 const row = porPosto[m] || {};
                 Object.keys(row).forEach(p => {
-                    if (selection !== 'ALL' && !selection.has(p)) return;
+                    if (!allowed.has(p)) return;
                     const v = Number(row[p]?.mensalidade) || 0;
                     map.set(p, (map.get(p) || 0) + v);
                 });
             });
+
             const entries = [...map.entries()].sort((a, b) => b[1] - a[1]);
             return {
                 labels: entries.map(e => e[0]),
@@ -1477,12 +1498,15 @@
                 total: entries.reduce((a, [, v]) => a + v, 0)
             };
         }
+
         function yoyMedioPorPosto(meses, selection) {
             const map = new Map();
+            const allowed = (selection === 'ALL') ? new Set(POSTOS) : selection;
+
             meses.forEach(m => {
                 const row = porPosto[m] || {};
                 Object.keys(row).forEach(p => {
-                    if (selection !== 'ALL' && !selection.has(p)) return;
+                    if (!allowed.has(p)) return;
                     const yoy = Number(row[p]?.receita_yoy_pct);
                     if (!Number.isFinite(yoy)) return;
                     const o = map.get(p) || { sum: 0, count: 0 };
@@ -1491,12 +1515,14 @@
                     map.set(p, o);
                 });
             });
+
             const postos = [...map.keys()].sort();
             return {
                 postos,
                 yoyMed: postos.map(p => map.get(p).sum / map.get(p).count)
             };
         }
+
         function maxDrawdown(vals) {
             let peak = -Infinity, mdd = 0;
             for (const v of vals) {
