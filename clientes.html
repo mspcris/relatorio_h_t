@@ -264,6 +264,21 @@
                 const jsonVid = await vRes.json();  // { posto: {faixa: total} }
                 window.PORMAT = jsonMat;
 
+                // -------------------------------------------------------
+                // 1) Extrair metadado e mostrar no topo
+                // -------------------------------------------------------
+                let metaInfo = "";
+                if (jsonVid["_meta"] && jsonVid["_meta"].gerado_em) {
+                    metaInfo = jsonVid["_meta"].gerado_em;
+                }
+                document.getElementById("jsonInfo").textContent =
+                    metaInfo ? `• dados gerados em ${metaInfo}` : "";
+
+                // -------------------------------------------------------
+                // 2) Remover _meta de ambos os JSONs
+                // -------------------------------------------------------
+                delete jsonMat["_meta"];
+                delete jsonVid["_meta"];
 
                 const postosMat = Object.keys(jsonMat);
                 const postosVid = Object.keys(jsonVid);
