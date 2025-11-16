@@ -5,6 +5,10 @@
     <meta charset="UTF-8" />
     <title>CAMIM — Dashboard Consolidado — Clientes</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="shortcut icon"
+        href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png"
+        type="image/x-icon">
+
 
     <!-- AdminLTE + FontAwesome -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
@@ -21,6 +25,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
     <link rel="stylesheet" href="css/style_kpi.css">
+    <script>
+        window.USER_EMAIL = "{{USER_EMAIL}}";
+    </script>
+
 
     <style>
         .kpi-mini-card {
@@ -246,6 +254,27 @@
         // =====================================================================
         // HELPERS
         // =====================================================================
+        // =====================================================================
+        // FILTRO DE POSTOS POR USUÁRIO (mesmo código de alimentacao.html)
+        // =====================================================================
+        function filtrarPostosPorUsuario(listaPostos) {
+            const email = String(window.USER_EMAIL || '').trim().toLowerCase();
+
+            // Mapeamento corporativo dos postos permitidos por usuário
+            const mapaPostos = {
+                'deangelo@camim.com.br': ['J', 'P'],
+                'derlana@camim.com.br': ['J'],
+                // adicionar outros usuários conforme necessidade
+            };
+
+            const postosPermitidos = mapaPostos[email];
+            if (!postosPermitidos) {
+                // Usuário sem restrição → vê tudo
+                return listaPostos;
+            }
+
+            return listaPostos.filter(p => postosPermitidos.includes(p));
+        }
 
         // Aceita:
         // - array direto
@@ -348,7 +377,15 @@
                 RAW_CLIENTES = Array.from(map.values());
 
                 // Lista de postos disponíveis
-                POSTOS = Array.from(new Set(RAW_CLIENTES.map(r => r.posto))).sort();
+                // Postos brutos
+                let postosBrutos = Array.from(new Set(RAW_CLIENTES.map(r => r.posto))).sort();
+
+                // Aplicar filtro por usuário
+                POSTOS = filtrarPostosPorUsuario(postosBrutos);
+
+                // Garantir compatibilidade
+                window.POSTOS = POSTOS;
+
                 selPostos = 'ALL';
 
                 buildPostoTabs();
