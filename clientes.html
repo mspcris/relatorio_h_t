@@ -1,214 +1,542 @@
-from flask import Flask, request, make_response, jsonify, render_template
-from itsdangerous import TimestampSigner, BadSignature
-from passlib.apache import HtpasswdFile
-import os, secrets, json
+<!doctype html>
+<html lang="pt-br">
 
-# ===============================
-# Configurações
-# ===============================
-
-HTPASS_PATH = '/etc/nginx/.htpasswd' # usuários
-ACL_PATH = '/etc/nginx/postos_acl.json' # postos permitidos
-
-SESS_NAME = 'appsess'
-SECRET = os.environ.get('SESSION_SECRET', secrets.token_hex(32))
-TTL_SECONDS = 3600 * 8 # 8h
-
-ht = HtpasswdFile(HTPASS_PATH)
-signer = TimestampSigner(SECRET)
-
-# Pasta única de templates
-app = Flask(__name__, template_folder="/opt/camim-auth/templates")
+<head>
+    <meta charset="UTF-8" />
+    <title>CAMIM — Dashboard Consolidado — Clientes</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="shortcut icon"
+        href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png"
+        type="image/x-icon">
 
 
-# ===============================
-# Funções auxiliares
-# ===============================
+    <!-- AdminLTE + FontAwesome -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
 
-def set_cookie(resp, value, max_age=TTL_SECONDS):
-resp.set_cookie(
-SESS_NAME,
-value,
-max_age=max_age,
-httponly=True,
-secure=True,
-samesite='Lax',
-path='/'
-)
+    <!-- Fonte padrão AdminLTE -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
 
-def load_acl():
-try:
-with open(ACL_PATH) as f:
-return json.load(f)
-except:
-return {}
+    <!-- JS base -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-def decode_user():
-"""Retorna email e postos autorizados (None se não autenticado)."""
-c = request.cookies.get(SESS_NAME)
-if not c:
-return None, None
-
-try:
-raw = signer.unsign(c, max_age=TTL_SECONDS + 3600).decode()
-email = raw.split(':', 1)[0]
-acl = load_acl()
-postos = acl.get(email, [])
-return email, postos
-except BadSignature:
-return None, None
+    <link rel="stylesheet" href="css/style_kpi.css">
+    <script>
+        window.USER_EMAIL = "{{USER_EMAIL}}";
+    </script>
 
 
-# ===============================
-# LOGIN / LOGOUT
-# ===============================
+    <style>
+        .kpi-mini-card {
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
 
-@app.post('/session/login')
-def login():
-ht.load()
-email = request.form.get('email', '').strip()
-senha = request.form.get('senha', '')
+        .scroll-tabs {
+            overflow-x: auto;
+            white-space: nowrap;
+        }
 
-if not (email and senha) or not ht.check_password(email, senha):
-r = make_response('', 302)
-r.headers['Location'] = '/login?e=1'
-return r
+        .scroll-tabs .nav-link {
+            padding: 4px 10px;
+            margin-right: 4px;
+            border-radius: 999px;
+        }
 
-token = signer.sign(f"{email}:{secrets.token_hex(8)}").decode()
-r = make_response('', 302)
-set_cookie(r, token)
-r.headers['Location'] = '/'
-return r
+        .faixa-card {
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
 
+        .faixa-card-title {
+            font-weight: 600;
+        }
 
-@app.post('/session/logout')
-def logout():
-r = make_response('', 302)
-r.delete_cookie(SESS_NAME, path='/')
-r.headers['Location'] = '/login'
-return r
+        .faixa-card-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
 
+        .chart-wrapper {
+            position: relative;
+            height: 360px;
+        }
+    </style>
+</head>
 
-# ===============================
-# /auth — usado pelo NGINX
-# ===============================
-
-@app.get('/auth')
-def auth():
-c = request.cookies.get(SESS_NAME)
-if not c:
-return ('', 401)
-
-try:
-signer.unsign(c, max_age=TTL_SECONDS + 3600)
-return ('', 200)
-except BadSignature:
-return ('', 401)
-
-
-# ===============================
-# /session/me — usado no frontend
-# ===============================
-
-@app.get('/session/me')
-def session_me():
-email, postos = decode_user()
-if not email:
-return ('', 401)
-
-return jsonify({
-"email": email,
-"postos": postos
-})
-
-
-# ======================================================
-# FUNÇÃO PADRÃO PARA RENDERIZAR PÁGINAS PROTEGIDAS
-# ======================================================
-
-def render_protected_page(page_name):
-email, postos = decode_user()
-if not email:
-return ('', 401)
-
-return render_template(
-page_name,
-USER_EMAIL=email,
-USER_POSTOS=json.dumps(postos)
-)
-
-
-# ======================================================
-# ROTAS INDIVIDUAIS
-# ======================================================
-
-@app.get('/')
-def home():
-return render_protected_page("kpi_home.html")
-
-@app.get('/alimentacao')
-def page_alimentacao():
-return render_protected_page("alimentacao.html")
-
-@app.get('/clientes')
-def page_clientes():
-return render_protected_page("clientes.html")
-
-@app.get('/kpi_governo')
-def page_governo():
-return render_protected_page("kpi_governo.html")
-
-@app.get('/kpi_home')
-def page_kpi_home():
-return render_protected_page("kpi_home.html")
-
-@app.get('/kpi_prescricao')
-def page_kpi_prescricao():
-return render_protected_page("kpi_prescricao.html")
-
-@app.get('/kpi_receita_despesa')
-def page_kpi_receita():
-return render_protected_page("kpi_receita_despesa.html")
-
-@app.get('/kpi_v2')
-def page_kpi_v2():
-return render_protected_page("kpi_v2.html")
-
-@app.get('/kpi_vendas')
-def page_kpi_vendas():
-return render_protected_page("kpi_vendas.html")
-
-@app.get('/medicos')
-def page_medicos():
-return render_protected_page("medicos.html")
+<body class="hold-transition sidebar-mini">
+    <div class="wrapper">
+        <!-- NAV -->
+        <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
+                </li>
+            </ul>
+            <span class="ml-2 font-weight-bold d-flex align-items-center">
+                <img src="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png"
+                    alt="Logo Camim">
+                <span class="ml-2">Dashboard Consolidado — Clientes</span>
+                <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+            </span>
+        </nav>
+        <!-- SIDEBAR -->
+        <aside class="main-sidebar sidebar-dark-primary elevation-4">
+            <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+            <div class="sidebar">
+                <nav class="mt-2">
+                    <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu"
+                        data-accordion="false">
+                        <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
+                                <p>Home Page</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i
+                                    class="nav-icon fas fa-book-open"></i>
+                                <p>Leia-me</p>
+                            </a></li>
+                        <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i
+                                    class="nav-icon fas fa-utensils"></i>
+                                <p>KPI Custo Alimentação</p>
+                            </a></li>
+                        <li class="nav-item"><a href="medicos.html" class="nav-link"><i
+                                    class="nav-icon fas fa-notes-medical"></i>
+                                <p>KPI Custo Médico</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i
+                                    class="nav-icon fas fa-chart-line"></i>
+                                <p>KPI Mensalidades</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i
+                                    class="nav-icon fas fa-shopping-cart"></i>
+                                <p>KPI Vendas</p>
+                            </a></li>
+                        <li class="nav-item">
+                            <a href="clientes.html" class="nav-link active">
+                                <i class="nav-icon fas fa-users"></i>
+                                <p>Clientes</p>
+                            </a>
+                        </li>
+                        <li class="nav-item"><a href="kpi_prescricao.html" class="nav-link"><i
+                                    class="nav-icon fas fa-prescription-bottle-alt"></i>
+                                <p>KPI Prescrições</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i
+                                    class="nav-icon fas fa-landmark"></i>
+                                <p>KPI Índices Oficiais</p>
+                            </a></li>
+                        <li class="nav-item">
+                            <form method="POST" action="/session/logout" style="display:inline">
+                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                                    <p>Sair</p>
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
 
 
-# ======================================================
-# Fallback para QUALQUER .html autenticado
-# ======================================================
+        <!-- CONTENT -->
+        <div class="content-wrapper">
+            <section class="content p-3">
+                <div id="err" class="text-danger mb-2"></div>
 
-@app.get('/<path:filename>')
-    def any_html(filename):
-    if not filename.endswith(".html"):
-    return ('', 404)
+                <!-- FILTRO DE POSTO -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap">
+                            <div class="mb-2">
+                                <h3 class="card-title mb-0">Dashboard Consolidado — Clientes</h3>
+                                <!-- <small class="text-muted">Filtro por posto (multi-seleção)</small> -->
+                            </div>
+                            <div class="flex-grow-1 ml-3">
+                                <label class="mb-0 small d-block">Filtro por posto (multi-seleção)</label>
+                                <ul id="postoTabsClientes" class="nav nav-pills scroll-tabs"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-    email, postos = decode_user()
-    if not email:
-    return ('', 401)
+                <!-- KPIs -->
+                <div class="row mb-3">
+                    <div class="col-md-4 mb-2">
+                        <div class="card kpi-mini-card">
+                            <div class="card-body">
+                                <div class="text-muted small">Total de Matrículas</div>
+                                <div id="kpiTotalMatriculas" class="h4 mb-0">0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <div class="card kpi-mini-card">
+                            <div class="card-body">
+                                <div class="text-muted small">Total de Vidas</div>
+                                <div id="kpiTotalVidas" class="h4 mb-0">0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <div class="card kpi-mini-card">
+                            <div class="card-body">
+                                <div class="text-muted small">Quantidade de Faixas Etárias</div>
+                                <div id="kpiQtdFaixas" class="h4 mb-0">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-    try:
-    return render_template(
-    filename,
-    USER_EMAIL=email,
-    USER_POSTOS=json.dumps(postos)
-    )
-    except:
-    return ('', 404)
+                <!-- CARDS DE FAIXA -->
+                <div class="row mb-3" id="faixasCardsRow"></div>
+
+                <!-- GRÁFICOS -->
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">Distribuição de Vidas por Faixa Etária</h3>
+                            </div>
+                            <div class="card-body chart-wrapper">
+                                <canvas id="chartFaixaBar"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">Percentual por Faixa</h3>
+                            </div>
+                            <div class="card-body chart-wrapper">
+                                <canvas id="chartFaixaDonut"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+        </div>
+    </div>
 
 
-    # ===============================
-    # Execução manual
-    # ===============================
 
-    if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=8020)
+
+
+
+    <script>
+        // =====================================================================
+        // CONFIG
+        // =====================================================================
+        const MATRICULA_URL = 'json_cadastro/pormatricula.json';
+        const VIDA_URL = 'json_cadastro/porvida.json';
+
+        let RAW_CLIENTES = [];
+        let POSTOS = [];
+        let selPostos = 'ALL';
+
+        let chFaixaBar = null;
+        let chFaixaDonut = null;
+
+        const fmtInt = new Intl.NumberFormat('pt-BR');
+        const fmtPct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+        // =====================================================================
+        // LOAD JSONS (NOVO FORMATO)
+        // =====================================================================
+        async function loadClientes() {
+            const errBox = document.getElementById('err');
+            errBox.textContent = '';
+
+            try {
+                const [mRes, vRes] = await Promise.all([
+                    fetch(MATRICULA_URL, { cache: 'no-store' }),
+                    fetch(VIDA_URL, { cache: 'no-store' })
+                ]);
+
+                if (!mRes.ok || !vRes.ok)
+                    throw new Error("Falha carregando JSONs de matrícula/vida");
+
+                const jsonMat = await mRes.json();  // { posto: total }
+                const jsonVid = await vRes.json();  // { posto: {faixa: total} }
+                window.PORMAT = jsonMat;
+
+                // -------------------------------------------------------
+                // 1) Extrair metadado e mostrar no topo
+                // -------------------------------------------------------
+                let metaInfo = "";
+                if (jsonVid["_meta"] && jsonVid["_meta"].gerado_em) {
+                    metaInfo = jsonVid["_meta"].gerado_em;
+                }
+                document.getElementById("jsonInfo").textContent =
+                    metaInfo ? `• dados gerados em ${metaInfo}` : "";
+
+                // -------------------------------------------------------
+                // 2) Remover _meta de ambos os JSONs
+                // -------------------------------------------------------
+                delete jsonMat["_meta"];
+                delete jsonVid["_meta"];
+
+                const postosMat = Object.keys(jsonMat);
+                const postosVid = Object.keys(jsonVid);
+
+                const todosPostos = Array.from(new Set([...postosMat, ...postosVid])).sort();
+
+                RAW_CLIENTES = [];
+
+                // ==========================================================
+                // CONSTRUIR RAW_CLIENTES NO NOVO MODELO
+                // ==========================================================
+                for (const posto of todosPostos) {
+                    const totalMat = jsonMat[posto] ?? 0;
+                    const mapaFaixas = jsonVid[posto] ?? {};
+
+                    // vidas por faixa
+                    for (const faixa in mapaFaixas) {
+                        RAW_CLIENTES.push({
+                            posto,
+                            faixa,
+                            vidas: mapaFaixas[faixa],
+                            matriculas: totalMat
+                        });
+                    }
+                }
+
+                // Aplicar regra por usuário (mesmo do KPI alimentacao)
+                POSTOS = filtrarPostosPorUsuario(todosPostos);
+                window.POSTOS = POSTOS;
+
+                selPostos = 'ALL';
+
+                buildPostoTabs();
+                refreshDashboard();
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('err').textContent =
+                    'Erro ao carregar dados: ' + err.message;
+            }
+        }
+
+        // =====================================================================
+        // FILTRO DE POSTOS POR USUÁRIO
+        // =====================================================================
+        function filtrarPostosPorUsuario(listaPostos) {
+            const email = String(window.USER_EMAIL || '').trim().toLowerCase();
+            const mapa = {
+                'deangelo@camim.com.br': ['J', 'P'],
+                'derlana@camim.com.br': ['J'],
+            };
+            return mapa[email] ?? listaPostos;
+        }
+
+        // =====================================================================
+        // POSTOS (UI)
+        // =====================================================================
+        function buildPostoTabs() {
+            const ul = document.getElementById('postoTabsClientes');
+            ul.innerHTML = '';
+
+            // TODOS
+            const liAll = document.createElement('li');
+            liAll.className = 'nav-item';
+            const aAll = document.createElement('a');
+            aAll.href = '#';
+            aAll.textContent = 'Todos';
+            aAll.className = 'nav-link' + (selPostos === 'ALL' ? ' active' : '');
+            aAll.onclick = e => {
+                e.preventDefault();
+                selPostos = 'ALL';
+                buildPostoTabs();
+                refreshDashboard();
+            };
+            liAll.appendChild(aAll);
+            ul.appendChild(liAll);
+
+            // POSTOS INDIVIDUAIS
+            POSTOS.forEach(p => {
+                const li = document.createElement('li');
+                li.className = 'nav-item';
+
+                const a = document.createElement('a');
+                a.href = '#';
+                a.textContent = p;
+                a.dataset.value = p;
+
+                const active = selPostos !== 'ALL' && selPostos.has(p);
+                a.className = 'nav-link' + (active ? ' active' : '');
+
+                a.onclick = e => {
+                    e.preventDefault();
+                    togglePostoSelecao(p);
+                };
+
+                li.appendChild(a);
+                ul.appendChild(li);
+            });
+        }
+
+        function togglePostoSelecao(p) {
+            if (selPostos === 'ALL') {
+                selPostos = new Set([p]);
+            } else {
+                if (selPostos.has(p)) {
+                    selPostos.delete(p);
+                    if (selPostos.size === 0) selPostos = 'ALL';
+                } else {
+                    selPostos.add(p);
+                }
+            }
+            buildPostoTabs();
+            refreshDashboard();
+        }
+
+        function isPostoEnabled(p) {
+            return selPostos === 'ALL' || selPostos.has(p);
+        }
+
+        // =====================================================================
+        // DASHBOARD
+        // =====================================================================
+        function refreshDashboard() {
+            const data = RAW_CLIENTES.filter(r => isPostoEnabled(r.posto));
+
+            // -------------------------------
+            // TOTAL DE MATRÍCULAS — correto
+            // pega apenas 1 vez por posto
+            // -------------------------------
+            let totalMatriculas = 0;
+            if (selPostos === 'ALL') {
+                // todos os postos
+                const postosUnicos = Array.from(new Set(RAW_CLIENTES.map(r => r.posto)));
+                postosUnicos.forEach(p => {
+                    if (window.PORMAT && window.PORMAT[p]) {
+                        totalMatriculas += window.PORMAT[p];
+                    }
+                });
+            } else {
+                selPostos.forEach(p => {
+                    if (window.PORMAT && window.PORMAT[p]) {
+                        totalMatriculas += window.PORMAT[p];
+                    }
+                });
+            }
+
+            // -------------------------------
+            // TOTAL DE VIDAS — soma normal
+            // -------------------------------
+            let totalVidas = 0;
+            const byFaixa = new Map();
+
+            data.forEach(r => {
+                totalVidas += r.vidas;
+
+                const fx = r.faixa;
+                let obj = byFaixa.get(fx);
+                if (!obj) obj = { faixa: fx, matriculas: 0, vidas: 0 };
+
+                obj.vidas += r.vidas;
+                byFaixa.set(fx, obj);
+            });
+
+            const faixasAgg = Array.from(byFaixa.values())
+                .sort((a, b) => a.faixa.localeCompare(b.faixa, 'pt-BR', { numeric: true }));
+
+            // KPIs
+            document.getElementById('kpiTotalMatriculas').textContent = fmtInt.format(totalMatriculas);
+            document.getElementById('kpiTotalVidas').textContent = fmtInt.format(totalVidas);
+            document.getElementById('kpiQtdFaixas').textContent = fmtInt.format(faixasAgg.length);
+
+            buildFaixasCards(faixasAgg, totalVidas);
+            buildCharts(faixasAgg, totalVidas);
+        }
+
+
+        // =====================================================================
+        // CARDS
+        // =====================================================================
+        function buildFaixasCards(list, totalVidas) {
+            const row = document.getElementById('faixasCardsRow');
+            row.innerHTML = '';
+
+            list.forEach(f => {
+                const pct = totalVidas ? (f.vidas / totalVidas * 100) : 0;
+
+                const col = document.createElement('div');
+                col.className = 'col-md-3 col-sm-6 mb-2';
+                col.innerHTML = `
+        <div class="card faixa-card bg-light">
+            <div class="card-body py-2">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <div class="faixa-card-title">${f.faixa}</div>
+                        <div class="text-muted small">Vidas: ${fmtInt.format(f.vidas)}</div>
+
+                    </div>
+                    <div class="faixa-card-value">${fmtPct.format(pct)}%</div>
+                </div>
+            </div>
+        </div>
+        `;
+                row.appendChild(col);
+            });
+        }
+
+        // =====================================================================
+        // GRÁFICOS
+        // =====================================================================
+        function buildCharts(list, totalVidas) {
+            const labels = list.map(f => f.faixa);
+            const vidas = list.map(f => f.vidas);
+            const pct = list.map(f => totalVidas ? (f.vidas / totalVidas * 100) : 0);
+
+            if (chFaixaBar) chFaixaBar.destroy();
+            if (chFaixaDonut) chFaixaDonut.destroy();
+
+            chFaixaBar = new Chart(document.getElementById('chartFaixaBar'), {
+                type: 'bar',
+                data: { labels, datasets: [{ label: 'Vidas', data: vidas }] },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+
+            chFaixaDonut = new Chart(document.getElementById('chartFaixaDonut'), {
+                type: 'doughnut',
+                data: { labels, datasets: [{ data: pct }] },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => {
+                                    const i = ctx.dataIndex;
+                                    return `${labels[i]}: ${fmtPct.format(pct[i])}% (${fmtInt.format(vidas[i])} vidas)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // =====================================================================
+        // START
+        // =====================================================================
+        document.addEventListener('DOMContentLoaded', loadClientes);
+
+    </script>
+
+
+
+
+
+</body>
+
+</html>

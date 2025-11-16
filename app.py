@@ -16,7 +16,9 @@ TTL_SECONDS = 3600 * 8   # 8h
 
 ht = HtpasswdFile(HTPASS_PATH)
 signer = TimestampSigner(SECRET)
-app = Flask(__name__, template_folder="/var/www")
+
+# Pasta única de templates
+app = Flask(__name__, template_folder="/opt/camim-auth/templates")
 
 
 # ===============================
@@ -88,7 +90,7 @@ def logout():
 
 
 # ===============================
-# /auth — NGINX usa isso
+# /auth — usado pelo NGINX
 # ===============================
 
 @app.get('/auth')
@@ -105,7 +107,7 @@ def auth():
 
 
 # ===============================
-# /session/me — usado pelo frontend
+# /session/me — usado no frontend
 # ===============================
 
 @app.get('/session/me')
@@ -121,7 +123,7 @@ def session_me():
 
 
 # ======================================================
-#  PÁGINAS RENDERIZADAS (COM USER_EMAIL + USER_POSTOS)
+#  FUNÇÃO PADRÃO PARA RENDERIZAR PÁGINAS PROTEGIDAS
 # ======================================================
 
 def render_protected_page(page_name):
@@ -129,20 +131,52 @@ def render_protected_page(page_name):
     if not email:
         return ('', 401)
 
-    # Renderiza template e injeta variáveis
     return render_template(
         page_name,
         USER_EMAIL=email,
         USER_POSTOS=json.dumps(postos)
     )
 
-@app.get('/kpi_v2')
-def page_kpi_v2():
-    return render_protected_page("kpi_v2.html")
+
+# ======================================================
+# ROTAS INDIVIDUAIS
+# ======================================================
+
+@app.get('/')
+def home():
+    return render_protected_page("kpi_home.html")
 
 @app.get('/alimentacao')
 def page_alimentacao():
     return render_protected_page("alimentacao.html")
+
+@app.get('/clientes')
+def page_clientes():
+    return render_protected_page("clientes.html")
+
+@app.get('/kpi_governo')
+def page_governo():
+    return render_protected_page("kpi_governo.html")
+
+@app.get('/kpi_home')
+def page_kpi_home():
+    return render_protected_page("kpi_home.html")
+
+@app.get('/kpi_prescricao')
+def page_kpi_prescricao():
+    return render_protected_page("kpi_prescricao.html")
+
+@app.get('/kpi_receita_despesa')
+def page_kpi_receita():
+    return render_protected_page("kpi_receita_despesa.html")
+
+@app.get('/kpi_v2')
+def page_kpi_v2():
+    return render_protected_page("kpi_v2.html")
+
+@app.get('/kpi_vendas')
+def page_kpi_vendas():
+    return render_protected_page("kpi_vendas.html")
 
 @app.get('/medicos')
 def page_medicos():
@@ -150,8 +184,9 @@ def page_medicos():
 
 
 # ======================================================
-# OPCIONAL — fallback para qualquer .html autenticado
+# Fallback para QUALQUER .html autenticado
 # ======================================================
+
 @app.get('/<path:filename>')
 def any_html(filename):
     if not filename.endswith(".html"):
