@@ -18,6 +18,8 @@ import json
 import argparse
 
 import pandas as pd
+
+
 from sqlalchemy import text
 
 from export_governanca import (
@@ -27,6 +29,14 @@ from export_governanca import (
     POSTOS,
     load_sql_strip_go,
 )
+
+from datetime import datetime, timezone
+
+def add_metadata(payload: dict) -> dict:
+    payload["_meta"] = {
+        "gerado_em": datetime.now(timezone.utc).astimezone().isoformat()
+    }
+    return payload
 
 # --------------------------------------------------------
 # PATHS
@@ -45,12 +55,17 @@ SQL_POR_VIDA      = os.path.join(SQL_DIR, "sql_porvida.sql")
 # --------------------------------------------------------
 
 def save_json(path: str, data):
-    """Salva JSON de forma segura."""
+    """Salva JSON com metadados de geração."""
     ensure_dir(os.path.dirname(path))
+
+    # injeta metadados
+    data = add_metadata(data)
+
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
+
 
 
 # --------------------------------------------------------
