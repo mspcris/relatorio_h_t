@@ -26,3 +26,5 @@ WHERE (cp.desativado = 0)
   AND cp.idendereco = emp.idendereco
   -- incremento: só novos idcliente
   AND cp.idcliente > :last_id;
+  and cp.idade is not null
+  
