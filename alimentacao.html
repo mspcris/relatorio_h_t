@@ -475,37 +475,35 @@
          * Usa window.USER_EMAIL, que vem do backend (mesmo esquema da kpi_v2.html).
          * Se o e-mail não estiver mapeado, mantém todos os postos.
          */
-        function filtrarPostosPorUsuario(listaPostos) {
+
+        async function filtrarPostosPorUsuario(listaPostos) {
             try {
-                const email = String(window.USER_EMAIL || '')
-                    .trim()
-                    .toLowerCase();
+                const email = String(window.USER_EMAIL || '').trim().toLowerCase();
 
-                // COPIE DA kpi_v2.html o mesmo mapa que já está funcionando lá
-                const mapaPostos = {
-                    'deangelo@camim.com.br': ['J', 'P'],
-                    'derlana@camim.com.br': ['J'],
-                    // acrescente aqui os demais usuários...
-                };
-
-                const postosPermitidos = mapaPostos[email];
-                if (!postosPermitidos || !postosPermitidos.length) {
-                    // Se o usuário não estiver no mapa, retorna tudo (comportamento atual)
+                // Carregar ACL real (arquivo usado pelo resto do sistema)
+                const resp = await fetch('/postos_acl.json', { cache: 'no-store' });
+                if (!resp.ok) {
+                    console.warn('ACL não encontrada, liberando todos os postos.');
                     return listaPostos;
                 }
 
-                const setPermitidos = new Set(
-                    postosPermitidos.map(p => String(p).toUpperCase())
-                );
+                const mapa = await resp.json();
+                const postosPermitidos = mapa[email];
 
-                return listaPostos.filter(p =>
-                    setPermitidos.has(String(p).toUpperCase())
-                );
-            } catch (e) {
-                console.error('Falha ao aplicar filtro de postos por usuário', e);
-                return listaPostos;
+                if (!postosPermitidos || postosPermitidos.length === 0) {
+                    // usuário sem ACL explícita → libera tudo
+                    return listaPostos;
+                }
+
+                const allowed = new Set(postosPermitidos.map(p => p.toUpperCase()));
+                return listaPostos.filter(p => allowed.has(p.toUpperCase()));
+            } catch (err) {
+                console.error('Erro ao aplicar ACL de postos', err);
+                return listaPostos; // fallback seguro
             }
         }
+
+
 
         window.filtrarPostosPorUsuario = filtrarPostosPorUsuario;
     </script>
@@ -744,7 +742,8 @@
                 .sort();
 
             // >>> AQUI entra o filtro por usuário
-            POSTOS = filtrarPostosPorUsuario(postosBrutos);
+            POSTOS = await filtrarPostosPorUsuario(postosBrutos);
+
 
             // Expondo para o resto da página (abas, KPIs, etc.)
             window.POSTOS = POSTOS;
