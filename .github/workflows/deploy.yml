@@ -195,25 +195,33 @@ jobs:
 
 
 
-      # 4) Sync dedicado do diretório sql/
-      - name: Sync sql -> /opt/relatorio_h_t/sql
+      # 4) Sync diretórios sql* -> /opt/relatorio_h_t
+      - name: Sync sql* -> /opt/relatorio_h_t
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
           set -euxo pipefail
-          DEST=/opt/relatorio_h_t/sql
-          if [ -d sql ]; then
-            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
-            rsync -rlvz --delete \
-              --omit-dir-times --no-perms --no-owner --no-group \
-              -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
-              ./sql/ "$SSH_USER@$SSH_HOST:$DEST/"
-          else
-            echo "WARN: diretório sql não existe no checkout"
-          fi
-          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "ln -sfn /opt/relatorio_h_t/sql /opt/relatorio_h_t/SQL || true"
+          DEST=/opt/relatorio_h_t
+
+          # Lista das pastas a sincronizar (ajuste se mudar os nomes)
+          for d in sql SQL_cadastro sql_full sql_vendas; do
+            if [ -d "$d" ]; then
+              ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST/$d'"
+              rsync -rlvz --delete \
+                --omit-dir-times --no-perms --no-owner --no-group \
+                -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+                "./$d/" "$SSH_USER@$SSH_HOST:$DEST/$d/"
+            else
+              echo "WARN: diretório $d não existe no checkout"
+            fi
+          done
+
+          # Symlink SQL (mantém o comportamento atual)
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
+            "ln -sfn /opt/relatorio_h_t/sql /opt/relatorio_h_t/SQL || true"
+
 
       # 5) Venv + deps + .env (sem sudo)
       - name: Venv + deps + .env
