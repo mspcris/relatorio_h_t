@@ -80,10 +80,12 @@
                                     class="nav-icon fas fa-chart-line"></i>
                                 <p>KPI Mensalidades</p>
                             </a></li>
+
                         <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i
                                     class="nav-icon fas fa-shopping-cart"></i>
                                 <p>KPI Vendas</p>
                             </a></li>
+
                         <li class="nav-item"><a href="kpi_prescricao.html" class="nav-link"><i
                                     class="nav-icon fas fa-prescription-bottle-alt"></i>
                                 <p>KPI Prescrições</p>
@@ -463,6 +465,39 @@
                 return { mens, med, margem, pctMed: mens > 0 ? (med / mens * 100) : null, pctMargem: mens > 0 ? (margem / mens * 100) : null };
             }
 
+            // Respeitar o filtro de postos para mostrar o todos e a IA
+            window.__SERIES_BAS__ = () => {
+                const meses = window.__MESES_FN__();          // meses filtrados pelos inputs
+                const labels = meses.slice();
+
+                // postos visíveis e selecionados (ACL + filtro de aba)
+                const postos = postosFromSelection(sel2);
+
+                const mensalidade = labels.map(m => {
+                    const row = POR_POSTO[m] || {};
+                    return postos.reduce((acc, p) => {
+                        const r = row[p];
+                        return acc + (r ? num(r.mensalidade) : 0);
+                    }, 0);
+                });
+
+                const medico = labels.map(m => {
+                    const row = POR_POSTO[m] || {};
+                    return postos.reduce((acc, p) => {
+                        const r = row[p];
+                        return acc + (r ? num(r.medico ?? r.custo_medico) : 0);
+                    }, 0);
+                });
+
+                const pct_med = labels.map((_, i) =>
+                    mensalidade[i] > 0 ? (medico[i] / mensalidade[i] * 100) : null
+                );
+
+                return { labels, mensalidade, medico, pct_med };
+            };
+
+
+
             // ==== KPIs ================================================================
             function kpiCard(title, val, fmt = 'text') {
                 const isNull = (val == null || Number.isNaN(val));
@@ -658,6 +693,7 @@ Não comece com “Visão executiva”. Títulos iniciam com “### ”.`;
                     document.querySelector('#from2').value = DEF_FROM;
                     document.querySelector('#to2').value = DEF_TO;
 
+
                     // Info "dados gerados"
                     const lm = r1.headers.get('Last-Modified') || r2.headers.get('Last-Modified');
 
@@ -709,20 +745,22 @@ Não comece com “Visão executiva”. Títulos iniciam com “### ”.`;
                     initCharts(); renderSel1(); renderSel2();
 
                     // Eventos
+
                     const on = (s, e, f) => { const o = document.querySelector(s); if (o) o.addEventListener(e, f); };
-                    on('#from1', 'change', renderSel1);
-                    on('#to1', 'change', renderSel1);
                     on('#reset1', 'click', () => {
-                        document.querySelector('#from1').value = MESES[0];
-                        document.querySelector('#to1').value = last;
-                        sel1 = 'ALL'; markActiveMulti('#postoTabs1', sel1); renderSel1();
+                        document.querySelector('#from1').value = DEF_FROM;
+                        document.querySelector('#to1').value = DEF_TO;
+                        sel1 = 'ALL';
+                        markActiveMulti('#postoTabs1', sel1);
+                        renderSel1();
                     });
-                    on('#from2', 'change', renderSel2);
-                    on('#to2', 'change', renderSel2);
+
                     on('#reset2', 'click', () => {
-                        document.querySelector('#from2').value = from12;
-                        document.querySelector('#to2').value = last;
-                        sel2 = 'ALL'; markActiveMulti('#postoTabs2', sel2); renderSel2();
+                        document.querySelector('#from2').value = DEF_FROM;
+                        document.querySelector('#to2').value = DEF_TO;
+                        sel2 = 'ALL';
+                        markActiveMulti('#postoTabs2', sel2);
+                        renderSel2();
                     });
                     on('#btnComparar', 'click', () => {
                         const b = document.querySelector('#compareBlock');
