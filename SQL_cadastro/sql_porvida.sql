@@ -22,9 +22,10 @@ FROM vw_Cad_PacienteView cp
 LEFT JOIN sis_empresa emp
        ON emp.idendereco = cp.idendereco
 WHERE (cp.desativado = 0)
+  and cp.idade is not null
   AND (cp.[Situação] = 'Adimplente')
   AND cp.idendereco = emp.idendereco
   -- incremento: só novos idcliente
   AND cp.idcliente > :last_id;
-  and cp.idade is not null
+
   
