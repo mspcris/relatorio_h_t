@@ -274,19 +274,16 @@
 
     <!-- AQUI O ALMOÇO ACABA E COMEÇA A LOUCURA!!! -->
 
-
-
-
     <script>
+
         /* =========================================================================
-            CONFIG / VARIÁVEIS GLOBAIS
+        CONFIG / VARIÁVEIS GLOBAIS
         ===========================================================================*/
 
         const MATRICULA_URL = 'json_cadastro/pormatricula.json';
         const VIDA_URL = 'json_cadastro/porvida.json';
         const BENE_URL = 'json_cadastro/porvida_beneficiarios.json';
 
-        // RAW datasets
         let RAW = {
             vidas: [],
             beneficiarios: []
@@ -294,10 +291,9 @@
 
         let RAW_MAT = {};
         let ALL_POSTOS = [];
-        let POSTOS = [];
+        let POSTOS_PERMITIDOS = [];
         let selPostos = 'ALL';
-
-        let datasetAtivo = 'vidas'; // default
+        let datasetAtivo = 'vidas';
 
         // Charts
         let chFaixaBar = null;
@@ -305,13 +301,12 @@
         let chMatBar = null;
         let chMatDonut = null;
 
-        // Formatters
         const fmtInt = new Intl.NumberFormat('pt-BR');
         const fmtPct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 
         /* =========================================================================
-            CARREGAMENTO DOS JSONs
+        CARREGAMENTO DOS JSONs
         ===========================================================================*/
 
         async function loadClientes() {
@@ -330,7 +325,6 @@
                 const jsonVid = await vidaRes.json();
                 const jsonBene = await beneRes.json();
 
-                // Metadados
                 const meta = jsonVid["_meta"]?.gerado_em ?? "";
                 document.getElementById("jsonInfo").textContent = meta ? `• dados gerados em ${meta}` : "";
 
@@ -338,34 +332,35 @@
                 delete jsonVid["_meta"];
                 delete jsonBene["_meta"];
 
-                RAW_MAT = jsonMat;
+                ALL_POSTOS = Array.from(new Set([
+                    ...Object.keys(jsonMat),
+                    ...Object.keys(jsonVid),
+                    ...Object.keys(jsonBene)
+                ])).sort();
 
-                const postosMat = Object.keys(jsonMat);
-                const postosVid = Object.keys(jsonVid);
-                const postosBene = Object.keys(jsonBene);
+                // FILTRAR POSTOS PELA PERMISSÃO DO USUÁRIO
+                POSTOS_PERMITIDOS = filtrarPostosPorUsuario(ALL_POSTOS);
 
-                ALL_POSTOS = Array.from(new Set([...postosMat, ...postosVid, ...postosBene])).sort();
+                RAW_MAT = {};
+                POSTOS_PERMITIDOS.forEach(p => {
+                    RAW_MAT[p] = jsonMat[p] ?? 0;
+                });
 
-                // Filtrar postos por usuário
-                POSTOS = filtrarPostosPorUsuario(ALL_POSTOS);
-
-                // Montar RAW.vidas
                 RAW.vidas = [];
-                for (const posto of ALL_POSTOS) {
-                    const faixas = jsonVid[posto] ?? {};
+                POSTOS_PERMITIDOS.forEach(p => {
+                    const faixas = jsonVid[p] ?? {};
                     for (const faixa in faixas) {
-                        RAW.vidas.push({ posto, faixa, total: faixas[faixa] });
+                        RAW.vidas.push({ posto: p, faixa, total: faixas[faixa] });
                     }
-                }
+                });
 
-                // Montar RAW.beneficiarios
                 RAW.beneficiarios = [];
-                for (const posto of ALL_POSTOS) {
-                    const faixas = jsonBene[posto] ?? {};
+                POSTOS_PERMITIDOS.forEach(p => {
+                    const faixas = jsonBene[p] ?? {};
                     for (const faixa in faixas) {
-                        RAW.beneficiarios.push({ posto, faixa, total: faixas[faixa] });
+                        RAW.beneficiarios.push({ posto: p, faixa, total: faixas[faixa] });
                     }
-                }
+                });
 
                 selPostos = 'ALL';
 
@@ -374,47 +369,13 @@
                 refreshDashboard();
 
             } catch (err) {
-                console.error(err);
                 document.getElementById('err').textContent = "Erro ao carregar dados: " + err.message;
             }
         }
 
 
         /* =========================================================================
-            SWITCH VIDAS ↔ BENEFICIÁRIOS
-        ===========================================================================*/
-
-        function setupDatasetSwitch() {
-            document.querySelectorAll("#switchDataset .switch-option").forEach(el => {
-                el.onclick = () => {
-                    document.querySelectorAll("#switchDataset .switch-option")
-                        .forEach(b => b.classList.remove("active"));
-
-                    el.classList.add("active");
-
-                    datasetAtivo = el.dataset.type;
-
-                    document.getElementById("titleChartFaixa").textContent =
-                        datasetAtivo === "vidas" ?
-                            "Distribuição de Vidas por Faixa Etária" :
-                            "Distribuição de Beneficiários por Faixa Etária";
-
-                    document.getElementById("titleChartFaixaDonut").textContent =
-                        datasetAtivo === "vidas" ?
-                            "Percentual por Faixa (Vidas)" :
-                            "Percentual por Faixa (Beneficiários)";
-
-                    // Atualizar KPIs fixos (não dependem da pílula)
-                    atualizarKPIsFixos();
-
-                    refreshDashboard();
-                };
-            });
-        }
-
-
-        /* =========================================================================
-            FILTRO DE POSTOS POR USUÁRIO
+        PERMISSÕES POR USUÁRIO
         ===========================================================================*/
 
         function filtrarPostosPorUsuario(lista) {
@@ -430,17 +391,16 @@
 
 
         /* =========================================================================
-            POSTOS (UI)
+        TABS DE POSTOS (Filtro)
         ===========================================================================*/
 
         function buildPostoTabs() {
             const ul = document.getElementById('postoTabsClientes');
             ul.innerHTML = '';
 
-            // Botão TODOS
+            // Botão "Todos"
             const liAll = document.createElement('li');
             liAll.className = 'nav-item';
-
             const aAll = document.createElement('a');
             aAll.href = '#';
             aAll.textContent = 'Todos';
@@ -451,12 +411,11 @@
                 buildPostoTabs();
                 refreshDashboard();
             };
-
             liAll.appendChild(aAll);
             ul.appendChild(liAll);
 
-            // Postos individuais
-            POSTOS.forEach(p => {
+            // Botões por posto
+            POSTOS_PERMITIDOS.forEach(p => {
                 const li = document.createElement('li');
                 li.className = 'nav-item';
 
@@ -498,45 +457,74 @@
 
 
         /* =========================================================================
-            KPIs FIXOS (Matrículas, Vidas, Beneficiários)
+        SWITCH VIDAS / BENEFICIÁRIOS
+        ===========================================================================*/
+
+        function setupDatasetSwitch() {
+            document.querySelectorAll("#switchDataset .switch-option").forEach(el => {
+                el.onclick = () => {
+                    document.querySelectorAll("#switchDataset .switch-option")
+                        .forEach(b => b.classList.remove("active"));
+
+                    el.classList.add("active");
+
+                    datasetAtivo = el.dataset.type;
+
+                    document.getElementById("titleChartFaixa").textContent =
+                        datasetAtivo === "vidas" ?
+                            "Distribuição de Vidas por Faixa Etária" :
+                            "Distribuição de Beneficiários por Faixa Etária";
+
+                    document.getElementById("titleChartFaixaDonut").textContent =
+                        datasetAtivo === "vidas" ?
+                            "Percentual por Faixa (Vidas)" :
+                            "Percentual por Faixa (Beneficiários)";
+
+                    refreshDashboard();
+                };
+            });
+        }
+
+
+        /* =========================================================================
+        KPIs PRINCIPAIS
         ===========================================================================*/
 
         function atualizarKPIsFixos() {
 
+            const postos = selPostos === 'ALL' ? POSTOS_PERMITIDOS : [...selPostos];
+
             // Matrículas
-            let totalMat = 0;
-            if (selPostos === 'ALL') {
-                ALL_POSTOS.forEach(p => totalMat += (RAW_MAT[p] ?? 0));
-            } else {
-                selPostos.forEach(p => totalMat += (RAW_MAT[p] ?? 0));
-            }
+            let totalMat = postos.reduce((acc, p) => acc + (RAW_MAT[p] ?? 0), 0);
             document.getElementById("kpiTotalMatriculas").textContent = fmtInt.format(totalMat);
 
             // Vidas
             let totalVidas = RAW.vidas
-                .filter(r => isPostoEnabled(r.posto))
+                .filter(r => postos.includes(r.posto))
                 .reduce((acc, r) => acc + r.total, 0);
+
             document.getElementById("kpiTotalVidas").textContent = fmtInt.format(totalVidas);
 
             // Beneficiários
             let totalBenef = RAW.beneficiarios
-                .filter(r => isPostoEnabled(r.posto))
+                .filter(r => postos.includes(r.posto))
                 .reduce((acc, r) => acc + r.total, 0);
+
             document.getElementById("kpiTotalBeneficiarios").textContent = fmtInt.format(totalBenef);
         }
 
 
         /* =========================================================================
-            DASHBOARD
+        DASHBOARD
         ===========================================================================*/
 
         function refreshDashboard() {
 
             atualizarKPIsFixos();
 
-            const data = RAW[datasetAtivo].filter(r => isPostoEnabled(r.posto));
+            const postos = selPostos === 'ALL' ? POSTOS_PERMITIDOS : [...selPostos];
+            const data = RAW[datasetAtivo].filter(r => postos.includes(r.posto));
 
-            // Agrupar por faixa
             const byFaixa = new Map();
             data.forEach(r => {
                 if (!byFaixa.has(r.faixa)) byFaixa.set(r.faixa, 0);
@@ -545,7 +533,7 @@
 
             const faixasAgg = [...byFaixa.entries()]
                 .map(([faixa, total]) => ({ faixa, total }))
-                .sort((a, b) => parseInt(a.faixa) - parseInt(b.faixa)); // ordenação numérica
+                .sort((a, b) => parseInt(a.faixa) - parseInt(b.faixa));
 
             const totalDataset = faixasAgg.reduce((acc, f) => acc + f.total, 0);
 
@@ -556,7 +544,7 @@
 
 
         /* =========================================================================
-            CARDS DE FAIXA
+        CARDS DE FAIXA
         ===========================================================================*/
 
         function buildFaixasCards(list, totalDataset) {
@@ -570,27 +558,27 @@
                 col.className = 'col-md-3 col-sm-6 mb-2';
 
                 col.innerHTML = `
-            <div class="card faixa-card bg-light">
-                <div class="card-body py-2">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <div class="faixa-card-title">${f.faixa}</div>
-                            <div class="text-muted small">
-                                ${datasetAtivo === "vidas" ? "Vidas" : "Beneficiários"}: ${fmtInt.format(f.total)}
-                            </div>
-                        </div>
-                        <div class="faixa-card-value">${fmtPct.format(pct)}%</div>
+    <div class="card faixa-card bg-light">
+        <div class="card-body py-2">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <div class="faixa-card-title">${f.faixa}</div>
+                    <div class="text-muted small">
+                        ${datasetAtivo === "vidas" ? "Vidas" : "Beneficiários"}: ${fmtInt.format(f.total)}
                     </div>
                 </div>
+                <div class="faixa-card-value">${fmtPct.format(pct)}%</div>
             </div>
-        `;
+        </div>
+    </div>
+    `;
                 row.appendChild(col);
             });
         }
 
 
         /* =========================================================================
-            GRÁFICOS: VIDAS / BENEFICIÁRIOS
+        GRÁFICOS FAIXA
         ===========================================================================*/
 
         function buildChartsFaixas(list, totalDataset) {
@@ -632,12 +620,12 @@
 
 
         /* =========================================================================
-            GRÁFICOS: MATRÍCULAS
+        GRÁFICOS MATRÍCULAS
         ===========================================================================*/
 
         function buildChartsMatriculas() {
 
-            const postos = selPostos === 'ALL' ? ALL_POSTOS : [...selPostos];
+            const postos = selPostos === 'ALL' ? POSTOS_PERMITIDOS : [...selPostos];
 
             const labels = postos;
             const vals = postos.map(p => RAW_MAT[p] ?? 0);
@@ -675,7 +663,7 @@
 
 
         /* =========================================================================
-            START
+        START
         ===========================================================================*/
 
         document.addEventListener('DOMContentLoaded', loadClientes);
