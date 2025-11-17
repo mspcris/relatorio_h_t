@@ -7,8 +7,8 @@ import os, secrets, json
 # Configurações
 # ===============================
 
-HTPASS_PATH = '/etc/nginx/.htpasswd'           # usuários
-ACL_PATH    = '/etc/nginx/postos_acl.json'     # postos permitidos
+HTPASS_PATH = '/etc/nginx/.htpasswd'
+ACL_PATH    = '/etc/nginx/postos_acl.json'
 
 SESS_NAME   = 'appsess'
 SECRET      = os.environ.get('SESSION_SECRET', secrets.token_hex(32))
@@ -44,19 +44,17 @@ def load_acl():
         return {}
 
 def decode_user():
-    """Retorna email e postos autorizados (None se não autenticado)."""
-    c = request.cookies.get(SESS_NAME)
-    if not c:
-        return None, None
-
-    try:
-        raw = signer.unsign(c, max_age=TTL_SECONDS + 3600).decode()
-        email = raw.split(':', 1)[0]
-        acl = load_acl()
-        postos = acl.get(email, [])
-        return email, postos
-    except BadSignature:
-        return None, None
+        c = request.cookies.get(SESS_NAME)
+        if not c:
+            return None, None
+        try:
+            raw = signer.unsign(c, max_age=TTL_SECONDS + 3600).decode()
+            email = raw.split(':', 1)[0]
+            acl = load_acl()
+            postos = acl.get(email, [])
+            return email, postos
+        except BadSignature:
+            return None, None
 
 
 # ===============================
@@ -107,7 +105,7 @@ def auth():
 
 
 # ===============================
-# /session/me — usado no frontend
+# /session/me
 # ===============================
 
 @app.get('/session/me')
@@ -122,9 +120,9 @@ def session_me():
     })
 
 
-# ======================================================
-#  FUNÇÃO PADRÃO PARA RENDERIZAR PÁGINAS PROTEGIDAS
-# ======================================================
+# ============================================
+# RENDERIZAÇÃO PROTEGIDA PADRÃO
+# ============================================
 
 def render_protected_page(page_name):
     email, postos = decode_user()
@@ -138,54 +136,113 @@ def render_protected_page(page_name):
     )
 
 
-# ======================================================
-# ROTAS INDIVIDUAIS
-# ======================================================
+# ===============================
+# ROTAS SEM .html
+# ===============================
 
 @app.get('/')
 def home():
     return render_protected_page("kpi_home.html")
 
 @app.get('/alimentacao')
-def page_alimentacao():
-    return render_protected_page("alimentacao.html")
+def r1(): return render_protected_page("alimentacao.html")
 
 @app.get('/clientes')
-def page_clientes():
-    return render_protected_page("clientes.html")
+def r2(): return render_protected_page("clientes.html")
 
 @app.get('/kpi_governo')
-def page_governo():
-    return render_protected_page("kpi_governo.html")
+def r3(): return render_protected_page("kpi_governo.html")
 
 @app.get('/kpi_home')
-def page_kpi_home():
-    return render_protected_page("kpi_home.html")
+def r4(): return render_protected_page("kpi_home.html")
 
 @app.get('/kpi_prescricao')
-def page_kpi_prescricao():
-    return render_protected_page("kpi_prescricao.html")
+def r5(): return render_protected_page("kpi_prescricao.html")
 
 @app.get('/kpi_receita_despesa')
-def page_kpi_receita():
-    return render_protected_page("kpi_receita_despesa.html")
+def r6(): return render_protected_page("kpi_receita_despesa.html")
 
 @app.get('/kpi_v2')
-def page_kpi_v2():
-    return render_protected_page("kpi_v2.html")
+def r7(): return render_protected_page("kpi_v2.html")
 
 @app.get('/kpi_vendas')
-def page_kpi_vendas():
-    return render_protected_page("kpi_vendas.html")
+def r8(): return render_protected_page("kpi_vendas.html")
 
 @app.get('/medicos')
-def page_medicos():
-    return render_protected_page("medicos.html")
+def r9(): return render_protected_page("medicos.html")
+
+@app.get('/carregando')
+def r10(): return render_protected_page("carregando.html")
+
+@app.get('/teste')
+def r11(): return render_protected_page("teste.html")
+
+@app.get('/trello_harvest')
+def r12(): return render_protected_page("trello_harvest.html")
 
 
-# ======================================================
-# Fallback para QUALQUER .html autenticado
-# ======================================================
+# ===============================
+# ROTAS COM .html
+# ===============================
+
+@app.get('/alimentacao.html')
+def h1(): return render_protected_page("alimentacao.html")
+
+@app.get('/clientes.html')
+def h2(): return render_protected_page("clientes.html")
+
+@app.get('/kpi_governo.html')
+def h3(): return render_protected_page("kpi_governo.html")
+
+@app.get('/kpi_home.html')
+def h4(): return render_protected_page("kpi_home.html")
+
+@app.get('/kpi_prescricao.html')
+def h5(): return render_protected_page("kpi_prescricao.html")
+
+@app.get('/kpi_receita_despesa.html')
+def h6(): return render_protected_page("kpi_receita_despesa.html")
+
+@app.get('/kpi_v2.html')
+def h7(): return render_protected_page("kpi_v2.html")
+
+@app.get('/kpi_vendas.html')
+def h8(): return render_protected_page("kpi_vendas.html")
+
+@app.get('/medicos.html')
+def h9(): return render_protected_page("medicos.html")
+
+@app.get('/carregando.html')
+def h10(): return render_protected_page("carregando.html")
+
+@app.get('/teste.html')
+def h11(): return render_protected_page("teste.html")
+
+@app.get('/trello_harvest.html')
+def h12(): return render_protected_page("trello_harvest.html")
+
+@app.get('/index.html')
+def h13(): return render_protected_page("index.html")
+
+@app.get('/overlay.html')
+def h14(): return render_protected_page("overlay.html")
+
+
+# ===============================
+# ACL JSON direto
+# ===============================
+
+@app.get('/postos_acl.json')
+def postos_acl_json():
+    email, postos = decode_user()
+    if not email:
+        return ('', 401)
+    return jsonify(load_acl())
+
+
+# ===============================
+# Fallback final para html
+# ===============================
 
 @app.get('/<path:filename>')
 def any_html(filename):
