@@ -77,7 +77,8 @@ jobs:
           DEST=/var/www
           if [ -f "$FILE" ]; then
             ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
-            rsync -rlvz --omit-dir-times --no-perms --no-owner --no-group \
+            rsync -rlvz --delete \ 
+            --omit-dir-times --no-perms --no-owner --no-group \
               -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
               "$FILE" "$SSH_USER@$SSH_HOST:$DEST/"
           else
@@ -97,7 +98,7 @@ jobs:
           set -euxo pipefail
           DEST=/opt/camim-auth/templates
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
-          rsync -rlvz \
+          rsync -rlvz \ --delete \
             --include='*/' \
             --include='*.html' \
             --exclude='*' \
@@ -123,7 +124,7 @@ jobs:
           fi
           for d in /opt/ia-groq /opt/ia-groq/app; do
             ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$d'"
-            rsync -rlvz \
+            rsync -rlvz \ --delete \
               --omit-dir-times --no-perms --no-owner --no-group \
               -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
               "$ANALYZE_PATH" "$SSH_USER@$SSH_HOST:$d/"
@@ -172,7 +173,7 @@ jobs:
           if [ -f "$FILE" ]; then
             ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
               "mkdir -p '$DEST'"
-            rsync -rlvz \
+            rsync -rlvz \ --delete \
               --omit-dir-times --no-perms --no-owner --no-group \
               -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
               "$FILE" "$SSH_USER@$SSH_HOST:$DEST/"
@@ -197,7 +198,7 @@ jobs:
           if [ -f "$FILE" ]; then
             ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
               "mkdir -p '$DEST'"
-            rsync -rlvz \
+            rsync -rlvz \ --delete \
               --omit-dir-times --no-perms --no-owner --no-group \
               -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
               "$FILE" "$SSH_USER@$SSH_HOST:$DEST/"
