@@ -41,7 +41,10 @@ jobs:
           chmod 600 ~/.ssh/id_vm
           ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
 
-      # 1) Assets web -> /var/www
+
+      # =====================================================================
+      # 1) ASSETS ESTÁTICOS → /var/www  (js, css, fonts, images)
+      # =====================================================================
       - name: WEB (js,css,fonts,images) -> /var/www
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -61,24 +64,10 @@ jobs:
             fi
           done
 
-      # 1.1) HTMLs na raiz do repo -> /var/www
-      - name: HTML raiz -> /var/www
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: |
-          set -euxo pipefail
-          DEST=/var/www
-          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
-          # Copia apenas *.html da raiz do projeto, sem deletar outros assets já publicados
-          rsync -rlvz --delete \
-            --omit-dir-times --no-perms --no-owner --no-group \
-            -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
-            --include='*.html' --exclude='*' \
-            ./ "$SSH_USER@$SSH_HOST:$DEST/"
 
-
+      # =====================================================================
+      # 2) HTMLs → SOMENTE /opt/camim-auth/templates
+      # =====================================================================
       - name: HTML templates -> /opt/camim-auth/templates
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -97,8 +86,9 @@ jobs:
             ./ "$SSH_USER@$SSH_HOST:$DEST/"
 
 
-
-      # 2) analyze_groq.py -> /opt/ia-groq e /opt/ia-groq/app
+      # =====================================================================
+      # 3) analyze_groq.py → /opt/ia-groq e /opt/ia-groq/app
+      # =====================================================================
       - name: analyze_groq.py -> /opt/ia-groq e /opt/ia-groq/app
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -119,7 +109,10 @@ jobs:
               "$ANALYZE_PATH" "$SSH_USER@$SSH_HOST:$d/"
           done
 
-      # 3) Código .py + requirements* -> /opt/relatorio_h_t
+
+      # =====================================================================
+      # 4) Código Python → /opt/relatorio_h_t
+      # =====================================================================
       - name: Código + requirements -> /opt/relatorio_h_t
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -142,7 +135,10 @@ jobs:
             --exclude='*' \
             ./ "$SSH_USER@$SSH_HOST:$DEST/"
 
-      # 3.1) postos_acl.json -> /opt/relatorio_h_t
+
+      # =====================================================================
+      # 4.1) postos_acl.json → /opt/relatorio_h_t
+      # =====================================================================
       - name: postos_acl.json -> /opt/relatorio_h_t
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -152,9 +148,9 @@ jobs:
           set -euxo pipefail
           DEST=/opt/relatorio_h_t
           FILE="postos_acl.json"
-              
+
           if [ -f "$FILE" ]; then
-           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
+            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
               "mkdir -p '$DEST'"
             rsync -rlvz \
               --omit-dir-times --no-perms --no-owner --no-group \
@@ -163,10 +159,11 @@ jobs:
           else
             echo "WARN: postos_acl.json não encontrado no repo"
           fi
-      
 
 
-      # 3.2) app.py -> /opt/camim-auth
+      # =====================================================================
+      # 4.2) app.py → /opt/camim-auth
+      # =====================================================================
       - name: app.py -> /opt/camim-auth
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -193,9 +190,9 @@ jobs:
             "sudo systemctl restart camim-auth || true"
 
 
-
-
-      # 4) Sync diretórios sql* -> /opt/relatorio_h_t
+      # =====================================================================
+      # 5) Sync diretórios SQL → /opt/relatorio_h_t
+      # =====================================================================
       - name: Sync sql* -> /opt/relatorio_h_t
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -205,7 +202,6 @@ jobs:
           set -euxo pipefail
           DEST=/opt/relatorio_h_t
 
-          # Lista das pastas a sincronizar (ajuste se mudar os nomes)
           for d in sql SQL_cadastro sql_full sql_vendas; do
             if [ -d "$d" ]; then
               ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST/$d'"
@@ -218,12 +214,13 @@ jobs:
             fi
           done
 
-          # Symlink SQL (mantém o comportamento atual)
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
             "ln -sfn /opt/relatorio_h_t/sql /opt/relatorio_h_t/SQL || true"
 
 
-      # 5) Venv + deps + .env (sem sudo)
+      # =====================================================================
+      # 6) Venv + .env
+      # =====================================================================
       - name: Venv + deps + .env
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -246,7 +243,10 @@ jobs:
               ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "cat > '$DEST/.env'"
           fi
 
-      # 6) Sanidade
+
+      # =====================================================================
+      # 7) Sanidade
+      # =====================================================================
       - name: Sanidade na VM
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}

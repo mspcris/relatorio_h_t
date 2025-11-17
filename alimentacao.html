@@ -476,26 +476,41 @@
             try {
                 const email = String(window.USER_EMAIL || '').trim().toLowerCase();
 
-                // Carregar ACL real (arquivo usado pelo resto do sistema)
                 const resp = await fetch('/postos_acl.json', { cache: 'no-store' });
                 if (!resp.ok) {
-                    console.warn('ACL não encontrada, liberando todos os postos.');
-                    return listaPostos;
+                    console.warn('ACL não encontrada.');
+                    return [];
                 }
 
-                const mapa = await resp.json();
+                // NORMALIZA TODAS AS CHAVES DO ACL
+                const mapaRaw = await resp.json();
+                const mapa = {};
+                for (const k of Object.keys(mapaRaw)) {
+                    mapa[k.toLowerCase()] = mapaRaw[k];
+                }
+
+                // EMAIL NORMALIZADO PARA MATCH
                 const postosPermitidos = mapa[email];
 
-                if (!postosPermitidos || postosPermitidos.length === 0) {
-                    // usuário sem ACL explícita → libera tudo
-                    return listaPostos;
+                // Se não existir ACL → bloquear (não liberar tudo!)
+                if (!postosPermitidos) {
+                    console.warn("Usuário SEM ACL registrada:", email);
+                    return [];
                 }
 
+                // Se existir ACL mas estiver vazia → bloquear
+                if (postosPermitidos.length === 0) {
+                    console.warn("ACL vazia para o usuário:", email);
+                    return [];
+                }
+
+                // Filtrar postos
                 const allowed = new Set(postosPermitidos.map(p => p.toUpperCase()));
                 return listaPostos.filter(p => allowed.has(p.toUpperCase()));
+
             } catch (err) {
                 console.error('Erro ao aplicar ACL de postos', err);
-                return listaPostos; // fallback seguro
+                return [];
             }
         }
 
