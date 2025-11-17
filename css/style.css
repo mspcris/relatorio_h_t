@@ -162,23 +162,44 @@ body {
 #                   HEADER                     #
 #                                              #
 ********************************************/
-
-#h1_header {
-  margin: 1px 0;
-  padding-top: 0px;
-  font-size: 2em;
-  font-weight: 400;
-  color: #55555c;
-  text-shadow: 1px 1px 1px var(--cor2);
-  text-align: center;
-  text-decoration: none;
-  
+header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
 }
+
+.topbar{
+  display:flex;
+  justify-content:center;   /* centraliza o conteúdo */
+  align-items:center;
+  min-height:72px;
+  padding:8px 16px;
+}
+
+/* header centralizado e em linha com a logo + texto */
+#h1_header1{
+  position:static;          /* remove o absolute */
+  margin:0;
+  text-align:center;
+  display:flex;
+  align-items:center;
+  gap:12px;                 /* espaço entre logo e frase */
+  color:#55555c;
+}
+
+/* override no global de img para não “empurrar” nada */
+#h1_header1 img{
+  margin:0;                 /* ZERA o margin:auto global */
+  height:48px;
+  width:auto;
+}
+  
 #fundoheader{
   color: white;
   text-align: center;
   font-family: var(--font-destaque);
-  background-image: linear-gradient(var(--cor0),var(--cor01),var(--cor01), var(--cor0));
+  background-image: linear-gradient(var(--cor0),var(--cor01),var(--cor01), var(--cor2));
   box-shadow: 0 0px 0px rgba(0,0,0,0.3);
   text-decoration: none;
 }
@@ -1688,7 +1709,7 @@ footer.copyright {
   display: grid !important;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 2px 2px;
-  padding-right: 2px;
+  padding-right: 8px;
 }
 
 .menu-list li {
@@ -1714,3 +1735,158 @@ padding: 6px 8px !important; */
   /* padding: 8px 10px !important; */
   border-radius: 8px !important;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* CSS otimizado conforme solicitado. Versão reorganizada e com menu em duas colunas. */
+
+/* === VARIÁVEIS === */
+:root {
+  --cor0:#F2F2F2; --cor01:#afbfa5; --cor1:#91b62f; --cor2:#009402; --cor3:#1c7932;
+  --cor4:#003f0a; --cor5:#0099ab; --cor6:#092019; --cor7:#444444;
+  --font-padrao:'Barlow Condensed', cursive;
+  --font-destaque:'Baloo 2', cursive;
+  --menu-drawer-w:560px;
+  --menu-speed:.1s;
+}
+
+/* === MENU LATERAL — LAYOUT BASE === */
+.menu-drawer {
+  position:fixed;top:0;left:0;bottom:0;width:var(--menu-drawer-w);
+  background:rgba(255,255,255,0.10);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  transform:translateX(-100%);
+  transition:transform var(--menu-speed) ease;
+  z-index:1002;
+  color:#fff;
+  display:flex;flex-direction:column;
+}
+.menu-drawer[data-open="true"] { transform:translateX(0); }
+
+/* === CABEÇALHO DO DRAWER === */
+.drawer-header {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px;border-bottom:1px solid rgba(255,255,255,0.2);
+  font-size:1.6em;font-weight:bold;
+}
+
+/* === LISTA PRINCIPAL === */
+.menu-nav { padding:10px;overflow-y:auto; }
+.menu-list {
+  display:grid !important;
+  grid-template-columns:repeat(2,1fr);
+  gap:6px;
+  list-style:none;margin:0;padding:0;
+}
+
+.menu-list li {
+  opacity:0;transform:translateY(6px);
+  transition:opacity .35s ease, transform .35s ease;
+}
+.menu-list li.show { opacity:1;transform:translateY(0); }
+
+.menu-link,
+.menu-accordion {
+  all:unset;
+  display:block;width:100%;cursor:pointer;
+  padding:10px 12px;
+  border-radius:10px;
+  background:transparent;color:#2a2000;
+  font-size:.85rem;font-family:var(--font-destaque);
+  transition:all .25s ease;
+}
+
+.menu-link:hover,
+.menu-accordion:hover {
+  background:rgba(255,255,255,0.20);
+  -webkit-backdrop-filter:blur(12px);
+  backdrop-filter:blur(12px);
+  transform:translateY(-2px);
+}
+
+/* === SUBMENUS === */
+.menu-group { width:100%; }
+.menu-sublist {
+  max-height:0;opacity:0;overflow:hidden;
+  transition:max-height .3s ease, opacity .3s;
+  list-style:none;margin:0;padding:0;text-align:center;
+}
+.menu-sublist.open { max-height:500px;opacity:1; }
+
+.menu-sublink {
+  display:inline-block;margin:5px;padding:8px 12px;
+  border-radius:8px;color:#fff;text-decoration:none;
+  font-size:1rem;transition:.25s;
+}
+.menu-sublink:hover {
+  background:rgba(255,255,255,0.15);
+  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(8px);
+}
+
+/* === ÍCONES E BOTÕES === */
+.icon-btn,
+.drawer-header button {
+  all:unset;cursor:pointer;color:#fff;font-size:1.5rem;
+}
+.icon-btn:hover,
+.drawer-header button:hover { color:var(--cor3); }
+
+/* === MOBILE === */
+@media(max-width:720px){
+  .menu-list{ grid-template-columns:repeat(2,1fr); }
+  .menu-link,.menu-accordion{
+    text-align:center;font-size:1rem;color:#fff;
+  }
+  .menu-sublink{ font-size:1.2rem;color:#fff; }
+}
+
+
+
+/* AGENDA */
+
+/* === CALENDÁRIO GOOGLE — CARD RESPONSIVO === */
+
+.calendario-card {
+    margin-top: 20px;
+    padding: 20px 24px;
+    border-radius: 20px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+}
+
+/* Container responsivo */
+.calendar-wrapper {
+    width: 100%;
+    overflow: hidden;
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    background: #fff;
+}
+
+/* Iframe ajustado ao layout */
+.calendar-iframe {
+    width: 100%;
+    height: 650px;
+    border: 0;
+    display: block;
+}
+
+/* Mobile: ajusta altura */
+@media (max-width: 768px) {
+    .calendar-iframe {
+        height: 800px;
+    }
+}
+
+
