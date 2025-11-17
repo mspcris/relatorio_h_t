@@ -339,7 +339,7 @@
                 ])).sort();
 
                 // FILTRAR POSTOS PELA PERMISSÃO DO USUÁRIO
-                POSTOS_PERMITIDOS = filtrarPostosPorUsuario(ALL_POSTOS);
+                POSTOS_PERMITIDOS = await filtrarPostosPorUsuario(ALL_POSTOS);
 
                 RAW_MAT = {};
                 POSTOS_PERMITIDOS.forEach(p => {
@@ -381,12 +381,18 @@
         function filtrarPostosPorUsuario(lista) {
             const email = String(window.USER_EMAIL || '').trim().toLowerCase();
 
-            const mapa = {
-                'deangelo@camim.com.br': ['J', 'P'],
-                'derlana@camim.com.br': ['J']
-            };
+            async function carregarACL() {
+                const res = await fetch('/postos_acl.json');
+                return await res.json();
+            }
 
-            return mapa[email] ?? lista;
+            async function filtrarPostosPorUsuario(postos) {
+                const email = String(window.USER_EMAIL || '').trim().toLowerCase();
+                const acl = await carregarACL();
+
+                return acl[email] ?? postos;
+            }
+
         }
 
 
