@@ -31,6 +31,9 @@ jobs:
           ls -la sql || true
           find sql -maxdepth 1 -type f -printf "%P\n" || true
 
+      # ================================================================
+      # 0) Setup SSH
+      # ================================================================
       - name: Setup SSH
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -85,7 +88,7 @@ jobs:
           fi
 
       # ================================================================
-      # 2) HTMLs → /opt/camim-auth/templates
+      # 2) HTML templates → /opt/camim-auth/templates
       # ================================================================
       - name: HTML templates -> /opt/camim-auth/templates
         env:
@@ -130,7 +133,7 @@ jobs:
           done
 
       # ================================================================
-      # 4) Código Python
+      # 4) Código Python → /opt/relatorio_h_t
       # ================================================================
       - name: Código + requirements -> /opt/relatorio_h_t
         env:
@@ -175,7 +178,7 @@ jobs:
           fi
 
       # ================================================================
-      # 5) app.py
+      # 5) app.py → /opt/camim-auth (SEM restart aqui)
       # ================================================================
       - name: app.py -> /opt/camim-auth
         env:
@@ -191,8 +194,6 @@ jobs:
             --omit-dir-times --no-perms --no-owner --no-group \
             -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
             "$FILE" "$SSH_USER@$SSH_HOST:$DEST/"
-
-          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "sudo systemctl restart camim-auth || true"
 
       # ================================================================
       # 6) Sync SQL
@@ -250,13 +251,11 @@ jobs:
             fi
           EOF
 
-          # Enviar .env
           if [ -n "${ENV_FILE_B64:-}" ]; then
             ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "install -m 600 -D /dev/null '$DEST/.env'"
             echo "$ENV_FILE_B64" | base64 -d | tr -d '\r' \
               | ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "cat > '$DEST/.env'"
           fi
-
 
       # ================================================================
       # 8) Sanidade final
@@ -273,4 +272,20 @@ jobs:
             . /opt/relatorio_h_t/.venv/bin/activate
             python -V
             pip -V
+          "
+
+      # ================================================================
+      # 9) Restart FINAL (camim-auth + nginx)
+      # ================================================================
+      - name: Restart services
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+            echo 'Reiniciando camim-auth.service e nginx...'
+            sudo systemctl restart camim-auth.service
+            sudo systemctl restart nginx
+            sudo systemctl status camim-auth.service --no-pager || true
           "
