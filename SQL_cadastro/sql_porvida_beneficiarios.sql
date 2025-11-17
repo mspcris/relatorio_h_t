@@ -1,4 +1,3 @@
-
 SELECT
     e.codigo AS posto,
     CASE
@@ -18,9 +17,11 @@ SELECT
 FROM vw_Cad_PacienteView cp
 LEFT JOIN sis_empresa emp ON emp.idendereco = cp.idendereco
 join cad_endereco e on e.idendereco = emp.idendereco
+left join cad_cliente cc on cc.idCliente = cp.idCliente
 WHERE cp.desativado = 0
   AND cp.idade IS NOT NULL
   AND cp.[Situação] = 'Adimplente'
+  AND cc.tipo = 'F'
   AND CP.CanceladoANS = 0
 GROUP BY
     e.codigo,
@@ -38,3 +39,8 @@ GROUP BY
         ELSE 'Sem idade'
     END
 ORDER BY e.codigo, faixa_etaria;
+
+
+
+
+
