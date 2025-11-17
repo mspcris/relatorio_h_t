@@ -65,6 +65,26 @@ jobs:
           done
 
 
+      # 1.2) postos_acl.json -> /var/www
+      - name: postos_acl.json -> /var/www
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          FILE="postos_acl.json"
+          DEST=/var/www
+          if [ -f "$FILE" ]; then
+            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
+            rsync -rlvz --omit-dir-times --no-perms --no-owner --no-group \
+              -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+              "$FILE" "$SSH_USER@$SSH_HOST:$DEST/"
+          else
+            echo "WARN: postos_acl.json não encontrado"
+          fi
+
+
       # =====================================================================
       # 2) HTMLs → SOMENTE /opt/camim-auth/templates
       # =====================================================================
