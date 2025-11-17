@@ -378,22 +378,22 @@
         PERMISSÕES POR USUÁRIO
         ===========================================================================*/
 
-        function filtrarPostosPorUsuario(lista) {
+        async function filtrarPostosPorUsuario(postos) {
             const email = String(window.USER_EMAIL || '').trim().toLowerCase();
 
-            async function carregarACL() {
+            try {
                 const res = await fetch('/postos_acl.json');
-                return await res.json();
-            }
+                if (!res.ok) throw new Error('Falha ao carregar postos_acl.json');
 
-            async function filtrarPostosPorUsuario(postos) {
-                const email = String(window.USER_EMAIL || '').trim().toLowerCase();
-                const acl = await carregarACL();
-
+                const acl = await res.json();
                 return acl[email] ?? postos;
-            }
 
+            } catch (err) {
+                console.error("Erro no ACL:", err);
+                return postos; // fallback seguro
+            }
         }
+
 
 
         /* =========================================================================
