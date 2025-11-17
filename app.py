@@ -229,6 +229,15 @@ def h14(): return render_protected_page("overlay.html")
 
 
 # ===============================
+# ROTAS PÚBLICAS (SEM LOGIN)
+# ===============================
+
+@app.get("/kpi_prescricao_aberta.html")
+def kpi_prescricao_aberta():
+    return render_template("kpi_prescricao_aberta.html")
+
+
+# ===============================
 # ACL JSON direto
 # ===============================
 
