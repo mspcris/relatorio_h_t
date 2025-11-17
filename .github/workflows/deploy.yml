@@ -207,7 +207,7 @@ jobs:
           set -euxo pipefail
           DEST=/opt/relatorio_h_t
 
-          for d in sql SQL_cadastro sql_full sql_vendas; do
+          for d in sql sql_cadastro sql_full sql_vendas; do
             if [ -d "$d" ]; then
               ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST/$d'"
               rsync -rlvz --delete \
