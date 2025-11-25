@@ -132,10 +132,8 @@ jobs:
               "$ANALYZE_PATH" "$SSH_USER@$SSH_HOST:$d/"
           done
 
-
-
-                # ================================================================
-      # 3B) Módulos completos da IA → /opt/ia-groq
+      # ================================================================
+      # 3B) IA modules -> /opt/ia-groq
       # ================================================================
       - name: IA modules -> /opt/ia-groq
         env:
@@ -148,7 +146,6 @@ jobs:
           DEST=/opt/ia-groq
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
 
-          # módulos que compõem o pipeline multiagentes
           IA_FILES=(
             "ia_orquestrador.py"
             "ia_router.py"
@@ -171,11 +168,28 @@ jobs:
             fi
           done
 
-          # remover orquestrador antigo
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "rm -f /opt/ia-groq/orquestrador.py || true"
 
+      # ================================================================
+      # 3C) COPIAR PROMPTS → /opt/ia-groq/prompt
+      # ================================================================
+      - name: Copiar prompts -> /opt/ia-groq/prompt
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          DEST=/opt/ia-groq/prompt
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
 
-          
+          rsync -rlvz --delete \
+            --include='*/' \
+            --include='*.txt' \
+            --exclude='*' \
+            --omit-dir-times --no-perms --no-owner --no-group \
+            -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+            "./prompt/" "$SSH_USER@$SSH_HOST:$DEST/"
 
       # ================================================================
       # 4) Código Python → /opt/relatorio_h_t
@@ -223,7 +237,7 @@ jobs:
           fi
 
       # ================================================================
-      # 5) app.py → /opt/camim-auth (SEM restart aqui)
+      # 5) app.py → /opt/camim-auth
       # ================================================================
       - name: app.py -> /opt/camim-auth
         env:
@@ -319,7 +333,7 @@ jobs:
             pip -V
           "
 
-                # ================================================================
+      # ================================================================
       # 9) Restart FINAL (camim-auth + nginx)
       # ================================================================
       - name: Restart camim-auth + nginx
