@@ -1,4 +1,4 @@
-# orquestrador.py
+# orquestrador.py --13:30
 # -*- coding: utf-8 -*-
 """
 Pipeline multiagentes completo para a Camila.AI.
@@ -200,23 +200,41 @@ class OrquestradorIA:
         5) Formatter cria layout corporativo
         """
 
+        # Controle de status por agente
+        status_agentes = {}
+
         # 1) Tradução PT→EN
         pergunta_en = await self.agente_tradutor.pt_para_en(pergunta_pt)
+        status_agentes["Tradutor PT→EN"] = "ok"
 
         # 2) Rodar todos agentes especialistas
         respostas: Dict[str, str] = {}
-        respostas["Finanças"]   = await self.agente_financas.executar(pergunta_en)
-        respostas["Contábil"]   = await self.agente_contabil.executar(pergunta_en)
-        respostas["Familiar"]   = await self.agente_familiar.executar(pergunta_en)
-        respostas["Marketing"]  = await self.agente_marketing.executar(pergunta_en)
+
+        respostas["Finanças"] = await self.agente_financas.executar(pergunta_en)
+        status_agentes["Finanças"] = "ok"
+
+        respostas["Contábil"] = await self.agente_contabil.executar(pergunta_en)
+        status_agentes["Contábil"] = "ok"
+
+        respostas["Familiar"] = await self.agente_familiar.executar(pergunta_en)
+        status_agentes["Familiar"] = "ok"
+
+        respostas["Marketing"] = await self.agente_marketing.executar(pergunta_en)
+        status_agentes["Marketing"] = "ok"
+
         respostas["Compliance"] = await self.agente_compliance.executar(pergunta_en)
-        respostas["Estilo"]     = await self.agente_estilo.executar(pergunta_en)
+        status_agentes["Compliance"] = "ok"
+
+        respostas["Estilo"] = await self.agente_estilo.executar(pergunta_en)
+        status_agentes["Estilo"] = "ok"
 
         # 3) Writer → análise combinada
         resposta_writer_en = await self.agente_writer.consolidar(respostas)
+        status_agentes["Writer"] = "ok"
 
         # 4) Traduzir EN → PT
         resposta_final_pt = await self.agente_tradutor.en_para_pt(resposta_writer_en)
+        status_agentes["Tradutor EN→PT"] = "ok"
 
         # 5) Formatador corporativo final
         resposta_formatada = self.formatter.formatar(resposta_final_pt)
@@ -238,4 +256,5 @@ class OrquestradorIA:
                 "respostas_agentes": respostas,
                 "resposta_writer_en": resposta_writer_en,
             },
+            "agentes_status": status_agentes
         }
