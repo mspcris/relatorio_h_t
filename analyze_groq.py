@@ -1,22 +1,17 @@
 # ================================================================
-# analyze_groq.py — PIPELINE MULTIAGENTES (VERSÃO LIMPA)
-# Flag de Deploy: BUILD-2025-02-XX-01
-# ================================================================
-# Este arquivo substitui completamente qualquer versão anterior.
-# Ele chama exclusivamente o OrquestradorIA, ignora totalmente o
-# pipeline antigo (ask_json_only_prompt, extratores etc.) e mantém
-# o endpoint minimalista necessário para o ChatIA.
+# analyze_groq.py — PIPELINE MULTIAGENTES (OPÇÃO A - FULL PAYLOAD)
+# Compatível com chat.js (envia prompt + blocks + prefs + produto)
 # ================================================================
 
 from __future__ import annotations
 
 import os
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -25,9 +20,9 @@ from orquestrador import OrquestradorIA
 
 
 # ================================================================
-# FastAPI CONFIG
+# FASTAPI CONFIG
 # ================================================================
-app = FastAPI(title="IA-Groq-Pipeline-MultiAgentes")
+app = FastAPI(title="IA-Groq-Pipeline-MultiAgentes-FULL")
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,11 +34,24 @@ app.add_middleware(
 
 
 # ================================================================
+# MODELOS — compatíveis com chat.js
+# ================================================================
+class AnalyzePayload(BaseModel):
+    prompt: Optional[str] = None
+    produto: Optional[str] = None
+    contexto: Optional[str] = None
+    blocks: Optional[List[Dict[str, Any]]] = None
+    prefs: Optional[Dict[str, Any]] = None
+
+
+# ================================================================
 # SANITIZAÇÃO
 # ================================================================
 def clean_text(s: str) -> str:
     import unicodedata, html, re
-    s = html.unescape(s or "")
+    if not s:
+        return ""
+    s = html.unescape(s)
     s = unicodedata.normalize("NFC", s)
     s = s.replace("\u00A0", " ").replace("\u200B", "")
     s = re.sub(r"([.,;:?!])(?!\s|$)", r"\1 ", s)
@@ -52,23 +60,12 @@ def clean_text(s: str) -> str:
 
 
 # ================================================================
-# PAYLOAD
-# ================================================================
-class AnalyzePayload(BaseModel):
-    prompt: Optional[str] = None
-
-
-# ================================================================
-# FUNÇÃO UNIVERSAL DE CHAMADA GROQ
+# CHAMADA UNIVERSAL AO MODELO
 # ================================================================
 async def llm_call(prompt: str, modelo: str) -> str:
-    """
-    Camada única de chamada ao LLM da Groq.
-    Atualiza logs futuros, padroniza temperatura e tokens.
-    """
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("GROQ_API_KEY ausente no ambiente (.env)")
+        raise RuntimeError("GROQ_API_KEY ausente")
 
     client = Groq(api_key=api_key)
 
@@ -82,40 +79,43 @@ async def llm_call(prompt: str, modelo: str) -> str:
 
 
 # ================================================================
-# INSTÂNCIA DO ORQUESTRADOR MULTIAGENTES
+# INSTÂNCIA DO ORQUESTRADOR
 # ================================================================
 orquestrador = OrquestradorIA(llm_call)
 
 
 # ================================================================
-# HEALTHCHECK SIMPLES
+# HEALTHCHECK
 # ================================================================
 @app.get("/health")
 async def health():
     return {
         "ok": True,
-        "service": "IA-Groq Multiagentes",
-        "deploy_flag": "BUILD-2025-02-XX-01",
+        "service": "IA-Groq Multiagentes FULL",
+        "deploy_flag": "BUILD-2025-02-XX-01"
     }
 
 
 # ================================================================
-# ENDPOINT PRINCIPAL USADO PELO FRONT
+# ENDPOINT PRINCIPAL — AGORA COMPATÍVEL COM chat.js
 # ================================================================
 @app.post("/ia/analisar")
-async def ia_analisar(payload: AnalyzePayload = Body(...)):
+async def ia_analisar(req: Request, payload: AnalyzePayload = Body(...)):
     """
-    ÚNICO endpoint consumido pelo chat.js.
-    Aqui enviamos o prompt para o pipeline multiagentes.
-    Esse endpoint deve sempre retornar:
-        { ok, entrada, resposta }
+    Suporta:
+      - prompt (texto do usuário)
+      - produto (ex: medicos, alimentacao, vendas…)
+      - blocks (dados estruturados dos gráficos)
+      - prefs (temperatura, tokens, modo json, etc.)
+      - contexto (relatorio, qa, deep…)
     """
 
-    if not payload.prompt or not payload.prompt.strip():
-        raise HTTPException(400, "prompt ausente")
+    if not payload.prompt and not payload.blocks:
+        raise HTTPException(400, "prompt ou blocks ausentes")
 
     try:
-        resultado = await orquestrador.responder(payload.prompt)
+        resultado = await orquestrador.responder(payload.model_dump())
+
         texto_final = clean_text(resultado["resposta_final_pt"])
 
         resposta_formatada = (
@@ -130,7 +130,7 @@ async def ia_analisar(payload: AnalyzePayload = Body(...)):
 
         return {
             "ok": True,
-            "entrada": payload.prompt,
+            "entrada": payload.model_dump(),
             "resposta": resposta_formatada,
             "deploy_flag": "BUILD-2025-02-XX-01"
         }

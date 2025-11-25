@@ -48,9 +48,9 @@ PROMPT BASE:
 {self.prompt_base}
 
 INPUT (ENGLISH):
-{text en}
+{texto_en}
 
-Respond ONLY in English.  
+Respond ONLY in English.
 No apologies, no disclaimers.
 """
         return await self.llm_call(prompt, modelo=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"))
