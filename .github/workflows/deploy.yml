@@ -132,6 +132,51 @@ jobs:
               "$ANALYZE_PATH" "$SSH_USER@$SSH_HOST:$d/"
           done
 
+
+
+                # ================================================================
+      # 3B) Módulos completos da IA → /opt/ia-groq
+      # ================================================================
+      - name: IA modules -> /opt/ia-groq
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+
+          DEST=/opt/ia-groq
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
+
+          # módulos que compõem o pipeline multiagentes
+          IA_FILES=(
+            "ia_orquestrador.py"
+            "ia_router.py"
+            "llm_client.py"
+            "formatter_html_universal.py"
+            "sanitizer_texto_universal.py"
+            "summarizer_universal.py"
+            "extractor_resposta_objetiva.py"
+          )
+
+          for f in "${IA_FILES[@]}"; do
+            if [ -f "$f" ]; then
+              echo "Copiando $f → $DEST"
+              rsync -rlvz --delete \
+                --omit-dir-times --no-perms --no-owner --no-group \
+                -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+                "$f" "$SSH_USER@$SSH_HOST:$DEST/"
+            else
+              echo "WARN: arquivo $f não encontrado no repositório"
+            fi
+          done
+
+          # remover orquestrador antigo
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "rm -f /opt/ia-groq/orquestrador.py || true"
+
+
+          
+
       # ================================================================
       # 4) Código Python → /opt/relatorio_h_t
       # ================================================================
