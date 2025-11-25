@@ -319,10 +319,10 @@ jobs:
             pip -V
           "
 
-      # ================================================================
+                # ================================================================
       # 9) Restart FINAL (camim-auth + nginx)
       # ================================================================
-      - name: Restart services
+      - name: Restart camim-auth + nginx
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
@@ -333,4 +333,19 @@ jobs:
             sudo systemctl restart camim-auth.service
             sudo systemctl restart nginx
             sudo systemctl status camim-auth.service --no-pager || true
+          "
+
+      # ================================================================
+      # 10) Restart IA-Groq service
+      # ================================================================
+      - name: Restart IA service
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+            echo 'Reiniciando ia-groq.service...'
+            sudo systemctl restart ia-groq.service
+            sudo systemctl status ia-groq.service --no-pager || true
           "
