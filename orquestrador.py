@@ -14,6 +14,11 @@ Fluxo:
 
 import os
 from typing import Callable, Dict, Any
+import logging
+
+# Configuração básica de logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -25,7 +30,8 @@ def load_prompt(path: str) -> str:
     try:
         with open(path, "r", encoding="utf-8") as f:
             return f.read().strip()
-    except Exception:
+    except Exception as e:
+        logger.warning("Falha ao carregar prompt em %s: %s", path, str(e))
         return "PROMPT NÃO ENCONTRADO."
 
 
@@ -198,7 +204,7 @@ class OrquestradorIA:
         pergunta_en = await self.agente_tradutor.pt_para_en(pergunta_pt)
 
         # 2) Rodar todos agentes especialistas
-        respostas = {}
+        respostas: Dict[str, str] = {}
         respostas["Finanças"]   = await self.agente_financas.executar(pergunta_en)
         respostas["Contábil"]   = await self.agente_contabil.executar(pergunta_en)
         respostas["Familiar"]   = await self.agente_familiar.executar(pergunta_en)
@@ -215,11 +221,21 @@ class OrquestradorIA:
         # 5) Formatador corporativo final
         resposta_formatada = self.formatter.formatar(resposta_final_pt)
 
+        # Log de debug do pipeline para inspeção na VM
+        logger.info(
+            "PIPELINE_DEBUG: %s",
+            {
+                "pergunta_en": pergunta_en,
+                "agentes": list(respostas.keys()),
+                "writer_en_preview": resposta_writer_en[:200],
+            },
+        )
+
         return {
             "resposta_final_pt": resposta_formatada,
             "pipeline_debug": {
                 "pergunta_en": pergunta_en,
                 "respostas_agentes": respostas,
                 "resposta_writer_en": resposta_writer_en,
-            }
+            },
         }
