@@ -1,13 +1,16 @@
-SELECT
-    e.codigo AS posto,
-    COUNT(*) AS total
-FROM vw_Cad_Cliente cc
-JOIN sis_empresa emp
-       ON emp.idEndereco = cc.idEndereco
+Select
+e.codigo AS posto,
+vwc.tipo,
+count(*) as matriculas, avg(vwc.Valormensalidadeultimopagamento) as ticket_medio_real, 
+avg(vwc.[valor mensalidade]) as ticket_medio_previsto
+from 
+vw_Cad_Cliente vwc
+join sis_empresa emp on emp.idendereco = vwc.idendereco
 join Cad_Endereco e on emp.idEndereco = e.idEndereco
-WHERE cc.Desativado = 0
-  AND cc.Situação = 'adimplente'
-  AND cc.[Data de cancelamento auto] IS NULL
-GROUP BY e.codigo
-ORDER BY e.codigo;
-
+Where (vwc.Desativado = 0)
+ and (vwc.[Situação] = 'adimplente')
+ and vwc.idEndereco = emp.idEndereco
+ AND (vwc.CanceladoANS = 0)
+ and vwc.Convênio = 0
+ and vwc.[Valor mensalidade] > 48
+ group by e.codigo, vwc.tipo

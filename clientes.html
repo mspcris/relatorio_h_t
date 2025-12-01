@@ -47,25 +47,6 @@
             border-radius: 999px;
         }
 
-        .faixa-card {
-            border-radius: 6px;
-            font-size: 0.85rem;
-        }
-
-        .faixa-card-title {
-            font-weight: 600;
-        }
-
-        .faixa-card-value {
-            font-size: 1.1rem;
-            font-weight: 700;
-        }
-
-        .chart-wrapper {
-            position: relative;
-            height: 360px;
-        }
-
         /* SWITCH VIDAS x BENEFICIÁRIOS */
         .switch-container {
             display: flex;
@@ -87,13 +68,35 @@
             background: #007bff;
             color: #fff;
         }
+
+        .chart-wrapper {
+            position: relative;
+            height: 360px;
+        }
+
+        .kpi-title {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .kpi-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+        }
+
+        .kpi-section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-top: 16px;
+            margin-bottom: 8px;
+        }
     </style>
 </head>
 
 <body class="hold-transition sidebar-mini">
     <div class="wrapper">
 
-        <!-- NAV -->
+        <!-- NAVBAR -->
         <nav class="main-header navbar navbar-expand navbar-white navbar-light">
             <ul class="navbar-nav">
                 <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
@@ -113,48 +116,14 @@
             <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
             <div class="sidebar">
                 <nav class="mt-2">
-                    <ul class="nav nav-pills nav-sidebar flex-column" role="menu">
+                    <ul class="nav nav-pills nav-sidebar flex-column">
                         <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
                                 <p>Home Page</p>
-                            </a></li>
-                        <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i
-                                    class="nav-icon fas fa-book-open"></i>
-                                <p>Leia-me</p>
-                            </a></li>
-                        <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i
-                                    class="nav-icon fas fa-utensils"></i>
-                                <p>KPI Custo Alimentação</p>
-                            </a></li>
-                        <li class="nav-item"><a href="medicos.html" class="nav-link"><i
-                                    class="nav-icon fas fa-notes-medical"></i>
-                                <p>KPI Custo Médico</p>
-                            </a></li>
-                        <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i
-                                    class="nav-icon fas fa-chart-line"></i>
-                                <p>KPI Mensalidades</p>
-                            </a></li>
-                        <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i
-                                    class="nav-icon fas fa-shopping-cart"></i>
-                                <p>KPI Vendas</p>
                             </a></li>
                         <li class="nav-item"><a href="clientes.html" class="nav-link active"><i
                                     class="nav-icon fas fa-users"></i>
                                 <p>Clientes</p>
                             </a></li>
-                        <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i
-                                    class="nav-icon fas fa-prescription-bottle-alt"></i>
-                                <p>KPI Prescrições</p>
-                            </a></li>
-                        <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i
-                                    class="nav-icon fas fa-landmark"></i>
-                                <p>KPI Índices Oficiais</p>
-                            </a></li>
-                        <li class="nav-item">
-                            <form method="POST" action="/session/logout"><button type="submit"
-                                    class="nav-link btn btn-link p-0"><i class="nav-icon fas fa-sign-out-alt"></i>
-                                    <p>Sair</p>
-                                </button></form>
-                        </li>
                     </ul>
                 </nav>
             </div>
@@ -165,67 +134,154 @@
             <section class="content p-3">
                 <div id="err" class="text-danger mb-2"></div>
 
-                <!-- FILTRO POSTO + SWITCH -->
+                <!-- FILTRO + SWITCH -->
                 <div class="card mb-3">
                     <div class="card-body">
                         <div class="d-flex align-items-center justify-content-between flex-wrap">
+
                             <div>
                                 <h3 class="mb-1">Dashboard Consolidado — Clientes</h3>
+
                                 <div class="mb-2">
                                     <div class="switch-container" id="switchDataset">
                                         <div class="switch-option active" data-type="vidas">Vidas</div>
                                         <div class="switch-option" data-type="beneficiarios">Beneficiários</div>
+                                        <div class="switch-option" data-type="beneficiarios_pj">Beneficiários PJ</div>
                                     </div>
                                 </div>
-
                             </div>
-
 
                             <div class="flex-grow-1 ml-3">
                                 <label class="mb-0 small d-block">Filtro por posto (multi-seleção)</label>
                                 <ul id="postoTabsClientes" class="nav nav-pills scroll-tabs"></ul>
                             </div>
+
                         </div>
                     </div>
                 </div>
 
-                <!-- KPIs -->
+                <!-- ======================================== -->
+                <!-- BLOCO 1 — KPIs GERAIS -->
+                <!-- ======================================== -->
+                <div class="kpi-section-title">Consolidado Geral</div>
                 <div class="row mb-3">
 
-                    <div class="col-md-4 mb-2">
+                    <div class="col-md-3 mb-2">
                         <div class="card kpi-mini-card text-center">
                             <div class="card-body">
-                                <div class="text-muted small">Total de Matrículas</div>
-                                <div id="kpiTotalMatriculas" class="h4 mb-0">0</div>
+                                <div class="kpi-title">Total Matrículas (PF + PJ)</div>
+                                <div id="kpiTotalMatriculas" class="kpi-value">0</div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-md-4 mb-2">
+                    <div class="col-md-3 mb-2">
                         <div class="card kpi-mini-card text-center">
                             <div class="card-body">
-                                <div class="text-muted small">Total de Vidas</div>
-                                <div id="kpiTotalVidas" class="h4 mb-0">0</div>
+                                <div class="kpi-title">Total Vidas</div>
+                                <div id="kpiTotalVidasPF" class="kpi-value">0</div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-md-4 mb-2">
+                    <div class="col-md-3 mb-2">
                         <div class="card kpi-mini-card text-center">
                             <div class="card-body">
-                                <div class="text-muted small">Total de Beneficiários</div>
-                                <div id="kpiTotalBeneficiarios" class="h4 mb-0">0</div>
+                                <div class="kpi-title">Total Beneficiários</div>
+                                <div id="kpiTotalBenefPF" class="kpi-value">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mb-2">
+                        <div class="card kpi-mini-card text-center">
+                            <div class="card-body">
+                                <div class="kpi-title">Total Beneficiários PJ</div>
+                                <div id="kpiTotalBenefPJ" class="kpi-value">0</div>
                             </div>
                         </div>
                     </div>
 
                 </div>
 
+                <!-- ======================================== -->
+                <!-- BLOCO 2 — KPIs PF -->
+                <!-- ======================================== -->
+                <div class="kpi-section-title">Indicadores — Pessoa Física (PF)</div>
+                <div class="row mb-3">
 
-                <!-- CARDS FAIXAS -->
+                    <div class="col-md-3 mb-2">
+                        <div class="card kpi-mini-card text-center">
+                            <div class="card-body">
+                                <div class="kpi-title">Matrículas PF</div>
+                                <div id="kpiMatPF" class="kpi-value">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mb-2">
+                        <div class="card kpi-mini-card text-center">
+                            <div class="card-body">
+                                <div class="kpi-title">Ticket Médio Real PF</div>
+                                <div id="kpiTicketRealPF" class="kpi-value">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mb-2">
+                        <div class="card kpi-mini-card text-center">
+                            <div class="card-body">
+                                <div class="kpi-title">Ticket Médio Previsto PF</div>
+                                <div id="kpiTicketPrevPF" class="kpi-value">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ======================================== -->
+                <!-- BLOCO 3 — KPIs PJ -->
+                <!-- ======================================== -->
+                <div class="kpi-section-title">Indicadores — Pessoa Jurídica (PJ)</div>
+                <div class="row mb-3">
+
+                    <div class="col-md-3 mb-2">
+                        <div class="card kpi-mini-card text-center">
+                            <div class="card-body">
+                                <div class="kpi-title">Matrículas PJ</div>
+                                <div id="kpiMatPJ" class="kpi-value">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mb-2">
+                        <div class="card kpi-mini-card text-center">
+                            <div class="card-body">
+                                <div class="kpi-title">Ticket Médio Real PJ</div>
+                                <div id="kpiTicketRealPJ" class="kpi-value">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mb-2">
+                        <div class="card kpi-mini-card text-center">
+                            <div class="card-body">
+                                <div class="kpi-title">Ticket Médio Previsto PJ</div>
+                                <div id="kpiTicketPrevPJ" class="kpi-value">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ======================================== -->
+                <!-- CARDS DE FAIXAS -->
+                <!-- ======================================== -->
                 <div class="row mb-4" id="faixasCardsRow"></div>
 
-                <!-- GRÁFICOS VIDAS/BENEFICIÁRIOS -->
+                <!-- ======================================== -->
+                <!-- GRÁFICOS -->
+                <!-- ======================================== -->
                 <div class="row">
                     <div class="col-md-6 mb-4">
                         <div class="card">
@@ -246,13 +302,14 @@
                     </div>
                 </div>
 
-                <!-- NOVO BLOCO – MATRÍCULAS -->
-                <h4 class="mt-4">Matrículas por Posto</h4>
+                <!-- GRÁFICOS MATRÍCULAS -->
+                <h4 class="mt-4">Matrículas — PF, PJ e Total</h4>
                 <div class="row">
+
                     <div class="col-md-6 mb-4">
                         <div class="card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Matrículas por Posto (Barra)</h3>
+                                <h3 class="card-title mb-0">Distribuição por Posto</h3>
                             </div>
                             <div class="card-body chart-wrapper"><canvas id="chartMatBar"></canvas></div>
                         </div>
@@ -261,121 +318,456 @@
                     <div class="col-md-6 mb-4">
                         <div class="card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Percentual por Posto (Matrículas)</h3>
+                                <h3 class="card-title mb-0">Percentual por Posto</h3>
                             </div>
                             <div class="card-body chart-wrapper"><canvas id="chartMatDonut"></canvas></div>
                         </div>
                     </div>
+
                 </div>
 
             </section>
         </div>
     </div>
 
-    <!-- AQUI O ALMOÇO ACABA E COMEÇA A LOUCURA!!! -->
+
+
+
+    <!-- ====================================================== -->
+    <!-- MANUAL TÉCNICO / ORIGEM DOS DADOS                      -->
+    <!-- ====================================================== -->
+
+    <div class="card mt-5">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h3 class="card-title mb-0">Manual Técnico — Origem dos Dados</h3>
+
+            <button class="btn btn-sm btn-primary" id="btnToggleManual">
+                Exibir Manual
+            </button>
+        </div>
+
+        <div class="card-body" id="manualConteudo" style="display: none;">
+
+            <h5>1. Visão Geral</h5>
+            <p>
+                Este painel consolida dados de matrículas PF, matrículas PJ, vidas e beneficiários,
+                provenientes diretamente das views e tabelas do banco operacional da CAMIM.
+                As cargas são executadas via <strong>export_cad_cliente_incremental.py</strong>, que gera
+                os arquivos JSON consumidos por este dashboard.
+            </p>
+
+            <hr>
+
+            <h5>2. Tela do Sistema (Exemplo)</h5>
+            <p>Referência visual da origem das métricas:</p>
+
+            <!-- SUA IMAGEM AQUI -->
+            <img src="images/cadastro_cliente.jpg" class="img-fluid rounded mb-3" alt="Exemplo Tela Sistema">
+
+            <hr>
+
+            <h5>3. Lógica de Cálculo (Resumo)</h5>
+            <ul>
+                <li><strong>Matrículas PF/PJ:</strong> somatório por tipo de contrato, sendo considerado planos PJ's
+                    matrículas com mensalidade de valor mínimo de R$ 49, para evitar matrículas feitas para
+                    funcionários, reserva de vagas, permuta, etc. Matrículas Taxi são consideradas matrículas normais
+                    CAMIM.</li>
+                <li><strong>Tickets PF/PJ:</strong> média ponderada por matrícula. O valor real considera o valor pago
+                    na última mensalidade que pode não ter sido no mês vigente, logo, é uma visão, apenas. Para
+                    visualizar dados reais sobre ticket médio, por favor, abra o <a href="kpi_v2.html">kpi de
+                        mensalidades</a>. O valor previsto considera
+                    o valor da mensalidade do cliente. Desta forma é posível considerar ganhos com pagamentos em atraso,
+                    mas, da mesma forma clientes que pagam em dia e possuem desconto ponderam o valor.</li>
+                <li><strong>Vidas:</strong> somatório por vidas em matrículas ativas, não importando se são CAMIM,
+                    Correios, etc.</li>
+                <li><strong>Beneficiários:</strong> somatório por faixa etária (PF e PJ separadamente). Sendo
+                    considerado PF somente planos CAMIM, CAMIM PREMIUM e Liberty.</li>
+                <li><strong>Consolidado Geral:</strong> união de PF + PJ por posto.</li>
+            </ul>
+
+            <hr>
+
+            <h5>4. SQL Utilizado (Exemplo)</h5>
+            <p>A consulta abaixo demonstra como os dados de matrículas PF/PJ são originados:</p>
+
+            <pre style="background:#a79d9d; padding:12px; border-radius:8px; max-height:400px; overflow:auto;">
+Select
+e.codigo AS posto,
+vwc.tipo,
+count(*) as matriculas, avg(vwc.Valormensalidadeultimopagamento) as ticket_medio_real, 
+avg(vwc.[valor mensalidade]) as ticket_medio_previsto
+from 
+vw_Cad_Cliente vwc
+join sis_empresa emp on emp.idendereco = vwc.idendereco
+join Cad_Endereco e on emp.idEndereco = e.idEndereco
+Where (vwc.Desativado = 0)
+ and (vwc.[Situação] = 'adimplente')
+ and vwc.idEndereco = emp.idEndereco
+ AND (vwc.DataCancelamentoAuto is null or vwc.DataCancelamentoANS < vwc.DataReativadoANS)
+ and vwc.Convênio = 0
+ and vwc.[Valor mensalidade] > 49
+ group by e.codigo, vwc.tipo
+</pre>
+
+            <p class="text-muted small">
+                *Este SQL é apenas um exemplo demonstrativo. Ajuste conforme necessário.
+            </p>
+
+
+
+            <h5>5. SQL Utilizado (Exemplo)</h5>
+            <p>A consulta abaixo demonstra como os dados de matrículas beneficiários PJ são originados:</p>
+
+            <pre style="background:#a79d9d; padding:12px; border-radius:8px; max-height:1000px; overflow:auto;">
+SELECT
+    e.codigo AS posto,
+    CASE
+        WHEN cp.idade BETWEEN  0 AND 18 THEN '0 a 18'
+        WHEN cp.idade BETWEEN 19 AND 23 THEN '19 a 23'
+        WHEN cp.idade BETWEEN 24 AND 28 THEN '24 a 28'
+        WHEN cp.idade BETWEEN 29 AND 33 THEN '29 a 33'
+        WHEN cp.idade BETWEEN 34 AND 38 THEN '34 a 38'
+        WHEN cp.idade BETWEEN 39 AND 43 THEN '39 a 43'
+        WHEN cp.idade BETWEEN 44 AND 48 THEN '44 a 48'
+        WHEN cp.idade BETWEEN 49 AND 53 THEN '49 a 53'
+        WHEN cp.idade BETWEEN 54 AND 58 THEN '54 a 58'
+        WHEN cp.idade >= 59            THEN '59+'
+        ELSE 'Sem idade'
+    END AS faixa_etaria,
+    COUNT(*) AS total
+FROM vw_Cad_PacienteView cp
+JOIN sis_empresa emp ON emp.idendereco = cp.idendereco
+join cad_endereco e on e.idendereco = emp.idendereco
+join vw_cad_cliente cc on cc.idCliente = cp.idCliente
+WHERE cp.desativado = 0
+  AND cp.idade IS NOT NULL
+  AND cp.[Situação] = 'Adimplente'
+  AND cc.tipo = 'J'
+  AND cc.Convenio = 0
+  AND (cc.DataCancelamentoAuto is null or cc.DataCancelamentoANS < cc.DataReativadoANS)
+  AND cc.[valor mensalidade] > 49
+GROUP BY
+    e.codigo,
+    CASE
+        WHEN cp.idade BETWEEN  0 AND 18 THEN '0 a 18'
+        WHEN cp.idade BETWEEN 19 AND 23 THEN '19 a 23'
+        WHEN cp.idade BETWEEN 24 AND 28 THEN '24 a 28'
+        WHEN cp.idade BETWEEN 29 AND 33 THEN '29 a 33'
+        WHEN cp.idade BETWEEN 34 AND 38 THEN '34 a 38'
+        WHEN cp.idade BETWEEN 39 AND 43 THEN '39 a 43'
+        WHEN cp.idade BETWEEN 44 AND 48 THEN '44 a 48'
+        WHEN cp.idade BETWEEN 49 AND 53 THEN '49 a 53'
+        WHEN cp.idade BETWEEN 54 AND 58 THEN '54 a 58'
+        WHEN cp.idade >= 59            THEN '59+'
+        ELSE 'Sem idade'
+    END
+ORDER BY e.codigo, faixa_etaria;
+</pre>
+
+            <p class="text-muted small">
+                *Este SQL é apenas um exemplo demonstrativo. Ajuste conforme necessário.
+            </p>
+
+
+
+            <h5>6. SQL Utilizado (Exemplo)</h5>
+            <p>A consulta abaixo demonstra como os dados de matrículas beneficiários PF são originados:</p>
+
+            <pre style="background:#a79d9d; padding:12px; border-radius:8px; max-height:1000px; overflow:auto;">
+SELECT
+    e.codigo AS posto,
+    CASE
+        WHEN cp.idade BETWEEN  0 AND 18 THEN '0 a 18'
+        WHEN cp.idade BETWEEN 19 AND 23 THEN '19 a 23'
+        WHEN cp.idade BETWEEN 24 AND 28 THEN '24 a 28'
+        WHEN cp.idade BETWEEN 29 AND 33 THEN '29 a 33'
+        WHEN cp.idade BETWEEN 34 AND 38 THEN '34 a 38'
+        WHEN cp.idade BETWEEN 39 AND 43 THEN '39 a 43'
+        WHEN cp.idade BETWEEN 44 AND 48 THEN '44 a 48'
+        WHEN cp.idade BETWEEN 49 AND 53 THEN '49 a 53'
+        WHEN cp.idade BETWEEN 54 AND 58 THEN '54 a 58'
+        WHEN cp.idade >= 59            THEN '59+'
+        ELSE 'Sem idade'
+    END AS faixa_etaria,
+    COUNT(*) AS total
+FROM vw_Cad_PacienteView cp
+LEFT JOIN sis_empresa emp ON emp.idendereco = cp.idendereco
+join cad_endereco e on e.idendereco = emp.idendereco
+left join vw_cad_cliente cc on cc.idCliente = cp.idCliente
+WHERE cp.desativado = 0
+  AND cp.idade IS NOT NULL
+  AND cp.[Situação] = 'Adimplente'
+  AND cc.tipo = 'F'
+  AND (cc.DataCancelamentoAuto is null or cc.DataCancelamentoANS < cc.DataReativadoANS)
+GROUP BY
+    e.codigo,
+    CASE
+        WHEN cp.idade BETWEEN  0 AND 18 THEN '0 a 18'
+        WHEN cp.idade BETWEEN 19 AND 23 THEN '19 a 23'
+        WHEN cp.idade BETWEEN 24 AND 28 THEN '24 a 28'
+        WHEN cp.idade BETWEEN 29 AND 33 THEN '29 a 33'
+        WHEN cp.idade BETWEEN 34 AND 38 THEN '34 a 38'
+        WHEN cp.idade BETWEEN 39 AND 43 THEN '39 a 43'
+        WHEN cp.idade BETWEEN 44 AND 48 THEN '44 a 48'
+        WHEN cp.idade BETWEEN 49 AND 53 THEN '49 a 53'
+        WHEN cp.idade BETWEEN 54 AND 58 THEN '54 a 58'
+        WHEN cp.idade >= 59            THEN '59+'
+        ELSE 'Sem idade'
+    END
+ORDER BY e.codigo, faixa_etaria;
+</pre>
+
+            <p class="text-muted small">
+                *Este SQL é apenas um exemplo demonstrativo. Ajuste conforme necessário.
+            </p>
+
+
+
+
+            <h5>7. SQL Utilizado (Exemplo)</h5>
+            <p>A consulta abaixo demonstra como os dados vidas são originados:</p>
+
+            <pre style="background:#a79d9d; padding:12px; border-radius:8px; max-height:1000px; overflow:auto;">
+SELECT
+    e.codigo AS posto,
+    CASE
+        WHEN cp.idade BETWEEN  0 AND 18 THEN '0 a 18'
+        WHEN cp.idade BETWEEN 19 AND 23 THEN '19 a 23'
+        WHEN cp.idade BETWEEN 24 AND 28 THEN '24 a 28'
+        WHEN cp.idade BETWEEN 29 AND 33 THEN '29 a 33'
+        WHEN cp.idade BETWEEN 34 AND 38 THEN '34 a 38'
+        WHEN cp.idade BETWEEN 39 AND 43 THEN '39 a 43'
+        WHEN cp.idade BETWEEN 44 AND 48 THEN '44 a 48'
+        WHEN cp.idade BETWEEN 49 AND 53 THEN '49 a 53'
+        WHEN cp.idade BETWEEN 54 AND 58 THEN '54 a 58'
+        WHEN cp.idade >= 59            THEN '59+'
+        ELSE 'Sem idade'
+    END AS faixa_etaria,
+    COUNT(*) AS total
+FROM vw_Cad_PacienteView cp
+JOIN sis_empresa emp ON emp.idendereco = cp.idendereco
+join cad_endereco e on e.idendereco = emp.idendereco
+join cad_cliente cc on cc.idCliente = cp.idCliente
+WHERE cp.desativado = 0
+  AND cp.idade IS NOT NULL
+  AND cp.[Situação] = 'Adimplente'
+  AND cc.tipo = 'F'
+  AND (cc.DataCancelamentoAuto is null or cc.DataCancelamentoANS < cc.DataReativadoANS)
+GROUP BY
+    e.codigo,
+    CASE
+        WHEN cp.idade BETWEEN  0 AND 18 THEN '0 a 18'
+        WHEN cp.idade BETWEEN 19 AND 23 THEN '19 a 23'
+        WHEN cp.idade BETWEEN 24 AND 28 THEN '24 a 28'
+        WHEN cp.idade BETWEEN 29 AND 33 THEN '29 a 33'
+        WHEN cp.idade BETWEEN 34 AND 38 THEN '34 a 38'
+        WHEN cp.idade BETWEEN 39 AND 43 THEN '39 a 43'
+        WHEN cp.idade BETWEEN 44 AND 48 THEN '44 a 48'
+        WHEN cp.idade BETWEEN 49 AND 53 THEN '49 a 53'
+        WHEN cp.idade BETWEEN 54 AND 58 THEN '54 a 58'
+        WHEN cp.idade >= 59            THEN '59+'
+        ELSE 'Sem idade'
+    END
+ORDER BY e.codigo, faixa_etaria;
+</pre>
+
+        </div>
+
+    </div>
+
+
+    <!-- SCRIPT PARA ABRIR / FECHAR -->
+    <script>
+        const btnToggleManual = document.getElementById("btnToggleManual");
+        const manualConteudo = document.getElementById("manualConteudo");
+
+        btnToggleManual.onclick = () => {
+            const aberto = manualConteudo.style.display !== "none";
+            manualConteudo.style.display = aberto ? "none" : "block";
+            btnToggleManual.textContent = aberto ? "Exibir Manual" : "Ocultar Manual";
+        };
+    </script>
+
+
+
+
+
 
     <script>
-
         /* =========================================================================
-        CONFIG / VARIÁVEIS GLOBAIS
+           CONFIG / VARIÁVEIS GLOBAIS
         ===========================================================================*/
 
         const MATRICULA_URL = 'json_cadastro/pormatricula.json';
         const VIDA_URL = 'json_cadastro/porvida.json';
         const BENE_URL = 'json_cadastro/porvida_beneficiarios.json';
+        const BENE_PJ_URL = 'json_cadastro/porvida_beneficiarios_pj.json';
 
-        let RAW = {
-            vidas: [],
-            beneficiarios: []
-        };
+        let RAW_MAT = {};          // PF, PJ, TOTAL + tickets
+        let RAW_VIDAS = [];        // vidas PF
+        let RAW_BENEF = [];        // beneficiários PF
+        let RAW_BENEF_PJ = [];     // beneficiários PJ
 
-        let RAW_MAT = {};
         let ALL_POSTOS = [];
         let POSTOS_PERMITIDOS = [];
+
         let selPostos = 'ALL';
         let datasetAtivo = 'vidas';
 
-        // Charts
+        // charts (criados no bloco 3)
         let chFaixaBar = null;
         let chFaixaDonut = null;
         let chMatBar = null;
         let chMatDonut = null;
 
+        // formatadores
         const fmtInt = new Intl.NumberFormat('pt-BR');
         const fmtPct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 
         /* =========================================================================
-        CARREGAMENTO DOS JSONs
+           LOAD PRINCIPAL
         ===========================================================================*/
 
         async function loadClientes() {
             try {
-                const [matRes, vidaRes, beneRes] = await Promise.all([
+                const [matRes, vidaRes, beneRes, benePJRes] = await Promise.all([
                     fetch(MATRICULA_URL, { cache: 'no-store' }),
                     fetch(VIDA_URL, { cache: 'no-store' }),
-                    fetch(BENE_URL, { cache: 'no-store' })
+                    fetch(BENE_URL, { cache: 'no-store' }),
+                    fetch(BENE_PJ_URL, { cache: 'no-store' })
                 ]);
 
-                if (!matRes.ok) throw new Error("Falha carregando pormatricula.json");
-                if (!vidaRes.ok) throw new Error("Falha carregando porvida.json");
-                if (!beneRes.ok) throw new Error("Falha carregando porvida_beneficiarios.json");
+                if (!matRes.ok) throw new Error("Falha ao carregar pormatricula.json");
+                if (!vidaRes.ok) throw new Error("Falha ao carregar porvida.json");
+                if (!beneRes.ok) throw new Error("Falha ao carregar porvida_beneficiarios.json");
+                if (!benePJRes.ok) throw new Error("Falha ao carregar porvida_beneficiarios_pj.json");
 
-                const jsonMat = await matRes.json();
-                const jsonVid = await vidaRes.json();
-                const jsonBene = await beneRes.json();
+                let jsonMat = await matRes.json();
+                let jsonVida = await vidaRes.json();
+                let jsonBenef = await beneRes.json();
+                let jsonBenefPJ = await benePJRes.json();
 
-                const meta = jsonVid["_meta"]?.gerado_em ?? "";
+                // mostra timestamp do JSON principal
+                const meta = jsonVida["_meta"]?.gerado_em ?? "";
                 document.getElementById("jsonInfo").textContent = meta ? `• dados gerados em ${meta}` : "";
 
+                // remove metadados
                 delete jsonMat["_meta"];
-                delete jsonVid["_meta"];
-                delete jsonBene["_meta"];
+                delete jsonVida["_meta"];
+                delete jsonBenef["_meta"];
+                delete jsonBenefPJ["_meta"];
 
+                // ============================
+                // 1. LISTA DE TODOS OS POSTOS
+                // ============================
                 ALL_POSTOS = Array.from(new Set([
                     ...Object.keys(jsonMat),
-                    ...Object.keys(jsonVid),
-                    ...Object.keys(jsonBene)
-                ])).sort();
+                    ...Object.keys(jsonVida),
+                    ...Object.keys(jsonBenef),
+                    ...Object.keys(jsonBenefPJ)
+                ])).filter(p => /^[A-Z]+$/.test(p)).sort();
 
-                // FILTRAR POSTOS PELA PERMISSÃO DO USUÁRIO
                 POSTOS_PERMITIDOS = await filtrarPostosPorUsuario(ALL_POSTOS);
 
+                // ============================
+                // 2. PROCESSAR MATRÍCULAS PF/PJ
+                // ============================
+
                 RAW_MAT = {};
-                POSTOS_PERMITIDOS.forEach(p => {
-                    RAW_MAT[p] = jsonMat[p] ?? 0;
+
+                POSTOS_PERMITIDOS.forEach(posto => {
+                    const linha = jsonMat[posto] || {};
+
+                    const PF = linha["F"] ?? 0;
+                    const PJ = linha["J"] ?? 0;
+
+                    const ticketReal = linha["ticket_medio_real"] ?? null;
+                    const ticketPrev = linha["ticket_medio_previsto"] ?? null;
+
+                    RAW_MAT[posto] = {
+                        PF,
+                        PJ,
+                        TOTAL: PF + PJ,
+
+                        ticket_real_PF: PF > 0 ? ticketReal : 0,
+                        ticket_prev_PF: PF > 0 ? ticketPrev : 0,
+
+                        ticket_real_PJ: PJ > 0 ? ticketReal : 0,
+                        ticket_prev_PJ: PJ > 0 ? ticketPrev : 0
+                    };
+
                 });
 
-                RAW.vidas = [];
-                POSTOS_PERMITIDOS.forEach(p => {
-                    const faixas = jsonVid[p] ?? {};
+                // ============================
+                // 3. VIDAS PF
+                // ============================
+
+                RAW_VIDAS = [];
+
+                POSTOS_PERMITIDOS.forEach(posto => {
+                    const faixas = jsonVida[posto] ?? {};
                     for (const faixa in faixas) {
-                        RAW.vidas.push({ posto: p, faixa, total: faixas[faixa] });
+                        RAW_VIDAS.push({
+                            posto,
+                            faixa,
+                            total: faixas[faixa]
+                        });
                     }
                 });
 
-                RAW.beneficiarios = [];
-                POSTOS_PERMITIDOS.forEach(p => {
-                    const faixas = jsonBene[p] ?? {};
+                // ============================
+                // 4. BENEFICIÁRIOS PF
+                // ============================
+
+                RAW_BENEF = [];
+
+                POSTOS_PERMITIDOS.forEach(posto => {
+                    const faixas = jsonBenef[posto] ?? {};
                     for (const faixa in faixas) {
-                        RAW.beneficiarios.push({ posto: p, faixa, total: faixas[faixa] });
+                        RAW_BENEF.push({
+                            posto,
+                            faixa,
+                            total: faixas[faixa]
+                        });
                     }
                 });
 
-                selPostos = 'ALL';
+                // ============================
+                // 5. BENEFICIÁRIOS PJ
+                // ============================
 
+                RAW_BENEF_PJ = [];
+
+                POSTOS_PERMITIDOS.forEach(posto => {
+                    const faixas = jsonBenefPJ[posto] ?? {};
+                    for (const faixa in faixas) {
+                        RAW_BENEF_PJ.push({
+                            posto,
+                            faixa,
+                            total: faixas[faixa]
+                        });
+                    }
+                });
+
+                // ============================
+                // FINAL: construir tabs e render
+                // ============================
+
+                selPostos = "ALL";
                 buildPostoTabs();
                 setupDatasetSwitch();
                 refreshDashboard();
 
             } catch (err) {
-                document.getElementById('err').textContent = "Erro ao carregar dados: " + err.message;
+                console.error(err);
+                document.getElementById("err").textContent = "Erro ao carregar dados: " + err.message;
             }
         }
 
 
         /* =========================================================================
-        PERMISSÕES POR USUÁRIO
+           ACL — PERMISSÃO POR USUÁRIO
         ===========================================================================*/
 
         async function filtrarPostosPorUsuario(postos) {
@@ -383,44 +775,45 @@
 
             try {
                 const res = await fetch('/postos_acl.json');
-                if (!res.ok) throw new Error('Falha ao carregar postos_acl.json');
+                if (!res.ok) throw new Error("Falha ao carregar postos_acl.json");
 
                 const acl = await res.json();
                 return acl[email] ?? postos;
 
             } catch (err) {
-                console.error("Erro no ACL:", err);
-                return postos; // fallback seguro
+                console.warn("ACL fallback total:", err);
+                return postos;
             }
         }
 
 
-
         /* =========================================================================
-        TABS DE POSTOS (Filtro)
+           TABS DE POSTOS
         ===========================================================================*/
 
         function buildPostoTabs() {
             const ul = document.getElementById('postoTabsClientes');
             ul.innerHTML = '';
 
-            // Botão "Todos"
+            // botão TODOS
             const liAll = document.createElement('li');
             liAll.className = 'nav-item';
+
             const aAll = document.createElement('a');
-            aAll.href = '#';
-            aAll.textContent = 'Todos';
+            aAll.href = "#";
             aAll.className = 'nav-link' + (selPostos === 'ALL' ? ' active' : '');
+            aAll.textContent = 'Todos';
             aAll.onclick = e => {
                 e.preventDefault();
                 selPostos = 'ALL';
                 buildPostoTabs();
                 refreshDashboard();
             };
+
             liAll.appendChild(aAll);
             ul.appendChild(liAll);
 
-            // Botões por posto
+            // postos individuais
             POSTOS_PERMITIDOS.forEach(p => {
                 const li = document.createElement('li');
                 li.className = 'nav-item';
@@ -463,7 +856,7 @@
 
 
         /* =========================================================================
-        SWITCH VIDAS / BENEFICIÁRIOS
+           SWITCH VIDAS / BENEFICIÁRIOS / BENEFICIÁRIOS PJ
         ===========================================================================*/
 
         function setupDatasetSwitch() {
@@ -476,63 +869,152 @@
 
                     datasetAtivo = el.dataset.type;
 
-                    document.getElementById("titleChartFaixa").textContent =
-                        datasetAtivo === "vidas" ?
-                            "Distribuição de Vidas por Faixa Etária" :
-                            "Distribuição de Beneficiários por Faixa Etária";
-
-                    document.getElementById("titleChartFaixaDonut").textContent =
-                        datasetAtivo === "vidas" ?
-                            "Percentual por Faixa (Vidas)" :
-                            "Percentual por Faixa (Beneficiários)";
+                    // ajusta títulos automaticamente
+                    if (datasetAtivo === "vidas") {
+                        document.getElementById("titleChartFaixa").textContent = "Distribuição de Vidas por Faixa Etária";
+                        document.getElementById("titleChartFaixaDonut").textContent = "Percentual por Faixa (Vidas)";
+                    }
+                    else if (datasetAtivo === "beneficiarios") {
+                        document.getElementById("titleChartFaixa").textContent = "Distribuição de Beneficiários por Faixa Etária";
+                        document.getElementById("titleChartFaixaDonut").textContent = "Percentual por Faixa (Beneficiários)";
+                    }
+                    else {
+                        document.getElementById("titleChartFaixa").textContent = "Distribuição Beneficiários PJ por Faixa Etária";
+                        document.getElementById("titleChartFaixaDonut").textContent = "Percentual por Faixa (Beneficiários PJ)";
+                    }
 
                     refreshDashboard();
                 };
             });
         }
 
+    </script>
+
+
+
+
+    <script>
 
         /* =========================================================================
-        KPIs PRINCIPAIS
+           =====================  B L O C O   3  ==================================
+           ==================  KPIs + GRÁFICOS PF/PJ/TOTAL  =======================
+        ===========================================================================*/
+
+
+        /* =========================================================================
+           ATUALIZAÇÃO DOS KPIs (GERAL, PF, PJ)
         ===========================================================================*/
 
         function atualizarKPIsFixos() {
 
-            const postos = selPostos === 'ALL' ? POSTOS_PERMITIDOS : [...selPostos];
+            const postos = selPostos === 'ALL'
+                ? POSTOS_PERMITIDOS
+                : [...selPostos];
 
-            // Matrículas
-            let totalMat = postos.reduce((acc, p) => acc + (RAW_MAT[p] ?? 0), 0);
-            document.getElementById("kpiTotalMatriculas").textContent = fmtInt.format(totalMat);
+            let totalMatPF = 0;
+            let totalMatPJ = 0;
 
-            // Vidas
-            let totalVidas = RAW.vidas
+            let somaTicketRealPF = 0;
+            let somaTicketPrevPF = 0;
+            let somaPF = 0;
+
+            let somaTicketRealPJ = 0;
+            let somaTicketPrevPJ = 0;
+            let somaPJ = 0;
+
+            // Vidas PF
+            let totalVidas = RAW_VIDAS
                 .filter(r => postos.includes(r.posto))
                 .reduce((acc, r) => acc + r.total, 0);
 
-            document.getElementById("kpiTotalVidas").textContent = fmtInt.format(totalVidas);
-
-            // Beneficiários
-            let totalBenef = RAW.beneficiarios
+            // Beneficiários PF
+            let totalBenefPF = RAW_BENEF
                 .filter(r => postos.includes(r.posto))
                 .reduce((acc, r) => acc + r.total, 0);
 
-            document.getElementById("kpiTotalBeneficiarios").textContent = fmtInt.format(totalBenef);
+            // Beneficiários PJ
+            let totalBenefPJ = RAW_BENEF_PJ
+                .filter(r => postos.includes(r.posto))
+                .reduce((acc, r) => acc + r.total, 0);
+
+            // Matrículas PF/PJ
+            postos.forEach(p => {
+
+                const m = RAW_MAT[p] ?? { PF: 0, PJ: 0 };
+
+                // MATRÍCULAS PF
+                totalMatPF += m.PF;
+                somaTicketRealPF += m.ticket_real_PF * m.PF;
+                somaTicketPrevPF += m.ticket_prev_PF * m.PF;
+                somaPF += m.PF;
+
+                // MATRÍCULAS PJ
+                totalMatPJ += m.PJ;
+                somaTicketRealPJ += m.ticket_real_PJ * m.PJ;
+                somaTicketPrevPJ += m.ticket_prev_PJ * m.PJ;
+                somaPJ += m.PJ;
+            });
+
+            // MATRÍCULAS TOTAL
+            let totalMatTotal = totalMatPF + totalMatPJ;
+
+            // TICKET MÉDIO PF
+            let ticketRealPF = somaPF > 0 ? (somaTicketRealPF / somaPF) : 0;
+            let ticketPrevPF = somaPF > 0 ? (somaTicketPrevPF / somaPF) : 0;
+
+            // TICKET MÉDIO PJ
+            let ticketRealPJ = somaPJ > 0 ? (somaTicketRealPJ / somaPJ) : 0;
+            let ticketPrevPJ = somaPJ > 0 ? (somaTicketPrevPJ / somaPJ) : 0;
+
+            // ============================
+            // POPULAÇÃO DOS KPIs
+            // ============================
+
+            // BLOCOS GERAIS
+            document.getElementById("kpiTotalMatriculas").textContent = fmtInt.format(totalMatTotal);
+            document.getElementById("kpiTotalVidasPF").textContent = fmtInt.format(totalVidas);
+            document.getElementById("kpiTotalBenefPF").textContent = fmtInt.format(totalBenefPF);
+            document.getElementById("kpiTotalBenefPJ").textContent = fmtInt.format(totalBenefPJ);
+
+            // BLOCO PF
+            document.getElementById("kpiMatPF").textContent = fmtInt.format(totalMatPF);
+            document.getElementById("kpiTicketRealPF").textContent = ticketRealPF.toFixed(2);
+            document.getElementById("kpiTicketPrevPF").textContent = ticketPrevPF.toFixed(2);
+
+            // BLOCO PJ
+            document.getElementById("kpiMatPJ").textContent = fmtInt.format(totalMatPJ);
+            document.getElementById("kpiTicketRealPJ").textContent = ticketRealPJ.toFixed(2);
+            document.getElementById("kpiTicketPrevPJ").textContent = ticketPrevPJ.toFixed(2);
         }
 
 
         /* =========================================================================
-        DASHBOARD
+           DASHBOARD MAIN
         ===========================================================================*/
 
         function refreshDashboard() {
 
             atualizarKPIsFixos();
 
-            const postos = selPostos === 'ALL' ? POSTOS_PERMITIDOS : [...selPostos];
-            const data = RAW[datasetAtivo].filter(r => postos.includes(r.posto));
+            const postos = selPostos === 'ALL'
+                ? POSTOS_PERMITIDOS
+                : [...selPostos];
 
+            // dataset (vidas / benef PF / benef PJ)
+            let fonte = [];
+
+            if (datasetAtivo === "vidas") {
+                fonte = RAW_VIDAS.filter(r => postos.includes(r.posto));
+            } else if (datasetAtivo === "beneficiarios") {
+                fonte = RAW_BENEF.filter(r => postos.includes(r.posto));
+            } else {
+                fonte = RAW_BENEF_PJ.filter(r => postos.includes(r.posto));
+            }
+
+            // agrega faixas
             const byFaixa = new Map();
-            data.forEach(r => {
+
+            fonte.forEach(r => {
                 if (!byFaixa.has(r.faixa)) byFaixa.set(r.faixa, 0);
                 byFaixa.set(r.faixa, byFaixa.get(r.faixa) + r.total);
             });
@@ -545,46 +1027,50 @@
 
             buildFaixasCards(faixasAgg, totalDataset);
             buildChartsFaixas(faixasAgg, totalDataset);
-            buildChartsMatriculas();
+            buildChartsMatriculas();  // PF / PJ / Total
         }
 
 
         /* =========================================================================
-        CARDS DE FAIXA
+           CARDS — FAIXAS
         ===========================================================================*/
 
         function buildFaixasCards(list, totalDataset) {
-            const row = document.getElementById('faixasCardsRow');
-            row.innerHTML = '';
+
+            const row = document.getElementById("faixasCardsRow");
+            row.innerHTML = "";
 
             list.forEach(f => {
                 const pct = totalDataset ? (f.total / totalDataset * 100) : 0;
 
-                const col = document.createElement('div');
-                col.className = 'col-md-3 col-sm-6 mb-2';
+                const col = document.createElement("div");
+                col.className = "col-md-3 col-sm-6 mb-2";
 
                 col.innerHTML = `
-    <div class="card faixa-card bg-light">
-        <div class="card-body py-2">
-            <div class="d-flex justify-content-between">
-                <div>
-                    <div class="faixa-card-title">${f.faixa}</div>
-                    <div class="text-muted small">
-                        ${datasetAtivo === "vidas" ? "Vidas" : "Beneficiários"}: ${fmtInt.format(f.total)}
+            <div class="card faixa-card bg-light">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="faixa-card-title">${f.faixa}</div>
+                            <div class="text-muted small">
+                                ${datasetAtivo === "vidas"
+                        ? "Vidas"
+                        : (datasetAtivo === "beneficiarios" ? "Beneficiários" : "Beneficiários PJ")
+                    }: ${fmtInt.format(f.total)}
+                            </div>
+                        </div>
+                        <div class="faixa-card-value">${fmtPct.format(pct)}%</div>
                     </div>
                 </div>
-                <div class="faixa-card-value">${fmtPct.format(pct)}%</div>
             </div>
-        </div>
-    </div>
-    `;
+        `;
                 row.appendChild(col);
             });
         }
 
 
         /* =========================================================================
-        GRÁFICOS FAIXA
+           GRÁFICOS — FAIXAS
         ===========================================================================*/
 
         function buildChartsFaixas(list, totalDataset) {
@@ -596,18 +1082,33 @@
             if (chFaixaBar) chFaixaBar.destroy();
             if (chFaixaDonut) chFaixaDonut.destroy();
 
-            chFaixaBar = new Chart(document.getElementById('chartFaixaBar'), {
-                type: 'bar',
+            // BARRA
+            chFaixaBar = new Chart(document.getElementById("chartFaixaBar"), {
+                type: "bar",
                 data: {
                     labels,
-                    datasets: [{ label: datasetAtivo === "vidas" ? "Vidas" : "Beneficiários", data: vals }]
+                    datasets: [{
+                        label: datasetAtivo === "vidas"
+                            ? "Vidas"
+                            : (datasetAtivo === "beneficiarios" ? "Beneficiários" : "Beneficiários PJ"),
+                        data: vals
+                    }]
                 },
-                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+                options: {
+                    responsive: true,
+                    scales: { y: { beginAtZero: true } }
+                }
             });
 
-            chFaixaDonut = new Chart(document.getElementById('chartFaixaDonut'), {
-                type: 'doughnut',
-                data: { labels, datasets: [{ data: pct }] },
+            // DONUT
+            chFaixaDonut = new Chart(document.getElementById("chartFaixaDonut"), {
+                type: "doughnut",
+                data: {
+                    labels,
+                    datasets: [{
+                        data: pct
+                    }]
+                },
                 options: {
                     responsive: true,
                     plugins: {
@@ -626,31 +1127,58 @@
 
 
         /* =========================================================================
-        GRÁFICOS MATRÍCULAS
+           GRÁFICOS — MATRÍCULAS PF / PJ / TOTAL
         ===========================================================================*/
 
         function buildChartsMatriculas() {
 
-            const postos = selPostos === 'ALL' ? POSTOS_PERMITIDOS : [...selPostos];
+            const postos = selPostos === 'ALL'
+                ? POSTOS_PERMITIDOS
+                : [...selPostos];
 
             const labels = postos;
-            const vals = postos.map(p => RAW_MAT[p] ?? 0);
 
-            const totalMat = vals.reduce((a, b) => a + b, 0);
-            const pct = vals.map(v => totalMat ? (v / totalMat * 100) : 0);
+            const valsPF = postos.map(p => RAW_MAT[p]?.PF ?? 0);
+            const valsPJ = postos.map(p => RAW_MAT[p]?.PJ ?? 0);
+            const valsTot = postos.map(p => RAW_MAT[p]?.TOTAL ?? 0);
 
+            const totalGeral = valsTot.reduce((a, b) => a + b, 0);
+            const pct = valsTot.map(v => totalGeral ? (v / totalGeral * 100) : 0);
+
+            // destruir gráficos antigos
             if (chMatBar) chMatBar.destroy();
             if (chMatDonut) chMatDonut.destroy();
 
-            chMatBar = new Chart(document.getElementById('chartMatBar'), {
-                type: 'bar',
-                data: { labels, datasets: [{ label: 'Matrículas', data: vals }] },
-                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            // BARRA — PF / PJ / TOTAL
+            chMatBar = new Chart(document.getElementById("chartMatBar"), {
+                type: "bar",
+                data: {
+                    labels,
+                    datasets: [
+                        { label: "Matrículas PF", data: valsPF },
+                        { label: "Matrículas PJ", data: valsPJ },
+                        { label: "Total Matrículas", data: valsTot }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            type: 'logarithmic',
+                            beginAtZero: true
+                        }
+                    }
+                }
+
             });
 
-            chMatDonut = new Chart(document.getElementById('chartMatDonut'), {
-                type: 'doughnut',
-                data: { labels, datasets: [{ data: pct }] },
+            // DONUT — Percentual por posto
+            chMatDonut = new Chart(document.getElementById("chartMatDonut"), {
+                type: "doughnut",
+                data: {
+                    labels,
+                    datasets: [{ data: pct }]
+                },
                 options: {
                     responsive: true,
                     plugins: {
@@ -658,7 +1186,7 @@
                             callbacks: {
                                 label: ctx => {
                                     const i = ctx.dataIndex;
-                                    return `${labels[i]}: ${fmtPct.format(pct[i])}% (${fmtInt.format(vals[i])})`;
+                                    return `${labels[i]}: ${fmtPct.format(pct[i])}% (${fmtInt.format(valsTot[i])})`;
                                 }
                             }
                         }
@@ -667,12 +1195,86 @@
             });
         }
 
+    </script>
+
+
+
+    <script>
 
         /* =========================================================================
-        START
+           =============   B L O C O   4 — SWITCH + FINALIZAÇÃO   ==================
         ===========================================================================*/
 
-        document.addEventListener('DOMContentLoaded', loadClientes);
+
+        /* =========================================================================
+           SWITCH DE DATASETS (VIDAS / BENEF / BENEF PJ)
+        ===========================================================================*/
+
+        function setupDatasetSwitch() {
+
+            document.querySelectorAll("#switchDataset .switch-option").forEach(el => {
+
+                el.onclick = () => {
+
+                    // remover active de todos
+                    document.querySelectorAll("#switchDataset .switch-option")
+                        .forEach(btn => btn.classList.remove("active"));
+
+                    // ativar o clicado
+                    el.classList.add("active");
+
+                    datasetAtivo = el.dataset.type;
+                    // vidas / beneficiarios / beneficiarios_pj
+
+                    // Títulos de gráficos
+                    if (datasetAtivo === "vidas") {
+
+                        document.getElementById("titleChartFaixa").textContent =
+                            "Distribuição de Vidas por Faixa Etária";
+
+                        document.getElementById("titleChartFaixaDonut").textContent =
+                            "Percentual por Faixa (Vidas)";
+
+                    } else if (datasetAtivo === "beneficiarios") {
+
+                        document.getElementById("titleChartFaixa").textContent =
+                            "Distribuição de Beneficiários por Faixa Etária";
+
+                        document.getElementById("titleChartFaixaDonut").textContent =
+                            "Percentual por Faixa (Beneficiários)";
+
+                    } else {
+
+                        document.getElementById("titleChartFaixa").textContent =
+                            "Distribuição de Beneficiários PJ por Faixa Etária";
+
+                        document.getElementById("titleChartFaixaDonut").textContent =
+                            "Percentual por Faixa (Beneficiários PJ)";
+                    }
+
+                    refreshDashboard();
+                };
+            });
+        }
+
+
+        /* =========================================================================
+           BOOTSTRAP DO SISTEMA
+        ===========================================================================*/
+
+        document.addEventListener("DOMContentLoaded", () => {
+
+            console.log("%c[CLIENTES] Inicializando dashboard...", "color: #0af");
+
+            loadClientes().then(() => {
+                console.log("%c[CLIENTES] Dados carregados e dashboard pronto.", "color: #0a0");
+            }).catch(err => {
+                console.error("Erro na inicialização:", err);
+                document.getElementById("err").textContent = "Erro inicial: " + err.message;
+            });
+
+        });
+
     </script>
 
 
@@ -680,7 +1282,6 @@
 
 
 
-    <!-- ATÉ AQUI VÁRIOS ALMOÇOS SE PASSARAM... VOCÊ CONSEGUIU E AINDA NÃO FICOU LOUCO!!!!!! -->
 </body>
 
 </html>

@@ -1,5 +1,5 @@
 SELECT
-    e.codigo AS posto,
+              e.codigo AS posto,
     CASE
         WHEN cp.idade BETWEEN  0 AND 18 THEN '0 a 18'
         WHEN cp.idade BETWEEN 19 AND 23 THEN '19 a 23'
@@ -15,14 +15,17 @@ SELECT
     END AS faixa_etaria,
     COUNT(*) AS total
 FROM vw_Cad_PacienteView cp
-JOIN sis_empresa emp ON emp.idendereco = cp.idendereco
+LEFT JOIN sis_empresa emp ON emp.idendereco = cp.idendereco
 join cad_endereco e on e.idendereco = emp.idendereco
-join cad_cliente cc on cc.idCliente = cp.idCliente
+left join vw_cad_cliente cc on cc.idcliente = cp.idcliente
 WHERE cp.desativado = 0
   AND cp.idade IS NOT NULL
   AND cp.[Situação] = 'Adimplente'
-  --AND cc.tipo = 'F'
-  AND (cp.CanceladoANS = 0)
+  AND cp.tipo_FJ = 'J'
+  AND cp.CanceladoANS = 0
+  AND cp.tipo = 'dependente'
+  AND cp.matricula <> emp.MatriculaFuncionario 
+  AND cc.[Valor mensalidade] > 48
 GROUP BY
     e.codigo,
     CASE
@@ -39,8 +42,3 @@ GROUP BY
         ELSE 'Sem idade'
     END
 ORDER BY e.codigo, faixa_etaria;
-
-
-
-
-
