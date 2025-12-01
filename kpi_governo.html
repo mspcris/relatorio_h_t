@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Indicadores Macro — PTAX, IPCA, IGP-M</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- AdminLTE + Bootstrap (CSS) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15/css/all.min.css">
+    <!-- DataTables -->
+    <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/datatables.net-bs4@1.13.10/css/dataTables.bootstrap4.min.css">
+
+    <!-- Fonte padrão AdminLTE 3 -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+
+    <link rel="shortcut icon" href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png
+" type="image/x-icon">
+
+    <!-- Normalização pós-AdminLTE: tipografia e UI consistentes -->
+    <style id="normalize-adminlte">
+        html {
+            font-size: 16px;
+        }
+
+        body {
+            font-size: 1rem;
+            -webkit-text-size-adjust: 100%;
+            font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body.text-sm {
+            font-size: 1rem;
+        }
+
+        .text-sm .btn,
+        .text-sm .form-control,
+        .text-sm .custom-select,
+        .text-sm .page-link,
+        .text-sm .breadcrumb,
+        .text-sm .nav-link,
+        .text-sm .card-title {
+            font-size: 1rem;
+        }
+
+        h1,
+        h2,
+        h3 {
+            margin-top: 0;
+            margin-bottom: .5rem;
+            font-weight: 600;
+            line-height: 1.25;
+        }
+
+        h1 {
+            font-size: 2rem;
+        }
+
+        /* 32px */
+        h2 {
+            font-size: 1.5rem;
+        }
+
+        /* 24px */
+        h3 {
+            font-size: 1.25rem;
+        }
+
+        /* 20px */
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .sidebar .nav-link {
+            font-size: .95rem;
+        }
+
+        .brand-link .brand-text {
+            font-size: 1rem;
+        }
+
+        html,
+        body {
+            zoom: 1;
+        }
+    </style>
+
+    <!-- Estilos locais -->
+    <style>
+        .kpi .info-box-number {
+            font-weight: 700;
+        }
+
+        .chart-box {
+            min-height: 320px;
+        }
+
+        .small {
+            font-size: .85rem;
+            color: #6b7280;
+        }
+
+        .w-100 {
+            width: 100% !important;
+        }
+
+        .nowrap {
+            white-space: nowrap;
+        }
+    </style>
+</head>
+
+<body class="hold-transition sidebar-mini layout-fixed">
+    <div class="wrapper">
+        <!-- Navbar -->
+        <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
+                </li>
+                <li class="nav-item d-none d-sm-inline-block"><span class="nav-link">Indicadores Macro</span></li>
+            </ul>
+            <ul class="navbar-nav ml-auto">
+                <li class="nav-item"><a class="nav-link" id="refreshBtn" href="#"><i class="fas fa-sync-alt"></i>
+                        Atualizar</a></li>
+            </ul>
+        </nav>
+
+        <!-- SIDEBAR -->
+        <aside class="main-sidebar sidebar-dark-primary elevation-4">
+            <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+            <div class="sidebar">
+                <nav class="mt-2">
+                    <ul class="nav nav-pills nav-sidebar flex-column" role="menu" data-accordion="false">
+                        <li class="nav-item"><a href="/" class="nav-link"><i class="nav-icon fas fa-home"></i>
+                                <p>Home Page</p>
+                            </a></li>
+                        <li class="nav-item"><a href="/kpi_home" class="nav-link"><i
+                                    class="nav-icon fas fa-book-open"></i>
+                                <p>Leia-me</p>
+                            </a></li>
+                        <li class="nav-item"><a href="/alimentacao" class="nav-link"><i
+                                    class="nav-icon fas fa-utensils"></i>
+                                <p>KPI Custo Alimentação</p>
+                            </a></li>
+                        <li class="nav-item"><a href="/medicos" class="nav-link"><i
+                                    class="nav-icon fas fa-notes-medical"></i>
+                                <p>KPI Custo Médico</p>
+                            </a></li>
+                        <li class="nav-item"><a href="/kpi_v2" class="nav-link"><i
+                                    class="nav-icon fas fa-chart-line"></i>
+                                <p>KPI Mensalidades</p>
+                            </a></li>
+                        <li class="nav-item"><a href="/kpi_vendas" class="nav-link"><i
+                                    class="nav-icon fas fa-shopping-cart"></i>
+                                <p>KPI Vendas</p>
+                            </a></li>
+                        <li class="nav-item">
+                            <a href="/clientes" class="nav-link">
+                                <i class="nav-icon fas fa-users"></i>
+                                <p>Clientes</p>
+                            </a>
+                        </li>
+                        <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i
+                                    class="nav-icon fas fa-prescription-bottle-alt"></i>
+                                <p>KPI Prescrições</p>
+                            </a></li>
+                        <li class="nav-item">
+                            <a href="/kpi_governo" class="nav-link active">
+                                <i class="nav-icon fas fa-landmark"></i>
+                                <p>KPI Índices Oficiais</p>
+                            </a>
+                        </li>
+
+
+                        <li class="nav-item"><a href="#resumo" class="nav-link"><i
+                                    class="nav-icon fas fa-tachometer-alt"></i>
+                                <p>Resumo</p>
+                            </a></li>
+                        <li class="nav-item"><a href="#ptax" class="nav-link"><i
+                                    class="nav-icon fas fa-dollar-sign"></i>
+                                <p>PTAX Diário</p>
+                            </a></li>
+                        <li class="nav-item"><a href="#ipca" class="nav-link"><i class="nav-icon fas fa-chart-bar"></i>
+                                <p>IPCA</p>
+                            </a></li>
+                        <li class="nav-item"><a href="#igpm" class="nav-link"><i class="nav-icon fas fa-chart-line"></i>
+                                <p>IGP-M</p>
+                            </a></li>
+                        <li class="nav-item"><a href="#tabelas" class="nav-link"><i class="nav-icon fas fa-table"></i>
+                                <p>Tabelas</p>
+                            </a></li>
+                        <li class="nav-item"><a href="#sobre" class="nav-link"><i
+                                    class="nav-icon fas fa-info-circle"></i>
+                                <p>Sobre</p>
+                            </a></li>
+                        <li class="nav-item">
+                            <form method="POST" action="/session/logout" style="display:inline">
+                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                                    <p>Sair</p>
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Content -->
+        <div class="content-wrapper">
+            <section class="content-header" id="resumo">
+                <div class="container-fluid">
+                    <div class="row mb-2">
+                        <div class="col-sm-6">
+                            <h1>Indicadores para análise financeira</h1>
+                        </div>
+                        <div class="col-sm-6">
+                            <ol class="breadcrumb float-sm-right">
+                                <li class="breadcrumb-item"><a href="#">Home</a></li>
+                                <li class="breadcrumb-item active">Indicadores Macro</li>
+                            </ol>
+                        </div>
+                    </div>
+                    <p class="small mb-2">Fonte: BCB/PTAX, IBGE/SIDRA e FGV (via Ipeadata). Período alvo: 2020-01+.</p>
+
+                    <!-- Filtros globais -->
+                    <div class="card card-outline card-primary">
+                        <div class="card-body">
+                            <div class="form-row">
+                                <div class="col-md-3">
+                                    <label>Data inicial</label>
+                                    <input id="dtIni" type="month" class="form-control" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label>Data final</label>
+                                    <input id="dtFim" type="month" class="form-control" />
+                                </div>
+                                <div class="col-md-6 d-flex align-items-end">
+                                    <span class="small">Sempre mostra 12 meses completos por padrão. Alterou um mês,
+                                        aplica na hora.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- KPIs -->
+                    <div class="row kpi">
+                        <div class="col-md-3 col-sm-6 col-12">
+                            <div class="info-box bg-light">
+                                <span class="info-box-icon"><i class="fas fa-dollar-sign"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">PTAX último</span>
+                                    <span id="kpi_ptax_last" class="info-box-number">—</span>
+                                    <span id="kpi_ptax_mom" class="progress-description small">MoM: —</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-sm-6 col-12">
+                            <div class="info-box bg-light">
+                                <span class="info-box-icon"><i class="fas fa-percentage"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">IPCA mês</span>
+                                    <span id="kpi_ipca_last" class="info-box-number">—</span>
+                                    <span id="kpi_ipca_12m" class="progress-description small">Acum. 12m: —</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-sm-6 col-12">
+                            <div class="info-box bg-light">
+                                <span class="info-box-icon"><i class="fas fa-chart-line"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">IGP-M mês</span>
+                                    <span id="kpi_igpm_last" class="info-box-number">—</span>
+                                    <span id="kpi_igpm_12m" class="progress-description small">Acum. 12m: —</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-sm-6 col-12">
+                            <div class="info-box bg-light">
+                                <span class="info-box-icon"><i class="fas fa-balance-scale"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">IPCA x IGP-M</span>
+                                    <span id="kpi_spread" class="info-box-number">—</span>
+                                    <span class="progress-description small">Diferença no mês</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PTAX -->
+            <section class="content" id="ptax">
+                <div class="container-fluid">
+                    <div class="card card-primary">
+                        <div class="card-header">
+                            <h3 class="card-title">USD/BRL — PTAX (diário)</h3>
+                            <div class="card-tools">
+                                <a class="btn btn-tool" href="json_consolidado/ptax_daily.json" download><i
+                                        class="fas fa-file-code"></i></a>
+                                <!-- <a class="btn btn-tool" href="json_consolidado/ptax_daily.csv" download><i -->
+                                <!-- class="fas fa-file-csv"></i></a> -->
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-lg-8"><canvas id="ptax_line" class="chart-box"></canvas></div>
+                                <div class="col-lg-4"><canvas id="ptax_hist" class="chart-box"></canvas></div>
+                            </div>
+                            <p class="small mt-2">Último ponto do dia consolidado. Série com média móvel de 21 dias.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- IPCA -->
+            <section class="content" id="ipca">
+                <div class="container-fluid">
+                    <div class="card card-success">
+                        <div class="card-header">
+                            <h3 class="card-title">IPCA — variação mensal</h3>
+                            <div class="card-tools">
+                                <a class="btn btn-tool" href="json_consolidado/ipca_monthly.json" download><i
+                                        class="fas fa-file-code"></i></a>
+                                <a class="btn btn-tool" href="json_consolidado/ipca_monthly.csv" download><i
+                                        class="fas fa-file-csv"></i></a>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-lg-8"><canvas id="ipca_bar_line" class="chart-box"></canvas></div>
+                                <div class="col-lg-4"><canvas id="ipca_pareto" class="chart-box"></canvas></div>
+                            </div>
+                            <p class="small mt-2">Barras = var. mensal; linha = acumulado 12m estimado. “Pareto” por mês
+                                no ano corrente.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- IGP-M -->
+            <section class="content" id="igpm">
+                <div class="container-fluid">
+                    <div class="card card-warning">
+                        <div class="card-header">
+                            <h3 class="card-title">IGP-M — variação mensal</h3>
+                            <div class="card-tools">
+                                <a class="btn btn-tool" href="json_consolidado/igpm_monthly.json" download><i
+                                        class="fas fa-file-code"></i></a>
+                                <a class="btn btn-tool" href="json_consolidado/igpm_monthly.csv" download><i
+                                        class="fas fa-file-csv"></i></a>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-lg-8"><canvas id="igpm_bar_line" class="chart-box"></canvas></div>
+                                <div class="col-lg-4"><canvas id="ipca_vs_igpm" class="chart-box"></canvas></div>
+                            </div>
+                            <p class="small mt-2">Comparativo IPCA x IGP-M com linha de spread.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tabelas -->
+            <section class="content" id="tabelas">
+                <div class="container-fluid">
+                    <div class="card card-outline card-secondary">
+                        <div class="card-header">
+                            <h3 class="card-title">Dados detalhados</h3>
+                        </div>
+                        <div class="card-body">
+                            <ul class="nav nav-tabs" id="tabTables" role="tablist">
+                                <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tbl_ptax"
+                                        role="tab">PTAX</a></li>
+                                <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tbl_ipca"
+                                        role="tab">IPCA</a></li>
+                                <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tbl_igpm"
+                                        role="tab">IGP-M</a></li>
+                            </ul>
+                            <div class="tab-content mt-3">
+                                <div class="tab-pane fade show active" id="tbl_ptax" role="tabpanel">
+                                    <table id="dt_ptax" class="table table-sm table-striped w-100"></table>
+                                </div>
+                                <div class="tab-pane fade" id="tbl_ipca" role="tabpanel">
+                                    <table id="dt_ipca" class="table table-sm table-striped w-100"></table>
+                                </div>
+                                <div class="tab-pane fade" id="tbl_igpm" role="tabpanel">
+                                    <table id="dt_igpm" class="table table-sm table-striped w-100"></table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sobre -->
+            <section class="content" id="sobre">
+                <div class="container-fluid">
+                    <div class="card card-outline card-light">
+                        <div class="card-header">
+                            <h3 class="card-title">Sobre e integrações</h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="small mb-3">
+                                Os gráficos consomem JSONs/CSVs gerados pelo ETL <code>indicadores_etl.py</code> em
+                                <code>/opt/relatorio_h_t/json_consolidado</code>.
+                                Após a geração no servidor, o deploy publica em <code>/var/www/json_consolidado</code>,
+                                que é onde este HTML lê.
+                            </p>
+
+                            <div class="table-responsive">
+                                <table id="dt_assets" class="table table-sm table-striped w-100">
+                                    <thead>
+                                        <tr>
+                                            <th>Arquivo</th>
+                                            <th>Tipo</th>
+                                            <th>Última atualização</th>
+                                            <th>Tamanho</th>
+                                            <th>Linhas</th>
+                                            <th>Download</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+
+                            <p class="small mt-3" id="etl_hint">
+                                Campos esperados: PTAX(<code>date, buy, sell, mid, source, as_of</code>),
+                                IPCA/IGP-M(<code>ref_date, value</code>). Use o script:
+                                <code>python indicadores_etl.py --ptax 2020-01-01 today --ipca 2020-01 thismonth --igpm 2020-01 thismonth --out /opt/relatorio_h_t/json_consolidado</code>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div><!-- /.content-wrapper -->
+
+        <footer class="main-footer"><strong>Arquivos prontos para consumo por IA.</strong></footer>
+    </div>
+
+    <!-- Scripts base -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <!-- DataTables -->
+    <script src="https://cdn.jsdelivr.net/npm/datatables.net@1.13.10/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/datatables.net-bs4@1.13.10/js/dataTables.bootstrap4.min.js"></script>
+
+    <!-- ====== Config JS - Aqui começa a loucura ====== -->
+
+
+    <!-- ====== Config JS - Aqui começa a loucura ====== -->
+
+
+    <script>
+        /* ====== Config ====== */
+        const DATA_BASES = ["./json_consolidado/", "json_consolidado/", "/json_consolidado/"];
+        async function fetchFirst(path) {
+            for (const base of DATA_BASES) {
+                try {
+                    const r = await fetch(base + path, { cache: "no-cache" });
+                    if (r.ok) return await r.json();
+                } catch (e) { }
+            }
+            throw new Error("Arquivo não encontrado: " + path);
+        }
+
+        /* ====== Utils ====== */
+        const fmtNum = v => (v == null || isNaN(v)) ? "—" : Number(v).toFixed(4);
+        function normalizePctMaybe(x) { x = Number(x); return Math.abs(x) >= 10 ? x / 100 : x; } // protege caso venha em pb
+        function normalizeUsdBrl(mid) { mid = Number(mid); return mid > 100 ? mid / 10000 : mid; }
+        function movingAverage(arr, win) {
+            const out = []; let s = 0;
+            for (let i = 0; i < arr.length; i++) { s += arr[i]; if (i >= win) s -= arr[i - win]; out.push(i >= win - 1 ? s / win : null); }
+            return out;
+        }
+        // composição correta: recebe série em % (ex.: 0.56) e retorna 12m também em %
+        function rolling12Compounded(percentSeries) {
+            const out = [];
+            for (let i = 0; i < percentSeries.length; i++) {
+                if (i < 11) { out.push(null); continue; }
+                let acc = 1;
+                for (let k = i - 11; k <= i; k++) acc *= (1 + (percentSeries[k] || 0) / 100);
+                out.push((acc - 1) * 100);
+            }
+            return out;
+        }
+
+        /* ====== Dados ====== */
+        let PTAX = [], IPCA = [], IGPM = [];
+        async function loadAll() {
+            PTAX = (await fetchFirst("ptax_daily.json")).map(r => ({
+                date: r.date, buy: +r.buy, sell: +r.sell, mid: normalizeUsdBrl(+r.mid), source: r.source, as_of: r.as_of
+            }));
+            IPCA = (await fetchFirst("ipca_monthly.json")).map(r => ({
+                ref_date: r.ref_date, value: normalizePctMaybe(+r.value) // mantém em %
+            }));
+            IGPM = (await fetchFirst("igpm_monthly.json")).map(r => ({
+                ref_date: r.ref_date, value: normalizePctMaybe(+r.value) // mantém em %
+            }));
+        }
+
+        /* ====== Range padrão: últimos 12 meses completos ====== */
+        function lastCompleteWindow() {
+            const today = new Date();
+            const end = new Date(today.getFullYear(), today.getMonth(), 1); // 1º do mês atual
+            end.setMonth(end.getMonth() - 1);                                // mês anterior
+            const start = new Date(end.getFullYear(), end.getMonth() - 11, 1);
+            const toYM = d => d.toISOString().slice(0, 7);
+            return { ini: toYM(start), fim: toYM(end) };
+        }
+
+        /* ====== KPIs ====== */
+        function kpisFromData() {
+            // PTAX
+            const last = PTAX.slice(-1)[0]?.mid ?? null;
+            const lastMonth = PTAX.length ? PTAX[PTAX.length - 1].date.slice(0, 7) : null;
+            const month = lastMonth ? PTAX.filter(r => r.date.slice(0, 7) === lastMonth) : [];
+            const mom = month.length >= 2 ? (month[month.length - 1].mid / month[0].mid - 1) : null;
+            $("#kpi_ptax_last").text(last != null ? "R$ " + fmtNum(last) : "—");
+            $("#kpi_ptax_mom").text("MoM: " + (mom != null ? (mom * 100).toFixed(2) + "%" : "—"));
+
+            // IPCA em % (sem *100)
+            const lastIpca = IPCA.slice(-1)[0]?.value ?? null;
+            const ipRoll12 = rolling12Compounded(IPCA.map(x => x.value)).slice(-1)[0] ?? null;
+            $("#kpi_ipca_last").text(lastIpca != null ? lastIpca.toFixed(2) + "%" : "—");
+            $("#kpi_ipca_12m").text("Acum. 12m: " + (ipRoll12 != null ? ipRoll12.toFixed(2) + "%" : "—"));
+
+            // IGP-M em % (sem *100)
+            const lastIgpm = IGPM.slice(-1)[0]?.value ?? null;
+            const igRoll12 = rolling12Compounded(IGPM.map(x => x.value)).slice(-1)[0] ?? null;
+            $("#kpi_igpm_last").text(lastIgpm != null ? lastIgpm.toFixed(2) + "%" : "—");
+            $("#kpi_igpm_12m").text("Acum. 12m: " + (igRoll12 != null ? igRoll12.toFixed(2) + "%" : "—"));
+
+            // Spread em pp
+            const ref = IPCA.slice(-1)[0]?.ref_date;
+            const ip = IPCA.slice(-1)[0]?.value ?? null;
+            const ig = IGPM.find(x => x.ref_date === ref)?.value ?? null;
+            const sp = (ip != null && ig != null) ? ig - ip : null;
+            $("#kpi_spread").text(sp != null ? sp.toFixed(2) + " pp" : "—");
+        }
+
+        /* ====== Charts ====== */
+        let chPTAXLine, chPTAXHist, chIPCABarLine, chIPCAPareto, chIGPMBarLine, chIPCAvsIGPM;
+
+        function buildPTAX(data) {
+            const labels = data.map(r => r.date);
+            const vals = data.map(r => r.mid);
+            const mm21 = movingAverage(vals, 21);
+            chPTAXLine = new Chart(document.getElementById("ptax_line"), {
+                type: "line",
+                data: {
+                    labels, datasets: [
+                        { label: "PTAX", data: vals, borderWidth: 1, pointRadius: 0 },
+                        { label: "Média móvel 21d", data: mm21, borderDash: [6, 4], borderWidth: 1, pointRadius: 0 }
+                    ]
+                },
+                options: { responsive: true, interaction: { mode: "index", intersect: false }, scales: { y: { beginAtZero: false } } }
+            });
+
+            // hist de retornos em %
+            const ret = [];
+            for (let i = 1; i < vals.length; i++) { if (vals[i - 1]) ret.push((vals[i] / vals[i - 1] - 1) * 100); }
+            const bins = new Array(21).fill(0);
+            ret.forEach(r => { const idx = Math.max(0, Math.min(20, Math.floor((r + 5) / 0.5))); bins[idx]++; });
+            const hlabels = Array.from({ length: 21 }, (_, i) => ((i * 0.5 - 5).toFixed(1)) + "%");
+            chPTAXHist = new Chart(document.getElementById("ptax_hist"), {
+                type: "bar", data: { labels: hlabels, datasets: [{ label: "Freq. retornos diários", data: bins }] },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+        }
+
+        function buildIPCA(data) {
+            const labels = data.map(r => r.ref_date);
+            const vals = data.map(r => r.value);               // já em %
+            const roll12 = rolling12Compounded(vals);          // 12m em %
+
+            chIPCABarLine = new Chart(document.getElementById("ipca_bar_line"), {
+                type: "bar",
+                data: {
+                    labels, datasets: [
+                        { label: "IPCA % mês", data: vals, yAxisID: "y" },
+                        { type: "line", label: "IPCA 12m %", data: roll12, yAxisID: "y1", borderDash: [6, 4], pointRadius: 0 }
+                    ]
+                },
+                options: {
+                    responsive: true, interaction: { mode: "index", intersect: false },
+                    scales: { y: { beginAtZero: true }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false } } }
+                }
+            });
+
+            // Pareto do ano corrente
+            const year = (labels.slice(-1)[0] || "").slice(0, 4);
+            const cur = data.filter(r => r.ref_date.startsWith(year)).map(r => ({ m: r.ref_date.slice(5), v: r.value }));
+            const total = cur.reduce((a, b) => a + b.v, 0); let cum = 0;
+            chIPCAPareto = new Chart(document.getElementById("ipca_pareto"), {
+                type: "bar",
+                data: {
+                    labels: cur.map(x => x.m), datasets: [
+                        { label: "% por mês", data: cur.map(x => x.v), yAxisID: "y" },
+                        { type: "line", label: "Acum. % do ano", data: cur.map(x => { cum += x.v; return (cum / Math.max(1, total)) * 100; }), yAxisID: "y1", pointRadius: 3 }
+                    ]
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false } } } }
+            });
+        }
+
+        function buildIGPM(igData, ipData) {
+            const L = igData.map(r => r.ref_date);
+            const V = igData.map(r => r.value);                 // já em %
+            const R12 = rolling12Compounded(V);                 // 12m em %
+
+            chIGPMBarLine = new Chart(document.getElementById("igpm_bar_line"), {
+                type: "bar",
+                data: {
+                    labels: L, datasets: [
+                        { label: "IGP-M % mês", data: V, yAxisID: "y" },
+                        { type: "line", label: "IGP-M 12m %", data: R12, yAxisID: "y1", pointRadius: 0, borderDash: [6, 4] }
+                    ]
+                },
+                options: {
+                    responsive: true, interaction: { mode: "index", intersect: false },
+                    scales: { y: { beginAtZero: true }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false } } }
+                }
+            });
+
+            // IPCA vs IGP-M em %
+            const mapIP = new Map(ipData.map(x => [x.ref_date, x.value]));
+            const common = igData.map(x => ({ ref: x.ref_date, igpm: x.value, ipca: mapIP.get(x.ref_date) })).filter(r => r.ipca != null);
+            chIPCAvsIGPM = new Chart(document.getElementById("ipca_vs_igpm"), {
+                type: "line",
+                data: {
+                    labels: common.map(r => r.ref), datasets: [
+                        { label: "IPCA %", data: common.map(r => r.ipca), pointRadius: 0 },
+                        { label: "IGP-M %", data: common.map(r => r.igpm), pointRadius: 0 },
+                        { type: "bar", label: "Spread (IGP-M - IPCA) pp", data: common.map(r => r.igpm - r.ipca), yAxisID: "y1" }
+                    ]
+                },
+                options: {
+                    responsive: true, interaction: { mode: "index", intersect: false },
+                    scales: { y: { beginAtZero: true }, y1: { position: "right", grid: { drawOnChartArea: false } } }
+                }
+            });
+        }
+
+        /* ====== Tabelas ====== */
+        function buildTables(pt, ip, ig) {
+            $("#dt_ptax").DataTable({
+                data: pt.map(r => [r.date, r.buy, r.sell, r.mid, r.source]),
+                columns: [{ title: "Data", className: "nowrap" }, { title: "Compra" }, { title: "Venda" }, { title: "Média" }, { title: "Fonte" }],
+                pageLength: 10, destroy: true
+            });
+            $("#dt_ipca").DataTable({
+                data: ip.map(r => [r.ref_date, (r.value).toFixed(2) + " %"]),  // sem *100
+                columns: [{ title: "Referência", className: "nowrap" }, { title: "Variação" }],
+                pageLength: 12, destroy: true
+            });
+            $("#dt_igpm").DataTable({
+                data: ig.map(r => [r.ref_date, (r.value).toFixed(2) + " %"]),  // sem *100
+                columns: [{ title: "Referência", className: "nowrap" }, { title: "Variação" }],
+                pageLength: 12, destroy: true
+            });
+        }
+
+        /* ====== Filtro e aplicação automática ====== */
+        function applyRange() {
+            const ini = $("#dtIni").val(); const fim = $("#dtFim").val();
+            const inRange = ym => (!ini || ym >= ini) && (!fim || ym <= fim);
+
+            const ip = IPCA.filter(r => inRange(r.ref_date));
+            const ig = IGPM.filter(r => inRange(r.ref_date));
+            const pt = PTAX.filter(r => inRange(r.date.slice(0, 7)));
+
+            // PTAX
+            chPTAXLine.data.labels = pt.map(r => r.date);
+            chPTAXLine.data.datasets[0].data = pt.map(r => r.mid);
+            chPTAXLine.data.datasets[1].data = movingAverage(pt.map(r => r.mid), 21);
+            chPTAXLine.update();
+
+            const vals = pt.map(r => r.mid); const ret = [];
+            for (let i = 1; i < vals.length; i++) { if (vals[i - 1]) ret.push((vals[i] / vals[i - 1] - 1) * 100); }
+            const bins = new Array(21).fill(0); ret.forEach(r => { const idx = Math.max(0, Math.min(20, Math.floor((r + 5) / 0.5))); bins[idx]++; });
+            chPTAXHist.data.datasets[0].data = bins; chPTAXHist.update();
+
+            // IPCA
+            chIPCABarLine.data.labels = ip.map(r => r.ref_date);
+            chIPCABarLine.data.datasets[0].data = ip.map(r => r.value);
+            chIPCABarLine.data.datasets[1].data = rolling12Compounded(ip.map(r => r.value));
+            chIPCABarLine.update();
+
+            const year = (chIPCABarLine.data.labels.slice(-1)[0] || "").slice(0, 4);
+            const cur = ip.filter(r => r.ref_date.startsWith(year)).map(r => ({ m: r.ref_date.slice(5), v: r.value }));
+            const total = cur.reduce((a, b) => a + b.v, 0); let cum = 0;
+            chIPCAPareto.data.labels = cur.map(x => x.m);
+            chIPCAPareto.data.datasets[0].data = cur.map(x => x.v);
+            chIPCAPareto.data.datasets[1].data = cur.map(x => { cum += x.v; return (cum / Math.max(1, total)) * 100; });
+            chIPCAPareto.update();
+
+            // IGP-M
+            chIGPMBarLine.data.labels = ig.map(r => r.ref_date);
+            chIGPMBarLine.data.datasets[0].data = ig.map(r => r.value);
+            chIGPMBarLine.data.datasets[1].data = rolling12Compounded(ig.map(r => r.value));
+            chIGPMBarLine.update();
+
+            // IPCA vs IGP-M
+            const mapIP = new Map(ip.map(x => [x.ref_date, x.value]));
+            const common = ig.map(x => ({ ref: x.ref_date, igpm: x.value, ipca: mapIP.get(x.ref_date) })).filter(r => r.ipca != null);
+            chIPCAvsIGPM.data.labels = common.map(r => r.ref);
+            chIPCAvsIGPM.data.datasets[0].data = common.map(r => r.ipca);
+            chIPCAvsIGPM.data.datasets[1].data = common.map(r => r.igpm);
+            chIPCAvsIGPM.data.datasets[2].data = common.map(r => r.igpm - r.ipca);
+            chIPCAvsIGPM.update();
+
+            buildTables(pt, ip, ig);
+        }
+
+        /* ====== Bootstrap ====== */
+        $(document).on("change", "#dtIni,#dtFim", applyRange);
+        $("#resetRange").on("click", () => { const { ini, fim } = lastCompleteWindow(); $("#dtIni").val(ini); $("#dtFim").val(fim); applyRange(); });
+        $("#refreshBtn").on("click", async (e) => {
+            e.preventDefault();
+            await loadAll(); kpisFromData();
+            const { ini, fim } = lastCompleteWindow(); $("#dtIni").val(ini); $("#dtFim").val(fim); applyRange();
+        });
+
+        (async function init() {
+            await loadAll();
+            kpisFromData();
+            const { ini, fim } = lastCompleteWindow();
+            $("#dtIni").val(ini);
+            $("#dtFim").val(fim);
+            const inRange = ym => ym >= ini && ym <= fim;
+            const pt = PTAX.filter(r => inRange(r.date.slice(0, 7)));
+            const ip = IPCA.filter(r => inRange(r.ref_date));
+            const ig = IGPM.filter(r => inRange(r.ref_date));
+            buildPTAX(pt);
+            buildIPCA(ip);
+            buildIGPM(ig, ip);
+            buildTables(pt, ip, ig);
+        })();
+    </script>
+
+
+
+
+
+
+
+    <script>
+        // ====== Inventário de arquivos publicados ======
+        const FILES = [
+            { name: "PTAX diário (JSON)", url: "json_consolidado/ptax_daily.json", kind: "json" },
+            // { name: "PTAX diário (CSV)", url: "json_consolidado/ptax_daily.csv", kind: "csv" },
+            { name: "IPCA mensal (JSON)", url: "json_consolidado/ipca_monthly.json", kind: "json" },
+            // { name: "IPCA mensal (CSV)", url: "json_consolidado/ipca_monthly.csv", kind: "csv" },
+            { name: "IGP-M mensal (JSON)", url: "json_consolidado/igpm_monthly.json", kind: "json" },
+            // { name: "IGP-M mensal (CSV)", url: "json_consolidado/igpm_monthly.csv", kind: "csv" },
+        ];
+
+        async function headInfo(url) {
+            try {
+                const r = await fetch(url, { method: "HEAD", cache: "no-cache" });
+                if (!r.ok) throw new Error();
+                const lm = r.headers.get("Last-Modified") || r.headers.get("Date");
+                const sz = r.headers.get("Content-Length");
+                return { lastModified: lm ? new Date(lm) : null, size: sz ? Number(sz) : null };
+            } catch { return { lastModified: null, size: null }; }
+        }
+
+        async function countRows(url, kind) {
+            try {
+                if (kind === "json") {
+                    const r = await fetch(url, { cache: "no-cache" });
+                    const data = await r.json();
+                    return Array.isArray(data) ? data.length : 0;
+                } else {
+                    // CSV: conta quebras de linha sem baixar tudo via streaming simples
+                    const r = await fetch(url, { cache: "no-cache" });
+                    const txt = await r.text();
+                    const lines = txt.split(/\r?\n/).filter(x => x.trim() !== "");
+                    // desconta header se existir
+                    return lines.length > 0 ? lines.length - 1 : 0;
+                }
+            } catch { return null; }
+        }
+
+        function fmtBytes(b) {
+            if (b == null) return "—";
+            const u = ["B", "KB", "MB", "GB"]; let i = 0, v = b;
+            while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+            return `${v.toFixed(1)} ${u[i]}`;
+        }
+        function fmtDate(d) {
+            if (!d) return "—";
+            // PT-BR curto
+            return d.toLocaleString("pt-BR", { dateStyle: "medium", timeStyle: "short" });
+        }
+
+        async function buildAssetsTable() {
+            const tbody = document.querySelector("#dt_assets tbody");
+            tbody.innerHTML = "";
+            let maxLM = null;
+
+            for (const f of FILES) {
+                const [hi, rows] = await Promise.all([headInfo(f.url), countRows(f.url, f.kind === "json" ? "json" : "csv")]);
+                if (hi.lastModified && (!maxLM || hi.lastModified > maxLM)) maxLM = hi.lastModified;
+
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+        <td class="nowrap">${f.name}</td>
+        <td>${f.kind.toUpperCase()}</td>
+        <td class="nowrap">${fmtDate(hi.lastModified)}</td>
+        <td>${fmtBytes(hi.size)}</td>
+        <td>${rows ?? "—"}</td>
+        <td><a href="${f.url}" download>baixar</a></td>
+      `;
+                tbody.appendChild(tr);
+            }
+
+            if (maxLM) {
+                document.querySelector("#etl_hint").insertAdjacentHTML(
+                    "afterend",
+                    `<p class="small mt-2">Última publicação detectada: <strong>${fmtDate(maxLM)}</strong>.</p>`
+                );
+            }
+
+            // inicializa DataTable se quiser paginação/ordenar (já está carregado no HTML)
+            if ($.fn.DataTable.isDataTable("#dt_assets")) $("#dt_assets").DataTable().destroy();
+            $("#dt_assets").DataTable({ pageLength: 10, order: [[2, "desc"]] });
+        }
+
+        // Hooka no fluxo existente
+        (async function () {
+            // já existe um init principal; chamamos a tabela depois do carregamento inicial
+            await buildAssetsTable();
+        })();
+    </script>
+
+
+
+
+
+
+</body>
+
+</html>

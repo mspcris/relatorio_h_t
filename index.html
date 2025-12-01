@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<!-- build: 2025-10-27T12:00Z cso-crc=abc123 -->
+<!-- teste -->
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shortcut_</title>
+    <link rel="shortcut icon" href="/images/Logo Camim-01_50px.png" type="image/x-icon">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <!-- Baloo 2 -->
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&display=swap" rel="stylesheet">
+    <!-- Fredoka (opção) -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
+    <!-- Nunito Rounded (opção) -->
+    <link href="https://fonts.googleapis.com/css2?family=Nunito+Rounded:wght@800&display=swap" rel="stylesheet">
+    <!-- APPLE -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+
+
+
+    <!-- Importa o JavaScript -->
+    <script src="/js/menu.js" defer></script>
+    <!-- <script src="js/preloader.js" defer></script> -->
+    <!-- <script src="../js/carrossel.js" defer></script> -->
+    <script src="/js/header.js" defer></script>
+    <script src="/js/footer.js" defer></script>
+    <script src="/js/overlay.js" defer></script>
+
+
+
+    <!-- CSS -->
+    <!-- <meta name="viewport" content="width=device-width, initial-scale=1.0"> -->
+    <link rel="stylesheet" href="/css/style.css?v=5">
+
+
+
+    <style>
+        #overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(12px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 1s ease, visibility 0s linear;
+        }
+
+        #overlay.fade-out {
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 1s ease, visibility 0s linear 1s;
+        }
+
+
+
+        h1,
+        h2,
+        h3 {
+            margin: 16px 0 8px;
+        }
+
+        p {
+            margin: 8px 0 16px;
+        }
+
+        ul {
+            margin: 0 0 16px 20px;
+        }
+
+        code,
+        pre {
+            background: #f6f8fa;
+            border: 1px solid #eaecef;
+            border-radius: 6px;
+        }
+
+        pre {
+            padding: 12px;
+            overflow: auto;
+        }
+
+        .kpi {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(180px, 1fr));
+            gap: 12px;
+            margin: 16px 0;
+        }
+
+        .card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .muted {
+            color: #555;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0 16px;
+        }
+
+        th,
+        td {
+            border: 1px solid #e5e7eb;
+            padding: 8px 10px;
+            text-align: left;
+        }
+
+        th {
+            background: #fafafa;
+        }
+
+        small {
+            color: #666;
+        }
+
+        /* estado inicial de cada item do menu */
+        #app-drawer .menu-list>li {
+            opacity: 0;
+            transform: translateX(-10px);
+        }
+
+        /* animação */
+        @keyframes slideIn {
+            to {
+                opacity: 1;
+                transform: none;
+            }
+        }
+
+        /* acessibilidade */
+        @media (prefers-reduced-motion: reduce) {
+            #app-drawer .menu-list>li {
+                opacity: 1;
+                transform: none;
+                animation: none !important;
+            }
+        }
+
+        /* reserva espaço fixo p/ a barra e evita sobreposição */
+        .menu-nav {
+            overflow-y: auto;
+            scrollbar-gutter: stable both-edges;
+            padding-right: 12px;
+        }
+
+        /* impede scroll no wrapper externo */
+        .menu-drawer {
+            overflow: hidden;
+        }
+
+        /* compensa qualquer sobra */
+        .menu-list {
+            padding-right: 4px;
+        }
+
+        .menu-list form {
+            margin: 0;
+        }
+
+        .menu-list form .menu-link {
+            display: block;
+            width: 100%;
+            text-align: left;
+        }
+
+        /* < !-- Ajustes mínimos para alinhamento se necessário -->*/
+        .menu-link {
+            display: flex;
+            align-items: center;
+            gap: .6rem
+        }
+
+        .menu-link i {
+            width: 1.25em;
+            text-align: center;
+            font-size: 1rem;
+            opacity: .95
+        }
+    </style>
+
+
+</head>
+
+
+
+
+<body>
+
+
+    <!-- Overlay de mensagem -->
+    <div id="overlay"></div>
+
+
+
+    <!-- Botão hamburguer que abre o menu -->
+    <button id="menuToggle" class="menu-btn" aria-label="Abrir menu" aria-controls="app-drawer" aria-expanded="false">
+        <!-- Ícone hamburguer -->
+        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"></path>
+        </svg>
+    </button>
+
+
+
+
+
+
+
+
+
+
+    <!-- Fundo escuro atrás do menu -->
+    <div id="drawerOverlay" class="menu-overlay" hidden></div>
+    <!-- O menu lateral -->
+    <aside id="app-drawer" class="menu-drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+        <div class="menu-splash">&nbsp;</div>
+        <header class="drawer-header">
+            <img src="/images/Logo Camim-01_50px.png" alt="Logo Camim">
+            <h2 id="drawerTitle">&nbsp;</h2>
+            <button id="drawerClose" class="menu-icon-btn" aria-label="Fechar menu">✖</button>
+        </header>
+
+
+
+        <!-- MENU LATERAL -->
+        <nav class="menu-nav" aria-label="Menu principal">
+            <ul class="menu-list">
+                <!-- <li>
+                    <a class="menu-link" href="/index.html">
+                        <i class="fas fa-home"></i>
+                        <span>Início</span>
+                    </a>
+                </li> -->
+                <li>
+                    <a class="menu-link" href="/kpi_home.html">
+                        <i class="nav-icon fas fa-chart-line"></i>
+                        <span>KPIs</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-link" href="https://trello.com/">
+                        <i class="fab fa-trello" style="color:#0079bf"></i>
+                        <span>Trello</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a class="menu-link" href="/trello_harvest.html">
+                        <i class="fas fa-file-alt" style="color:#444;"></i>
+                        <span>Relatório Harvest / Trello</span>
+                    </a>
+                </li>
+
+
+                <li>
+                    <a class="menu-link"
+                        href="https://appstoreconnect.apple.com/login?targetPrefix=%2FWebObjects%2FiTunesConnect.woa&targetUrl=%2Fra%2Fng%2Fapp%2F1019335872%2Factivity%2Fios%2FratingsResponses&authResult=FAILED">
+                        <i class="bi bi-apple"></i>
+                        <span>Apple Store</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a class="menu-link" href="https://play.google.com/console/developers/#AlertsPlace">
+                        <i class="fab fa-google" style="color:#db4437"></i>
+                        <span>Google Store</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a class="menu-link" href="https://mail.google.com/">
+                        <i class="fas fa-envelope" style="color:#d93025"></i>
+                        <span>Gmail</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-link" href="https://camim.harvestapp.com/team">
+                        <i class="fas fa-stopwatch" style="color:#fa5c5c"></i>
+                        <span>Harvest</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-link" href="https://app2.plugnotas.com.br/#/Home">
+                        <i class="fas fa-plug" style="color:#ff7f00"></i>
+                        <span>Plugnotas</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a class="menu-link"
+                        href="https://docs.google.com/spreadsheets/d/1uMgHGjfxCtrObv5lAqXHQce5uaemAA2bpyLmIveHAzI/edit?gid=0#gid=0">
+                        <i class="fas fa-comment-dots" style="color:#00A859"></i>
+                        <span>Reclame Aqui</span>
+                    </a>
+                </li>
+
+
+                <li>
+                    <a class="menu-link" href="https://app.sgg.net.br/index.php">
+                        <i class="fas fa-user-md" style="color:#1e88e5"></i>
+                        <span>SGG – Medicina do Trabalho</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-link" href="https://portal.paygo.com.br/auth/login">
+                        <i class="fas fa-credit-card" style="color:#000000"></i>
+                        <span>PayGo / C6</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a class="menu-link"
+                        href="https://docs.google.com/document/d/1KL14KHkT658pBl_usLgP5eC4B4cHhaTLXCIx0bQ9PLw/edit?tab=t.0">
+                        <i class="fas fa-briefcase" style="color:#444"></i>
+                        <span>Competências / Gerência</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a class="menu-link"
+                        href="https://docs.google.com/spreadsheets/d/1I_DeWFfX0OMkNslz4Z-gYKG2k0e0leTmRHkRPkqkAAA/edit?gid=0#gid=0">
+                        <i class="fas fa-sim-card" style="color:#ff9800"></i>
+                        <span>Controle de SIM</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a class="menu-link"
+                        href="https://docs.google.com/spreadsheets/d/1yYsNeDsICUfsYx1TMWG66YfNBO-RqCzzi-boV7TkYv8/edit?gid=1455252511#gid=1455252511">
+                        <i class="fas fa-clock" style="color:#1976d2"></i>
+                        <span>Controle de Ponto (Gerentes)</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a class="menu-link" href="https://login.kinghost.com.br/">
+                        <i class="fas fa-server" style="color:#6a1b9a"></i>
+                        <span>KingHost</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-link"
+                        href="https://developers.facebook.com/apps/1266588074633485/whatsapp-business/wa-dev-console/?business_id=148212396421577">
+                        <i class="fab fa-whatsapp" style="color:#25D366"></i>
+                        <span>Meta / WhatsApp Business</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a class="menu-link"
+                        href="https://search.google.com/search-console/performance/search-analytics?resource_id=https://www.camim.com.br/&start_date=20250901&end_date=20250930&utm_source=wnc_20089453&utm_medium=gamma&utm_campaign=wnc_20089453&utm_content=msg_110214818&hl=pt">
+                        <i class="fas fa-chart-line" style="color:#4285f4"></i>
+                        <span>Search Console</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a class="menu-link" href="https://console.groq.com/keys">
+                        <i class="fas fa-microchip" style="color:#ff6f00"></i>
+                        <span>API Groq</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-link"
+                        href="http://zabbix.camim.com.br:3000/d/000000006/monitoramento-de-problemas-de-infraestrutura?orgId=1&refresh=1m">
+                        <i class="fas fa-server" style="color:#ff8800"></i>
+                        <span>Monitoramento (Zabbix)</span>
+                    </a>
+                </li>
+
+                <li>
+                    <a class="menu-link" href="https://www.promptcowboy.ai/">
+                        <i class="fas fa-hat-cowboy" style="color:#aa6c39"></i>
+                        <span>Prompt Cowboy</span>
+                    </a>
+                </li>
+
+
+
+
+                <li>
+                    <a class="menu-link" href="#" id="btnLogout">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Sair</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        <div class="menu-brand">&nbsp;</div>
+    </aside>
+    <script>
+        document.getElementById('btnLogout')?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            try { await fetch('/session/logout', { method: 'POST', credentials: 'include' }); } catch (_) { }
+            location.href = '/login.html';
+        });
+    </script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <div id="header"></div>
+
+
+
+
+
+
+    <!-- ======== CARROSSEL ========
+    <div class="carousel2" aria-label="Carrossel 2">
+        Radios
+        <input type="radio" name="radio-btn-2" id="radio2-1" checked>
+        <input type="radio" name="radio-btn-2" id="radio2-2">
+        <input type="radio" name="radio-btn-2" id="radio2-3">
+        <input type="radio" name="radio-btn-2" id="radio2-4">
+        <input type="radio" name="radio-btn-2" id="radio2-5">
+
+        2) TRILHO DOS SLIDES
+        <div class="slides2">
+            <a href="diadascriancas2025_prestacao_de_contas.html">
+                <img src="../images/carrossel2/upup_carrossel_2_img1_anime_prestacao.jpg"
+                    alt="Dia das crianças - Prestação de contas - UPUP">
+            </a>
+            <a href="cursos_bombeiromirim.html">
+                <img src="../images/carrossel2/upup_curso_bombeiro_mirim_16x9_res_40_876x574px.png"
+                    alt="Curso Bombeiro Mirim - UPUP">
+            </a>
+            <a href="cursos_preparatoriotjrj.html">
+                <img src="../images/carrossel2/upup_curso_preparatorio_tjrj_16x9_1037x583_res_40.png"
+                    alt="Curso Preparatório TJ-RJ - UPUP">
+            </a>
+            <a href="https://www.facebook.com/61554552819759/posts/122244610568151760/?rdid=pulTmzgLO1PgYPXn"
+                target="_blank">
+                <img src="../images/upup_visita_lar_idosos.jpg" alt="UPUP - Visita ao lar de idosos de Natividade">
+            </a>
+            <a href="https://www.instagram.com/p/C_tYlRUB63i/?img_index=1" target="_blank">
+                <img src="../images/carrossel2/upup_evento_passeata.png" alt="Passeata Centro de Natividade - UPUP">
+            </a>
+        </div>
+
+        Navegação
+        <div class="navigation2">
+            <label for="radio2-1" class="bar"></label>
+            <label for="radio2-2" class="bar"></label>
+            <label for="radio2-3" class="bar"></label>
+            <label for="radio2-4" class="bar"></label>
+            <label for="radio2-5" class="bar"></label>
+        </div>
+    </div> -->
+
+
+
+
+
+
+    <main class="page">
+        <div class="card calendario-card">
+            <!-- <h2 class="subtitulos">Agenda</h2> -->
+            <p>Visualização da agenda</p>
+
+            <div class="calendar-wrapper">
+                <iframe
+                    src="https://calendar.google.com/calendar/embed?src=cristiano%40camim.com.br&ctz=America%2FSao_Paulo"
+                    class="calendar-iframe" loading="lazy">
+                </iframe>
+            </div>
+        </div>
+
+        <!-- APRESENTAÇÃO -->
+        <article class="card">
+            <h2>Agenda</h2>
+            <p>Quero ver minha agenda aqui</p>
+        </article>
+
+        <!-- ACESSO RÁPIDO E CONTESTAÇÕES -->
+        <article class="card">
+            <h2>Acesso rápido por unidade e contestações</h2>
+
+            <h3>Painel “Todas as Unidades”</h3>
+            <ul class="list">
+                <li>KPIs por unidade: <strong>ICA</strong>, <strong>Sinistralidade</strong>, <strong>Índice
+                        Alimentação</strong>, <strong>EBITDA Operacional</strong>.</li>
+                <li>Filtros: período, convênio, centro de custo, tipo de ocorrência.</li>
+                <li>Variações: M/M, YTD e média móvel 3M.</li>
+            </ul>
+
+            <h3>Mapa de evidências para contestações</h3>
+            <ul class="list">
+                <li>Anexos: NF, guia, laudo, contrato e regra de cobertura.</li>
+                <li>Status: Pendente, Em Análise, Enviado, Deferido, Indeferido.</li>
+                <li>Fila priorizada por impacto financeiro, SLA de corte e probabilidade de êxito.</li>
+                <li>Log: responsável, data, base documental.</li>
+            </ul>
+        </article>
+
+        <!-- KPIs E FÓRMULAS -->
+        <article class="card">
+            <h2>KPIs e fórmulas</h2>
+
+            <h3>1) Relação mensalidades vs custos médicos</h3>
+            <p><strong>Mensalidade Líquida</strong> = Mensalidades Brutas − Descontos/Glosas − Inadimplência
+                reconhecida</p>
+            <p><strong>Custo Médico</strong> = Honorários + Exames + Internações + OPME (líquido de glosa
+                recuperável)</p>
+            <p><strong>Índice de Cobertura Assistencial (ICA)</strong> = Mensalidade Líquida ÷ Custo Médico</p>
+            <p><strong>Sinistralidade Assistencial</strong> = Custo Médico ÷ Mensalidade Líquida</p>
+            <p class="muted">Recomendação: série de 6–12 meses, variação %, média móvel 3M e meta.</p>
+
+            <h3>2) Mensalidade vs alimentação</h3>
+            <p><strong>Custo Alimentação</strong> = Insumos + Terceiros + Perdas Auditadas</p>
+            <p><strong>Índice Alimentação</strong> = Custo Alimentação ÷ Mensalidade Líquida</p>
+            <p><strong>Delta Valor</strong> = Mensalidade Líquida − Custo Alimentação</p>
+            <p><strong>Share no Custo Total</strong> = Custo Alimentação ÷ Custo Total</p>
+            <p class="muted">Cortes: unidade, posto, turno e cardápio.</p>
+
+            <h3>3) Gasto do posto vs recebimento de mensalidade</h3>
+            <p><strong>Razão Posto</strong> = Custo Alimentação do Posto ÷ Mensalidade Líquida alocada ao Posto</p>
+            <p><strong>Break-even do Posto</strong> quando <strong>Razão Posto ≤ 1</strong></p>
+        </article>
+
+        <!-- TABELA EXEMPLO -->
+        <article class="card">
+            <h2>Tabela de referência — Posto x Mensalidade x Alimentação</h2>
+            <div class="tabela-doacoes-wrap">
+                <div class="tabela-scroll">
+                    <table class="tabela-doacoes" aria-label="Síntese por posto">
+                        <thead>
+                            <tr>
+                                <th>Posto</th>
+                                <th>Unidade</th>
+                                <th>Mês</th>
+                                <th>Mensalidade Alocada</th>
+                                <th>Custo Alimentação</th>
+                                <th>Razão Posto</th>
+                                <th>Variação M/M</th>
+                                <th>Observações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td data-label="Posto">Posto A</td>
+                                <td data-label="Unidade">Unidade 1</td>
+                                <td data-label="Mês">2025-08</td>
+                                <td data-label="Mensalidade Alocada">R$ 120.000</td>
+                                <td data-label="Custo Alimentação">R$ 78.000</td>
+                                <td data-label="Razão Posto">0,65</td>
+                                <td data-label="Variação M/M">-0,04 p.p.</td>
+                                <td data-label="Observações"><span class="badge ok">redução de perdas</span></td>
+                            </tr>
+                            <tr>
+                                <td data-label="Posto">Posto B</td>
+                                <td data-label="Unidade">Unidade 2</td>
+                                <td data-label="Mês">2025-08</td>
+                                <td data-label="Mensalidade Alocada">R$ 95.000</td>
+                                <td data-label="Custo Alimentação">R$ 102.000</td>
+                                <td data-label="Razão Posto">1,07</td>
+                                <td data-label="Variação M/M">+0,09 p.p.</td>
+                                <td data-label="Observações"><span class="badge pendente">revisar contrato</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p class="tabela-legenda muted">Legenda: Razão Posto = Custo Alimentação ÷ Mensalidade Alocada.
+                    </p>
+                </div>
+            </div>
+        </article>
+
+        <!-- LAYOUT DO DASHBOARD -->
+        <article class="card">
+            <h2>Layout recomendado do dashboard</h2>
+            <ul class="list">
+                <li><strong>Visão Executiva:</strong> cards por unidade com ICA, Sinistralidade, Índice Alimentação,
+                    EBITDA Operacional.</li>
+                <li><strong>Séries Temporais:</strong> Mensalidade Líquida, Custo Médico, Custo Alimentação.</li>
+                <li><strong>Matriz de Desvio:</strong> unidades × meses com heatmap.</li>
+                <li><strong>Drill-through:</strong> acesso a contas, NFs e evidências de contestação.</li>
+            </ul>
+        </article>
+
+        <!-- SQL MODELO -->
+        <article class="card">
+            <h2>Consultas — modelo SQL</h2>
+            <pre><code>-- Mensalidade x Custo Médico x Alimentação por mês e unidade
+SELECT
+  unidade,
+  DATE_TRUNC('month', competencia) AS mes,
+  SUM(mensalidade_bruta - descontos - glosas - inadimplencia) AS mensalidade_liquida,
+  SUM(custo_medico) AS custo_medico,
+  SUM(custo_alimentacao) AS custo_alimentacao,
+  ROUND(SUM(custo_alimentacao) / NULLIF(SUM(mensalidade_bruta - descontos - glosas - inadimplencia),0), 4) AS indice_alimentacao,
+  ROUND(SUM(mensalidade_bruta - descontos - glosas - inadimplencia) / NULLIF(SUM(custo_medico),0), 4) AS ica,
+  ROUND(SUM(custo_medico) / NULLIF(SUM(mensalidade_bruta - descontos - glosas - inadimplencia),0), 4) AS sinistralidade
+FROM fato_financeiro
+WHERE competencia BETWEEN :ini AND :fim
+GROUP BY 1,2
+ORDER BY 1,2;</code></pre>
+        </article>
+
+        <!-- CHECKLIST DE DADOS -->
+        <article class="card">
+            <h2>Checklist de dados para carga</h2>
+            <p>Envie CSV/planilha para habilitar o dashboard e as contestações.</p>
+            <ul class="list">
+                <li><strong>unidade</strong>, <strong>competencia</strong> (YYYY-MM)</li>
+                <li><strong>mensalidade_bruta</strong>, <strong>descontos</strong>, <strong>glosas</strong>,
+                    <strong>inadimplencia</strong>
+                </li>
+                <li><strong>custo_medico</strong>, <strong>custo_alimentacao</strong>, <strong>custo_total</strong>
+                    (opcional)</li>
+                <li><strong>posto</strong>, <strong>turno</strong> (se aplicável para alocação)</li>
+            </ul>
+        </article>
+
+    </main>
+
+
+
+
+
+    <!-- ORGANIZAR O FOOTER PARA POR EM UM ARQUIVO -->
+    <div id="footer"></div>
+    <script src="/js/footer.js" defer></script>
+
+
+
+    <script>
+        document.addEventListener('click', (e) => {
+            const a = e.target.closest('#btnLogout');
+            if (!a) return;
+            e.preventDefault();
+
+            // tenta invalidar credenciais e caches
+            Promise.allSettled([
+                fetch('/logout', { cache: 'no-store', credentials: 'include' }),
+                fetch('/protected/logout', { cache: 'no-store', credentials: 'include' })
+            ]).finally(() => {
+                try { localStorage.clear(); sessionStorage.clear(); } catch { }
+                location.href = '/login.html';
+            });
+        });
+    </script>
+
+
+
+    <script>
+        function animateMenuItems() {
+            const items = document.querySelectorAll('#app-drawer .menu-list > li');
+            items.forEach((el, i) => {
+                el.style.animation = 'none';            // reinicia
+                void el.offsetWidth;                    // reflow
+                el.style.animation = `slideIn .24s ease-out forwards`;
+                el.style.animationDelay = `${i * 60}ms`;  // “stagger” automático
+            });
+        }
+
+        /* chame isso no ponto onde você já abre o menu */
+        function openDrawer() {
+            drawer.hidden = false;
+            overlay.hidden = false;
+            animateMenuItems();
+        }
+
+        /* se preferir não tocar no openDrawer, observe a mudança do atributo */
+        const drawer = document.getElementById('app-drawer');
+        new MutationObserver(m => {
+            if (!drawer.hidden) animateMenuItems();
+        }).observe(drawer, { attributes: true, attributeFilter: ['hidden'] });
+    </script>
+
+
+
+</body>
+
+</html>

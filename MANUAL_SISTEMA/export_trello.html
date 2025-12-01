@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Exportador Trello → CSV (board completo)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        :root {
+            --bg: #0b1220;
+            --card: #0f1a36;
+            --muted: #9aa4b2;
+            --text: #eef2ff;
+            --line: #1f2a4a;
+            --acc: #60a5fa;
+            --ok: #34d399
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font: 15px/1.55 system-ui, -apple-system, Segoe UI, Roboto, Arial
+        }
+
+        main {
+            max-width: 960px;
+            margin: 28px auto;
+            padding: 0 18px
+        }
+
+        h1 {
+            font-size: 22px;
+            margin: 8px 0 12px
+        }
+
+        h2 {
+            font-size: 18px;
+            margin: 18px 0 10px
+        }
+
+        p {
+            margin: 8px 0
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 10px 0
+        }
+
+        .muted {
+            color: var(--muted)
+        }
+
+        code {
+            background: #0b1229;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 1px 6px;
+            color: #c7d2fe
+        }
+
+        pre {
+            background: #0b1229;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 12px;
+            overflow: auto
+        }
+
+        ul {
+            margin: 6px 0 6px 18px
+        }
+
+        .pill {
+            display: inline-block;
+            background: #ffffff10;
+            border: 1px solid #ffffff22;
+            border-radius: 999px;
+            padding: 6px 10px;
+            margin: 0 6px 8px 0
+        }
+
+        .ok {
+            color: var(--ok)
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <div>
+            <span class="pill">Python</span>
+            <span class="pill">Requests</span>
+            <span class="pill">dateutil/ZoneInfo</span>
+            <span class="pill">CSV</span>
+            <span class="pill">Trello API v1</span>
+        </div>
+
+        <h1>O que este código faz</h1>
+        <p>
+            Implementa um <strong>exportador completo de um quadro do Trello</strong> para múltiplos CSVs (boards,
+            listas, membros, rótulos, cards, checklists, anexos e <em>custom fields</em>),
+            criando uma <strong>subpasta exclusiva por execução</strong> com <code>export_YYYYMMDD_HHMMSS</code>
+            (timezone <code>America/Sao_Paulo</code>).
+            É plug-and-play para BI/ETL, com <em>flatten</em> consistente de entidades e referencial cruzado por IDs.
+        </p>
+
+        <div class="card">
+            <h2>Inputs & dependências</h2>
+            <ul>
+                <li><strong>Env vars obrigatórias</strong>: <code>TRELLO_KEY</code>, <code>TRELLO_TOKEN</code>
+                    (carregadas via <code>dotenv</code> do ambiente e do arquivo <code>.env</code> ao lado do script).
+                </li>
+                <li><strong>CLI</strong>: <code>--board &lt;BOARD_ID&gt;</code> (obrigatório),
+                    <code>--out ./export_trello</code> (opcional; default).</li>
+                <li><strong>Libs</strong>: <code>requests</code>, <code>python-dateutil</code>, <code>zoneinfo</code>
+                    (Py≥3.9), <code>python-dotenv</code>.</li>
+            </ul>
+            <pre><code># Exemplo de execução
+python export_trello.py --board 5aBCdEF1234567890abcde12 --out ./export_trello</code></pre>
+        </div>
+
+        <div class="card">
+            <h2>Painel de arquitetura (E2E)</h2>
+            <ol>
+                <li><strong>Bootstrap</strong>: carrega <code>.env</code>; valida <code>TRELLO_KEY/TRELLO_TOKEN</code>
+                    (senão aborta com <code>SystemExit</code>).</li>
+                <li><strong>Fetch consolidado</strong> (função <code>fetch_board()</code>):
+                    <ul>
+                        <li><code>/boards/{id}</code> → metadados do quadro
+                            (<code>name,url,desc,closed,dateLastActivity,prefs</code>).</li>
+                        <li><code>/boards/{id}/lists</code> → listas ativas (<code>name,closed,pos</code>), e
+                            <strong>filtra apenas abertas</strong>.</li>
+                        <li><code>/boards/{id}/members</code> → (<code>fullName,username</code>).</li>
+                        <li><code>/boards/{id}/labels</code> → (<code>name,color</code>).</li>
+                        <li><code>/boards/{id}/customFields</code> → tolerante a erro (tenta; se 404/sem permissão,
+                            segue vazio).</li>
+                        <li><code>/boards/{id}/cards</code> →
+                            inclui <strong>attachments</strong> e <strong>checklists=all</strong>, com campos:
+                            <code>name,desc,closed,url,idList,idMembers,due,start,dueComplete,labels,dateLastActivity,shortLink</code>.
+                        </li>
+                        <li><code>/boards/{id}/checklists</code> → checklist e itens com metas de prazo/estado.</li>
+                    </ul>
+                </li>
+                <li><strong>Normalização</strong>:
+                    <ul>
+                        <li><code>flatten_cards()</code> → expande rótulos, membros, anexos e mapeia
+                            <code>idList → nome da lista</code>; formata datas p/ ISO.</li>
+                        <li><code>flatten_checklists()</code> → uma linha por item de checklist, <em>join</em> por
+                            <code>card_id</code>.</li>
+                    </ul>
+                </li>
+                <li><strong>Persistência</strong>: escreve CSVs com <code>csv.DictWriter</code> (UTF-8, cabeçalho
+                    padronizado). Subpasta: <code>--out/export_YYYYMMDD_HHMMSS</code>.</li>
+            </ol>
+        </div>
+
+        <div class="card">
+            <h2>Artefatos gerados (CSVs)</h2>
+            <ul>
+                <li><code>board.csv</code> — <span class="muted">1 linha</span>:
+                    <code>id,name,url,desc,closed,dateLastActivity</code></li>
+                <li><code>lists.csv</code> — apenas listas <strong>abertas</strong>:
+                    <code>id,name,pos,closed,idBoard</code></li>
+                <li><code>members.csv</code> — <code>id,username,fullName</code></li>
+                <li><code>labels.csv</code> — <code>id,name,color</code></li>
+                <li><code>cards.csv</code> — <em>flatten</em> de cards:
+                    <code>card_id,card,list,labels,members,due,start,due_complete,url,short_link,closed,updated,desc,attachments_count,attachments_urls</code>
+                </li>
+                <li><code>checklists.csv</code> — uma linha por item de checklist:
+                    <code>checklist_id,checklist,card_id,item_id,item,state,pos,due,member_id</code>
+                </li>
+                <li><code>attachments.csv</code> — anexos por card:
+                    <code>card_id,card,attachment_id,name,url,bytes,mimeType,date,isUpload</code>
+                </li>
+                <li><code>custom_fields.csv</code> — se existirem:
+                    <code>id,name,type,idModel,modelType,pos,options</code>
+                </li>
+            </ul>
+            <p class="muted">Datas são normalizadas para ISO via <code>dateutil.parser</code> quando possível.</p>
+        </div>
+
+        <div class="card">
+            <h2>Estratégia de saída & naming</h2>
+            <ul>
+                <li>Diretório raiz: parâmetro <code>--out</code> (default <code>./export_trello</code>).</li>
+                <li>Subpasta por execução (<strong>não sobrescreve</strong>): <code>export_YYYYMMDD_HHMMSS</code> em
+                    fuso <code>America/Sao_Paulo</code>.</li>
+                <li class="ok">Idempotência operacional por run → cada execução gera um snapshot completo do board.</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>Gestão de falhas & hardening</h2>
+            <ul>
+                <li><strong>Erros de credencial</strong>: ausência de <code>TRELLO_KEY/TRELLO_TOKEN</code> interrompe
+                    com <code>SystemExit</code>.</li>
+                <li><strong>HTTP != 200</strong>: <code>trello_get()</code> aborta com mensagem detalhando
+                    <code>status_code</code> e corpo.</li>
+                <li><strong>Campos customizados</strong>: se o endpoint não existir/sem permissão, o processo continua
+                    (arquivo omitido).</li>
+                <li><strong>Checklist/Attachments</strong>: sempre normalizados; URLs de anexos consolidados em
+                    <code>cards.csv</code> e detalhados em <code>attachments.csv</code>.</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>Deliverables & time-to-value</h2>
+            <ul>
+                <li><strong>Full-fidelity export</strong> para consumo por Data Studio/Power BI/ETLs.</li>
+                <li><strong>Chaves de join</strong>: <code>card_id</code> e IDs de checklist/attachments para relacionar
+                    fatos/dimensões.</li>
+                <li><strong>Taxa de adoção</strong>: mínima fricção operacional; basta o <em>Board ID</em> e
+                    credenciais.</li>
+            </ul>
+        </div>
+
+        <p class="muted">Output de execução (STDOUT): <code>Export OK: &lt;outdir&gt;  (Xs)</code>.</p>
+    </main>
+</body>
+
+</html>

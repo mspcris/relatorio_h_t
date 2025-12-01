@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>CAMIM — KPI de Vagas</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- AdminLTE + Bootstrap + FontAwesome -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+
+    <!-- Fonts -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap">
+
+    <!-- CSS do projeto -->
+    <link rel="stylesheet" href="/css/style2.css?v=20251114">
+    <link rel="stylesheet" href="/css/style_kpi.css?v=20251114">
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- Configura usuário -->
+    <script>
+        fetch("/session/me", { credentials: "same-origin" })
+            .then(r => r.json())
+            .then(data => {
+                window.USER_EMAIL = data.email;
+                window.USER_POSTOS = data.postos;
+            });
+    </script>
+
+    <script src="/js/chat.js?v=20251115"></script>
+
+    <style>
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 8px;
+        }
+
+        .kpi-card {
+            border-radius: 10px;
+        }
+
+        .chart-card {
+            height: 340px;
+        }
+
+        .scroll-tabs {
+            display: flex;
+            overflow-x: auto;
+            gap: 6px;
+            white-space: nowrap;
+            padding: 6px 0;
+        }
+    </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+    <div class="wrapper">
+
+        <!-- Navbar -->
+        <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
+                </li>
+            </ul>
+            <span class="ml-2 font-weight-bold">KPI de Vagas</span>
+        </nav>
+
+        <!-- Sidebar -->
+        <aside class="main-sidebar sidebar-dark-primary elevation-4">
+            <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+            <div class="sidebar">
+                <nav class="mt-2">
+                    <ul class="nav nav-pills nav-sidebar flex-column">
+                        <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
+                                <p>Home Page</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_vagas.html" class="nav-link active"><i
+                                    class="nav-icon fas fa-calendar-check"></i>
+                                <p>KPI Vagas</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i
+                                    class="nav-icon fas fa-chart-line"></i>
+                                <p>KPI Mensalidades</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i
+                                    class="nav-icon fas fa-shopping-cart"></i>
+                                <p>KPI Vendas</p>
+                            </a></li>
+                        <li class="nav-item"><a href="clientes.html" class="nav-link"><i
+                                    class="nav-icon fas fa-users"></i>
+                                <p>Clientes</p>
+                            </a></li>
+
+                        <li class="nav-item">
+                            <form method="POST" action="/session/logout">
+                                <button type="submit" class="nav-link btn btn-link p-0">
+                                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                                    <p>Sair</p>
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Conteúdo -->
+        <div class="content-wrapper">
+            <section class="content p-3">
+
+                <!-- Filtros -->
+                <div class="card p-3 mb-3">
+                    <div class="d-flex flex-wrap align-items-end" style="gap: 12px;">
+                        <div>
+                            <label class="small mb-0">Período</label>
+                            <div class="d-flex" style="gap: 6px;">
+                                <input id="from" type="month" class="form-control form-control-sm" />
+                                <input id="to" type="month" class="form-control form-control-sm" />
+                            </div>
+                        </div>
+
+                        <div class="flex-grow-1">
+                            <label class="small mb-0">Posto</label>
+                            <ul id="postoTabs" class="nav nav-pills scroll-tabs"></ul>
+                        </div>
+
+                        <button id="reset" class="btn btn-outline-secondary btn-sm">Reset</button>
+                    </div>
+                </div>
+
+                <!-- KPIs principais -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">KPIs de Vagas</h3>
+                    </div>
+                    <div id="kpis" class="card-body kpi-grid"></div>
+                </div>
+
+                <!-- Tabela -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Tabela do Período</h3>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Mês</th>
+                                        <th class="text-right">Total Vagas</th>
+                                        <th class="text-right">Reservadas</th>
+                                        <th class="text-right">Faltas Médicas</th>
+                                        <th class="text-right">Disponíveis</th>
+                                        <th class="text-right">Ocupadas</th>
+                                        <th class="text-right">% Ocupação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tblBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gráfico -->
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Evolução de Ocupação</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartOcup"></canvas></div>
+                </div>
+
+            </section>
+        </div>
+    </div>
+
+    <!-- Lógica específica KPI Vagas -->
+    <script>
+        const URL_VAGAS = "json_vagas/vagas_mensal.json";
+        const URL_VAGAS_POSTO = "json_vagas/vagas_por_posto.json";
+
+        let MESES = [];
+        let DATA = {};
+        let POSTOS = [];
+        let selPosto = "ALL";
+
+        const el = s => document.querySelector(s);
+
+        function fmt(n) {
+            return new Intl.NumberFormat('pt-BR').format(n ?? 0);
+        }
+
+        function pct(a, b) {
+            if (!a || !b) return 0;
+            return (a / b * 100);
+        }
+
+        async function load() {
+            const r1 = await fetch(URL_VAGAS);
+            const r2 = await fetch(URL_VAGAS_POSTO);
+
+            DATA = await r1.json();
+            const porPosto = await r2.json();
+
+            MESES = Object.keys(DATA).sort();
+
+            const algumMes = porPosto[MESES[0]];
+            POSTOS = Object.keys(algumMes).sort();
+
+            if (USER_POSTOS?.length)
+                POSTOS = POSTOS.filter(p => USER_POSTOS.includes(p));
+
+            montarTabs();
+            ajustarPeriodo();
+
+            render();
+        }
+
+        function montarTabs() {
+            const ul = el("#postoTabs");
+            ul.innerHTML = `<li class="nav-item"><a data-p="ALL" class="nav-link active" href="#">Todos</a></li>`;
+            POSTOS.forEach(p =>
+                ul.innerHTML += `<li class="nav-item"><a data-p="${p}" class="nav-link" href="#">${p}</a></li>`
+            );
+
+            ul.onclick = e => {
+                if (!e.target.dataset.p) return;
+                selPosto = e.target.dataset.p;
+                Array.from(ul.querySelectorAll(".nav-link"))
+                    .forEach(a => a.classList.toggle("active", a.dataset.p === selPosto));
+                render();
+            }
+        }
+
+        function ajustarPeriodo() {
+            el("#from").value = MESES[0];
+            el("#to").value = MESES.at(-1);
+            el("#reset").onclick = () => {
+                el("#from").value = MESES[0];
+                el("#to").value = MESES.at(-1);
+                selPosto = "ALL";
+                render();
+            };
+        }
+
+        function mesesFiltrados() {
+            const f = el("#from").value;
+            const t = el("#to").value;
+            return MESES.filter(m => (!f || m >= f) && (!t || m <= t));
+        }
+
+        function aggMes(ym) {
+            if (selPosto === "ALL") return DATA[ym];
+
+            return DATA[ym + "_posto"]?.[selPosto] ?? {};
+        }
+
+        function render() {
+            const meses = mesesFiltrados();
+            const box = el("#kpis");
+            box.innerHTML = "";
+
+            let totV = 0, resV = 0, falV = 0, dispV = 0, ocuV = 0;
+
+            meses.forEach(m => {
+                const d = aggMes(m);
+
+                totV += d.total_vagas ?? 0;
+                resV += d.reservadas ?? 0;
+                falV += d.faltas ?? 0;
+                dispV += d.disponiveis ?? 0;
+                ocuV += d.ocupadas ?? 0;
+            });
+
+            box.innerHTML += kpi("Total Vagas", totV);
+            box.innerHTML += kpi("Disponíveis", dispV);
+            box.innerHTML += kpi("Reservas", resV);
+            box.innerHTML += kpi("Faltas Médicas", falV);
+            box.innerHTML += kpi("Ocupadas", ocuV);
+            box.innerHTML += kpi("% Ocupação", ((ocuV / totV) * 100).toFixed(1) + "%");
+
+            buildTable(meses);
+            drawChart(meses);
+        }
+
+        function kpi(t, v) {
+            return `
+            <div class="card kpi-card">
+                <div class="card-body p-2">
+                    <div class="small muted">${t}</div>
+                    <div class="h5 mb-0">${v}</div>
+                </div>
+            </div>`;
+        }
+
+        function buildTable(meses) {
+            const tb = el("#tblBody");
+            tb.innerHTML = "";
+
+            meses.forEach(m => {
+                const d = aggMes(m);
+                tb.innerHTML += `
+                <tr>
+                    <td>${m}</td>
+                    <td class="text-right">${fmt(d.total_vagas)}</td>
+                    <td class="text-right">${fmt(d.reservadas)}</td>
+                    <td class="text-right">${fmt(d.faltas)}</td>
+                    <td class="text-right">${fmt(d.disponiveis)}</td>
+                    <td class="text-right">${fmt(d.ocupadas)}</td>
+                    <td class="text-right">${pct(d.ocupadas, d.total_vagas).toFixed(1)}%</td>
+                </tr>`;
+            });
+        }
+
+        let chart = null;
+
+        function drawChart(meses) {
+            const ctx = document.getElementById("chartOcup");
+
+            if (chart) chart.destroy();
+
+            chart = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: meses,
+                    datasets: [{
+                        label: "% Ocupação",
+                        data: meses.map(m => pct(aggMes(m).ocupadas, aggMes(m).total_vagas)),
+                        borderColor: "rgba(0,123,255,1)",
+                        backgroundColor: "rgba(0,123,255,0.2)",
+                        tension: .2
+                    }]
+                }
+            });
+        }
+
+        load();
+    </script>
+
+    <!-- Chat IA -->
+    <script>
+        ChatIA.init({
+            apiUrl: "/ia/analisar",
+            mountAfterSelector: ".content-header",
+            title: "IA (Vagas)",
+            briefInstruction: "Responda em até 3 linhas.",
+            briefDefault: true
+        });
+    </script>
+</body>
+
+</html>

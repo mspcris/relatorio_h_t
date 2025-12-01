@@ -1,0 +1,47 @@
+2) medicos.html — % Médico vs Mensalidade (custo médico vs receita)
+
+
+Analise a relação CUSTO MÉDICO × RECEITA no período {from}→{to} (posto {posto}), com foco em:
+- valor absoluto do custo médico;
+- % MÉDICO/MENSALIDADE por mês;
+- composição Médico × Margem quando disponível;
+- variações YoY em pontos percentuais se presente.
+
+Você receberá em outra mensagem um objeto JSON com "blocks" contendo KPIs, séries para "% médico", "valores", "stack", pareto por posto, etc. Use tudo.
+
+Objetivos:
+1) Identifique tendência, sazonalidade e meses atípicos da % MÉDICO/MENSALIDADE.
+2) Destaque picos e vales e possíveis drivers.
+3) Comente a concentração de custo por posto quando houver pareto.
+4) Indique riscos e oportunidades operacionais para reduzir pressão de custo.
+5) Não invente números não presentes nos blocks.
+
+Restrições:
+- Seja técnico e direto, seguido de explicação acessível.
+- Apenas o período {from}→{to}.
+- Saída SOMENTE em JSON válido.
+
+SAÍDA:
+{"resumo":"string","insights":["string"],"alertas":["string"],"recomendacoes":["string"]}
+
+
+
+O QUE NÃO FOI ENVIADO DO MODELO DA API ANTES DE SEPARAR POR SCRPT NA PÁGINA:
+
+def prompt_medico(series: Dict[str, dict], meses: List[str]) -> str:
+    dados = {m: series.get(m, {}) for m in meses}
+    return textwrap.dedent(f"""
+    CONTEXTO:
+    - {BUSINESS_CTX}
+    - Série mensal com chaves: mensalidade, medico, alimentacao.
+    - Meses: {meses[0]}..{meses[-1]} (apenas meses completos).
+    DADOS:
+    {json.dumps(dados, ensure_ascii=False)}
+    TAREFA:
+    1) Analise CUSTO MÉDICO em valor.
+    2) Calcule e analise a % MÉDICO/MENSALIDADE para cada mês.
+    3) Destaque picos/vales e meses atípicos e drivers prováveis.
+    4) Liste ações para reduzir pressão de custo.
+    SAIDA_JSON:
+    {{"resumo":"string","picos_e_vales":["string"],"percentual_med_mens":{{"serie":[{{"mes":"YYYY-MM","pct":0.0}}]}}, "recomendacoes":["string"]}}
+    """).strip()

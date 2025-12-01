@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>CAMIM — KPI de Custo Médico x Mensalidades (com IA)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- AdminLTE + FontAwesome -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+
+    <!-- Fonte padrão AdminLTE -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+
+    <!-- CSS do projeto -->
+    <link rel="stylesheet" href="/css/style2.css">
+    <link rel="shortcut icon" href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png
+" type="image/x-icon">
+
+    <!-- Libs JS (ordem importa) -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+    <!-- Config de IA -->
+    <script>
+        window.IA_API_URL = '/ia/analisar';
+        window.PROMPTS_API_BASE = '/prompts';
+    </script>
+    <script src="/js/chat.js"></script>
+
+    <link rel="stylesheet" href="css/style_kpi.css">
+
+</head>
+
+<body class="hold-transition sidebar-mini">
+    <div class="wrapper">
+        <!-- NAV -->
+        <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
+                </li>
+            </ul>
+            <span class="ml-2 font-weight-bold d-flex align-items-center">
+                <img src="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png
+" alt="Logo Camim">
+                <span class="ml-2">Quem tem saúde é mais feliz!</span>
+                <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+            </span>
+        </nav>
+
+        <!-- SIDEBAR -->
+        <aside class="main-sidebar sidebar-dark-primary elevation-4">
+            <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+            <div class="sidebar">
+                <nav class="mt-2">
+                    <ul class="nav nav-pills nav-sidebar flex-column" role="menu" data-accordion="false">
+                        <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
+                                <p>Home Page</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i
+                                    class="nav-icon fas fa-book-open"></i>
+                                <p>Leia-me</p>
+                            </a></li>
+                        <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i
+                                    class="nav-icon fas fa-utensils"></i>
+                                <p>KPI Custo Alimentação</p>
+                            </a></li>
+                        <li class="nav-item"><a href="medicos.html" class="nav-link active"><i
+                                    class="nav-icon fas fa-notes-medical"></i>
+                                <p>KPI Custo Médico</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i
+                                    class="nav-icon fas fa-chart-line"></i>
+                                <p>KPI Mensalidades</p>
+                            </a></li>
+
+                        <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i
+                                    class="nav-icon fas fa-shopping-cart"></i>
+                                <p>KPI Vendas</p>
+                            </a></li>
+                        <li class="nav-item">
+                            <a href="clientes.html" class="nav-link">
+                                <i class="nav-icon fas fa-users"></i>
+                                <p>Clientes</p>
+                            </a>
+                        </li>
+                        <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i
+                                    class="nav-icon fas fa-prescription-bottle-alt"></i>
+                                <p>KPI Prescrições</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i
+                                    class="nav-icon fas fa-landmark"></i>
+                                <p>KPI Índices Oficiais</p>
+                            </a></li>
+                        <li class="nav-item">
+                            <form method="POST" action="/session/logout" style="display:inline">
+                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                                    <p>Sair</p>
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- CONTENT -->
+        <div class="content-wrapper">
+            <nav class="navbar navbar-expand navbar-white navbar-light">
+                <div class="d-flex w-100 align-items-center">
+                    <span class="ml-2 font-weight-bold">KPI — Custo Médico x Mensalidades</span>
+                    <div class="ml-auto">
+                        <button id="btnComparar" class="btn btn-sm btn-outline-secondary"
+                            title="Mostrar/ocultar bloco de comparação">Comparar</button>
+                    </div>
+                </div>
+            </nav>
+
+            <section class="content p-3 stack">
+                <div id="err" class="text-danger mb-1"></div>
+
+                <!-- COMPARAÇÃO -->
+                <div id="compareBlock" style="display:none">
+                    <div class="card">
+                        <div class="filter-bar">
+                            <div>
+                                <label class="mb-0 small d-block">Selecione o Período - KPIs Comparação</label>
+                                <div class="month-inputs">
+                                    <input id="from1" type="month" class="form-control form-control-sm" />
+                                    <input id="to1" type="month" class="form-control form-control-sm" />
+                                    <button id="reset1" class="btn btn-sm btn-outline-secondary">Reset</button>
+                                </div>
+                            </div>
+                            <div class="flex-grow-1">
+                                <label class="mb-0 small d-block">Posto</label>
+                                <ul id="postoTabs1" class="nav nav-pills scroll-tabs"></ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title mb-0">KPIs Comparação</h3>
+                        </div>
+                        <div class="card-body kpi" id="kpisSel1"></div>
+                    </div>
+                </div>
+
+                <!-- FILTROS PRINCIPAIS -->
+                <div class="card">
+                    <div class="filter-bar">
+                        <div>
+                            <label class="mb-0 small d-block">Selecione o Período - KPIs Médicos</label>
+                            <div class="month-inputs">
+                                <input id="from2" type="month" class="form-control form-control-sm" />
+                                <input id="to2" type="month" class="form-control form-control-sm" />
+                                <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1">
+                            <label class="mb-0 small d-block">Posto</label>
+                            <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPIs -->
+                <div class="card">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">KPIs Médicos</h3>
+                    </div>
+                    <div class="card-body kpi" id="kpisSel2"></div>
+                </div>
+
+                <!-- TABELA -->
+                <div class="card">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">Dados do Período Selecionado (12 meses)</h3>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Mês</th>
+                                        <th class="text-right">Mensalidade</th>
+                                        <th class="text-right">Médico</th>
+                                        <th class="text-right">Margem</th>
+                                        <th class="text-right">% Médico</th>
+                                        <th class="text-right">% Margem</th>
+                                        <th class="text-right">Δ pp MoM</th>
+                                        <th class="text-right">Δ pp YoY</th>
+                                        <th class="text-right">MM3 %</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tblBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GRÁFICOS -->
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">% Médico sobre Mensalidade</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartPct"></canvas></div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Evolução: Mensalidade e Médico</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartValores"></canvas></div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Composição: Médico × Margem</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartStack"></canvas></div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Variação YoY de % Médico (p.p.)
+                            <span class="mini muted" style="margin-left:8px">
+                                <span class="lg-box lg-pos"></span>Positivo&nbsp;&nbsp;
+                                <span class="lg-box lg-neg"></span>Negativo
+                            </span>
+                        </h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartYoYpp"></canvas></div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">% Médico médio por Posto (12m)</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartPctPosto"></canvas></div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Pareto de Custo Médico por Posto</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartParetoMed"></canvas></div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Dispersão: Mensalidade × % Médico</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartScatter"></canvas></div>
+                </div>
+
+                <!-- HEATMAP -->
+                <div class="card">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">Heatmap de % Médico por Posto</h3>
+                    </div>
+                    <div class="card-body heatmap" id="heatmapBox"></div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- AQUI A LOUCURA COMEÇA  -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <!-- Variáveis de sessão injetadas pelo backend -->
+    <script>
+        window.USER_EMAIL = "{{ USER_EMAIL }}";
+        window.USER_POSTOS = {{ USER_POSTOS | safe }};
+    </script>
+
+
+
+
+
+    <!-- AQUI A LOUCURA COMEÇA  -->
+
+    <script>
+        /* ===================== PROMPTS (compartilhado) ===================== */
+        (function () {
+            const API_PROMPTS = (window.PROMPTS_API_BASE || '/prompts').replace(/\/+$/, '');
+            function uid() { return 'p_' + Math.random().toString(36).slice(2, 10); }
+            function nowISO() { return new Date().toISOString(); }
+            function tplRender(tpl, vars) { return String(tpl || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => (vars?.[k] ?? `{${k}}`)); }
+            const Prompts = {
+                state: { pageId: null, list: [], activeId: null, mounted: false, editingId: null },
+                async _loadRemote(pageId) { const r = await fetch(`${API_PROMPTS}/${encodeURIComponent(pageId)}`, { credentials: 'same-origin' }); if (!r.ok) return null; return await r.json(); },
+                async _saveRemote(pageId, obj) {
+                    const r = await fetch(`${API_PROMPTS}/${encodeURIComponent(pageId)}`, {
+                        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                        body: JSON.stringify({ list: obj.list, activeId: obj.activeId })
+                    }); if (!r.ok) throw new Error('Falha ao salvar');
+                },
+                async init({ pageId, defaults = [], mountAfter }) {
+                    this.state.pageId = pageId;
+                    let saved = null; try { saved = await this._loadRemote(pageId); } catch { }
+                    if (!saved || !Array.isArray(saved.list) || !saved.list.length) {
+                        const list = defaults.map(d => ({ id: uid(), name: d.name, template: d.template, updatedAt: nowISO() }));
+                        saved = { list, activeId: list[0]?.id || null }; try { await this._saveRemote(pageId, saved); } catch { }
+                    }
+                    this.state.list = saved.list; this.state.activeId = saved.activeId;
+                    this._mountUI(mountAfter); this._renderList();
+                },
+                getActive() { const { list, activeId } = this.state; return list.find(p => p.id === activeId) || null; },
+                render(vars) { const a = this.getActive(); return a ? tplRender(a.template, vars) : ''; },
+                _mountUI(mountAfter) {
+                    if (this.state.mounted) return;
+                    const btn = document.createElement('button');
+                    btn.id = 'btnPrompts'; btn.className = 'btn btn-sm btn-outline-secondary ml-2';
+                    btn.textContent = 'Prompts'; btn.title = 'Gerenciar prompts desta página';
+                    const anchor = document.querySelector(mountAfter) || document.body; anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+                    const modal = document.createElement('div'); modal.id = 'promptModal'; modal.style.display = 'none';
+                    modal.innerHTML = `
+<div class="card p-2" style="position:fixed;right:16px;bottom:16px;width:min(720px,92vw);max-height:80vh;overflow:auto;z-index:9999;box-shadow:0 10px 24px rgba(0,0,0,.18)">
+  <div class="d-flex align-items-center mb-2">
+    <b class="mr-auto">Prompts desta página</b>
+    <button id="pmClose" class="btn btn-sm btn-outline-secondary">Fechar</button>
+  </div>
+  <div class="d-flex" style="gap:12px;flex-wrap:wrap">
+    <div style="flex:1 1 220px;min-width:220px">
+      <div class="mb-2 d-flex" style="gap:6px">
+        <button id="pmNew"  class="btn btn-sm btn-primary">Novo</button>
+        <button id="pmDup"  class="btn btn-sm btn-outline-secondary">Duplicar</button>
+        <button id="pmDel"  class="btn btn-sm btn-outline-danger">Excluir</button>
+      </div>
+      <ul id="pmList" class="list-group"></ul>
+      <div class="mt-2">
+        <button id="pmExport" class="btn btn-sm btn-outline-secondary">Exportar</button>
+        <label class="btn btn-sm btn-outline-secondary mb-0">Importar <input id="pmImport" type="file" accept="application/json" hidden></label>
+      </div>
+    </div>
+    <div style="flex:2 1 360px;min-width:280px">
+      <input id="pmName" class="form-control form-control-sm mb-2" placeholder="Nome do prompt">
+      <textarea id="pmTpl" class="form-control form-control-sm" rows="12" placeholder="Template com {placeholders}"></textarea>
+      <small class="text-muted">Placeholders: {produto}, {from}, {to}, {posto}, {contexto}, {scopes}.</small>
+      <div class="mt-2 d-flex">
+        <button id="pmSave"      class="btn btn-sm btn-success mr-2">Salvar</button>
+        <button id="pmSetActive" class="btn btn-sm btn-outline-primary">Definir como ativo</button>
+        <span id="pmStatus" class="ml-2 text-muted small"></span>
+      </div>
+    </div>
+  </div>
+</div>`;
+                    document.body.appendChild(modal);
+                    btn.addEventListener('click', () => { modal.style.display = modal.style.display === 'none' ? 'block' : 'none'; });
+                    modal.querySelector('#pmClose').addEventListener('click', () => { modal.style.display = 'none'; });
+                    modal.querySelector('#pmNew').addEventListener('click', () => this._new());
+                    modal.querySelector('#pmDup').addEventListener('click', () => this._dup());
+                    modal.querySelector('#pmDel').addEventListener('click', () => this._del());
+                    modal.querySelector('#pmSave').addEventListener('click', () => this._saveEdits());
+                    modal.querySelector('#pmSetActive').addEventListener('click', () => this._setActiveFromEditor());
+                    modal.querySelector('#pmExport').addEventListener('click', () => this._export());
+                    modal.querySelector('#pmImport').addEventListener('change', e => this._import(e));
+                    this.state.mounted = true;
+                },
+                _renderList() {
+                    const { list, activeId } = this.state;
+                    const ul = document.querySelector('#pmList'); if (!ul) return;
+                    ul.innerHTML = '';
+                    list.forEach(p => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item d-flex align-items-center';
+                        li.dataset.id = p.id; li.style.cursor = 'pointer';
+                        li.innerHTML = `<span class="mr-2 ${p.id === activeId ? 'text-primary' : ''}">●</span><span class="flex-grow-1">${p.name}</span><small class="text-muted ml-2">${new Date(p.updatedAt).toLocaleString('pt-BR')}</small>`;
+                        li.addEventListener('click', () => this._loadToEditor(p.id));
+                        ul.appendChild(li);
+                    });
+                    if (list.length) this._loadToEditor(activeId || list[0].id);
+                },
+                _loadToEditor(id) {
+                    const { list } = this.state; const p = list.find(x => x.id === id) || list[0]; if (!p) return;
+                    document.querySelector('#pmName').value = p.name || '';
+                    document.querySelector('#pmTpl').value = p.template || '';
+                    document.querySelectorAll('#pmList li').forEach(li => li.classList.toggle('active', li.dataset.id === p.id));
+                    this.state.editingId = p.id; const st = document.querySelector('#pmStatus'); if (st) st.textContent = '';
+                },
+                async _persist() { const { pageId, list, activeId } = this.state; const payload = { list, activeId }; try { await this._saveRemote(pageId, payload); } catch { } },
+                async _new() { const id = uid(); this.state.list.unshift({ id, name: 'Novo prompt', template: '', updatedAt: nowISO() }); await this._persist(); this._renderList(); this._loadToEditor(id); },
+                async _dup() { const id = this.state.editingId; const p = this.state.list.find(x => x.id === id); if (!p) return; const nid = uid(); this.state.list.unshift({ id: nid, name: p.name + ' (cópia)', template: p.template, updatedAt: nowISO() }); await this._persist(); this._renderList(); this._loadToEditor(nid); },
+                async _del() { const id = this.state.editingId; if (!id) return; this.state.list = this.state.list.filter(x => x.id !== id); if (this.state.activeId === id) this.state.activeId = this.state.list[0]?.id || null; await this._persist(); this._renderList(); },
+                async _saveEdits() { const id = this.state.editingId; if (!id) return; const name = (document.querySelector('#pmName').value || '').trim() || 'Sem nome'; const template = document.querySelector('#pmTpl').value; const p = this.state.list.find(x => x.id === id); if (!p) return; p.name = name; p.template = template; p.updatedAt = nowISO(); await this._persist(); this._renderList(); this._loadToEditor(id); const st = document.querySelector('#pmStatus'); if (st) { st.textContent = 'Salvo'; setTimeout(() => st.textContent = '', 1200); } },
+                async _setActiveFromEditor() { const id = this.state.editingId; if (!id) return; this.state.activeId = id; await this._persist(); this._renderList(); },
+                _export() { const blob = new Blob([JSON.stringify({ list: this.state.list, activeId: this.state.activeId }, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `prompts_${this.state.pageId}.json`; a.click(); URL.revokeObjectURL(a.href); },
+                async _import(e) { const f = e.target.files?.[0]; if (!f) return; const txt = await f.text(); let obj = null; try { obj = JSON.parse(txt); } catch { alert('JSON inválido'); return; } if (!obj || !Array.isArray(obj.list)) { alert('Estrutura inválida'); return; } const norm = obj.list.map(x => ({ id: x.id || uid(), name: x.name || 'Sem nome', template: x.template || '', updatedAt: x.updatedAt || nowISO() })); this.state.list = norm; this.state.activeId = obj.activeId && norm.find(x => x.id === obj.activeId) ? obj.activeId : (norm[0]?.id || null); await this._persist(); this._renderList(); e.target.value = ''; }
+            };
+            window.Prompts = Prompts;
+        })();
+    </script>
+
+    <script>
+        (function () {
+            // ==== Utils ===============================================================
+            const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+            const fmt2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+            const mFmt = ym => { const [y, m] = ym.split('-').map(Number); return `${MES_ABBR[m - 1]}-${String(y).slice(-2)}`; };
+            const num = v => Number.isFinite(Number(v)) ? Number(v) : 0;
+            const sum = a => a.reduce((x, y) => x + (y || 0), 0);
+            const mm3 = arr => arr.map((_, i) => { const s = arr.slice(Math.max(0, i - 2), i + 1).filter(v => v != null); return s.length ? (s.reduce((a, b) => a + b, 0) / s.length) : null; });
+            const prevMonth = ym => { const [yy, mm] = ym.split('-').map(Number); const d = new Date(yy, mm - 1, 1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+            const prevYear = ym => { const [yy, mm] = ym.split('-').map(Number); return `${yy - 1}-${String(mm).padStart(2, '0')}`; };
+            const inRange = (labels, from, to) => labels.filter(m => (!from || m >= from) && (!to || m <= to));
+
+            // ==== Estado ==============================================================
+            let POR_POSTO = {}, CONSOLIDADO = {}, PCT_POR_POSTO = {};
+            let MESES = [], POSTOS = [];
+            let sel1 = 'ALL', sel2 = 'ALL';
+            let chPct, chValores, chStack, chYoYpp, chPctPosto, chParetoMed, chScatter;
+
+            // ==== Tabs ================================================================
+            function markActiveMulti(scopeId, selection) {
+                const isAll = selection === 'ALL';
+                document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
+                    const p = a.dataset.posto;
+                    if (p === 'ALL') a.classList.toggle('active', isAll);
+                    else a.classList.toggle('active', !isAll && selection.has(p));
+                });
+            }
+            function buildPostoTabs(ulId, getSel, setSel, onChange) {
+                const ul = document.querySelector(ulId); if (!ul) return;
+                ul.innerHTML = '';
+                ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="ALL" class="nav-link" href="#">Todos</a></li>`);
+                POSTOS.forEach(p => ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`));
+                markActiveMulti(ulId, getSel());
+                ul.addEventListener('click', e => {
+                    if (!e.target.matches('.nav-link')) return; e.preventDefault();
+                    const p = e.target.dataset.posto; let sel = getSel();
+                    if (p === 'ALL') sel = 'ALL';
+                    else {
+                        if (sel === 'ALL') sel = new Set();
+                        if (sel.has(p)) sel.delete(p); else sel.add(p);
+                        if (sel.size === POSTOS.length || sel.size === 0) sel = 'ALL';
+                    }
+                    setSel(sel); markActiveMulti(ulId, sel); onChange();
+                });
+            }
+
+            // ==== Agregadores =========================================================
+            function aggMes(ym, selection) {
+                const rows = POR_POSTO[ym] || {};
+                const postos = selection === 'ALL' ? POSTOS : [...selection];
+                let mens = 0, med = 0;
+                postos.forEach(p => { const r = rows[p]; if (!r) return; mens += num(r.mensalidade); med += num(r.medico ?? r.custo_medico); });
+                const margem = mens - med;
+                return { mens, med, margem, pctMed: mens > 0 ? (med / mens * 100) : null, pctMargem: mens > 0 ? (margem / mens * 100) : null };
+            }
+
+            // Respeitar o filtro de postos para mostrar o todos e a IA
+            window.__SERIES_BAS__ = () => {
+                const meses = window.__MESES_FN__();          // meses filtrados pelos inputs
+                const labels = meses.slice();
+
+                // postos visíveis e selecionados (ACL + filtro de aba)
+                const postos = postosFromSelection(sel2);
+
+                const mensalidade = labels.map(m => {
+                    const row = POR_POSTO[m] || {};
+                    return postos.reduce((acc, p) => {
+                        const r = row[p];
+                        return acc + (r ? num(r.mensalidade) : 0);
+                    }, 0);
+                });
+
+                const medico = labels.map(m => {
+                    const row = POR_POSTO[m] || {};
+                    return postos.reduce((acc, p) => {
+                        const r = row[p];
+                        return acc + (r ? num(r.medico ?? r.custo_medico) : 0);
+                    }, 0);
+                });
+
+                const pct_med = labels.map((_, i) =>
+                    mensalidade[i] > 0 ? (medico[i] / mensalidade[i] * 100) : null
+                );
+
+                return { labels, mensalidade, medico, pct_med };
+            };
+
+
+
+            // ==== KPIs ================================================================
+            function kpiCard(title, val, fmt = 'text') {
+                const isNull = (val == null || Number.isNaN(val));
+                const out = isNull ? '<span class="text-muted">-</span>' :
+                    (fmt === 'moeda' ? fmtInt.format(val) : (fmt === 'pct' ? fmt2.format(val) + '%' : fmt2.format(val)));
+                return `<div class="card"><div class="card-body p-2"><div class="small text-muted">${title}</div><div class="h5 mb-0">${out}</div></div></div>`;
+            }
+            function buildKPIs(containerId, meses, selection) {
+                const box = document.querySelector(containerId); if (!box) return; box.innerHTML = '';
+                const rows = meses.map(m => aggMes(m, selection));
+                const mens = sum(rows.map(r => r.mens)), med = sum(rows.map(r => r.med)), margem = sum(rows.map(r => r.margem));
+                const pctMedPond = mens > 0 ? med / mens * 100 : null;
+                const pctMargemPond = mens > 0 ? margem / mens * 100 : null;
+                const pm = rows.map(r => r.pctMed).filter(x => x != null);
+                const pctMedAvg = pm.length ? pm.reduce((a, b) => a + b, 0) / pm.length : null;
+                const pctMedMax = pm.length ? Math.max(...pm) : null;
+                const pctMedMin = pm.length ? Math.min(...pm) : null;
+                box.insertAdjacentHTML('beforeend', kpiCard('Mensalidade total', mens, 'moeda'));
+                box.insertAdjacentHTML('beforeend', kpiCard('Custo médico total', med, 'moeda'));
+                box.insertAdjacentHTML('beforeend', kpiCard('% Médico ponderado', pctMedPond, 'pct'));
+                box.insertAdjacentHTML('beforeend', kpiCard('% Médico média simples', pctMedAvg, 'pct'));
+                box.insertAdjacentHTML('beforeend', kpiCard('% Médico máximo', pctMedMax, 'pct'));
+                box.insertAdjacentHTML('beforeend', kpiCard('% Médico mínimo', pctMedMin, 'pct'));
+                box.insertAdjacentHTML('beforeend', kpiCard('Margem total aprox.', margem, 'moeda'));
+                box.insertAdjacentHTML('beforeend', kpiCard('% Margem ponderada', pctMargemPond, 'pct'));
+            }
+
+            // ==== Tabela ==============================================================
+            function buildTable(meses, selection) {
+                const tb = document.querySelector('#tblBody'); if (!tb) return; tb.innerHTML = '';
+                const map = new Map(); meses.forEach(m => map.set(m, aggMes(m, selection)));
+                const arrPct = meses.map(x => map.get(x)?.pctMed ?? null), arrMM3 = mm3(arrPct);
+                meses.forEach((m, idx) => {
+                    const r = map.get(m), rPrev = map.get(prevMonth(m)), rYoY = map.get(prevYear(m));
+                    const mom = (r?.pctMed != null && rPrev?.pctMed != null) ? (r.pctMed - rPrev.pctMed) : null;
+                    const yoy = (r?.pctMed != null && rYoY?.pctMed != null) ? (r.pctMed - rYoY.pctMed) : null;
+                    const mm3pct = arrMM3[idx];
+                    tb.insertAdjacentHTML('beforeend', `
+<tr>
+  <td>${mFmt(m)}</td>
+  <td class="text-right">${fmtInt.format(r.mens)}</td>
+  <td class="text-right">${fmtInt.format(r.med)}</td>
+  <td class="text-right">${fmtInt.format(r.margem)}</td>
+  <td class="text-right">${r.pctMed == null ? '-' : fmt2.format(r.pctMed) + '%'}</td>
+  <td class="text-right">${r.pctMargem == null ? '-' : fmt2.format(r.pctMargem) + '%'}</td>
+  <td class="text-right">${mom == null ? '-' : fmt2.format(mom) + ' pp'}</td>
+  <td class="text-right">${yoy == null ? '-' : fmt2.format(yoy) + ' pp'}</td>
+  <td class="text-right">${mm3pct == null ? '-' : fmt2.format(mm3pct) + '%'}</td>
+</tr>`);
+                });
+            }
+
+            // ==== Gráficos ============================================================
+            function initCharts() {
+                const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
+                chPct = new Chart(document.getElementById('chartPct'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
+                chValores = new Chart(document.getElementById('chartValores'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
+                chStack = new Chart(document.getElementById('chartStack'), { type: 'bar', data: { labels: [], datasets: [] }, options: { ...base, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } } });
+                chYoYpp = new Chart(document.getElementById('chartYoYpp'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+                chPctPosto = new Chart(document.getElementById('chartPctPosto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+                chParetoMed = new Chart(document.getElementById('chartParetoMed'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
+                chScatter = new Chart(document.getElementById('chartScatter'), { type: 'scatter', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Mensalidade' } }, y: { title: { display: true, text: '% Médico' } } } } });
+            }
+            function postoLabel(selection) { if (selection === 'ALL') return 'Todos'; const a = [...selection].sort(); return a.length ? a.join('+') : 'Todos'; }
+            function postoShares(meses, selection) {
+                const medMap = new Map();
+                meses.forEach(m => {
+                    const row = POR_POSTO[m] || {};
+                    (selection === 'ALL' ? POSTOS : [...selection]).forEach(p => { const r = row[p]; if (!r) return; medMap.set(p, (medMap.get(p) || 0) + num(r.medico ?? r.custo_medico)); });
+                });
+                const entries = [...medMap.entries()].sort((a, b) => b[1] - a[1]);
+                return { labels: entries.map(e => e[0]), valores: entries.map(e => e[1]) };
+            }
+            function avgPctByPosto(meses, selection) {
+                const map = new Map();
+                meses.forEach(m => {
+                    const row = POR_POSTO[m] || {};
+                    (selection === 'ALL' ? POSTOS : [...selection]).forEach(p => {
+                        const r = row[p]; if (!r) return;
+                        const mens = num(r.mensalidade), med = num(r.medico ?? r.custo_medico);
+                        if (mens > 0) { const o = map.get(p) || { sum: 0, cnt: 0 }; o.sum += (med / mens * 100); o.cnt += 1; map.set(p, o); }
+                    });
+                });
+                const postos = [...map.keys()].sort();
+                return { labels: postos, valores: postos.map(p => map.get(p).cnt ? map.get(p).sum / map.get(p).cnt : null) };
+            }
+            function buildHeatmap(meses, selection) {
+                const box = document.querySelector('#heatmapBox'); if (!box) return; box.innerHTML = '';
+                const postos = selection === 'ALL' ? POSTOS : [...selection].sort(); if (!postos.length) return;
+                function color(v) { if (v == null) return '#eee'; const x = Math.min(40, Math.max(0, v)); const g = Math.round(255 - (x / 40) * 200); const r = Math.round(55 + (x / 40) * 200); return `rgb(${r},${g},180)`; }
+                const thead = `<thead><tr><th class="text-left">Posto</th>${meses.map(m => `<th>${mFmt(m)}</th>`).join('')}</tr></thead>`;
+                const rows = postos.map(p => {
+                    const tds = meses.map(m => {
+                        const r = POR_POSTO[m]?.[p]; const mens = num(r?.mensalidade), med = num(r?.medico ?? r?.custo_medico);
+                        const v = mens > 0 ? (med / mens * 100) : null;
+                        return `<td><div class="cell" style="background:${color(v)}">${v == null ? '-' : fmt2.format(v)}</div></td>`;
+                    }).join('');
+                    return `<tr><th class="text-left">${p}</th>${tds}</tr>`;
+                }).join('');
+                box.innerHTML = `<div class="table-responsive"><table class="table table-sm">${thead}<tbody>${rows}</tbody></table></div>`;
+            }
+            function updateCharts(meses, selection) {
+                const labels = meses.map(mFmt), tag = postoLabel(selection);
+                const rows = meses.map(m => aggMes(m, selection));
+                const pct = rows.map(r => r.pctMed);
+                chPct.data.labels = labels; chPct.data.datasets = [{ label: `% Médico/Mensalidade (${tag})`, data: pct, tension: .2 }, { label: 'Média móvel 3m', data: mm3(pct), tension: .2 }]; chPct.update();
+                chValores.data.labels = labels; chValores.data.datasets = [{ label: `Mensalidade (${tag})`, data: rows.map(r => r.mens), tension: .2 }, { label: 'Médico', data: rows.map(r => r.med), tension: .2 }]; chValores.update();
+                chStack.data.labels = labels; chStack.data.datasets = [{ label: 'Médico', data: rows.map(r => r.med) }, { label: 'Margem aprox.', data: rows.map(r => r.margem) }]; chStack.update();
+                const yoyPP = meses.map((m, i) => { const py = prevYear(m); const a = rows[i].pctMed; const b = aggMes(py, selection).pctMed; return (a != null && b != null) ? a - b : null; });
+                const colors = yoyPP.map(v => (v != null && v < 0) ? 'rgba(220,53,69,0.4)' : 'rgba(54,162,235,0.4)');
+                const borders = yoyPP.map(v => (v != null && v < 0) ? 'rgba(220,53,69,1)' : 'rgba(54,162,235,1)');
+                chYoYpp.data.labels = labels; chYoYpp.data.datasets = [{ label: 'Δ YoY (p.p.)', data: yoyPP, backgroundColor: colors, borderColor: borders, borderWidth: 1 }]; chYoYpp.update();
+                const share = postoShares(meses, selection); chParetoMed.data.labels = share.labels; chParetoMed.data.datasets = [{ label: 'Custo Médico no período', data: share.valores }]; chParetoMed.update();
+                const ap = avgPctByPosto(meses, selection); chPctPosto.data.labels = ap.labels; chPctPosto.data.datasets = [{ label: '% médio (12m)', data: ap.valores }]; chPctPosto.update();
+                chScatter.data.datasets = [{ label: 'Meses', data: rows.map(r => ({ x: r.mens, y: r.pctMed })) }]; chScatter.update();
+                buildHeatmap(meses, selection);
+            }
+
+            // ==== Payload ChatIA ======================================================
+            function buildPayloadDeepMed({ userQuery }) {
+                const meses = window.__MESES_FN__?.() || [];
+                const serie = window.__SERIES_BAS__?.() || { labels: [], mensalidade: [], medico: [], pct_med: [] };
+                const posto = window.__POSTO_ATUAL__?.() || 'ALL';
+                const scopes = ['chart_pct', 'chart_valores', 'chart_stack'].join(', ');
+                const basePrompt =
+                    (window.Prompts?.render?.({ produto: 'medicos', from: meses[0], to: meses.at(-1), posto, contexto: 'deep', scopes })) ||
+                    `### RELATÓRIO TÉCNICO — medicos ${meses[0]}→${meses.at(-1)} — Posto ${posto}
+Objetivo: diagnóstico executivo e direcionadores de margem. Escopo: gráficos ${scopes}; drivers preço×volume; variações MoM/YoY; riscos e oportunidades; plano 30/60/90; validações.
+NÃO use tabelas, Markdown tabular, ASCII ou barras "|". Não desenhe gráficos. Apenas referencie os gráficos da tela pelo título. Responda em texto corrido, com parágrafos curtos.
+Não comece com “Visão executiva”. Títulos iniciam com “### ”.`;
+
+                const base = {
+                    produto: 'medicos', when: Date.now(),
+                    contexto: userQuery ? 'qa' : 'relatorio',
+                    prefs: { output: 'livre', assertivo: true, accept_format: 'free_text', temperature: 0.2, max_tokens: 7000 },
+                    defs: { pct_med: '% da mensalidade consumido por custo médico', margem: 'mensalidade - médico', yoy_pp: 'diferença em p.p. vs mesmo mês do ano anterior' },
+                    blocks: [
+                        { scope: 'chart_pct', periodo: { from: meses[0], to: meses.at(-1) }, posto, series: { labels: serie.labels, pct_med: serie.pct_med } },
+                        { scope: 'chart_valores', periodo: { from: meses[0], to: meses.at(-1) }, posto, series: { labels: serie.labels, mensalidade: serie.mensalidade, medico: serie.medico } },
+                        { scope: 'chart_stack', periodo: { from: meses[0], to: meses.at(-1) }, posto, series: { labels: serie.labels, medico: serie.medico } }
+                    ]
+                };
+                return userQuery ? { ...base, prompt: basePrompt + `\nPergunta: ${userQuery}` } : { ...base, prompt: basePrompt };
+            }
+
+            // ==== Boot ================================================================
+            window.addEventListener('DOMContentLoaded', async () => {
+                const err = document.getElementById('err');
+                try {
+                    // JSONs
+                    const URL_POR_POSTO = 'json_consolidado/consolidado_mensal_por_posto.json';
+                    const URL_CONSOLID = 'json_consolidado/consolidado_mensal.json';
+                    const URL_PCT_POSTO = 'json_consolidado/percentuais_mensais_por_posto.json';
+
+                    const [r1, r2, r3] = await Promise.all([
+                        fetch(URL_POR_POSTO, { cache: 'no-store' }),
+                        fetch(URL_CONSOLID, { cache: 'no-store' }),
+                        fetch(URL_PCT_POSTO, { cache: 'no-store' })
+                    ]);
+                    if (!r1.ok || !r2.ok || !r3.ok) throw new Error('Falha ao carregar JSON');
+
+                    POR_POSTO = await r1.json();
+                    CONSOLIDADO = await r2.json();
+                    PCT_POR_POSTO = await r3.json();
+
+                    // Meses e Postos
+                    MESES = Object.keys(POR_POSTO).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+                    if (!MESES.length) throw new Error('Sem dados');
+
+                    const setP = new Set();
+                    for (const m of MESES) for (const p of Object.keys(POR_POSTO[m] || {})) if (/^[A-Z]{1,3}$/.test(p)) setP.add(p);
+                    POSTOS = [...setP].sort();
+                    // ACL aplicado aqui, após JSON e definição de POSTOS.
+                    if (window.USER_POSTOS && Array.isArray(window.USER_POSTOS)) {
+                        const allowed = new Set(window.USER_POSTOS);
+                        POSTOS = POSTOS.filter(p => allowed.has(p));
+                    }
+
+                    // expor global para os tabs
+                    window.POSTOS = POSTOS;
+
+
+                    // Default UI: últimos 12 meses completos (até o mês anterior à data atual)
+                    function ym(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+                    const endDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1); endDate.setMonth(endDate.getMonth() - 1);
+                    const startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 11, 1);
+                    const last12 = inRange(MESES, ym(startDate), ym(endDate));
+                    const DEF_FROM = last12[0] || MESES.at(-12) || MESES[0];
+                    const DEF_TO = last12.at(-1) || MESES.at(-1);
+
+                    document.querySelector('#from1').value = DEF_FROM;
+                    document.querySelector('#to1').value = DEF_TO;
+                    document.querySelector('#from2').value = DEF_FROM;
+                    document.querySelector('#to2').value = DEF_TO;
+
+
+                    // Info "dados gerados"
+                    const lm = r1.headers.get('Last-Modified') || r2.headers.get('Last-Modified');
+
+                    if (lm) {
+                        const dt = new Date(lm);
+                        const info = document.querySelector('#jsonInfo');
+                        if (info) info.textContent = '• dados gerados em ' + dt.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+                    }
+
+                    // Exposição p/ ChatIA
+                    window.__MESES_FN__ = () => inRange(MESES, document.querySelector('#from2').value, document.querySelector('#to2').value);
+                    window.__POSTO_ATUAL__ = () => sel2 === 'ALL' ? 'ALL' : [...sel2].sort().join('+');
+                    window.__SERIES_BAS__ = () => {
+                        const meses = window.__MESES_FN__(); const labs = meses.slice();
+                        const mens = labs.map(m => sum(Object.values(POR_POSTO[m] || {}).map(r => num(r.mensalidade))));
+                        const med = labs.map(m => sum(Object.values(POR_POSTO[m] || {}).map(r => num(r.medico ?? r.custo_medico))));
+                        const pct = labs.map((_, i) => mens[i] > 0 ? (med[i] / mens[i] * 100) : null);
+                        return { labels: labs, mensalidade: mens, medico: med, pct_med: pct };
+                    };
+
+                    // Prompts: montar botão e modal no canto direito
+                    if (window.Prompts?.init) {
+                        Prompts.init({
+                            pageId: 'medicos',
+                            defaults: [
+                                { name: 'Padrão', template: `Analise % médico, mensalidade, custo e margem para {posto} de {from} a {to}. Foque nos gráficos {scopes}. Liste até 5 insights e 3 alertas. Tom assertivo.` },
+                                { name: 'Executivo', template: `Resumo executivo de {produto} {from}→{to}, posto {posto}. Riscos e oportunidades. Cite {scopes}. Texto conciso.` }
+                            ],
+                            mountAfter: '#btnComparar'
+                        });
+                    }
+
+                    // ChatIA: botão separado
+                    if (window.ChatIA?.init) {
+                        ChatIA.init({
+                            apiUrl: (window.IA_API_URL || '/ia/analisar'),
+                            mountAfterSelector: '#btnComparar',
+                            title: 'IA — Análise Completa & Chat',
+                            briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
+                            getPayload: async ({ userQuery }) => buildPayloadDeepMed({ userQuery })
+                        });
+                    } else {
+                        console.warn('ChatIA.init indisponível. Verifique /js/chat.js');
+                    }
+
+                    // Tabs, charts e renders
+                    buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
+                    buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; }, () => renderSel2());
+                    initCharts(); renderSel1(); renderSel2();
+
+                    // Eventos
+
+                    const on = (s, e, f) => { const o = document.querySelector(s); if (o) o.addEventListener(e, f); };
+                    on('#reset1', 'click', () => {
+                        document.querySelector('#from1').value = DEF_FROM;
+                        document.querySelector('#to1').value = DEF_TO;
+                        sel1 = 'ALL';
+                        markActiveMulti('#postoTabs1', sel1);
+                        renderSel1();
+                    });
+
+                    on('#reset2', 'click', () => {
+                        document.querySelector('#from2').value = DEF_FROM;
+                        document.querySelector('#to2').value = DEF_TO;
+                        sel2 = 'ALL';
+                        markActiveMulti('#postoTabs2', sel2);
+                        renderSel2();
+                    });
+                    on('#btnComparar', 'click', () => {
+                        const b = document.querySelector('#compareBlock');
+                        const show = (b.style.display === 'none' || b.style.display === '');
+                        b.style.display = show ? 'block' : 'none';
+                    });
+
+                } catch (e) {
+                    console.error(e);
+                    if (err) err.textContent = 'Erro: ' + (e.message || e);
+                }
+            });
+
+
+            // ==== Render wrappers =====================================================
+            function renderSel1() {
+                const meses = inRange(MESES, document.querySelector('#from1').value, document.querySelector('#to1').value);
+                buildKPIs('#kpisSel1', meses, sel1);
+            }
+            function renderSel2() {
+                const meses = inRange(MESES, document.querySelector('#from2').value, document.querySelector('#to2').value);
+                buildKPIs('#kpisSel2', meses, sel2);
+                buildTable(meses, sel2);
+                updateCharts(meses, sel2);
+            }
+        })();
+    </script>
+
+
+
+
+
+
+
+
+
+
+
+
+</body>
+
+</html>

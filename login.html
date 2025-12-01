@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="utf-8">
+    <title>CAMIM — Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+    <link rel="shortcut icon" href="images/Logo Camim-01_50px.png" type="image/x-icon">
+
+    <style>
+        html,
+        body {
+            height: 100%;
+        }
+
+        .login-wrap {
+            min-height: 100svh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background:
+                radial-gradient(1200px 600px at 10% 10%, rgba(255, 255, 255, .08), transparent 60%),
+                radial-gradient(1000px 600px at 90% 90%, rgba(255, 255, 255, .06), transparent 60%),
+                linear-gradient(135deg, #e6eef5 0%, #dfe7ef 40%, #d5e0ea 100%);
+        }
+
+        .glass-card {
+            width: min(420px, 92vw);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid rgba(255, 255, 255, .35);
+            background: rgba(255, 255, 255, .40);
+            box-shadow: 0 10px 30px rgba(31, 49, 71, .18), inset 0 0 0 1px rgba(255, 255, 255, .25);
+            -webkit-backdrop-filter: blur(16px) saturate(1.2);
+            backdrop-filter: blur(16px) saturate(1.2);
+        }
+
+        @supports not ((-webkit-backdrop-filter:blur(16px)) or (backdrop-filter:blur(16px))) {
+            .glass-card {
+                background: rgba(255, 255, 255, .85);
+            }
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px
+        }
+
+        .brand img {
+            height: 42px;
+            width: auto
+        }
+
+        .brand-title {
+            font-weight: 700;
+            white-space: nowrap
+        }
+
+        .muted {
+            color: #6b7280
+        }
+
+        .form-group {
+            margin-bottom: 12px
+        }
+
+        .btn-primary {
+            background: #2f6bb6;
+            border-color: #25599a
+        }
+
+        .btn-primary:hover {
+            filter: brightness(.98)
+        }
+
+        .form-control {
+            height: 42px
+        }
+
+        .input-group-text {
+            width: 42px;
+            justify-content: center
+        }
+
+        .helpers {
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+            flex-wrap: wrap
+        }
+
+        /* força visibilidade caso exista preloader global */
+        html,
+        body,
+        .login-wrap,
+        .glass-card {
+            visibility: visible !important;
+            opacity: 1 !important
+        }
+
+        [hidden],
+        .hidden,
+        .d-none,
+        .preloader,
+        #preloader,
+        .page-preload {
+            display: none !important
+        }
+
+        body {
+            color: #111 !important
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-wrap">
+        <div class="glass-card" role="main" aria-labelledby="titulo-login">
+            <div class="brand">
+                <img src="/images/Logo Camim-01_50px.png" alt="Logo CAMIM">
+                <div id="titulo-login" class="brand-title">Quem tem saúde é mais feliz!</div>
+            </div>
+
+            <div class="muted mb-3">Acesse sua conta para continuar.</div>
+
+            <!-- LOGIN POR FORMULÁRIO: POST em /session/login -->
+            <form method="POST" action="/session/login" novalidate>
+                <div class="form-group">
+                    <label for="email" class="small mb-1">E-mail</label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="far fa-envelope" aria-hidden="true"></i></span>
+                        </div>
+                        <input id="email" name="email" type="email" class="form-control" placeholder="voce@empresa.com"
+                            autocomplete="username" inputmode="email" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="senha" class="small mb-1">Senha</label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fas fa-lock" aria-hidden="true"></i></span>
+                        </div>
+                        <input id="senha" name="senha" type="password" class="form-control" placeholder="••••••••"
+                            minlength="4" autocomplete="current-password" required>
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" type="button" id="togglePwd"
+                                aria-label="Mostrar ou ocultar senha"><i class="far fa-eye"
+                                    aria-hidden="true"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block mt-2">Entrar</button>
+
+                <!-- <div class="helpers mt-3" aria-label="Ações auxiliares">
+                    <a href="/session/logout" class="small">Sair/Trocar usuário</a>
+                    <span class="small text-muted">Suporte: TI</span>
+                </div> -->
+            </form>
+
+            <div id="msg" class="text-danger small mt-2" role="alert" style="min-height:18px"></div>
+        </div>
+    </div>
+
+    <script>
+        // Mostrar/ocultar senha
+        document.getElementById('togglePwd').addEventListener('click', function () {
+            const i = document.getElementById('senha');
+            const eye = this.querySelector('i');
+            const show = i.type === 'password';
+            i.type = show ? 'text' : 'password';
+            eye.classList.toggle('fa-eye', !show);
+            eye.classList.toggle('fa-eye-slash', show);
+        });
+
+        // Exibe erro quando backend redireciona com ?e=1
+        if (new URLSearchParams(location.search).get('e') === '1') {
+            const msg = document.getElementById('msg');
+            msg.textContent = 'Usuário ou senha inválidos.';
+        }
+    </script>
+</body>
+
+</html>
