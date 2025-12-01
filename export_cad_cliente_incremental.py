@@ -1,4 +1,4 @@
-# export_cad_cliente_incremental.py
+# export_cad_cliente_incremental.py - 01-12-25 - 16h42m
 # --------------------------------------------------------
 # Agora totalmente DINÂMICO E CORRIGIDO:
 # - Gera:
