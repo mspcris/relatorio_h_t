@@ -30,10 +30,16 @@
         window.USER_EMAIL = "{{USER_EMAIL}}";
     </script>
 
+
     <style>
         .kpi-mini-card {
             border-radius: 8px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+
+        /* deixa o card mais “baixo” */
+        .kpi-mini-card .card-body {
+            padding: 8px 12px;
         }
 
         .scroll-tabs {
@@ -80,21 +86,31 @@
         }
 
         .kpi-value {
-            font-size: 1.4rem;
+            font-size: 1.3rem;
             font-weight: 700;
         }
 
         .kpi-section-title {
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: 600;
-            margin-top: 16px;
-            margin-bottom: 8px;
+            margin-top: 8px;
+            margin-bottom: 4px;
+        }
+
+        /* menos espaço vertical entre as linhas de KPIs */
+        .kpi-row {
+            margin-bottom: 0.75rem !important;
         }
     </style>
+
+
+
 </head>
 
 <body class="hold-transition sidebar-mini">
     <div class="wrapper">
+
+
 
         <!-- NAVBAR -->
         <nav class="main-header navbar navbar-expand navbar-white navbar-light">
@@ -111,23 +127,69 @@
             </span>
         </nav>
 
+
+
         <!-- SIDEBAR -->
         <aside class="main-sidebar sidebar-dark-primary elevation-4">
             <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
             <div class="sidebar">
                 <nav class="mt-2">
-                    <ul class="nav nav-pills nav-sidebar flex-column">
+                    <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu"
+                        data-accordion="false">
                         <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
                                 <p>Home Page</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i
+                                    class="nav-icon fas fa-book-open"></i>
+                                <p>Leia-me</p>
+                            </a></li>
+                        <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i
+                                    class="nav-icon fas fa-utensils"></i>
+                                <p>KPI Custo Alimentação</p>
+                            </a></li>
+                        <li class="nav-item"><a href="medicos.html" class="nav-link"><i
+                                    class="nav-icon fas fa-notes-medical"></i>
+                                <p>KPI Custo Médico</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i
+                                    class="nav-icon fas fa-chart-line"></i>
+                                <p>KPI Mensalidades</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i
+                                    class="nav-icon fas fa-shopping-cart"></i>
+                                <p>KPI Vendas</p>
                             </a></li>
                         <li class="nav-item"><a href="clientes.html" class="nav-link active"><i
                                     class="nav-icon fas fa-users"></i>
                                 <p>Clientes</p>
                             </a></li>
+                        </li>
+                        <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i
+                                    class="nav-icon fas fa-prescription-bottle-alt"></i>
+                                <p>KPI Prescrições</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i
+                                    class="nav-icon fas fa-landmark"></i>
+                                <p>KPI Índices Oficiais</p>
+                            </a></li>
+                        <li class="nav-item">
+                            <form method="POST" action="/session/logout" style="display:inline">
+                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                                    <p>Sair</p>
+                                </button>
+                            </form>
+                        </li>
                     </ul>
                 </nav>
             </div>
         </aside>
+
+
+
+
+
+
 
         <!-- CONTENT -->
         <div class="content-wrapper">
@@ -257,7 +319,7 @@
                     <div class="col-md-3 mb-2">
                         <div class="card kpi-mini-card text-center">
                             <div class="card-body">
-                                <div class="kpi-title">Ticket Médio Real PJ</div>
+                                <div class="kpi-title">Ticket Médio PJ</div>
                                 <div id="kpiTicketRealPJ" class="kpi-value">0</div>
                             </div>
                         </div>
@@ -266,13 +328,43 @@
                     <div class="col-md-3 mb-2">
                         <div class="card kpi-mini-card text-center">
                             <div class="card-body">
-                                <div class="kpi-title">Ticket Médio Previsto PJ</div>
-                                <div id="kpiTicketPrevPJ" class="kpi-value">0</div>
+                                <div class="kpi-title">Ticket Médio Por Vida PJ</div>
+                                <div id="kpiTicketPrevVidaPJ" class="kpi-value">0</div>
                             </div>
                         </div>
                     </div>
 
                 </div>
+
+                <!-- BOTÃO PARA MOSTRAR / OCULTAR EXPLICAÇÃO DOS KPIs -->
+                <div class="text-center mb-3">
+                    <button class="btn btn-outline-secondary" id="btnToggleKpiManual">
+                        EXPLICAÇÃO DOS KPI'S
+                    </button>
+                </div>
+
+                <!-- BLOCO DE EXPLICAÇÃO DOS KPIs (INICIALMENTE OCULTO) -->
+                <div id="kpiManual" style="display: none;">
+
+                    <p><code>1) Total Beneficiários se refere a clientes CAMIM, CAMIM Premium e Liberty.</code></p>
+                    <p><code>2) Ticket Médio Real PF é o valor do tícket consierando as mensalidades pagas, ou seja, se pago antes do vencimento, tem desconto, etc.</code>
+                    </p>
+                    <p><code>3) Ticket Médio Previsto PF é o ticket considerando o valor da mensalidade cheio, sem descontos.</code>
+                    </p>
+                    <p><code>4) Total de vidas considera qualquer matrícula, pf, pj, convênios como correios, etc. Este dado é considerado para estudo da necessidade de controladoria do quadro de médicos.</code>
+                    </p>
+                    <p><code>5) Total Beneficiários PJ elimina da conta o titular. Se houver algum plano PJ em que o titular é uma pessoa física e beneficiário, caso notado em algumas matrículas, ele não é contabilizado. Uma vez que o previsto para PJ é o titular ser a empresa.</code>
+                    </p>
+                    <p><code>6) A conta de vidas PJ não considera matrículas PJ com valor de mensalidade menor que R$ 48. Desta forma simples eliminamos matrículas de testes, funcionários, etc.</code>
+                    </p>
+                    <p><code>
+                    <h3>No final da página, toque em 'Exibir Manual' para ter mais informações sobre os dados contidos
+                        nos KPI's</h3></code>
+                    </p>
+
+                </div>
+
+
 
                 <!-- ======================================== -->
                 <!-- CARDS DE FAIXAS -->
@@ -362,14 +454,20 @@
             <p>Referência visual da origem das métricas:</p>
 
             <!-- SUA IMAGEM AQUI -->
-            <img src="images/cadastro_cliente.jpg" class="img-fluid rounded mb-3" alt="Exemplo Tela Sistema">
+            <img src="images/total_de_matriculas_cadastro_de_cliente.jpg" class="img-fluid rounded mb-3"
+                alt="Exemplo Tela Sistema">
+            <img src="images/total_de_beneficiarios_premium_camim_liberty.jpg" class="img-fluid rounded mb-3"
+                alt="Exemplo Tela Sistema">
+            <img src="images/total_de_beneficiarios_pj_mens48oumais.jpg" class="img-fluid rounded mb-3"
+                alt="Exemplo Tela Sistema">
+            <img src="images/vidas_convenio_pj_pf.jpg" class="img-fluid rounded mb-3" alt="Exemplo Tela Sistema">
 
             <hr>
 
             <h5>3. Lógica de Cálculo (Resumo)</h5>
             <ul>
                 <li><strong>Matrículas PF/PJ:</strong> somatório por tipo de contrato, sendo considerado planos PJ's
-                    matrículas com mensalidade de valor mínimo de R$ 49, para evitar matrículas feitas para
+                    matrículas com mensalidade de valor mínimo de R$ 48, para evitar matrículas feitas para
                     funcionários, reserva de vagas, permuta, etc. Matrículas Taxi são consideradas matrículas normais
                     CAMIM.</li>
                 <li><strong>Tickets PF/PJ:</strong> média ponderada por matrícula. O valor real considera o valor pago
@@ -395,7 +493,7 @@ Select
 e.codigo AS posto,
 vwc.tipo,
 count(*) as matriculas, avg(vwc.Valormensalidadeultimopagamento) as ticket_medio_real, 
-avg(vwc.[valor mensalidade]) as ticket_medio_previsto
+avg(vwc.[valor mensalidade]) as ticket_medio_previsto, sum(vwc.Valormensalidadeultimopagamento) as totalultimamensalidade
 from 
 vw_Cad_Cliente vwc
 join sis_empresa emp on emp.idendereco = vwc.idendereco
@@ -403,9 +501,9 @@ join Cad_Endereco e on emp.idEndereco = e.idEndereco
 Where (vwc.Desativado = 0)
  and (vwc.[Situação] = 'adimplente')
  and vwc.idEndereco = emp.idEndereco
- AND (vwc.DataCancelamentoAuto is null or vwc.DataCancelamentoANS < vwc.DataReativadoANS)
+ AND (vwc.CanceladoANS = 0)
  and vwc.Convênio = 0
- and vwc.[Valor mensalidade] > 49
+ and vwc.[Valor mensalidade] > 48
  group by e.codigo, vwc.tipo
 </pre>
 
@@ -420,7 +518,7 @@ Where (vwc.Desativado = 0)
 
             <pre style="background:#a79d9d; padding:12px; border-radius:8px; max-height:1000px; overflow:auto;">
 SELECT
-    e.codigo AS posto,
+              e.codigo AS posto,
     CASE
         WHEN cp.idade BETWEEN  0 AND 18 THEN '0 a 18'
         WHEN cp.idade BETWEEN 19 AND 23 THEN '19 a 23'
@@ -436,16 +534,17 @@ SELECT
     END AS faixa_etaria,
     COUNT(*) AS total
 FROM vw_Cad_PacienteView cp
-JOIN sis_empresa emp ON emp.idendereco = cp.idendereco
+LEFT JOIN sis_empresa emp ON emp.idendereco = cp.idendereco
 join cad_endereco e on e.idendereco = emp.idendereco
-join vw_cad_cliente cc on cc.idCliente = cp.idCliente
+left join vw_cad_cliente cc on cc.idcliente = cp.idcliente
 WHERE cp.desativado = 0
   AND cp.idade IS NOT NULL
   AND cp.[Situação] = 'Adimplente'
-  AND cc.tipo = 'J'
-  AND cc.Convenio = 0
-  AND (cc.DataCancelamentoAuto is null or cc.DataCancelamentoANS < cc.DataReativadoANS)
-  AND cc.[valor mensalidade] > 49
+  AND cp.tipo_FJ = 'J'
+  AND cp.CanceladoANS = 0
+  AND cp.tipo = 'dependente'
+  AND cp.matricula <> emp.MatriculaFuncionario 
+  AND cc.[Valor mensalidade] > 48
 GROUP BY
     e.codigo,
     CASE
@@ -475,7 +574,7 @@ ORDER BY e.codigo, faixa_etaria;
 
             <pre style="background:#a79d9d; padding:12px; border-radius:8px; max-height:1000px; overflow:auto;">
 SELECT
-    e.codigo AS posto,
+              e.codigo AS posto,
     CASE
         WHEN cp.idade BETWEEN  0 AND 18 THEN '0 a 18'
         WHEN cp.idade BETWEEN 19 AND 23 THEN '19 a 23'
@@ -493,12 +592,11 @@ SELECT
 FROM vw_Cad_PacienteView cp
 LEFT JOIN sis_empresa emp ON emp.idendereco = cp.idendereco
 join cad_endereco e on e.idendereco = emp.idendereco
-left join vw_cad_cliente cc on cc.idCliente = cp.idCliente
 WHERE cp.desativado = 0
   AND cp.idade IS NOT NULL
   AND cp.[Situação] = 'Adimplente'
-  AND cc.tipo = 'F'
-  AND (cc.DataCancelamentoAuto is null or cc.DataCancelamentoANS < cc.DataReativadoANS)
+  AND cp.tipo_FJ = 'F'
+  AND cp.DataCancelamentoANS is null
 GROUP BY
     e.codigo,
     CASE
@@ -551,8 +649,8 @@ join cad_cliente cc on cc.idCliente = cp.idCliente
 WHERE cp.desativado = 0
   AND cp.idade IS NOT NULL
   AND cp.[Situação] = 'Adimplente'
-  AND cc.tipo = 'F'
-  AND (cc.DataCancelamentoAuto is null or cc.DataCancelamentoANS < cc.DataReativadoANS)
+  --AND cc.tipo = 'F'
+  AND (cp.CanceladoANS = 0)
 GROUP BY
     e.codigo,
     CASE
@@ -578,6 +676,7 @@ ORDER BY e.codigo, faixa_etaria;
 
     <!-- SCRIPT PARA ABRIR / FECHAR -->
     <script>
+        // Toggle do Manual Técnico
         const btnToggleManual = document.getElementById("btnToggleManual");
         const manualConteudo = document.getElementById("manualConteudo");
 
@@ -585,6 +684,16 @@ ORDER BY e.codigo, faixa_etaria;
             const aberto = manualConteudo.style.display !== "none";
             manualConteudo.style.display = aberto ? "none" : "block";
             btnToggleManual.textContent = aberto ? "Exibir Manual" : "Ocultar Manual";
+        };
+
+        // Toggle da explicação dos KPIs
+        const btnToggleKpiManual = document.getElementById("btnToggleKpiManual");
+        const kpiManual = document.getElementById("kpiManual");
+
+        btnToggleKpiManual.onclick = () => {
+            const aberto = kpiManual.style.display !== "none";
+            kpiManual.style.display = aberto ? "none" : "block";
+            btnToggleKpiManual.textContent = aberto ? "MOSTRAR KPI'S" : "OCULTAR KPI'S";
         };
     </script>
 
@@ -679,24 +788,31 @@ ORDER BY e.codigo, faixa_etaria;
                 POSTOS_PERMITIDOS.forEach(posto => {
                     const linha = jsonMat[posto] || {};
 
-                    const PF = linha["F"] ?? 0;
-                    const PJ = linha["J"] ?? 0;
+                    const PF = Number(linha["F"] ?? 0);
+                    const PJ = Number(linha["J"] ?? 0);
 
-                    const ticketReal = linha["ticket_medio_real"] ?? null;
-                    const ticketPrev = linha["ticket_medio_previsto"] ?? null;
+                    const ticketReal = Number(linha["ticket_medio_real"] ?? 0);
+                    const ticketPrev = Number(linha["ticket_medio_previsto"] ?? 0);
+
+                    // novo campo vindo do JSON, focado em PJ
+                    const totalUltPJ = Number(linha["totalultimamensalidade_J"] ?? 0);
 
                     RAW_MAT[posto] = {
                         PF,
                         PJ,
                         TOTAL: PF + PJ,
 
+                        // PF: exatamente a mesma lógica de antes
                         ticket_real_PF: PF > 0 ? ticketReal : 0,
                         ticket_prev_PF: PF > 0 ? ticketPrev : 0,
 
-                        ticket_real_PJ: PJ > 0 ? ticketReal : 0,
-                        ticket_prev_PJ: PJ > 0 ? ticketPrev : 0
-                    };
+                        // PJ: recalculado com base em totalultimamensalidade_J / J
+                        ticket_real_PJ: (PJ > 0 && totalUltPJ > 0) ? (totalUltPJ / PJ) : 0,
+                        ticket_prev_PJ: PJ > 0 ? ticketPrev : 0,
 
+                        // guarda para o KPI "Ticket Médio Previsto Por Vida PJ"
+                        totalUltPJ
+                    };
                 });
 
                 // ============================
@@ -922,6 +1038,9 @@ ORDER BY e.codigo, faixa_etaria;
             let somaTicketPrevPJ = 0;
             let somaPJ = 0;
 
+            // novo: somatório do total da última mensalidade PJ
+            let somaTotalUltPJ = 0;
+
             // Vidas PF
             let totalVidas = RAW_VIDAS
                 .filter(r => postos.includes(r.posto))
@@ -942,29 +1061,38 @@ ORDER BY e.codigo, faixa_etaria;
 
                 const m = RAW_MAT[p] ?? { PF: 0, PJ: 0 };
 
-                // MATRÍCULAS PF
+                // MATRÍCULAS PF  (mantido)
                 totalMatPF += m.PF;
-                somaTicketRealPF += m.ticket_real_PF * m.PF;
-                somaTicketPrevPF += m.ticket_prev_PF * m.PF;
+                somaTicketRealPF += (m.ticket_real_PF || 0) * m.PF;
+                somaTicketPrevPF += (m.ticket_prev_PF || 0) * m.PF;
                 somaPF += m.PF;
 
-                // MATRÍCULAS PJ
+                // MATRÍCULAS PJ  (usa novos tickets de PJ)
                 totalMatPJ += m.PJ;
-                somaTicketRealPJ += m.ticket_real_PJ * m.PJ;
-                somaTicketPrevPJ += m.ticket_prev_PJ * m.PJ;
+                somaTicketRealPJ += (m.ticket_real_PJ || 0) * m.PJ;
+                somaTicketPrevPJ += (m.ticket_prev_PJ || 0) * m.PJ;
                 somaPJ += m.PJ;
+
+                // acumula total da última mensalidade PJ para o KPI por vida
+                somaTotalUltPJ += Number(m.totalUltPJ || 0);
             });
 
             // MATRÍCULAS TOTAL
             let totalMatTotal = totalMatPF + totalMatPJ;
 
-            // TICKET MÉDIO PF
+            // TICKET MÉDIO PF (igual ao original)
             let ticketRealPF = somaPF > 0 ? (somaTicketRealPF / somaPF) : 0;
             let ticketPrevPF = somaPF > 0 ? (somaTicketPrevPF / somaPF) : 0;
 
-            // TICKET MÉDIO PJ
+            // TICKET MÉDIO PJ (ponderado por matrícula, mas agora já vem com a nova base)
             let ticketRealPJ = somaPJ > 0 ? (somaTicketRealPJ / somaPJ) : 0;
             let ticketPrevPJ = somaPJ > 0 ? (somaTicketPrevPJ / somaPJ) : 0;
+
+            // NOVO KPI: Ticket Médio Previsto Por Vida PJ
+            // soma(totalultimamensalidade_J) / total de beneficiários PJ
+            let ticketPrevVidaPJ = totalBenefPJ > 0
+                ? (somaTotalUltPJ / totalBenefPJ)
+                : 0;
 
             // ============================
             // POPULAÇÃO DOS KPIs
@@ -982,11 +1110,11 @@ ORDER BY e.codigo, faixa_etaria;
             document.getElementById("kpiTicketPrevPF").textContent = ticketPrevPF.toFixed(2);
 
             // BLOCO PJ
+            // BLOCO PJ
             document.getElementById("kpiMatPJ").textContent = fmtInt.format(totalMatPJ);
             document.getElementById("kpiTicketRealPJ").textContent = ticketRealPJ.toFixed(2);
-            document.getElementById("kpiTicketPrevPJ").textContent = ticketPrevPJ.toFixed(2);
+            document.getElementById("kpiTicketPrevVidaPJ").textContent = ticketPrevVidaPJ.toFixed(2);
         }
-
 
         /* =========================================================================
            DASHBOARD MAIN

@@ -42,7 +42,7 @@ def add_metadata(payload: dict) -> dict:
 # --------------------------------------------------------
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SQL_DIR  = os.path.join(BASE_DIR, "SQL_cadastro")
+SQL_DIR  = os.path.join(BASE_DIR, "sql_cadastro")
 JSON_DIR = os.path.join(BASE_DIR, "json_cadastro")
 
 
@@ -135,7 +135,6 @@ def export_vidas(sql_path: str, json_out: str, conns: dict, postos: list, col_to
 
 
 # ---------------------- NOVOS EXPORTADORES ------------------------------
-
 def export_matriculas_tipo(sql_path: str, json_out: str, conns: dict, postos: list):
     print(f"\n=== EXPORTANDO {json_out} (PF/PJ) ===")
 
@@ -154,6 +153,7 @@ def export_matriculas_tipo(sql_path: str, json_out: str, conns: dict, postos: li
             print(f"[ERRO] Exec SQL {posto}: {e}")
             continue
 
+        # garante só o posto atual
         df = df[df["posto"] == posto]
         if df.empty:
             final[posto] = {}
@@ -161,12 +161,16 @@ def export_matriculas_tipo(sql_path: str, json_out: str, conns: dict, postos: li
 
         mapa = {}
 
-        # salva PF e PJ
+        # PF / PJ + totais de última mensalidade por tipo
         for _, row in df.iterrows():
-            tipo = row["tipo"]          # "F" ou "J"
+            tipo = row["tipo"]                      # "F" ou "J"
             mapa[tipo] = int(row["matriculas"])
 
-        # campos corrigidos — AGORA USA ticket_medio_real / ticket_medio_previsto
+            if "totalultimamensalidade" in df.columns:
+                key = f"totalultimamensalidade_{tipo}"
+                mapa[key] = float(row["totalultimamensalidade"])
+
+        # campos agregados já existentes
         if "ticket_medio_real" in df.columns:
             mapa["ticket_medio_real"] = float(df["ticket_medio_real"].iloc[0])
 

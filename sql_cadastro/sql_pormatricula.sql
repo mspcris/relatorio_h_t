@@ -2,7 +2,7 @@ Select
 e.codigo AS posto,
 vwc.tipo,
 count(*) as matriculas, avg(vwc.Valormensalidadeultimopagamento) as ticket_medio_real, 
-avg(vwc.[valor mensalidade]) as ticket_medio_previsto
+avg(vwc.[valor mensalidade]) as ticket_medio_previsto, sum(vwc.Valormensalidadeultimopagamento) as totalultimamensalidade
 from 
 vw_Cad_Cliente vwc
 join sis_empresa emp on emp.idendereco = vwc.idendereco
