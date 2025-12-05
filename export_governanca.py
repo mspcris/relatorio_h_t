@@ -5,18 +5,29 @@
 #         Adiciona mensalidade_qtd, ticket_medio e performance aos JSONs.
 #         KPIs mensais e de período (rodapé) com médias geométricas, mix e estatísticas.
 #         Inclui agregados de PRESCRIÇÃO nos JSONs legados e publica JSONs enriquecidos específicos de prescrição.
-#teste1 deploy
+#         Inclui coleções Liberty, inclusive VIDAS (uma vez por posto).
 import os, re, sys, glob, json, argparse, shutil, math
 from datetime import date, datetime, timezone
 from urllib.parse import quote_plus
 import numpy as np
 import pandas as pd
+from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
+
 def _set_mtime(path: str) -> None:
     """Ajusta atime/mtime do arquivo para 'agora' com timezone local."""
     ts = datetime.now(timezone.utc).astimezone().timestamp()
     os.utime(path, (ts, ts))
-from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
+
+def sanitize_nan(obj):
+    """Converte numpy.nan, NaT, inf e similares em None de forma recursiva."""
+    if isinstance(obj, dict):
+        return {k: sanitize_nan(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_nan(v) for v in obj]
+    if pd.isna(obj):
+        return None
+    return obj
 
 # =========================
 # Constantes e Defaults
@@ -37,6 +48,8 @@ KEY_PATTERNS = {
     "medico":      re.compile(r"(medic|custo_?med|assist|sinistral)", re.I),
     "alimentacao": re.compile(r"(alimenta|refeic|cozinha|posto)", re.I),
     "prescricao":  re.compile(r"\bprescri(ção|cao|c)(es|o|oes)?\b", re.I),
+    # NOVO: dados financeiros específicos do plano CAMIM LIBERTY
+    "liberty":     re.compile(r"liberty", re.I),
 }
 
 PREFER_NOMES = {
@@ -44,7 +57,13 @@ PREFER_NOMES = {
     "medico":      ["medicos", "valor", "total"],
     "alimentacao": ["alimentacao", "valor", "total"],
     "prescricao":  ["valor", "total", "qtd"],
-    "desconhecido":["valor", "total"]
+    "desconhecido":["valor", "total"],
+    # NOVO: prioriza coluna valor_pago para os CSVs liberty
+    "liberty":           ["valor_pago", "valor", "total"],
+    "liberty_consultas": ["valor_pago", "valor", "total"],
+    "liberty_lancamentos": ["valor_pago", "valor", "total"],
+    "liberty_mensalidades": ["valor_pago", "valor", "total"],
+    "liberty_taxainscricao": ["valor_pago", "valor", "total"],
 }
 
 # =========================
@@ -90,11 +109,29 @@ def load_sql_strip_go(path):
 
 def infer_key_from_filename(fn):
     name = os.path.basename(fn).lower()
+
+    # LIBERTY: captura nomes específicos
+    if name.startswith("liberty_consultas"):
+        return "liberty_consultas"
+    if name.startswith("liberty_lancamentos"):
+        return "liberty_lancamentos"
+    if name.startswith("liberty_mensalidades"):
+        return "liberty_mensalidades"
+    if name.startswith("liberty_taxainscricao"):
+        return "liberty_taxainscricao"
+    # NOVO: único SQL de vidas (uma vez por posto)
+    if name.startswith("liberty_vidas"):
+        return "liberty_vidas"
+
+    # PRESCRIÇÃO
     if name.startswith("prescricao"):
         return "prescricao"
+
+    # DEMAIS GRUPOS
     for key, pat in KEY_PATTERNS.items():
         if pat.search(name):
             return key
+
     return None
 
 def env(key, default=""):
@@ -172,6 +209,12 @@ def run_query(engine, sql_txt, ini, fim):
     body = _ensure_nocount(sql_txt)
     with engine.connect() as con:
         return pd.read_sql_query(text(body), con, params={"ini": ini, "fim": fim})
+
+# NOVO: consulta simples, sem parâmetros de período (usado em liberty_vidas)
+def run_query_simple(engine, sql_txt):
+    body = _ensure_nocount(sql_txt)
+    with engine.connect() as con:
+        return pd.read_sql_query(text(body), con)
 
 # =========================
 # Funções de cálculo (KPIs)
@@ -728,7 +771,6 @@ def build_prescricao_jsons_enriquecidos():
     mes_atual_posto_por_medico = {}
     mes_atual_rows = []
 
-    # NOVO: todos os registros de todos os CSVs
     all_rows = []
 
     linhas_hoje = []
@@ -750,7 +792,6 @@ def build_prescricao_jsons_enriquecidos():
         df = _normalize_presc_df(raw, posto_hint=posto)
         postos.add(posto)
 
-        # push nos ALL ROWS
         all_rows.extend(df.to_dict("records"))
 
         meses_all.setdefault(ym, {"total": 0, "medicos_ativos": 0, "tipos": {}})
@@ -788,7 +829,6 @@ def build_prescricao_jsons_enriquecidos():
 
             mes_atual_rows.extend(df.to_dict("records"))
 
-        # linhas de HOJE
         if ym == ym_today:
             mask_hoje = df["data_consulta"].fillna("").astype(str).str[:10] == d_today
             if mask_hoje.any():
@@ -816,7 +856,6 @@ def build_prescricao_jsons_enriquecidos():
     top10_qtd = sum(v for _, v in top10) if top10 else 0
     top10_share = round(100.0 * top10_qtd / total_hoje, 2) if total_hoje > 0 else None
 
-    # Saída HOJE: agora com TODOS os registros em "linhas"
     out_hoje = {
         "data": d_today,
         "postos": sorted(list(postos)),
@@ -832,7 +871,6 @@ def build_prescricao_jsons_enriquecidos():
             "por_medico": _sorted_dict(por_medico_hoje),
             "por_posto": _sorted_dict(por_posto_hoje)
         },
-        # Compat: mantém linhas_hoje, e adiciona "linhas" com TUDO
         "linhas_hoje": linhas_hoje,
         "linhas": all_rows
     }
@@ -874,6 +912,189 @@ def build_prescricao_jsons_enriquecidos():
 
     print(f"[EXTRA] Prescrição HOJE   -> json_consolidado/prescricao_hoje.json  linhas_all={len(all_rows)}  linhas_hoje={len(linhas_hoje)}")
     print(f"[EXTRA] Prescrição MENSAL -> json_consolidado/prescricao_mensal.json  meses={len(serie_mensal)}  rows_mes_atual={len(out_mensal['mes_atual']['rows'])}")
+
+# =========================
+# LIBERTY: JSON detalhado (todas as linhas, mês/posto)
+# =========================
+def build_liberty_detalhado_json():
+    """
+    Gera json_consolidado/liberty_detalhado.json com TODOS os registros
+    dos CSVs {POSTO}_{YYYY-MM}_liberty.csv.
+    """
+    ensure_dir(JSON_DIR)
+    pat = re.compile(r"^(?P<posto>[A-Z])_(?P<ym>\d{4}-\d{2})_liberty\.csv$", re.I)
+
+    dados = {}
+    postos = set()
+    meses = set()
+
+    for fn in os.listdir(DADOS_DIR):
+        m = pat.match(fn)
+        if not m:
+            continue
+        posto = m.group("posto").upper()
+        ym = m.group("ym")
+        path = os.path.join(DADOS_DIR, fn)
+        try:
+            df = pd.read_csv(path)
+        except Exception as e:
+            print(f"[WARN] Falha ao ler {fn}: {e}")
+            continue
+
+        cols_lower = {c.lower(): c for c in df.columns}
+        rename = {}
+        if "data prestação" in cols_lower:
+            rename[cols_lower["data prestação"]] = "data_prestacao"
+        if "data prestação " in cols_lower:
+            rename[cols_lower["data prestação "]] = "data_prestacao"
+        if "valor pago" in cols_lower:
+            rename[cols_lower["valor pago"]] = "valor_pago"
+        if rename:
+            df = df.rename(columns=rename)
+
+        registros = df.to_dict("records")
+        dados.setdefault(ym, {})[posto] = registros
+        postos.add(posto)
+        meses.add(ym)
+
+    if not dados:
+        print("[EXTRA] Liberty detalhado -> nenhum CSV *_liberty.csv encontrado.")
+        return
+
+    meses_sorted = sorted(meses)
+    payload = sanitize_nan({
+        "periodo": {
+            "inicio": meses_sorted[0],
+            "fim": meses_sorted[-1],
+            "n_meses": len(meses_sorted),
+        },
+        "postos": sorted(postos),
+        "meses": meses_sorted,
+        "dados": {ym: dados[ym] for ym in meses_sorted},
+    })
+
+    out_path = os.path.join(JSON_DIR, "liberty_detalhado.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _set_mtime(out_path)
+    print(f"[EXTRA] Liberty detalhado -> {os.path.relpath(out_path, BASE_DIR)}")
+
+def build_liberty_json_por_processo(nome_processo):
+    """
+    Gera json_consolidado/liberty_${processo}.json com TODOS os registros
+    dos CSVs {POSTO}_{YYYY-MM}_${processo}.csv.
+    Ex: liberty_consultas.json, liberty_mensalidades.json, etc.
+    """
+    ensure_dir(JSON_DIR)
+    pat = re.compile(rf"^(?P<posto>[A-Z])_(?P<ym>\d{{4}}-\d{{2}})_{nome_processo}\.csv$", re.I)
+
+    dados = {}
+    postos = set()
+    meses = set()
+
+    for fn in os.listdir(DADOS_DIR):
+        m = pat.match(fn)
+        if not m:
+            continue
+
+        posto = m.group("posto").upper()
+        ym    = m.group("ym")
+        path  = os.path.join(DADOS_DIR, fn)
+
+        try:
+            df = pd.read_csv(path)
+        except Exception:
+            continue
+
+        cols_lower = {c.lower(): c for c in df.columns}
+        rename = {}
+        if "data prestação" in cols_lower:
+            rename[cols_lower["data prestação"]] = "data_prestacao"
+        if "valor pago" in cols_lower:
+            rename[cols_lower["valor pago"]] = "valor_pago"
+        if rename:
+            df = df.rename(columns=rename)
+
+        registros = df.to_dict("records")
+
+        valor_total = sum_numeric(df, PREFER_NOMES.get(nome_processo, ["valor_pago", "valor", "total"]))
+        qtd_total = len(df)
+
+        dados.setdefault(ym, {})[posto] = {
+            "linhas": registros,
+            "valor_total": round(valor_total, 2),
+            "qtd": int(qtd_total)
+        }
+
+        postos.add(posto)
+        meses.add(ym)
+
+    if not dados:
+        print(f"[EXTRA] Liberty {nome_processo} -> nenhum CSV encontrado.")
+        return
+
+    meses_sorted = sorted(meses)
+    payload = sanitize_nan({
+        "periodo": {
+            "inicio": meses_sorted[0],
+            "fim": meses_sorted[-1],
+            "n_meses": len(meses_sorted),
+        },
+        "postos": sorted(postos),
+        "meses": meses_sorted,
+        "dados": {ym: dados[ym] for ym in meses_sorted},
+    })
+
+    out_path = os.path.join(JSON_DIR, f"liberty_{nome_processo}.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _set_mtime(out_path)
+
+    print(f"[EXTRA] Liberty {nome_processo} -> {os.path.relpath(out_path, BASE_DIR)}")
+
+# NOVO: VIDAS – JSON único por posto, sem fatiar por mês
+def build_liberty_vidas_json():
+    """
+    Lê dados/{POSTO}_liberty_vidas.csv (uma vez por posto) e gera
+    json_consolidado/liberty_liberty_vidas.json com todas as vidas por posto.
+    """
+    ensure_dir(JSON_DIR)
+    pat = re.compile(r"^(?P<posto>[A-Z])_liberty_vidas\.csv$", re.I)
+
+    dados = {}
+    postos = set()
+
+    for fn in os.listdir(DADOS_DIR):
+        m = pat.match(fn)
+        if not m:
+            continue
+        posto = m.group("posto").upper()
+        path = os.path.join(DADOS_DIR, fn)
+        try:
+            df = pd.read_csv(path)
+        except Exception as e:
+            print(f"[WARN] Falha ao ler {fn}: {e}")
+            continue
+
+        registros = df.to_dict("records")
+        dados[posto] = registros
+        postos.add(posto)
+
+    if not dados:
+        print("[EXTRA] Liberty VIDAS -> nenhum CSV *_liberty_vidas.csv encontrado.")
+        return
+
+    payload = sanitize_nan({
+        "atualizado_em": date.today().isoformat(),
+        "postos": sorted(postos),
+        "dados": dados
+    })
+
+    out_path = os.path.join(JSON_DIR, "liberty_liberty_vidas.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _set_mtime(out_path)
+    print(f"[EXTRA] Liberty VIDAS -> {os.path.relpath(out_path, BASE_DIR)}")
 
 # =========================
 # CLI
@@ -942,6 +1163,10 @@ def run():
         print(f"ERRO: Sem .sql em {SQL_DIR}.")
         sys.exit(1)
 
+    # Split: SQLs mensais x SQL de VIDAS (uma vez por posto)
+    sqls_mensais = [s for s in sqls if s["key"] != "liberty_vidas"]
+    sqls_vidas = [s for s in sqls if s["key"] == "liberty_vidas"]
+
     print(f"- Período: {periodo_desc}")
     print(f"- Mês corrente: {ym_current}")
     print(f"- Postos: {list(conns.keys())}")
@@ -960,7 +1185,7 @@ def run():
                 print(f"   [{posto}] ERRO engine: {e}")
                 continue
 
-            for entry in sqls:
+            for entry in sqls_mensais:
                 key = entry["key"] or "desconhecido"
                 sql_txt = entry["sql"]
                 out_path = target_csv_path(posto, ym, key)
@@ -986,11 +1211,49 @@ def run():
                 except Exception as e:
                     print(f"   [{posto}] ERRO salvar: {e}")
 
+    # NOVO: LIBERTY VIDAS – executa uma vez por posto (sem laço de mês)
+    if sqls_vidas:
+        entry_vidas = sqls_vidas[0]
+        sql_txt_vidas = entry_vidas["sql"]
+        print("\n[ETAPA 2/6 - VIDAS] Execução Liberty VIDAS (uma vez por posto)")
+        for posto, odbc_str in conns.items():
+            print(f"   [{posto}] conectando (VIDAS)...")
+            try:
+                engine = make_engine(odbc_str)
+            except Exception as e:
+                print(f"   [{posto}] ERRO engine VIDAS: {e}")
+                continue
+
+            out_path = os.path.join(DADOS_DIR, f"{posto}_liberty_vidas.csv")
+            if os.path.exists(out_path) and not args.force:
+                print(f"   [{posto}] SKIP {os.path.basename(out_path)} (existe; use --force para recriar)")
+                continue
+
+            print(f"   [{posto}] RUN {os.path.basename(entry_vidas['path'])} -> {os.path.basename(out_path)}")
+            if args.dry_run:
+                continue
+
+            try:
+                df = run_query_simple(engine, sql_txt_vidas)
+            except Exception as e:
+                print(f"   [{posto}] ERRO exec VIDAS: {e}")
+                continue
+
+            try:
+                df.to_csv(out_path, index=False, encoding="utf-8-sig")
+                print(f"   [{posto}] OK VIDAS  linhas={len(df)}")
+            except Exception as e:
+                print(f"   [{posto}] ERRO salvar VIDAS: {e}")
+
     if args.dry_run:
         print("\n[ETAPA 3/6] Consolidados -> SKIP (dry-run)")
         print("[ETAPA 4/6] JSON consolidado -> SKIP (dry-run)")
         print("[ETAPA 5/6] JSON por posto -> SKIP (dry-run)")
         print("[ETAPA 6/6] Percentuais -> SKIP (dry-run)")
+        print("[EXTRA] JSONs de prescrição -> SKIP (dry-run)")
+        print("[EXTRA] JSON Liberty detalhado -> SKIP (dry-run)")
+        print("[EXTRA] JSON Liberty por processo -> SKIP (dry-run)")
+        print("[EXTRA] JSON Liberty VIDAS -> SKIP (dry-run)")
         return
 
     print("\n[ETAPA 3/6] Conferência rápida")
@@ -1009,6 +1272,23 @@ def run():
     # EXTRA: JSONs específicos de prescrição
     print("\n[EXTRA] JSONs de prescrição (enriquecidos)")
     build_prescricao_jsons_enriquecidos()
+
+    # EXTRA: JSON detalhado de Liberty (todas as linhas, mês/posto)
+    print("\n[EXTRA] JSON Liberty detalhado (todas as linhas)")
+    build_liberty_detalhado_json()
+
+    print("\n[EXTRA] JSON Liberty por processo")
+    liberty_processos = [
+        "consultas",
+        "lancamentos",
+        "mensalidades",
+        "taxainscricao",
+    ]
+    for proc in liberty_processos:
+        build_liberty_json_por_processo(f"liberty_{proc}")
+
+    print("\n[EXTRA] JSON Liberty VIDAS (todas as vidas por posto)")
+    build_liberty_vidas_json()
 
     if args.copy_templates:
         print("\n[EXTRA] Cópia de templates")

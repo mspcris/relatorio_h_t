@@ -1,0 +1,1346 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>CAMIM — KPI CAMIM LIBERTY</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- AdminLTE + FontAwesome -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+
+    <!-- Fonte principal -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap">
+
+    <!-- CSS do projeto (mantidos) -->
+    <link rel="stylesheet" href="/css/style2.css?v=20251114">
+    <link rel="stylesheet" href="/css/style_kpi.css?v=20251114&force=1">
+
+    <link rel="shortcut icon"
+        href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png"
+        type="image/x-icon">
+
+    <!-- JS base -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <style>
+        :root {
+            --kpi-loaded: 1;
+            --cor0: #F2F2F2;
+            --cor1: #afbfa5;
+            --cor2: #91b62f;
+            --cor3: #009402;
+            --cor4: #1c7932;
+            --cor5: #003f0a;
+            --cor6: #0099ab;
+            --cor7: #092019;
+            --cor8: #444444;
+        }
+
+        html {
+            font-size: 16px;
+            zoom: 1;
+        }
+
+        body {
+            font-size: 1rem;
+            -webkit-text-size-adjust: 100%;
+            -webkit-font-smoothing: antialiased;
+            font-family: "Source Sans Pro", system-ui, -apple-system,
+                "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body.text-sm {
+            font-size: 1rem;
+        }
+
+        .text-sm .btn,
+        .text-sm .form-control,
+        .text-sm .custom-select,
+        .text-sm .page-link,
+        .text-sm .breadcrumb,
+        .text-sm .nav-link,
+        .text-sm .card-title {
+            font-size: 1rem;
+        }
+
+        h1,
+        h2,
+        h3 {
+            margin-top: 0;
+            margin-bottom: .5rem;
+            font-weight: 600;
+            line-height: 1.25;
+        }
+
+        h1 {
+            font-size: 2rem;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+        }
+
+        h3,
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .sidebar .nav-link {
+            font-size: .95rem;
+        }
+
+        .brand-link .brand-text {
+            font-size: 1rem;
+        }
+
+        .muted {
+            color: #6b7280;
+        }
+
+        .mini {
+            font-size: .85rem;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .table-responsive {
+            width: 100%;
+        }
+
+        .stack>*+* {
+            margin-top: 14px;
+        }
+
+        .filter-bar {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            padding: 10px;
+        }
+
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .month-inputs {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        #selPostos {
+            min-width: 180px;
+            min-height: 110px;
+        }
+
+        .kpi,
+        .card-body.kpi {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 8px;
+        }
+
+        .kpi .card,
+        .card-body.kpi .card {
+            border-radius: 12px;
+            margin: 0;
+        }
+
+        .card-body.kpi .card .card-body {
+            padding: .5rem .75rem;
+        }
+
+        .chart-card .card-body {
+            height: 340px;
+        }
+
+        /* === Postos estilo KPI Mensalidades (scroll-tabs) === */
+        .scroll-tabs {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 6px 0;
+        }
+
+        .scroll-tabs .nav-link {
+            display: inline-block;
+            min-width: 52px;
+            text-align: center;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+    <div class="wrapper">
+
+        <!-- NAVBAR SUPERIOR -->
+        <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i
+                            class="fas fa-bars"></i></a></li>
+            </ul>
+
+            <span class="ml-2 font-weight-bold d-flex align-items-center">
+                <img src="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png"
+                    alt="Logo Camim">
+                <span class="ml-2">CAMIM LIBERTY — Monitor Completo</span>
+                <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+            </span>
+        </nav>
+
+        <!-- SIDEBAR -->
+        <aside class="main-sidebar sidebar-dark-primary elevation-4">
+            <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+            <div class="sidebar">
+                <nav class="mt-2">
+                    <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu"
+                        data-accordion="false">
+                        <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
+                                <p>Home Page</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i
+                                    class="nav-icon fas fa-book-open"></i>
+                                <p>Leia-me</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_alimentacao.html" class="nav-link"><i
+                                    class="nav-icon fas fa-utensils"></i>
+                                <p>KPI Custo Alimentação</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_medicos.html" class="nav-link"><i
+                                    class="nav-icon fas fa-notes-medical"></i>
+                                <p>KPI Custo Médico</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i
+                                    class="nav-icon fas fa-chart-line"></i>
+                                <p>KPI Mensalidades</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i
+                                    class="nav-icon fas fa-shopping-cart"></i>
+                                <p>KPI Vendas</p>
+                            </a></li>
+                        <li class="nav-item">
+                            <a href="kpi_clientes.html" class="nav-link">
+                                <i class="nav-icon fas fa-users"></i>
+                                <p>KPI Clientes</p>
+                            </a>
+                        </li>
+                        <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i
+                                    class="nav-icon fas fa-prescription-bottle-alt"></i>
+                                <p>KPI Prescrições</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i
+                                    class="nav-icon fas fa-landmark"></i>
+                                <p>KPI Índices Oficiais</p>
+                            </a></li>
+
+
+
+
+
+                        <li class="nav-item">
+                            <a href="kpi_liberty.html" class="nav-link active">
+                                <i class="nav-icon fas fa-passport"></i>
+                                <p>KPI CAMIM Liberty</p>
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a href="k_adicional_NBS-IBS-CBS.html" class="nav-link">
+                                <i class="nav-icon fas fa-file-invoice"></i>
+                                <p>Notas Fiscais – NBS</p>
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a href="k_adicional_relatorio_pcs.html" class="nav-link">
+                                <i class="nav-icon fas fa-tasks"></i>
+                                <p>Planejamento PC's</p>
+                            </a>
+                        </li>
+
+
+
+
+                        <li class="nav-item">
+                            <form method="POST" action="/session/logout" style="display:inline">
+                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                                    <p>Sair</p>
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- ÁREA DE CONTEÚDO -->
+        <div class="content-wrapper">
+
+            <!-- Cabeçalho -->
+            <nav class="navbar navbar-expand navbar-white navbar-light">
+                <div class="d-flex w-100 align-items-center">
+                    <span class="ml-2 font-weight-bold">KPI CAMIM LIBERTY — Análise Completa</span>
+                </div>
+            </nav>
+
+            <!-- Conteúdo Principal -->
+            <section class="content p-3 stack">
+                <div id="err" class="text-danger mb-1"></div>
+
+                <!-- FILTROS -->
+                <div class="card">
+                    <div class="filter-bar">
+
+                        <!-- Período -->
+                        <div class="filter-item">
+                            <label class="mb-0 small d-block">Período de análise</label>
+                            <div class="month-inputs">
+                                <input id="fromMes" type="month" class="form-control form-control-sm" />
+                                <input id="toMes" type="month" class="form-control form-control-sm" />
+                                <button id="btnReset" class="btn btn-sm btn-outline-secondary">Reset</button>
+                            </div>
+                        </div>
+
+                        <!-- POSTOS (novo estilo igual KPI v2) -->
+                        <div class="filter-item flex-grow-1">
+                            <label class="mb-0 small d-block">Postos</label>
+                            <ul id="postoTabsLiberty" class="nav nav-pills scroll-tabs"></ul>
+                        </div>
+
+                        <div class="text-muted mini">
+                            <i class="fas fa-info-circle"></i>
+                            Dados consolidados diretamente dos 5 JSONs Liberty oficiais.
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- KPIs PRINCIPAIS -->
+                <div class="card">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">KPIs Consolidados</h3>
+                    </div>
+                    <div class="card-body kpi" id="kpiCards"></div>
+                </div>
+
+                <!-- TABELA MENSAL -->
+                <div class="card">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">Resumo Mensal — CAMIM Liberty</h3>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Mês</th>
+                                        <th class="text-right">Receita Total (R$)</th>
+                                        <th class="text-right">Mensalidades (R$)</th>
+                                        <th class="text-right">Mensalidades (Qtd)</th>
+                                        <th class="text-right">Ticket Médio Mensalidades (R$)</th>
+                                        <th class="text-right">Lançamentos (R$)</th>
+                                        <th class="text-right">Consultas (R$)</th>
+                                        <th class="text-right">Consultas (Qtd)</th>
+                                        <th class="text-right">Taxas de Inscrição (R$)</th>
+                                        <th class="text-right">Vidas (Qtd)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tblLiberty"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GRÁFICOS -->
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Receita Mensal</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartReceitaMensal"></canvas></div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Mensalidades — Qtd e Ticket Médio</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartMensalidades"></canvas></div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Consultas por Especialidade</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartConsultas"></canvas></div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Lançamentos por Classe</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartLancamentos"></canvas></div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Novas Vidas por Mês</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartVidasAtivas"></canvas></div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Tempo Médio de Permanência (dias)</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartPermanencia"></canvas></div>
+                </div>
+
+            </section>
+        </div>
+    </div>
+
+
+    <script>
+        /* ============================================
+           CONFIGURAÇÕES E CAMINHOS DOS JSONS
+        ============================================ */
+        const BASE = new URL('.', location.href);
+        const URLS = {
+            consultas: new URL('json_consolidado/liberty_liberty_consultas.json', BASE).href,
+            lancamentos: new URL('json_consolidado/liberty_liberty_lancamentos.json', BASE).href,
+            mensalidades: new URL('json_consolidado/liberty_liberty_mensalidades.json', BASE).href,
+            taxainscricao: new URL('json_consolidado/liberty_liberty_taxainscricao.json', BASE).href,
+            vidas: new URL('json_consolidado/liberty_liberty_vidas.json', BASE).href
+        };
+
+        const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+        const fmt2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const el = (s) => document.querySelector(s);
+
+        // container global das vidas normalizadas
+        window.VIDAS = {};
+
+        // Normalização corporativa de texto (remove acentos, lower-case)
+        function normalizarTipo(v) {
+            return String(v || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .trim();
+        }
+
+        function parseDateFlex(value) {
+            if (!value) return null;
+            let s = String(value).trim();
+            if (!s) return null;
+            s = s.replace(' ', 'T').replace(/(\.\d+)?$/, '');
+            const d = new Date(s);
+            return isNaN(d) ? null : d;
+        }
+
+        /* ============================================
+           INICIALIZAÇÃO
+        ============================================ */
+        document.addEventListener('DOMContentLoaded', initLiberty);
+
+        async function initLiberty() {
+            try {
+                const dados = await carregarTodosJsons();
+                window.LIBERTY = dados;
+
+                const rows = normalizarTodosRegistros(dados);
+
+                if (!Array.isArray(rows) || rows.length === 0) {
+                    el('#err').textContent = 'Nenhum registro encontrado nos arquivos JSON.';
+                    window.ROWS = [];
+                    window.MONTHLY = [];
+                    return;
+                }
+
+                window.ROWS = rows;
+
+                const POSTOS = extrairPostos(rows);
+                if (!POSTOS.length) {
+                    el('#err').textContent = 'Nenhum posto encontrado nos dados.';
+                    return;
+                }
+
+                popularPostos(POSTOS);
+
+                window.MONTHLY = consolidarMensal(rows);
+                inicializarPeriodoComDados(window.MONTHLY);
+
+                updateJsonInfo(rows);
+                renderAll();
+
+            } catch (e) {
+                console.error(e);
+                el('#err').textContent = e.message || 'Erro inesperado ao carregar dados.';
+            }
+        }
+
+        /* ============================================
+           CARREGAR JSONS (5 arquivos em paralelo)
+        ============================================ */
+        async function carregarTodosJsons() {
+            const keys = Object.keys(URLS);
+
+            const promises = keys.map(async (k) => {
+                const url = URLS[k];
+                const resp = await fetch(url, { cache: 'no-store' });
+                if (!resp.ok) {
+                    throw new Error(`Erro ao carregar ${k}: ${resp.status} ${resp.statusText}`);
+                }
+                const json = await resp.json();
+                return [k, json];
+            });
+
+            return Object.fromEntries(await Promise.all(promises));
+        }
+
+        /* ============================================
+           NORMALIZAÇÃO DOS REGISTROS
+           - Consolida 4 JSONs financeiros em uma lista única de linhas
+           - Guarda VIDAS em window.VIDAS (por posto)
+        ============================================ */
+        function normalizarTodosRegistros(dados) {
+            const out = [];
+            const vidasPorPosto = {};
+
+            // Mapa fonte -> tipo lógico
+            const mapa = {
+                consultas: 'consulta',
+                lancamentos: 'lancamento',
+                mensalidades: 'mensalidade',
+                taxainscricao: 'taxa'
+            };
+
+            Object.keys(dados).forEach(fonte => {
+                if (fonte === 'vidas') {
+                    const srcV = dados[fonte];
+                    if (!srcV || !srcV.dados) return;
+
+                    // Estrutura esperada: { dados: { POSTO: [vidas...] } }
+                    Object.keys(srcV.dados).forEach(posto => {
+                        const arr = srcV.dados[posto] || [];
+                        if (!Array.isArray(arr)) return;
+
+                        vidasPorPosto[posto] = arr.map(v => {
+                            const adm = parseDateFlex(
+                                v['DataAdmissao'] ??
+                                v['dataadmissao'] ??
+                                v['Data Admissao']
+                            );
+                            const canc = parseDateFlex(
+                                v['DataCancelamentoANS'] ??
+                                v['datacancelamentoans'] ??
+                                v['Data Cancelamento ANS']
+                            );
+                            const diasRaw =
+                                v['dias de plano'] ??
+                                v['dias_de_plano'] ??
+                                v['dias_plano'] ??
+                                v['dias'] ??
+                                null;
+                            const dias = diasRaw != null ? Number(diasRaw) : null;
+
+                            return {
+                                ...v,
+                                _posto: posto,
+                                _adm: adm,
+                                _canc: canc,
+                                _dias: isNaN(dias) ? null : dias
+                            };
+                        });
+                    });
+
+                    return; // VIDAS não entram em ROWS, só em window.VIDAS
+                }
+
+                const src = dados[fonte];
+                if (!src || !src.dados) return;
+
+                const tipoBase = mapa[fonte] || fonte;
+                const tipoNormalizado = normalizarTipo(tipoBase);
+
+                Object.keys(src.dados).forEach(ym => {
+                    const porPosto = src.dados[ym];
+                    if (!porPosto) return;
+
+                    Object.keys(porPosto).forEach(posto => {
+                        const bloco = porPosto[posto];
+                        if (!bloco || !Array.isArray(bloco.linhas)) return;
+                        if (!bloco.linhas.length) return;
+
+                        bloco.linhas.forEach(r => {
+                            const row = { ...r, _tipo: tipoNormalizado, _posto: posto };
+
+                            const dRaw =
+                                row['data_prestacao'] ??
+                                row['data prestação'] ??
+                                row['data_prestação'] ??
+                                row['data'] ??
+                                row['dt'];
+
+                            const fixed = dRaw
+                                ? String(dRaw).replace(' ', 'T').replace(/(\.\d+)?$/, '')
+                                : null;
+
+                            row._date = fixed ? new Date(fixed) : null;
+                            if (!row._date || isNaN(row._date)) row._date = null;
+
+                            if (row._date) {
+                                const Y = row._date.getFullYear();
+                                const M = String(row._date.getMonth() + 1).padStart(2, '0');
+                                row._ym = `${Y}-${M}`;
+                            } else {
+                                row._ym = ym;
+                            }
+
+                            row._valor = Number(
+                                row.valor_pago ??
+                                row['valor'] ??
+                                row['Valor'] ??
+                                0
+                            );
+
+                            out.push(row);
+                        });
+                    });
+                });
+            });
+
+            window.VIDAS = vidasPorPosto;
+
+            return out.sort((a, b) => {
+                const da = a._date ? a._date.getTime() : 0;
+                const db = b._date ? b._date.getTime() : 0;
+                return da - db;
+            });
+        }
+
+        /* ============================================
+           POSTOS
+        ============================================ */
+        function extrairPostos(rows) {
+            return [...new Set(rows.map(r => r._posto).filter(Boolean))].sort();
+        }
+
+        let POSTOS_LIBERTY = [];
+        let selPostosLiberty = 'ALL';
+
+        function popularPostos(postos) {
+            POSTOS_LIBERTY = postos;
+            selPostosLiberty = 'ALL';
+
+            const ul = el('#postoTabsLiberty');
+            if (!ul) return;
+
+            ul.innerHTML = `
+            <li class="nav-item">
+                <a class="nav-link active" data-posto="ALL" href="#">Todos</a>
+            </li>
+        `;
+
+            postos.forEach(p => {
+                ul.insertAdjacentHTML('beforeend', `
+                <li class="nav-item">
+                    <a class="nav-link" data-posto="${p}" href="#">${p}</a>
+                </li>
+            `);
+            });
+
+            ul.onclick = (e) => {
+                if (!e.target.matches('.nav-link')) return;
+                e.preventDefault();
+
+                const p = e.target.dataset.posto;
+
+                if (p === 'ALL') {
+                    selPostosLiberty = 'ALL';
+                } else {
+                    if (selPostosLiberty === 'ALL') selPostosLiberty = new Set();
+
+                    if (selPostosLiberty.has(p)) selPostosLiberty.delete(p);
+                    else selPostosLiberty.add(p);
+
+                    if (selPostosLiberty.size === 0) selPostosLiberty = 'ALL';
+
+                    if (selPostosLiberty !== 'ALL' && selPostosLiberty.size === POSTOS_LIBERTY.length) {
+                        selPostosLiberty = 'ALL';
+                    }
+                }
+
+                marcarPostosAtivos();
+                renderAll();
+            };
+
+            marcarPostosAtivos();
+        }
+
+        function marcarPostosAtivos() {
+            document.querySelectorAll('#postoTabsLiberty .nav-link').forEach(a => {
+                const p = a.dataset.posto;
+                if (selPostosLiberty === 'ALL') {
+                    a.classList.toggle('active', p === 'ALL');
+                } else {
+                    a.classList.toggle('active', selPostosLiberty.has(p));
+                }
+            });
+        }
+
+        /* ============================================
+           PERÍODO INICIAL = 1º mês com dado real até o último
+        ============================================ */
+        function inicializarPeriodoComDados(arr) {
+            if (!arr || arr.length === 0) return;
+
+            const first = arr[0].ym;
+            const last = arr[arr.length - 1].ym;
+
+            el('#fromMes').value = first;
+            el('#toMes').value = last;
+
+            el('#btnReset').onclick = () => {
+                el('#fromMes').value = first;
+                el('#toMes').value = last;
+                renderAll();
+            };
+
+            el('#fromMes').onchange = el('#toMes').onchange = renderAll;
+        }
+
+        /* ============================================
+           JSON INFO (header)
+        ============================================ */
+        function updateJsonInfo(rows) {
+            const span = el('#jsonInfo');
+            const dates = rows.map(r => r._date).filter(Boolean).sort((a, b) => a - b);
+            if (!dates.length) return;
+
+            const fmt = d => d.toLocaleDateString('pt-BR');
+            span.textContent = `• ${rows.length} registros • período ${fmt(dates[0])} a ${fmt(dates.at(-1))}`;
+        }
+
+        /* ============================================
+           CONSOLIDAÇÃO MENSAL (financeiro)
+        ============================================ */
+        function consolidarMensal(rows) {
+            const map = new Map();
+
+            rows.forEach(r => {
+                if (!r._ym) return;
+
+                let o = map.get(r._ym);
+                if (!o) {
+                    o = {
+                        ym: r._ym,
+                        total: 0,
+                        mensalidades: 0,
+                        lancamentos: 0,
+                        consultas: 0,
+                        taxas: 0,
+                        qtdMensalidade: 0,
+                        qtdLancamentos: 0,
+                        qtdTaxas: 0,
+                        qtdConsultas: 0,
+                        vidasAtivas: 0,
+                        vidasNovas: 0
+                    };
+                    map.set(r._ym, o);
+                }
+
+                const v = r._valor || 0;
+                const tipo = normalizarTipo(r._tipo);
+
+                switch (tipo) {
+                    case 'mensalidade':
+                        o.mensalidades += v;
+                        o.qtdMensalidade++;
+                        break;
+
+                    case 'lancamento':
+                        o.lancamentos += v;
+                        o.qtdLancamentos++;
+                        break;
+
+                    case 'consulta':
+                        o.consultas += v;
+                        o.qtdConsultas++;
+                        break;
+
+                    case 'taxa':
+                        o.taxas += v;
+                        o.qtdTaxas++;
+                        break;
+                }
+
+                o.total = o.mensalidades + o.lancamentos + o.consultas + o.taxas;
+            });
+
+            return [...map.values()].sort((a, b) => a.ym.localeCompare(b.ym));
+        }
+
+        /* ============================================
+           VIDAS -> aplica vidas ativas / novas por mês
+        ============================================ */
+        function aplicarVidasMensais(months, postosSel) {
+            if (!window.VIDAS || !months.length) return months;
+
+            const monthMap = {};
+            const ymList = [];
+
+            months.forEach(m => {
+                monthMap[m.ym] = m;
+                ymList.push(m.ym);
+                m.vidasAtivas = 0;
+                m.vidasNovas = 0;
+            });
+
+            const monthEnd = {};
+            ymList.forEach(ym => {
+                const [yStr, mStr] = ym.split('-');
+                const y = Number(yStr);
+                const m = Number(mStr);
+                monthEnd[ym] = new Date(y, m, 0); // último dia do mês
+            });
+
+            const postosAtivos = new Set(postosSel);
+
+            Object.entries(window.VIDAS).forEach(([posto, arr]) => {
+                if (!postosAtivos.has(posto)) return;
+
+                arr.forEach(v => {
+                    const adm = v._adm;
+                    const canc = v._canc;
+
+                    if (adm) {
+                        const ymAdm = `${adm.getFullYear()}-${String(adm.getMonth() + 1).padStart(2, '0')}`;
+                        if (monthMap[ymAdm]) {
+                            monthMap[ymAdm].vidasNovas = (monthMap[ymAdm].vidasNovas || 0) + 1;
+                        }
+                    }
+
+                    if (!adm) return;
+
+                    ymList.forEach(ym => {
+                        const end = monthEnd[ym];
+                        if (adm <= end && (!canc || canc > end)) {
+                            monthMap[ym].vidasAtivas = (monthMap[ym].vidasAtivas || 0) + 1;
+                        }
+                    });
+                });
+            });
+
+            return months;
+        }
+
+        function calcularPermanenciaMedia(postosSel, fromYm, toYm) {
+            if (!window.VIDAS) return null;
+
+            const postosAtivos = new Set(postosSel);
+            let soma = 0;
+            let qtd = 0;
+
+            Object.entries(window.VIDAS).forEach(([posto, arr]) => {
+                if (!postosAtivos.has(posto)) return;
+
+                arr.forEach(v => {
+                    const adm = v._adm;
+                    if (adm) {
+                        const ymAdm = `${adm.getFullYear()}-${String(adm.getMonth() + 1).padStart(2, '0')}`;
+                        if (fromYm && ymAdm < fromYm) return;
+                        if (toYm && ymAdm > toYm) return;
+                    }
+
+                    const dias = v._dias;
+                    if (dias != null && !isNaN(dias) && dias > 0) {
+                        soma += dias;
+                        qtd += 1;
+                    }
+                });
+            });
+
+            return qtd ? soma / qtd : null;
+        }
+
+        /* ============================================
+           RENDER ALL
+        ============================================ */
+        function renderAll() {
+            try {
+                const from = el('#fromMes').value || null;
+                const to = el('#toMes').value || null;
+
+                let postosSel =
+                    selPostosLiberty === 'ALL'
+                        ? [...POSTOS_LIBERTY]
+                        : [...selPostosLiberty];
+
+                const filteredRows = window.ROWS.filter(r =>
+                    (!from || r._ym >= from) &&
+                    (!to || r._ym <= to) &&
+                    postosSel.includes(r._posto)
+                );
+
+                let monthly = consolidarMensal(filteredRows);
+                monthly = aplicarVidasMensais(monthly, postosSel);
+
+                if (!monthly.length) {
+                    el('#err').textContent =
+                        'Nenhum registro encontrado no período e postos selecionados.';
+                    el('#kpiCards').innerHTML = '';
+                    el('#tblLiberty').innerHTML = '';
+                    updateCharts([], postosSel, from, to);
+                    return;
+                }
+
+                el('#err').textContent = '';
+                buildKpis(monthly, postosSel, from, to);
+                buildTable(monthly);
+                updateCharts(monthly, postosSel, from, to);
+
+            } catch (e) {
+                console.error(e);
+                el('#err').textContent = 'Erro ao renderizar dados.';
+            }
+        }
+
+        /* ============================================
+           KPI CARDS
+        ============================================ */
+        function buildKpis(months, postosSel, fromYm, toYm) {
+            const box = el('#kpiCards');
+            if (!months.length) {
+                box.innerHTML = '<div class="text-muted">Sem dados no período.</div>';
+                return;
+            }
+
+            let receitaTotal = 0,
+                receitaMens = 0,
+                receitaLanc = 0,
+                receitaCons = 0,
+                receitaTaxa = 0,
+                qtdMens = 0,
+                qtdLanc = 0,
+                qtdTaxa = 0;
+
+            months.forEach(m => {
+                receitaTotal += m.total;
+                receitaMens += m.mensalidades;
+                receitaLanc += m.lancamentos;
+                receitaCons += m.consultas;
+                receitaTaxa += m.taxas;
+
+                qtdMens += m.qtdMensalidade;
+                qtdLanc += m.qtdLancamentos;
+                qtdTaxa += m.qtdTaxas;
+            });
+
+            const ticketMedio = qtdMens ? receitaMens / qtdMens : 0;
+            const permMedia = calcularPermanenciaMedia(postosSel, fromYm, toYm);
+
+            const card = (titulo, valor, tipo = 'int') => `
+            <div class="card">
+                <div class="card-body p-2">
+                    <div class="small muted">${titulo}</div>
+                    <div class="h5 mb-0">${valor != null
+                    ? (tipo === '2' ? fmt2.format(valor) : fmtInt.format(valor))
+                    : '-'
+                }</div>
+                </div>
+            </div>`;
+
+            box.innerHTML = '';
+            box.insertAdjacentHTML('beforeend', card('Receita Total (R$)', receitaTotal, '2'));
+            box.insertAdjacentHTML('beforeend', card('Taxas de Inscrição (R$)', receitaTaxa, '2'));
+            box.insertAdjacentHTML('beforeend', card('Taxas de Inscrição (Qtd)', qtdTaxa));
+            box.insertAdjacentHTML('beforeend', card('Mensalidades (R$)', receitaMens, '2'));
+            box.insertAdjacentHTML('beforeend', card('Mensalidades (Qtd)', qtdMens));
+            box.insertAdjacentHTML('beforeend', card('Ticket Médio Mensalidades (R$)', ticketMedio, '2'));
+            box.insertAdjacentHTML('beforeend', card('Lançamentos (R$)', receitaLanc, '2'));
+            box.insertAdjacentHTML('beforeend', card('Lançamentos (Qtd)', qtdLanc));
+            box.insertAdjacentHTML('beforeend', card('Permanência Média (dias)', permMedia != null ? permMedia : 0, '2'));
+        }
+
+        /* ============================================
+           TABELA MENSAL
+        ============================================ */
+        function buildTable(months) {
+            const tb = el('#tblLiberty');
+            tb.innerHTML = '';
+            if (!months.length) return;
+
+            let tot = {
+                total: 0,
+                mensalidades: 0,
+                qtdMensalidade: 0,
+                lancamentos: 0,
+                consultas: 0,
+                taxas: 0,
+                vidas: 0,
+                qtdConsultas: 0
+            };
+
+            months.forEach(m => {
+                tot.total += m.total;
+                tot.mensalidades += m.mensalidades;
+                tot.qtdMensalidade += m.qtdMensalidade;
+                tot.lancamentos += m.lancamentos;
+                tot.consultas += m.consultas;
+                tot.taxas += m.taxas;
+                tot.vidas += (m.vidasAtivas || 0);
+                tot.qtdConsultas += (m.qtdConsultas || 0);
+
+                tb.insertAdjacentHTML('beforeend', `
+                <tr>
+                    <td>${m.ym}</td>
+                    <!-- CAMPOS R$ COM DUAS CASAS DECIMAIS -->
+                    <td class="text-right">${fmt2.format(m.total)}</td>
+                    <td class="text-right">${fmt2.format(m.mensalidades)}</td>
+                    <td class="text-right">${fmtInt.format(m.qtdMensalidade)}</td>
+                    <td class="text-right">${m.qtdMensalidade
+                        ? fmt2.format(m.mensalidades / m.qtdMensalidade)
+                        : '-'
+                    }</td>
+                    <td class="text-right">${fmt2.format(m.lancamentos)}</td>
+                    <td class="text-right">${fmt2.format(m.consultas)}</td>
+                    <td class="text-right">${fmtInt.format(m.qtdConsultas || 0)}</td>
+                    <td class="text-right">${fmt2.format(m.taxas)}</td>
+                    <td class="text-right">${fmtInt.format(m.vidasAtivas || 0)}</td>
+                </tr>
+            `);
+            });
+
+            // TOTAL – R$ com 2 casas, quantidades inteiras
+            tb.insertAdjacentHTML('beforeend', `
+            <tr style="font-weight:bold; background:#f7f7f7">
+                <td>Total</td>
+                <td class="text-right">${fmt2.format(tot.total)}</td>
+                <td class="text-right">${fmt2.format(tot.mensalidades)}</td>
+                <td class="text-right">${fmtInt.format(tot.qtdMensalidade)}</td>
+                <td class="text-right">-</td>
+                <td class="text-right">${fmt2.format(tot.lancamentos)}</td>
+                <td class="text-right">${fmt2.format(tot.consultas)}</td>
+                <td class="text-right">${fmtInt.format(tot.qtdConsultas)}</td>
+                <td class="text-right">${fmt2.format(tot.taxas)}</td>
+                <td class="text-right">${fmtInt.format(tot.vidas)}</td>
+            </tr>
+        `);
+
+            // MÉDIA – R$ com 2 casas, volumes em média simples
+            tb.insertAdjacentHTML('beforeend', `
+            <tr style="font-weight:bold; background:#efefef">
+                <td>Média</td>
+                <td class="text-right">${fmt2.format(tot.total / months.length)}</td>
+                <td class="text-right">${fmt2.format(tot.mensalidades / months.length)}</td>
+                <td class="text-right">${fmt2.format(tot.qtdMensalidade / months.length)}</td>
+                <td class="text-right">-</td>
+                <td class="text-right">${fmt2.format(tot.lancamentos / months.length)}</td>
+                <td class="text-right">${fmt2.format(tot.consultas / months.length)}</td>
+                <td class="text-right">${fmt2.format(tot.qtdConsultas / months.length)}</td>
+                <td class="text-right">${fmt2.format(tot.taxas / months.length)}</td>
+                <td class="text-right">${fmt2.format(tot.vidas / months.length)}</td>
+            </tr>
+        `);
+        }
+
+        /* ============================================
+           GRÁFICOS
+        ============================================ */
+        let charts = {};
+
+        function updateCharts(months, postosSel, fromYm, toYm) {
+            buildChartReceita(months);
+            buildChartMensalidades(months);
+            buildChartConsultas(postosSel, fromYm, toYm);
+            buildChartLancamentos(postosSel, fromYm, toYm);
+            buildChartVidasNovas(months);
+            buildChartPermanencia(postosSel, fromYm, toYm);
+        }
+
+        function buildChartReceita(months) {
+            const ctx = el('#chartReceitaMensal');
+            if (charts.receita) charts.receita.destroy();
+
+            charts.receita = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: months.map(m => m.ym),
+                    datasets: [
+                        {
+                            label: 'Receita Total (R$)',
+                            data: months.map(m => m.total),
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        function buildChartMensalidades(months) {
+            const ctx = el('#chartMensalidades');
+            if (charts.mensal) charts.mensal.destroy();
+
+            charts.mensal = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: months.map(m => m.ym),
+                    datasets: [
+                        {
+                            label: 'Qtd Mensalidades',
+                            data: months.map(m => m.qtdMensalidade),
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Ticket Médio Mensalidades (R$)',
+                            data: months.map(m =>
+                                m.qtdMensalidade ? m.mensalidades / m.qtdMensalidade : 0
+                            ),
+                            type: 'line',
+                            borderWidth: 2,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, position: 'left' },
+                        y1: { beginAtZero: true, position: 'right' }
+                    }
+                }
+            });
+        }
+
+        function buildChartVidasNovas(months) {
+            const ctx = el('#chartVidasAtivas');
+            if (charts.vidas) charts.vidas.destroy();
+
+            charts.vidas = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: months.map(m => m.ym),
+                    datasets: [
+                        {
+                            label: 'Novas vidas no mês',
+                            data: months.map(m => m.vidasNovas || 0),
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        function buildChartPermanencia(postosSel, fromYm, toYm) {
+            const ctx = el('#chartPermanencia');
+            if (charts.permanencia) charts.permanencia.destroy();
+
+            const labels = [];
+            const data = [];
+
+            if (window.VIDAS) {
+                const postos = postosSel;
+                postos.forEach(p => {
+                    const arr = window.VIDAS[p] || [];
+                    let soma = 0;
+                    let qtd = 0;
+
+                    arr.forEach(v => {
+                        const adm = v._adm;
+                        if (adm) {
+                            const ymAdm = `${adm.getFullYear()}-${String(adm.getMonth() + 1).padStart(2, '0')}`;
+                            if (fromYm && ymAdm < fromYm) return;
+                            if (toYm && ymAdm > toYm) return;
+                        }
+
+                        const dias = v._dias;
+                        if (dias != null && !isNaN(dias) && dias > 0) {
+                            soma += dias;
+                            qtd += 1;
+                        }
+                    });
+
+                    if (qtd > 0) {
+                        labels.push(p);
+                        data.push(soma / qtd);
+                    }
+                });
+            }
+
+            charts.permanencia = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Permanência média (dias) por posto',
+                            data,
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        /* ============================================
+           GRÁFICO – CONSULTAS POR ESPECIALIDADE
+        ============================================ */
+        function buildChartConsultas(postosSel, fromYm, toYm) {
+            const ctx = el('#chartConsultas');
+            if (charts.consultas) charts.consultas.destroy();
+
+            if (!window.ROWS || !window.ROWS.length) {
+                charts.consultas = new Chart(ctx, { type: 'bar', data: { labels: [], datasets: [] } });
+                return;
+            }
+
+            const rows = window.ROWS.filter(r =>
+                normalizarTipo(r._tipo) === 'consulta' &&
+                postosSel.includes(r._posto) &&
+                (!fromYm || r._ym >= fromYm) &&
+                (!toYm || r._ym <= toYm)
+            );
+
+            if (!rows.length) {
+                charts.consultas = new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: [], datasets: [{ label: 'Consultas (R$)', data: [] }] },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+                });
+                return;
+            }
+
+            const map = new Map();
+            rows.forEach(r => {
+                const esp = (r.especialidade || r['Especialidade'] || 'Sem especialidade').trim();
+                const key = esp || 'Sem especialidade';
+                map.set(key, (map.get(key) || 0) + (r._valor || 0));
+            });
+
+            const entries = [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30);
+            const labels = entries.map(e => e[0]);
+            const data = entries.map(e => e[1]);
+
+            charts.consultas = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Consultas (R$)',
+                            data,
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => `R$ ${fmt2.format(context.parsed.y)}`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        /* ============================================
+           GRÁFICO – LANÇAMENTOS POR CLASSE
+        ============================================ */
+        function buildChartLancamentos(postosSel, fromYm, toYm) {
+            const ctx = el('#chartLancamentos');
+            if (charts.lancamentos) charts.lancamentos.destroy();
+
+            if (!window.ROWS || !window.ROWS.length) {
+                charts.lancamentos = new Chart(ctx, { type: 'bar', data: { labels: [], datasets: [] } });
+                return;
+            }
+
+            const rows = window.ROWS.filter(r =>
+                normalizarTipo(r._tipo) === 'lancamento' &&
+                postosSel.includes(r._posto) &&
+                (!fromYm || r._ym >= fromYm) &&
+                (!toYm || r._ym <= toYm)
+            );
+
+            if (!rows.length) {
+                charts.lancamentos = new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: [], datasets: [{ label: 'Lançamentos (R$)', data: [] }] },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+                });
+                return;
+            }
+
+            const map = new Map();
+            rows.forEach(r => {
+                const cls = (r.classe || r['Classe'] || 'Sem classe').trim();
+                const key = cls || 'Sem classe';
+                map.set(key, (map.get(key) || 0) + (r._valor || 0));
+            });
+
+            const entries = [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30);
+            const labels = entries.map(e => e[0]);
+            const data = entries.map(e => e[1]);
+
+            charts.lancamentos = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Lançamentos (R$)',
+                            data,
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => `R$ ${fmt2.format(context.parsed.y)}`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>
