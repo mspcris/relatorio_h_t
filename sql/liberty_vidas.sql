@@ -29,4 +29,4 @@ Where (c.Desativado = 0) and (d.Desativado = 0)
  and (c.[Plano] = 'CAMIM LIBERTY')
  and c.idEndereco = emp.idEndereco
  --and c.CanceladoANS = 0 o front kpi_Liberty.html tem inteligência no js para mostrar as vidas mês a mês considerando datacancelamentoans. Portanto, não posso subir esta regra e vou deixar comentado para não esquecer.
-order by idcliente, idDependente
+--order by idcliente, idDependente
