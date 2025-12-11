@@ -934,9 +934,10 @@ let considerarRetirada = false;
             }
 
             function isRetiradaPlano(row) {
-                const v = (row.Plano || '').toString().trim().toUpperCase();
-                return v === 'RETIRADA';
+               const v = (row.plano || row.Plano || '').toString().trim().toUpperCase();
+               return v === 'RETIRADA';
             }
+
 
             function isRetiradaPlanoPrincipal(row) {
                 const v = (row.PlanoPrincipal || '').toString().trim().toUpperCase();
@@ -1117,20 +1118,16 @@ function computeReceitaDim(meses, dim) {
 function computeDespesaDim(meses, dim) {
     const postos = postosSelecionados();
     let ds = null;
-    let key = null;
     let isRetFn = null;
 
     if (dim === 'plano_principal') {
         ds = DATA.despPP;
-        key = 'PlanoPrincipal';
         isRetFn = isRetiradaPlanoPrincipal;
     } else if (dim === 'plano') {
         ds = DATA.despPlano;
-        key = 'Plano';
         isRetFn = isRetiradaPlano;
     } else {
         ds = DATA.despTipo;
-        key = 'tipo';
         isRetFn = isRetiradaTipo;
     }
 
@@ -1146,30 +1143,38 @@ function computeDespesaDim(meses, dim) {
             const v = num(r.valorpago);
             if (!v) return;
 
+            // aplica regra de retirada conforme a dimensão
             if (!considerarRetirada && isRetFn && isRetFn(r)) {
-                // RETIRADA / CAMPINHO fora quando switch desligado
                 return;
             }
 
-            const nome = (r[key] || 'Sem classificação').toString();
+            let nome;
+            if (dim === 'plano_principal') {
+                // cobre variações de case
+                nome = (r.PlanoPrincipal || r.planoprincipal || 'Sem classificação').toString();
+            } else if (dim === 'plano') {
+                // aqui está o ponto crítico: usar 'plano' minúsculo
+                nome = (r.plano || r.Plano || 'Sem classificação').toString();
+            } else { // tipo
+                nome = (r.tipo || r.Tipo || 'Sem classificação').toString();
+            }
+
             map.set(nome, (map.get(nome) || 0) + v);
         });
     });
 
     const entries = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
-
     const total = entries.reduce((acc, [, v]) => acc + v, 0);
     const top = entries.slice(0, 12);
 
     return {
-        // gráfico
         labels: top.map(e => e[0]),
         valores: top.map(e => e[1]),
-        // tabela
         full: entries.map(([nome, valor]) => ({ nome, valor })),
         total
     };
 }
+
             // ============================================================
             // ANÁLISE DE VARIAÇÃO ENTRE MESES
             // ============================================================
