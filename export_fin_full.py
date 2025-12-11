@@ -1,8 +1,9 @@
 # export_fin_full.py
 # Pipeline separado para fin_receita_full e fin_despesa_full
+
 import os, re, glob, json, argparse
 import pandas as pd
-from datetime import date
+from datetime import date, datetime  # <-- inclui datetime
 
 # Reuso de utilitários do pipeline legado
 from export_governanca import (
@@ -58,8 +59,25 @@ def build_json_full(key: str):
       json_fin_full/fin_receita_full.json
       json_fin_full/fin_despesa_full.json
 
-    Estrutura: lista de linhas com campos:
-      posto, mes, <colunas do select>
+    Estrutura final:
+
+    {
+      "meta": {
+        "dados_gerados_em": "08/12/2025, 16:19",
+        "gerado_em": "08/12/2025, 16:19",
+        "export_timestamp": "2025-12-08T16:19:00",
+        "origem": "fin_receita_full"
+      },
+      "meses": ["2024-01", "2024-02", ...],
+      "postos": ["A", "B", ...],
+      "dados": {
+        "2024-01": {
+          "A": { "linhas": [ {<colunas do select>}, ... ] },
+          "B": { "linhas": [ ... ] }
+        },
+        ...
+      }
+    }
     """
     ensure_dir(JSON_FULL_DIR)
     pattern = re.compile(
@@ -82,7 +100,7 @@ def build_json_full(key: str):
             print(f"[WARN] Falha ao ler {path}: {e}")
             continue
 
-        # Enriquecer com posto e mês
+        # Enriquecer com posto e mês (colunas auxiliares)
         df.insert(0, "posto", posto)
         df.insert(1, "mes", ym)
         dfs.append(df)
@@ -92,12 +110,50 @@ def build_json_full(key: str):
         return
 
     big = pd.concat(dfs, ignore_index=True)
-    records = big.to_dict(orient="records")
+
+    # ---------------- META ----------------
+    agora_br = datetime.now().strftime("%d/%m/%Y, %H:%M")
+    agora_iso = datetime.now().isoformat(timespec="seconds")
+
+    meta = {
+        # compatível com vários front-ends
+        "dados_gerados_em": agora_br,
+        "gerado_em": agora_br,
+        "export_timestamp": agora_iso,
+        "origem": key,  # ex: "fin_receita_full"
+    }
+
+    # ---------------- LISTAS ----------------
+    lista_meses = sorted(big["mes"].dropna().unique().tolist())
+    lista_postos = sorted(big["posto"].dropna().unique().tolist())
+
+    # ---------------- DADOS AGRUPADOS ----------------
+    dados = {}
+    for _, row in big.iterrows():
+        mes = row["mes"]
+        posto = row["posto"]
+
+        payload = row.to_dict()
+        # remove chaves auxiliares (ficam só os campos do SELECT)
+        payload.pop("mes", None)
+        payload.pop("posto", None)
+
+        dados.setdefault(mes, {}).setdefault(posto, {"linhas": []})["linhas"].append(payload)
+
+    saida = {
+        "meta": meta,
+        "meses": lista_meses,
+        "postos": lista_postos,
+        "dados": dados,
+    }
 
     out_path = os.path.join(JSON_FULL_DIR, f"{key}.json")
     with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(records, f, ensure_ascii=False, indent=2)
-    print(f"[JSON] Gerado -> {os.path.relpath(out_path, BASE_DIR)}  linhas={len(records)}")
+        json.dump(saida, f, ensure_ascii=False, indent=2)
+
+    print(
+        f"[JSON] Gerado -> {os.path.relpath(out_path, BASE_DIR)}  linhas={len(big)}"
+    )
 
 
 def parse_args():

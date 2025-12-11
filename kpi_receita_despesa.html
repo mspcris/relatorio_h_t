@@ -772,29 +772,106 @@
                 return labels.filter(m => (!from || m >= from) && (!to || m <= to));
             }
 
-            function num(v) {
-                const n = Number(v);
-                return Number.isFinite(n) ? n : 0;
+function num(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function atualizarJsonInfo(meta) {
+    const infoEl = el('#jsonInfo');
+    if (!infoEl || !meta) return;
+
+    // Se vier o JSON inteiro, tenta usar meta/info internas
+    if (!meta.gerado_em && !meta.atualizado_em && !meta.export_timestamp &&
+        !meta.generated_at && !meta.data_geracao &&
+        !meta.origem && !meta.fonte && !meta.nome_arquivo &&
+        !meta.file_name && !meta.arquivo) {
+
+        const inner = meta.meta || meta.Meta || meta.info || null;
+        if (inner && typeof inner === 'object') {
+            meta = inner;
+        }
+    }
+
+    let ts =
+        meta.gerado_em ||
+        meta.atualizado_em ||
+        meta.export_timestamp ||
+        meta.generated_at ||
+        meta.data_geracao ||
+        meta.dados_gerados_em;
+
+    let fonte =
+        meta.origem ||
+        meta.fonte ||
+        meta.nome_arquivo ||
+        meta.file_name ||
+        meta.arquivo;
+
+    // Heurística: procurar qualquer chave que pareça data/hora
+    if (!ts) {
+        for (const [k, v] of Object.entries(meta)) {
+            const lk = k.toLowerCase();
+            if (typeof v === 'string' &&
+                (lk.includes('gerad') ||
+                 lk.includes('atualiz') ||
+                 lk.includes('export') ||
+                 lk.includes('data'))) {
+                ts = v;
+                break;
             }
+        }
+    }
 
-            // ============================================================
-            // ESTADO GLOBAL
-            // ============================================================
+    // Heurística: procurar qualquer chave que pareça origem/arquivo
+    if (!fonte) {
+        for (const [k, v] of Object.entries(meta)) {
+            const lk = k.toLowerCase();
+            if (typeof v === 'string' &&
+                (lk.includes('orig') ||
+                 lk.includes('font') ||
+                 lk.includes('arq') ||
+                 lk.includes('file'))) {
+                fonte = v;
+                break;
+            }
+        }
+    }
 
-            let DATA = {
-                recTipo: null,
-                recForma: null,
-                recLanc: null,
-                despPP: null,
-                despPlano: null,
-                despTipo: null
-            };
+    // Se ainda assim não achar nada, pelo menos mostra algo genérico
+    if (!ts && !fonte) {
+        infoEl.textContent = '• dados carregados';
+        return;
+    }
 
-            let MESES = [];
-            let POSTOS = [];
-            let LAST_FULL = null;
-            let selectedPosto = 'ALL';
-            let considerarRetirada = false;
+    let texto = '• dados gerados';
+    if (ts) texto += ` em ${ts}`;
+    if (fonte) texto += ` (${fonte})`;
+
+    infoEl.textContent = texto;
+}
+
+// ============================================================
+// ESTADO GLOBAL
+// ============================================================
+
+let DATA = {
+    recTipo: null,
+    recForma: null,
+    recLanc: null,
+    despPP: null,
+    despPlano: null,
+    despTipo: null
+};
+
+
+let MESES = [];
+let POSTOS = [];
+let LAST_FULL = null;
+// agora trabalhamos com múltiplos postos selecionados
+let selectedPostos = new Set();
+let considerarRetirada = false;
+
 
             let chartReceitaDespesa = null;
             let chartResultado = null;
@@ -823,11 +900,16 @@
             }
 
             function postosSelecionados() {
-                if (!POSTOS || POSTOS.length === 0) return [];
-                if (selectedPosto === 'ALL') return POSTOS;
-                if (POSTOS.includes(selectedPosto)) return [selectedPosto];
-                return POSTOS;
-            }
+    if (!POSTOS || POSTOS.length === 0) return [];
+
+    // Se nada estiver selecionado, tratamos como "todos"
+    if (!selectedPostos || selectedPostos.size === 0) {
+        return [...POSTOS];
+    }
+
+    return POSTOS.filter(p => selectedPostos.has(p));
+}
+
 
             function getLinhas(ds, mes, postos) {
                 if (!ds || !ds.dados) return [];
@@ -1665,37 +1747,75 @@ function updateChartReceitaDim(meses) {
             // ============================================================
             // POSTO TABS
             // ============================================================
+function buildPostoTabs() {
+    const ul = el('#postoTabs');
+    if (!ul) return;
 
-            function buildPostoTabs() {
-                const ul = el('#postoTabs');
-                if (!ul) return;
+    ul.innerHTML = '';
 
-                ul.innerHTML = '';
+    // Estado "Todos" = nenhum posto específico selecionado
+    const allActive = !selectedPostos || selectedPostos.size === 0;
 
-                ul.insertAdjacentHTML('beforeend', `
+    // Aba "Todos"
+    ul.insertAdjacentHTML('beforeend', `
 <li class="nav-item">
-  <a href="#" class="nav-link ${selectedPosto === 'ALL' ? 'active' : ''}" data-posto="ALL">Todos</a>
+  <a href="#" class="nav-link ${allActive ? 'active' : ''}" data-posto="ALL">Todos</a>
 </li>`);
 
-                POSTOS.forEach(p => {
-                    ul.insertAdjacentHTML('beforeend', `
+    // Abas individuais
+    POSTOS.forEach(p => {
+        const ativo = !allActive && selectedPostos.has(p);
+        ul.insertAdjacentHTML('beforeend', `
 <li class="nav-item">
-  <a href="#" class="nav-link ${selectedPosto === p ? 'active' : ''}" data-posto="${p}">${p}</a>
+  <a href="#" class="nav-link ${ativo ? 'active' : ''}" data-posto="${p}">${p}</a>
 </li>`);
-                });
+    });
 
-                ul.addEventListener('click', e => {
-                    if (!e.target.matches('.nav-link')) return;
-                    e.preventDefault();
-                    const posto = e.target.dataset.posto;
-                    selectedPosto = posto || 'ALL';
+    // Handler de clique
+    ul.onclick = (e) => {
+        const link = e.target.closest('.nav-link');
+        if (!link) return;
+        e.preventDefault();
 
-                    ul.querySelectorAll('.nav-link').forEach(a => a.classList.remove('active'));
-                    e.target.classList.add('active');
+        const posto = link.dataset.posto;
+        if (!posto) return;
 
-                    updateAll();
-                });
+        if (posto === 'ALL') {
+            // Volta para "Todos": nenhum posto específico marcado
+            selectedPostos = new Set();
+        } else {
+            // Se estava em "Todos" (set vazio), começa seleção a partir do zero
+            if (!selectedPostos || selectedPostos.size === 0) {
+                selectedPostos = new Set([posto]);
+            } else {
+                if (selectedPostos.has(posto)) {
+                    selectedPostos.delete(posto);
+                } else {
+                    selectedPostos.add(posto);
+                }
             }
+            // Se zerou tudo ao desmarcar o último, interpretamos como "Todos"
+            if (selectedPostos.size === 0) {
+                // Mantém set vazio = estado "Todos"
+            }
+        }
+
+        const allNow = selectedPostos.size === 0;
+
+        // Atualiza classes das abas
+        ul.querySelectorAll('.nav-link').forEach(a => {
+            const p = a.dataset.posto;
+            if (p === 'ALL') {
+                a.classList.toggle('active', allNow);
+            } else {
+                a.classList.toggle('active', !allNow && selectedPostos.has(p));
+            }
+        });
+
+        updateAll();
+    };
+}
+
 
             // ============================================================
             // DIM TABS
@@ -1797,62 +1917,95 @@ function updateChartReceitaDim(meses) {
                 updateVariacao();
             }
 
-            async function init() {
-                try {
-                    const [
-                        rRecTipo,
-                        rRecForma,
-                        rRecLanc,
-                        rDespPP,
-                        rDespPlano,
-                        rDespTipo
-                    ] = await Promise.all([
-                        fetch(URL_REC_TIPO, { cache: 'no-store' }),
-                        fetch(URL_REC_FORMA, { cache: 'no-store' }),
-                        fetch(URL_REC_LANC, { cache: 'no-store' }),
-                        fetch(URL_DESP_PP, { cache: 'no-store' }),
-                        fetch(URL_DESP_PLANO, { cache: 'no-store' }),
-                        fetch(URL_DESP_TIPO, { cache: 'no-store' })
-                    ]);
+async function init() {
+    try {
+        const [
+            rRecTipo,
+            rRecForma,
+            rRecLanc,
+            rDespPP,
+            rDespPlano,
+            rDespTipo
+        ] = await Promise.all([
+            fetch(URL_REC_TIPO,  { cache: 'no-store' }),
+            fetch(URL_REC_FORMA, { cache: 'no-store' }),
+            fetch(URL_REC_LANC,  { cache: 'no-store' }),
+            fetch(URL_DESP_PP,   { cache: 'no-store' }),
+            fetch(URL_DESP_PLANO,{ cache: 'no-store' }),
+            fetch(URL_DESP_TIPO, { cache: 'no-store' })
+        ]);
 
-                    if (!rRecTipo.ok) throw new Error(`Erro ao carregar fin_receita_tipo.json (${rRecTipo.status})`);
-                    if (!rDespTipo.ok) throw new Error(`Erro ao carregar fin_despesa_tipo.json (${rDespTipo.status})`);
+        if (!rRecTipo.ok)  throw new Error(`Erro ao carregar fin_receita_tipo.json (${rRecTipo.status})`);
+        if (!rDespTipo.ok) throw new Error(`Erro ao carregar fin_despesa_tipo.json (${rDespTipo.status})`);
 
-                    DATA.recTipo = await rRecTipo.json();
-                    DATA.recForma = rRecForma.ok ? await rRecForma.json() : null;
-                    DATA.recLanc = rRecLanc.ok ? await rRecLanc.json() : null;
+        // Lê os JSONs
+        const [
+            jRecTipo,
+            jRecForma,
+            jRecLanc,
+            jDespPP,
+            jDespPlano,
+            jDespTipo
+        ] = await Promise.all([
+            rRecTipo.json(),
+            rRecForma.ok  ? rRecForma.json()  : Promise.resolve(null),
+            rRecLanc.ok   ? rRecLanc.json()   : Promise.resolve(null),
+            rDespPP.ok    ? rDespPP.json()    : Promise.resolve(null),
+            rDespPlano.ok ? rDespPlano.json() : Promise.resolve(null),
+            rDespTipo.json()
+        ]);
 
-                    DATA.despPP = rDespPP.ok ? await rDespPP.json() : null;
-                    DATA.despPlano = rDespPlano.ok ? await rDespPlano.json() : null;
-                    DATA.despTipo = await rDespTipo.json();
+        // Guarda no estado global
+        DATA.recTipo   = jRecTipo;
+        DATA.recForma  = jRecForma;
+        DATA.recLanc   = jRecLanc;
+        DATA.despPP    = jDespPP;
+        DATA.despPlano = jDespPlano;
+        DATA.despTipo  = jDespTipo;
 
-                    const metaMeses = Array.isArray(DATA.recTipo.meses)
-                        ? DATA.recTipo.meses.slice()
-                        : Object.keys(DATA.recTipo.dados || {});
-                    MESES = metaMeses.filter(Boolean).sort();
-                    if (!MESES.length) throw new Error('Nenhum mês encontrado em fin_receita_tipo.json');
+        // ============================
+        // Banner "dados gerados em..."
+        // ============================
+        const metaJson = jRecTipo && (jRecTipo.meta || jRecTipo.Meta || jRecTipo.info || null);
+        atualizarJsonInfo(metaJson || jRecTipo);
 
-                    const metaPostos = Array.isArray(DATA.recTipo.postos)
-                        ? DATA.recTipo.postos.slice()
-                        : Object.keys((DATA.recTipo.dados || {})[MESES[0]] || {});
-                    POSTOS = await carregarPostosDoUsuario(metaPostos.filter(Boolean).sort());
+        // ============================
+        // Meses e postos (base receita_tipo)
+        // ============================
+        const metaMeses =
+            Array.isArray(jRecTipo.meses)
+                ? jRecTipo.meses
+                : Object.keys(jRecTipo.dados || {});
 
-                    const lastFull = lastCompleteMonth(MESES);
-                    LAST_FULL = lastFull;
+        MESES = metaMeses.filter(Boolean).sort();
+        if (!MESES.length) throw new Error('Nenhum mês encontrado em fin_receita_tipo.json');
 
-                    initCharts();
-                    buildPostoTabs();
-                    wireDimTabs();
-                    wirePeriodo(lastFull);
-                    wireRetiradaSwitch();
-                    preencherMesesVariacao();
+        const metaPostos = Array.isArray(jRecTipo.postos)
+            ? jRecTipo.postos.slice()
+            : Object.keys((jRecTipo.dados || {})[MESES[0]] || {});
 
-                    updateAll();
-                } catch (e) {
-                    showErr(e);
-                    alert('Falha ao carregar dados de receitas/despesas. Ver console para detalhes.');
-                }
-            }
+        POSTOS = await carregarPostosDoUsuario(metaPostos.filter(Boolean).sort());
+
+        const lastFull = lastCompleteMonth(MESES);
+        LAST_FULL = lastFull;
+
+        // ============================
+        // Inicializa UI
+        // ============================
+        initCharts();
+        buildPostoTabs();
+        wireDimTabs();
+        wirePeriodo(lastFull);
+        wireRetiradaSwitch();
+        preencherMesesVariacao();
+
+        updateAll();
+    } catch (e) {
+        showErr(e);
+        alert('Falha ao carregar dados de receitas/despesas. Ver console para detalhes.');
+    }
+}
+
 
             document.addEventListener('DOMContentLoaded', init);
         })();
