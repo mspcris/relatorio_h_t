@@ -20,9 +20,9 @@ from export_governanca import (
 )
 
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
-SQL_FULL_DIR    = os.path.join(BASE_DIR, "SQL_full")          # NOVA pasta
-DADOS_FULL_DIR  = os.path.join(BASE_DIR, "dados_fin_full")    # NOVA pasta
-JSON_FULL_DIR   = os.path.join(BASE_DIR, "json_fin_full")     # NOVA pasta
+SQL_FULL_DIR    = os.path.join(BASE_DIR, "sql_full")          # Ajustado: minúsculo
+DADOS_FULL_DIR  = os.path.join(BASE_DIR, "dados_fin_full")    # Garantir minúsculo
+JSON_FULL_DIR   = os.path.join(BASE_DIR, "json_fin_full")     # Garantir minúsculo
 
 
 def load_sql_strip_go(path: str) -> str:
