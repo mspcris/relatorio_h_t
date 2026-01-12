@@ -1,0 +1,922 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — KPI Médicos (Qualidade: RQE / PJ / Agenda / Certificado)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- AdminLTE + FontAwesome -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+
+  <!-- Fonte padrão AdminLTE -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+
+  <!-- CSS do projeto -->
+  <link rel="stylesheet" href="/css/style2.css">
+  <link rel="shortcut icon"
+    href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png"
+    type="image/x-icon">
+
+  <!-- Libs JS (ordem importa) -->
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- Config de IA (mantido) -->
+  <script>
+    window.IA_API_URL = '/ia/analisar';
+    window.PROMPTS_API_BASE = '/prompts';
+  </script>
+  <script src="/js/chat.js"></script>
+
+  <link rel="stylesheet" href="css/style_kpi.css">
+  <style>
+    .stack { display: flex; flex-direction: column; gap: 12px; }
+    .filter-bar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; padding: 12px; }
+    .month-inputs { display: flex; gap: 6px; align-items: center; }
+    .scroll-tabs { overflow-x: auto; white-space: nowrap; flex-wrap: nowrap; }
+    .scroll-tabs .nav-item { display: inline-block; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 10px; }
+    @media (max-width: 1200px) { .kpi-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); } }
+    @media (max-width: 640px) { .kpi-grid { grid-template-columns: 1fr; } }
+    .chart-card .card-body { height: 320px; }
+    .mini { font-size: .85rem; }
+    .muted { color: #6c757d; }
+    .clickable { cursor: pointer; }
+    .badge-soft { background: rgba(0,0,0,.06); }
+    .table td, .table th { vertical-align: middle; }
+    .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; background:rgba(0,0,0,.06); }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+  <div class="wrapper">
+    <!-- NAV -->
+    <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+      <ul class="navbar-nav">
+        <li class="nav-item">
+          <a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
+        </li>
+      </ul>
+
+      
+
+       <span class="ml-2 font-weight-bold d-flex align-items-center">
+                <img src="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png"
+                    alt="Logo Camim">
+                <span class="ml-2">Quem tem saúde é mais feliz!</span>
+                <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+            </span>
+        
+        <span> <a href="ctrlq_relatorio_manual.html"> - Leia-me</a></span>
+        
+        </nav>
+
+
+     <!-- SIDEBAR -->
+        <aside class="main-sidebar sidebar-dark-primary elevation-4">
+            <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+            <div class="sidebar">
+                <nav class="mt-2">
+                    <ul class="nav nav-pills nav-sidebar flex-column" role="menu" data-accordion="false">
+                        <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
+                                <p>Home Page</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i
+                                    class="nav-icon fas fa-book-open"></i>
+                                <p>Leia-me</p>
+                            </a></li>
+                        <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i
+                                    class="nav-icon fas fa-utensils"></i>
+                                <p>KPI Custo Alimentação</p>
+                            </a></li>
+                        <li class="nav-item"><a href="medicos.html" class="nav-link"><i
+                                    class="nav-icon fas fa-notes-medical"></i>
+                                <p>KPI Custo Médico</p>
+                            </a></li>
+
+
+
+                                        <li class="nav-item"><a href="ctrlq_relatorio.html" class="nav-link active"><i
+                  class="nav-icon fas fa-user-md"></i>
+                <p>KPI Médicos (Qualidade)</p>
+              </a></li>
+
+
+
+                        <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i
+                                    class="nav-icon fas fa-chart-line"></i>
+                                <p>KPI Mensalidades</p>
+                            </a></li>
+
+                        <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i
+                                    class="nav-icon fas fa-shopping-cart"></i>
+                                <p>KPI Vendas</p>
+                            </a></li>
+                        <li class="nav-item">
+                            <a href="clientes.html" class="nav-link">
+                                <i class="nav-icon fas fa-users"></i>
+                                <p>KPI Clientes</p>
+                            </a>
+                        </li>
+                        <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i
+                                    class="nav-icon fas fa-prescription-bottle-alt"></i>
+                                <p>KPI Prescrições</p>
+                            </a></li>
+                        <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i
+                                    class="nav-icon fas fa-landmark"></i>
+                                <p>KPI Índices Oficiais</p>
+                            </a></li>
+
+
+
+
+
+
+
+
+                        <li class="nav-item">
+                            <a href="kpi_liberty.html" class="nav-link">
+                                <i class="nav-icon fas fa-passport"></i>
+                                <p>KPI CAMIM Liberty</p>
+                            </a>
+                        </li>
+
+
+
+                        
+
+                        <li class="nav-item">
+                            <a href="kpi_receita_despesa.html" class="nav-link">
+                                <i class="nav-icon fas fa-balance-scale"></i>
+                                <p>KPI Receitas x Despesas</p>
+                            </a>
+                        </li>
+
+
+
+
+                        
+                        <li class="nav-item">
+                            <a href="k_adicional_NBS-IBS-CBS.html" class="nav-link">
+                                <i class="nav-icon fas fa-file-invoice"></i>
+                                <p>Notas Fiscais – NBS</p>
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a href="k_adicional_relatorio_pcs.html" class="nav-link">
+                                <i class="nav-icon fas fa-tasks"></i>
+                                <p>Planejamento PC's</p>
+                            </a>
+                        </li>
+
+
+                        <li class="nav-item">
+                            <form method="POST" action="/session/logout" style="display:inline">
+                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                                    <p>Sair</p>
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+
+    <!-- CONTENT -->
+    <div class="content-wrapper">
+      <nav class="navbar navbar-expand navbar-white navbar-light">
+        <div class="d-flex w-100 align-items-center">
+          <span class="ml-2 font-weight-bold">KPI — Médicos (RQE / PJ / Agenda / Certificado / Especialidades)</span>
+        </div>
+      </nav>
+
+      <section class="content p-3 stack">
+        <div id="err" class="text-danger mb-1"></div>
+
+        <!-- FILTROS PRINCIPAIS (RIGOROSAMENTE IGUAL) -->
+        <div class="card">
+          <div class="filter-bar">
+            <div>
+              <label class="mb-0 small d-block">Selecione o Período</label>
+              <div class="month-inputs">
+                <input id="from2" type="month" class="form-control form-control-sm" />
+                <input id="to2" type="month" class="form-control form-control-sm" />
+                <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
+              </div>
+            </div>
+            <div class="flex-grow-1">
+              <label class="mb-0 small d-block">Posto</label>
+              <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPIs (MÊS ATUAL DO FILTRO = último mês do range) -->
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <h3 class="card-title mb-0">KPIs do Mês (último mês do filtro)</h3>
+            <span id="kpiScopeInfo" class="mini text-muted"></span>
+          </div>
+          <div class="card-body">
+            <div class="kpi-grid" id="kpisTop"></div>
+          </div>
+        </div>
+
+        <!-- TABELA (MÊS A MÊS) -->
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <h3 class="card-title mb-0">Evolução mês a mês (contagens de médicos)</h3>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-striped table-sm mb-0">
+                <thead>
+                  <tr>
+                    <th>Mês</th>
+                    <th class="text-right">Total</th>
+                    <th class="text-right">Com RQE</th>
+                    <th class="text-right">Com contrato PJ</th>
+                    <th class="text-right">Agenda restrita</th>
+                    <th class="text-right">Com cert. digital</th>
+                    <th class="text-right">Pediatras</th>
+                    <th class="text-right">Clínicos</th>
+                    <th class="text-right">Δ Total MoM</th>
+                  </tr>
+                </thead>
+                <tbody id="tblBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- GRÁFICOS -->
+        <div class="card chart-card">
+          <div class="card-header">
+            <h3 class="card-title mb-0">Total de médicos (mês a mês)</h3>
+          </div>
+          <div class="card-body"><canvas id="chartTotal"></canvas></div>
+        </div>
+
+        <div class="card chart-card">
+          <div class="card-header">
+            <h3 class="card-title mb-0">Evolução: RQE / PJ / Agenda restrita / Certificado</h3>
+          </div>
+          <div class="card-body"><canvas id="chartFlags"></canvas></div>
+        </div>
+
+
+        <div class="ml-auto d-flex align-items-center" style="gap:8px">
+            <span class="pill mini"><b>Mês do Pareto:</b> <span id="paretoMonthLabel">-</span></span>
+            <select id="paretoMonthSel" class="form-control form-control-sm" style="width:auto"></select>
+          </div>
+
+
+        <div class="card chart-card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <h3 class="card-title mb-0">Pareto de especialidades (mês: <span id="paretoMonthInTitle">-</span>)</h3>
+            <span class="mini muted">Clique em uma barra para listar médicos</span>
+          </div>
+          <div class="card-body"><canvas id="chartParetoEsp"></canvas></div>
+        </div>
+
+      </section>
+    </div>
+  </div>
+
+  <!-- Variáveis de sessão injetadas pelo backend -->
+  <script>
+    window.USER_EMAIL = "{{ USER_EMAIL }}";
+    window.USER_POSTOS = {{ USER_POSTOS | safe }};
+  </script>
+
+  <!-- MODAL DRILLDOWN -->
+  <div class="modal fade" id="drillModal" tabindex="-1" role="dialog" aria-labelledby="drillTitle" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="drillTitle">Detalhes</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Fechar">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex align-items-center mb-2" style="gap:10px; flex-wrap:wrap">
+            <span id="drillMeta" class="mini muted"></span>
+            <input id="drillSearch" class="form-control form-control-sm ml-auto" style="width:min(420px, 100%)"
+              placeholder="Buscar por nome/CRM/especialidade...">
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-striped">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>CRM/ID</th>
+                  <th>Especialidade</th>
+                  <th class="text-center">RQE</th>
+                  <th class="text-center">PJ</th>
+                  <th class="text-center">Agenda</th>
+                  <th class="text-center">Cert. digital</th>
+                  <th>Posto</th>
+                </tr>
+              </thead>
+              <tbody id="drillBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      // ================== CONFIG ==================
+      const URL_JSON = 'json_ctrlq_relatorio/CTRLQ_RELATORIO_CONSOLIDADO_2026-01-12_1518.json';
+
+      // Mapeamento de colunas
+      const FIELD_MAP = {
+        // texto
+        nome: ['medico', 'MEdico', 'MÉDICO', 'nome', 'Nome', 'NOME', 'nomemedico', 'NOME_MEDICO', 'nome_medico'],
+        crm: ['crm', 'CRM', 'Crm', 'id', 'ID', 'cod', 'COD', 'codigo', 'Codigo', 'id_medico', 'ID_MEDICO'],
+        especialidade: ['especialidade', 'Especialidade', 'ESPECIALIDADE'],
+
+        // flags (ATENÇÃO: PJ aqui é "pessoajuridica")
+        rqe: ['rqe', 'RQE', 'temrqe', 'TEM_RQE'],
+        pj: ['pessoajuridica', 'PessoaJuridica', 'PESSOAJURIDICA', 'pessoa_juridica', 'PESSOA_JURIDICA'],
+        certificado: ['certificadodigital', 'certificado_digital', 'CERTIFICADO_DIGITAL', 'cert_digital'],
+        // 1 = agenda aberta, 0 = restrita
+        agenda_aberta: ['permitiragendamentoquenuncaconsultou', 'PERMITIRAGENDAMENTOQUENUNCACONSULTOU', 'agendaaberta', 'AGENDA_ABERTA'],
+
+        // datas
+        data_fechamento_mes: ['DataFechamentoMes', 'datafechamentomes'],
+        data_inclusao: ['DataHoraInclusao', 'datahorainclusao']
+      };
+
+      // Especialidades-alvo
+      const ESP_PEDIATRA_MATCH = /pediatr/i;
+      const ESP_CLINICO_MATCH = /(cl[ií]nico|cl[ií]nica|clínico geral|cl[ií]nico geral|medicina de fam[ií]lia)/i;
+
+      // ================== UTILS ==================
+      const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+      const fmtPct = (num) => `${(Math.round((num + Number.EPSILON) * 10) / 10).toFixed(1).replace('.', ',')}%`;
+      const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+      const mFmt = ym => { const [y, m] = ym.split('-').map(Number); return `${MES_ABBR[m - 1]}-${String(y).slice(-2)}`; };
+
+      const uniqBy = (arr, keyFn) => {
+        const seen = new Set(); const out = [];
+        for (const x of arr) {
+          const k = keyFn(x);
+          if (!k || seen.has(k)) continue;
+          seen.add(k); out.push(x);
+        }
+        return out;
+      };
+
+      const pick = (obj, keys) => {
+        for (const k of keys) {
+          if (obj != null && Object.prototype.hasOwnProperty.call(obj, k) && obj[k] != null && obj[k] !== '') return obj[k];
+        }
+        return null;
+      };
+
+      const cleanStr = (v) => String(v ?? '').trim();
+
+      const b01 = (v) => {
+        if (v == null) return false;
+        if (typeof v === 'boolean') return v;
+        const s = String(v).trim().toLowerCase();
+        if (s === '1' || s === 'true' || s === 'sim' || s === 'yes') return true;
+        if (s === '0' || s === 'false' || s === 'não' || s === 'nao' || s === 'no') return false;
+        const n = Number(v);
+        if (Number.isFinite(n)) return n === 1;
+        return false;
+      };
+
+      // ================== STATE ==================
+      let RAW = null;
+      let MESES = [];
+      let POSTOS = [];
+
+      let sel2 = 'ALL';
+      let chTotal, chFlags, chPareto;
+
+      // ================== TABS ==================
+      function markActiveMulti(scopeId, selection) {
+        const isAll = selection === 'ALL';
+        document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
+          const p = a.dataset.posto;
+          if (p === 'ALL') a.classList.toggle('active', isAll);
+          else a.classList.toggle('active', !isAll && selection.has(p));
+        });
+      }
+
+      function buildPostoTabs(ulId, getSel, setSel, onChange) {
+        const ul = document.querySelector(ulId); if (!ul) return;
+        ul.innerHTML = '';
+        ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="ALL" class="nav-link" href="#">Todos</a></li>`);
+        POSTOS.forEach(p => ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`));
+        markActiveMulti(ulId, getSel());
+        ul.addEventListener('click', e => {
+          if (!e.target.matches('.nav-link')) return;
+          e.preventDefault();
+          const p = e.target.dataset.posto;
+          let sel = getSel();
+
+          if (p === 'ALL') sel = 'ALL';
+          else {
+            if (sel === 'ALL') sel = new Set();
+            if (sel.has(p)) sel.delete(p); else sel.add(p);
+            if (sel.size === POSTOS.length || sel.size === 0) sel = 'ALL';
+          }
+          setSel(sel);
+          markActiveMulti(ulId, sel);
+          onChange();
+        });
+      }
+
+      function postosFromSelection(selection) {
+        if (selection === 'ALL') return POSTOS.slice();
+        return [...selection];
+      }
+
+      // ================== DATA ACCESS ==================
+      function inRange(labels, from, to) {
+        return labels.filter(m => (!from || m >= from) && (!to || m <= to));
+      }
+
+      function rowsForMonthAndPostos(ym, selection) {
+        if (!RAW?.dados?.[ym]) return [];
+        const postos = postosFromSelection(selection);
+        const out = [];
+        for (const p of postos) {
+          const bucket = RAW.dados?.[ym]?.[p]?.linhas || [];
+          for (const r of bucket) out.push(r);
+        }
+        return out;
+      }
+
+      function canonRow(r) {
+        const nome = cleanStr(pick(r, FIELD_MAP.nome));
+        const crm = cleanStr(pick(r, FIELD_MAP.crm));
+        const esp = cleanStr(pick(r, FIELD_MAP.especialidade));
+
+        const rqe = b01(pick(r, FIELD_MAP.rqe));
+        const pj = b01(pick(r, FIELD_MAP.pj));             // <-- FIX: pessoa jurídica = PJ
+        const cert = b01(pick(r, FIELD_MAP.certificado));
+        const agendaAberta = b01(pick(r, FIELD_MAP.agenda_aberta)); // 1 aberta, 0 restrita
+
+        const posto = cleanStr(r.posto ?? r.Posto ?? r.POSTO);
+
+        return {
+          nome: nome || '',
+          crm: crm || '',
+          especialidade: esp || '',
+          rqe,
+          pj,
+          cert,
+          agendaAberta,
+          posto: posto || '',
+          __raw: r
+        };
+      }
+
+      function uniqueDoctors(rows) {
+        const canon = rows.map(canonRow);
+
+        // chave preferencial = CRM/ID (normalizado); fallback nome+especialidade+posto
+        return uniqBy(canon, x => {
+          const crmKey = cleanStr(x.crm).replace(/\s+/g, '');
+          if (crmKey) return `crm:${crmKey}`;
+          const n = cleanStr(x.nome).toLowerCase();
+          const e = cleanStr(x.especialidade).toLowerCase();
+          const p = cleanStr(x.posto).toLowerCase();
+          return (n || e) ? `n:${n}|e:${e}|p:${p}` : null;
+        });
+      }
+
+      function monthAgg(ym, selection) {
+        const doctors = uniqueDoctors(rowsForMonthAndPostos(ym, selection));
+        const total = doctors.length;
+
+        const comRQE = doctors.filter(d => d.rqe).length;
+        const comPJ = doctors.filter(d => d.pj).length;
+        const agendaRestrita = doctors.filter(d => !d.agendaAberta).length;
+        const comCert = doctors.filter(d => d.cert).length;
+
+        const pediatras = doctors.filter(d => ESP_PEDIATRA_MATCH.test(d.especialidade || '')).length;
+        const clinico = doctors.filter(d => ESP_CLINICO_MATCH.test(d.especialidade || '')).length;
+
+        return { ym, doctors, total, comRQE, comPJ, agendaRestrita, comCert, pediatras, clinico };
+      }
+
+      function paretoEspecialidades(ym, selection) {
+        const doctors = uniqueDoctors(rowsForMonthAndPostos(ym, selection));
+        const map = new Map();
+        for (const d of doctors) {
+          const k = (d.especialidade || 'Sem especialidade').trim() || 'Sem especialidade';
+          map.set(k, (map.get(k) || 0) + 1);
+        }
+        const entries = [...map.entries()].sort((a, b) => b[1] - a[1]);
+        return { labels: entries.map(e => e[0]), values: entries.map(e => e[1]), doctors };
+      }
+
+      // ================== UI RENDER ==================
+      function kpiCard(title, value, subtitle, onClick) {
+        const id = 'k_' + Math.random().toString(36).slice(2, 9);
+        const html = `
+          <div class="card mb-0 ${onClick ? 'clickable' : ''}" id="${id}">
+            <div class="card-body p-2">
+              <div class="small text-muted">${title}</div>
+              <div class="h4 mb-0">${fmtInt.format(value || 0)}</div>
+              ${subtitle ? `<div class="mini muted">${subtitle}</div>` : ''}
+            </div>
+          </div>`;
+        setTimeout(() => {
+          if (!onClick) return;
+          const el = document.getElementById(id);
+          if (el) el.addEventListener('click', onClick);
+        }, 0);
+        return html;
+      }
+
+      function pctOf(part, total) {
+        if (!total) return '0,0%';
+        return fmtPct((part / total) * 100);
+      }
+
+      function renderKPIs(topAgg) {
+        const box = document.querySelector('#kpisTop'); if (!box) return;
+        box.innerHTML = '';
+
+        const ym = topAgg.ym;
+        const total = topAgg.total || 0;
+        const postoLabel = (sel2 === 'ALL') ? 'Todos' : [...sel2].sort().join('+');
+        document.querySelector('#kpiScopeInfo').textContent = `${mFmt(ym)} • Posto: ${postoLabel} • Base: mês ${mFmt(ym)}`;
+
+        const openDrill = (title, filterFn) => () => openDrilldown({
+          ym,
+          selection: sel2,
+          title,
+          filterFn
+        });
+
+        box.insertAdjacentHTML('beforeend', kpiCard(
+          'Total de médicos',
+          total,
+          `mês ${mFmt(ym)} • clique para listar`,
+          openDrill(`Total de médicos — ${mFmt(ym)}`, d => true)
+        ));
+
+        box.insertAdjacentHTML('beforeend', kpiCard(
+          `Com certificado digital`,
+          topAgg.comCert,
+          `${pctOf(topAgg.comCert, total)} do total (${fmtInt.format(total)}) • clique para listar`,
+          openDrill(`Médicos com certificado digital — ${mFmt(ym)}`, d => d.cert)
+        ));
+
+        box.insertAdjacentHTML('beforeend', kpiCard(
+          `Com RQE`,
+          topAgg.comRQE,
+          `${pctOf(topAgg.comRQE, total)} do total (${fmtInt.format(total)}) • clique para listar`,
+          openDrill(`Médicos com RQE — ${mFmt(ym)}`, d => d.rqe)
+        ));
+
+        box.insertAdjacentHTML('beforeend', kpiCard(
+          `Pediatras`,
+          topAgg.pediatras,
+          `${pctOf(topAgg.pediatras, total)} do total (${fmtInt.format(total)}) • clique para listar`,
+          openDrill(`Pediatras — ${mFmt(ym)}`, d => ESP_PEDIATRA_MATCH.test(d.especialidade || ''))
+        ));
+
+        box.insertAdjacentHTML('beforeend', kpiCard(
+          `Com contrato PJ`,
+          topAgg.comPJ,
+          `${pctOf(topAgg.comPJ, total)} do total (${fmtInt.format(total)}) • clique para listar`,
+          openDrill(`Médicos com contrato PJ — ${mFmt(ym)}`, d => d.pj)
+        ));
+
+        box.insertAdjacentHTML('beforeend', kpiCard(
+          `Clínicos`,
+          topAgg.clinico,
+          `${pctOf(topAgg.clinico, total)} do total (${fmtInt.format(total)}) • clique para listar`,
+          openDrill(`Clínicos — ${mFmt(ym)}`, d => ESP_CLINICO_MATCH.test(d.especialidade || ''))
+        ));
+
+        box.insertAdjacentHTML('beforeend', kpiCard(
+          `Agenda restrita`,
+          topAgg.agendaRestrita,
+          `${pctOf(topAgg.agendaRestrita, total)} do total (${fmtInt.format(total)}) • clique para listar`,
+          openDrill(`Médicos com agenda restrita — ${mFmt(ym)}`, d => !d.agendaAberta)
+        ));
+
+        const semRQE = total - topAgg.comRQE;
+        box.insertAdjacentHTML('beforeend', kpiCard(
+          `Sem RQE`,
+          semRQE,
+          `${pctOf(semRQE, total)} do total (${fmtInt.format(total)}) • gap vs padrão • clique para listar`,
+          openDrill(`Médicos sem RQE — ${mFmt(ym)}`, d => !d.rqe)
+        ));
+      }
+
+      function renderTable(months, aggs) {
+        const tb = document.querySelector('#tblBody'); if (!tb) return;
+        tb.innerHTML = '';
+
+        for (let i = 0; i < months.length; i++) {
+          const a = aggs[i];
+          const prev = i > 0 ? aggs[i - 1] : null;
+          const mom = prev ? (a.total - prev.total) : null;
+
+          const row = `
+            <tr>
+              <td>${mFmt(a.ym)}</td>
+              <td class="text-right clickable" data-k="total" data-ym="${a.ym}">${fmtInt.format(a.total)}</td>
+              <td class="text-right clickable" data-k="rqe" data-ym="${a.ym}">${fmtInt.format(a.comRQE)}</td>
+              <td class="text-right clickable" data-k="pj" data-ym="${a.ym}">${fmtInt.format(a.comPJ)}</td>
+              <td class="text-right clickable" data-k="restrita" data-ym="${a.ym}">${fmtInt.format(a.agendaRestrita)}</td>
+              <td class="text-right clickable" data-k="cert" data-ym="${a.ym}">${fmtInt.format(a.comCert)}</td>
+              <td class="text-right clickable" data-k="pediatra" data-ym="${a.ym}">${fmtInt.format(a.pediatras)}</td>
+              <td class="text-right clickable" data-k="clinico" data-ym="${a.ym}">${fmtInt.format(a.clinico)}</td>
+              <td class="text-right">${mom == null ? '-' : fmtInt.format(mom)}</td>
+            </tr>`;
+          tb.insertAdjacentHTML('beforeend', row);
+        }
+
+        tb.querySelectorAll('td.clickable').forEach(td => {
+          td.addEventListener('click', () => {
+            const ym = td.dataset.ym;
+            const k = td.dataset.k;
+
+            const filterMap = {
+              total: d => true,
+              rqe: d => d.rqe,
+              pj: d => d.pj,
+              restrita: d => !d.agendaAberta,
+              cert: d => d.cert,
+              pediatra: d => ESP_PEDIATRA_MATCH.test(d.especialidade || ''),
+              clinico: d => ESP_CLINICO_MATCH.test(d.especialidade || '')
+            };
+
+            const titleMap = {
+              total: 'Total de médicos',
+              rqe: 'Médicos com RQE',
+              pj: 'Médicos com contrato PJ',
+              restrita: 'Médicos com agenda restrita',
+              cert: 'Médicos com certificado digital',
+              pediatra: 'Pediatras',
+              clinico: 'Clínicos'
+            };
+
+            openDrilldown({
+              ym,
+              selection: sel2,
+              title: `${titleMap[k]} — ${mFmt(ym)}`,
+              filterFn: filterMap[k] || (d => true)
+            });
+          });
+        });
+      }
+
+      function initCharts() {
+        const base = {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: { y: { beginAtZero: true } }
+        };
+
+        chTotal = new Chart(document.getElementById('chartTotal'), {
+          type: 'line',
+          data: { labels: [], datasets: [] },
+          options: base
+        });
+
+        chFlags = new Chart(document.getElementById('chartFlags'), {
+          type: 'line',
+          data: { labels: [], datasets: [] },
+          options: base
+        });
+
+        chPareto = new Chart(document.getElementById('chartParetoEsp'), {
+          type: 'bar',
+          data: { labels: [], datasets: [] },
+          options: {
+            ...base,
+            scales: {
+              x: {
+                ticks: {
+                  autoSkip: false,
+                  maxRotation: 90,
+                  minRotation: 90
+                }
+              },
+              y: { beginAtZero: true }
+            }
+          }
+        });
+
+        document.getElementById('chartParetoEsp').onclick = (evt) => {
+          const pts = chPareto.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
+          if (!pts.length) return;
+          const idx = pts[0].index;
+          const esp = chPareto.data.labels[idx];
+          const ym = document.querySelector('#paretoMonthSel').value;
+          openDrilldown({
+            ym,
+            selection: sel2,
+            title: `Especialidade: ${esp} — ${mFmt(ym)}`,
+            filterFn: d => (String(d.especialidade || 'Sem especialidade').trim() || 'Sem especialidade') === esp
+          });
+        };
+      }
+
+      function updateCharts(months, aggs) {
+        const labels = months.map(mFmt);
+
+        chTotal.data.labels = labels;
+        chTotal.data.datasets = [{ label: 'Total', data: aggs.map(a => a.total), tension: .2 }];
+        chTotal.update();
+
+        chFlags.data.labels = labels;
+        chFlags.data.datasets = [
+          { label: 'Com RQE', data: aggs.map(a => a.comRQE), tension: .2 },
+          { label: 'Com PJ', data: aggs.map(a => a.comPJ), tension: .2 },
+          { label: 'Agenda restrita', data: aggs.map(a => a.agendaRestrita), tension: .2 },
+          { label: 'Cert. digital', data: aggs.map(a => a.comCert), tension: .2 },
+        ];
+        chFlags.update();
+      }
+
+      function updatePareto(ym) {
+        const { labels, values } = paretoEspecialidades(ym, sel2);
+
+        document.querySelector('#paretoMonthLabel').textContent = mFmt(ym);
+        document.querySelector('#paretoMonthInTitle').textContent = mFmt(ym);
+
+        // aqui: mostra todas (vertical). Se ficar pesado, dá pra voltar a fatiar.
+        chPareto.data.labels = labels;
+        chPareto.data.datasets = [{ label: 'Qtd médicos', data: values }];
+        chPareto.update();
+      }
+
+      // ================== DRILLDOWN ==================
+      function openDrilldown({ ym, selection, title, filterFn }) {
+        const docs = uniqueDoctors(rowsForMonthAndPostos(ym, selection)).filter(filterFn || (d => true));
+        const postoLabel = (selection === 'ALL') ? 'Todos' : [...selection].sort().join('+');
+
+        document.querySelector('#drillTitle').textContent = title;
+        document.querySelector('#drillMeta').textContent = `Mês: ${mFmt(ym)} • Posto: ${postoLabel} • Médicos: ${docs.length}`;
+
+        const tbody = document.querySelector('#drillBody');
+        const input = document.querySelector('#drillSearch');
+        if (!tbody || !input) return;
+
+        const badgeSimNao = (ok) =>
+          ok
+            ? `<span class="badge badge-success">Sim</span>`
+            : `<span class="badge badge-danger">Não</span>`;
+
+        const badgeAgenda = (aberta) =>
+          aberta
+            ? `<span class="badge badge-success">Aberta</span>`
+            : `<span class="badge badge-warning">Restrita</span>`;
+
+        const render = () => {
+          const q = (input.value || '').trim().toLowerCase();
+          const filtered = !q ? docs : docs.filter(d =>
+            (d.nome || '').toLowerCase().includes(q) ||
+            (String(d.crm || '')).toLowerCase().includes(q) ||
+            (d.especialidade || '').toLowerCase().includes(q) ||
+            (d.posto || '').toLowerCase().includes(q)
+          );
+
+          tbody.innerHTML = '';
+          for (const d of filtered) {
+            tbody.insertAdjacentHTML('beforeend', `
+              <tr>
+                <td>${d.nome || '-'}</td>
+                <td>${d.crm || '-'}</td>
+                <td>${d.especialidade || '-'}</td>
+                <td class="text-center">${badgeSimNao(d.rqe)}</td>
+                <td class="text-center">${badgeSimNao(d.pj)}</td>
+                <td class="text-center">${badgeAgenda(d.agendaAberta)}</td>
+                <td class="text-center">${badgeSimNao(d.cert)}</td>
+                <td>${d.posto || '-'}</td>
+              </tr>
+            `);
+          }
+        };
+
+        input.value = '';
+        input.oninput = render;
+        render();
+
+        $('#drillModal').modal('show');
+      }
+
+      // ================== BOOT ==================
+      function ym(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+
+      window.addEventListener('DOMContentLoaded', async () => {
+        const err = document.getElementById('err');
+        try {
+          const r = await fetch(URL_JSON, { cache: 'no-store' });
+          if (!r.ok) throw new Error('Falha ao carregar JSON');
+          RAW = await r.json();
+
+          MESES = (RAW.meses || []).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+          if (!MESES.length) throw new Error('Sem meses no JSON');
+
+          POSTOS = (RAW.postos || []).slice().sort();
+          if (!POSTOS.length) throw new Error('Sem postos no JSON');
+
+          if (window.USER_POSTOS && Array.isArray(window.USER_POSTOS)) {
+            const allowed = new Set(window.USER_POSTOS);
+            POSTOS = POSTOS.filter(p => allowed.has(p));
+          }
+          window.POSTOS = POSTOS;
+
+          const info = document.querySelector('#jsonInfo');
+          if (info && RAW.meta?.dados_gerados_em) info.textContent = '• dados gerados em ' + RAW.meta.dados_gerados_em;
+
+          // Default: últimos 12 meses completos (até o mês anterior à data atual)
+          const endDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+          endDate.setMonth(endDate.getMonth() - 1);
+          const startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 11, 1);
+          const DEF_FROM = ym(startDate);
+          const DEF_TO = ym(endDate);
+
+          document.querySelector('#from2').value = DEF_FROM;
+          document.querySelector('#to2').value = DEF_TO;
+
+          const paretoSel = document.querySelector('#paretoMonthSel');
+          paretoSel.innerHTML = '';
+          MESES.forEach(m => paretoSel.insertAdjacentHTML('beforeend', `<option value="${m}">${mFmt(m)}</option>`));
+
+          buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; }, () => renderSel2());
+          initCharts();
+          renderSel2();
+
+          const on = (s, e, f) => { const o = document.querySelector(s); if (o) o.addEventListener(e, f); };
+
+          on('#reset2', 'click', () => {
+            document.querySelector('#from2').value = DEF_FROM;
+            document.querySelector('#to2').value = DEF_TO;
+            sel2 = 'ALL';
+            markActiveMulti('#postoTabs2', sel2);
+            renderSel2();
+          });
+
+          on('#from2', 'change', renderSel2);
+          on('#to2', 'change', renderSel2);
+
+          on('#paretoMonthSel', 'change', () => {
+            updatePareto(document.querySelector('#paretoMonthSel').value);
+          });
+
+        } catch (e) {
+          console.error(e);
+          if (err) err.textContent = 'Erro: ' + (e.message || e);
+        }
+      });
+
+      function renderSel2() {
+        const from = document.querySelector('#from2').value;
+        const to = document.querySelector('#to2').value;
+
+        const months = inRange(MESES, from, to);
+        if (!months.length) return;
+
+        const aggs = months.map(m => monthAgg(m, sel2));
+
+        // KPIs: último mês do filtro
+        const top = aggs[aggs.length - 1];
+        renderKPIs(top);
+
+        // tabela
+        renderTable(months, aggs);
+
+        // charts
+        updateCharts(months, aggs);
+
+        // Pareto: acompanha o último mês do filtro, mas respeita seleção manual
+        const paretoSel = document.querySelector('#paretoMonthSel');
+        const wanted = paretoSel.value;
+        const last = months[months.length - 1];
+
+        if (!wanted || wanted < months[0] || wanted > last) paretoSel.value = last;
+        updatePareto(paretoSel.value);
+      }
+
+    })();
+  </script>
+
+</body>
+
+</html>

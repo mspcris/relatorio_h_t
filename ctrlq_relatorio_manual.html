@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Explicação do SELECT (Snapshot mensal)</title>
+  <style>
+    /* Auto contido: não depende de CSS externo, mas convive bem com Bootstrap/AdminLTE */
+    :root{
+      --bg:#ffffff;
+      --text:#111827;
+      --muted:#6b7280;
+      --border:#e5e7eb;
+      --card:#ffffff;
+      --code-bg:#f8fafc;
+      --badge-bg:#eef2ff;
+      --badge-text:#3730a3;
+      --accent:#2563eb;
+    }
+    html, body { background: var(--bg) !important; color: var(--text); }
+    body { margin: 0; padding: 16px; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    .explain-wrap{
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      max-width: 980px;
+    }
+    .explain-title{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin:0 0 10px 0;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: .2px;
+    }
+    .explain-subtitle{
+      margin:0 0 14px 0;
+      color: var(--muted);
+      line-height: 1.4;
+      font-size: 14px;
+    }
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--badge-bg);
+      color: var(--badge-text);
+      font-weight: 600;
+      font-size: 12px;
+      border: 1px solid rgba(55,48,163,.15);
+      white-space: nowrap;
+    }
+    .section{
+      border-top: 1px solid var(--border);
+      padding-top: 14px;
+      margin-top: 14px;
+    }
+    .section h3{
+      margin:0 0 8px 0;
+      font-size: 15px;
+      font-weight: 700;
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .section p{
+      margin: 0 0 10px 0;
+      color: var(--text);
+      line-height: 1.55;
+      font-size: 14px;
+    }
+    .muted{ color: var(--muted); }
+    ul{
+      margin: 8px 0 0 0;
+      padding-left: 18px;
+      line-height: 1.55;
+      font-size: 14px;
+    }
+    li{ margin: 6px 0; }
+    .kbd{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 2px 6px;
+      font-size: 12.5px;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+    .callout{
+      border: 1px solid rgba(37,99,235,.25);
+      background: rgba(37,99,235,.06);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-top: 14px;
+    }
+    .callout strong{ color: var(--accent); }
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 820px){
+      .grid{ grid-template-columns: 1fr 1fr; }
+    }
+    .mini-card{
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: var(--card);
+    }
+    .mini-card h4{
+      margin: 0 0 6px 0;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .mini-card p{
+      margin: 0;
+      font-size: 13.5px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+        .codeblock{
+      margin-top: 14px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--code-bg);
+      overflow: auto;
+      max-width: 100%;
+    }
+    .codeblock code{
+      display: block;
+      white-space: pre;           /* preserva identação e quebras */
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: #0f172a;
+    }
+
+  </style>
+</head>
+<body>
+  <div>
+    <a href="ctrlq_relatorio.html">Voltar</a>
+  </div>
+
+  <div class="explain-wrap" role="article" aria-label="Explicação do SELECT">
+    <div class="explain-title">
+      Explicação do SELECT (Snapshot mensal)
+      <span class="chip">1 linha por médico • Último dia do mês • Prioriza PJ</span>
+    </div>
+
+    <p class="explain-subtitle">
+      Este SELECT foi desenhado para gerar um <strong>snapshot mensal</strong> do histórico de especialidades:
+      para cada mês, ele considera <strong>somente os registros do último dia do mês</strong> e devolve
+      <strong>apenas 1 linha por médico</strong> (sem duplicar por múltiplas especialidades), priorizando
+      registros em que <strong>PessoaJuridica = 1</strong>.
+    </p>
+
+    <div class="grid">
+      <div class="mini-card">
+        <h4>Objetivo prático</h4>
+        <p>
+          Ter uma “foto do mês” do seu quadro de médicos no fechamento, para medir KPIs como
+          <span class="kbd">% de PessoaJuridica preenchido</span> mês a mês e montar análises (ex.: Pareto).
+        </p>
+      </div>
+      <div class="mini-card">
+        <h4>Resultado esperado</h4>
+        <p>
+          Em cada <span class="kbd">DataFechamentoMes</span>, cada <span class="kbd">idmedico</span> aparece uma única vez,
+          mesmo que ele tenha várias especialidades. No mês seguinte, ele aparece novamente (novo snapshot).
+        </p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3><span class="chip">1</span> CTE <span class="kbd">base</span>: prepara e “limpa” os dados</h3>
+      <p>
+        Aqui o SELECT lê o histórico (<span class="kbd">Cad_EspecialidadeHistorico</span>) e faz o join com o cadastro do médico
+        (<span class="kbd">cad_medico</span>) para trazer nome, CRM e indicadores (ex.: Pessoa Jurídica).
+      </p>
+      <ul>
+        <li>
+          Cria <span class="kbd">DataDia</span>: pega somente a parte da data (sem hora) de <span class="kbd">DataHoraInclusao</span>.
+        </li>
+        <li>
+          Cria <span class="kbd">DataFechamentoMes</span>: calcula o <strong>último dia do mês</strong> com
+          <span class="kbd">EOMONTH(DataHoraInclusao)</span> (28/29/30/31).
+        </li>
+        <li>
+          Aplica filtros de qualidade:
+          remove registros desativados (<span class="kbd">eh.Desativado = 0</span>), nomes internos/fake e especialidades
+          fora do escopo.
+        </li>
+      </ul>
+      <p class="muted">
+        Resultado desta etapa: uma base consistente para análise, mas ainda pode conter duplicidades (ex.: 2 especialidades para o mesmo médico).
+      </p>
+    </div>
+
+    <div class="section">
+      <h3><span class="chip">2</span> CTE <span class="kbd">fechamento</span>: mantém só o último dia de cada mês</h3>
+      <p>
+        Nesta etapa, o SELECT filtra a base para ficar apenas com registros do <strong>dia de fechamento do mês</strong>:
+      </p>
+      <ul>
+        <li>
+          Regra: <span class="kbd">DataDia = DataFechamentoMes</span>
+        </li>
+        <li>
+          Exemplo: se o mês tem 30 dias, ficam apenas linhas do dia 30; se tem 31, apenas do dia 31.
+        </li>
+      </ul>
+      <div class="callout">
+        <strong>Leitura simples:</strong> “Eu só quero olhar o quadro de médicos no fechamento do mês, não o mês inteiro.”
+      </div>
+    </div>
+
+    <div class="section">
+      <h3><span class="chip">3</span> CTE <span class="kbd">dedup</span>: remove duplicidade por médico (prioriza PJ=1)</h3>
+      <p>
+        Mesmo no fechamento, um médico pode ter várias linhas (por múltiplas especialidades ou duplicação no histórico).
+        Para garantir <strong>1 linha por médico por mês</strong>, o SELECT usa <span class="kbd">ROW_NUMBER()</span>.
+      </p>
+      <ul>
+        <li>
+          Particiona por <span class="kbd">(DataFechamentoMes, idmedico)</span>:
+          “para cada mês e para cada médico, numere as linhas”.
+        </li>
+        <li>
+          Define qual linha “ganha” (fica como <span class="kbd">rn = 1</span>):
+          <ol style="margin:8px 0 0 0; padding-left: 18px;">
+            <li><strong>Prioridade:</strong> primeiro quem tem <span class="kbd">PessoaJuridica = 1</span></li>
+            <li><strong>Desempate 1:</strong> mais recente dentro do dia (<span class="kbd">DataHoraInclusao DESC</span>)</li>
+            <li><strong>Desempate 2:</strong> especialidade em ordem alfabética (só para não ficar aleatório)</li>
+          </ol>
+        </li>
+      </ul>
+      <p class="muted">
+        Resultado desta etapa: para cada mês (fechamento), cada médico aparece uma única vez, com preferência por registros PJ.
+      </p>
+    </div>
+
+    <div class="section">
+      <h3><span class="chip">4</span> SELECT final: entrega o snapshot pronto para KPI</h3>
+      <p>
+        No final, o SELECT escolhe apenas a linha “vencedora” de cada médico:
+        <span class="kbd">WHERE rn = 1</span>
+        e ainda remove médicos temporários:
+        <span class="kbd">AND Temporario = 0</span>.
+      </p>
+      <ul>
+        <li>
+          <span class="kbd">certificadodigital</span> vira um indicador (0/1) baseado em <span class="kbd">CertificadoPFX</span>.
+        </li>
+        <li>
+          <span class="kbd">rqe</span> vira um indicador (0/1) baseado em <span class="kbd">NumeroRQE</span>.
+        </li>
+        <li>
+          Ordena por <span class="kbd">DataFechamentoMes</span> e nome do médico para leitura/extração.
+        </li>
+      </ul>
+      <div class="callout">
+        <strong>Resultado final:</strong> “Para cada mês, no último dia, me traga a lista de médicos (sem duplicar), escolhendo a melhor linha por médico, e ignorando temporários.”
+      </div>
+    </div>
+
+  </div>
+
+
+  <pre class="codeblock"><code>
+-- SQL_CTRLQ_RELATORIO.SQL
+WITH base AS (
+  SELECT
+    eh.DataHoraInclusao,
+    CONVERT(date, eh.DataHoraInclusao) AS DataDia,
+    EOMONTH(eh.DataHoraInclusao)       AS DataFechamentoMes,
+
+    m.idmedico,
+    m.nome,
+    m.crm,
+    eh.Especialidade,
+
+    m.CertificadoPFX,
+    eh.PermitirAgendamentoquenuncaconsultou,
+    m.PessoaJuridica,
+    eh.NumeroRQE,
+    eh.temporario
+  FROM Cad_EspecialidadeHistorico eh
+  LEFT JOIN cad_medico m ON m.idmedico = eh.idmedico
+  WHERE eh.Desativado = 0
+    AND m.nome NOT LIKE '%sede%'
+    AND m.nome NOT LIKE '%agendamento%'
+    AND m.nome NOT LIKE '%teste%'
+    AND m.nome NOT LIKE '%fake%'
+    AND eh.especialidade NOT IN (
+      'enfermeiro','eletrocardiograma','espirometria','biologista','mamografia',
+      'tecnico em radiologia','HOLTER 24 HRS','mapa'
+    )
+),
+fechamento AS (
+  SELECT *
+  FROM base
+  WHERE DataDia = DataFechamentoMes   -- só o último dia do mês (30/31/28/29)
+),
+dedup AS (
+  SELECT
+    *,
+    ROW_NUMBER() OVER (
+      PARTITION BY DataFechamentoMes, idmedico
+      ORDER BY
+        CASE WHEN PessoaJuridica = 1 THEN 0 ELSE 1 END, -- prioriza PJ=1
+        DataHoraInclusao DESC,                          -- desempate: mais recente no dia
+        Especialidade ASC                               -- desempate final determinístico
+    ) AS rn
+  FROM fechamento
+)
+SELECT
+  DataFechamentoMes,
+  DataHoraInclusao,
+  nome AS medico,
+  crm,
+  especialidade,
+  temporario,
+  IIF(CertificadoPFX IS NULL, 0, 1) AS certificadodigital,
+  permitiragendamentoquenuncaconsultou,
+  pessoajuridica,
+  IIF(NumeroRQE IS NULL, 0, 1) AS rqe
+FROM dedup
+WHERE rn = 1 and Temporario = 0
+ORDER BY DataFechamentoMes, medico;
+-- END SQL_CTRLQ_RELATORIO.SQL
+  </code></pre>
+
+
+</body>
+</html>
