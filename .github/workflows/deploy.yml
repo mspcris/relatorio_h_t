@@ -253,7 +253,7 @@ jobs:
             "$FILE" "$SSH_USER@$SSH_HOST:$DEST/"
 
       # ================================================================
-      # 6) Sync SQL
+      # 6) Sync SQL (todas as pastas que começam com sql*)
       # ================================================================
       - name: Sync sql* -> /opt/relatorio_h_t
         env:
@@ -264,18 +264,29 @@ jobs:
           set -euxo pipefail
           DEST=/opt/relatorio_h_t
 
-          for d in sql sql_cadastro sql_full sql_vendas; do
-            if [ -d "$d" ]; then
-              ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST/$d'"
-              rsync -rlvz --delete \
-                --omit-dir-times --no-perms --no-owner --no-group \
-                -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
-                "./$d/" "$SSH_USER@$SSH_HOST:$DEST/$d/"
-            fi
+          # pega diretórios no root do repo que começam com "sql"
+          mapfile -t SQL_DIRS < <(find . -maxdepth 1 -type d -name 'sql*' -printf '%f\n' | sort)
+
+          if [ "${#SQL_DIRS[@]}" -eq 0 ]; then
+            echo "WARN: nenhuma pasta sql* encontrada no checkout"
+            exit 0
+          fi
+
+          echo "Pastas encontradas: ${SQL_DIRS[*]}"
+
+          for d in "${SQL_DIRS[@]}"; do
+            echo "Sync pasta: $d"
+            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST/$d'"
+            rsync -rlvz --delete \
+              --omit-dir-times --no-perms --no-owner --no-group \
+              -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+              "./$d/" "$SSH_USER@$SSH_HOST:$DEST/$d/"
           done
 
+          # Mantém compatibilidade com caminhos antigos (se você usa /SQL em algum lugar)
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
             "ln -sfn /opt/relatorio_h_t/sql /opt/relatorio_h_t/SQL || true"
+
 
       # ================================================================
       # 7) Venv + .env
