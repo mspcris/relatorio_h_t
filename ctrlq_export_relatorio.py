@@ -4,8 +4,9 @@
 #   - Executar em LOOP por posto (DB_HOST_A/DB_BASE_A ...)
 #   - Normalizar dados (Timestamp, NaT, Decimal, numpy types, etc.)
 #   - Salvar:
-#       1) 1 JSON por posto: json_ctrlq_relatorio/CTRLQ_RELATORIO_<POSTO>_YYYY-MM-DD_HHMM.json
-#       2) (Opcional) 1 JSON consolidado: json_ctrlq_relatorio/CTRLQ_RELATORIO_CONSOLIDADO_YYYY-MM-DD_HHMM.json
+#       1) 1 JSON por posto (NOME FIXO): json_ctrlq_relatorio/CTRLQ_RELATORIO_<POSTO>.json
+#       2) 1 JSON consolidado (NOME FIXO): json_ctrlq_relatorio/CTRLQ_RELATORIO_CONSOLIDADO.json
+#   - Antes de salvar: limpar os .json antigos da pasta json_ctrlq_relatorio
 #
 # Dependências: pandas, sqlalchemy, pyodbc, python-dotenv
 
@@ -38,12 +39,33 @@ POSTOS_FALLBACK = list("ANXYBRPCDGIMJ")  # fallback caso não exista nada no .en
 # ---------------------------------------------
 # Utilitários
 # ---------------------------------------------
-def ensure_dir(d):
+def ensure_dir(d: str):
     os.makedirs(d, exist_ok=True)
 
-def env(key, default=""):
+def env(key: str, default=""):
     v = os.getenv(key, default)
     return v.strip() if isinstance(v, str) else v
+
+def atomic_write_json(path_out: str, payload):
+    tmp = path_out + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path_out)
+
+def cleanup_json_dir(json_dir: str):
+    """Remove apenas *.json dentro do diretório alvo."""
+    ensure_dir(json_dir)
+    removed = 0
+    for name in os.listdir(json_dir):
+        if name.lower().endswith(".json"):
+            try:
+                os.remove(os.path.join(json_dir, name))
+                removed += 1
+            except Exception:
+                pass
+    print(f"[CLEANUP] Removidos {removed} arquivos .json em {json_dir}")
 
 
 # ---------------------------------------------
@@ -146,33 +168,24 @@ def normalize_record(row: dict):
     return {k: normalize_value(v) for k, v in row.items()}
 
 def drop_ignored_fields(rec: dict):
-    # campo temporario deve ser ignorado/removido do payload
     rec.pop("temporario", None)
     return rec
 
 
 # ---------------------------------------------
-# Nome do arquivo
+# Nome do arquivo (FIXO)
 # ---------------------------------------------
-def now_stamp():
-    now = datetime.now(timezone.utc).astimezone()
-    return now.strftime("%Y-%m-%d_%H%M")
-
 def filename_posto(posto: str):
-    return f"CTRLQ_RELATORIO_{posto}_{now_stamp()}.json"
+    return f"CTRLQ_RELATORIO_{posto}.json"
 
 def filename_consolidado():
-    return f"CTRLQ_RELATORIO_CONSOLIDADO_{now_stamp()}.json"
+    return "CTRLQ_RELATORIO_CONSOLIDADO.json"
 
 
 # ---------------------------------------------
 # Consolidação (mes -> posto -> linhas)
 # ---------------------------------------------
 def month_key_from_record(rec: dict):
-    """
-    Prioriza DataFechamentoMes (YYYY-MM-DD...), converte em YYYY-MM
-    Fallback: DataHoraInclusao (YYYY-MM-DDTHH:MM...), converte em YYYY-MM
-    """
     v = rec.get("DataFechamentoMes") or rec.get("datafechamentomes")
     if isinstance(v, str) and len(v) >= 7:
         return v[:7]
@@ -182,21 +195,8 @@ def month_key_from_record(rec: dict):
     return "UNKNOWN"
 
 def build_consolidated_json(all_rows_by_posto: dict):
-    """
-    all_rows_by_posto: { 'A': [rec, rec...], 'B': [...], ... }
-    Saída:
-    {
-      "meta": {...},
-      "meses": [...],
-      "postos": [...],
-      "dados": {
-        "2025-11": { "A": {"linhas":[...]}, "B": {"linhas":[...]} },
-        ...
-      }
-    }
-    """
     agora_br = datetime.now().strftime("%d/%m/%Y, %H:%M")
-    agora_iso = datetime.now().isoformat(timespec="seconds")
+    agora_iso = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
     dados = {}
     meses_set = set()
@@ -247,6 +247,9 @@ def main():
 
     print(f"Postos detectados: {list(conns.keys())}")
 
+    # 1) limpa outputs antigos (antes de gerar novos)
+    cleanup_json_dir(JSON_DIR)
+
     all_rows_by_posto = {}
 
     # Executar por posto
@@ -265,21 +268,19 @@ def main():
             print(f"[{posto}] ERRO ao executar SQL: {e}")
             continue
 
-        # Normalização + enrich posto + drop temporario
         rows = []
         for r in df.to_dict(orient="records"):
             rec = normalize_record(r)
             rec = drop_ignored_fields(rec)
-            rec["posto"] = posto  # campo essencial para o front cruzar com tabs/ACL
+            rec["posto"] = posto
             rows.append(rec)
 
         all_rows_by_posto[posto] = rows
 
-        # Salvar JSON por posto
+        # Salvar JSON por posto (NOME FIXO)
         path_out = os.path.join(JSON_DIR, filename_posto(posto))
         try:
-            with open(path_out, "w", encoding="utf-8") as f:
-                json.dump(rows, f, ensure_ascii=False, indent=2)
+            atomic_write_json(path_out, rows)
             print(f"[{posto}] OK -> {path_out}  ({len(rows)} registros)")
         except Exception as e:
             print(f"[{posto}] ERRO salvando JSON: {e}")
@@ -288,12 +289,11 @@ def main():
         print("\nERRO: nenhuma exportação bem-sucedida.")
         return
 
-    # Salvar consolidado (recomendado p/ front)
+    # Salvar consolidado (NOME FIXO)
     consolidado = build_consolidated_json(all_rows_by_posto)
     path_cons = os.path.join(JSON_DIR, filename_consolidado())
     try:
-        with open(path_cons, "w", encoding="utf-8") as f:
-            json.dump(consolidado, f, ensure_ascii=False, indent=2)
+        atomic_write_json(path_cons, consolidado)
         total = sum(len(v) for v in all_rows_by_posto.values())
         print(f"\n[CONSOLIDADO] OK -> {path_cons}  (total registros={total})")
     except Exception as e:
@@ -304,6 +304,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-# ---------------------------------------------
-# Fim do arquivo
-# ---------------------------------------------
