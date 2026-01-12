@@ -6,25 +6,30 @@
   <title>CAMIM — KPI Médicos (Qualidade: RQE / PJ / Agenda / Certificado)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- AdminLTE + FontAwesome -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
 
-  <!-- Fonte padrão AdminLTE -->
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+
+
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-datepicker@1.10.0/dist/css/bootstrap-datepicker3.min.css">
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap-datepicker@1.10.0/dist/js/bootstrap-datepicker.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap-datepicker@1.10.0/dist/locales/bootstrap-datepicker.pt-BR.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+
 
   <!-- CSS do projeto -->
   <link rel="stylesheet" href="/css/style2.css">
   <link rel="shortcut icon"
     href="https://d9hhrg4mnvzow.cloudfront.net/lp.camim.com.br/7c264685-logo-topo_101x01x000000000000000.png"
     type="image/x-icon">
-
-  <!-- Libs JS (ordem importa) -->
-  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <!-- Config de IA (mantido) -->
   <script>
@@ -34,6 +39,8 @@
   <script src="/js/chat.js"></script>
 
   <link rel="stylesheet" href="css/style_kpi.css">
+
+
   <style>
     .stack { display: flex; flex-direction: column; gap: 12px; }
     .filter-bar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; padding: 12px; }
@@ -50,6 +57,23 @@
     .badge-soft { background: rgba(0,0,0,.06); }
     .table td, .table th { vertical-align: middle; }
     .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; background:rgba(0,0,0,.06); }
+    /* Normaliza o visual do input month para ficar igual aos demais */
+input[type="month"].form-control {
+  -webkit-appearance: none;
+  appearance: none;
+  line-height: 1.5;
+  padding-right: .5rem;
+}
+
+/* Remove o look “quadradão” do Chrome/Safari e evita fonte estranha */
+input[type="month"].form-control::-webkit-datetime-edit {
+  padding: 0;
+}
+input[type="month"].form-control::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: .75;
+}
+
   </style>
 </head>
 
@@ -202,21 +226,37 @@
 
         <!-- FILTROS PRINCIPAIS (RIGOROSAMENTE IGUAL) -->
         <div class="card">
-          <div class="filter-bar">
-            <div>
-              <label class="mb-0 small d-block">Selecione o Período</label>
-              <div class="month-inputs">
-                <input id="from2" type="month" class="form-control form-control-sm" />
-                <input id="to2" type="month" class="form-control form-control-sm" />
-                <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
-              </div>
-            </div>
-            <div class="flex-grow-1">
-              <label class="mb-0 small d-block">Posto</label>
-              <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
-            </div>
-          </div>
-        </div>
+  <div class="filter-bar">
+    <div>
+      <label class="mb-0 small d-block">Selecione o Período - KPI Médicos (Qualidade)</label>
+      <div class="month-inputs">
+        
+        <div class="input-group input-group-sm" style="width: 170px;">
+  <input id="from2" type="text" class="form-control" placeholder="Selecione...">
+  <div class="input-group-append">
+    <span class="input-group-text"><i class="far fa-calendar-alt"></i></span>
+  </div>
+</div>
+
+<div class="input-group input-group-sm" style="width: 170px;">
+  <input id="to2" type="text" class="form-control" placeholder="Selecione...">
+  <div class="input-group-append">
+    <span class="input-group-text"><i class="far fa-calendar-alt"></i></span>
+  </div>
+</div>
+
+        
+        <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
+      </div>
+    </div>
+
+    <div class="flex-grow-1">
+      <label class="mb-0 small d-block">Posto</label>
+      <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
+    </div>
+  </div>
+</div>
+
 
         <!-- KPIs (MÊS ATUAL DO FILTRO = último mês do range) -->
         <div class="card">
@@ -362,6 +402,11 @@
       const ESP_PEDIATRA_MATCH = /pediatr/i;
       const ESP_CLINICO_MATCH = /(cl[ií]nico|cl[ií]nica|clínico geral|cl[ií]nico geral|medicina de fam[ií]lia)/i;
 
+
+
+
+
+      
       // ================== UTILS ==================
       const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
       const fmtPct = (num) => `${(Math.round((num + Number.EPSILON) * 10) / 10).toFixed(1).replace('.', ',')}%`;
@@ -397,6 +442,43 @@
         if (Number.isFinite(n)) return n === 1;
         return false;
       };
+
+
+
+
+
+
+
+      function ymFromDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function setPickerYM(sel, ym) {
+  const el = document.querySelector(sel);
+  if (!el || !ym) return;
+  const [y, m] = ym.split('-').map(Number);
+  const dt = new Date(y, m - 1, 1);
+
+  // atualiza datepicker e o valor canônico
+  $(el).datepicker('update', dt);
+  el.dataset.ym = ym;
+}
+
+function getPickerYM(sel) {
+  const el = document.querySelector(sel);
+  if (!el) return '';
+  // fonte da verdade: data-ym
+  if (el.dataset.ym && /^\d{4}-\d{2}$/.test(el.dataset.ym)) return el.dataset.ym;
+
+  // fallback: tenta parse do datepicker
+  const dt = $(el).datepicker('getDate');
+  if (dt instanceof Date && !isNaN(dt)) {
+    const out = ymFromDate(dt);
+    el.dataset.ym = out;
+    return out;
+  }
+  return '';
+}
 
       // ================== STATE ==================
       let RAW = null;
@@ -486,19 +568,24 @@
         };
       }
 
-      function uniqueDoctors(rows) {
-        const canon = rows.map(canonRow);
+function uniqueDoctors(rows) {
+  const canon = rows.map(canonRow);
 
-        // chave preferencial = CRM/ID (normalizado); fallback nome+especialidade+posto
-        return uniqBy(canon, x => {
-          const crmKey = cleanStr(x.crm).replace(/\s+/g, '');
-          if (crmKey) return `crm:${crmKey}`;
-          const n = cleanStr(x.nome).toLowerCase();
-          const e = cleanStr(x.especialidade).toLowerCase();
-          const p = cleanStr(x.posto).toLowerCase();
-          return (n || e) ? `n:${n}|e:${e}|p:${p}` : null;
-        });
-      }
+  // chave preferencial = CRM/ID + POSTO (normalizado)
+  // isso deduplica dentro do mesmo posto, mas NÃO deduplica entre postos
+  return uniqBy(canon, x => {
+    const crmKey = cleanStr(x.crm).replace(/\s+/g, '');
+    const p = cleanStr(x.posto).toLowerCase();
+
+    if (crmKey) return `crm:${crmKey}|p:${p}`;
+
+    // fallback: nome+especialidade+posto (também inclui posto)
+    const n = cleanStr(x.nome).toLowerCase();
+    const e = cleanStr(x.especialidade).toLowerCase();
+    return (n || e) ? `n:${n}|e:${e}|p:${p}` : null;
+  });
+}
+
 
       function monthAgg(ym, selection) {
         const doctors = uniqueDoctors(rowsForMonthAndPostos(ym, selection));
@@ -852,8 +939,31 @@
           const DEF_FROM = ym(startDate);
           const DEF_TO = ym(endDate);
 
-          document.querySelector('#from2').value = DEF_FROM;
-          document.querySelector('#to2').value = DEF_TO;
+
+// 1) inicializa o datepicker (modo mês) primeiro
+$('#from2, #to2').datepicker({
+  format: 'MM yyyy',
+  minViewMode: 1,
+  maxViewMode: 2,
+  language: 'pt-BR',
+  autoclose: true,
+  todayBtn: true,
+  clearBtn: true,
+  todayHighlight: true
+}).on('changeDate', function () {
+  const dt = $(this).datepicker('getDate');
+  this.dataset.ym = dt ? ymFromDate(dt) : '';
+  renderSel2();
+}).on('clearDate', function () {
+  this.dataset.ym = '';
+  renderSel2();
+});
+
+// 2) agora sim pode setar valores
+setPickerYM('#from2', DEF_FROM);
+setPickerYM('#to2', DEF_TO);
+
+
 
           const paretoSel = document.querySelector('#paretoMonthSel');
           paretoSel.innerHTML = '';
@@ -866,15 +976,15 @@
           const on = (s, e, f) => { const o = document.querySelector(s); if (o) o.addEventListener(e, f); };
 
           on('#reset2', 'click', () => {
-            document.querySelector('#from2').value = DEF_FROM;
-            document.querySelector('#to2').value = DEF_TO;
+            setPickerYM('#from2', DEF_FROM);
+            setPickerYM('#to2', DEF_TO);
+
             sel2 = 'ALL';
             markActiveMulti('#postoTabs2', sel2);
             renderSel2();
           });
 
-          on('#from2', 'change', renderSel2);
-          on('#to2', 'change', renderSel2);
+          
 
           on('#paretoMonthSel', 'change', () => {
             updatePareto(document.querySelector('#paretoMonthSel').value);
@@ -887,8 +997,9 @@
       });
 
       function renderSel2() {
-        const from = document.querySelector('#from2').value;
-        const to = document.querySelector('#to2').value;
+        const from = getPickerYM('#from2');
+        const to = getPickerYM('#to2');
+
 
         const months = inRange(MESES, from, to);
         if (!months.length) return;
