@@ -1,4 +1,8 @@
 -- SQL_CTRLQ_RELATORIO.SQL
+
+DECLARE @asof date = DATEADD(day, -1, CONVERT(date, GETDATE()));  -- ontem
+DECLARE @start date = DATEADD(month, -12, DATEFROMPARTS(YEAR(@asof), MONTH(@asof), 1)); -- 12 meses completos + mês atual
+
 WITH base AS (
   SELECT
     eh.DataHoraInclusao,
@@ -18,6 +22,8 @@ WITH base AS (
   FROM Cad_EspecialidadeHistorico eh
   LEFT JOIN cad_medico m ON m.idmedico = eh.idmedico
   WHERE eh.Desativado = 0
+    AND CONVERT(date, eh.DataHoraInclusao) >= @start
+    AND CONVERT(date, eh.DataHoraInclusao) <= @asof
     AND m.nome NOT LIKE '%sede%'
     AND m.nome NOT LIKE '%agendamento%'
     AND m.nome NOT LIKE '%teste%'
@@ -30,7 +36,18 @@ WITH base AS (
 fechamento AS (
   SELECT *
   FROM base
-  WHERE DataDia = DataFechamentoMes   -- só o último dia do mês (30/31/28/29)
+  WHERE
+    (
+      -- meses fechados: pega só o último dia do mês
+      DataFechamentoMes < EOMONTH(@asof)
+      AND DataDia = DataFechamentoMes
+    )
+    OR
+    (
+      -- mês vigente: pega o snapshot de ontem
+      DataFechamentoMes = EOMONTH(@asof)
+      AND DataDia = @asof
+    )
 ),
 dedup AS (
   SELECT
@@ -38,9 +55,9 @@ dedup AS (
     ROW_NUMBER() OVER (
       PARTITION BY DataFechamentoMes, idmedico
       ORDER BY
-        CASE WHEN PessoaJuridica = 1 THEN 0 ELSE 1 END, -- prioriza PJ=1
-        DataHoraInclusao DESC,                          -- desempate: mais recente no dia
-        Especialidade ASC                               -- desempate final determinístico
+        CASE WHEN PessoaJuridica = 1 THEN 0 ELSE 1 END,
+        DataHoraInclusao DESC,
+        Especialidade ASC
     ) AS rn
   FROM fechamento
 )
@@ -56,6 +73,8 @@ SELECT
   pessoajuridica,
   IIF(NumeroRQE IS NULL, 0, 1) AS rqe
 FROM dedup
-WHERE rn = 1 and Temporario = 0
+WHERE rn = 1
+  AND Temporario = 0
 ORDER BY DataFechamentoMes, medico;
+
 -- END SQL_CTRLQ_RELATORIO.SQL
