@@ -441,6 +441,27 @@ canvas { max-width: 100% !important; }
       <label class="mb-0 small d-block">Posto</label>
       <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
     </div>
+  
+
+
+  
+  <div class="ml-3 d-flex align-items-center">
+  <div class="custom-control custom-switch">
+    <input type="checkbox"
+           class="custom-control-input"
+           id="toggleMedAlt">
+    <label class="custom-control-label small"
+           for="toggleMedAlt">
+      Mostrar medicina alternativa
+    </label>
+  </div>
+</div>
+
+  
+  
+  
+  
+  
   </div>
 </div>
 
@@ -588,6 +609,50 @@ canvas { max-width: 100% !important; }
       // Especialidades-alvo
       const ESP_PEDIATRA_MATCH = /pediatr/i;
       const ESP_CLINICO_MATCH = /(cl[ií]nico|cl[ií]nica|clínico geral|cl[ií]nico geral|medicina de fam[ií]lia)/i;
+      // ================== MEDICINA ALTERNATIVA ==================
+      const MED_ALT_LIST = [
+        'ACUPUNTURISTA',
+        'ENDOSCOPISTA',
+        'DENSITOMETRISTA',
+        'TERAPEUTA OCUPACIONAL ON LINE',
+        'FONIATRA',
+        'OFTALMOLOGISTA',
+        'PSICOTERAPEUTA',
+        'ENFERMEIRO',
+        'AGENDAMENTO DE EXAMES',
+        'FISIOTERAPEUTA',
+        'FISIOTERAPEUTA ACUPUNTURISTA',
+        'TERAPEUTA OCUPACIONAL',
+        'NUTRICIONISTA',
+        'FONOAUDIÓLOGO',
+        'PSICÓLOGO',
+        'PSICÓLOGO ON LINE',
+        'TERAPEUTA',
+        'NEUROPSICÓLOGO',
+        'PSICANALISTA',
+        'TÉCNICO EM RADIOLOGIA',
+        'TÉCNICO EM TOMOGRAFIA',
+        'ELETROENCEFALOGRAMA',
+        'EMAGRECIMENTO ESTÉTICA',
+        'ELETROCARDIOGRAMA',
+        'MAPA',
+        'ESPIROMETRIA',
+        'HOLTER 24 HRS',
+        'NUTRICIONISTA ON LINE',
+        'PSICOPEDAGOGO',
+        'NEUROPSICOPEDAGOGO',
+        'PSICOMOTRICIDADE CLÍNICA',
+        'PILATES',
+        'NEUROPSICOPEDAGOGO ABA',
+        'PSICOPEDAGOGO ABA'
+      ].map(e => e.toUpperCase().trim());
+
+      function isMedicinaAlternativa(esp) {
+        if (!esp) return false;
+        return MED_ALT_LIST.includes(
+          String(esp).toUpperCase().trim()
+        );
+      }
 
 
 
@@ -674,6 +739,8 @@ function getPickerYM(sel) {
 
       let sel2 = 'ALL';
       let chTotal, chFlags, chPareto;
+      let showMedAlt = false; // default: NÃO mostrar medicina alternativa
+
 
       // ================== TABS ==================
       function markActiveMulti(scopeId, selection) {
@@ -756,22 +823,27 @@ function getPickerYM(sel) {
       }
 
 function uniqueDoctors(rows) {
-  const canon = rows.map(canonRow);
+  let canon = rows.map(canonRow);
 
-  // chave preferencial = CRM/ID + POSTO (normalizado)
-  // isso deduplica dentro do mesmo posto, mas NÃO deduplica entre postos
+  // 🔴 FILTRO DE MEDICINA ALTERNATIVA (DEFAULT OFF)
+  if (!showMedAlt) {
+    canon = canon.filter(
+      d => !isMedicinaAlternativa(d.especialidade)
+    );
+  }
+
   return uniqBy(canon, x => {
     const crmKey = cleanStr(x.crm).replace(/\s+/g, '');
     const p = cleanStr(x.posto).toLowerCase();
 
     if (crmKey) return `crm:${crmKey}|p:${p}`;
 
-    // fallback: nome+especialidade+posto (também inclui posto)
     const n = cleanStr(x.nome).toLowerCase();
     const e = cleanStr(x.especialidade).toLowerCase();
     return (n || e) ? `n:${n}|e:${e}|p:${p}` : null;
   });
 }
+
 
 
       function monthAgg(ym, selection) {
@@ -1107,12 +1179,23 @@ function uniqueDoctors(rows) {
 
         $('#drillModal').on('shown.bs.modal', function () {
   const body = this.querySelector('.modal-body');
-  if (body) body.scrollTop = 0;
-  const inp = document.getElementById('drillSearch');
-  if (inp && window.innerWidth <= 768) inp.focus();
-});
+    if (body) body.scrollTop = 0;
+    const inp = document.getElementById('drillSearch');
+    if (inp && window.innerWidth <= 768) inp.focus();
+  });
 
-      
+        const toggleMedAlt = document.getElementById('toggleMedAlt');
+        if (toggleMedAlt) {
+          toggleMedAlt.checked = false;
+          toggleMedAlt.addEventListener('change', () => {
+            showMedAlt = toggleMedAlt.checked;
+            renderSel2();
+          });
+        }
+
+
+
+
         const err = document.getElementById('err');
         try {
           const r = await fetch(URL_JSON, { cache: 'no-store' });
