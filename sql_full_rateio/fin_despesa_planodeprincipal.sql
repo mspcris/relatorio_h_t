@@ -1,5 +1,5 @@
 SELECT
-    dr.endereco, isnull(pp.PlanoPrincipal,'sem plano principal') as PlanoPrincipal,
+    dr.endereco_letra, isnull(pp.PlanoPrincipal,'sem plano principal') as PlanoPrincipal,
     sum(d.Valorpago) as 'valorpago'
 FROM vw_Fin_DespesaRateio_tela dr
 left join fin_despesa D on d.idDespesa = dr.idDespesa

@@ -1,5 +1,5 @@
     SELECT
-    dr.endereco,
+    dr.endereco_letra,
     pp.PlanoPrincipal,
     isnull(p.descricao,'sem plano') as plano,
     ct.tipo,

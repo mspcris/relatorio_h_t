@@ -1,4 +1,4 @@
-SELECT dr.Endereco,
+SELECT dr.endereco_letra,
     pp.PlanoPrincipal,
     isnull(p.descricao,'sem plano') as plano,
     sum(dr.ValorRateio) as 'valorpago'
