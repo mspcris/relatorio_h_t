@@ -140,6 +140,11 @@ def render_protected_page(page_name):
 # ROTAS SEM .html
 # ===============================
 
+@app.get('/kpi_receita_despesa_rateio')
+def r_rateio():
+    return render_protected_page("kpi_receita_despesa_rateio.html")
+
+
 @app.get('/')
 def home():
     return render_protected_page("kpi_home.html")
@@ -181,9 +186,16 @@ def r11(): return render_protected_page("teste.html")
 def r12(): return render_protected_page("trello_harvest.html")
 
 
+
+
 # ===============================
 # ROTAS COM .html
 # ===============================
+
+@app.get('/kpi_receita_despesa_rateio.html')
+def h_rateio():
+    return render_protected_page("kpi_receita_despesa_rateio.html")
+
 
 @app.get('/alimentacao.html')
 def h1(): return render_protected_page("alimentacao.html")
