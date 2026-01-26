@@ -33,20 +33,25 @@ def load_sql_strip_go(path: str) -> str:
 
 def collect_full_sql_files():
     """
-    Carrega apenas os SQLs full:
-      - fin_receita_full.sql
-      - fin_despesa_full.sql
-    colocados em SQL_full/
+    Carrega todos os SQLs em sql_full/*.sql
     """
-    files = sorted(glob.glob(os.path.join(SQL_FULL_DIR, "fin_*_full.sql")))
+    files = sorted(glob.glob(os.path.join(SQL_FULL_DIR, "*.sql")))
     items = []
+
     for f in files:
         sql_txt = load_sql_strip_go(f)
         if not sql_txt:
             continue
-        key = os.path.splitext(os.path.basename(f))[0]  # ex: fin_receita_full
-        items.append({"path": f, "sql": sql_txt, "key": key})
+
+        key = os.path.splitext(os.path.basename(f))[0]
+        items.append({
+            "path": f,
+            "sql": sql_txt,
+            "key": key
+        })
+
     return items
+
 
 
 def target_csv_full_path(posto: str, ym: str, key: str) -> str:
@@ -101,9 +106,13 @@ def build_json_full(key: str):
             continue
 
         # Enriquecer com posto e mês (colunas auxiliares)
+        if df.empty:
+            continue
+
         df.insert(0, "posto", posto)
         df.insert(1, "mes", ym)
         dfs.append(df)
+
 
     if not dfs:
         print(f"[INFO] Nenhum CSV encontrado para {key}; JSON não gerado.")
@@ -138,7 +147,29 @@ def build_json_full(key: str):
         payload.pop("mes", None)
         payload.pop("posto", None)
 
-        dados.setdefault(mes, {}).setdefault(posto, {"linhas": []})["linhas"].append(payload)
+        slot = dados.setdefault(mes, {}).setdefault(
+            posto,
+            {
+                "linhas": [],
+                "valor_total": 0.0,
+                "qtd": 0,
+            }
+        )
+
+        # JSON-safe: NaN → None
+        for k, v in payload.items():
+            if pd.isna(v):
+                payload[k] = None
+
+        slot["linhas"].append(payload)
+
+        # agrega somente se houver valor numérico
+        val = payload.get("valorpago")
+        if isinstance(val, (int, float)):
+            slot["valor_total"] += float(val)
+
+        slot["qtd"] += 1
+
 
     saida = {
         "meta": meta,
@@ -195,6 +226,7 @@ def run():
         return
 
     sqls = collect_full_sql_files()
+    keys = sorted({s["key"] for s in sqls})
     if not sqls:
         print(f"ERRO: Sem SQLs full em {SQL_FULL_DIR}.")
         return
@@ -247,11 +279,11 @@ def run():
         return
 
     # JSONs separados, conforme solicitado
-    print("\n[JSON] Consolidação fin_receita_full")
-    build_json_full("fin_receita_full")
+    print("\n[JSON] Consolidação FULL (automática)")
+    for key in keys:
+        print(f"[JSON] Consolidação {key}")
+        build_json_full(key)
 
-    print("\n[JSON] Consolidação fin_despesa_full")
-    build_json_full("fin_despesa_full")
 
     print("\nConcluído.")
 

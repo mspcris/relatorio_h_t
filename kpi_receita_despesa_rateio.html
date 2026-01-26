@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="pt-br">
-<!-- Arquivo: kpi_recaita_despesa.html -->
+<!-- Arquivo: kpi_receita_despesa_rateio.html -->
 
 <head>
   <meta charset="UTF-8" />
-  <title>CAMIM — KPI Receitas x Despesas (com IA)</title>
+  <title>CAMIM — KPI Rateio</title>
 
   <!-- Responsividade -->
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -652,6 +652,36 @@
   }
 }
 
+/* KPI clicável — affordance de ação */
+.kpi-card.clickable {
+  cursor: pointer;
+}
+
+.kpi-card.clickable:hover {
+  box-shadow: 0 0 0 2px rgba(0,0,0,.08);
+}
+
+.kpi-card.clickable * {
+  user-select: none;      /* evita seleção de texto */
+  -webkit-user-select: none;
+}
+
+/* Modal de despesas mais largo */
+#drillDespModal .modal-dialog {
+  max-width: 95vw;
+}
+
+/* Evita quebra feia nas colunas novas */
+#drillDespModal th,
+#drillDespModal td {
+  white-space: nowrap;
+}
+
+/* Comentário pode quebrar linha */
+#drillDespModal td:nth-child(7) {
+  white-space: normal;
+  min-width: 260px;
+}
 
 
   </style>
@@ -759,9 +789,17 @@
 
             <!-- NOVO ITEM: KPI Receitas x Despesas -->
             <li class="nav-item">
-              <a href="kpi_recaita_despesa.html" class="nav-link active">
+              <a href="kpi_recaita_despesa.html" class="nav-link">
                 <i class="nav-icon fas fa-balance-scale"></i>
                 <p>KPI Receitas x Despesas</p>
+              </a>
+            </li>
+
+             <!-- NOVO ITEM: KPI Receitas x Despesas Rateio -->
+            <li class="nav-item">
+              <a href="kpi_recaita_despesa.html" class="nav-link active">
+                <i class="nav-icon fas fa-balance-scale"></i>
+                <p>KPI R x D com Rateio</p>
               </a>
             </li>
 
@@ -851,19 +889,20 @@
           </div>
           <div class="card-body p-0">
             <div class="table-responsive">
-              <table class="table table-striped table-sm mb-0">
-                <thead>
-                  <tr>
-                    <th>Mês</th>
-                    <th class="text-right">Receita</th>
-                    <th class="text-right">Despesa</th>
-                    <th class="text-right">Retirada</th>
-                    <th class="text-right">Resultado</th>
-                    <th class="text-right">Margem</th>
-                  </tr>
-                </thead>
-                <tbody id="tblBodyPeriodo"></tbody>
-              </table>
+              <table class="table table-sm table-striped">
+  <thead>
+    <tr>
+      <th>Mês</th>
+      <th>Posto</th>
+      <th>Plano principal</th>
+      <th>Plano</th>
+      <th>Tipo</th>
+      <th class="text-right">Valor</th>
+    </tr>
+  </thead>
+  <tbody id="tblBodyPeriodo"></tbody>
+</table>
+
             </div>
           </div>
         </div>
@@ -922,18 +961,24 @@
     <div class="col-12 col-lg-6 mb-3">
       <h6 class="mb-2">Receitas — principais alavancas</h6>
       <div class="table-responsive var-table">
-        <table class="table table-sm table-composicao table-variacao mb-0">
+
+
+
+        <table class="table table-sm table-striped">
           <thead>
             <tr>
-              <th>Grupo</th>
-              <th class="text-right">Mês ref.</th>
-              <th class="text-right">Mês comp.</th>
-              <th class="text-right">Δ</th>
-              <th class="text-right">Δ%</th>
+              <th>Mês</th>
+              <th class="text-right">Receita</th>
+              <th class="text-right">Despesa</th>
+              <th class="text-right">Retirada</th>
+              <th class="text-right">Resultado</th>
+              <th class="text-right">Margem</th>
             </tr>
           </thead>
-          <tbody id="tblVarReceita"></tbody>
+          <tbody id="tblBodyPeriodo"></tbody>
         </table>
+
+
       </div>
     </div>
 
@@ -1226,6 +1271,50 @@
 
 
 
+<!-- MODAL — Drilldown Despesas -->
+<div class="modal fade" id="modalDespesaDrilldown" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-fullscreen-xl-down" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Detalhamento de Despesas</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="table-responsive">
+
+          <!-- MODAL — Drilldown -->
+          <table class="table table-striped table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Mês</th>
+                <th>Posto lançamento</th>
+                <th>Posto rateio</th>
+                <th>Plano principal</th>
+                <th>Plano</th>
+                <th>Tipo</th>
+                <th>Comentário</th>
+                <th class="text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody id="tblDespesaDrilldown"></tbody>
+          </table>
+
+
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
 
 
 
@@ -1472,49 +1561,31 @@
       // ============================================================
 
       function getLinhasRateadas(ds, mes, postosSelecionados) {
-        if (!ds || !ds.dados || !ds.dados[mes]) return [];
+  if (!ds || !ds.dados || !ds.dados[mes]) return [];
 
-        // Se JSON já veio por posto, NÃO rateia
-        const temPostoNativo = Object.keys(ds.dados[mes] || {}).every(p => p.length === 1);
+  const out = [];
 
-        if (temPostoNativo) {
-          return getLinhas(ds, mes, postosSelecionados);
-        }
+  Object.values(ds.dados[mes]).forEach(bloco => {
+    (bloco.linhas || []).forEach(row => {
+      // POSTO DE RATEIO = endereco
+      const postoRateio = row.endereco;
 
+      // se não tiver endereco, descarta
+      if (!postoRateio) return;
 
-        const out = [];
+      // respeita filtro do usuário (sempre pelo rateio)
+      if (!postosSelecionados.includes(postoRateio)) return;
 
-        Object.values(ds.dados[mes]).forEach(bloco => {
-          (bloco.linhas || []).forEach(row => {
-            const enderecoNorm = normalizarEndereco(row.endereco || row.Endereco);
+      out.push({
+        ...row,
+        __posto_rateado: postoRateio
+      });
+    });
+  });
 
-              let postoDestino = null;
+  return out;
+}
 
-                // match por inclusão (robusto)
-                for (const [nome, codigo] of Object.entries(ENDERECO_PARA_POSTO)) {
-                  const nomeNorm = normalizarEndereco(nome);
-                  if (enderecoNorm.includes(nomeNorm)) {
-                    postoDestino = codigo;
-                    break;
-                  }
-                }
-
-                // sem match → descarta linha
-                if (!postoDestino) return;
-
-                // posto fora do filtro → descarta linha
-                if (!postosSelecionados.includes(postoDestino)) return;
-
-
-            out.push({
-              ...row,
-              __posto_rateado: postoDestino
-            });
-          });
-        });
-
-        return out;
-      }
 
       // ============================================================
       // REGRAS DE RETIRADA
@@ -1845,32 +1916,30 @@
             input.dispatchEvent(new Event('change', { bubbles: true }));
       }
 
+        function wirePeriodo(lastFull) {
+          const fromEl = el('#from2');
+          const toEl = el('#to2');
+          const btnReset = el('#reset2');
 
-      function wirePeriodo(lastFull) {
-        const fromEl = el('#from2');
-        const toEl = el('#to2');
-        const btnReset = el('#reset2');
-
-        if (fromEl && toEl) {
-          const idx = MESES.indexOf(lastFull);
-          const startIdx = idx > 10 ? idx - 11 : 0;
-          setMonthValue('#from2', MESES[startIdx]);
-          setMonthValue('#to2', lastFull);
-        }
-
-        if (fromEl) fromEl.addEventListener('change', updateAll);
-        if (toEl) toEl.addEventListener('change', updateAll);
-
-        if (btnReset) {
-          btnReset.addEventListener('click', () => {
-            const idx = MESES.indexOf(lastFull);
-            const startIdx = idx > 10 ? idx - 11 : 0;
-            setMonthValue('#from2', MESES[startIdx]);
+          if (fromEl && toEl && lastFull) {
+            // REGRA: mês imediatamente anterior ao atual
+            setMonthValue('#from2', lastFull);
             setMonthValue('#to2', lastFull);
-            updateAll();
-          });
+          }
+
+          if (fromEl) fromEl.addEventListener('change', updateAll);
+          if (toEl) toEl.addEventListener('change', updateAll);
+
+          if (btnReset) {
+            btnReset.addEventListener('click', () => {
+              // Reset também volta para o mês anterior
+              setMonthValue('#from2', lastFull);
+              setMonthValue('#to2', lastFull);
+              updateAll();
+            });
+          }
         }
-      }
+
 
       // ============================================================
       // SWITCH RETIRADA
@@ -1892,56 +1961,214 @@
       // UI — KPIs
       // ============================================================
 
-      function cardKpi(label, valor, tipo, sufixoExtra) {
-        const isNull = valor == null || Number.isNaN(valor);
+      function cardKpi(label, valor, tipo, sufixoExtra, onClick) {
+        const clickable = typeof onClick === 'function';
         let classe = 'kpi-card';
         if (tipo === 'receita') classe += ' kpi-card-receita';
         else if (tipo === 'despesa') classe += ' kpi-card-despesa';
         else if (tipo === 'resultado') classe += ' kpi-card-resultado';
+        if (clickable) classe += ' clickable';
 
+        const isNull = valor == null || Number.isNaN(valor);
         let texto = '<span class="muted">-</span>';
         if (!isNull) {
           if (sufixoExtra === '%') texto = fmtPct.format(valor) + '%';
           else texto = 'R$ ' + fmt2.format(valor);
         }
 
+        const id = 'kpi_' + Math.random().toString(36).slice(2);
+
+        setTimeout(() => {
+          if (clickable) {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('click', onClick);
+          }
+        }, 0);
+
         return `
-<div class="card ${classe}">
-  <div class="card-body">
-    <div class="kpi-label">${label}</div>
-    <div class="kpi-value">${texto}</div>
-    ${sufixoExtra && sufixoExtra !== '%' ? `<div class="kpi-sub muted">${sufixoExtra}</div>` : ''}
-  </div>
-</div>`;
+      <div class="card ${classe}" id="${id}">
+        <div class="card-body">
+          <div class="kpi-label">${label}</div>
+          <div class="kpi-value">${texto}</div>
+          ${sufixoExtra && sufixoExtra !== '%' ? `<div class="kpi-sub muted">${sufixoExtra}</div>` : ''}
+          ${clickable ? `<div class="mini muted">clique para listar</div>` : ''}
+        </div>
+      </div>`;
       }
 
-      function buildKpis(meses) {
-        const box = el('#kpiResumo');
-        if (!box) return;
 
-        const agg = aggregatePeriodo(meses);
-        box.innerHTML = '';
+     
+function postoFromRow(row) {
+  // 1) Posto real de origem do lançamento (backend)
+  if (row.posto_lancamento) return row.posto_lancamento;
 
-        box.insertAdjacentHTML('beforeend', cardKpi('Receita total', agg.recTotal, 'receita', 'Receitas (tipo) no período'));
-        box.insertAdjacentHTML('beforeend', cardKpi('Receita de serviços', agg.recServ, 'receita', 'Somente lançamentos (serviços)'));
-        box.insertAdjacentHTML('beforeend', cardKpi('Receita estimada de mensalidades', agg.recMens, 'receita', 'Receita total – serviços'));
-        box.insertAdjacentHTML('beforeend', cardKpi('Despesa (sem retirada)', agg.despSem, 'despesa', 'Base operacional'));
-        box.insertAdjacentHTML('beforeend', cardKpi('Despesa em retirada', agg.retiradaTotal, 'despesa', 'Plano/Tipo RETIRADA / CAMPINHO'));
-        box.insertAdjacentHTML('beforeend',
-          cardKpi('Despesa considerada', agg.despUsada, 'despesa', considerarRetirada ? 'Inclui retirada' : 'Exclui retirada')
-        );
-        box.insertAdjacentHTML('beforeend',
-          cardKpi('Resultado (R – D)', agg.resultado, 'resultado', agg.resultado >= 0 ? 'Superávit no período' : 'Déficit no período')
-        );
-        box.insertAdjacentHTML('beforeend', cardKpi('Margem sobre receita', agg.margem, 'resultado', '%'));
+  // 2) Posto de rateio (fallback)
+  if (row.__posto_rateado) return row.__posto_rateado;
 
-        const lbl = el('#lblModoRetirada');
-        if (lbl) {
-          lbl.textContent = considerarRetirada
-            ? 'Modo: Despesa incluindo retirada'
-            : 'Modo: Despesa excluindo retirada';
-        }
-      }
+  // 3) Endereço/letra do rateio vindo do JSON
+  if (row.endereco) return row.endereco;
+
+  return '-';
+}
+
+
+
+
+
+
+function openDespesaDrilldown(ym, linhas) {
+  const tbody = document.getElementById('tblDespesaDrilldown');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+
+  linhas.forEach(r => {
+    const valor = num(r.valorpago || r.valor || 0);
+
+    tbody.insertAdjacentHTML('beforeend', `
+<tr>
+  <td>${mFmt(ym)}</td>
+  <td>${r.posto_lancamento || '-'}</td>
+  <td>${r.__posto_rateado || r.endereco || '-'}</td>
+  <td>${r.PlanoPrincipal || '-'}</td>
+  <td>${r.plano || '-'}</td>
+  <td>${r.tipo || '-'}</td>
+  <td>${r.comentario || '-'}</td>
+  <td class="text-right">R$ ${fmt2.format(valor)}</td>
+</tr>
+    `);
+  });
+
+  // Bootstrap / AdminLTE — forma correta de abrir modal
+  $('#modalDespesaDrilldown').modal('show');
+}
+
+
+function buildKpis(meses) {
+  const box = el('#kpiResumo');
+  if (!box) return;
+
+  const agg = aggregatePeriodo(meses);
+  box.innerHTML = '';
+
+  // mês base para o drilldown (último mês selecionado)
+  const ym = meses[meses.length - 1];
+
+  // linhas reais de despesa (rateadas, respeitando postos)
+  const linhasDespesa = getLinhasRateadas(
+    DATA.despTipo,
+    ym,
+    postosSelecionados()
+  );
+
+  const abrirModal = () => {
+    openDespesaDrilldown(ym, linhasDespesa);
+  };
+
+  box.insertAdjacentHTML(
+    'beforeend',
+    cardKpi(
+      'Receita total',
+      agg.recTotal,
+      'receita',
+      'Receitas (tipo) no período',
+      abrirModal
+    )
+  );
+
+  box.insertAdjacentHTML(
+    'beforeend',
+    cardKpi(
+      'Receita de serviços',
+      agg.recServ,
+      'receita',
+      'Somente lançamentos (serviços)',
+      abrirModal
+    )
+  );
+
+  box.insertAdjacentHTML(
+    'beforeend',
+    cardKpi(
+      'Receita estimada de mensalidades',
+      agg.recMens,
+      'receita',
+      'Receita total – serviços',
+      abrirModal
+    )
+  );
+
+  box.insertAdjacentHTML(
+    'beforeend',
+    cardKpi(
+      'Despesa (sem retirada)',
+      agg.despSem,
+      'despesa',
+      'Base operacional',
+      abrirModal
+    )
+  );
+
+  box.insertAdjacentHTML(
+    'beforeend',
+    cardKpi(
+      'Despesa em retirada',
+      agg.retiradaTotal,
+      'despesa',
+      'Plano/Tipo RETIRADA / CAMPINHO',
+      abrirModal
+    )
+  );
+
+  box.insertAdjacentHTML(
+    'beforeend',
+    cardKpi(
+      'Despesa considerada',
+      agg.despUsada,
+      'despesa',
+      considerarRetirada ? 'Inclui retirada' : 'Exclui retirada',
+      abrirModal
+    )
+  );
+
+  box.insertAdjacentHTML(
+    'beforeend',
+    cardKpi(
+      'Resultado (R – D)',
+      agg.resultado,
+      'resultado',
+      agg.resultado >= 0 ? 'Superávit no período' : 'Déficit no período',
+      abrirModal
+    )
+  );
+
+  box.insertAdjacentHTML(
+    'beforeend',
+    cardKpi(
+      'Margem sobre receita',
+      agg.margem,
+      'resultado',
+      '%',
+      abrirModal
+    )
+  );
+
+  const lbl = el('#lblModoRetirada');
+  if (lbl) {
+    lbl.textContent = considerarRetirada
+      ? 'Modo: Despesa incluindo retirada'
+      : 'Modo: Despesa excluindo retirada';
+  }
+}
+
+
+
+
+
+
+
+
+
 
       // ============================================================
       // UI — TABELA POR MÊS

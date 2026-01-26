@@ -1,4 +1,4 @@
-# export_fin_full.py
+# export_fin_full_rateio.py
 # Pipeline separado para fin_receita_full e fin_despesa_full
 
 import os, re, glob, json, argparse

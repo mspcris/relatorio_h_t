@@ -582,6 +582,136 @@ canvas { max-width: 100% !important; }
     </div>
   </div>
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <!-- =========================================================
+     MODAL — DRILLDOWN DESPESAS
+     ========================================================= -->
+<div class="modal fade" id="drillDespModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="drillDespTitle">Detalhamento de Despesas</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="d-flex align-items-center mb-2" style="gap:10px; flex-wrap:wrap">
+          <span id="drillDespMeta" class="mini muted"></span>
+          <input id="drillDespSearch"
+                 class="form-control form-control-sm ml-auto"
+                 style="width:min(420px,100%)"
+                 placeholder="Buscar por plano / tipo / posto...">
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-striped">
+            <thead>
+              <tr>
+                <th>Mês</th>
+                <th>Posto</th>
+                <th>Plano Principal</th>
+                <th>Plano</th>
+                <th>Tipo</th>
+                <th class="text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody id="drillDespBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
+<script>
+  function openDespesaDrilldown({ meses, postos, considerarRetirada }) {
+
+  const rows = [];
+
+  meses.forEach(ym => {
+    const linhas = getLinhasRateadas(DATA.despTipo, ym, postos);
+
+    linhas.forEach(r => {
+      if (!considerarRetirada && isRetiradaTipo(r)) return;
+
+      rows.push({
+        mes: ym,
+        posto: r.__posto_rateado || '',
+        plano_principal: r.PlanoPrincipal || '',
+        plano: r.plano || '',
+        tipo: r.tipo || '',
+        valor: num(r.valorpago)
+      });
+    });
+  });
+
+  // header
+  el('#drillDespTitle').textContent = 'Detalhamento — Despesa (sem retirada)';
+  el('#drillDespMeta').textContent =
+    `Registros: ${rows.length} • Postos: ${postos.join(', ')}`;
+
+  const tbody = el('#drillDespBody');
+  const input = el('#drillDespSearch');
+
+  function render() {
+    const q = (input.value || '').toLowerCase();
+    tbody.innerHTML = '';
+
+    rows
+      .filter(r =>
+        !q ||
+        r.plano_principal.toLowerCase().includes(q) ||
+        r.plano.toLowerCase().includes(q) ||
+        r.tipo.toLowerCase().includes(q) ||
+        r.posto.toLowerCase().includes(q)
+      )
+      .forEach(r => {
+        tbody.insertAdjacentHTML('beforeend', `
+<tr>
+  <td>${mFmt(r.mes)}</td>
+  <td>${r.posto}</td>
+  <td>${r.plano_principal}</td>
+  <td>${r.plano}</td>
+  <td>${r.tipo}</td>
+  <td class="text-right">R$ ${fmt2.format(r.valor)}</td>
+</tr>`);
+      });
+  }
+
+  input.value = '';
+  input.oninput = render;
+  render();
+
+  $('#drillDespModal').modal('show');
+}
+
+</script>
+
+
+
+
   <script>
     (function () {
       // ================== CONFIG ==================

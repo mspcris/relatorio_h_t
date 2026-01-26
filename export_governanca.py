@@ -14,6 +14,14 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
+def build_meta(nome_arquivo: str):
+    return {
+        "gerado_em": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "arquivo": nome_arquivo,
+        "origem": "export_governanca.py"
+    }
+
+
 def _set_mtime(path: str) -> None:
     """Ajusta atime/mtime do arquivo para 'agora' com timezone local."""
     ts = datetime.now(timezone.utc).astimezone().timestamp()
@@ -33,7 +41,7 @@ def sanitize_nan(obj):
 # Constantes e Defaults
 # =========================
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-SQL_DIR    = os.path.join(BASE_DIR, "SQL")
+SQL_DIR    = os.path.join(BASE_DIR, "sql")
 DADOS_DIR  = os.path.join(BASE_DIR, "dados")
 JSON_DIR   = os.path.join(BASE_DIR, "json_consolidado")
 SRC_TEMPLATES_DIR   = os.path.join(BASE_DIR, "templates")  # opcional: front estático
@@ -42,6 +50,17 @@ TARGET_TEMPLATES_DIR = os.getenv("TARGET_TEMPLATES_DIR", os.path.join(BASE_DIR, 
 EARLIEST_ALLOWED = date(2020, 1, 1)
 POSTOS = list("ANXYBRPCDGIMJ")
 ODBC_DRIVER = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
+
+# =========================
+# Chaves permitidas no consolidado LEGADO
+# =========================
+LEGACY_KEYS_CONSOLIDADO = {
+    "mensalidade",
+    "medico",
+    "alimentacao",
+    "prescricao",
+}
+
 
 KEY_PATTERNS = {
     "mensalidade": re.compile(r"(mensal|mensalid|receita|fin_?receita)", re.I),
@@ -110,7 +129,22 @@ def load_sql_strip_go(path):
 def infer_key_from_filename(fn):
     name = os.path.basename(fn).lower()
 
-    # LIBERTY: captura nomes específicos
+    # === FINANCEIRO (NOVO – EXPLÍCITO) ===
+    if name.startswith("fin_receita_tipo"):
+        return "fin_receita_tipo"
+    if name.startswith("fin_receita_forma"):
+        return "fin_receita_forma"
+    if name.startswith("fin_receita_lancamento"):
+        return "fin_receita_lancamento"
+
+    if name.startswith("fin_despesa_tipo"):
+        return "fin_despesa_tipo"
+    if name.startswith("fin_despesa_plano"):
+        return "fin_despesa_plano"
+    if name.startswith("fin_despesa_planodeprincipal"):
+        return "fin_despesa_planodeprincipal"
+
+    # === LIBERTY ===
     if name.startswith("liberty_consultas"):
         return "liberty_consultas"
     if name.startswith("liberty_lancamentos"):
@@ -119,15 +153,14 @@ def infer_key_from_filename(fn):
         return "liberty_mensalidades"
     if name.startswith("liberty_taxainscricao"):
         return "liberty_taxainscricao"
-    # NOVO: único SQL de vidas (uma vez por posto)
     if name.startswith("liberty_vidas"):
         return "liberty_vidas"
 
-    # PRESCRIÇÃO
+    # === PRESCRIÇÃO ===
     if name.startswith("prescricao"):
         return "prescricao"
 
-    # DEMAIS GRUPOS
+    # === FALLBACK LEGADO ===
     for key, pat in KEY_PATTERNS.items():
         if pat.search(name):
             return key
@@ -352,6 +385,10 @@ def build_monthly_json():
             continue
         ym  = m.group("ym")
         key = m.group("key").lower()
+
+        if key not in LEGACY_KEYS_CONSOLIDADO:
+            continue
+
         path = os.path.join(DADOS_DIR, fn)
         try:
             df = pd.read_csv(path)
@@ -533,7 +570,11 @@ def build_monthly_json_by_posto():
             continue
         posto = m.group("posto")
         ym = m.group("ym")
+    
         key = m.group("key").lower()
+        if key not in LEGACY_KEYS_CONSOLIDADO:
+            continue
+
         path = os.path.join(DADOS_DIR, fn)
         try:
             df = pd.read_csv(path)
@@ -963,6 +1004,7 @@ def build_liberty_detalhado_json():
 
     meses_sorted = sorted(meses)
     payload = sanitize_nan({
+        "meta": build_meta(f"{key}.json"),
         "periodo": {
             "inicio": meses_sorted[0],
             "fim": meses_sorted[-1],
@@ -972,6 +1014,7 @@ def build_liberty_detalhado_json():
         "meses": meses_sorted,
         "dados": {ym: dados[ym] for ym in meses_sorted},
     })
+
 
     out_path = os.path.join(JSON_DIR, "liberty_detalhado.json")
     with open(out_path, "w", encoding="utf-8") as f:
@@ -1096,6 +1139,94 @@ def build_liberty_vidas_json():
     _set_mtime(out_path)
     print(f"[EXTRA] Liberty VIDAS -> {os.path.relpath(out_path, BASE_DIR)}")
 
+
+# =========================
+# FINANCEIRO: JSONs diretos para o front (SEM consolidação)
+# =========================
+def build_financeiro_jsons_front():
+    """
+    Gera JSONs financeiros no formato ESPERADO PELO FRONT:
+    periodo / postos / meses / dados[mes][posto]{linhas, valor_total, qtd}
+    """
+    ensure_dir(JSON_DIR)
+
+    FIN_KEYS = [
+        "fin_receita_tipo",
+        "fin_receita_forma",
+        "fin_receita_lancamento",
+        "fin_despesa_tipo",
+        "fin_despesa_plano",
+        "fin_despesa_planodeprincipal",
+    ]
+
+    pat = re.compile(
+        r"^(?P<posto>[A-Z])_(?P<ym>\d{4}-\d{2})_(?P<key>fin_[a-z_]+)\.csv$",
+        re.I
+    )
+
+    for key in FIN_KEYS:
+        dados = {}
+        postos = set()
+        meses = set()
+
+        for fn in os.listdir(DADOS_DIR):
+            m = pat.match(fn)
+            if not m:
+                continue
+
+            if m.group("key").lower() != key:
+                continue
+
+            posto = m.group("posto").upper()
+            ym = m.group("ym")
+
+            path = os.path.join(DADOS_DIR, fn)
+            try:
+                df = pd.read_csv(path)
+            except Exception:
+                continue
+
+            registros = df.to_dict("records")
+            valor_total = sum_numeric(df, ["valor_pago", "valor", "total"])
+            qtd = len(df)
+
+            dados.setdefault(ym, {})[posto] = {
+                "linhas": registros,
+                "valor_total": round(valor_total, 2),
+                "qtd": int(qtd),
+            }
+
+            postos.add(posto)
+            meses.add(ym)
+
+        if not dados:
+            print(f"[WARN] Financeiro {key}: nenhum CSV encontrado.")
+            continue
+
+        meses_sorted = sorted(meses)
+
+        payload = sanitize_nan({
+            "meta": build_meta(f"{key}.json"),
+            "periodo": {
+                "inicio": meses_sorted[0],
+                "fim": meses_sorted[-1],
+                "n_meses": len(meses_sorted),
+            },
+            "postos": sorted(postos),
+            "meses": meses_sorted,
+            "dados": {ym: dados[ym] for ym in meses_sorted},
+        })
+
+
+        out_path = os.path.join(JSON_DIR, f"{key}.json")
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+
+        _set_mtime(out_path)
+        print(f"[EXTRA] Financeiro JSON OK -> {os.path.relpath(out_path, BASE_DIR)}")
+
+
+
 # =========================
 # CLI
 # =========================
@@ -1113,6 +1244,7 @@ def parse_args():
     p.add_argument("--no-validate", action="store_true", help="Não valida o conteúdo dos .sql.")
     p.add_argument("--dry-run", action="store_true", help="Executa sem gravar CSV/JSON.")
     p.add_argument("--copy-templates", action="store_true", help="Copia templates/ para TARGET_TEMPLATES_DIR.")
+    p.add_argument("--only-json", action="store_true", help="Pula SQL/CSV e gera apenas os JSONs a partir dos dados existentes.")
     return p.parse_args()
 
 # =========================
@@ -1125,6 +1257,41 @@ def run():
 
     ensure_dir(DADOS_DIR)
     ensure_dir(JSON_DIR)
+
+    # =========================
+    # ONLY JSON (sem SQL / CSV)
+    # =========================
+    if args.only_json:
+        print("\n[ONLY-JSON] Pulando execução de SQL/CSV. Usando dados existentes.")
+
+        print("\n[ETAPA 4/6] JSON consolidado mensal (global)")
+        build_monthly_json()
+
+        print("\n[ETAPA 5/6] JSON consolidado por posto")
+        build_monthly_json_by_posto()
+
+        print("\n[ETAPA 6/6] JSON de percentuais do mês corrente")
+        build_percent_by_posto()
+
+        print("\n[EXTRA] JSONs de prescrição (enriquecidos)")
+        build_prescricao_jsons_enriquecidos()
+
+        print("\n[EXTRA] JSONs Financeiros para o front")
+        build_financeiro_jsons_front()
+
+        print("\n[EXTRA] JSON Liberty detalhado (todas as linhas)")
+        build_liberty_detalhado_json()
+
+        print("\n[EXTRA] JSON Liberty por processo")
+        for proc in ["consultas", "lancamentos", "mensalidades", "taxainscricao"]:
+            build_liberty_json_por_processo(f"liberty_{proc}")
+
+        print("\n[EXTRA] JSON Liberty VIDAS (todas as vidas por posto)")
+        build_liberty_vidas_json()
+
+        print("\n✅ Finalizado (ONLY-JSON).")
+        return
+
 
     ini_cur, fim_cur, ym_current = current_month_bounds()
     _, _, ym_prev = previous_month_bounds(date.today())
@@ -1272,6 +1439,10 @@ def run():
     # EXTRA: JSONs específicos de prescrição
     print("\n[EXTRA] JSONs de prescrição (enriquecidos)")
     build_prescricao_jsons_enriquecidos()
+
+    print("\n[EXTRA] JSONs Financeiros para o front")
+    build_financeiro_jsons_front()
+
 
     # EXTRA: JSON detalhado de Liberty (todas as linhas, mês/posto)
     print("\n[EXTRA] JSON Liberty detalhado (todas as linhas)")
