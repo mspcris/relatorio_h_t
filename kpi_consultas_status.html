@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — KPI Consultas por Status</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- CORE CSS — AdminLTE + FontAwesome -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+
+  <!-- Fonte -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap">
+
+  <!-- CSS do projeto -->
+  <link rel="stylesheet" href="/css/style2.css?v=20251114">
+  <link rel="stylesheet" href="/css/style_kpi.css?v=20251114&force=1">
+
+  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <!-- JS Base -->
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+  <!-- Contexto -->
+  <script>
+    window.IA_API_URL = '/ia/analisar';
+    window.PROMPTS_API_BASE = '/prompts';
+
+    fetch("/session/me", { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => {
+        window.USER_EMAIL = data.email;
+        window.USER_POSTOS = Array.isArray(data.postos) ? data.postos : [];
+      })
+      .catch(() => {
+        window.USER_EMAIL = null;
+        window.USER_POSTOS = [];
+      });
+  </script>
+  <script src="/js/chat.js?v=20251114"></script>
+
+  <style>
+    :root { --kpi-loaded: 1; }
+
+    html { font-size: 16px; zoom: 1; }
+    body {
+      font-size: 1rem;
+      -webkit-text-size-adjust: 100%;
+      -webkit-font-smoothing: antialiased;
+      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    body.text-sm { font-size: 1rem; }
+    .text-sm .btn, .text-sm .form-control, .text-sm .custom-select, .text-sm .page-link,
+    .text-sm .breadcrumb, .text-sm .nav-link, .text-sm .card-title { font-size: 1rem; }
+
+    h1,h2,h3 { margin-top: 0; margin-bottom: .5rem; font-weight: 600; line-height: 1.25; }
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.5rem; }
+    h3,.card-title { font-size: 1.25rem; font-weight: 600; }
+
+    .sidebar .nav-link { font-size: .95rem; }
+    .brand-link .brand-text { font-size: 1rem; }
+
+    :root {
+      --cor0:#F2F2F2; --cor1:#afbfa5; --cor2:#91b62f; --cor3:#009402;
+      --cor4:#1c7932; --cor5:#003f0a; --cor6:#0099ab; --cor7:#092019; --cor8:#444444;
+    }
+
+    .muted { color:#6b7280; }
+    .mini { font-size:.85rem; }
+    .text-right { text-align:right; }
+    .small-td { white-space:nowrap; }
+    .table-responsive { width:100%; }
+    .stack>*+* { margin-top:14px; }
+
+    .filter-bar { display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; padding:10px; }
+    .month-inputs { display:flex; gap:6px; align-items:center; }
+    .scroll-tabs { display:flex; gap:6px; overflow:auto; white-space:nowrap; padding:6px 0; }
+    .scroll-tabs .nav-link { display:inline-block; min-width:52px; text-align:center; cursor:pointer; }
+
+    .kpi, .card-body.kpi {
+      display:grid !important;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 8px;
+    }
+    .kpi .card, .card-body.kpi .card { border-radius:12px; margin:0; }
+    .card-body.kpi .card .card-body { padding:.5rem .75rem; }
+
+    .chart-card .card-body { height:360px; }
+
+    .pill { display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:999px; background:#f3f4f6; }
+    .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+  <!-- NAVBAR (mesma parte superior) -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+      </li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+      <span class="ml-2">Quem tem saúde é mais feliz!</span>
+      <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+    </span>
+  </nav>
+
+  <!-- SIDEBAR -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a></li>
+          <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i class="nav-icon fas fa-book-open"></i><p>Leia-me</p></a></li>
+          <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i class="nav-icon fas fa-utensils"></i><p>KPI Custo Alimentação</p></a></li>
+          <li class="nav-item"><a href="medicos.html" class="nav-link"><i class="nav-icon fas fa-notes-medical"></i><p>KPI Custo Médico</p></a></li>
+          <li class="nav-item"><a href="ctrlq_relatorio.html" class="nav-link"><i class="nav-icon fas fa-user-md"></i><p>KPI Médicos (Qualidade)</p></a></li>
+          <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i class="nav-icon fas fa-chart-line"></i><p>KPI Mensalidades</p></a></li>
+          <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i class="nav-icon fas fa-shopping-cart"></i><p>KPI Vendas</p></a></li>
+          <li class="nav-item"><a href="clientes.html" class="nav-link"><i class="nav-icon fas fa-users"></i><p>KPI Clientes</p></a></li>
+          <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i class="nav-icon fas fa-prescription-bottle-alt"></i><p>KPI Prescrições</p></a></li>
+          <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i class="nav-icon fas fa-landmark"></i><p>KPI Índices Oficiais</p></a></li>
+          <li class="nav-item"><a href="kpi_liberty.html" class="nav-link"><i class="nav-icon fas fa-passport"></i><p>KPI CAMIM Liberty</p></a></li>
+          <li class="nav-item"><a href="kpi_receita_despesa.html" class="nav-link"><i class="nav-icon fas fa-balance-scale"></i><p>KPI Receitas x Despesas</p></a></li>
+          <li class="nav-item"><a href="kpi_receita_despesa_rateio.html" class="nav-link"><i class="nav-icon fas fa-balance-scale"></i><p>KPI R x D com Rateio</p></a></li>
+
+          <!-- ESTA PÁGINA -->
+          <li class="nav-item"><a href="kpi_consultas_status.html" class="nav-link active">
+            <i class="nav-icon fas fa-stethoscope"></i><p>KPI Consultas (Status)</p>
+          </a></li>
+
+          <li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline">
+              <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                <i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p>
+              </button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- CONTEÚDO -->
+  <div class="content-wrapper">
+    <nav class="navbar navbar-expand navbar-white navbar-light">
+      <div class="d-flex w-100 align-items-center">
+        <span class="ml-2 font-weight-bold">KPI Consultas — Status</span>
+        <div class="ml-auto">
+          <button id="btnComparar" class="btn btn-sm btn-outline-secondary" title="Mostrar/ocultar bloco de comparação">Comparar</button>
+        </div>
+      </div>
+    </nav>
+
+    <section class="content p-3 stack">
+      <div id="err" class="text-danger mb-1"></div>
+
+      <!-- BLOCO: COMPARAÇÃO -->
+      <div id="compareBlock" style="display:none">
+        <div class="card">
+          <div class="filter-bar">
+            <div>
+              <label class="mb-0 small d-block">Selecione o Período — Comparação</label>
+              <div class="month-inputs">
+                <input id="from1" type="month" class="form-control form-control-sm" />
+                <input id="to1" type="month" class="form-control form-control-sm" />
+                <button id="reset1" class="btn btn-sm btn-outline-secondary">Reset</button>
+              </div>
+            </div>
+            <div class="flex-grow-1">
+              <label class="mb-0 small d-block">Posto</label>
+              <ul id="postoTabs1" class="nav nav-pills scroll-tabs"></ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <h3 class="card-title mb-0">KPIs — Comparação</h3>
+          </div>
+          <div class="card-body kpi" id="kpisSel1"></div>
+        </div>
+      </div>
+
+      <!-- FILTRO PRINCIPAL -->
+      <div class="card">
+        <div class="filter-bar">
+          <div>
+            <label class="mb-0 small d-block">Selecione o Período — Consultas</label>
+            <div class="month-inputs">
+              <input id="from2" type="month" class="form-control form-control-sm" />
+              <input id="to2" type="month" class="form-control form-control-sm" />
+              <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
+            </div>
+          </div>
+          <div class="flex-grow-1">
+            <label class="mb-0 small d-block">Posto</label>
+            <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="card">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <h3 class="card-title mb-0">KPIs — Consultas</h3>
+          <div class="mini muted">
+            <span class="pill"><span class="dot" style="background:#60a5fa"></span> Realizadas</span>
+            <span class="pill"><span class="dot" style="background:#f59e0b"></span> Médico faltou</span>
+            <span class="pill"><span class="dot" style="background:#ef4444"></span> Faltas</span>
+            <span class="pill"><span class="dot" style="background:#a78bfa"></span> Pendência recepção</span>
+          </div>
+        </div>
+        <div class="card-body kpi" id="kpisSel2"></div>
+      </div>
+
+      <!-- TABELA MENSAL -->
+      <div class="card">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <h3 class="card-title mb-0">Tabela mensal (Total + Status)</h3>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-striped table-sm mb-0">
+              <thead>
+              <tr>
+                <th>Mês</th>
+                <th class="text-right">Total</th>
+                <th class="text-right">Realizadas</th>
+                <th class="text-right">% Realizadas</th>
+                <th class="text-right">Médico faltou</th>
+                <th class="text-right">% Médico faltou</th>
+                <th class="text-right">Faltas</th>
+                <th class="text-right">% Faltas</th>
+                <th class="text-right">Pend. recepção</th>
+                <th class="text-right">% Pend. recepção</th>
+                <th class="text-right small-td">MoM Total</th>
+              </tr>
+              </thead>
+              <tbody id="tblBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- GRÁFICOS -->
+      <div class="card chart-card">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <h3 class="card-title mb-0">Evolução — Total de consultas previstas</h3>
+        </div>
+        <div class="card-body"><canvas id="chartTotal"></canvas></div>
+      </div>
+
+      <div class="card chart-card">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <h3 class="card-title mb-0">Status — composição por mês (stack)</h3>
+        </div>
+        <div class="card-body"><canvas id="chartStatusStack"></canvas></div>
+      </div>
+
+      <div class="card chart-card">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <h3 class="card-title mb-0">Top 10 — Especialidades (período)</h3>
+        </div>
+        <div class="card-body"><canvas id="chartEsp"></canvas></div>
+      </div>
+
+      <div class="card chart-card">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <h3 class="card-title mb-0">Top 10 — Médicos (período)</h3>
+        </div>
+        <div class="card-body"><canvas id="chartMed"></canvas></div>
+      </div>
+
+    </section>
+  </div>
+</div>
+
+<script>
+  // =========================================================
+  // Config
+  // =========================================================
+  const BASE = new URL('.', location.href);
+  const JSON_DIR = new URL('json_consultas_mensal/', BASE).href;
+
+  const el = s => document.querySelector(s);
+  const showErr = e => { console.error(e); const er = el('#err'); if (er) er.textContent = e?.message || e; };
+
+  const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+  const fmtPct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const MES_ABBR = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const mFmt = ym => { const [y,m] = ym.split('-').map(Number); return `${MES_ABBR[m-1]}-${String(y).slice(-2)}`; };
+
+  function pad2(n){ return String(n).padStart(2,'0'); }
+  function ymNow(){
+    const d = new Date();
+    return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
+  }
+  function ymAdd(ym, deltaMonths){
+    const [y,m] = ym.split('-').map(Number);
+    const d = new Date(y, m-1, 1);
+    d.setMonth(d.getMonth() + deltaMonths);
+    return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
+  }
+  function ymRange(fromYm, toYm){
+    const out = [];
+    let cur = fromYm;
+    while(cur <= toYm){
+      out.push(cur);
+      cur = ymAdd(cur, 1);
+      if(out.length > 500) break;
+    }
+    return out;
+  }
+  function lastCompleteMonth(){
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
+  }
+  function defaultFromTo(){
+    // padrão: início = 3 meses anteriores ao mês atual; fim = mês passado
+    const now = ymNow();
+    const from = ymAdd(now, -3);
+    const to = lastCompleteMonth();
+    return { from, to };
+  }
+
+  // =========================================================
+  // Postos (permite multi + ALL)
+  // =========================================================
+  const DEFAULT_POSTOS = "ANXYBRPCDGIMJ".split('');
+  let POSTOS = [];
+  let sel1 = 'ALL';
+  let sel2 = 'ALL';
+
+  function markActiveMulti(scopeId, selection){
+    const isAll = (selection === 'ALL');
+    document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
+      const p = a.dataset.posto;
+      if(p === 'ALL') a.classList.toggle('active', isAll);
+      else a.classList.toggle('active', !isAll && selection.has(p));
+    });
+  }
+
+  function buildPostoTabs(ulId, getSel, setSel, onChange){
+    const ul = el(ulId);
+    if(!ul) return;
+    ul.innerHTML = '';
+    ul.insertAdjacentHTML('beforeend',
+      `<li class="nav-item"><a data-posto="ALL" class="nav-link" href="#">Todos</a></li>`
+    );
+    POSTOS.forEach(p => ul.insertAdjacentHTML('beforeend',
+      `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`
+    ));
+    markActiveMulti(ulId, getSel());
+    ul.addEventListener('click', e => {
+      if(!e.target.matches('.nav-link')) return;
+      e.preventDefault();
+      const p = e.target.dataset.posto;
+      let sel = getSel();
+      if(p === 'ALL'){
+        sel = 'ALL';
+      } else {
+        if(sel === 'ALL') sel = new Set();
+        if(sel.has(p)) sel.delete(p); else sel.add(p);
+        if(sel.size === POSTOS.length || sel.size === 0) sel = 'ALL';
+      }
+      setSel(sel);
+      markActiveMulti(ulId, sel);
+      onChange();
+    });
+  }
+
+  function labelSelec(selection){
+    if(selection === 'ALL') return 'Todos';
+    const arr = [...selection].sort();
+    return arr.length ? arr.join('+') : 'Todos';
+  }
+
+  // =========================================================
+  // Status: normalização + regras do negócio (conforme você definiu)
+  // =========================================================
+  function stripDiacritics(s){
+    return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  }
+  function normStatus(s){
+    return stripDiacritics(String(s||'').trim()).toUpperCase();
+  }
+  function normText(s){
+    return String(s||'').trim();
+  }
+  function toInt(v){
+    const n = Number(String(v||'0').replace(/[^\d-]/g,''));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  // Regras declaradas:
+  // 1) Atendido = realizada
+  // 7) Aguardando = realizada
+  // 2) Médico faltou = NÃO realizada (grupo próprio)
+  // 3/4/5/6) Ausente/Faltou/Não atendido/Pendência de guia = NÃO realizada (grupo "faltas")
+  // 8) Pendência recepção = falta, mas manter separado (grupo próprio)
+  //
+  // Obs: também aparece "PENDÊNCIA DE PAGAMENTO" em dados reais; por padrão tratei como "faltas" (não atendido).
+  function isRealizada(s){
+    return s === 'ATENDIDO' || s === 'AGUARDANDO';
+  }
+  function isMedicoFaltou(s){
+    return /MEDICO/.test(s) && /FALTOU/.test(s);
+  }
+  function isPendenciaRecepcao(s){
+    return /PENDENCIA/.test(s) && /RECEP/.test(s);
+  }
+  function isFaltaPacienteOuNaoAtendido(s){
+    // faltou/ausente/não atendido/pendências (exceto recepção que é separado)
+    if (isPendenciaRecepcao(s)) return false;
+    return (
+      s === 'FALTOU' ||
+      s === 'AUSENTE' ||
+      s === 'NAO ATENDIDO' ||
+      s === 'NAOATENDIDO' ||
+      /NAO\s*ATEND/.test(s) ||
+      ( /PENDENCIA/.test(s) && ( /GUIA/.test(s) || /PAGAMENTO/.test(s) ) )
+    );
+  }
+
+  function classifyStatusGroup(raw){
+    const s = normStatus(raw);
+    if(isRealizada(s)) return 'realizadas';
+    if(isMedicoFaltou(s)) return 'medico_faltou';
+    if(isPendenciaRecepcao(s)) return 'pend_recepcao';
+    if(isFaltaPacienteOuNaoAtendido(s)) return 'faltas';
+    return 'outros';
+  }
+
+  // =========================================================
+  // Leitura JSONs (cache + fallback nomes)
+  // =========================================================
+  const CACHE = new Map(); // key `${posto}|${ym}` => linhas (array) | null (404/erro)
+
+  function buildUrlCandidates(posto, ym){
+    const ymDash = ym;
+    const ymUnd = ym.replace('-', '_');
+
+    return [
+      `${JSON_DIR}${posto}_consultas_${ymDash}.json`,
+      `${JSON_DIR}${posto}_consultas_${ymUnd}.json`,
+      `${JSON_DIR}${posto}_consultas_${ymDash.replace('-','_')}.json`,
+      `${JSON_DIR}${posto}_consultas_${ymDash.slice(0,4)}_${ymDash.slice(5,7)}.json`,
+      `${JSON_DIR}${posto}_consultas_${ymDash.slice(0,4)}-${ymDash.slice(5,7)}.json`,
+    ];
+  }
+
+  async function fetchJsonFirstOk(urls){
+    let lastErr = null;
+    for(const u of urls){
+      try{
+        const r = await fetch(u, { cache:'no-store' });
+        if(!r.ok) { lastErr = new Error(`HTTP ${r.status} em ${u}`); continue; }
+        return { url:u, resp:r, data: await r.json() };
+      } catch(e){
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('Falha ao carregar JSON (todas as tentativas falharam)');
+  }
+
+  const LM = {};
+  function renderJsonInfo(){
+    const info = el('#jsonInfo');
+    if(!info) return;
+    const entries = Object.values(LM).filter(Boolean);
+    if(!entries.length){ info.textContent=''; info.removeAttribute('title'); return; }
+    const newest = entries.slice().sort((a,b)=>b.date-a.date)[0];
+    const fmt = d => d.toLocaleString('pt-BR', { dateStyle:'short', timeStyle:'short' });
+    info.textContent = `• dados gerados em ${fmt(newest.date)}`;
+    info.title = entries.map(e => `${e.label}: ${fmt(e.date)}`).join(' | ');
+  }
+  function setJsonInfoFromHeaders(resp, key, label){
+    try{
+      const lm = resp.headers.get('Last-Modified');
+      if(!lm) return false;
+      LM[key] = { date:new Date(lm), label };
+      renderJsonInfo();
+      return true;
+    } catch { return false; }
+  }
+
+  async function loadMonthForPosto(posto, ym){
+    const k = `${posto}|${ym}`;
+    if(CACHE.has(k)) return CACHE.get(k);
+
+    try{
+      const { resp, data } = await fetchJsonFirstOk(buildUrlCandidates(posto, ym));
+      setJsonInfoFromHeaders(resp, `${posto}-${ym}`, `${posto} ${ym}`);
+
+      const linhas = Array.isArray(data?.linhas) ? data.linhas : [];
+      CACHE.set(k, linhas);
+      return linhas;
+    } catch (e){
+      CACHE.set(k, null);
+      return null;
+    }
+  }
+
+  async function loadRange(selection, fromYm, toYm){
+    const meses = ymRange(fromYm, toYm);
+    const postos = (selection === 'ALL') ? POSTOS : [...selection];
+
+    const allRows = [];
+    for(const ym of meses){
+      for(const p of postos){
+        const linhas = await loadMonthForPosto(p, ym);
+        if(!linhas || !linhas.length) continue;
+
+        for(const r of linhas){
+          const ano = toInt(r.ano);
+          const mes = toInt(r.mes);
+          const ym2 = `${ano}-${pad2(mes)}`;
+          const qtde = toInt(r.qtde);
+
+          allRows.push({
+            ym: ym2,
+            posto: p,
+            especialidade: normText(r.Especialidade),
+            medico: normText(r.medico),
+            status: normText(r.status),
+            group: classifyStatusGroup(r.status),
+            qtde
+          });
+        }
+      }
+    }
+    return { meses, rows: allRows };
+  }
+
+  // =========================================================
+  // KPIs
+  // =========================================================
+  function sum(arr){ return arr.reduce((a,b)=>a+(b||0),0); }
+  function groupSum(rows, keyFn){
+    const m = new Map();
+    for(const r of rows){
+      const k = keyFn(r);
+      m.set(k, (m.get(k)||0) + (r.qtde||0));
+    }
+    return m;
+  }
+  function topN(map, n=10){
+    return [...map.entries()].sort((a,b)=>b[1]-a[1]).slice(0,n);
+  }
+  function pct(a,b){ return (b>0) ? (a/b*100) : null; }
+  function mom(curr, prev){ return (prev>0) ? ((curr/prev-1)*100) : null; }
+
+  function monthlySeries(rows, meses){
+    const totalByYm = new Map();
+    const byGroupYm = new Map(); // `${ym}|group` -> sum
+
+    for(const r of rows){
+      totalByYm.set(r.ym, (totalByYm.get(r.ym)||0) + r.qtde);
+      const kg = `${r.ym}|${r.group}`;
+      byGroupYm.set(kg, (byGroupYm.get(kg)||0) + r.qtde);
+    }
+
+    const out = meses.map(ym => {
+      const total = totalByYm.get(ym)||0;
+      const realizadas = byGroupYm.get(`${ym}|realizadas`)||0;
+      const medico_faltou = byGroupYm.get(`${ym}|medico_faltou`)||0;
+      const faltas = byGroupYm.get(`${ym}|faltas`)||0;
+      const pend_recepcao = byGroupYm.get(`${ym}|pend_recepcao`)||0;
+      const outros = Math.max(0, total - (realizadas + medico_faltou + faltas + pend_recepcao));
+      return { ym, total, realizadas, medico_faltou, faltas, pend_recepcao, outros };
+    });
+
+    for(let i=0;i<out.length;i++){
+      out[i].mom_total = (i>0) ? mom(out[i].total, out[i-1].total) : null;
+    }
+    return out;
+  }
+
+  function buildKpisFromSeries(series, rows){
+    const total = sum(series.map(x=>x.total)); // Total previsto
+    const realizadas = sum(series.map(x=>x.realizadas));
+    const medico_faltou = sum(series.map(x=>x.medico_faltou));
+    const faltas = sum(series.map(x=>x.faltas));
+    const pend_recepcao = sum(series.map(x=>x.pend_recepcao));
+    const outros = Math.max(0, total - (realizadas + medico_faltou + faltas + pend_recepcao));
+
+    const mesesComDados = series.filter(x=>x.total>0).length;
+    const avgMes = mesesComDados ? Math.round(total/mesesComDados) : null; // inteiro (regra)
+
+    const espMap = groupSum(rows, r => (r.especialidade || 'Sem especialidade'));
+    const medMap = groupSum(rows, r => (r.medico || 'Sem médico'));
+
+    const espAtivas = [...espMap.keys()].filter(k=>k && k!=='Sem especialidade').length;
+    const medAtivos = [...medMap.keys()].filter(k=>k && k!=='Sem médico').length;
+
+    const top10Med = topN(medMap, 10);
+    const top10MedTotal = sum(top10Med.map(x=>x[1]));
+    const top10Share = pct(top10MedTotal, total);
+
+    return {
+      total, avgMes,
+      realizadas, medico_faltou, faltas, pend_recepcao, outros,
+      p_realizadas: pct(realizadas, total),
+      p_medico_faltou: pct(medico_faltou, total),
+      p_faltas: pct(faltas, total),
+      p_pend_recepcao: pct(pend_recepcao, total),
+      p_outros: pct(outros, total),
+      espAtivas, medAtivos,
+      top10Share
+    };
+  }
+
+  function kpiCard(title, val, kind='int'){
+    const isNull = (val == null || Number.isNaN(val));
+    const out = isNull ? '<span class="muted">-</span>'
+      : (kind==='pct' ? (fmtPct.format(val) + '%')
+      : fmtInt.format(val));
+    const neg = (!isNull && kind==='pct' && val < 0);
+    return `
+      <div class="card">
+        <div class="card-body p-2">
+          <div class="small muted">${title}</div>
+          <div class="h5 mb-0 ${neg ? 'text-danger' : ''}">${out}</div>
+        </div>
+      </div>`;
+  }
+
+  // =========================================================
+  // Charts
+  // =========================================================
+  let chTotal, chStack, chEsp, chMed;
+
+  function initCharts(){
+    const baseLine = { responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false}, scales:{ y:{ beginAtZero:true } } };
+    chTotal = new Chart(document.getElementById('chartTotal'), {
+      type:'line', data:{ labels:[], datasets:[] }, options: baseLine
+    });
+
+    chStack = new Chart(document.getElementById('chartStatusStack'), {
+      type:'bar',
+      data:{ labels:[], datasets:[] },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        interaction:{mode:'index', intersect:false},
+        scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true } }
+      }
+    });
+
+    chEsp = new Chart(document.getElementById('chartEsp'), {
+      type:'bar', data:{ labels:[], datasets:[] },
+      options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', scales:{ x:{ beginAtZero:true } } }
+    });
+
+    chMed = new Chart(document.getElementById('chartMed'), {
+      type:'bar', data:{ labels:[], datasets:[] },
+      options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', scales:{ x:{ beginAtZero:true } } }
+    });
+  }
+
+  function updateCharts(series, rows){
+    const labels = series.map(x => mFmt(x.ym));
+    const total = series.map(x => x.total);
+
+    chTotal.data.labels = labels;
+    chTotal.data.datasets = [
+      { label:`Total previsto (${labelSelec(sel2)})`, data: total, tension:.2 },
+      { label:'Média móvel 3m', data: total.map((_,i)=>{
+        const s = total.slice(Math.max(0,i-2), i+1);
+        return s.length ? (s.reduce((a,b)=>a+b,0)/s.length) : null;
+      }), tension:.2 }
+    ];
+    chTotal.update();
+
+    chStack.data.labels = labels;
+    chStack.data.datasets = [
+      { label:'Realizadas', data: series.map(x=>x.realizadas) },
+      { label:'Médico faltou', data: series.map(x=>x.medico_faltou) },
+      { label:'Faltas', data: series.map(x=>x.faltas) },
+      { label:'Pend. recepção', data: series.map(x=>x.pend_recepcao) },
+      { label:'Outros', data: series.map(x=>x.outros) },
+    ];
+    chStack.update();
+
+    const espMap = groupSum(rows, r => (r.especialidade || 'Sem especialidade'));
+    const topEsp = topN(espMap, 10).reverse();
+    chEsp.data.labels = topEsp.map(x=>x[0]);
+    chEsp.data.datasets = [{ label:'Consultas (qtde)', data: topEsp.map(x=>x[1]) }];
+    chEsp.update();
+
+    const medMap = groupSum(rows, r => (r.medico || 'Sem médico'));
+    const topMed = topN(medMap, 10).reverse();
+    chMed.data.labels = topMed.map(x=>x[0]);
+    chMed.data.datasets = [{ label:'Consultas (qtde)', data: topMed.map(x=>x[1]) }];
+    chMed.update();
+  }
+
+  // =========================================================
+  // Tabela
+  // =========================================================
+  function buildTable(series){
+    const tb = el('#tblBody'); if(!tb) return;
+    tb.innerHTML = '';
+
+    for(let i=0;i<series.length;i++){
+      const x = series[i];
+      const total = x.total || 0;
+
+      const pr = pct(x.realizadas, total);
+      const pmf = pct(x.medico_faltou, total);
+      const pf = pct(x.faltas, total);
+      const ppr = pct(x.pend_recepcao, total);
+
+      tb.insertAdjacentHTML('beforeend', `
+        <tr>
+          <td>${mFmt(x.ym)}</td>
+          <td class="text-right">${fmtInt.format(total)}</td>
+          <td class="text-right">${fmtInt.format(x.realizadas)}</td>
+          <td class="text-right">${pr==null?'-':(fmtPct.format(pr)+'%')}</td>
+          <td class="text-right">${fmtInt.format(x.medico_faltou)}</td>
+          <td class="text-right">${pmf==null?'-':(fmtPct.format(pmf)+'%')}</td>
+          <td class="text-right">${fmtInt.format(x.faltas)}</td>
+          <td class="text-right">${pf==null?'-':(fmtPct.format(pf)+'%')}</td>
+          <td class="text-right">${fmtInt.format(x.pend_recepcao)}</td>
+          <td class="text-right">${ppr==null?'-':(fmtPct.format(ppr)+'%')}</td>
+          <td class="text-right">${x.mom_total==null?'-':(fmtPct.format(x.mom_total)+'%')}</td>
+        </tr>
+      `);
+    }
+
+    const tot = sum(series.map(x=>x.total));
+    const r = sum(series.map(x=>x.realizadas));
+    const mf = sum(series.map(x=>x.medico_faltou));
+    const f = sum(series.map(x=>x.faltas));
+    const prc = sum(series.map(x=>x.pend_recepcao));
+
+    tb.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td><b>Total</b></td>
+        <td class="text-right"><b>${fmtInt.format(tot)}</b></td>
+        <td class="text-right"><b>${fmtInt.format(r)}</b></td>
+        <td class="text-right"><b>${pct(r,tot)==null?'-':(fmtPct.format(pct(r,tot))+'%')}</b></td>
+        <td class="text-right"><b>${fmtInt.format(mf)}</b></td>
+        <td class="text-right"><b>${pct(mf,tot)==null?'-':(fmtPct.format(pct(mf,tot))+'%')}</b></td>
+        <td class="text-right"><b>${fmtInt.format(f)}</b></td>
+        <td class="text-right"><b>${pct(f,tot)==null?'-':(fmtPct.format(pct(f,tot))+'%')}</b></td>
+        <td class="text-right"><b>${fmtInt.format(prc)}</b></td>
+        <td class="text-right"><b>${pct(prc,tot)==null?'-':(fmtPct.format(pct(prc,tot))+'%')}</b></td>
+        <td class="text-right"><b>-</b></td>
+      </tr>
+    `);
+  }
+
+  // =========================================================
+  // Render (Sel1 / Sel2)
+  // =========================================================
+  async function renderSel1(){
+    const from = el('#from1')?.value;
+    const to = el('#to1')?.value;
+    if(!from || !to) return;
+
+    const { rows } = await loadRange(sel1, from, to);
+    const meses = ymRange(from, to);
+    const series = monthlySeries(rows, meses);
+    const k = buildKpisFromSeries(series, rows);
+
+    const box = el('#kpisSel1'); if(!box) return;
+    box.innerHTML = '';
+    box.insertAdjacentHTML('beforeend', kpiCard('Total de consultas previstas', k.total));
+    box.insertAdjacentHTML('beforeend', kpiCard('Média mensal', k.avgMes));
+    box.insertAdjacentHTML('beforeend', kpiCard('Consultas realizadas', k.realizadas));
+    box.insertAdjacentHTML('beforeend', kpiCard('% Consultas realizadas', k.p_realizadas, 'pct'));
+    box.insertAdjacentHTML('beforeend', kpiCard('Médico faltou', k.medico_faltou));
+    box.insertAdjacentHTML('beforeend', kpiCard('% Consultas médico faltou', k.p_medico_faltou, 'pct'));
+    box.insertAdjacentHTML('beforeend', kpiCard('Faltas', k.faltas));
+    box.insertAdjacentHTML('beforeend', kpiCard('% Faltas', k.p_faltas, 'pct'));
+    box.insertAdjacentHTML('beforeend', kpiCard('Pendência recepção', k.pend_recepcao));
+    box.insertAdjacentHTML('beforeend', kpiCard('% Pend. recepção', k.p_pend_recepcao, 'pct'));
+    box.insertAdjacentHTML('beforeend', kpiCard('Especialidades ativas', k.espAtivas));
+    box.insertAdjacentHTML('beforeend', kpiCard('Médicos ativos', k.medAtivos));
+    box.insertAdjacentHTML('beforeend', kpiCard('Share Top10 médicos', k.top10Share, 'pct'));
+  }
+
+  async function renderSel2(){
+    const from = el('#from2')?.value;
+    const to = el('#to2')?.value;
+    if(!from || !to) return;
+
+    const meses = ymRange(from, to);
+    const { rows } = await loadRange(sel2, from, to);
+    const series = monthlySeries(rows, meses);
+    const k = buildKpisFromSeries(series, rows);
+
+    const box = el('#kpisSel2'); if(box){
+      box.innerHTML = '';
+      box.insertAdjacentHTML('beforeend', kpiCard('Total de consultas previstas', k.total));
+      box.insertAdjacentHTML('beforeend', kpiCard('Média mensal', k.avgMes));
+      box.insertAdjacentHTML('beforeend', kpiCard('Consultas realizadas', k.realizadas));
+      box.insertAdjacentHTML('beforeend', kpiCard('% Consultas realizadas', k.p_realizadas, 'pct'));
+      box.insertAdjacentHTML('beforeend', kpiCard('Médico faltou', k.medico_faltou));
+      box.insertAdjacentHTML('beforeend', kpiCard('% Consultas médico faltou', k.p_medico_faltou, 'pct'));
+      box.insertAdjacentHTML('beforeend', kpiCard('Faltas', k.faltas));
+      box.insertAdjacentHTML('beforeend', kpiCard('% Faltas', k.p_faltas, 'pct'));
+      box.insertAdjacentHTML('beforeend', kpiCard('Pendência recepção', k.pend_recepcao));
+      box.insertAdjacentHTML('beforeend', kpiCard('% Pend. recepção', k.p_pend_recepcao, 'pct'));
+      box.insertAdjacentHTML('beforeend', kpiCard('Especialidades ativas', k.espAtivas));
+      box.insertAdjacentHTML('beforeend', kpiCard('Médicos ativos', k.medAtivos));
+      box.insertAdjacentHTML('beforeend', kpiCard('Share Top10 médicos', k.top10Share, 'pct'));
+    }
+
+    buildTable(series);
+    updateCharts(series, rows);
+  }
+
+  function setPressed(btn, on, variant='primary'){
+    btn.classList.toggle(`btn-outline-${variant}`, !on);
+    btn.classList.toggle(`btn-${variant}`, on);
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
+  function attachHandlers(){
+    if(el('#from1')) el('#from1').addEventListener('change', ()=>renderSel1());
+    if(el('#to1')) el('#to1').addEventListener('change', ()=>renderSel1());
+    if(el('#reset1')) el('#reset1').addEventListener('click', ()=>{
+      const d = defaultFromTo();
+      el('#from1').value = d.from;
+      el('#to1').value = d.to;
+      sel1 = 'ALL';
+      markActiveMulti('#postoTabs1', sel1);
+      renderSel1();
+    });
+
+    if(el('#from2')) el('#from2').addEventListener('change', ()=>renderSel2());
+    if(el('#to2')) el('#to2').addEventListener('change', ()=>renderSel2());
+    if(el('#reset2')) el('#reset2').addEventListener('click', ()=>{
+      const d = defaultFromTo();
+      el('#from2').value = d.from;
+      el('#to2').value = d.to;
+      sel2 = 'ALL';
+      window.sel2 = sel2;
+      markActiveMulti('#postoTabs2', sel2);
+      renderSel2();
+    });
+
+    const btnCmp = el('#btnComparar');
+    if(btnCmp) btnCmp.addEventListener('click', ()=>{
+      const box = el('#compareBlock');
+      if(!box) return;
+      const show = (box.style.display === 'none' || box.style.display === '');
+      box.style.display = show ? 'block' : 'none';
+      setPressed(btnCmp, show, 'secondary');
+    });
+  }
+
+  // =========================================================
+  // Boot
+  // =========================================================
+  (async function boot(){
+    try{
+      const postosUsuario = Array.isArray(window.USER_POSTOS) ? window.USER_POSTOS : [];
+      POSTOS = (postosUsuario.length ? postosUsuario : DEFAULT_POSTOS).filter(p => /^[A-Z]$/.test(p)).sort();
+
+      const d = defaultFromTo();
+      if(el('#from1')) el('#from1').value = d.from;
+      if(el('#to1')) el('#to1').value = d.to;
+      if(el('#from2')) el('#from2').value = d.from;
+      if(el('#to2')) el('#to2').value = d.to;
+
+      sel1 = 'ALL'; sel2 = 'ALL';
+
+      buildPostoTabs('#postoTabs1', ()=>sel1, v=>{ sel1=v; }, ()=>renderSel1());
+      buildPostoTabs('#postoTabs2', ()=>sel2, v=>{ sel2=v; window.sel2=sel2; }, ()=>renderSel2());
+
+      initCharts();
+      attachHandlers();
+
+      await renderSel1();
+      await renderSel2();
+
+      if(el('#compareBlock')) el('#compareBlock').style.display = 'none';
+      if(el('#btnComparar')) setPressed(el('#btnComparar'), false, 'secondary');
+    } catch(e){
+      showErr(e);
+      alert('Falha ao iniciar KPI Consultas. Veja o console.');
+    }
+  })();
+</script>
+
+</body>
+</html>
