@@ -268,19 +268,47 @@
         <div class="card-body"><canvas id="chartStatusStack"></canvas></div>
       </div>
 
-      <div class="card chart-card">
-        <div class="card-header d-flex align-items-center justify-content-between">
-          <h3 class="card-title mb-0">Top 10 — Especialidades (período)</h3>
-        </div>
-        <div class="card-body"><canvas id="chartEsp"></canvas></div>
+     <!-- Top — Especialidades (com toggle + paginação) -->
+<div class="card chart-card">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <h3 class="card-title mb-0">Top — Especialidades (período)</h3>
+
+    <div class="d-flex align-items-center" style="gap:8px">
+      <div class="btn-group btn-group-sm" role="group" aria-label="Modo especialidades">
+        <button id="btnEspTotal" class="btn btn-outline-secondary">Consultas</button>
+        <button id="btnEspFaltas" class="btn btn-outline-secondary">Faltas</button>
       </div>
 
-      <div class="card chart-card">
-        <div class="card-header d-flex align-items-center justify-content-between">
-          <h3 class="card-title mb-0">Top 10 — Médicos (período)</h3>
-        </div>
-        <div class="card-body"><canvas id="chartMed"></canvas></div>
+      <div class="btn-group btn-group-sm" role="group" aria-label="Paginação especialidades">
+        <button id="btnEspPrev" class="btn btn-outline-secondary" title="Anterior"><i class="fas fa-chevron-left"></i></button>
+        <button id="btnEspNext" class="btn btn-outline-secondary" title="Próximo"><i class="fas fa-chevron-right"></i></button>
       </div>
+    </div>
+  </div>
+
+  <div class="card-body"><canvas id="chartEsp"></canvas></div>
+</div>
+
+<!-- Top — Médicos (com toggle + paginação) -->
+<div class="card chart-card">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <h3 class="card-title mb-0">Top — Médicos (período)</h3>
+
+    <div class="d-flex align-items-center" style="gap:8px">
+      <div class="btn-group btn-group-sm" role="group" aria-label="Modo médicos">
+        <button id="btnMedTotal" class="btn btn-outline-secondary">Consultas</button>
+        <button id="btnMedFaltas" class="btn btn-outline-secondary">Faltas</button>
+      </div>
+
+      <div class="btn-group btn-group-sm" role="group" aria-label="Paginação médicos">
+        <button id="btnMedPrev" class="btn btn-outline-secondary" title="Anterior"><i class="fas fa-chevron-left"></i></button>
+        <button id="btnMedNext" class="btn btn-outline-secondary" title="Próximo"><i class="fas fa-chevron-right"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-body"><canvas id="chartMed"></canvas></div>
+</div>
 
     </section>
   </div>
@@ -641,6 +669,49 @@
   // =========================================================
   // Charts
   // =========================================================
+
+
+  const TOP_PAGE_SIZE = 10;
+
+let espMode = 'total'; // 'total' | 'faltas'
+let medMode = 'total'; // 'total' | 'faltas'
+let espPage = 0;
+let medPage = 0;
+
+function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+function groupSumFiltered(rows, keyFn, filterFn){
+  const m = new Map();
+  for(const r of rows){
+    if(filterFn && !filterFn(r)) continue;
+    const k = keyFn(r);
+    m.set(k, (m.get(k)||0) + (r.qtde||0));
+  }
+  return m;
+}
+
+function topPage(map, page, pageSize){
+  const all = [...map.entries()].sort((a,b)=>b[1]-a[1]);
+  const totalPages = Math.max(1, Math.ceil(all.length / pageSize));
+  const p = clamp(page, 0, totalPages - 1);
+  const slice = all.slice(p * pageSize, p * pageSize + pageSize);
+  return { slice, totalPages, page: p, totalItems: all.length };
+}
+
+function setBtnActive(aId, bId, modeIsA){
+  const a = el(aId), b = el(bId);
+  if(!a || !b) return;
+  a.classList.toggle('btn-secondary', modeIsA);
+  a.classList.toggle('btn-outline-secondary', !modeIsA);
+  b.classList.toggle('btn-secondary', !modeIsA);
+  b.classList.toggle('btn-outline-secondary', modeIsA);
+}
+
+function setDisabled(id, disabled){
+  const b = el(id);
+  if(b) b.disabled = !!disabled;
+}
+
   let chTotal, chStack, chEsp, chMed;
 
   function initCharts(){
@@ -694,18 +765,59 @@
     ];
     chStack.update();
 
-    const espMap = groupSum(rows, r => (r.especialidade || 'Sem especialidade'));
-    const topEsp = topN(espMap, 10).reverse();
-    chEsp.data.labels = topEsp.map(x=>x[0]);
-    chEsp.data.datasets = [{ label:'Consultas (qtde)', data: topEsp.map(x=>x[1]) }];
-    chEsp.update();
+      // --- TOP Especialidades: Consultas x Faltas + paginação ---
+  const espMapTotal = groupSum(rows, r => (r.especialidade || 'Sem especialidade'));
 
-    const medMap = groupSum(rows, r => (r.medico || 'Sem médico'));
-    const topMed = topN(medMap, 10).reverse();
-    chMed.data.labels = topMed.map(x=>x[0]);
-    chMed.data.datasets = [{ label:'Consultas (qtde)', data: topMed.map(x=>x[1]) }];
-    chMed.update();
-  }
+  // "faltas" aqui = group === 'faltas' (não inclui pend_recepcao)
+  // se quiser incluir pendência recepção como falta: troque o filtro abaixo
+  // para: r => (r.group === 'faltas' || r.group === 'pend_recepcao')
+  const espMapFaltas = groupSumFiltered(
+    rows,
+    r => (r.especialidade || 'Sem especialidade'),
+    r => (r.group === 'faltas' || r.group === 'pend_recepcao')
+  );
+
+  const espMapUse = (espMode === 'faltas') ? espMapFaltas : espMapTotal;
+  const espPg = topPage(espMapUse, espPage, TOP_PAGE_SIZE);
+  espPage = espPg.page;
+
+  setBtnActive('#btnEspTotal', '#btnEspFaltas', espMode === 'total');
+  setDisabled('#btnEspPrev', espPage <= 0);
+  setDisabled('#btnEspNext', espPage >= espPg.totalPages - 1);
+
+  const espSlice = espPg.slice.slice().reverse();
+  chEsp.data.labels = espSlice.map(x=>x[0]);
+  chEsp.data.datasets = [{
+    label: (espMode === 'faltas') ? 'Faltas (qtde pacientes)' : 'Consultas (qtde)',
+    data: espSlice.map(x=>x[1])
+  }];
+  chEsp.update();
+
+  // --- TOP Médicos: Consultas x Faltas + paginação ---
+  const medMapTotal = groupSum(rows, r => (r.medico || 'Sem médico'));
+
+  const medMapFaltas = groupSumFiltered(
+    rows,
+    r => (r.medico || 'Sem médico'),
+    r => r.group === 'faltas'
+  );
+
+  const medMapUse = (medMode === 'faltas') ? medMapFaltas : medMapTotal;
+  const medPg = topPage(medMapUse, medPage, TOP_PAGE_SIZE);
+  medPage = medPg.page;
+
+  setBtnActive('#btnMedTotal', '#btnMedFaltas', medMode === 'total');
+  setDisabled('#btnMedPrev', medPage <= 0);
+  setDisabled('#btnMedNext', medPage >= medPg.totalPages - 1);
+
+  const medSlice = medPg.slice.slice().reverse();
+  chMed.data.labels = medSlice.map(x=>x[0]);
+  chMed.data.datasets = [{
+    label: (medMode === 'faltas') ? 'Faltas (qtde pacientes)' : 'Consultas (qtde)',
+    data: medSlice.map(x=>x[1])
+  }];
+  chMed.update();
+   }
 
   // =========================================================
   // Tabela
@@ -853,6 +965,34 @@
       window.sel2 = sel2;
       markActiveMulti('#postoTabs2', sel2);
       renderSel2();
+    });
+
+      // Top Especialidades: modo + paginação
+    if(el('#btnEspTotal')) el('#btnEspTotal').addEventListener('click', ()=>{
+      espMode = 'total'; espPage = 0; renderSel2();
+    });
+    if(el('#btnEspFaltas')) el('#btnEspFaltas').addEventListener('click', ()=>{
+      espMode = 'faltas'; espPage = 0; renderSel2();
+    });
+    if(el('#btnEspPrev')) el('#btnEspPrev').addEventListener('click', ()=>{
+      espPage = Math.max(0, espPage - 1); renderSel2();
+    });
+    if(el('#btnEspNext')) el('#btnEspNext').addEventListener('click', ()=>{
+      espPage = espPage + 1; renderSel2();
+    });
+
+    // Top Médicos: modo + paginação
+    if(el('#btnMedTotal')) el('#btnMedTotal').addEventListener('click', ()=>{
+      medMode = 'total'; medPage = 0; renderSel2();
+    });
+    if(el('#btnMedFaltas')) el('#btnMedFaltas').addEventListener('click', ()=>{
+      medMode = 'faltas'; medPage = 0; renderSel2();
+    });
+    if(el('#btnMedPrev')) el('#btnMedPrev').addEventListener('click', ()=>{
+      medPage = Math.max(0, medPage - 1); renderSel2();
+    });
+    if(el('#btnMedNext')) el('#btnMedNext').addEventListener('click', ()=>{
+      medPage = medPage + 1; renderSel2();
     });
 
     const btnCmp = el('#btnComparar');
