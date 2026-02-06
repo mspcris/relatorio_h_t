@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Manual WhatsApp (API Meta) — Entendimento e Custos</title>
+  <style>
+    /* =========================================================
+       AdminLTE 3.0-inspired (self-contained)
+       - Clean, Bootstrap-like grid + AdminLTE-like cards/callouts
+       - No external assets
+       ========================================================= */
+    :root{
+      --primary:#007bff;
+      --secondary:#6c757d;
+      --success:#28a745;
+      --info:#17a2b8;
+      --warning:#ffc107;
+      --danger:#dc3545;
+      --light:#f8f9fa;
+      --dark:#343a40;
+
+      --bg:#f4f6f9;
+      --text:#1f2d3d;
+      --muted:#6c757d;
+      --border:#dee2e6;
+
+      --card:#ffffff;
+      --shadow:0 1px 2px rgba(0,0,0,.08),0 1px 1px rgba(0,0,0,.06);
+
+      --sidebar:#343a40;
+      --sidebarText:#c2c7d0;
+      --sidebarActive:#ffffff;
+
+      --radius: .35rem;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:var(--font);
+      background:var(--bg);
+      color:var(--text);
+    }
+    a{color:var(--primary); text-decoration:none}
+    a:hover{text-decoration:underline}
+
+    /* Layout */
+    .wrapper{display:flex; min-height:100vh;}
+    .sidebar{
+      width:260px;
+      background:var(--sidebar);
+      color:var(--sidebarText);
+      display:flex;
+      flex-direction:column;
+      position:sticky;
+      top:0;
+      height:100vh;
+    }
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:.6rem;
+      padding:1rem 1rem;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      color:#fff;
+      font-weight:700;
+      letter-spacing:.2px;
+    }
+    .brand-badge{
+      width:34px;height:34px;border-radius:8px;
+      background:rgba(255,255,255,.12);
+      display:flex;align-items:center;justify-content:center;
+      font-weight:800;
+    }
+    .nav{
+      padding:.75rem .5rem;
+      overflow:auto;
+      flex:1;
+    }
+    .nav h6{
+      margin:1rem .75rem .35rem;
+      color:rgba(255,255,255,.55);
+      font-size:.78rem;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+    }
+    .nav a{
+      display:flex; align-items:center; gap:.6rem;
+      padding:.65rem .75rem;
+      border-radius:.35rem;
+      color:var(--sidebarText);
+      font-size:.95rem;
+    }
+    .nav a.active, .nav a:hover{background:rgba(255,255,255,.08); color:var(--sidebarActive)}
+    .nav .dot{
+      width:10px;height:10px;border-radius:50%;
+      background:rgba(255,255,255,.25);
+      flex:0 0 auto;
+    }
+    .nav a.active .dot{background:var(--primary)}
+    .sidebar-footer{
+      padding:.75rem 1rem;
+      border-top:1px solid rgba(255,255,255,.08);
+      font-size:.85rem;
+      color:rgba(255,255,255,.6);
+    }
+
+    .content{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      min-width:0;
+    }
+
+    .topbar{
+      background:#fff;
+      box-shadow:var(--shadow);
+      padding:.85rem 1.25rem;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:1rem;
+    }
+    .topbar .title{
+      display:flex; flex-direction:column;
+      line-height:1.1;
+    }
+    .topbar .title b{font-size:1.05rem}
+    .topbar .title span{color:var(--muted); font-size:.88rem}
+    .topbar .tools{
+      display:flex; gap:.5rem; flex-wrap:wrap; justify-content:flex-end;
+    }
+    .btn{
+      border:1px solid transparent;
+      background:var(--primary);
+      color:#fff;
+      padding:.45rem .7rem;
+      border-radius:.35rem;
+      font-weight:600;
+      font-size:.9rem;
+      cursor:pointer;
+      display:inline-flex; align-items:center; gap:.45rem;
+    }
+    .btn:disabled{opacity:.6; cursor:not-allowed}
+    .btn-secondary{background:var(--secondary)}
+    .btn-light{background:#fff; color:var(--text); border-color:var(--border)}
+    .btn-success{background:var(--success)}
+    .btn-warning{background:var(--warning); color:#1f2d3d}
+    .btn-danger{background:var(--danger)}
+    .container{
+      padding:1.25rem;
+      max-width:1200px;
+      width:100%;
+      margin:0 auto;
+    }
+
+    /* Grid */
+    .row{display:flex; flex-wrap:wrap; margin:-.75rem;}
+    .col{padding:.75rem;}
+    .col-12{flex:0 0 100%}
+    .col-8{flex:0 0 66.666%}
+    .col-6{flex:0 0 50%}
+    .col-4{flex:0 0 33.333%}
+    .col-3{flex:0 0 25%}
+    @media (max-width: 980px){
+      .sidebar{display:none}
+      .col-8,.col-6,.col-4,.col-3{flex:0 0 100%}
+      .topbar{position:sticky; top:0; z-index:10}
+    }
+
+    /* Components */
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .card-header{
+      padding:.9rem 1rem;
+      border-bottom:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between;
+      gap:.75rem;
+    }
+    .card-title{
+      font-weight:800;
+      margin:0;
+      font-size:1rem;
+    }
+    .card-body{padding:1rem;}
+    .card-footer{
+      padding:.85rem 1rem;
+      border-top:1px solid var(--border);
+      background:var(--light);
+      display:flex; justify-content:space-between; gap:.75rem; flex-wrap:wrap;
+    }
+
+    .badge{
+      display:inline-flex; align-items:center;
+      padding:.15rem .5rem;
+      border-radius:999px;
+      font-size:.78rem;
+      font-weight:700;
+      border:1px solid transparent;
+      white-space:nowrap;
+    }
+    .badge-primary{background:rgba(0,123,255,.12); border-color:rgba(0,123,255,.25); color:var(--primary)}
+    .badge-success{background:rgba(40,167,69,.12); border-color:rgba(40,167,69,.25); color:var(--success)}
+    .badge-info{background:rgba(23,162,184,.12); border-color:rgba(23,162,184,.25); color:var(--info)}
+    .badge-warning{background:rgba(255,193,7,.18); border-color:rgba(255,193,7,.35); color:#7a5a00}
+    .badge-danger{background:rgba(220,53,69,.12); border-color:rgba(220,53,69,.25); color:var(--danger)}
+    .muted{color:var(--muted)}
+    .kpi{
+      display:flex; flex-direction:column; gap:.35rem;
+      padding:.85rem 1rem;
+      border-radius:var(--radius);
+      border:1px solid var(--border);
+      background:#fff;
+    }
+    .kpi b{font-size:1.05rem}
+    .kpi .value{font-size:1.25rem; font-weight:900}
+    .kpi .hint{color:var(--muted); font-size:.85rem}
+
+    .callout{
+      border-left:5px solid var(--info);
+      background:#fff;
+      border-radius:var(--radius);
+      border:1px solid var(--border);
+      box-shadow:var(--shadow);
+      padding:1rem 1rem;
+    }
+    .callout h4{margin:.1rem 0 .25rem; font-size:1.05rem}
+    .callout p{margin:.35rem 0; color:var(--text)}
+    .callout-info{border-left-color:var(--info)}
+    .callout-warning{border-left-color:var(--warning)}
+    .callout-success{border-left-color:var(--success)}
+    .callout-danger{border-left-color:var(--danger)}
+
+    .list{
+      margin:.25rem 0 0;
+      padding-left:1.1rem;
+    }
+    .list li{margin:.35rem 0}
+
+    .table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:.92rem;
+    }
+    .table th,.table td{
+      padding:.65rem .6rem;
+      border-top:1px solid var(--border);
+      vertical-align:top;
+    }
+    .table thead th{
+      border-top:none;
+      color:var(--muted);
+      font-weight:800;
+      font-size:.8rem;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      background:var(--light);
+    }
+    .table .mono{font-family:var(--mono)}
+    .hr{height:1px; background:var(--border); margin:.9rem 0}
+
+    /* Timeline */
+    .timeline{position:relative; margin:0; padding:0; list-style:none;}
+    .timeline:before{
+      content:"";
+      position:absolute; left:14px; top:0; bottom:0;
+      width:2px; background:var(--border);
+    }
+    .timeline li{
+      position:relative;
+      padding-left:3.1rem;
+      margin:0 0 1rem 0;
+    }
+    .timeline .time-dot{
+      position:absolute; left:6px; top:.2rem;
+      width:18px; height:18px; border-radius:50%;
+      background:var(--primary);
+      box-shadow:0 0 0 4px rgba(0,123,255,.15);
+    }
+    .timeline .time-dot.success{background:var(--success); box-shadow:0 0 0 4px rgba(40,167,69,.15)}
+    .timeline .time-dot.warning{background:var(--warning); box-shadow:0 0 0 4px rgba(255,193,7,.18)}
+    .timeline .time-dot.danger{background:var(--danger); box-shadow:0 0 0 4px rgba(220,53,69,.12)}
+    .timeline .item{
+      background:#fff;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:.85rem 1rem;
+    }
+    .timeline .item h5{margin:.1rem 0 .35rem; font-size:1rem}
+    .timeline .item p{margin:.35rem 0; color:var(--text)}
+    .timeline .item small{color:var(--muted)}
+
+    /* Form */
+    .form-row{display:flex; flex-wrap:wrap; gap:.75rem; align-items:flex-end}
+    .form-group{flex:1; min-width:180px}
+    label{display:block; font-size:.85rem; color:var(--muted); margin:0 0 .35rem; font-weight:700}
+    input[type="number"], input[type="text"]{
+      width:100%;
+      padding:.55rem .65rem;
+      border:1px solid var(--border);
+      border-radius:.35rem;
+      font-size:1rem;
+      outline:none;
+      background:#fff;
+    }
+    input:focus{border-color:rgba(0,123,255,.5); box-shadow:0 0 0 3px rgba(0,123,255,.12)}
+    .note{
+      font-size:.85rem;
+      color:var(--muted);
+      margin-top:.5rem;
+    }
+
+    /* Print */
+    @media print{
+      .sidebar, .topbar .tools{display:none !important}
+      .container{max-width:none}
+      .card{box-shadow:none}
+      body{background:#fff}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-badge">WA</div>
+        <div>
+          Manual WhatsApp<br/>
+          <span class="muted" style="color:rgba(255,255,255,.6)">API Meta — Custos & Regras</span>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Navegação">
+        <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i class="nav-icon fas fa-book-open"></i><p>← Voltar</p></a></li>
+        <h6>Sumário</h6>
+        <a class="active" href="#visao-geral"><span class="dot"></span>Visão geral</a>
+        <a href="#regras"><span class="dot"></span>Regras que geram confusão</a>
+        <a href="#fluxo"><span class="dot"></span>Fluxo real (24h / template)</a>
+        <a href="#custos"><span class="dot"></span>Custos e impacto</a>
+        <a href="#exemplos"><span class="dot"></span>Exemplos práticos</a>
+        <a href="#calculadora"><span class="dot"></span>Calculadora rápida</a>
+        <a href="#boas-praticas"><span class="dot"></span>Boas práticas (governança)</a>
+      </nav>
+
+      <div class="sidebar-footer">
+        Documento auto contido (AdminLTE 3.0-inspired).
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div class="title">
+          <b>WhatsApp Business Platform (Meta): como funciona de verdade</b>
+          <span>Objetivo: reduzir ambiguidade, alinhar custo x benefício e apoiar decisão executiva.</span>
+        </div>
+        <div class="tools">
+          <button class="btn btn-light" onclick="window.print()">Imprimir / PDF</button>
+          <button class="btn btn-secondary" id="btnScrollTop" title="Topo">Topo</button>
+        </div>
+      </header>
+
+      <div class="container">
+
+        <!-- Visão geral -->
+        <section id="visao-geral" class="row">
+          <div class="col col-12">
+            <div class="callout callout-info">
+              <h4>Resumo executivo</h4>
+              <p class="muted" style="margin:.25rem 0 0;">
+                A confusão normalmente vem do termo “Serviço”. No site, “Serviço” existe como tipo de mensagem, mas <b>não</b> como <b>categoria de template</b>.
+                Na operação, o que importa é: <b>janela de 24h</b> e <b>se a empresa está iniciando o contato</b>.
+              </p>
+            </div>
+          </div>
+
+          <div class="col col-3">
+            <div class="kpi">
+              <b>Regra 1</b>
+              <div class="value">Sem “grátis” para iniciar</div>
+              <div class="hint">Iniciar conversa, em geral, tem custo (via template).</div>
+            </div>
+          </div>
+          <div class="col col-3">
+            <div class="kpi">
+              <b>Regra 2</b>
+              <div class="value">“Serviço” ≠ Template</div>
+              <div class="hint">Serviço é a conversa dentro da janela de 24h após resposta do cliente.</div>
+            </div>
+          </div>
+          <div class="col col-3">
+            <div class="kpi">
+              <b>Regra 3</b>
+              <div class="value">Template = gatilho de custo</div>
+              <div class="hint">Utility/Marketing/Auth são templates. “Service” é livre (dentro da janela).</div>
+            </div>
+          </div>
+          <div class="col col-3">
+            <div class="kpi">
+              <b>Regra 4</b>
+              <div class="value">Câmbio impacta</div>
+              <div class="hint">Custos em USD: dólar sobe, custo operacional sobe.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Regras -->
+        <section id="regras" class="row">
+          <div class="col col-12">
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Regras que geram confusão (explicadas sem ambiguidade)</div>
+                  <div class="muted" style="font-size:.9rem;margin-top:.25rem;">
+                    Baseado no entendimento operacional descrito no texto e no comportamento do produto.
+                  </div>
+                </div>
+                <span class="badge badge-info">Versão para diretoria</span>
+              </div>
+              <div class="card-body">
+                <div class="row">
+                  <div class="col col-6">
+                    <div class="callout callout-warning">
+                      <h4>1) “Mensagem grátis para começar conversa”</h4>
+                      <p><b>Não conte com isso.</b> Na prática, iniciar contato com o cliente exige <b>template</b>, o que dispara cobrança conforme categoria.</p>
+                      <ul class="list">
+                        <li>“Iniciar conversa” = empresa falando primeiro (fora da janela de 24h).</li>
+                        <li>Se o cliente já falou recentemente, você está em “atendimento” (Service).</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="col col-6">
+                    <div class="callout callout-info">
+                      <h4>2) O que é “Serviço” no site</h4>
+                      <p><b>Serviço</b> é o conjunto de mensagens dentro de uma <b>janela de 24 horas</b> depois que o cliente responde. Isso <b>não é template</b>.</p>
+                      <ul class="list">
+                        <li>Cliente respondeu → janela de 24h aberta.</li>
+                        <li>Dentro da janela → você envia mensagem livre (sem template).</li>
+                        <li>Expirou a janela → para falar de novo, precisa template.</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div class="col col-12">
+                    <div class="hr"></div>
+                  </div>
+
+                  <div class="col col-6">
+                    <div class="callout callout-success">
+                      <h4>3) “Consulta marcada com médico” = Utility (Utilidade)</h4>
+                      <p>Isso é <b>mensagem operacional</b> (agenda/atendimento). No WhatsApp Manager, ela aparece como <b>Utility</b>. O termo “serviço” é informal aqui.</p>
+                      <ul class="list">
+                        <li>Template para avisar/confirmar consulta (empresa inicia) → Utility template.</li>
+                        <li>Após resposta do cliente → atendimento livre (Service) por 24h.</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="col col-6">
+                    <div class="callout callout-danger">
+                      <h4>4) Marketing é outro patamar de custo</h4>
+                      <p>Mensagens de <b>Marketing</b> têm precificação distinta e podem elevar significativamente o custo total em escala.</p>
+                      <ul class="list">
+                        <li>Use Marketing quando for claramente promoção/campanha.</li>
+                        <li>Evite “disfarçar” marketing como utilidade (risco de bloqueio/qualidade).</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+              <div class="card-footer">
+                <span class="muted">Ponto de controle: sempre classificar a intenção da mensagem antes de enviar.</span>
+                <span class="badge badge-primary">Janela 24h = atendimento (Service)</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Fluxo -->
+        <section id="fluxo" class="row">
+          <div class="col col-12">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Fluxo real (o que acontece na operação)</div>
+                <span class="badge badge-primary">Decisão simples</span>
+              </div>
+              <div class="card-body">
+                <ol class="timeline">
+                  <li>
+                    <span class="time-dot warning" aria-hidden="true"></span>
+                    <div class="item">
+                      <h5>Empresa quer falar com o cliente “do nada” (fora da janela)</h5>
+                      <p><b>Precisa template</b> (ex.: Utility para lembrete/confirmar presença).</p>
+                      <small>Impacto: dispara cobrança conforme categoria e país (USD).</small>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="time-dot success" aria-hidden="true"></span>
+                    <div class="item">
+                      <h5>Cliente responde</h5>
+                      <p>Abre uma <b>janela de 24 horas</b> para atendimento.</p>
+                      <small>Objetivo: resolver pendências com agilidade, reduzindo churn e retrabalho.</small>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="time-dot" aria-hidden="true"></span>
+                    <div class="item">
+                      <h5>Durante a janela (24h)</h5>
+                      <p>Você envia mensagens <b>livres</b> (isso é o “Serviço” do site: atendimento).</p>
+                      <small>Prática: coletar confirmação, ajustar detalhes, orientar chegada, etc.</small>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="time-dot danger" aria-hidden="true"></span>
+                    <div class="item">
+                      <h5>Janela expira</h5>
+                      <p>Para retomar contato, volta a precisar de <b>template</b>.</p>
+                      <small>Governança: evitar reabertura desnecessária, padronizar lembretes e follow-ups.</small>
+                    </div>
+                  </li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Custos -->
+        <section id="custos" class="row">
+          <div class="col col-12">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Custos e impacto (com os valores do exemplo)</div>
+                <span class="badge badge-warning">Atenção: valores variam por país e tabela</span>
+              </div>
+              <div class="card-body">
+                <div class="callout callout-warning">
+                  <h4>Premissas usadas no texto (exemplo interno)</h4>
+                  <ul class="list">
+                    <li><b>Iniciar conversa (Utility)</b>: US$ <span class="mono" id="usdUtilityLabel">0.0068</span> (≈ R$ <span class="mono" id="brlUtilityLabel">0.036</span>)</li>
+                    <li><b>Marketing</b>: US$ <span class="mono" id="usdMktLabel">0.0625</span> (≈ R$ <span class="mono" id="brlMktLabel">0.33</span> a <span class="mono" id="brlMktLabel2">0.34</span>)</li>
+                    <li><b>Câmbio</b>: referência ~ R$ <span class="mono" id="fxLabel">5.35</span> / US$</li>
+                  </ul>
+                  <p class="note">
+                    Observação: “Serviço” (atendimento dentro da janela) não é template. O custo principal costuma ocorrer quando a empresa precisa <b>iniciar</b> (template) ou enviar <b>marketing</b>.
+                  </p>
+                </div>
+
+                <div class="row">
+                  <div class="col col-12">
+                    <table class="table" aria-label="Tabela de custos">
+                      <thead>
+                        <tr>
+                          <th>Cenário</th>
+                          <th>O que envia</th>
+                          <th>Template?</th>
+                          <th>Categoria</th>
+                          <th>Quando cobra (na prática)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td><b>Lembrete de consulta (cliente “frio”)</b></td>
+                          <td>Mensagem proativa</td>
+                          <td><span class="badge badge-danger">Sim</span></td>
+                          <td><span class="badge badge-success">Utility</span></td>
+                          <td>Cobra o template (ex.: ~US$ 0.0068 no exemplo)</td>
+                        </tr>
+                        <tr>
+                          <td><b>Cliente responde</b></td>
+                          <td>Abre janela</td>
+                          <td><span class="badge badge-info">Não</span></td>
+                          <td><span class="badge badge-info">Service</span></td>
+                          <td>Atendimento dentro de 24h (mensagem livre)</td>
+                        </tr>
+                        <tr>
+                          <td><b>Continuação do atendimento</b></td>
+                          <td>Troca de mensagens</td>
+                          <td><span class="badge badge-info">Não</span></td>
+                          <td><span class="badge badge-info">Service</span></td>
+                          <td>Sem template durante a janela de 24h</td>
+                        </tr>
+                        <tr>
+                          <td><b>Campanha / promoção</b></td>
+                          <td>Mensagem comercial</td>
+                          <td><span class="badge badge-danger">Sim</span></td>
+                          <td><span class="badge badge-warning">Marketing</span></td>
+                          <td>Cobra por mensagem de Marketing (ex.: ~US$ 0.0625 no exemplo)</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+              <div class="card-footer">
+                <span class="muted">
+                  Direcionamento: avaliar custo x benefício considerando redução de faltas, liberação de vagas e eficiência operacional.
+                </span>
+                <span class="badge badge-primary">Modelo mental: “Iniciar custa” • “Atender é janela 24h”</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Exemplos -->
+        <section id="exemplos" class="row">
+          <div class="col col-6">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Exemplo: Utility (lembrete de consulta)</div>
+                <span class="badge badge-success">Template</span>
+              </div>
+              <div class="card-body">
+                <p class="muted" style="margin-top:0">
+                  Use quando a empresa precisa iniciar contato (cliente não falou recentemente).
+                </p>
+                <div class="callout callout-success">
+                  <h4>Texto recomendado (mais “aprovação-friendly”)</h4>
+                  <p style="margin:.35rem 0 0">
+                    “Olá {{1}}. Você tem um <b>agendamento</b> para {{2}} às {{3}} no local {{4}}. Confirma presença?”
+                  </p>
+                  <p class="note">Evita detalhes sensíveis no template; detalhe fino pode ficar para o atendimento após resposta.</p>
+                </div>
+              </div>
+              <div class="card-footer">
+                <span class="muted">KPI esperado: redução de faltas e melhoria no aproveitamento de agenda.</span>
+                <span class="badge badge-success">Custo baixo por envio (exemplo)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="col col-6">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Exemplo: Service (atendimento dentro da janela)</div>
+                <span class="badge badge-info">Sem template</span>
+              </div>
+              <div class="card-body">
+                <p class="muted" style="margin-top:0">
+                  Use após o cliente responder. Você tem 24h para concluir o atendimento.
+                </p>
+                <div class="callout callout-info">
+                  <h4>Exemplos de mensagens livres</h4>
+                  <ul class="list">
+                    <li>“Perfeito. Você confirma presença amanhã às 14:30?”</li>
+                    <li>“Ok. Para cancelar, posso liberar a vaga para outro paciente. Confirma o cancelamento?”</li>
+                    <li>“Preciso apenas confirmar o endereço/unidade: é a Unidade Centro, correto?”</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="card-footer">
+                <span class="muted">Objetivo: concluir ação (confirmar/cancelar) com baixo atrito.</span>
+                <span class="badge badge-info">Janela 24h</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Calculadora -->
+        <section id="calculadora" class="row">
+          <div class="col col-12">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Calculadora rápida (impacto financeiro em escala)</div>
+                <span class="badge badge-primary">Simulação</span>
+              </div>
+              <div class="card-body">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="fx">Câmbio (R$/US$)</label>
+                    <input id="fx" type="number" step="0.01" min="0" value="5.35" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="qtdUtility">Qtd. envios Utility (iniciar conversa)</label>
+                    <input id="qtdUtility" type="number" step="1" min="0" value="1000" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="usdUtility">Custo Utility (US$)</label>
+                    <input id="usdUtility" type="number" step="0.0001" min="0" value="0.0068" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="qtdMkt">Qtd. envios Marketing</label>
+                    <input id="qtdMkt" type="number" step="1" min="0" value="0" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="usdMkt">Custo Marketing (US$)</label>
+                    <input id="usdMkt" type="number" step="0.0001" min="0" value="0.0625" />
+                  </div>
+
+                  <div class="form-group">
+                    <button class="btn btn-success" id="btnCalc">Calcular</button>
+                  </div>
+                </div>
+
+                <div class="hr"></div>
+
+                <div class="row">
+                  <div class="col col-4">
+                    <div class="kpi">
+                      <b>Utility (R$)</b>
+                      <div class="value" id="outUtility">—</div>
+                      <div class="hint">Total estimado para lembretes/operacional.</div>
+                    </div>
+                  </div>
+                  <div class="col col-4">
+                    <div class="kpi">
+                      <b>Marketing (R$)</b>
+                      <div class="value" id="outMkt">—</div>
+                      <div class="hint">Total estimado para campanha/promoção.</div>
+                    </div>
+                  </div>
+                  <div class="col col-4">
+                    <div class="kpi">
+                      <b>Total (R$)</b>
+                      <div class="value" id="outTotal">—</div>
+                      <div class="hint">Visão consolidada (sensível ao câmbio).</div>
+                    </div>
+                  </div>
+                </div>
+
+                <p class="note">
+                  Nota: esta simulação considera apenas o custo “Meta” do exemplo. Se houver BSP/fornecedor, pode existir fee adicional (infra/assinatura).
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Boas práticas -->
+        <section id="boas-praticas" class="row">
+          <div class="col col-12">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Boas práticas (governança e redução de custo)</div>
+                <span class="badge badge-secondary">Recomendação</span>
+              </div>
+              <div class="card-body">
+                <div class="row">
+                  <div class="col col-6">
+                    <div class="callout callout-success">
+                      <h4>Checklist de decisão (antes de enviar)</h4>
+                      <ul class="list">
+                        <li>O cliente falou conosco nas últimas 24h? Se sim: atender como <b>Service</b> (mensagem livre).</li>
+                        <li>Se não: precisamos iniciar. Usar <b>Utility template</b> (operacional) ou <b>Marketing</b> (campanha).</li>
+                        <li>Mensagem tem cara de promoção? Evitar colocar como Utility (risco de qualidade/bloqueio).</li>
+                        <li>Evitar dados sensíveis no template; guardar detalhe fino para o atendimento pós-resposta.</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="col col-6">
+                    <div class="callout callout-warning">
+                      <h4>Direcionadores de custo (para diretoria)</h4>
+                      <ul class="list">
+                        <li>Em escala, <b>pequenas taxas viram orçamento</b>.</li>
+                        <li>O “benefício” deve ser medido: redução de faltas, liberação de vagas, reocupação e eficiência.</li>
+                        <li>Monitorar câmbio: USD sobe → custo unitário sobe.</li>
+                        <li>Definir política: quais eventos disparam lembretes e com qual timing.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="hr"></div>
+
+                <div class="callout callout-info">
+                  <h4>Mensagem final (alinhamento)</h4>
+                  <p style="margin:.35rem 0 0">
+                    O WhatsApp, na prática, tem dois modos de operação:
+                    <b>(1) Iniciar contato = template (custo)</b> e <b>(2) Atender dentro de 24h = “Serviço” (mensagem livre)</b>.
+                    O investimento tende a valer quando reduz faltas e melhora a gestão de agenda.
+                  </p>
+                </div>
+
+              </div>
+              <div class="card-footer">
+                <span class="muted">Versão 1.0</span>
+                <span class="badge badge-info">service_whatsapp_como_funcioa.html</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+ <script>
+(function(){
+  const $ = (id) => document.getElementById(id);
+
+  function fmtBRL(v){
+    if (!isFinite(v)) return "—";
+    return v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
+  }
+
+  function calc(){
+    const fx = parseFloat($("fx").value || "0");
+    const qtdUtility = parseInt($("qtdUtility").value || "0", 10);
+    const usdUtility = parseFloat($("usdUtility").value || "0");
+    const qtdMkt = parseInt($("qtdMkt").value || "0", 10);
+    const usdMkt = parseFloat($("usdMkt").value || "0");
+
+    const totalUtilityBRL = qtdUtility * usdUtility * fx;
+    const totalMktBRL = qtdMkt * usdMkt * fx;
+    const totalBRL = totalUtilityBRL + totalMktBRL;
+
+    $("outUtility").textContent = fmtBRL(totalUtilityBRL);
+    $("outMkt").textContent = fmtBRL(totalMktBRL);
+    $("outTotal").textContent = fmtBRL(totalBRL);
+
+    $("fxLabel").textContent = fx.toFixed(2);
+    $("usdUtilityLabel").textContent = usdUtility.toFixed(4);
+    $("usdMktLabel").textContent = usdMkt.toFixed(4);
+
+    $("brlUtilityLabel").textContent = (usdUtility * fx).toFixed(3);
+    const mktBRL = (usdMkt * fx);
+    $("brlMktLabel").textContent = (mktBRL * 0.98).toFixed(2);
+    $("brlMktLabel2").textContent = (mktBRL * 1.02).toFixed(2);
+  }
+
+  // ===== Active menu by click + scroll (ScrollSpy-like) =====
+  function setupNavActive(){
+    const navLinks = Array.from(document.querySelectorAll(".sidebar .nav a[href^='#']"));
+    const sections = navLinks
+      .map(a => document.querySelector(a.getAttribute("href")))
+      .filter(Boolean);
+
+    function setActiveById(id){
+      navLinks.forEach(a => a.classList.toggle("active", a.getAttribute("href") === "#" + id));
+    }
+
+    // Click: highlight immediately
+    navLinks.forEach(a => {
+      a.addEventListener("click", () => {
+        const target = a.getAttribute("href").slice(1);
+        setActiveById(target);
+      });
+    });
+
+    // Scroll: highlight the section closest to top
+    const observer = new IntersectionObserver((entries) => {
+      // pick the most visible entry
+      const visible = entries
+        .filter(e => e.isIntersecting)
+        .sort((a,b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+      if (visible && visible.target && visible.target.id) {
+        setActiveById(visible.target.id);
+      }
+    }, {
+      root: null,
+      // top/bottom margins tune when it switches
+      rootMargin: "-20% 0px -70% 0px",
+      threshold: [0.05, 0.1, 0.2, 0.4, 0.6]
+    });
+
+    sections.forEach(s => observer.observe(s));
+
+    // Default: first section
+    if (sections[0]?.id) setActiveById(sections[0].id);
+  }
+
+  $("btnCalc").addEventListener("click", function(ev){
+    ev.preventDefault();
+    calc();
+  });
+
+  $("btnScrollTop").addEventListener("click", function(){
+    window.scrollTo({ top:0, behavior:"smooth" });
+  });
+
+  // Initial
+  calc();
+  ["fx","qtdUtility","usdUtility","qtdMkt","usdMkt"].forEach(id=>{
+    $(id).addEventListener("input", ()=>calc());
+  });
+
+  setupNavActive();
+})();
+</script>
+
+</body>
+</html>
