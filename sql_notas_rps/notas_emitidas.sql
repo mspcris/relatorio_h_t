@@ -1,5 +1,6 @@
 SELECT
     e.codigo,
+    nf.origem,
     nf.Empresa,
     COUNT(*) AS qtd_notas,
     CAST(SUM(nf.valor_servicos) AS DECIMAL(18,2)) AS valor_notas_emitidas,
@@ -18,4 +19,5 @@ WHERE nf.Desativado = 0
   AND nf.DataEmissao <  :fim
 GROUP BY
     e.codigo,
+    nf.origem,
     nf.Empresa;
