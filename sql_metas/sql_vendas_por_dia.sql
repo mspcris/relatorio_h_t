@@ -8,7 +8,12 @@ SELECT
     DATENAME(MONTH, r.DataPagamentoAuto) AS mes_nome,
     DAY(r.DataPagamentoAuto) AS dia,
     DATENAME(WEEKDAY, r.DataPagamentoAuto) AS dia_sem,
-    COUNT(*) AS mens_dia
+    COUNT(DISTINCT CASE
+        WHEN r.idContaTipo = 5
+         AND MONTH(r.DataMensalidade) = MONTH(cl.DataAdmissao)
+         AND YEAR(r.DataMensalidade)  = YEAR(cl.DataAdmissao)
+        THEN r.idCliente
+    END) AS vendas_dia
 FROM Fin_Receita r
 JOIN Cad_Cliente cl ON cl.idCliente = r.idCliente
 WHERE

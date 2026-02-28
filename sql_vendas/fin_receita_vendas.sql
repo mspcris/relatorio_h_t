@@ -13,8 +13,8 @@ SELECT
 FROM vw_Fin_Receita2 r2
 LEFT JOIN cad_cliente c ON c.idcliente = r2.idcliente
 WHERE (0=0)
-  AND (r2.[Data Referencia] >= :ini)
-  AND (r2.[Data Referencia] <  :fim)
+  AND (r2.[Data prestaçao] >= :ini)
+  AND (r2.[Data prestaçao] <  :fim)
   AND (r2.[DataAdmissao]   >= :ini)
   AND (r2.[DataAdmissao]   <  :fim)
   AND (r2.[Situação] = 'pago')
