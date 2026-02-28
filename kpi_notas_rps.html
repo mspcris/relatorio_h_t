@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — Painel Notas x RPS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+  <style>
+    .filter-bar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;padding:10px;}
+    .scroll-tabs{display:flex;gap:6px;overflow:auto;white-space:nowrap;padding:6px 0;}
+    .scroll-tabs .nav-link{display:inline-block;min-width:52px;text-align:center;cursor:pointer;}
+    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;}
+    .muted{color:#6b7280;}
+    .mini{font-size:.85rem;}
+    .small-td{white-space:nowrap;}
+  </style>
+
+  <script>
+    // =========================
+    // Session (opcional)
+    // =========================
+    async function carregarPostosDoUsuario(){
+      try{
+        const r = await fetch("/session/me",{credentials:"same-origin"});
+        if(!r.ok) return [];
+        const d = await r.json();
+        return Array.isArray(d.postos) ? d.postos : [];
+      }catch{ return []; }
+    }
+
+    // =========================
+    // Helpers
+    // =========================
+    const el = s => document.querySelector(s);
+    const fmtInt = new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0});
+    const fmt2 = new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    const sum = arr => arr.reduce((a,b)=>a+(b||0),0);
+    const num = v => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    function ymNow(){
+      const d=new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    }
+
+    // =========================
+    // Estado
+    // =========================
+    let POSTOS = [];
+    let selPostos = 'ALL';        // 'ALL' ou Set
+    let selGrupo  = 'ALL';        // ALL | Clinica | OperadoraCamim | OperadoraSDM | Laboratorio
+    let ymSel = ymNow();
+
+    // switches de Operadora (mutuamente exclusivos)
+    let operadoraMode = null;     // null | 'CAMIM' | 'SDM'
+
+    // cache mensal: { ym: { posto: payload } }
+    const CACHE = {};
+
+    // =========================
+    // Paths JSON
+    // =========================
+    function jsonUrl(posto, ym){
+      return `/json_notas_rps/${posto}_notas_rps_${ym}.json`;
+    }
+
+    async function fetchJsonSafe(url){
+      const r = await fetch(url,{cache:'no-store'});
+      if(!r.ok) throw new Error(`HTTP ${r.status} em ${url}`);
+      return { data: await r.json(), lastModified: r.headers.get('Last-Modified') };
+    }
+
+    async function loadMonth(ym){
+      CACHE[ym] ||= {};
+      const promises = POSTOS.map(async p=>{
+        if(CACHE[ym][p]) return;
+        const url = jsonUrl(p, ym);
+        try{
+          const {data,lastModified} = await fetchJsonSafe(url);
+          CACHE[ym][p] = data;
+          if(lastModified) setJsonInfo(lastModified, ym);
+        }catch{
+          CACHE[ym][p] = null; // pode não existir em alguns postos/meses
+        }
+      });
+      await Promise.allSettled(promises);
+    }
+
+    function setJsonInfo(lastModified, ym){
+      const info = el('#jsonInfo');
+      if(!info) return;
+      const d = new Date(lastModified);
+      info.textContent = `• ${ym} atualizado em ${d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}`;
+      info.title = lastModified;
+    }
+
+    // =========================
+    // Detecção de postos (fallback local)
+    // =========================
+    const POSTOS_CANDIDATOS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+    async function detectPostosDisponiveis(ym){
+      const found = [];
+      await Promise.allSettled(POSTOS_CANDIDATOS.map(async (p)=>{
+        const url = jsonUrl(p, ym);
+        try{
+          const r = await fetch(url, { method:'HEAD', cache:'no-store' });
+          if (r.ok) found.push(p);
+        }catch{}
+      }));
+      return found.sort();
+    }
+
+    // =========================
+    // Tabs de posto (multi-select)
+    // =========================
+    function markActiveMulti(scopeSel, selection){
+      const isAll = selection === 'ALL';
+      document.querySelectorAll(`${scopeSel} .nav-link`).forEach(a=>{
+        const p = a.dataset.posto;
+        if(p==='ALL') a.classList.toggle('active', isAll);
+        else a.classList.toggle('active', !isAll && selection.has(p));
+      });
+    }
+
+        
+    function buildPostoTabs(ulSel){
+    const ul = el(ulSel);
+    if(!ul) return;
+
+    // monta HTML
+    ul.innerHTML = '';
+    ul.insertAdjacentHTML('beforeend',
+        `<li class="nav-item"><a data-posto="ALL" class="nav-link" href="#">Todos</a></li>`
+    );
+    POSTOS.forEach(p=>{
+        ul.insertAdjacentHTML('beforeend',
+        `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`
+        );
+    });
+
+    // pinta estado atual
+    markActiveMulti(ulSel, selPostos);
+
+    // IMPORTANTE: garante 1 handler só (não acumula ao trocar mês)
+    ul.onclick = (e)=>{
+        const a = e.target.closest('.nav-link');
+        if(!a) return;
+
+        e.preventDefault();
+        const p = a.dataset.posto;
+
+        let sel = selPostos;
+        if(p === 'ALL'){
+        sel = 'ALL';
+        } else {
+        if(sel === 'ALL') sel = new Set();
+        if(sel.has(p)) sel.delete(p); else sel.add(p);
+        if(sel.size === 0 || sel.size === POSTOS.length) sel = 'ALL';
+        }
+
+        selPostos = sel;
+        markActiveMulti(ulSel, selPostos);
+        render();
+    };
+    }
+
+
+    function selectedPostosList(){
+      return selPostos==='ALL' ? POSTOS : [...selPostos];
+    }
+
+    function showByPosto(){
+    return selPostos === 'ALL' || (selPostos instanceof Set && selPostos.size > 1);
+    }
+
+    // =========================
+    // Regras Operadora (não confundir SDM clínica)
+    // =========================
+    function isOperadoraEmpresa(nome, op){
+      const s = String(nome || '').toUpperCase().trim();
+      if(op === 'CAMIM') return s.startsWith('CAMIM OPERADORA');
+      if(op === 'SDM')   return s.startsWith('SD-M OPERADORA');
+      return false;
+    }
+
+    // =========================
+    // Filtros
+    // =========================
+    function rpsFilter(row){
+      // RPS tem origem
+      if (operadoraMode === 'CAMIM') return String(row.origem||'') === 'OperadoraCamim';
+      if (operadoraMode === 'SDM')   return String(row.origem||'') === 'OperadoraSDM';
+
+      if(selGrupo==='ALL') return true;
+      return String(row.origem||'') === selGrupo;
+    }
+
+    function notasFilter(row){
+      // Notas NÃO têm origem no JSON -> filtra por Empresa
+      const emp = row.Empresa || row.empresa || '';
+
+      if (operadoraMode === 'CAMIM') return isOperadoraEmpresa(emp, 'CAMIM');
+      if (operadoraMode === 'SDM')   return isOperadoraEmpresa(emp, 'SDM');
+
+    //   if (selGrupo === 'OperadoraCamim') return isOperadoraEmpresa(emp, 'CAMIM');
+    //   if (selGrupo === 'OperadoraSDM')   return isOperadoraEmpresa(emp, 'SDM');
+
+      if (selGrupo === 'Clinica') {
+        // tudo que NÃO é operadora
+        return !String(emp).toUpperCase().includes('OPERADORA');
+      }
+
+      if (selGrupo === 'Laboratorio') {
+        // hoje: dívida técnica (emitidas laboratório não está mapeado)
+        return false;
+      }
+
+      return true; // ALL
+    }
+
+    // =========================
+    // Agregação por posto (mantém o código)
+    // =========================
+    function aggNotasForPosto(payload){
+      const rows = (payload?.notas_emitidas||[]).filter(notasFilter);
+      return {
+        qtd: sum(rows.map(r=>num(r.qtd_notas))),
+        emitidas: sum(rows.map(r=>num(r.valor_notas_emitidas))),
+        canc_qtd: sum(rows.map(r=>num(r.qtd_notas_canceladas))),
+        canc_val: sum(rows.map(r=>num(r.valor_notas_canceladas))),
+        cont_qtd: sum(rows.map(r=>num(r.qtd_notas_contabilizadas))),
+        cont_val: sum(rows.map(r=>num(r.valor_notas_contabilizadas))),
+        byEmpresa: rows
+      };
+    }
+
+    function aggRpsForPosto(payload){
+      const rows = (payload?.rps_pendentes||[]).filter(rpsFilter);
+      return {
+        qtd: sum(rows.map(r=>num(r.qtd))),
+        total: sum(rows.map(r=>num(r.total))),
+        byEmpresa: rows
+      };
+    }
+
+
+
+    function codigoDisplay(){
+        const postos = selectedPostosList();
+        if (operadoraMode) return null; // no modo operadora, mostramos código real (A/B/...)
+        if (postos.length === 1) return postos[0];
+        return 'MULTI';
+    }
+    // =========================
+    // Consolidação global (com/sem modo operadora)
+    // - Sempre adiciona coluna "Código" nas tabelas (pedido)
+    //   * No modo normal, o código vira "ALL" (porque é soma multi-posto).
+    //   * No modo operadora, o código é o posto real por linha.
+    // =========================
+    function aggAllSelected(ym){
+      const postos = selectedPostosList();
+
+      // KPIs topo
+      let n = {qtd:0,emitidas:0,canc_qtd:0,canc_val:0,cont_qtd:0,cont_val:0};
+      let r = {qtd:0,total:0};
+
+      // tabelas detalhadas
+      const notasRowsDetailed = [];
+      const rpsRowsDetailed = [];
+
+      for(const p of postos){
+        const payload = CACHE[ym]?.[p];
+        if(!payload) continue;
+
+        const an = aggNotasForPosto(payload);
+        const ar = aggRpsForPosto(payload);
+
+        n.qtd += an.qtd; n.emitidas += an.emitidas;
+        n.canc_qtd += an.canc_qtd; n.canc_val += an.canc_val;
+        n.cont_qtd += an.cont_qtd; n.cont_val += an.cont_val;
+
+        r.qtd += ar.qtd; r.total += ar.total;
+
+        // mantém código + empresa (granularidade)
+        (an.byEmpresa||[]).forEach(row => notasRowsDetailed.push({ codigo: p, ...row }));
+        (ar.byEmpresa||[]).forEach(row => rpsRowsDetailed.push({ codigo: p, ...row }));
+      }
+
+      // --- modo normal: tabela agregada (código = ALL) por empresa
+      // --- modo operadora: tabela por (codigo+empresa)
+      const notasMap = new Map();
+        for (const row of notasRowsDetailed) {
+        const emp = row.Empresa || row.empresa || '';
+        const cod = (operadoraMode || showByPosto()) ? row.codigo : codigoDisplay();
+        const key = `${cod}||${emp}`;
+
+        const cur = notasMap.get(key) || {
+            codigo: cod,
+            Empresa: emp,
+            qtd_notas: 0,
+            valor_notas_emitidas: 0,
+            qtd_notas_canceladas: 0,
+            valor_notas_canceladas: 0,
+            qtd_notas_contabilizadas: 0,
+            valor_notas_contabilizadas: 0
+        };
+
+        cur.qtd_notas += num(row.qtd_notas);
+        cur.valor_notas_emitidas += num(row.valor_notas_emitidas);
+        cur.qtd_notas_canceladas += num(row.qtd_notas_canceladas);
+        cur.valor_notas_canceladas += num(row.valor_notas_canceladas);
+        cur.qtd_notas_contabilizadas += num(row.qtd_notas_contabilizadas);
+        cur.valor_notas_contabilizadas += num(row.valor_notas_contabilizadas);
+
+        notasMap.set(key, cur);
+        }
+
+      const rpsMap = new Map();
+        for (const row of rpsRowsDetailed) {
+        const emp = row.Empresa || row.empresa || '';
+        const cod = (operadoraMode || showByPosto()) ? row.codigo : codigoDisplay();
+        const key = `${cod}||${emp}`;
+
+        const cur = rpsMap.get(key) || {
+            codigo: cod,
+            Empresa: emp,
+            qtd: 0,
+            total: 0
+        };
+
+        cur.qtd += num(row.qtd);
+        cur.total += num(row.total);
+
+        rpsMap.set(key, cur);
+        }
+
+      const notasList = [...notasMap.values()].sort((a,b)=>{
+        // ordena por valor emitido desc; se empatar, por codigo
+        const dv = (b.valor_notas_emitidas||0) - (a.valor_notas_emitidas||0);
+        if(dv !== 0) return dv;
+        return String(a.codigo).localeCompare(String(b.codigo));
+      });
+
+      const rpsList = [...rpsMap.values()].sort((a,b)=>{
+        const dv = (b.total||0) - (a.total||0);
+        if(dv !== 0) return dv;
+        return String(a.codigo).localeCompare(String(b.codigo));
+      });
+
+      return { notas:n, rps:r, notas_empresas:notasList, rps_empresas:rpsList };
+    }
+
+    // =========================
+    // UI
+    // =========================
+    function kpiCard(title, val, kind){
+      let out='-';
+      if(val!=null){
+        out = (kind==='moeda') ? `R$ ${fmt2.format(val)}` : fmtInt.format(val);
+      }
+      return `
+        <div class="card mb-0">
+          <div class="card-body p-2">
+            <div class="small muted">${title}</div>
+            <div class="h5 mb-0">${out}</div>
+          </div>
+        </div>`;
+    }
+
+    function applyOperadoraSwitches(){
+      const swCamim = el('#swCamim');
+      const swSdm   = el('#swSdm');
+
+      if (swCamim.checked) {
+        swSdm.checked = false;
+        operadoraMode = 'CAMIM';
+      } else if (swSdm.checked) {
+        swCamim.checked = false;
+        operadoraMode = 'SDM';
+      } else {
+        operadoraMode = null;
+      }
+
+      // quando operadoraMode ligado, Grupo vira ALL e fica desabilitado (evita confusão)
+      const grp = el('#grupo');
+      if (grp) {
+        grp.disabled = !!operadoraMode;
+        if (operadoraMode) grp.value = 'ALL';
+        selGrupo = grp.value;
+      }
+
+      render();
+    }
+
+    function render(){
+      const ym = ymSel;
+      const postoLabel = (selPostos==='ALL') ? 'Todos' : [...selPostos].sort().join('+');
+      const modoTxt = operadoraMode ? `Operadora: ${operadoraMode}` : `Grupo: ${selGrupo}`;
+      el('#hdrSel').textContent = `Mês: ${ym} • Postos: ${postoLabel} • ${modoTxt}`;
+
+      const agg = aggAllSelected(ym);
+
+      // KPIs topo
+      const kpi = el('#kpis');
+      kpi.innerHTML = '';
+      kpi.insertAdjacentHTML('beforeend', kpiCard('RPS pendentes (qtd)', agg.rps.qtd, 'int'));
+      kpi.insertAdjacentHTML('beforeend', kpiCard('RPS pendentes (total)', agg.rps.total, 'moeda'));
+      kpi.insertAdjacentHTML('beforeend', kpiCard('NF emitidas (qtd)', agg.notas.qtd, 'int'));
+      kpi.insertAdjacentHTML('beforeend', kpiCard('NF emitidas (valor)', agg.notas.emitidas, 'moeda'));
+      kpi.insertAdjacentHTML('beforeend', kpiCard('NF canceladas (qtd)', agg.notas.canc_qtd, 'int'));
+      kpi.insertAdjacentHTML('beforeend', kpiCard('NF canceladas (valor)', agg.notas.canc_val, 'moeda'));
+      kpi.insertAdjacentHTML('beforeend', kpiCard('NF contabilizadas (qtd)', agg.notas.cont_qtd, 'int'));
+      kpi.insertAdjacentHTML('beforeend', kpiCard('NF contabilizadas (valor)', agg.notas.cont_val, 'moeda'));
+
+      // Tabela RPS (com Código + Empresa)
+      const tbR = el('#tblRps');
+      tbR.innerHTML = '';
+      agg.rps_empresas.forEach(r=>{
+        tbR.insertAdjacentHTML('beforeend', `
+          <tr>
+            <td><b>${r.codigo || ''}</b></td>
+            <td>${r.Empresa||''}</td>
+            <td class="text-right">${fmtInt.format(r.qtd)}</td>
+            <td class="text-right">R$ ${fmt2.format(r.total)}</td>
+          </tr>`);
+      });
+
+      // Tabela Notas (com Código + Empresa)
+      const tbN = el('#tblNotas');
+      tbN.innerHTML = '';
+      agg.notas_empresas.forEach(r=>{
+        tbN.insertAdjacentHTML('beforeend', `
+          <tr>
+            <td><b>${r.codigo || ''}</b></td>
+            <td>${r.Empresa||''}</td>
+            <td class="text-right">${fmtInt.format(r.qtd_notas)}</td>
+            <td class="text-right">R$ ${fmt2.format(r.valor_notas_emitidas)}</td>
+            <td class="text-right">${fmtInt.format(r.qtd_notas_canceladas)}</td>
+            <td class="text-right">R$ ${fmt2.format(r.valor_notas_canceladas)}</td>
+            <td class="text-right">${fmtInt.format(r.qtd_notas_contabilizadas)}</td>
+            <td class="text-right">R$ ${fmt2.format(r.valor_notas_contabilizadas)}</td>
+          </tr>`);
+      });
+    }
+
+    // =========================
+    // Boot
+    // =========================
+    async function boot(){
+      const postosUsuario = await carregarPostosDoUsuario();
+
+      // Mês default
+      el('#mes').value = ymSel;
+
+      // 1) sessão
+      POSTOS = (postosUsuario && postosUsuario.length) ? postosUsuario : [];
+
+      // 2) fallback local (HEAD)
+      if(!POSTOS.length){
+        POSTOS = await detectPostosDisponiveis(ymSel);
+      }
+
+      if(!POSTOS.length){
+        el('#err').textContent = 'Sem JSONs encontrados em /json_notas_rps para o mês selecionado.';
+        return;
+      } else {
+        el('#err').textContent = '';
+      }
+
+      buildPostoTabs('#postoTabs');
+
+      // listeners
+      el('#mes').addEventListener('change', async ()=>{
+        ymSel = el('#mes').value;
+
+        // se não tem sessão, re-detecta postos para o mês selecionado
+        if(!(postosUsuario && postosUsuario.length)){
+          POSTOS = await detectPostosDisponiveis(ymSel);
+          if(!POSTOS.length){
+            el('#err').textContent = 'Sem JSONs encontrados para o mês selecionado.';
+            el('#postoTabs').innerHTML = '';
+            return;
+          }
+          el('#err').textContent = '';
+          selPostos = 'ALL';
+          buildPostoTabs('#postoTabs');
+        }
+
+        await loadMonth(ymSel);
+        render();
+      });
+
+      el('#grupo').addEventListener('change', ()=>{
+        selGrupo = el('#grupo').value;
+        render();
+      });
+
+      el('#btnReload').addEventListener('click', async ()=>{
+        const ym = ymSel;
+        CACHE[ym] = {};
+        await loadMonth(ym);
+        render();
+      });
+
+      // switches
+      el('#swCamim').addEventListener('change', applyOperadoraSwitches);
+      el('#swSdm').addEventListener('change', applyOperadoraSwitches);
+
+      await loadMonth(ymSel);
+      render();
+    }
+
+    window.addEventListener('DOMContentLoaded', boot);
+  </script>
+</head>
+
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <span>Painel Notas x RPS</span>
+      <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+    </span>
+  </nav>
+
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column">
+          <li class="nav-item">
+            <a href="kpi_notas_rps.html" class="nav-link active">
+              <i class="nav-icon fas fa-file-invoice"></i><p>Notas x RPS</p>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="content-wrapper">
+    <nav class="navbar navbar-expand navbar-white navbar-light">
+      <div class="d-flex w-100 align-items-center">
+        <span class="ml-2 font-weight-bold" id="hdrSel"></span>
+      </div>
+    </nav>
+
+    <section class="content p-3">
+      <div id="err" class="text-danger mb-2"></div>
+
+      <div class="card">
+        <div class="filter-bar">
+          <div>
+            <label class="mb-0 small d-block">Mês</label>
+            <input id="mes" type="month" class="form-control form-control-sm" />
+          </div>
+
+          <div>
+            <label class="mb-0 small d-block">Grupo</label>
+            <select id="grupo" class="form-control form-control-sm">
+            <option value="ALL">Todos</option>
+            <option value="Clinica">Clínicas</option>
+            <option value="Laboratorio">Laboratório</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="mb-0 small d-block">Operadora</label>
+            <div class="d-flex" style="gap:14px;align-items:center">
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="swCamim">
+                <label class="custom-control-label" for="swCamim">CAMIM</label>
+              </div>
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="swSdm">
+                <label class="custom-control-label" for="swSdm">SDM</label>
+              </div>
+            </div>
+            <div class="mini muted mt-1">0 ou 1 marcado</div>
+          </div>
+
+          <div class="flex-grow-1">
+            <label class="mb-0 small d-block">Posto</label>
+            <ul id="postoTabs" class="nav nav-pills scroll-tabs"></ul>
+          </div>
+
+          <div class="ml-auto">
+            <button id="btnReload" class="btn btn-sm btn-outline-secondary">Recarregar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 class="card-title mb-0">Resumo do mês</h3></div>
+        <div class="card-body kpi-grid" id="kpis"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 class="card-title mb-0">RPS pendentes</h3></div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-striped table-sm mb-0">
+              <thead>
+                <tr>
+                  <th class="small-td">Código</th>
+                  <th>Empresa</th>
+                  <th class="text-right small-td">Qtd</th>
+                  <th class="text-right small-td">Total</th>
+                </tr>
+              </thead>
+              <tbody id="tblRps"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 class="card-title mb-0">Notas emitidas</h3></div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-striped table-sm mb-0">
+              <thead>
+                <tr>
+                  <th class="small-td">Código</th>
+                  <th>Empresa</th>
+                  <th class="text-right small-td">Qtd</th>
+                  <th class="text-right small-td">Emitidas</th>
+                  <th class="text-right small-td">Canc</th>
+                  <th class="text-right small-td">Val Canc</th>
+                  <th class="text-right small-td">Cont</th>
+                  <th class="text-right small-td">Val Cont</th>
+                </tr>
+              </thead>
+              <tbody id="tblNotas"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </div>
+</div>
+</body>
+</html>

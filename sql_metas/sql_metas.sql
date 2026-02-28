@@ -1,0 +1,1 @@
+select ano, mes, DataReferencia, Meta2Mensalidade from Cad_MetaFilial order by idMetaFilial DESC
