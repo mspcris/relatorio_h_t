@@ -21,3 +21,4 @@ Para todos os tractimenrs que estão em run no harvest. Não é usado neste proj
 
 # upload_report.ps1
 Faz deploy na vm ubuntu.
+

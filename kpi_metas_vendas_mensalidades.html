@@ -75,6 +75,38 @@
     }
 
     // =========================
+    // Last-Modified (mostrar sempre o MAIS RECENTE)
+    // =========================
+    let LAST_INFO_TS = 0;
+
+    function resetJsonInfo(){
+      LAST_INFO_TS = 0;
+      const info = el('#jsonInfo');
+      if(info){
+        info.textContent = '';
+        info.title = '';
+      }
+    }
+
+    function setJsonInfoIfNewer(lastModified, ym){
+      if(!lastModified) return;
+
+      const ts = Date.parse(lastModified);
+      if(!Number.isFinite(ts)) return;
+
+      // só atualiza se for mais novo que o atual
+      if(ts <= LAST_INFO_TS) return;
+      LAST_INFO_TS = ts;
+
+      const info = el('#jsonInfo');
+      if(!info) return;
+
+      const d = new Date(ts);
+      info.textContent = `• ${ym} atualizado em ${d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short', timeZone:'America/Sao_Paulo'})}`;
+      info.title = lastModified;
+    }
+
+    // =========================
     // Estado
     // =========================
     let POSTOS = [];
@@ -97,14 +129,6 @@
       return { data: await r.json(), lastModified: r.headers.get('Last-Modified') };
     }
 
-    function setJsonInfo(lastModified, ym){
-      const info = el('#jsonInfo');
-      if(!info) return;
-      const d = new Date(lastModified);
-      info.textContent = `• ${ym} atualizado em ${d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}`;
-      info.title = lastModified;
-    }
-
     async function loadMonth(ym){
       CACHE[ym] ||= {};
       const promises = POSTOS.map(async p=>{
@@ -113,7 +137,7 @@
         try{
           const {data,lastModified} = await fetchJsonSafe(url);
           CACHE[ym][p] = data;
-          if(lastModified) setJsonInfo(lastModified, ym);
+          setJsonInfoIfNewer(lastModified, ym);
         }catch{
           CACHE[ym][p] = null;
         }
@@ -426,6 +450,7 @@
     // Boot
     // =========================
     async function boot(){
+      resetJsonInfo();
       const postosUsuario = await carregarPostosDoUsuario();
 
       el('#mes').value = ymSel;
@@ -457,6 +482,7 @@
 
       el('#mes').addEventListener('change', async ()=>{
         ymSel = el('#mes').value;
+        resetJsonInfo();
 
         // se não tem sessão, re-detecta postos para o mês selecionado (ano atual)
         if(!(postosUsuario && postosUsuario.length)){
@@ -476,6 +502,7 @@
       });
 
       el('#btnReload').addEventListener('click', async ()=>{
+        resetJsonInfo();
         const {y,m} = parseYm(ymSel);
         const yms = [ymOf(y,m), ymOf(y-1,m), ymOf(y-2,m)].filter(ym => parseYm(ym).y >= 2024);
         for(const ym of yms){
