@@ -9,6 +9,12 @@ from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine, text
 
+
+
+from dotenv import load_dotenv
+load_dotenv("/opt/relatorio_h_t/.env")
+
+
 # ===============================
 # Configurações
 # ===============================
