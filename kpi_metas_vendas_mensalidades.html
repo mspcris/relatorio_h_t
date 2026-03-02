@@ -446,6 +446,207 @@
       if(years[2]) renderYearTable('#yearC', years[2], ymSel);
     }
 
+
+    // =========================
+    // Metas API (modal)
+    // =========================
+    function setMetaMsg(txt, isErr=false){
+      const msg = el('#metaMsg');
+      const err = el('#metaErr');
+      if(msg) msg.textContent = isErr ? '' : (txt || '');
+      if(err) err.textContent = isErr ? (txt || '') : '';
+    }
+
+    function fillMetaPostosSelect(){
+      const sel = el('#metaPosto');
+      if(!sel) return;
+      sel.innerHTML = '';
+      POSTOS.forEach(p => {
+        sel.insertAdjacentHTML('beforeend', `<option value="${p}">${p}</option>`);
+      });
+    }
+
+    function sugest90(v){
+      const n = Number(v);
+      if(!Number.isFinite(n) || n < 0) return 0;
+      return Math.round(n * 0.90);
+    }
+
+    async function apiGetMeta(posto, ym){
+      const url = `/api/metas?posto=${encodeURIComponent(posto)}&ym=${encodeURIComponent(ym)}`;
+      const r = await fetch(url, {credentials:"same-origin"});
+      const d = await r.json().catch(()=> ({}));
+      if(!r.ok){
+        const code = d.code || `HTTP_${r.status}`;
+        const msg = d.message || 'Falha ao consultar meta';
+        const err = new Error(msg);
+        err.code = code;
+        err.status = r.status;
+        err.payload = d;
+        throw err;
+      }
+      return d;
+    }
+
+    async function apiSaveMeta(body){
+      const r = await fetch("/api/metas", {
+        method:"POST",
+        credentials:"same-origin",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(body)
+      });
+      const d = await r.json().catch(()=> ({}));
+      if(!r.ok){
+        const code = d.code || `HTTP_${r.status}`;
+        const msg = d.message || 'Falha ao salvar meta';
+        const err = new Error(msg);
+        err.code = code;
+        err.status = r.status;
+        err.payload = d;
+        throw err;
+      }
+      return d;
+    }
+
+    async function refreshJsonAndUIAfterSave(posto, ym){
+      // garante cache limpo do mês e recarrega
+      CACHE[ym] = {};
+      resetJsonInfo();
+      await loadMonth(ym);
+      render();
+    }
+
+    function bindMetaModal(){
+      const btn = el('#btnMeta');
+      const btnSalvar = el('#btnMetaSalvar');
+      const selPosto = el('#metaPosto');
+      const inpYm = el('#metaYm');
+
+      const meta2Mens = el('#meta2Mens');
+      const meta1Mens = el('#meta1Mens');
+      const meta2Vend = el('#meta2Vend');
+      const meta1Vend = el('#meta1Vend');
+
+      if(!btn || !btnSalvar || !selPosto || !inpYm) return;
+
+      btn.addEventListener('click', async ()=>{
+        setMetaMsg('', false);
+        fillMetaPostosSelect();
+
+        // default: primeiro posto selecionado no filtro atual (se multi, pega o primeiro)
+        const defaultPosto = (selPostos === 'ALL') ? (POSTOS[0] || '') : ([...selPostos][0] || POSTOS[0] || '');
+        selPosto.value = defaultPosto;
+
+        inpYm.value = ymSel || ymNow();
+
+        // valores iniciais (limpa)
+        meta2Mens.value = '';
+        meta2Vend.value = '';
+        meta1Mens.value = '';
+        meta1Vend.value = '';
+
+        // tenta pré-carregar existente
+        try{
+          setMetaMsg('Consultando meta existente...', false);
+          const resp = await apiGetMeta(selPosto.value, inpYm.value);
+          if(resp.exists && resp.meta){
+            meta2Mens.value = Math.round(Number(resp.meta.Meta2Mensalidade || 0));
+            meta2Vend.value = Math.round(Number(resp.meta.Meta2Venda || 0));
+            meta1Mens.value = Math.round(Number(resp.meta.Meta1Mensalidade || sugest90(meta2Mens.value)));
+            meta1Vend.value = Math.round(Number(resp.meta.Meta1Venda || sugest90(meta2Vend.value)));
+            setMetaMsg('Meta existente carregada. Ajuste e salve.', false);
+          }else{
+            setMetaMsg('Sem meta cadastrada para este mês. Informe e salve.', false);
+          }
+        }catch(e){
+          if(e.code === 'POSTO_OFFLINE'){
+            setMetaMsg(`Posto offline: não foi possível conectar ao posto ${selPosto.value}`, true);
+          }else{
+            setMetaMsg(e.message || 'Erro ao consultar meta', true);
+          }
+        }
+
+        $('#metaModal').modal('show');
+      });
+
+      // ao trocar posto/mês dentro do modal, recarrega sugestão/valor existente
+      async function reloadMetaInsideModal(){
+        setMetaMsg('Consultando meta existente...', false);
+        meta2Mens.value = '';
+        meta2Vend.value = '';
+        meta1Mens.value = '';
+        meta1Vend.value = '';
+
+        try{
+          const resp = await apiGetMeta(selPosto.value, inpYm.value);
+          if(resp.exists && resp.meta){
+            meta2Mens.value = Math.round(Number(resp.meta.Meta2Mensalidade || 0));
+            meta2Vend.value = Math.round(Number(resp.meta.Meta2Venda || 0));
+            meta1Mens.value = Math.round(Number(resp.meta.Meta1Mensalidade || sugest90(meta2Mens.value)));
+            meta1Vend.value = Math.round(Number(resp.meta.Meta1Venda || sugest90(meta2Vend.value)));
+            setMetaMsg('Meta existente carregada. Ajuste e salve.', false);
+          }else{
+            setMetaMsg('Sem meta cadastrada para este mês. Informe e salve.', false);
+          }
+        }catch(e){
+          if(e.code === 'POSTO_OFFLINE'){
+            setMetaMsg(`Posto offline: não foi possível conectar ao posto ${selPosto.value}`, true);
+          }else{
+            setMetaMsg(e.message || 'Erro ao consultar meta', true);
+          }
+        }
+      }
+
+      selPosto.addEventListener('change', reloadMetaInsideModal);
+      inpYm.addEventListener('change', reloadMetaInsideModal);
+
+      // sugestão automática: quando mexer na meta2 e meta1 estiver vazia, preenche 90%
+      meta2Mens.addEventListener('input', ()=>{
+        if(String(meta1Mens.value || '').trim() === ''){
+          meta1Mens.value = sugest90(meta2Mens.value);
+        }
+      });
+      meta2Vend.addEventListener('input', ()=>{
+        if(String(meta1Vend.value || '').trim() === ''){
+          meta1Vend.value = sugest90(meta2Vend.value);
+        }
+      });
+
+      btnSalvar.addEventListener('click', async ()=>{
+        try{
+          setMetaMsg('Salvando...', false);
+
+          const body = {
+            posto: selPosto.value,
+            ym: inpYm.value,
+            meta2_mens: Number(meta2Mens.value || 0),
+            meta2_venda: Number(meta2Vend.value || 0),
+            meta1_mens: Number(meta1Mens.value || sugest90(meta2Mens.value)),
+            meta1_venda: Number(meta1Vend.value || sugest90(meta2Vend.value)),
+          };
+
+          const resp = await apiSaveMeta(body);
+
+          // se o backend não conseguiu patch do JSON, avisa mas não falha
+          const jp = resp.json_patch || {};
+          if(jp.patched){
+            setMetaMsg('Salvo. Atualizando tela...', false);
+          }else{
+            setMetaMsg(`Salvo no posto, mas o JSON não foi atualizado agora (${jp.reason || 'sem detalhe'}). Recarregue se necessário.`, false);
+          }
+
+          await refreshJsonAndUIAfterSave(body.posto, body.ym);
+
+          $('#metaModal').modal('hide');
+        }catch(e){
+          if(e.code === 'POSTO_OFFLINE'){
+            setMetaMsg(`Posto offline: não foi possível conectar ao posto ${selPosto.value}`, true);
+          }else{
+            setMetaMsg(e.message || 'Erro ao salvar meta', true);
+          }
+        }
+      });
+    }
     // =========================
     // Boot
     // =========================
@@ -514,6 +715,7 @@
 
       await loadAllYearsForCurrentMonth();
       render();
+      bindMetaModal();
     }
 
     window.addEventListener('DOMContentLoaded', boot);
@@ -714,7 +916,10 @@
             <ul id="postoTabs" class="nav nav-pills scroll-tabs"></ul>
           </div>
 
-          <div class="ml-auto">
+          <div class="ml-auto d-flex" style="gap:8px;">
+            <button id="btnMeta" class="btn btn-sm btn-primary">
+              <i class="fas fa-plus-circle"></i> Cadastrar metas
+            </button>
             <button id="btnReload" class="btn btn-sm btn-outline-secondary">Recarregar</button>
           </div>
         </div>
@@ -746,5 +951,62 @@
     </section>
   </div>
 </div>
+<!-- Modal Metas -->
+<div class="modal fade" id="metaModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-sm" role="document">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title">Cadastrar metas</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Fechar">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div id="metaMsg" class="mini mb-2 muted"></div>
+
+        <div class="form-group mb-2">
+          <label class="mb-0 small">Posto</label>
+          <select id="metaPosto" class="form-control form-control-sm"></select>
+        </div>
+
+        <div class="form-group mb-2">
+          <label class="mb-0 small">Mês</label>
+          <input id="metaYm" type="month" class="form-control form-control-sm" />
+        </div>
+
+        <hr class="my-2"/>
+
+        <div class="form-group mb-2">
+          <label class="mb-0 small">Meta2 Mensalidade</label>
+          <input id="meta2Mens" type="number" min="0" step="1" class="form-control form-control-sm" />
+        </div>
+
+        <div class="form-group mb-2">
+          <label class="mb-0 small">Meta1 Mensalidade (sugestão 90%)</label>
+          <input id="meta1Mens" type="number" min="0" step="1" class="form-control form-control-sm" />
+        </div>
+
+        <div class="form-group mb-2">
+          <label class="mb-0 small">Meta2 Vendas</label>
+          <input id="meta2Vend" type="number" min="0" step="1" class="form-control form-control-sm" />
+        </div>
+
+        <div class="form-group mb-0">
+          <label class="mb-0 small">Meta1 Vendas (sugestão 90%)</label>
+          <input id="meta1Vend" type="number" min="0" step="1" class="form-control form-control-sm" />
+        </div>
+
+        <div id="metaErr" class="text-danger mini mt-2"></div>
+      </div>
+
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" id="btnMetaSalvar" class="btn btn-sm btn-success">Salvar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
