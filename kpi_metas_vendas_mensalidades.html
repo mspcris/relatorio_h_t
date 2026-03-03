@@ -354,91 +354,106 @@
         </div>`;
     }
 
+    
     function renderYearTable(containerId, ano, ym){
-      const {m} = parseYm(ym);
-      const ymYear = ymOf(ano, m);
+  const {m} = parseYm(ym);
+  const ymYear = ymOf(ano, m);
 
-      const days = mergePostosForYm(ymYear);
-      const totals = totalsFromDays(days);
+  const days = mergePostosForYm(ymYear);
+  const totals = totalsFromDays(days);
 
-      const metas = metasFromCache(ymYear);
-      const metaMens = metas.meta_mens;
-      const metaVenda = metas.meta_venda;
+  const metas = metasFromCache(ymYear);
+  const metaMens = metas.meta_mens;
+  const metaVenda = metas.meta_venda;
 
-      const pm = pct(totals.mens_total, metaMens);
-      const pv = pct(totals.vendas_total, metaVenda);
+  // Ano atual (do mês selecionado) mantém % vs meta.
+  // Anos anteriores viram evolução vs total do mês (fecha 100% no último dia).
+  const ySel = parseYm(ymSel).y;
+  const isAnoAtual = (ano === ySel);
 
-      const box = el(containerId);
-      if(!box) return;
+  // TOP (KPIs): sempre vs meta (inclusive Ano -1 e -2)
+  const pm = pct(totals.mens_total, metaMens);
+  const pv = pct(totals.vendas_total, metaVenda);
+  const lblPm = '% Mens (vs meta)';
+  const lblPv = '% Vendas (vs meta)';
 
-      const warnTxt = metas.postosSemMeta.length
-        ? `<span class="mini warn"><i class="fas fa-exclamation-triangle"></i> Sem meta em: ${metas.postosSemMeta.sort().join(', ')}</span>`
-        : `<span class="mini muted">Metas OK</span>`;
+  // LINHAS (tabela): ano atual vs meta; anos anteriores vs total do mês (fecha 100% no último dia)
+  const denomMensRows = isAnoAtual ? metaMens : totals.mens_total;
+  const denomVendRows = isAnoAtual ? metaVenda : totals.vendas_total;
 
-      const title = `
-        <div class="year-card-title">
-          <div>
-            <span class="year-tag">${ano}</span>
-            <span class="muted mini ml-2">(${ymYear})</span>
-            <div class="mt-1">${warnTxt}</div>
-          </div>
-          <div class="meta-pill">
-            <span class="pill"><span class="mini muted">Meta Mens:</span> <b>${fmtInt.format(metaMens)}</b></span>
-            <span class="pill"><span class="mini muted">Meta Vendas:</span> <b>${fmtInt.format(metaVenda)}</b></span>
-          </div>
-        </div>
-      `;
+  const box = el(containerId);
+  if(!box) return;
 
-      const kpis = `
-        <div class="kpi-grid mt-2">
-          ${kpiCard('Mens (mês)', totals.mens_total, 'int')}
-          ${kpiCard('Vendas (mês)', totals.vendas_total, 'int')}
-          ${kpiCard('% Mens (vs meta)', pm, 'pct')}
-          ${kpiCard('% Vendas (vs meta)', pv, 'pct')}
-        </div>
-      `;
+  const warnTxt = metas.postosSemMeta.length
+    ? `<span class="mini warn"><i class="fas fa-exclamation-triangle"></i> Sem meta em: ${metas.postosSemMeta.sort().join(', ')}</span>`
+    : `<span class="mini muted">Metas OK</span>`;
 
-      let rows = '';
-      for(const d of days){
-        const pctMens = pct(d.mens_acum, metaMens);
-        const pctVendas = pct(d.vendas_acum, metaVenda);
+  const title = `
+    <div class="year-card-title">
+      <div>
+        <span class="year-tag">${ano}</span>
+        <span class="muted mini ml-2">(${ymYear})</span>
+        <div class="mt-1">${warnTxt}</div>
+      </div>
+      <div class="meta-pill">
+        <span class="pill"><span class="mini muted">Meta Mens:</span> <b>${fmtInt.format(metaMens)}</b></span>
+        <span class="pill"><span class="mini muted">Meta Vendas:</span> <b>${fmtInt.format(metaVenda)}</b></span>
+      </div>
+    </div>
+  `;
 
-        rows += `
+  const kpis = `
+    <div class="kpi-grid mt-2">
+      ${kpiCard('Mens (mês)', totals.mens_total, 'int')}
+      ${kpiCard('Vendas (mês)', totals.vendas_total, 'int')}
+      ${kpiCard(lblPm, pm, 'pct')}
+      ${kpiCard(lblPv, pv, 'pct')}
+    </div>
+  `;
+//teste
+
+  let rows = '';
+  for(const d of days){
+    const pctMens = pct(d.mens_acum, denomMensRows);
+    const pctVendas = pct(d.vendas_acum, denomVendRows);
+
+    rows += `
+      <tr>
+        <td class="small-td">${String(d.dia).padStart(2,'0')}</td>
+        <td class="small-td">${d.dia_sem || ''}</td>
+        <td class="text-right small-td">${fmtInt.format(d.mens_dia)}</td>
+        <td class="text-right small-td">${fmtInt.format(d.mens_acum)}</td>
+        <td class="text-right small-td">${pctMens==null ? '-' : (fmt2.format(pctMens)+'%')}</td>
+        <td class="text-right small-td">${fmtInt.format(d.vendas_dia)}</td>
+        <td class="text-right small-td">${fmtInt.format(d.vendas_acum)}</td>
+        <td class="text-right small-td">${pctVendas==null ? '-' : (fmt2.format(pctVendas)+'%')}</td>
+      </tr>
+    `;
+  }
+
+  const table = `
+    <div class="table-responsive mt-2">
+      <table class="table table-striped table-sm mb-0">
+        <thead>
           <tr>
-            <td class="small-td">${String(d.dia).padStart(2,'0')}</td>
-            <td class="small-td">${d.dia_sem || ''}</td>
-            <td class="text-right small-td">${fmtInt.format(d.mens_dia)}</td>
-            <td class="text-right small-td">${fmtInt.format(d.mens_acum)}</td>
-            <td class="text-right small-td">${pctMens==null ? '-' : (fmt2.format(pctMens)+'%')}</td>
-            <td class="text-right small-td">${fmtInt.format(d.vendas_dia)}</td>
-            <td class="text-right small-td">${fmtInt.format(d.vendas_acum)}</td>
-            <td class="text-right small-td">${pctVendas==null ? '-' : (fmt2.format(pctVendas)+'%')}</td>
+            <th>Dia</th>
+            <th>Dia Sem</th>
+            <th class="text-right">Mens</th>
+            <th class="text-right">Mens Acum</th>
+            <th class="text-right">% Mens</th>
+            <th class="text-right">Vendas</th>
+            <th class="text-right">Vendas Acum</th>
+            <th class="text-right">% Vendas</th>
           </tr>
-        `;
-      }
+        </thead>
+        <tbody>${rows || `<tr><td colspan="8" class="text-center muted p-3">Sem dados</td></tr>`}</tbody>
+      </table>
+    </div>
+  `;
 
-      const table = `
-        <div class="table-responsive mt-2">
-          <table class="table table-striped table-sm mb-0">
-            <thead>
-              <tr>
-                <th>Dia</th>
-                <th>Dia Sem</th>
-                <th class="text-right">Mens</th>
-                <th class="text-right">Mens Acum</th>
-                <th class="text-right">% Mens</th>
-                <th class="text-right">Vendas</th>
-                <th class="text-right">Vendas Acum</th>
-                <th class="text-right">% Vendas</th>
-              </tr>
-            </thead>
-            <tbody>${rows || `<tr><td colspan="8" class="text-center muted p-3">Sem dados</td></tr>`}</tbody>
-          </table>
-        </div>
-      `;
+  box.innerHTML = title + kpis + table;
+}
 
-      box.innerHTML = title + kpis + table;
-    }
 
     function render(){
       const {y,m} = parseYm(ymSel);
