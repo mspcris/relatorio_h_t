@@ -1,569 +1,444 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
-    <meta charset="utf-8" />
-    <title>Mapa Tributário – Clínica e Operadora de Plano de Saúde (RJ)</title>
-    <style>
-        :root {
-            color-scheme: light dark;
-            --bg: #f5f7fa;
-            --card-bg: #ffffff;
-            --border: #d0d7e2;
-            --primary: #1554b3;
-            --primary-soft: #e4edf9;
-            --accent: #008272;
-            --text-main: #20252d;
-            --text-soft: #4c5566;
-            --danger: #b3261e;
-            --muted: #8b93a5;
-            --code-bg: #f1f3f9;
-        }
 
-        * {
-            box-sizing: border-box;
-        }
+<meta charset="UTF-8">
 
-        body {
-            margin: 0;
-            padding: 24px;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: var(--bg);
-            color: var(--text-main);
-            line-height: 1.55;
-        }
+<title>Manual de Emissão de Nota Fiscal – Área da Saúde</title>
 
-        .page {
-            max-width: 960px;
-            margin: 0 auto;
-        }
+<style>
 
-        header {
-            margin-bottom: 24px;
-        }
+body{
+font-family:Arial;
+background:#f4f6fb;
+margin:auto;
+max-width:1100px;
+padding:30px;
+}
 
-        h1 {
-            margin: 0 0 8px 0;
-            font-size: 1.8rem;
-            color: var(--primary);
-        }
+h1{color:#0a4fa5}
 
-        .subtitle {
-            margin: 0;
-            font-size: 0.95rem;
-            color: var(--muted);
-        }
+h2{
+border-left:6px solid #0a4fa5;
+padding-left:10px;
+margin-top:40px;
+}
 
-        h2 {
-            margin-top: 32px;
-            margin-bottom: 8px;
-            font-size: 1.35rem;
-            color: var(--primary);
-            border-left: 4px solid var(--primary);
-            padding-left: 8px;
-        }
+.section{
+background:white;
+border:1px solid #d9deea;
+padding:20px;
+margin-top:20px;
+border-radius:8px;
+}
 
-        h3 {
-            margin-top: 20px;
-            margin-bottom: 6px;
-            font-size: 1.05rem;
-            color: var(--accent);
-        }
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:15px;
+}
 
-        p {
-            margin: 4px 0 10px 0;
-            font-size: 0.96rem;
-        }
+th,td{
+border:1px solid #d9deea;
+padding:8px;
+font-size:14px;
+}
 
-        ul,
-        ol {
-            margin: 4px 0 12px 24px;
-            padding: 0;
-            font-size: 0.96rem;
-        }
+th{background:#e9eef9}
 
-        li {
-            margin-bottom: 4px;
-        }
+.alert{
+background:#fff4e6;
+padding:15px;
+border-left:5px solid orange;
+margin-top:15px;
+}
 
-        .card {
-            background: var(--card-bg);
-            border-radius: 10px;
-            border: 1px solid var(--border);
-            padding: 16px 18px;
-            margin: 14px 0;
-        }
+.good{
+background:#e7f7f0;
+padding:15px;
+border-left:5px solid green;
+margin-top:15px;
+}
 
-        .card-title {
-            font-weight: 600;
-            margin-bottom: 6px;
-        }
+.code{
+font-family:monospace;
+background:#eef1f7;
+padding:4px 7px;
+}
 
-        .tag-pill {
-            display: inline-block;
-            padding: 2px 8px;
-            font-size: 0.76rem;
-            border-radius: 999px;
-            background: var(--primary-soft);
-            color: var(--primary);
-            margin-right: 4px;
-            margin-top: 4px;
-        }
+.example{
+background:#f8f9fd;
+border:1px dashed #cdd3e0;
+padding:15px;
+margin-top:10px;
+font-family:monospace;
+}
 
-        .tag-pill.warning {
-            background: #fdecea;
-            color: var(--danger);
-        }
+</style>
 
-        .tag-pill.ok {
-            background: #e3f6ee;
-            color: var(--accent);
-        }
-
-        .muted {
-            color: var(--muted);
-            font-size: 0.88rem;
-        }
-
-        .grid-2 {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            gap: 12px;
-        }
-
-        .table-like {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 4px;
-            font-size: 0.9rem;
-        }
-
-        .table-like th,
-        .table-like td {
-            border: 1px solid var(--border);
-            padding: 6px 8px;
-            vertical-align: top;
-        }
-
-        .table-like th {
-            background: var(--primary-soft);
-            font-weight: 600;
-            text-align: left;
-        }
-
-        code {
-            font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 0.86rem;
-            background: var(--code-bg);
-            padding: 2px 4px;
-            border-radius: 4px;
-        }
-
-        .highlight {
-            background: #fff9e6;
-            border-left: 4px solid #f5c451;
-            padding: 10px 12px;
-            border-radius: 8px;
-            margin: 12px 0;
-            font-size: 0.9rem;
-        }
-
-        @media (max-width: 720px) {
-            body {
-                padding: 16px;
-            }
-
-            .grid-2 {
-                grid-template-columns: minmax(0, 1fr);
-            }
-        }
-    </style>
 </head>
 
 <body>
-    <div class="page">
 
-        <header>
-            <h1>Mapa Tributário – Clínica e Operadora de Plano de Saúde (Rio de Janeiro)</h1>
-            <p class="subtitle">
-                Consolidação das principais decisões de código de serviço, NBS, ISS, CBS e IBS para duas empresas:
-                clínica médica e operadora de planos de saúde, ambas sediadas no Rio de Janeiro.
-            </p>
-        </header>
+<h1>Manual de Emissão de Nota Fiscal – Clínicas e Operadoras</h1>
 
-        <!-- 1. Códigos atuais de ISS x reforma -->
-        <section id="iss-codigos">
-            <h2>1. Códigos atuais de ISS e impacto da reforma</h2>
+<p>
+Este documento mostra exatamente como preencher cada campo da nota fiscal.
+</p>
 
-            <div class="card">
-                <div class="card-title">Situação atual – Lista de Serviços / Município do Rio</div>
-                <div class="grid-2">
-                    <div>
-                        <h3>Clínica de assistência médica</h3>
-                        <ul>
-                            <li><strong>Hoje usamos o código de serviço (ISS – Rio):</strong> <code>04.03.14</code></li>
-                            <li><strong>Porém, no sistema nacional o código adequado é o (ISS – Rio):</strong>
-                                <code>04.03.03</code>
-                            </li>
-                            <li><strong>Descrição:</strong> serviços prestados por ambulatórios / clínicas.</li>
-                            <li><strong>Empresa:</strong> clínica que atende pacientes humanos.</li>
-                        </ul>
-                    </div>
-                    <div>
-                        <h3>Operadora de plano de saúde</h3>
-                        <ul>
-                            <li><strong>Código de serviço (ISS – Rio):</strong> <code>04.22.01</code></li>
-                            <li><strong>Descrição:</strong> planos de medicina de grupo ou individual, convênios de
-                                assistência médica/hospitalar/odontológica.</li>
-                        </ul>
-                    </div>
-                </div>
+<p>
+<strong>Não inventar texto. Sempre usar os modelos abaixo.</strong>
+</p>
 
-                <p><strong>Ponto-chave:</strong> a reforma tributária não altera automaticamente esses códigos
-                    municipais de ISS.
-                    Enquanto o ISS existir, você continua utilizando <code>04.03.03</code> e <code>04.22.01</code>,
-                    salvo mudança específica
-                    da Prefeitura do Rio.</p>
-            </div>
+---
 
-            <p>
-                O que muda com a reforma é a forma de classificar os serviços para fins de
-                <strong>CBS</strong> e <strong>IBS</strong>: entra em cena a
-                <strong>NBS – Nomenclatura Brasileira de Serviços</strong>. Os códigos municipais de ISS continuam
-                existindo em paralelo,
-                mas, para o IVA (CBS/IBS), a referência é a NBS.
-            </p>
-        </section>
+<h2>1 – Consulta médica</h2>
 
-        <!-- 2. Alíquota de ISS ao longo da transição -->
-        <section id="iss-aliquota">
-            <h2>2. ISS: alíquota agora e ao longo da transição</h2>
+<div class="section">
 
-            <div class="card">
-                <div class="card-title">Linha do tempo regulatória</div>
-                <ul>
-                    <li><strong>Até 2028:</strong> o ISS continua plenamente vigente. A alíquota é a definida pela
-                        legislação do Município do Rio.</li>
-                    <li><strong>2029–2032:</strong> começa a transição. Gradualmente, ICMS/ISS perdem peso e o IBS ganha
-                        espaço.</li>
-                    <li><strong>A partir de 2033:</strong> ISS e ICMS deixam de existir; prevalecem IBS
-                        (estadual/municipal) e CBS (federal).</li>
-                </ul>
-                <p class="muted">
-                    Ou seja: no curto e médio prazo você continua recolhendo ISS normalmente, pelas regras atuais do
-                    município, mesmo já
-                    convivendo com CBS e IBS em fase de testes/implantação.
-                </p>
-            </div>
-        </section>
+<table>
 
-        <!-- 3. CBS e IBS na nota -->
-        <section id="cbs-ibs">
-            <h2>3. CBS e IBS na nota fiscal de serviços</h2>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
 
-            <p>
-                A Lei Complementar 214/2025 determina que, a partir de 2026, os documentos fiscais eletrônicos sigam um
-                leiaute nacional,
-                com campos específicos para <strong>CBS</strong>, <strong>IBS</strong> e <strong>IS</strong> (Imposto
-                Seletivo).
-            </p>
+<tr>
+<td>Código Tributação Nacional</td>
+<td class="code">04.01.01</td>
+</tr>
 
-            <div class="card">
-                <div class="card-title">Operacional – o que vai aparecer na NFS-e (padrão nacional)</div>
-                <ul>
-                    <li>Campos próprios para base de cálculo, alíquota e valor de <strong>CBS</strong> e
-                        <strong>IBS</strong>.
-                    </li>
-                    <li>Uso de <strong>CST</strong> e <strong>cClassTrib</strong> específicos para o novo modelo.</li>
-                    <li>Campo de <strong>NBS</strong> para classificar o serviço de forma padronizada.</li>
-                </ul>
-                <p>
-                    Em 2026 há um “ano-teste”, com alíquotas simbólicas (CBS de referência em torno de 0,9% e IBS de
-                    0,1%),
-                    sem substituir imediatamente o ISS, mas já exigindo o preenchimento dos novos campos no leiaute
-                    nacional.
-                </p>
-            </div>
+<tr>
+<td>Código Complementar Municipal</td>
+<td class="code">001</td>
+</tr>
 
-            <div class="highlight">
-                <strong>Resposta direta:</strong> sim, a tendência é que você tenha de declarar <strong>CBS</strong> e
-                <strong>IBS</strong> na NFS-e
-                no padrão nacional, a partir da entrada em produção do novo leiaute (início em 2026), ainda que o ISS
-                continue sendo
-                devido paralelamente até 2032.
-            </div>
-        </section>
+<tr>
+<td>NBS</td>
+<td class="code">123012100</td>
+</tr>
 
-        <!-- 4. NBS para cada empresa -->
-        <section id="nbs-codigos">
-            <h2>4. Códigos NBS recomendados</h2>
+<tr>
+<td>Descrição oficial</td>
+<td>Serviços de clínica médica</td>
+</tr>
 
-            <p>
-                Para CBS/IBS, o mapeamento estratégico é:
-            </p>
+</table>
 
-            <div class="grid-2">
-                <!-- 4.1 Clínica -->
-                <div class="card">
-                    <div class="card-title">4.1 Clínica de assistência médica (humanos)</div>
-                    <span class="tag-pill ok">Serviços de saúde com redução de alíquota</span>
-                    <ul>
-                        <li>
-                            <strong>Família NBS 1.2301 – serviços de saúde humana, exceto serviços
-                                hospitalares:</strong>
-                            <ul>
-                                <li><code>1.2301</code> – Serviços de saúde humana, exceto os serviços hospitalares.
-                                </li>
-                                <li><code>1.2301.11.00</code> – Serviços cirúrgicos.</li>
-                                <li><code>1.2301.12.00</code> – Serviços ginecológicos e obstétricos.</li>
-                                <li><code>1.2301.13.00</code> – Serviços psiquiátricos.</li>
-                                <li><code>1.2301.14.00</code> – Serviços cardiológicos (ou serviços prestados em
-                                    unidades de terapia intensiva,
-                                    dependendo da versão/anexo legal).</li>
-                                <li><code>1.2301.15.00</code> – Serviços oncológicos (ou serviços de atendimento de
-                                    urgência,
-                                    dependendo da versão/anexo legal).</li>
-                                <li><code>1.2301.16.00</code> – Serviços aos recém-nascidos.</li>
-                                <li><code>1.2301.17.00</code> – Serviços de ambulâncias, exceto as destinadas unicamente
-                                    para
-                                    remoção de enfermos.</li>
-                                <li><code>1.2301.18.00</code> – Serviços prestados em unidades de cuidados intensivos.
-                                </li>
-                                <li>
-                                    <code>1.2301.2</code> – Serviços médicos e odontológicos.
-                                    <ul>
-                                        <li><code>1.2301.21.00</code> – Serviços de clínica médica.</li>
-                                        <li><code>1.2301.22.00</code> – Serviços médicos especializados.</li>
-                                        <li><code>1.2301.23.00</code> – Serviços odontológicos.</li>
-                                    </ul>
-                                </li>
-                                <li><code>1.2301.91.00</code> – Serviços de enfermagem.</li>
-                                <li><code>1.2301.92.00</code> – Serviços de fisioterapia.</li>
-                                <li><code>1.2301.93.00</code> – Serviços laboratoriais.</li>
-                                <li><code>1.2301.94.00</code> – Serviços de diagnóstico por imagem.</li>
-                                <li><code>1.2301.95.00</code> – Serviços de bancos de material biológico humano.</li>
-                                <li><code>1.2301.99.00</code> – Outros serviços de saúde humana, exceto os serviços
-                                    hospitalares
-                                    (código residual para serviços não listados acima).</li>
-                            </ul>
-                        </li>
-                    </ul>
-                    <p class="muted">
-                        Todos os códigos do grupo <code>1.2301</code> constam no Anexo III da LC 214/2025, com redução
-                        de 60%
-                        na alíquota de IBS/CBS, desde que o enquadramento esteja consistente com o CNAE e a efetiva
-                        natureza
-                        do serviço prestado pela clínica.
-                    </p>
-                </div>
+<h3>Descrição do serviço (campo da nota)</h3>
 
-                <!-- 4.2 Operadora (mantém o card já ajustado no HTML principal) -->
-                <!-- ... restante do card 4.2 Operadora de planos de saúde ... -->
-            </div>
-        </section>
+<div class="example">
 
-        <!-- 4.2 Operadora -->
-        <!-- 4.2 Operadora de planos de saúde -->
-        <div class="card">
-            <div class="card-title">4.2 Operadora de planos de saúde</div>
-            <span class="tag-pill">Serviço assistencial continuado</span>
+Serviços de clínica médica.
 
-            <ul>
-                <li>
-                    <strong>NBS / código CBS/IBS para planos de saúde:</strong><br>
-                    <code>1.0910.10.00</code> – Serviços de planos privados de assistência à saúde.
-                </li>
-                <li>
-                    <strong>Código exibido no Emissor Nacional (NBS sem pontos):</strong><br>
-                    <code>109101000</code> – Serviços de planos privados de assistência à saúde.
-                </li>
-                <li>
-                    <strong>Escopo:</strong> contratos de prestação continuada de serviços
-                    ou cobertura de custos assistenciais, a preço pré ou pós-estabelecido, por
-                    prazo indeterminado, garantindo acesso a profissionais e serviços de saúde
-                    em rede própria ou credenciada, exatamente a lógica de uma operadora de plano
-                    privado de assistência à saúde.
-                </li>
-            </ul>
+</div>
 
-            <div class="highlight">
-                <strong>Ajuste importante sobre o Emissor Nacional e a NBS:</strong>
-                <ul>
-                    <li>
-                        A <strong>classificação normativa</strong> da operadora, nas tabelas oficiais
-                        de correlação LC 116 × NBS × cClassTrib, é
-                        <code>1.0910.10.00 – Serviços de planos privados de assistência à saúde</code>.
-                    </li>
-                    <li>
-                        No <strong>Emissor Nacional – Produção Restrita</strong>
-                        (<a href="https://www.producaorestrita.nfse.gov.br/EmissorNacional" target="_blank"
-                            rel="noopener noreferrer">
-                            producaorestrita.nfse.gov.br/EmissorNacional
-                        </a>),
-                        esse mesmo item aparece codificado como <code>109101000</code>
-                        (formato numérico da NBS, sem pontos), com a mesma descrição.
-                    </li>
-                    <li>
-                        O código anterior <code>1.2306</code> constava na NBS antiga, mas
-                        foi substituído por <code>1.0910.10.00</code> na tabela atual usada
-                        para CBS/IBS e para o layout nacional da NFS-e, motivo pelo qual
-                        <code>1.2306</code> não aparece mais na interface do portal.
-                    </li>
-                    <li>
-                        <strong>Consequência prática no curto prazo:</strong>
-                        <ul>
-                            <li>Na emissão da NFS-e, você continua utilizando o
-                                <strong>código de serviço municipal do ISS</strong>
-                                <code>04.22.01</code> para planos de saúde;
-                            </li>
-                            <li>Para fins de CBS/IBS e de parametrização do sistema,
-                                você deve tratar a atividade da operadora como
-                                <strong>NBS 1.0910.10.00</strong>, que aparece no sistema
-                                com o valor <code>109101000</code>.
-                            </li>
-                        </ul>
-                    </li>
-                </ul>
-            </div>
-        </div>
+<h3>Discriminação do serviço</h3>
 
-        <!-- 5. Como isso entra na emissão de NFS-e -->
-        <section id="emissao-nota">
-            <h2>5. Emissão da NFS-e na prática</h2>
+<div class="example">
 
-            <div class="card">
-                <div class="card-title">Resumo tático por empresa</div>
-                <table class="table-like">
-                    <thead>
-                        <tr>
-                            <th>Empresa</th>
-                            <th>Campo ISS (Código Serviço / Lista LC 116)</th>
-                            <th>NBS recomendada para CBS/IBS</th>
-                            <th>Observações operacionais</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><strong>Clínica de assistência médica</strong></td>
-                            <td>
-                                <ul>
-                                    <li>Código municipal: <code>04.03.03</code></li>
-                                    <li>Baseado no item 4.03 da Lista de Serviços da LC 116.</li>
-                                </ul>
-                            </td>
-                            <td>
-                                <ul>
-                                    <li>Consultas/atendimento clínico: <code>1.2301.21.00</code></li>
-                                    <li>Outros serviços: família <code>1.2301.xx</code> (exames, imagem, fisio etc.).
-                                    </li>
-                                </ul>
-                            </td>
-                            <td>
-                                <ul>
-                                    <li>Elegível à redução de 60% da alíquota de IBS/CBS (Anexo III), se corretamente
-                                        enquadrada.</li>
-                                    <li>Na NFS-e nacional, você seleciona o serviço pela lista municipal e, quando
-                                        disponível,
-                                        preenche o NBS correspondente.</li>
-                                </ul>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><strong>Operadora de plano de saúde</strong></td>
-                            <td>
-                                <ul>
-                                    <li>Código municipal: <code>04.22.01</code></li>
-                                    <li>Planos de medicina de grupo ou individual; convênios para prestação de
-                                        assistência médica, hospitalar e odontológica.</li>
-                                </ul>
-                            </td>
-                            <td>
-                                <ul>
-                                    <li>NBS normativa: <code>1.0910.10.00</code> – Serviços de planos privados de
-                                        assistência
-                                        à saúde.</li>
-                                </ul>
-                            </td>
-                            <td>
-                                <ul>
-                                    <li>Hoje, o Emissor Nacional não disponibiliza a seleção de
-                                        <code>1.2306</code>;
-                                        o controle continua baseado no código de serviço <code>04.22.01</code>.
-                                    </li>
-                                    <li>Do ponto de vista de governança, a empresa já deve tratar essa atividade como
-                                        NBS 1.0910.10.00
-                                        para fins de CBS/IBS, mesmo que o sistema ainda não reflita isso na tela.</li>
-                                </ul>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+Consulta médica realizada pelo Dr. Fulano de Tal – CRM 12345.
 
-            <div class="highlight">
-                <strong>Ponto de atenção:</strong><br />
-                Mesmo quando a NBS estiver totalmente operacional na NFS-e nacional, o município continuará
-                tendo papel relevante: o ISS (até 2032) e eventuais regimes especiais municipais ainda serão
-                parametrizados pela combinação <strong>CNAE + código de serviço LC 116/Lei municipal</strong>.
-            </div>
-        </section>
+</div>
 
-        <!-- 6. Riscos e próximos passos -->
-        <section id="riscos-proximos-passos">
-            <h2>6. Riscos de compliance e próximos passos recomendados</h2>
+</div>
 
-            <div class="card">
-                <div class="card-title">Checklist de governança tributária</div>
-                <ol>
-                    <li>
-                        <strong>Alinhar CNAE × ISS × NBS de cada CNPJ.</strong><br />
-                        Garantir que:
-                        <ul>
-                            <li>Clínica: CNAE de atividades médicas ambulatoriais compatível com <code>04.03.03</code> e
-                                NBS <code>1.2301.xx</code>.</li>
-                            <li>Operadora: CNAE de plano de saúde/seguro saúde compatível com <code>04.22.01</code> e
-                                NBS <code>1.0910.10.00</code>.</li>
-                        </ul>
-                    </li>
-                    <li>
-                        <strong>Validar as escolhas de NBS com o contador/consultoria tributária.</strong><br />
-                        A classificação correta é o que garante acesso à redução de alíquota (no caso da clínica) e
-                        evita discussões futuras com fiscos municipal, estadual e federal.
-                    </li>
-                    <li>
-                        <strong>Acompanhar a evolução do Emissor Nacional e da NFS-e do Rio.</strong><br />
-                        <ul>
-                            <li>Monitorar quando o campo NBS se tornar obrigatório para o seu município/regime.</li>
-                            <li>Testar antecipadamente no ambiente de produção restrita.</li>
-                            <li>Ajustar o sistema de faturamento para suportar: código de serviço municipal, NBS, CST,
-                                cClassTrib, IBS, CBS e ISS na mesma emissão.</li>
-                        </ul>
-                    </li>
-                    <li>
-                        <strong>Documentar internamente o “mapa de códigos”.</strong><br />
-                        Manter um documento ou planilha com, no mínimo:
-                        <ul>
-                            <li>Descrição do serviço;</li>
-                            <li>CNPJ emissor (clínica ou operadora);</li>
-                            <li>CNAE;</li>
-                            <li>Código ISS municipal;</li>
-                            <li>NBS;</li>
-                            <li>Regime de tributação (ISS, IBS, CBS) e eventuais benefícios.</li>
-                        </ul>
-                    </li>
-                </ol>
-            </div>
+---
 
-            <p class="muted">
-                Em síntese, para fins práticos de emissão de notas hoje, você continua com os códigos de ISS
-                <code>04.03.03</code> (clínica) e <code>04.22.01</code> (operadora). Para planejamento da reforma e
-                configuração futura de CBS/IBS, a clínica se ancora na família <code>1.2301.xx</code> e a operadora
-                na posição <code>1.0910.10.00</code>, respeitando o ritmo de adoção da NBS pelo Emissor Nacional e
-                pelas regras específicas do Município do Rio de Janeiro.
-            </p>
-        </section>
+<h2>2 – Procedimentos ambulatoriais</h2>
 
-    </div>
+<div class="section">
+
+<table>
+
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+
+<tr>
+<td>Código Trib Nacional</td>
+<td class="code">04.03.03</td>
+</tr>
+
+<tr>
+<td>Complementar</td>
+<td class="code">001</td>
+</tr>
+
+<tr>
+<td>NBS</td>
+<td class="code">123012100</td>
+</tr>
+
+<tr>
+<td>Descrição oficial</td>
+<td>Serviços prestados por clínicas, sanatórios, casas de saúde, ambulatórios e congêneres</td>
+</tr>
+
+</table>
+
+<h3>Descrição do serviço</h3>
+
+<div class="example">
+
+Serviços prestados por clínica.
+
+</div>
+
+<h3>Discriminação</h3>
+
+<div class="example">
+
+Procedimento ambulatorial realizado na clínica conforme prontuário médico.
+
+</div>
+
+</div>
+
+---
+
+<h2>3 – Exames laboratoriais</h2>
+
+<div class="section">
+
+<table>
+
+<tr>
+<th>Código</th>
+<th>Valor</th>
+</tr>
+
+<tr>
+<td>Código Trib Nacional</td>
+<td class="code">04.02.01</td>
+</tr>
+
+<tr>
+<td>Complementar</td>
+<td class="code">001</td>
+</tr>
+
+<tr>
+<td>NBS</td>
+<td class="code">123019300</td>
+</tr>
+
+<tr>
+<td>Descrição oficial</td>
+<td>Serviços laboratoriais</td>
+</tr>
+
+</table>
+
+<h3>Descrição do serviço</h3>
+
+<div class="example">
+
+Serviços laboratoriais.
+
+</div>
+
+<h3>Discriminação</h3>
+
+<div class="example">
+
+Exames laboratoriais realizados conforme solicitação médica.
+
+</div>
+
+</div>
+
+---
+
+<h2>4 – Diagnóstico por imagem</h2>
+
+<div class="section">
+
+<table>
+
+<tr>
+<th>Código</th>
+<th>Valor</th>
+</tr>
+
+<tr>
+<td>Código Trib Nacional</td>
+<td class="code">04.02.01</td>
+</tr>
+
+<tr>
+<td>Complementar</td>
+<td class="code">001</td>
+</tr>
+
+<tr>
+<td>NBS</td>
+<td class="code">123019400</td>
+</tr>
+
+<tr>
+<td>Descrição oficial</td>
+<td>Serviços de diagnóstico por imagem</td>
+</tr>
+
+</table>
+
+<h3>Descrição do serviço</h3>
+
+<div class="example">
+
+Serviços de diagnóstico por imagem.
+
+</div>
+
+<h3>Discriminação</h3>
+
+<div class="example">
+
+Exame de ressonância magnética realizado conforme solicitação médica.
+
+</div>
+
+</div>
+
+---
+
+<h2>5 – Prestação de mão de obra</h2>
+
+<div class="section">
+
+<table>
+
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+
+<tr>
+<td>Código Trib Nacional</td>
+<td class="code">17.05.01</td>
+</tr>
+
+<tr>
+<td>Complementar</td>
+<td class="code">001</td>
+</tr>
+
+<tr>
+<td>NBS</td>
+<td class="code">118012100</td>
+</tr>
+
+<tr>
+<td>Descrição oficial</td>
+<td>Fornecimento de mão-de-obra, mesmo em caráter temporário</td>
+</tr>
+
+</table>
+
+<h3>Descrição do serviço</h3>
+
+<div class="example">
+
+Fornecimento de mão-de-obra.
+
+</div>
+
+<h3>Discriminação</h3>
+
+<div class="example">
+
+Prestação de serviços médicos mediante cessão de mão de obra.
+
+</div>
+
+<div class="alert">
+
+Quando houver fornecimento de mão de obra:
+
+RETENÇÃO DE INSS = 11%
+
+</div>
+
+</div>
+
+---
+
+<h2>6 – PIS e COFINS</h2>
+
+<div class="section">
+
+<table>
+
+<tr>
+<th>Regime</th>
+<th>PIS</th>
+<th>COFINS</th>
+</tr>
+
+<tr>
+<td>Simples Nacional</td>
+<td>NÃO PREENCHER</td>
+<td>NÃO PREENCHER</td>
+</tr>
+
+<tr>
+<td>Lucro Presumido</td>
+<td>INSERIR VALOR – 0,65%</td>
+<td>INSERIR VALOR – 3%</td>
+</tr>
+
+</table>
+
+<div class="alert">
+
+Se a empresa for Lucro Presumido:
+
+DEVE SER INFORMADO O VALOR.
+
+Exemplo:
+
+Valor da nota = 1000
+
+PIS = 6,50  
+COFINS = 30,00
+
+</div>
+
+</div>
+
+---
+
+<h2>7 – IRPJ e CSLL</h2>
+
+<div class="section">
+
+<div class="good">
+
+Nunca preencher IRPJ ou CSLL na nota.
+
+Esses impostos são calculados pela contabilidade.
+
+</div>
+
+</div>
+
+---
+
+<h2>8 – IBPT</h2>
+
+<div class="section">
+
+<div class="good">
+
+Não é mais necessário preencher os dados do IBPT.
+
+O sistema calcula automaticamente.
+
+</div>
+
+</div>
+
 </body>
-
 </html>
