@@ -1,17 +1,32 @@
-async function perguntarIA(pergunta, contexto) {
+async function perguntarIA(pergunta, contexto){
 
-    const resp = await fetch("/api/ia/pergunta", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            pergunta: pergunta,
-            contexto: contexto
+    try{
+
+        const resp = await fetch("/api/ia/pergunta",{
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json"
+            },
+            body:JSON.stringify({
+                pergunta:pergunta,
+                contexto:contexto
+            })
         })
-    })
 
-    const data = await resp.json()
+        if(!resp.ok){
 
-    return data.resposta
+            if(resp.status===429){
+                return "⚠️ IA indisponível: limite da API ou sem crédito."
+            }
+
+            return "⚠️ Falha ao conectar com a IA."
+        }
+
+        const data = await resp.json()
+        return data.resposta
+
+    }catch(e){
+
+        return "⚠️ Erro de conexão com servidor."
+    }
 }
