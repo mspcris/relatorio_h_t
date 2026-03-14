@@ -14,8 +14,7 @@ from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 load_dotenv("/opt/relatorio_h_t/.env")
 
-from ia_router_openai import ia_bp
-app.register_blueprint(ia_bp)
+
 
 
 # ===============================
@@ -35,6 +34,8 @@ signer = TimestampSigner(SECRET)
 # Pasta única de templates
 app = Flask(__name__, template_folder="/opt/camim-auth/templates")
 
+from ia_router_openai import ia_bp
+app.register_blueprint(ia_bp)
 
 # ===============================
 # Funções auxiliares
