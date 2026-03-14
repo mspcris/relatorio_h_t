@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="pt-br">
-<!-- Arquivo: kpi_recaita_despesa.html -->
+<!-- Arquivo: kpi_receita_despesa.html -->
 
 <head>
   <meta charset="UTF-8" />
@@ -750,7 +750,7 @@
 
             <!-- NOVO ITEM: KPI Receitas x Despesas -->
             <li class="nav-item">
-              <a href="kpi_recaita_despesa.html" class="nav-link active">
+              <a href="kpi_receita_despesa.html" class="nav-link active">
                 <i class="nav-icon fas fa-balance-scale"></i>
                 <p>KPI Receitas x Despesas</p>
               </a>
@@ -1676,6 +1676,53 @@
           full: entries,
           total
         };
+      }
+
+      // ============================================================
+      // DRIVERS — VARIAÇÃO DE DESPESA POR TIPO (jan vs fev, etc.)
+      // ============================================================
+
+      function calcularDriversTipo(meses) {
+
+        if (!Array.isArray(meses) || meses.length !== 2) return []
+
+        const [mesA, mesB] = meses
+
+        const baseA = computeDespesaDim([mesA], "tipo").full
+        const baseB = computeDespesaDim([mesB], "tipo").full
+
+        const map = {}
+
+        baseA.forEach(r => {
+          const tipo = (r.tipo || 'Sem classificação')
+          const v = Number(r.valor) || 0
+          map[tipo] = { jan: v, fev: 0 }
+        })
+
+        baseB.forEach(r => {
+          const tipo = (r.tipo || 'Sem classificação')
+          const v = Number(r.valor) || 0
+          if (!map[tipo]) map[tipo] = { jan: 0, fev: 0 }
+          map[tipo].fev = v
+        })
+
+        const out = []
+
+        Object.entries(map).forEach(([tipo, v]) => {
+
+          const variacao = v.fev - v.jan
+
+          out.push({
+            tipo,
+            jan: v.jan,
+            fev: v.fev,
+            variacao
+          })
+        })
+
+        return out
+          .sort((a, b) => Math.abs(b.variacao) - Math.abs(a.variacao))
+          .slice(0, 10)
       }
 
       // ============================================================
@@ -2993,8 +3040,47 @@ function updateExploradorDespesas(mesesSelec) {
         updateChartDespesaDim(mesesSelec);
         updateVariacao();
 
-        // Explorador (respeita período + filtros)
+        // Explorador
         updateExploradorDespesas(mesesSelec);
+
+        // ======================================================
+        // CONTEXTO PARA IA (ESSENCIAL)
+        // ======================================================
+
+        try {
+
+          const resumo = aggregatePeriodo(mesesSelec);
+          const despesasPorTipo = computeDespesaDim(mesesSelec,"tipo")
+            .full
+            .slice(0,20)
+          const driversTipo = calcularDriversTipo(mesesSelec)
+
+          window.__kpi_contexto = JSON.stringify({
+            kpi: "receita_despesa",
+            empresa: "CAMIM",
+            postos: postosSelecionados(),
+            periodo: mesesSelec,
+            considerar_retirada: considerarRetirada,
+
+            resumo_financeiro: {
+              receita_total: resumo.recTotal,
+              receita_mensalidades: resumo.recMens,
+              receita_servicos: resumo.recServ,
+              despesa_sem_retirada: resumo.despSem,
+              despesa_com_retirada: resumo.despCom,
+              despesa_considerada: resumo.despUsada,
+              resultado: resumo.resultado,
+              margem: resumo.margem
+            },
+
+            despesas_por_tipo: despesasPorTipo,
+            drivers_despesa_tipo: driversTipo
+          });
+
+        } catch (e) {
+          console.warn("Erro ao montar contexto IA:", e);
+        }
+
       }
 
       async function init() {
@@ -3080,6 +3166,15 @@ function updateExploradorDespesas(mesesSelec) {
       document.addEventListener('DOMContentLoaded', init);
     })();
   </script>
+
+  <script src="/js/ia_client.js"></script>
+<script src="/js/ia_chat_widget.js"></script>
+
+<script>
+initIAChat()
+</script>
+
+
 
 </body>
 
