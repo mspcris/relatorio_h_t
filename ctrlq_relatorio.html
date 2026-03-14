@@ -564,10 +564,14 @@ canvas { max-width: 100% !important; }
   </div>
 
   <!-- Variáveis de sessão injetadas pelo backend -->
-  <script>
-    window.USER_EMAIL = "{{ USER_EMAIL }}";
-    window.USER_POSTOS = {{ USER_POSTOS | safe }};
-  </script>
+<!-- Variáveis de sessão injetadas pelo backend -->
+<script>
+window.USER_EMAIL = {{ USER_EMAIL | tojson | default('""') }};
+window.USER_POSTOS = {{ USER_POSTOS | tojson | default('[]') }};
+</script>
+
+
+
 
   <!-- MODAL DRILLDOWN -->
   <div class="modal fade" id="drillModal" tabindex="-1" role="dialog" aria-labelledby="drillTitle" aria-hidden="true">

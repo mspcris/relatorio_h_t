@@ -52,13 +52,11 @@ fechamento AS (
 dedup AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (
-      PARTITION BY DataFechamentoMes, idmedico
-      ORDER BY
-        CASE WHEN PessoaJuridica = 1 THEN 0 ELSE 1 END,
-        DataHoraInclusao DESC,
-        Especialidade ASC
-    ) AS rn
+ROW_NUMBER() OVER (
+  PARTITION BY DataFechamentoMes, idmedico
+  ORDER BY temporario ASC, DataHoraInclusao DESC
+) rn
+
   FROM fechamento
 )
 SELECT
