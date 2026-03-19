@@ -64,6 +64,10 @@
     // switches de Operadora (mutuamente exclusivos)
     let operadoraMode = null;     // null | 'CAMIM' | 'SDM'
 
+    // filtro por faixa de dias (null = sem filtro)
+    let diaDe = null;
+    let diaAte = null;
+
     // cache mensal: { ym: { posto: payload } }
     const CACHE = {};
 
@@ -232,7 +236,18 @@
     // Agregação por posto (mantém o código)
     // =========================
     function aggNotasForPosto(payload){
-      const rows = (payload?.notas_emitidas||[]).filter(notasFilter);
+      let source;
+      if ((diaDe !== null || diaAte !== null) && Array.isArray(payload?.notas_por_dia)) {
+        const de  = diaDe  ?? 1;
+        const ate = diaAte ?? 31;
+        source = payload.notas_por_dia.filter(r => {
+          const d = parseInt((r.data_emissao || '').slice(8, 10), 10);
+          return d >= de && d <= ate;
+        });
+      } else {
+        source = payload?.notas_emitidas || [];
+      }
+      const rows = source.filter(notasFilter);
       return {
         qtd: sum(rows.map(r=>num(r.qtd_notas))),
         emitidas: sum(rows.map(r=>num(r.valor_notas_emitidas))),
@@ -406,7 +421,10 @@
       const ym = ymSel;
       const postoLabel = (selPostos==='ALL') ? 'Todos' : [...selPostos].sort().join('+');
       const modoTxt = operadoraMode ? `Operadora: ${operadoraMode}` : `Grupo: ${selGrupo}`;
-      el('#hdrSel').textContent = `Mês: ${ym} • Postos: ${postoLabel} • ${modoTxt}`;
+      const diaTxt = (diaDe !== null || diaAte !== null)
+        ? ` • Dias: ${diaDe ?? 1}–${diaAte ?? 31}`
+        : '';
+      el('#hdrSel').textContent = `Mês: ${ym}${diaTxt} • Postos: ${postoLabel} • ${modoTxt}`;
 
       const agg = aggAllSelected(ym);
 
@@ -502,6 +520,17 @@
 
       el('#grupo').addEventListener('change', ()=>{
         selGrupo = el('#grupo').value;
+        render();
+      });
+
+      el('#diaDe').addEventListener('change', ()=>{
+        const v = el('#diaDe').value;
+        diaDe = v ? parseInt(v, 10) : null;
+        render();
+      });
+      el('#diaAte').addEventListener('change', ()=>{
+        const v = el('#diaAte').value;
+        diaAte = v ? parseInt(v, 10) : null;
         render();
       });
 
@@ -715,6 +744,18 @@
           <div>
             <label class="mb-0 small d-block">Mês</label>
             <input id="mes" type="month" class="form-control form-control-sm" />
+          </div>
+
+          <div>
+            <label class="mb-0 small d-block">Dia de</label>
+            <input id="diaDe" type="number" min="1" max="31" placeholder="1"
+                   class="form-control form-control-sm" style="width:70px" />
+          </div>
+
+          <div>
+            <label class="mb-0 small d-block">Dia até</label>
+            <input id="diaAte" type="number" min="1" max="31" placeholder="31"
+                   class="form-control form-control-sm" style="width:70px" />
           </div>
 
           <div>
