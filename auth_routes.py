@@ -282,7 +282,7 @@ def admin_page():
 @auth_bp.get("/admin/api/usuarios")
 def admin_lista():
     if not _require_admin():
-        return ("", 403)
+        return jsonify({"erro": "Não autorizado"}), 403
     db = SessionLocal()
     try:
         users = db.query(User).order_by(User.email).all()
@@ -301,7 +301,7 @@ def admin_lista():
 @auth_bp.post("/admin/api/usuarios")
 def admin_criar():
     if not _require_admin():
-        return ("", 403)
+        return jsonify({"erro": "Não autorizado"}), 403
     d  = request.get_json(silent=True) or {}
     db = SessionLocal()
     try:
@@ -328,13 +328,13 @@ def admin_criar():
 @auth_bp.post("/admin/api/usuarios/<int:uid>")
 def admin_editar(uid: int):
     if not _require_admin():
-        return ("", 403)
+        return jsonify({"erro": "Não autorizado"}), 403
     d  = request.get_json(silent=True) or {}
     db = SessionLocal()
     try:
         user = get_user_by_id(db, uid)
         if not user:
-            return ("", 404)
+            return jsonify({"erro": "Usuário não encontrado"}), 404
         if "nome" in d:
             user.nome = d["nome"].strip()
         if "is_admin" in d:
@@ -359,12 +359,12 @@ def admin_editar(uid: int):
 def admin_deletar(uid: int):
     adm = _require_admin()
     if not adm:
-        return ("", 403)
+        return jsonify({"erro": "Não autorizado"}), 403
     db = SessionLocal()
     try:
         user = get_user_by_id(db, uid)
         if not user:
-            return ("", 404)
+            return jsonify({"erro": "Usuário não encontrado"}), 404
         if user.email == adm.email:
             return jsonify({"erro": "Não é possível excluir o próprio usuário"}), 400
         db.delete(user)
@@ -377,12 +377,12 @@ def admin_deletar(uid: int):
 @auth_bp.post("/admin/api/usuarios/<int:uid>/reset")
 def admin_reset_link(uid: int):
     if not _require_admin():
-        return ("", 403)
+        return jsonify({"erro": "Não autorizado"}), 403
     db = SessionLocal()
     try:
         user = get_user_by_id(db, uid)
         if not user:
-            return ("", 404)
+            return jsonify({"erro": "Usuário não encontrado"}), 404
         token = user.gerar_reset_token()
         db.commit()
         ok = _enviar_reset(user.email, token)

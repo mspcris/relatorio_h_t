@@ -282,6 +282,14 @@ function editar(id) {
   $('#modal').modal('show');
 }
 
+// ── Helper: fetch que nunca explode no .json() ────────────────────────────────
+async function api(url, opts = {}) {
+  const r = await fetch(url, opts);
+  let data = {};
+  try { data = await r.json(); } catch (_) {}
+  return { ok: r.ok, status: r.status, data };
+}
+
 // ── Salvar (criar ou editar) ──────────────────────────────────────────────────
 async function salvar() {
   const uid    = document.getElementById('uid').value;
@@ -301,24 +309,25 @@ async function salvar() {
   if (!uid) payload.email = email;
   if (senha) payload.senha = senha;
 
-  const url    = uid ? `/admin/api/usuarios/${uid}` : '/admin/api/usuarios';
-  const method = 'POST';
-  const btn    = document.getElementById('btnSalvar');
+  const url = uid ? `/admin/api/usuarios/${uid}` : '/admin/api/usuarios';
+  const btn = document.getElementById('btnSalvar');
   btn.disabled = true;
 
   try {
-    const r = await fetch(url, {
-      method,
+    const { ok, status, data } = await api(url, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    const data = await r.json();
-    if (!r.ok) { erroEl.textContent = data.erro || 'Erro ao salvar.'; return; }
+    if (!ok) {
+      erroEl.textContent = data.erro || `Erro ${status} ao salvar.`;
+      return;
+    }
     $('#modal').modal('hide');
     toast(uid ? 'Usuário atualizado.' : 'Usuário criado.');
     await carregar();
   } catch (e) {
-    erroEl.textContent = 'Erro de comunicação.';
+    erroEl.textContent = `Falha de rede: ${e.message}`;
   } finally {
     btn.disabled = false;
   }
@@ -327,9 +336,8 @@ async function salvar() {
 // ── Excluir ───────────────────────────────────────────────────────────────────
 async function excluir(id, email) {
   if (!confirm(`Excluir o usuário "${email}"?`)) return;
-  const r = await fetch(`/admin/api/usuarios/${id}/delete`, { method: 'POST' });
-  const d = await r.json();
-  if (!r.ok) { toast(d.erro || 'Erro ao excluir.', true); return; }
+  const { ok, status, data } = await api(`/admin/api/usuarios/${id}/delete`, { method: 'POST' });
+  if (!ok) { toast(data.erro || `Erro ${status} ao excluir.`, true); return; }
   toast('Usuário excluído.');
   await carregar();
 }
@@ -337,9 +345,9 @@ async function excluir(id, email) {
 // ── Enviar reset ──────────────────────────────────────────────────────────────
 async function enviarReset(id, email) {
   if (!confirm(`Enviar link de redefinição de senha para "${email}"?`)) return;
-  const r = await fetch(`/admin/api/usuarios/${id}/reset`, { method: 'POST' });
-  const d = await r.json();
-  toast(d.ok ? `Link enviado para ${email}.` : 'Falha ao enviar e-mail.', !d.ok);
+  const { ok, status, data } = await api(`/admin/api/usuarios/${id}/reset`, { method: 'POST' });
+  if (!ok) { toast(data.erro || `Erro ${status}.`, true); return; }
+  toast(data.ok ? `Link enviado para ${email}.` : 'Falha ao enviar e-mail.', !data.ok);
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
