@@ -108,6 +108,22 @@ jobs:
             ./ "$SSH_USER@$SSH_HOST:$DEST/"
 
       # ================================================================
+      # 2B) login.html -> /var/www  (nginx serve direto; sync_www também faz isso,
+      #     mas o deploy garante atualização imediata sem depender do cron)
+      # ================================================================
+      - name: login.html -> /var/www
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          rsync -lvz \
+            --omit-dir-times --no-perms --no-owner --no-group \
+            -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+            ./login.html "$SSH_USER@$SSH_HOST:/var/www/login.html"
+
+      # ================================================================
       # 3) analyze_groq.py
       # ================================================================
       - name: analyze_groq.py -> /opt/ia-groq e /opt/ia-groq/app

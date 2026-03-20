@@ -1,10 +1,8 @@
-# no topo do script
-[ "$(id -un)" = "appuser" ] || { echo "erro: execute como appuser"; exit 1; }
-umask 002
-
 #!/usr/bin/env bash
 set -euo pipefail
 umask 002
+
+[ "$(id -un)" = "appuser" ] || { echo "erro: execute como appuser"; exit 1; }
 
 # === paths ===
 ROOT="/opt/relatorio_h_t"
