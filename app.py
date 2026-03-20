@@ -265,6 +265,10 @@ def render_protected_page(page_name):
 # ROTAS SEM .html
 # ===============================
 
+@app.get('/mais_servicos')
+def r_mais_servicos():
+    return render_protected_page("mais_servicos.html")
+
 @app.get('/kpi_receita_despesa_rateio')
 def r_rateio():
     return render_protected_page("kpi_receita_despesa_rateio.html")
@@ -316,6 +320,10 @@ def r12(): return render_protected_page("trello_harvest.html")
 # ===============================
 # ROTAS COM .html
 # ===============================
+
+@app.get('/mais_servicos.html')
+def h_mais_servicos():
+    return render_protected_page("mais_servicos.html")
 
 @app.get('/kpi_receita_despesa_rateio.html')
 def h_rateio():
