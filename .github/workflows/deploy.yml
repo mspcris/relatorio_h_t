@@ -246,7 +246,7 @@ jobs:
           set -euxo pipefail
           DEST=/opt/camim-auth
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
-          for f in app.py auth_db.py auth_routes.py ia_router_openai.py llm_client_openai.py; do
+          for f in app.py auth_db.py auth_routes.py migrate_usuarios.py ia_router_openai.py llm_client_openai.py; do
             if [ -f "$f" ]; then
               echo "Copiando $f → $DEST"
               rsync -rlvz \
@@ -257,6 +257,24 @@ jobs:
               echo "WARN: $f não encontrado"
             fi
           done
+
+      # ================================================================
+      # 5B) Deps novas no venv de /opt/camim-auth
+      # ================================================================
+      - name: pip install werkzeug no venv camim-auth
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+            VENV=/opt/camim-auth/venv
+            if [ -d \"\$VENV\" ]; then
+              \$VENV/bin/pip install --quiet werkzeug sqlalchemy
+            else
+              echo 'WARN: venv em /opt/camim-auth/venv nao encontrado'
+            fi
+          "
 
       # ================================================================
       # 6) Sync SQL (todas as pastas que começam com sql*)
