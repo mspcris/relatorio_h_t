@@ -1,6 +1,4 @@
 from flask import Flask, request, make_response, jsonify, render_template
-from itsdangerous import TimestampSigner, BadSignature
-from passlib.apache import HtpasswdFile
 import os, secrets, json
 from datetime import date, datetime
 import re
@@ -9,27 +7,19 @@ from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine, text
 
-
-
 from dotenv import load_dotenv
 load_dotenv("/opt/relatorio_h_t/.env")
-
-
 
 
 # ===============================
 # Configurações
 # ===============================
 
-HTPASS_PATH = '/etc/nginx/.htpasswd'
-ACL_PATH    = '/etc/nginx/postos_acl.json'
+ACL_PATH    = '/etc/nginx/postos_acl.json'   # mantido para /postos_acl.json
 
 SESS_NAME   = 'appsess'
 SECRET      = os.environ.get('SESSION_SECRET', secrets.token_hex(32))
 TTL_SECONDS = 3600 * 8   # 8h
-
-ht = HtpasswdFile(HTPASS_PATH)
-signer = TimestampSigner(SECRET)
 
 # Pasta única de templates
 app = Flask(__name__, template_folder="/opt/camim-auth/templates")
@@ -37,20 +27,13 @@ app = Flask(__name__, template_folder="/opt/camim-auth/templates")
 from ia_router_openai import ia_bp
 app.register_blueprint(ia_bp)
 
+from auth_routes import auth_bp, init_auth, decode_user
+app.register_blueprint(auth_bp)
+init_auth(SESS_NAME, SECRET, TTL_SECONDS)
+
 # ===============================
 # Funções auxiliares
 # ===============================
-
-def set_cookie(resp, value, max_age=TTL_SECONDS):
-    resp.set_cookie(
-        SESS_NAME,
-        value,
-        max_age=max_age,
-        httponly=True,
-        secure=True,
-        samesite='Lax',
-        path='/'
-    )
 
 def load_acl():
     try:
@@ -58,19 +41,6 @@ def load_acl():
             return json.load(f)
     except:
         return {}
-
-def decode_user():
-        c = request.cookies.get(SESS_NAME)
-        if not c:
-            return None, None
-        try:
-            raw = signer.unsign(c, max_age=TTL_SECONDS + 3600).decode()
-            email = raw.split(':', 1)[0]
-            acl = load_acl()
-            postos = acl.get(email, [])
-            return email, postos
-        except BadSignature:
-            return None, None
 
 # ===============================
 # Metas API (SQL Server por posto)
@@ -182,67 +152,7 @@ def _patch_json_meta(posto: str, ym: str, meta_obj: dict):
 
     return {"patched": True}
 
-# ===============================
-# LOGIN / LOGOUT
-# ===============================
-
-@app.post('/session/login')
-def login():
-    ht.load()
-    email = request.form.get('email', '').strip()
-    senha = request.form.get('senha', '')
-
-    if not (email and senha) or not ht.check_password(email, senha):
-        r = make_response('', 302)
-        r.headers['Location'] = '/login?e=1'
-        return r
-
-    token = signer.sign(f"{email}:{secrets.token_hex(8)}").decode()
-    r = make_response('', 302)
-    set_cookie(r, token)
-    r.headers['Location'] = '/'
-    return r
-
-
-@app.post('/session/logout')
-def logout():
-    r = make_response('', 302)
-    r.delete_cookie(SESS_NAME, path='/')
-    r.headers['Location'] = '/login'
-    return r
-
-
-# ===============================
-# /auth — usado pelo NGINX
-# ===============================
-
-@app.get('/auth')
-def auth():
-    c = request.cookies.get(SESS_NAME)
-    if not c:
-        return ('', 401)
-
-    try:
-        signer.unsign(c, max_age=TTL_SECONDS + 3600)
-        return ('', 200)
-    except BadSignature:
-        return ('', 401)
-
-
-# ===============================
-# /session/me
-# ===============================
-
-@app.get('/session/me')
-def session_me():
-    email, postos = decode_user()
-    if not email:
-        return ('', 401)
-
-    return jsonify({
-        "email": email,
-        "postos": postos
-    })
+# login/logout/auth/session/me → auth_routes.py (blueprint)
 
 
 # ============================================
@@ -250,14 +160,23 @@ def session_me():
 # ============================================
 
 def render_protected_page(page_name):
+    from auth_db import SessionLocal, get_user_by_email as _gue
     email, postos = decode_user()
     if not email:
         return ('', 401)
 
+    db = SessionLocal()
+    try:
+        u = _gue(db, email)
+        is_admin = u.is_admin if u else False
+    finally:
+        db.close()
+
     return render_template(
         page_name,
         USER_EMAIL=email,
-        USER_POSTOS=json.dumps(postos)
+        USER_POSTOS=json.dumps(postos),
+        USER_IS_ADMIN=is_admin,
     )
 
 

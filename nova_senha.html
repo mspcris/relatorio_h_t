@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>CAMIM — Nova senha</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="shortcut icon" href="/images/Logo Camim-01_50px.png" type="image/x-icon">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: linear-gradient(160deg, #0a2010 0%, #0d1a0d 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.card {
+  width: min(420px, 100%);
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 16px;
+  padding: 40px 36px;
+  color: #fff;
+}
+.logo-row { text-align: center; margin-bottom: 28px; }
+.logo-row img { height: 52px; }
+h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; text-align: center; }
+.sub { text-align: center; color: rgba(255,255,255,.45); font-size: .88rem; margin-bottom: 28px; }
+label { display: block; font-size: .78rem; font-weight: 600; color: rgba(255,255,255,.5); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 8px; }
+.input-row {
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color .2s;
+  margin-bottom: 16px;
+}
+.input-row:focus-within { border-color: #009944; box-shadow: 0 0 0 3px rgba(0,153,68,.18); }
+.input-row .icon { width: 44px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.3); }
+.input-row input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: .97rem;
+  padding: 13px 12px 13px 0;
+}
+.input-row input::placeholder { color: rgba(255,255,255,.2); }
+.toggle-pwd { background: none; border: none; cursor: pointer; padding: 0 14px; color: rgba(255,255,255,.3); font-size: .9rem; transition: color .2s; }
+.toggle-pwd:hover { color: rgba(255,255,255,.7); }
+.strength { font-size: .78rem; margin-bottom: 16px; color: rgba(255,255,255,.4); }
+.strength span { font-weight: 600; }
+.btn {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #009944, #006633);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0,153,68,.3);
+  transition: filter .2s;
+}
+.btn:hover { filter: brightness(1.1); }
+.erro { color: #ff6b6b; font-size: .85rem; text-align: center; margin-bottom: 14px; }
+.back { display: block; text-align: center; margin-top: 20px; color: rgba(255,255,255,.35); font-size: .85rem; text-decoration: none; }
+.back:hover { color: #009944; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo-row">
+    <img src="/images/Logo Camim-01_200px.png" alt="CAMIM">
+  </div>
+  <h1>Criar nova senha</h1>
+  <p class="sub">Mínimo de 8 caracteres.</p>
+
+  {% if erro %}
+  <p class="erro"><i class="fas fa-exclamation-circle"></i> {{ erro }}</p>
+  {% endif %}
+
+  <form method="POST" action="/auth/reset/{{ token }}">
+    <label for="senha">Nova senha</label>
+    <div class="input-row">
+      <span class="icon"><i class="fas fa-lock"></i></span>
+      <input id="senha" name="senha" type="password" placeholder="••••••••" minlength="8" required oninput="checkStrength(this.value)">
+      <button class="toggle-pwd" type="button" onclick="toggle('senha','eye1')"><i id="eye1" class="far fa-eye"></i></button>
+    </div>
+
+    <label for="confirma">Confirmar senha</label>
+    <div class="input-row">
+      <span class="icon"><i class="fas fa-lock"></i></span>
+      <input id="confirma" name="confirma" type="password" placeholder="••••••••" minlength="8" required>
+      <button class="toggle-pwd" type="button" onclick="toggle('confirma','eye2')"><i id="eye2" class="far fa-eye"></i></button>
+    </div>
+
+    <p class="strength" id="strength"></p>
+
+    <button type="submit" class="btn">Salvar nova senha</button>
+  </form>
+
+  <a href="/login" class="back"><i class="fas fa-arrow-left" style="margin-right:6px"></i>Voltar ao login</a>
+</div>
+
+<script>
+function toggle(inputId, iconId) {
+  const inp  = document.getElementById(inputId);
+  const icon = document.getElementById(iconId);
+  const show = inp.type === 'password';
+  inp.type   = show ? 'text' : 'password';
+  icon.className = show ? 'far fa-eye-slash' : 'far fa-eye';
+}
+function checkStrength(v) {
+  const el = document.getElementById('strength');
+  if (!v) { el.innerHTML = ''; return; }
+  let score = 0;
+  if (v.length >= 8)  score++;
+  if (v.length >= 12) score++;
+  if (/[A-Z]/.test(v)) score++;
+  if (/[0-9]/.test(v)) score++;
+  if (/[^A-Za-z0-9]/.test(v)) score++;
+  const labels = ['Muito fraca','Fraca','Razoável','Boa','Forte','Muito forte'];
+  const colors = ['#ff4444','#ff7700','#ffbb00','#88cc00','#00cc55','#00aa44'];
+  el.innerHTML = 'Força: <span style="color:' + colors[score] + '">' + labels[score] + '</span>';
+}
+</script>
+</body>
+</html>

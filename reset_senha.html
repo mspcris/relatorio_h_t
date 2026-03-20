@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>CAMIM — Recuperar senha</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="shortcut icon" href="/images/Logo Camim-01_50px.png" type="image/x-icon">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: linear-gradient(160deg, #0a2010 0%, #0d1a0d 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.card {
+  width: min(420px, 100%);
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 16px;
+  padding: 40px 36px;
+  color: #fff;
+}
+.logo-row { text-align: center; margin-bottom: 28px; }
+.logo-row img { height: 52px; }
+h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; text-align: center; }
+.sub { text-align: center; color: rgba(255,255,255,.45); font-size: .88rem; margin-bottom: 28px; }
+label { display: block; font-size: .78rem; font-weight: 600; color: rgba(255,255,255,.5); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 8px; }
+.input-row {
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color .2s;
+  margin-bottom: 20px;
+}
+.input-row:focus-within { border-color: #009944; box-shadow: 0 0 0 3px rgba(0,153,68,.18); }
+.input-row .icon { width: 44px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.3); }
+.input-row input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: .97rem;
+  padding: 13px 12px 13px 0;
+}
+.input-row input::placeholder { color: rgba(255,255,255,.2); }
+.btn {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #009944, #006633);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0,153,68,.3);
+  transition: filter .2s;
+}
+.btn:hover { filter: brightness(1.1); }
+.back { display: block; text-align: center; margin-top: 20px; color: rgba(255,255,255,.35); font-size: .85rem; text-decoration: none; }
+.back:hover { color: #009944; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo-row">
+    <img src="/images/Logo Camim-01_200px.png" alt="CAMIM">
+  </div>
+  <h1>Recuperar senha</h1>
+  <p class="sub">Informe seu e-mail e enviaremos um link para criar uma nova senha.</p>
+
+  <form method="POST" action="/auth/reset">
+    <label for="email">E-mail</label>
+    <div class="input-row">
+      <span class="icon"><i class="far fa-envelope"></i></span>
+      <input id="email" name="email" type="email" placeholder="voce@camim.com.br" required autocomplete="email">
+    </div>
+    <button type="submit" class="btn">Enviar link de recuperação</button>
+  </form>
+
+  <a href="/login" class="back"><i class="fas fa-arrow-left" style="margin-right:6px"></i>Voltar ao login</a>
+</div>
+</body>
+</html>

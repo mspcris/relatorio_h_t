@@ -1,191 +1,497 @@
 <!doctype html>
 <html lang="pt-br">
-
 <head>
-    <meta charset="utf-8">
-    <title>CAMIM — Login</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<title>CAMIM — Acesso</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="shortcut icon" href="/images/Logo Camim-01_50px.png" type="image/x-icon">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
-    <link rel="shortcut icon" href="images/Logo Camim-01_50px.png" type="image/x-icon">
+:root {
+  --green: #006633;
+  --green2: #009944;
+  --red:   #cc0000;
+  --white: #ffffff;
+}
 
-    <style>
-        html,
-        body {
-            height: 100%;
-        }
+html, body { height: 100%; font-family: "Segoe UI", system-ui, sans-serif; }
 
-        .login-wrap {
-            min-height: 100svh;
-            display: grid;
-            place-items: center;
-            padding: 24px;
-            background:
-                radial-gradient(1200px 600px at 10% 10%, rgba(255, 255, 255, .08), transparent 60%),
-                radial-gradient(1000px 600px at 90% 90%, rgba(255, 255, 255, .06), transparent 60%),
-                linear-gradient(135deg, #e6eef5 0%, #dfe7ef 40%, #d5e0ea 100%);
-        }
+/* ── SPLIT LAYOUT ─────────────────────────────────────────────────────────── */
+.split {
+  display: grid;
+  grid-template-columns: 1fr 480px;
+  min-height: 100vh;
+}
 
-        .glass-card {
-            width: min(420px, 92vw);
-            border-radius: 16px;
-            padding: 24px;
-            border: 1px solid rgba(255, 255, 255, .35);
-            background: rgba(255, 255, 255, .40);
-            box-shadow: 0 10px 30px rgba(31, 49, 71, .18), inset 0 0 0 1px rgba(255, 255, 255, .25);
-            -webkit-backdrop-filter: blur(16px) saturate(1.2);
-            backdrop-filter: blur(16px) saturate(1.2);
-        }
+/* ── ESQUERDA — galeria imersiva ──────────────────────────────────────────── */
+.gallery {
+  position: relative;
+  overflow: hidden;
+  background: #001a0a;
+}
 
-        @supports not ((-webkit-backdrop-filter:blur(16px)) or (backdrop-filter:blur(16px))) {
-            .glass-card {
-                background: rgba(255, 255, 255, .85);
-            }
-        }
+.slide {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+}
+.slide.active { opacity: 1; }
 
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px
-        }
+/* Fotos reais das unidades CAMIM */
+.slide:nth-child(1) { background-image: url('https://www.camim.com.br/wp-content/uploads/2022/08/fachada-camim-norte.jpg'); }
+.slide:nth-child(2) { background-image: url('https://www.camim.com.br/wp-content/uploads/2022/08/fachada-camim-sul.jpg'); }
+.slide:nth-child(3) { background-image: url('https://www.camim.com.br/wp-content/uploads/2022/08/fachada-camim-leste.jpg'); }
+.slide:nth-child(4) { background-image: url('https://www.camim.com.br/wp-content/uploads/2022/08/fachada-camim-oeste.jpg'); }
+.slide:nth-child(5) { background-image: url('https://www.camim.com.br/wp-content/uploads/2023/01/camim-recepcao.jpg'); }
 
-        .brand img {
-            height: 42px;
-            width: auto
-        }
+/* gradiente overlay lado direito — transição suave para o painel */
+.gallery::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to right,
+    rgba(0,30,15,.35) 0%,
+    rgba(0,30,15,.7)  70%,
+    rgba(0,20,10,.95) 100%
+  );
+}
 
-        .brand-title {
-            font-weight: 700;
-            white-space: nowrap
-        }
+/* badge flutuante com contagem de postos */
+.gallery-badge {
+  position: absolute;
+  bottom: 40px;
+  left: 40px;
+  z-index: 10;
+  color: #fff;
+}
+.gallery-badge .big   { font-size: 4rem; font-weight: 800; line-height: 1; }
+.gallery-badge .label { font-size: 1rem; opacity: .8; letter-spacing: .06em; text-transform: uppercase; }
 
-        .muted {
-            color: #6b7280
-        }
+/* dots indicadores */
+.dots {
+  position: absolute;
+  bottom: 40px;
+  right: 40px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+}
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.35);
+  cursor: pointer;
+  transition: background .3s, transform .3s;
+}
+.dot.active { background: #fff; transform: scale(1.4); }
 
-        .form-group {
-            margin-bottom: 12px
-        }
+/* texto central flutuante */
+.gallery-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  text-align: center;
+  color: #fff;
+  pointer-events: none;
+}
+.gallery-center .tagline {
+  font-size: clamp(1.6rem, 3vw, 2.8rem);
+  font-weight: 800;
+  line-height: 1.15;
+  text-shadow: 0 2px 20px rgba(0,0,0,.6);
+  letter-spacing: -.01em;
+}
+.gallery-center .sub {
+  margin-top: 12px;
+  font-size: 1.05rem;
+  opacity: .85;
+  text-shadow: 0 1px 8px rgba(0,0,0,.5);
+}
 
-        .btn-primary {
-            background: #2f6bb6;
-            border-color: #25599a
-        }
+/* pulso verde animado */
+.pulse-ring {
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  background: rgba(0,153,68,.15);
+  border: 2px solid rgba(0,153,68,.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  position: relative;
+  animation: pulse 2.4s ease-in-out infinite;
+}
+.pulse-ring::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  border: 2px solid rgba(0,153,68,.2);
+  animation: pulse 2.4s ease-in-out infinite .6s;
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.08); opacity: .7; }
+}
+.pulse-ring img { width: 72px; height: 72px; object-fit: contain; }
 
-        .btn-primary:hover {
-            filter: brightness(.98)
-        }
+/* ── DIREITA — painel de login ────────────────────────────────────────────── */
+.panel {
+  background: #0a1f0f;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px 52px;
+  position: relative;
+  overflow: hidden;
+}
 
-        .form-control {
-            height: 42px
-        }
+/* borda esquerda verde */
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 4px; height: 100%;
+  background: linear-gradient(to bottom, var(--green2), var(--red), var(--green2));
+}
 
-        .input-group-text {
-            width: 42px;
-            justify-content: center
-        }
+/* grid decorativo translúcido */
+.panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,153,68,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,153,68,.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+}
 
-        .helpers {
-            display: flex;
-            gap: 10px;
-            justify-content: space-between;
-            flex-wrap: wrap
-        }
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 36px;
+  position: relative;
+  z-index: 1;
+}
+.brand-row img { height: 48px; width: auto; filter: drop-shadow(0 0 8px rgba(0,200,80,.3)); }
+.brand-text { color: #fff; }
+.brand-text .name { font-size: 1.3rem; font-weight: 800; letter-spacing: -.01em; }
+.brand-text .slogan { font-size: .78rem; color: rgba(255,255,255,.5); margin-top: 2px; }
 
-        /* força visibilidade caso exista preloader global */
-        html,
-        body,
-        .login-wrap,
-        .glass-card {
-            visibility: visible !important;
-            opacity: 1 !important
-        }
+h1 {
+  color: #fff;
+  font-size: 1.65rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 6px;
+  position: relative;
+  z-index: 1;
+}
+.h1-sub {
+  color: rgba(255,255,255,.45);
+  font-size: .9rem;
+  margin-bottom: 32px;
+  position: relative;
+  z-index: 1;
+}
 
-        [hidden],
-        .hidden,
-        .d-none,
-        .preloader,
-        #preloader,
-        .page-preload {
-            display: none !important
-        }
+.form-wrap { position: relative; z-index: 1; }
 
-        body {
-            color: #111 !important
-        }
-    </style>
+.field { margin-bottom: 18px; }
+.field label {
+  display: block;
+  font-size: .78rem;
+  font-weight: 600;
+  color: rgba(255,255,255,.5);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: 8px;
+}
+.input-row {
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color .2s, box-shadow .2s;
+}
+.input-row:focus-within {
+  border-color: var(--green2);
+  box-shadow: 0 0 0 3px rgba(0,153,68,.18);
+}
+.input-row .icon {
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,.3);
+  font-size: .95rem;
+  flex-shrink: 0;
+}
+.input-row input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: .97rem;
+  padding: 13px 12px 13px 0;
+}
+.input-row input::placeholder { color: rgba(255,255,255,.2); }
+.toggle-pwd {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 14px;
+  color: rgba(255,255,255,.3);
+  font-size: .9rem;
+  transition: color .2s;
+}
+.toggle-pwd:hover { color: rgba(255,255,255,.7); }
+
+.btn-login {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--green2) 0%, var(--green) 100%);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  cursor: pointer;
+  margin-top: 4px;
+  position: relative;
+  overflow: hidden;
+  transition: filter .2s, transform .1s;
+  box-shadow: 0 4px 20px rgba(0,153,68,.35);
+}
+.btn-login:hover  { filter: brightness(1.1); }
+.btn-login:active { transform: scale(.98); }
+
+/* brilho animado no botão */
+.btn-login::after {
+  content: '';
+  position: absolute;
+  top: -50%; left: -60%;
+  width: 40%; height: 200%;
+  background: rgba(255,255,255,.15);
+  transform: skewX(-20deg);
+  animation: shine 3.5s ease-in-out infinite 1s;
+}
+@keyframes shine {
+  0%, 100% { left: -60%; opacity: 0; }
+  40%       { left: 120%; opacity: 1; }
+}
+
+.helpers {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  position: relative;
+  z-index: 1;
+}
+.helpers a {
+  color: rgba(255,255,255,.4);
+  font-size: .83rem;
+  text-decoration: none;
+  transition: color .2s;
+}
+.helpers a:hover { color: var(--green2); }
+
+#msg {
+  min-height: 20px;
+  font-size: .85rem;
+  color: #ff6b6b;
+  margin-top: 14px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.msg-ok {
+  min-height: 20px;
+  font-size: .85rem;
+  color: #5ddd8b;
+  margin-top: 14px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.footer-line {
+  margin-top: auto;
+  padding-top: 40px;
+  font-size: .75rem;
+  color: rgba(255,255,255,.2);
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── RESPONSIVO ────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .split { grid-template-columns: 1fr; }
+  .gallery { display: none; }
+  .panel {
+    padding: 40px 28px;
+    min-height: 100vh;
+    background: linear-gradient(160deg, #0a2010 0%, #0d1a0d 100%);
+  }
+}
+</style>
 </head>
 
 <body>
-    <div class="login-wrap">
-        <div class="glass-card" role="main" aria-labelledby="titulo-login">
-            <div class="brand">
-                <img src="/images/Logo Camim-01_50px.png" alt="Logo CAMIM">
-                <div id="titulo-login" class="brand-title">Quem tem saúde é mais feliz!</div>
-            </div>
+<div class="split">
 
-            <div class="muted mb-3">Acesse sua conta para continuar.</div>
+  <!-- ── ESQUERDA ─────────────────────────────────────────────────────────── -->
+  <div class="gallery" id="gallery">
+    <div class="slide active"></div>
+    <div class="slide"></div>
+    <div class="slide"></div>
+    <div class="slide"></div>
+    <div class="slide"></div>
 
-            <!-- LOGIN POR FORMULÁRIO: POST em /session/login -->
-            <form method="POST" action="/session/login" novalidate>
-                <div class="form-group">
-                    <label for="email" class="small mb-1">E-mail</label>
-                    <div class="input-group">
-                        <div class="input-group-prepend">
-                            <span class="input-group-text"><i class="far fa-envelope" aria-hidden="true"></i></span>
-                        </div>
-                        <input id="email" name="email" type="email" class="form-control" placeholder="voce@empresa.com"
-                            autocomplete="username" inputmode="email" required>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="senha" class="small mb-1">Senha</label>
-                    <div class="input-group">
-                        <div class="input-group-prepend">
-                            <span class="input-group-text"><i class="fas fa-lock" aria-hidden="true"></i></span>
-                        </div>
-                        <input id="senha" name="senha" type="password" class="form-control" placeholder="••••••••"
-                            minlength="4" autocomplete="current-password" required>
-                        <div class="input-group-append">
-                            <button class="btn btn-outline-secondary" type="button" id="togglePwd"
-                                aria-label="Mostrar ou ocultar senha"><i class="far fa-eye"
-                                    aria-hidden="true"></i></button>
-                        </div>
-                    </div>
-                </div>
-
-                <button type="submit" class="btn btn-primary btn-block mt-2">Entrar</button>
-
-                <!-- <div class="helpers mt-3" aria-label="Ações auxiliares">
-                    <a href="/session/logout" class="small">Sair/Trocar usuário</a>
-                    <span class="small text-muted">Suporte: TI</span>
-                </div> -->
-            </form>
-
-            <div id="msg" class="text-danger small mt-2" role="alert" style="min-height:18px"></div>
-        </div>
+    <div class="gallery-center">
+      <div class="pulse-ring">
+        <img src="/images/Logo Camim-01_200px.png" alt="CAMIM">
+      </div>
+      <div class="tagline">Gestão que<br>transforma saúde</div>
+      <div class="sub">Indicadores em tempo real · Todas as unidades</div>
     </div>
 
-    <script>
-        // Mostrar/ocultar senha
-        document.getElementById('togglePwd').addEventListener('click', function () {
-            const i = document.getElementById('senha');
-            const eye = this.querySelector('i');
-            const show = i.type === 'password';
-            i.type = show ? 'text' : 'password';
-            eye.classList.toggle('fa-eye', !show);
-            eye.classList.toggle('fa-eye-slash', show);
-        });
+    <div class="gallery-badge">
+      <div class="big">15+</div>
+      <div class="label">Postos ativos</div>
+    </div>
 
-        // Exibe erro quando backend redireciona com ?e=1
-        if (new URLSearchParams(location.search).get('e') === '1') {
-            const msg = document.getElementById('msg');
-            msg.textContent = 'Usuário ou senha inválidos.';
-        }
-    </script>
+    <div class="dots" id="dots"></div>
+  </div>
+
+  <!-- ── DIREITA ──────────────────────────────────────────────────────────── -->
+  <div class="panel">
+
+    <div class="brand-row">
+      <img src="/images/Logo Camim-01_200px.png" alt="CAMIM">
+      <div class="brand-text">
+        <div class="name">CAMIM</div>
+        <div class="slogan">Painel de Gestão</div>
+      </div>
+    </div>
+
+    <h1>Bem-vindo de volta</h1>
+    <div class="h1-sub">Acesse seu painel de indicadores</div>
+
+    <div class="form-wrap">
+      <form method="POST" action="/session/login" novalidate>
+
+        <div class="field">
+          <label for="email">E-mail</label>
+          <div class="input-row">
+            <span class="icon"><i class="far fa-envelope"></i></span>
+            <input id="email" name="email" type="email"
+              placeholder="voce@camim.com.br"
+              autocomplete="username" inputmode="email" required>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="senha">Senha</label>
+          <div class="input-row">
+            <span class="icon"><i class="fas fa-lock"></i></span>
+            <input id="senha" name="senha" type="password"
+              placeholder="••••••••"
+              autocomplete="current-password" required>
+            <button class="toggle-pwd" type="button" id="togglePwd" aria-label="Mostrar/ocultar senha">
+              <i class="far fa-eye" id="eyeIcon"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-login">
+          <i class="fas fa-sign-in-alt" style="margin-right:8px"></i>Entrar
+        </button>
+
+      </form>
+
+      <div class="helpers">
+        <a href="/auth/reset">Esqueci minha senha</a>
+      </div>
+
+      <div id="msg" role="alert"></div>
+    </div>
+
+    <div class="footer-line">
+      © CAMIM · Painel de gestão interno · Acesso restrito
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Toggle senha ─────────────────────────────────────────────────────────────
+document.getElementById('togglePwd').addEventListener('click', function () {
+  const inp  = document.getElementById('senha');
+  const icon = document.getElementById('eyeIcon');
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  icon.className = show ? 'far fa-eye-slash' : 'far fa-eye';
+});
+
+// ── Mensagens via querystring ─────────────────────────────────────────────────
+(function () {
+  const p   = new URLSearchParams(location.search);
+  const msg = document.getElementById('msg');
+  if (p.get('e') === '1') {
+    msg.textContent = 'E-mail ou senha incorretos.';
+  } else if (p.get('reset') === '1') {
+    msg.className = 'msg-ok';
+    msg.textContent = 'Se o e-mail existir, você receberá o link em instantes.';
+  } else if (p.get('reset') === 'ok') {
+    msg.className = 'msg-ok';
+    msg.textContent = '✓ Senha atualizada com sucesso! Faça login.';
+  } else if (p.get('reset') === 'expirado') {
+    msg.textContent = 'Link expirado ou inválido. Solicite um novo.';
+  }
+})();
+
+// ── Slideshow ─────────────────────────────────────────────────────────────────
+(function () {
+  const slides = document.querySelectorAll('.slide');
+  const dotsCt = document.getElementById('dots');
+  if (!dotsCt) return;
+
+  let cur = 0;
+
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.addEventListener('click', () => goTo(i));
+    dotsCt.appendChild(d);
+  });
+
+  function goTo(n) {
+    slides[cur].classList.remove('active');
+    dotsCt.children[cur].classList.remove('active');
+    cur = n;
+    slides[cur].classList.add('active');
+    dotsCt.children[cur].classList.add('active');
+  }
+
+  setInterval(() => goTo((cur + 1) % slides.length), 5000);
+})();
+</script>
 </body>
-
 </html>
