@@ -235,9 +235,9 @@ jobs:
           fi
 
       # ================================================================
-      # 5) app.py → /opt/camim-auth
+      # 5) app.py + módulos Python → /opt/camim-auth
       # ================================================================
-      - name: app.py -> /opt/camim-auth
+      - name: app.py + modules -> /opt/camim-auth
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
@@ -245,12 +245,18 @@ jobs:
         run: |
           set -euxo pipefail
           DEST=/opt/camim-auth
-          FILE="app.py"
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
-          rsync -rlvz --delete \
-            --omit-dir-times --no-perms --no-owner --no-group \
-            -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
-            "$FILE" "$SSH_USER@$SSH_HOST:$DEST/"
+          for f in app.py auth_db.py auth_routes.py ia_router_openai.py llm_client_openai.py; do
+            if [ -f "$f" ]; then
+              echo "Copiando $f → $DEST"
+              rsync -rlvz \
+                --omit-dir-times --no-perms --no-owner --no-group \
+                -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+                "$f" "$SSH_USER@$SSH_HOST:$DEST/"
+            else
+              echo "WARN: $f não encontrado"
+            fi
+          done
 
       # ================================================================
       # 6) Sync SQL (todas as pastas que começam com sql*)
