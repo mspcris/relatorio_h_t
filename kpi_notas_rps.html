@@ -53,6 +53,12 @@
       return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     }
 
+    function lastDayStr(ym){
+      const [y,m] = ym.split('-').map(Number);
+      const d = new Date(y, m, 0).getDate();
+      return `${ym}-${String(d).padStart(2,'0')}`;
+    }
+
     // =========================
     // Estado
     // =========================
@@ -64,9 +70,9 @@
     // switches de Operadora (mutuamente exclusivos)
     let operadoraMode = null;     // null | 'CAMIM' | 'SDM'
 
-    // filtro por faixa de dias (null = sem filtro)
-    let diaDe = null;
-    let diaAte = null;
+    // filtro por faixa de datas
+    let dataIni = `${ymSel}-01`;
+    let dataFim = lastDayStr(ymSel);
 
     // cache mensal: { ym: { posto: payload } }
     const CACHE = {};
@@ -237,12 +243,12 @@
     // =========================
     function aggNotasForPosto(payload){
       let source;
-      if ((diaDe !== null || diaAte !== null) && Array.isArray(payload?.notas_por_dia)) {
-        const de  = diaDe  ?? 1;
-        const ate = diaAte ?? 31;
+      const mesIni = `${ymSel}-01`;
+      const mesFim = lastDayStr(ymSel);
+      if ((dataIni !== mesIni || dataFim !== mesFim) && Array.isArray(payload?.notas_por_dia)) {
         source = payload.notas_por_dia.filter(r => {
-          const d = parseInt((r.data_emissao || '').slice(8, 10), 10);
-          return d >= de && d <= ate;
+          const d = r.data_emissao || '';
+          return d >= dataIni && d <= dataFim;
         });
       } else {
         source = payload?.notas_emitidas || [];
@@ -421,10 +427,8 @@
       const ym = ymSel;
       const postoLabel = (selPostos==='ALL') ? 'Todos' : [...selPostos].sort().join('+');
       const modoTxt = operadoraMode ? `Operadora: ${operadoraMode}` : `Grupo: ${selGrupo}`;
-      const diaTxt = (diaDe !== null || diaAte !== null)
-        ? ` • Dias: ${diaDe ?? 1}–${diaAte ?? 31}`
-        : '';
-      el('#hdrSel').textContent = `Mês: ${ym}${diaTxt} • Postos: ${postoLabel} • ${modoTxt}`;
+      const fmtData = s => s ? s.split('-').reverse().join('/') : '';
+      el('#hdrSel').textContent = `${fmtData(dataIni)} a ${fmtData(dataFim)} • Postos: ${postoLabel} • ${modoTxt}`;
 
       const agg = aggAllSelected(ym);
 
@@ -477,8 +481,9 @@
     async function boot(){
       const postosUsuario = await carregarPostosDoUsuario();
 
-      // Mês default
-      el('#mes').value = ymSel;
+      // Datas default
+      el('#dataIni').value = dataIni;
+      el('#dataFim').value = dataFim;
 
       // 1) sessão
       POSTOS = (postosUsuario && postosUsuario.length) ? postosUsuario : [];
@@ -498,39 +503,37 @@
       buildPostoTabs('#postoTabs');
 
       // listeners
-      el('#mes').addEventListener('change', async ()=>{
-        ymSel = el('#mes').value;
+      el('#dataIni').addEventListener('change', async ()=>{
+        dataIni = el('#dataIni').value;
+        const newYm = dataIni.slice(0, 7);
 
-        // se não tem sessão, re-detecta postos para o mês selecionado
-        if(!(postosUsuario && postosUsuario.length)){
-          POSTOS = await detectPostosDisponiveis(ymSel);
-          if(!POSTOS.length){
-            el('#err').textContent = 'Sem JSONs encontrados para o mês selecionado.';
-            el('#postoTabs').innerHTML = '';
-            return;
+        if(newYm !== ymSel){
+          ymSel = newYm;
+
+          if(!(postosUsuario && postosUsuario.length)){
+            POSTOS = await detectPostosDisponiveis(ymSel);
+            if(!POSTOS.length){
+              el('#err').textContent = 'Sem JSONs encontrados para o mês selecionado.';
+              el('#postoTabs').innerHTML = '';
+              return;
+            }
+            el('#err').textContent = '';
+            selPostos = 'ALL';
+            buildPostoTabs('#postoTabs');
           }
-          el('#err').textContent = '';
-          selPostos = 'ALL';
-          buildPostoTabs('#postoTabs');
-        }
 
-        await loadMonth(ymSel);
+          await loadMonth(ymSel);
+        }
+        render();
+      });
+
+      el('#dataFim').addEventListener('change', ()=>{
+        dataFim = el('#dataFim').value;
         render();
       });
 
       el('#grupo').addEventListener('change', ()=>{
         selGrupo = el('#grupo').value;
-        render();
-      });
-
-      el('#diaDe').addEventListener('change', ()=>{
-        const v = el('#diaDe').value;
-        diaDe = v ? parseInt(v, 10) : null;
-        render();
-      });
-      el('#diaAte').addEventListener('change', ()=>{
-        const v = el('#diaAte').value;
-        diaAte = v ? parseInt(v, 10) : null;
         render();
       });
 
@@ -742,20 +745,13 @@
       <div class="card">
         <div class="filter-bar">
           <div>
-            <label class="mb-0 small d-block">Mês</label>
-            <input id="mes" type="month" class="form-control form-control-sm" />
+            <label class="mb-0 small d-block">Data início</label>
+            <input id="dataIni" type="date" class="form-control form-control-sm" />
           </div>
 
           <div>
-            <label class="mb-0 small d-block">Dia de</label>
-            <input id="diaDe" type="number" min="1" max="31" placeholder="1"
-                   class="form-control form-control-sm" style="width:70px" />
-          </div>
-
-          <div>
-            <label class="mb-0 small d-block">Dia até</label>
-            <input id="diaAte" type="number" min="1" max="31" placeholder="31"
-                   class="form-control form-control-sm" style="width:70px" />
+            <label class="mb-0 small d-block">Data fim</label>
+            <input id="dataFim" type="date" class="form-control form-control-sm" />
           </div>
 
           <div>
