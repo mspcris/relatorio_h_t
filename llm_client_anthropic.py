@@ -7,7 +7,7 @@ import anthropic
 
 @dataclass
 class AnthropicConfig:
-    model: str = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
+    model: str = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
     max_tokens: int = 4096
     temperature: float = 0.1
 
