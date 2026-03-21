@@ -24,13 +24,17 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+import requests as http_requests
 from flask import Blueprint, jsonify, make_response, render_template, request
 from itsdangerous import BadSignature, TimestampSigner
+from sqlalchemy import func
 
 from auth_db import (
-    SessionLocal, User, UserPosto, LoginHistory,
+    SessionLocal, User, UserPosto, LoginHistory, IAConversa,
     get_user_by_email, get_user_by_id, init_db,
 )
+
+IA_GROQ_URL = os.environ.get("IA_GROQ_URL", "http://127.0.0.1:8030/ia/analisar")
 
 auth_bp = Blueprint("auth_bp", __name__)
 
@@ -215,9 +219,10 @@ def session_me():
     try:
         u = get_user_by_email(db, email)
         is_admin = bool(u.is_admin) if u else False
+        nome = (u.nome or "") if u else ""
     finally:
         db.close()
-    return jsonify({"email": email, "postos": postos, "is_admin": is_admin})
+    return jsonify({"email": email, "postos": postos, "is_admin": is_admin, "nome": nome})
 
 
 # ── Reset de senha ─────────────────────────────────────────────────────────────
@@ -440,5 +445,95 @@ def admin_reset_link(uid: int):
         db.commit()
         ok = _enviar_reset(user.email, token)
         return jsonify({"ok": ok})
+    finally:
+        db.close()
+
+
+# ── IA — proxy com persistência ────────────────────────────────────────────────
+
+@auth_bp.post("/ia/chat")
+def ia_chat():
+    """Proxy autenticado: encaminha ao Groq, salva pergunta+resposta no DB."""
+    email, _ = decode_user()
+    if not email:
+        return ("", 401)
+
+    d = request.get_json(silent=True) or {}
+    pergunta_txt = str(d.get("prompt", ""))[:2000]
+    pagina_txt   = str(d.get("pagina", ""))[:200]
+
+    # Encaminha ao serviço Groq
+    try:
+        gr = http_requests.post(
+            IA_GROQ_URL,
+            json=d,
+            timeout=190,
+            headers={"Content-Type": "application/json"},
+        )
+        gr.raise_for_status()
+        resposta_json = gr.json()
+    except Exception as exc:
+        return jsonify({"erro": f"Serviço IA indisponível: {exc}"}), 502
+
+    # Extrai texto da resposta para persistir
+    if isinstance(resposta_json, dict):
+        resposta_txt = (
+            resposta_json.get("html") or
+            resposta_json.get("livre") or
+            resposta_json.get("text") or
+            str(resposta_json)
+        )[:5000]
+    else:
+        resposta_txt = str(resposta_json)[:5000]
+
+    # Persiste no SQLite
+    db = SessionLocal()
+    try:
+        u = get_user_by_email(db, email)
+        if u and pergunta_txt:
+            db.add(IAConversa(
+                user_id  = u.id,
+                pagina   = pagina_txt or None,
+                pergunta = pergunta_txt,
+                resposta = resposta_txt,
+            ))
+            db.commit()
+    except Exception as exc:
+        print(f"[ia_chat] erro ao salvar conversa: {exc}")
+    finally:
+        db.close()
+
+    return jsonify(resposta_json)
+
+
+@auth_bp.get("/ia/saudacao")
+def ia_saudacao():
+    """Retorna saudação personalizada + perguntas mais frequentes do usuário."""
+    email, _ = decode_user()
+    if not email:
+        return ("", 401)
+
+    db = SessionLocal()
+    try:
+        u = get_user_by_email(db, email)
+        if not u:
+            return ("", 401)
+
+        # Primeiro nome
+        raw_nome = (u.nome or email.split("@")[0]).strip()
+        nome = raw_nome.split()[0].capitalize() if raw_nome else "Você"
+
+        # Top 5 perguntas mais frequentes do usuário
+        top = (
+            db.query(IAConversa.pergunta, func.count(IAConversa.id).label("cnt"))
+            .filter(IAConversa.user_id == u.id)
+            .group_by(IAConversa.pergunta)
+            .order_by(func.count(IAConversa.id).desc())
+            .limit(5)
+            .all()
+        )
+        perguntas = [r.pergunta for r in top]
+
+        return jsonify({"nome": nome, "perguntas_frequentes": perguntas})
     finally:
         db.close()

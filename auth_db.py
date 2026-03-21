@@ -7,7 +7,7 @@ import secrets
 from datetime import datetime, timedelta
 
 from sqlalchemy import (
-    create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey
+    create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -39,6 +39,10 @@ class User(Base):
     )
     login_history = relationship(
         "LoginHistory", back_populates="user",
+        cascade="all, delete-orphan", lazy="select"
+    )
+    ia_conversas = relationship(
+        "IAConversa", back_populates="user",
         cascade="all, delete-orphan", lazy="select"
     )
 
@@ -82,6 +86,18 @@ class LoginHistory(Base):
     ip         = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     user       = relationship("User", back_populates="login_history")
+
+
+class IAConversa(Base):
+    __tablename__ = "ia_conversas"
+
+    id         = Column(Integer, primary_key=True)
+    user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    pagina     = Column(String(200), nullable=True)
+    pergunta   = Column(Text, nullable=False)
+    resposta   = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    user       = relationship("User", back_populates="ia_conversas")
 
 
 def init_db():

@@ -3076,8 +3076,8 @@ function updateExploradorDespesas(mesesSelec) {
             });
           });
 
-          // 3) Despesas por tipo — evolução mensal
-          const despesas_tipo_mensal = mesesSelec.map(ym => {
+          // 3) Despesas por tipo — evolução mensal CONSOLIDADA (todos os postos)
+          const despesas_tipo_mensal_consolidado = mesesSelec.map(ym => {
             const linhas = getLinhas(DATA.despTipo, ym, postosList);
             const porTipo = {};
             linhas.forEach(r => {
@@ -3086,6 +3086,21 @@ function updateExploradorDespesas(mesesSelec) {
               porTipo[tp] = r2((porTipo[tp] || 0) + num(r.valorpago));
             });
             return { mes: ym, tipos: porTipo };
+          });
+
+          // 3b) Despesas por tipo — por posto, por mês (use para responder perguntas sobre um posto específico)
+          const despesas_tipo_por_posto = {};
+          postosList.forEach(posto => {
+            despesas_tipo_por_posto[posto] = mesesSelec.map(ym => {
+              const linhas = getLinhas(DATA.despTipo, ym, [posto]);
+              const porTipo = {};
+              linhas.forEach(r => {
+                if (!considerarRetirada && isRetiradaTipo(r)) return;
+                const tp = normStr(r.tipo || r.Tipo, 'Sem classificação');
+                porTipo[tp] = r2((porTipo[tp] || 0) + num(r.valorpago));
+              });
+              return { mes: ym, tipos: porTipo };
+            });
           });
 
           // 4) Despesas por plano principal — evolução mensal
@@ -3131,7 +3146,8 @@ function updateExploradorDespesas(mesesSelec) {
 
             evolucao_mensal,
             evolucao_por_posto,
-            despesas_tipo_mensal,
+            despesas_tipo_mensal_consolidado,
+            despesas_tipo_por_posto,
             despesas_pp_mensal,
             receita_tipo_mensal
           });

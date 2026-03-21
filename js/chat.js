@@ -15,7 +15,7 @@
 
     init(options) {
       const defaults = {
-        apiUrl: (window.IA_API_URL || '/ia/analisar'),
+        apiUrl: (window.IA_API_URL || '/ia/chat'),
         mountAfterSelector: '#btnComparar',
         title: 'IA — Análise Completa & Chat',
         briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
@@ -177,9 +177,7 @@
 
         document.body.appendChild(wrap);
 
-        this._append('bot',
-          'Olá, eu sou a Camila.AI e vou te ajudar a analisar os dados desta página. Toque em Iniciar ou digite sua pergunta.');
-
+        this._loadSaudacao();
         this._prefillInput();
       }
 
@@ -192,6 +190,50 @@
       const send = this._q('#iadSend');
       if (!input || !send) return;
       if (initial) send.textContent = 'Iniciar';
+    },
+
+    async _loadSaudacao() {
+      let nome = this._displayNameFromEmail();
+      let perguntas = [];
+
+      try {
+        const resp = await fetch('/ia/saudacao', { credentials: 'same-origin', cache: 'no-store' });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.nome) {
+            nome = data.nome;
+            window.USER_NOME = nome;
+          }
+          perguntas = data.perguntas_frequentes || [];
+        }
+      } catch (_) { /* usa fallback silencioso */ }
+
+      let saudacao = `Olá, ${nome}! Sou a Camila.AI e vou te ajudar a analisar os dados desta página. Toque em Iniciar ou digite sua pergunta.`;
+      if (perguntas.length > 0) {
+        saudacao += '\n\nVocê costuma perguntar:';
+      }
+      this._append('bot', saudacao);
+
+      if (perguntas.length > 0) {
+        const out = this._outBox();
+        const pillRow = document.createElement('div');
+        pillRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px 0;';
+        perguntas.forEach(q => {
+          const pill = document.createElement('button');
+          pill.className = 'btn btn-sm btn-outline-secondary';
+          pill.style.cssText = 'font-size:.78rem;padding:2px 10px;border-radius:20px;max-width:320px;white-space:normal;text-align:left;';
+          pill.textContent = q;
+          pill.addEventListener('click', () => {
+            pillRow.remove();
+            this._append('user', q);
+            this._sendToIA(q);
+          });
+          pillRow.appendChild(pill);
+        });
+        out.appendChild(pillRow);
+        const sc = this._panel().querySelector('.body');
+        if (sc) sc.scrollTop = sc.scrollHeight;
+      }
     },
 
     _wireUI() {
@@ -292,9 +334,9 @@
 
     /* ===================== Helpers ===================== */
     _displayNameFromEmail() {
+      if (window.USER_NOME && window.USER_NOME.trim()) return window.USER_NOME.trim();
       const email = (window.USER_EMAIL || '').trim();
       if (!email || !/@/.test(email)) return 'Você';
-
       const first = email.split('@')[0];
       return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'Você';
     },
@@ -520,6 +562,10 @@
 
       try {
         const payload = await this._state.opts.getPayload({ userQuery });
+        // Adiciona pagina para persistência no servidor
+        if (payload && typeof payload === 'object') {
+          payload.pagina = window.IA_PAGINA || window.location.pathname;
+        }
         const raw = await this._callIA(payload, this._state.opts.timeoutMs);
 
         this._dotsStop();
