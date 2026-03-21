@@ -37,6 +37,10 @@ class User(Base):
         "UserPosto", back_populates="user",
         cascade="all, delete-orphan", lazy="select"
     )
+    login_history = relationship(
+        "LoginHistory", back_populates="user",
+        cascade="all, delete-orphan", lazy="select"
+    )
 
     def set_senha(self, senha: str):
         self.senha_hash = generate_password_hash(senha)
@@ -68,6 +72,16 @@ class UserPosto(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     posto   = Column(String(10), nullable=False)
     user    = relationship("User", back_populates="postos")
+
+
+class LoginHistory(Base):
+    __tablename__ = "login_history"
+
+    id         = Column(Integer, primary_key=True)
+    user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    ip         = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    user       = relationship("User", back_populates="login_history")
 
 
 def init_db():

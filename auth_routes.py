@@ -28,7 +28,7 @@ from flask import Blueprint, jsonify, make_response, render_template, request
 from itsdangerous import BadSignature, TimestampSigner
 
 from auth_db import (
-    SessionLocal, User, UserPosto,
+    SessionLocal, User, UserPosto, LoginHistory,
     get_user_by_email, get_user_by_id, init_db,
 )
 
@@ -166,6 +166,15 @@ def login():
             r.headers["Location"] = "/login?e=1"
             return r
 
+        ip = (
+            request.headers.get("X-Real-IP")
+            or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+            or request.remote_addr
+            or ""
+        )
+        db.add(LoginHistory(user_id=user.id, ip=ip))
+        db.commit()
+
         token = _signer.sign(f"{email}:{secrets.token_hex(8)}").decode()
         r = make_response("", 302)
         _set_cookie(r, token)
@@ -299,14 +308,25 @@ def admin_lista():
     db = SessionLocal()
     try:
         users = db.query(User).order_by(User.email).all()
-        return jsonify([{
-            "id":       u.id,
-            "email":    u.email,
-            "nome":     u.nome,
-            "is_admin": u.is_admin,
-            "ativo":    u.ativo,
-            "postos":   u.lista_postos(),
-        } for u in users])
+        result = []
+        for u in users:
+            last = (
+                db.query(LoginHistory)
+                .filter_by(user_id=u.id)
+                .order_by(LoginHistory.created_at.desc())
+                .first()
+            )
+            result.append({
+                "id":            u.id,
+                "email":         u.email,
+                "nome":          u.nome,
+                "is_admin":      u.is_admin,
+                "ativo":         u.ativo,
+                "postos":        u.lista_postos(),
+                "ultimo_login":  last.created_at.isoformat() if last else None,
+                "ultimo_login_ip": last.ip if last else None,
+            })
+        return jsonify(result)
     finally:
         db.close()
 
@@ -382,6 +402,27 @@ def admin_deletar(uid: int):
         db.delete(user)
         db.commit()
         return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@auth_bp.get("/admin/api/usuarios/<int:uid>/logins")
+def admin_logins(uid: int):
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    db = SessionLocal()
+    try:
+        logins = (
+            db.query(LoginHistory)
+            .filter_by(user_id=uid)
+            .order_by(LoginHistory.created_at.desc())
+            .limit(200)
+            .all()
+        )
+        return jsonify([{
+            "ip":         l.ip or "—",
+            "created_at": l.created_at.isoformat(),
+        } for l in logins])
     finally:
         db.close()
 

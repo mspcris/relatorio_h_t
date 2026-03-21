@@ -120,11 +120,12 @@
                 <th>Postos</th>
                 <th style="width:80px">Admin</th>
                 <th style="width:80px">Ativo</th>
-                <th style="width:160px">Ações</th>
+                <th style="width:160px">Último Login</th>
+                <th style="width:180px">Ações</th>
               </tr>
             </thead>
             <tbody id="tbody">
-              <tr><td colspan="6" class="text-center text-muted py-4">Carregando…</td></tr>
+              <tr><td colspan="7" class="text-center text-muted py-4">Carregando…</td></tr>
             </tbody>
           </table>
         </div>
@@ -204,6 +205,35 @@
   </div>
 </div>
 
+<!-- ── MODAL HISTÓRICO DE LOGINS ──────────────────────────────────────────── -->
+<div class="modal fade" id="modal-logins" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="logins-titulo">Histórico de logins</h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body p-0">
+        <table class="table table-striped table-sm mb-0">
+          <thead class="thead-light">
+            <tr>
+              <th style="width:50px">#</th>
+              <th>Data / Hora</th>
+              <th>IP</th>
+            </tr>
+          </thead>
+          <tbody id="logins-tbody">
+            <tr><td colspan="3" class="text-center text-muted py-3">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── TOAST ──────────────────────────────────────────────────────────────── -->
 <div id="toast-wrap"></div>
 
@@ -232,10 +262,17 @@ async function carregar() {
   renderTabela();
 }
 
+function fmtDt(iso) {
+  if (!iso) return '<span class="text-muted">—</span>';
+  const d = new Date(iso + 'Z');
+  return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric',
+    hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
 function renderTabela() {
   const tbody = document.getElementById('tbody');
   if (!_usuarios.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Nenhum usuário cadastrado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Nenhum usuário cadastrado.</td></tr>';
     return;
   }
   tbody.innerHTML = _usuarios.map(u => `
@@ -247,9 +284,13 @@ function renderTabela() {
       <td class="text-center">
         <span class="badge badge-${u.ativo ? 'success' : 'secondary'}">${u.ativo ? 'Sim' : 'Não'}</span>
       </td>
+      <td class="small">${fmtDt(u.ultimo_login)}</td>
       <td>
         <button class="btn btn-xs btn-outline-primary mr-1" title="Editar" onclick="editar(${u.id})">
           <i class="fas fa-edit"></i>
+        </button>
+        <button class="btn btn-xs btn-outline-secondary mr-1" title="Histórico de logins" onclick="verLogins(${u.id}, '${u.email}')">
+          <i class="fas fa-history"></i>
         </button>
         <button class="btn btn-xs btn-outline-info mr-1" title="Enviar link de reset" onclick="enviarReset(${u.id}, '${u.email}')">
           <i class="fas fa-key"></i>
@@ -361,6 +402,31 @@ async function enviarReset(id, email) {
   const { ok, status, data } = await api(`/admin/api/usuarios/${id}/reset`, { method: 'POST' });
   if (!ok) { toast(data.erro || `Erro ${status}.`, true); return; }
   toast(data.ok ? `Link enviado para ${email}.` : 'Falha ao enviar e-mail.', !data.ok);
+}
+
+// ── Histórico de logins ───────────────────────────────────────────────────────
+async function verLogins(id, email) {
+  document.getElementById('logins-titulo').textContent = `Logins — ${email}`;
+  document.getElementById('logins-tbody').innerHTML =
+    '<tr><td colspan="3" class="text-center text-muted py-3">Carregando…</td></tr>';
+  $('#modal-logins').modal('show');
+
+  const { ok, data } = await api(`/admin/api/usuarios/${id}/logins`);
+  const tbody = document.getElementById('logins-tbody');
+  if (!ok) {
+    tbody.innerHTML = `<tr><td colspan="3" class="text-danger py-3 text-center">${data.erro || 'Erro ao carregar.'}</td></tr>`;
+    return;
+  }
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Nenhum login registrado.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map((l, i) => `
+    <tr>
+      <td class="text-muted">${i + 1}</td>
+      <td>${fmtDt(l.created_at)}</td>
+      <td><code>${l.ip}</code></td>
+    </tr>`).join('');
 }
 
 // ── Gerar senha forte ─────────────────────────────────────────────────────────
