@@ -182,6 +182,7 @@
         <span class="ml-2 font-weight-bold">KPI Consultas — Status</span>
         <div class="ml-auto">
           <button id="btnComparar" class="btn btn-sm btn-outline-secondary" title="Mostrar/ocultar bloco de comparação">Comparar</button>
+          <span id="ia-anchor"></span>
         </div>
       </div>
     </nav>
@@ -1100,6 +1101,28 @@
       alert('Falha ao iniciar KPI Consultas. Veja o console.');
     }
   })();
+</script>
+
+<script>
+  window.IA_API_URL = '/api/ia/chat';
+  window.IA_PAGINA  = 'consultas_status';
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.ChatIA?.init) {
+      ChatIA.init({
+        apiUrl: window.IA_API_URL || '/api/ia/chat',
+        mountAfterSelector: '#ia-anchor',
+        title: 'IA CAMIM',
+        briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
+        briefDefault: true,
+        getPayload: async ({ userQuery }) => ({
+          prompt: userQuery,
+          produto: 'consultas_status',
+          contexto: window.__kpi_contexto || '',
+          prefs: { accept_format: 'free_text' }
+        })
+      });
+    }
+  });
 </script>
 
 </body>
