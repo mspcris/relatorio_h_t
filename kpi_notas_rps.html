@@ -31,6 +31,8 @@
         const r = await fetch("/session/me",{credentials:"same-origin"});
         if(!r.ok) return [];
         const d = await r.json();
+        window.USER_NOME   = d.nome   || null;
+        window.USER_POSTOS = d.postos || null;
         return Array.isArray(d.postos) ? d.postos : [];
       }catch{ return []; }
     }
@@ -473,6 +475,35 @@
             <td class="text-right">R$ ${fmt2.format(r.valor_notas_contabilizadas)}</td>
           </tr>`);
       });
+
+      // Contexto IA — atualiza sempre que o dashboard recarrega
+      try {
+        const dadosPorPosto = {};
+        const postos = (selPostos === 'ALL') ? POSTOS : [...selPostos];
+        postos.forEach(p => {
+          const payload = CACHE[ymSel]?.[p];
+          if (payload) {
+            dadosPorPosto[p] = {
+              notas: { qtd: agg.notas.qtd, emitidas: agg.notas.emitidas, canc_qtd: agg.notas.canc_qtd, canc_val: agg.notas.canc_val },
+              rps: { qtd: agg.rps.qtd, total: agg.rps.total }
+            };
+          }
+        });
+        window.__kpi_contexto = JSON.stringify({
+          produto: 'notas_rps',
+          mes: ymSel,
+          postos: postos,
+          agregado: { notas: agg.notas, rps: agg.rps },
+          dados_por_posto: dadosPorPosto,
+          _instrucoes_ia: [
+            "Use SOMENTE os dados fornecidos neste JSON. NUNCA invente ou estime valores.",
+            "Os dados são de Notas Fiscais (NF) e RPS por posto/mês.",
+            "notas: qtd=total emitidas, emitidas=valor, canc_qtd/canc_val=canceladas, cont_qtd/cont_val=contabilizadas.",
+            "rps: qtd=RPS pendentes, total=valor total dos RPS.",
+            "Os valores monetários estão em Reais (R$)."
+          ]
+        });
+      } catch(e) { /* contexto não disponível ainda */ }
     }
 
     // =========================
@@ -826,5 +857,26 @@
     </section>
   </div>
 </div>
+
+<script src="/js/chat.js?v=20251114"></script>
+<script>
+  window.IA_API_URL = '/ia/chat';
+  window.IA_PAGINA  = 'notas_rps';
+  document.addEventListener('DOMContentLoaded', () => {
+    ChatIA.init({
+      apiUrl: window.IA_API_URL || '/ia/chat',
+      mountAfterSelector: '#btnReload',
+      title: 'IA CAMIM',
+      briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
+      briefDefault: true,
+      getPayload: async ({ userQuery }) => ({
+        prompt: userQuery,
+        produto: 'notas_rps',
+        contexto: window.__kpi_contexto || '',
+        prefs: { accept_format: 'free_text' }
+      })
+    });
+  });
+</script>
 </body>
 </html>

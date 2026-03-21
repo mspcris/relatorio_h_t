@@ -36,26 +36,21 @@
 
   <!-- CONFIGURAÇÃO DE CONTEXTO (IA + Sessão do usuário) -->
  <script>
-    // window.IA_API_URL = '/ia/analisar';
-    // window.PROMPTS_API_BASE = '/prompts';
+    window.IA_API_URL = '/ia/chat';
+    window.IA_PAGINA  = 'rateio';
 
-    // // Carrega email e postos direto do backend após login
-    // fetch("/session/me", { credentials: 'same-origin' })
-    //   .then(r => r.json())
-    //   .then(data => {
-    //     window.USER_EMAIL = data.email;
-    //     window.USER_POSTOS = data.postos;
-    //   })
-    //   .catch(() => {
-    //     window.USER_EMAIL = null;
-    //     window.USER_POSTOS = [];
-    //   });
-
-
-      // Ambiente estático: sem sessão
-    window.USER_EMAIL = null;
-    window.USER_POSTOS = null; // null = não filtrar
-
+    fetch("/session/me", { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => {
+        window.USER_EMAIL = data.email || null;
+        window.USER_NOME  = data.nome  || null;
+        window.USER_POSTOS = data.postos || null;
+      })
+      .catch(() => {
+        window.USER_EMAIL  = null;
+        window.USER_NOME   = null;
+        window.USER_POSTOS = null;
+      });
     </script>
 
 
@@ -3297,6 +3292,25 @@ function updateExploradorDespesas(mesesSelec) {
 
         // Explorador (respeita período + filtros)
         updateExploradorDespesas(mesesSelec);
+
+        // Contexto IA — atualiza sempre que os dados mudam
+        try {
+          window.__kpi_contexto = JSON.stringify({
+            produto: 'rateio',
+            postos: POSTOS,
+            meses_selecionados: mesesSelec,
+            receita_por_tipo: DATA.recTipo,
+            despesa_por_tipo: DATA.despTipo,
+            despesa_por_plano: DATA.despPlano,
+            _instrucoes_ia: [
+              "Use SOMENTE os dados fornecidos neste JSON. NUNCA invente ou estime valores.",
+              "Os dados são de rateio de despesas e receitas por posto/plano de saúde.",
+              "Se a pergunta mencionar posto específico, filtre os dados daquele posto no JSON.",
+              "Se dados não disponíveis para um posto, informe claramente.",
+              "Os valores monetários estão em Reais (R$)."
+            ]
+          });
+        } catch(e) { /* contexto não disponível ainda */ }
       }
 
       async function init() {
@@ -3381,6 +3395,24 @@ function updateExploradorDespesas(mesesSelec) {
 
       document.addEventListener('DOMContentLoaded', init);
     })();
+  </script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      ChatIA.init({
+        apiUrl: window.IA_API_URL || '/ia/chat',
+        mountAfterSelector: '#reset2',
+        title: 'IA CAMIM',
+        briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
+        briefDefault: true,
+        getPayload: async ({ userQuery }) => ({
+          prompt: userQuery,
+          produto: 'rateio',
+          contexto: window.__kpi_contexto || '',
+          prefs: { accept_format: 'free_text' }
+        })
+      });
+    });
   </script>
 
 </body>

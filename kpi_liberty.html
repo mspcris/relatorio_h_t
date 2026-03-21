@@ -449,8 +449,13 @@
     </div>
 
 
+    <!-- Chat IA -->
+    <script src="/js/chat.js?v=20251114"></script>
+
     <!-- INJEÇÃO DO BACKEND (obrigatório para filtrar postos) -->
     <script>
+        window.IA_API_URL = '/ia/chat';
+        window.IA_PAGINA  = 'liberty';
         window.USER_EMAIL = "{{ USER_EMAIL }}";
 
         async function filtrarPostosPorUsuario(listaPostos) {
@@ -458,6 +463,8 @@
                 const resp = await fetch('/session/me', { cache: 'no-store', credentials: 'same-origin' });
                 if (!resp.ok) { console.warn('Sessão não encontrada.'); return []; }
                 const data = await resp.json();
+                window.USER_NOME   = data.nome   || null;
+                window.USER_POSTOS = data.postos || null;
                 const postosPermitidos = data.postos;
                 if (!postosPermitidos || postosPermitidos.length === 0) return [];
                 const allowed = new Set(postosPermitidos.map(p => p.toUpperCase()));
@@ -975,6 +982,23 @@
                 buildTable(monthly);
                 updateCharts(monthly, postosSel, from, to);
 
+                // Contexto IA — atualiza sempre que o dashboard recarrega
+                try {
+                  window.__kpi_contexto = JSON.stringify({
+                    produto: 'liberty',
+                    postos: postosSel,
+                    periodo: { de: from, ate: to },
+                    consolidado_mensal: monthly,
+                    _instrucoes_ia: [
+                      "Use SOMENTE os dados fornecidos neste JSON. NUNCA invente ou estime valores.",
+                      "Os dados são de faturamento Liberty (receitas, lançamentos, consultas) por posto/mês.",
+                      "Se a pergunta mencionar posto específico, filtre em consolidado_mensal pelo posto.",
+                      "Se dados não disponíveis para um posto, informe claramente.",
+                      "Os valores monetários estão em Reais (R$)."
+                    ]
+                  });
+                } catch(e) { /* contexto não disponível ainda */ }
+
             } catch (e) {
                 console.error(e);
                 el('#err').textContent = 'Erro ao renderizar dados.';
@@ -1402,6 +1426,25 @@
             });
         }
     </script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      ChatIA.init({
+        apiUrl: window.IA_API_URL || '/ia/chat',
+        mountAfterSelector: '#btnReset',
+        title: 'IA CAMIM',
+        briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
+        briefDefault: true,
+        getPayload: async ({ userQuery }) => ({
+          prompt: userQuery,
+          produto: 'liberty',
+          contexto: window.__kpi_contexto || '',
+          prefs: { accept_format: 'free_text' }
+        })
+      });
+    });
+  </script>
+
 </body>
 
 </html>

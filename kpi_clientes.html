@@ -26,8 +26,23 @@
 
     <link rel="stylesheet" href="css/style_kpi.css">
 
+    <script src="/js/chat.js?v=20251114"></script>
     <script>
-        window.USER_EMAIL = "{{USER_EMAIL}}";
+        window.IA_API_URL = '/ia/chat';
+        window.IA_PAGINA  = 'clientes';
+
+        fetch("/session/me", { credentials: 'same-origin' })
+          .then(r => r.json())
+          .then(data => {
+            window.USER_EMAIL  = data.email  || null;
+            window.USER_NOME   = data.nome   || null;
+            window.USER_POSTOS = data.postos || null;
+          })
+          .catch(() => {
+            window.USER_EMAIL  = null;
+            window.USER_NOME   = null;
+            window.USER_POSTOS = null;
+          });
     </script>
 
 
@@ -1244,6 +1259,36 @@ ORDER BY e.codigo, faixa_etaria;
             buildFaixasCards(faixasAgg, totalDataset);
             buildChartsFaixas(faixasAgg, totalDataset);
             buildChartsMatriculas();  // PF / PJ / Total
+
+            // Contexto IA — atualiza sempre que o dashboard recarrega
+            try {
+              const resumoPorPosto = {};
+              POSTOS_PERMITIDOS.forEach(p => {
+                const m = RAW_MAT[p] || {};
+                resumoPorPosto[p] = {
+                  matriculas_pf: m.PF || 0,
+                  matriculas_pj: m.PJ || 0,
+                  total: m.TOTAL || 0,
+                  ticket_medio_real: m.ticketReal || 0,
+                  ticket_medio_previsto: m.ticketPrev || 0
+                };
+              });
+              window.__kpi_contexto = JSON.stringify({
+                produto: 'clientes',
+                postos: POSTOS_PERMITIDOS,
+                matriculas_por_posto: resumoPorPosto,
+                vidas_pf: RAW_VIDAS,
+                beneficiarios_pf: RAW_BENEF,
+                beneficiarios_pj: RAW_BENEF_PJ,
+                _instrucoes_ia: [
+                  "Use SOMENTE os dados fornecidos neste JSON. NUNCA invente ou estime valores.",
+                  "Os dados são de cadastro de clientes (matrículas PF/PJ, vidas, beneficiários).",
+                  "Se a pergunta mencionar posto específico, filtre em matriculas_por_posto[posto].",
+                  "Se dados não disponíveis para um posto, informe claramente.",
+                  "Os valores de ticket estão em Reais (R$)."
+                ]
+              });
+            } catch(e) { /* contexto não disponível ainda */ }
         }
 
 
@@ -1493,10 +1538,23 @@ ORDER BY e.codigo, faixa_etaria;
 
     </script>
 
-
-
-
-
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      ChatIA.init({
+        apiUrl: window.IA_API_URL || "/ia/chat",
+        mountAfterSelector: "#btnToggleKpiManual",
+        title: "IA CAMIM",
+        briefInstruction: "Responda em até 3 linhas e 300 caracteres. Sem listas.",
+        briefDefault: true,
+        getPayload: async ({ userQuery }) => ({
+          prompt: userQuery,
+          produto: "clientes",
+          contexto: window.__kpi_contexto || "",
+          prefs: { accept_format: "free_text" }
+        })
+      });
+    });
+  </script>
 
 </body>
 

@@ -521,6 +521,17 @@
         <footer class="main-footer"><strong>Arquivos prontos para consumo por IA.</strong></footer>
     </div>
 
+    <!-- Chat IA -->
+    <script src="/js/chat.js?v=20251114"></script>
+    <script>
+        window.IA_API_URL = '/ia/chat';
+        window.IA_PAGINA  = 'governo';
+        fetch("/session/me", { credentials: 'same-origin' })
+          .then(r => r.json())
+          .then(data => { window.USER_NOME = data.nome || null; })
+          .catch(() => {});
+    </script>
+
     <!-- Scripts base -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6/dist/js/bootstrap.bundle.min.js"></script>
@@ -822,8 +833,43 @@
             buildIPCA(ip);
             buildIGPM(ig, ip);
             buildTables(pt, ip, ig);
+
+            // Contexto IA
+            try {
+              window.__kpi_contexto = JSON.stringify({
+                produto: 'governo',
+                ptax_diario: PTAX.slice(-90),
+                ipca_mensal: IPCA.slice(-24),
+                igpm_mensal: IGPM.slice(-24),
+                _instrucoes_ia: [
+                  "Use SOMENTE os dados fornecidos neste JSON. NUNCA invente ou estime valores.",
+                  "Os dados são de indicadores macroeconômicos: PTAX (câmbio USD/BRL), IPCA (inflação) e IGP-M.",
+                  "PTAX: campo mid é a taxa média. IPCA e IGP-M: campo value é a variação mensal em %.",
+                  "Para calcular acumulado 12 meses, some os valores mensais (aproximação) ou use a fórmula composta.",
+                  "Os valores de PTAX estão em R$/USD."
+                ]
+              });
+            } catch(e) { /* contexto não disponível */ }
         })();
     </script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      ChatIA.init({
+        apiUrl: window.IA_API_URL || '/ia/chat',
+        mountAfterSelector: '#refreshBtn',
+        title: 'IA CAMIM',
+        briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
+        briefDefault: true,
+        getPayload: async ({ userQuery }) => ({
+          prompt: userQuery,
+          produto: 'governo',
+          contexto: window.__kpi_contexto || '',
+          prefs: { accept_format: 'free_text' }
+        })
+      });
+    });
+  </script>
 
 
 

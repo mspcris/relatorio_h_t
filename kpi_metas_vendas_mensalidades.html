@@ -53,6 +53,8 @@
         const r = await fetch("/session/me",{credentials:"same-origin"});
         if(!r.ok) return [];
         const d = await r.json();
+        window.USER_NOME   = d.nome   || null;
+        window.USER_POSTOS = d.postos || null;
         return Array.isArray(d.postos) ? d.postos : [];
       }catch{ return []; }
     }
@@ -474,6 +476,35 @@
       if(years[0]) renderYearTable('#yearA', years[0], ymSel);
       if(years[1]) renderYearTable('#yearB', years[1], ymSel);
       if(years[2]) renderYearTable('#yearC', years[2], ymSel);
+
+      // Contexto IA — atualiza sempre que o dashboard recarrega
+      try {
+        const dadosPorPosto = {};
+        POSTOS.forEach(p => {
+          const payload = CACHE[ymSel]?.[p];
+          if (payload) {
+            dadosPorPosto[p] = {
+              meta_mensalidade: payload.meta?.meta_mens ?? null,
+              meta_venda: payload.meta?.meta_venda ?? null,
+              mensalidades_por_dia: payload.mensalidades_por_dia ?? [],
+              vendas_por_dia: payload.vendas_por_dia ?? []
+            };
+          }
+        });
+        window.__kpi_contexto = JSON.stringify({
+          produto: 'metas',
+          mes_selecionado: ymSel,
+          postos: POSTOS,
+          dados_por_posto: dadosPorPosto,
+          _instrucoes_ia: [
+            "Use SOMENTE os dados fornecidos neste JSON. NUNCA invente ou estime valores.",
+            "Os dados são de metas de vendas e mensalidades por posto/mês.",
+            "Para posto específico, consulte dados_por_posto[posto].",
+            "meta_mensalidade e meta_venda são os objetivos definidos. Os arrays _por_dia mostram a evolução diária.",
+            "Os valores monetários estão em Reais (R$)."
+          ]
+        });
+      } catch(e) { /* contexto não disponível ainda */ }
     }
 
 
@@ -1047,6 +1078,27 @@
   mq.addEventListener?.('change', onScroll);
   onScroll();
 }
+</script>
+
+<script src="/js/chat.js?v=20251114"></script>
+<script>
+  window.IA_API_URL = '/ia/chat';
+  window.IA_PAGINA  = 'metas';
+  document.addEventListener('DOMContentLoaded', () => {
+    ChatIA.init({
+      apiUrl: window.IA_API_URL || '/ia/chat',
+      mountAfterSelector: '#btnReload',
+      title: 'IA CAMIM',
+      briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
+      briefDefault: true,
+      getPayload: async ({ userQuery }) => ({
+        prompt: userQuery,
+        produto: 'metas',
+        contexto: window.__kpi_contexto || '',
+        prefs: { accept_format: 'free_text' }
+      })
+    });
+  });
 </script>
 </body>
 </html>
