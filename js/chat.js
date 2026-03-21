@@ -31,7 +31,7 @@
 
     init(options) {
       const defaults = {
-        apiUrl: '/ia/chat',
+        apiUrl: '/api/ia/chat',
         mountAfterSelector: '#btnComparar',
         title: 'IA CAMIM',
         timeoutMs: 180000,
@@ -265,7 +265,7 @@
       let perguntas = [];
 
       try {
-        const resp = await fetch('/ia/saudacao', { credentials: 'same-origin', cache: 'no-store' });
+        const resp = await fetch('/api/ia/saudacao', { credentials: 'same-origin', cache: 'no-store' });
         if (resp.ok) {
           const data = await resp.json();
           nome = data.nome || null;

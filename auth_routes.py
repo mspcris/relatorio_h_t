@@ -479,7 +479,7 @@ def admin_reset_link(uid: int):
 
 # ── IA — proxy com persistência ────────────────────────────────────────────────
 
-@auth_bp.post("/ia/chat")
+@auth_bp.post("/api/ia/chat")
 def ia_chat():
     """Proxy autenticado: roteia para Groq / OpenAI / Anthropic conforme campo 'provider'."""
     email, _ = decode_user()
@@ -562,7 +562,7 @@ def ia_chat():
     return jsonify(resposta_json)
 
 
-@auth_bp.get("/ia/saudacao")
+@auth_bp.get("/api/ia/saudacao")
 def ia_saudacao():
     """Retorna saudação personalizada + perguntas mais frequentes do usuário."""
     email, _ = decode_user()
