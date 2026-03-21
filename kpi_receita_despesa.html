@@ -3032,18 +3032,15 @@ function updateExploradorDespesas(mesesSelec) {
         updateExploradorDespesas(mesesSelec);
 
         // ======================================================
-        // CONTEXTO PARA IA (ESSENCIAL)
+        // CONTEXTO PARA IA — COMPLETO
         // ======================================================
 
         try {
+          const postosList = postosSelecionados();
+          const resumo    = aggregatePeriodo(mesesSelec);
+          const r2 = v => Math.round(v * 100) / 100;
 
-          const resumo = aggregatePeriodo(mesesSelec);
-          const despesasPorTipo = computeDespesaDim(mesesSelec,"tipo")
-            .full
-            .slice(0,20)
-          const driversTipo = calcularDriversTipo(mesesSelec)
-
-          // evolução mês a mês (receita, despesa, resultado, margem)
+          // 1) Evolução mensal consolidada
           const evolucao_mensal = mesesSelec.map(ym => {
             const r = aggregateReceitaMes(ym);
             const d = aggregateDespesaMes(ym);
@@ -3052,41 +3049,91 @@ function updateExploradorDespesas(mesesSelec) {
             const margem = r.receita_total > 0 ? (resultado / r.receita_total) * 100 : null;
             return {
               mes: ym,
-              receita_total: r.receita_total,
-              receita_mensalidades: r.receita_mensalidades,
-              receita_servicos: r.receita_servicos,
-              despesa: desp,
-              resultado,
-              margem_pct: margem != null ? +margem.toFixed(2) : null
+              receita_total:        r2(r.receita_total),
+              receita_mensalidades: r2(r.receita_mensalidades),
+              receita_servicos:     r2(r.receita_servicos),
+              despesa:              r2(desp),
+              retirada:             r2(d.retirada),
+              resultado:            r2(resultado),
+              margem_pct:           margem != null ? +margem.toFixed(2) : null
             };
           });
 
-          // receita por tipo no período
-          const receitaPorTipo = computeReceitaDim(mesesSelec, 'tipo')
-            .full.slice(0, 20);
+          // 2) Evolução mensal por posto (receita + despesa)
+          const evolucao_por_posto = {};
+          postosList.forEach(posto => {
+            evolucao_por_posto[posto] = mesesSelec.map(ym => {
+              const recLinhas  = getLinhas(DATA.recTipo,  ym, [posto]);
+              const despLinhas = getLinhas(DATA.despTipo, ym, [posto]);
+              let rec = 0, desp = 0, retir = 0;
+              recLinhas.forEach(r  => { rec  += num(r.valorpago); });
+              despLinhas.forEach(r => {
+                const v = num(r.valorpago);
+                if (isRetiradaTipo(r)) retir += v; else desp += v;
+              });
+              const despUsada = considerarRetirada ? desp + retir : desp;
+              return { mes: ym, receita: r2(rec), despesa: r2(despUsada) };
+            });
+          });
+
+          // 3) Despesas por tipo — evolução mensal
+          const despesas_tipo_mensal = mesesSelec.map(ym => {
+            const linhas = getLinhas(DATA.despTipo, ym, postosList);
+            const porTipo = {};
+            linhas.forEach(r => {
+              if (!considerarRetirada && isRetiradaTipo(r)) return;
+              const tp = normStr(r.tipo || r.Tipo, 'Sem classificação');
+              porTipo[tp] = r2((porTipo[tp] || 0) + num(r.valorpago));
+            });
+            return { mes: ym, tipos: porTipo };
+          });
+
+          // 4) Despesas por plano principal — evolução mensal
+          const despesas_pp_mensal = mesesSelec.map(ym => {
+            const linhas = getLinhas(DATA.despTipo, ym, postosList);
+            const porPP = {};
+            linhas.forEach(r => {
+              if (!considerarRetirada && isRetiradaTipo(r)) return;
+              const pp = normStr(r.PlanoPrincipal || r.planoprincipal, 'Sem classificação');
+              porPP[pp] = r2((porPP[pp] || 0) + num(r.valorpago));
+            });
+            return { mes: ym, planos: porPP };
+          });
+
+          // 5) Receita por tipo — evolução mensal
+          const receita_tipo_mensal = mesesSelec.map(ym => {
+            const linhas = getLinhas(DATA.recTipo, ym, postosList);
+            const porTipo = {};
+            linhas.forEach(r => {
+              const tp = normStr(r.tipo || r.Tipo, 'Sem classificação');
+              porTipo[tp] = r2((porTipo[tp] || 0) + num(r.valorpago));
+            });
+            return { mes: ym, tipos: porTipo };
+          });
 
           window.__kpi_contexto = JSON.stringify({
             kpi: "receita_despesa",
             empresa: "CAMIM",
-            postos: postosSelecionados(),
+            postos: postosList,
             periodo: mesesSelec,
             considerar_retirada: considerarRetirada,
 
             resumo_financeiro: {
-              receita_total: resumo.recTotal,
-              receita_mensalidades: resumo.recMens,
-              receita_servicos: resumo.recServ,
-              despesa_sem_retirada: resumo.despSem,
-              despesa_com_retirada: resumo.despCom,
-              despesa_considerada: resumo.despUsada,
-              resultado: resumo.resultado,
-              margem: resumo.margem
+              receita_total:        r2(resumo.recTotal),
+              receita_mensalidades: r2(resumo.recMens),
+              receita_servicos:     r2(resumo.recServ),
+              despesa_sem_retirada: r2(resumo.despSem),
+              despesa_com_retirada: r2(resumo.despCom),
+              despesa_considerada:  r2(resumo.despUsada),
+              resultado:            r2(resumo.resultado),
+              margem_pct:           resumo.margem != null ? +resumo.margem.toFixed(2) : null
             },
 
             evolucao_mensal,
-            receita_por_tipo: receitaPorTipo,
-            despesas_por_tipo: despesasPorTipo,
-            drivers_despesa_tipo: driversTipo
+            evolucao_por_posto,
+            despesas_tipo_mensal,
+            despesas_pp_mensal,
+            receita_tipo_mensal
           });
 
         } catch (e) {
