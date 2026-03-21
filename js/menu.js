@@ -1,3 +1,28 @@
+// Injeta link Admin no drawer se o usuário for admin
+fetch("/session/me")
+  .then(r => r.ok ? r.json() : null)
+  .then(data => {
+    if (!data || !data.is_admin) return;
+    // Procura o <li> do Home Page e insere o Admin logo abaixo
+    const links = document.querySelectorAll("#app-drawer a[href]");
+    let homeItem = null;
+    links.forEach(a => {
+      if (a.getAttribute("href") === "/" || a.textContent.trim() === "Home Page") {
+        homeItem = a.closest("li");
+      }
+    });
+    const adminLi = document.createElement("li");
+    adminLi.innerHTML =
+      '<a href="/admin" style="display:flex;align-items:center;gap:10px;padding:10px 16px;' +
+      'color:inherit;text-decoration:none;font-weight:600;border-left:3px solid #f39c12">' +
+      '<i class="fas fa-users-cog" style="color:#f39c12;width:18px;text-align:center"></i>' +
+      '<span>Admin</span></a>';
+    if (homeItem && homeItem.parentNode) {
+      homeItem.parentNode.insertBefore(adminLi, homeItem.nextSibling);
+    }
+  })
+  .catch(() => {});
+
 // Aguarda o HTML carregar
 document.addEventListener("DOMContentLoaded", () => {
   // Seletores principais do menu

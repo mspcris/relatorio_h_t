@@ -195,7 +195,13 @@ def session_me():
     email, postos = decode_user()
     if not email:
         return ("", 401)
-    return jsonify({"email": email, "postos": postos})
+    db = SessionLocal()
+    try:
+        u = get_user_by_email(db, email)
+        is_admin = bool(u.is_admin) if u else False
+    finally:
+        db.close()
+    return jsonify({"email": email, "postos": postos, "is_admin": is_admin})
 
 
 # ── Reset de senha ─────────────────────────────────────────────────────────────
@@ -344,8 +350,7 @@ def admin_editar(uid: int):
         if d.get("senha"):
             user.set_senha(d["senha"])
         if "postos" in d:
-            for p in list(user.postos):
-                db.delete(p)
+            db.query(UserPosto).filter_by(user_id=user.id).delete(synchronize_session="fetch")
             db.flush()
             for posto in d["postos"]:
                 db.add(UserPosto(user_id=user.id, posto=posto.upper()))
