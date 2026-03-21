@@ -2694,15 +2694,15 @@ function uniqueSorted(arr) {
 
 function listPlanoPrincipalOptions(mesesSelec) {
   const postos = postosSelecionados();
-  if (!DATA.despPP || !postos.length) return [];
+  if (!DATA.despTipo || !postos.length) return [];
 
   const out = [];
   mesesSelec.forEach(ym => {
-    const linhas = getLinhas(DATA.despPP, ym, postos);
+    const linhas = getLinhas(DATA.despTipo, ym, postos);
     linhas.forEach(r => {
       const v = num(r.valorpago);
       if (!v) return;
-      if (!considerarRetirada && isRetiradaPlanoPrincipal(r)) return;
+      if (!considerarRetirada && isRetiradaTipo(r)) return;
 
       const pp = normStr(r.PlanoPrincipal || r.planoprincipal, 'Sem classificação');
       out.push(pp);
@@ -2714,15 +2714,15 @@ function listPlanoPrincipalOptions(mesesSelec) {
 
 function listPlanoOptions(mesesSelec, planoPrincipal) {
   const postos = postosSelecionados();
-  if (!DATA.despPlano || !postos.length || !planoPrincipal) return [];
+  if (!DATA.despTipo || !postos.length || !planoPrincipal) return [];
 
   const out = [];
   mesesSelec.forEach(ym => {
-    const linhas = getLinhas(DATA.despPlano, ym, postos);
+    const linhas = getLinhas(DATA.despTipo, ym, postos);
     linhas.forEach(r => {
       const v = num(r.valorpago);
       if (!v) return;
-      if (!considerarRetirada && isRetiradaPlano(r)) return;
+      if (!considerarRetirada && isRetiradaTipo(r)) return;
 
       const pp = normStr(r.PlanoPrincipal || r.planoprincipal, 'Sem classificação');
       if (pp !== planoPrincipal) return;
@@ -2769,11 +2769,11 @@ function seriesDespesaPlanoPrincipal(mesesSelec, planoPrincipal) {
     labels.push(mFmt(ym));
     let soma = 0;
 
-    const linhas = getLinhas(DATA.despPP, ym, postos);
+    const linhas = getLinhas(DATA.despTipo, ym, postos);
     linhas.forEach(r => {
       const v = num(r.valorpago);
       if (!v) return;
-      if (!considerarRetirada && isRetiradaPlanoPrincipal(r)) return;
+      if (!considerarRetirada && isRetiradaTipo(r)) return;
 
       const pp = normStr(r.PlanoPrincipal || r.planoprincipal, 'Sem classificação');
       if (pp !== planoPrincipal) return;
@@ -2796,11 +2796,11 @@ function seriesDespesaPlano(mesesSelec, planoPrincipal, plano) {
     labels.push(mFmt(ym));
     let soma = 0;
 
-    const linhas = getLinhas(DATA.despPlano, ym, postos);
+    const linhas = getLinhas(DATA.despTipo, ym, postos);
     linhas.forEach(r => {
       const v = num(r.valorpago);
       if (!v) return;
-      if (!considerarRetirada && isRetiradaPlano(r)) return;
+      if (!considerarRetirada && isRetiradaTipo(r)) return;
 
       const pp = normStr(r.PlanoPrincipal || r.planoprincipal, 'Sem classificação');
       const pl = normStr(r.plano || r.Plano, 'Sem plano');
@@ -2935,7 +2935,7 @@ function updateExploradorDespesas(mesesSelec) {
   const selPlano = el('#selExplPlano');
   const selTipo = el('#selExplTipo');
 
-  if (!selPP || !DATA.despPP) return;
+  if (!selPP || !DATA.despTipo) return;
 
   // 1) opções de Plano Principal
   const curPP = selPP.value || '';
@@ -2973,7 +2973,7 @@ function updateExploradorDespesas(mesesSelec) {
   if (selTipo) selTipo.disabled = !chosenPlano;
 
   // 2) chart + tabela Plano
-  if (chosenPP && chosenPlano && DATA.despPlano) {
+  if (chosenPP && chosenPlano) {
     const s2 = seriesDespesaPlano(mesesSelec, chosenPP, chosenPlano);
     updateExplorerChart(chartDespPlanoTrend, s2.labels, s2.values, `Despesa — ${chosenPlano}`);
     renderExplorerTable('#tblExplPlano', mesesSelec, s2.values);
@@ -3043,6 +3043,28 @@ function updateExploradorDespesas(mesesSelec) {
             .slice(0,20)
           const driversTipo = calcularDriversTipo(mesesSelec)
 
+          // evolução mês a mês (receita, despesa, resultado, margem)
+          const evolucao_mensal = mesesSelec.map(ym => {
+            const r = aggregateReceitaMes(ym);
+            const d = aggregateDespesaMes(ym);
+            const desp = considerarRetirada ? d.desp_com_retirada : d.desp_sem_retirada;
+            const resultado = r.receita_total - desp;
+            const margem = r.receita_total > 0 ? (resultado / r.receita_total) * 100 : null;
+            return {
+              mes: ym,
+              receita_total: r.receita_total,
+              receita_mensalidades: r.receita_mensalidades,
+              receita_servicos: r.receita_servicos,
+              despesa: desp,
+              resultado,
+              margem_pct: margem != null ? +margem.toFixed(2) : null
+            };
+          });
+
+          // receita por tipo no período
+          const receitaPorTipo = computeReceitaDim(mesesSelec, 'tipo')
+            .full.slice(0, 20);
+
           window.__kpi_contexto = JSON.stringify({
             kpi: "receita_despesa",
             empresa: "CAMIM",
@@ -3061,6 +3083,8 @@ function updateExploradorDespesas(mesesSelec) {
               margem: resumo.margem
             },
 
+            evolucao_mensal,
+            receita_por_tipo: receitaPorTipo,
             despesas_por_tipo: despesasPorTipo,
             drivers_despesa_tipo: driversTipo
           });
