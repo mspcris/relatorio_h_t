@@ -36,19 +36,21 @@
 
   <!-- CONFIGURAÇÃO DE CONTEXTO (IA + Sessão do usuário) -->
   <script>
-    window.IA_API_URL = '/ia/analisar';
+    window.IA_API_URL = '/ia/chat';
     window.PROMPTS_API_BASE = '/prompts';
 
-    // Carrega email e postos direto do backend após login
+    // Carrega email, nome e postos direto do backend após login
     fetch("/session/me", { credentials: 'same-origin' })
       .then(r => r.json())
       .then(data => {
         window.USER_EMAIL = data.email;
         window.USER_POSTOS = data.postos;
+        window.USER_NOME  = (data.nome || '').split(' ')[0] || '';
       })
       .catch(() => {
         window.USER_EMAIL = null;
         window.USER_POSTOS = [];
+        window.USER_NOME  = '';
       });
   </script>
 
@@ -3133,6 +3135,14 @@ function updateExploradorDespesas(mesesSelec) {
             periodo: mesesSelec,
             considerar_retirada: considerarRetirada,
 
+            _instrucoes_ia: [
+              "Use SOMENTE os dados fornecidos neste JSON. NUNCA invente ou estime valores.",
+              "Se a pergunta mencionar um posto específico (ex: 'em X', 'no posto A'), use EXCLUSIVAMENTE despesas_tipo_por_posto[posto] e evolucao_por_posto[posto] para aquele posto.",
+              "despesas_tipo_mensal_consolidado contém o total de TODOS os postos em postos[]. NÃO use esse campo para responder sobre um único posto.",
+              "Se os dados de um posto não estiverem disponíveis, informe que não há dados para aquele posto no período selecionado.",
+              "Os valores monetários estão em Reais (R$)."
+            ],
+
             resumo_financeiro: {
               receita_total:        r2(resumo.recTotal),
               receita_mensalidades: r2(resumo.recMens),
@@ -3242,12 +3252,23 @@ function updateExploradorDespesas(mesesSelec) {
     })();
   </script>
 
-  <script src="/js/ia_client.js"></script>
-<script src="/js/ia_chat_widget.js"></script>
-
-<script>
-initIAChat()
-</script>
+  <script>
+    if (window.ChatIA) {
+      ChatIA.init({
+        apiUrl: (window.IA_API_URL || '/ia/chat'),
+        mountAfterSelector: '#reset2',
+        title: 'IA CAMIM',
+        briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
+        briefDefault: true,
+        getPayload: async ({ userQuery }) => ({
+          prompt: userQuery,
+          produto: 'receita_despesa',
+          contexto: window.__kpi_contexto || '',
+          prefs: { accept_format: 'free_text' }
+        })
+      });
+    }
+  </script>
 
 
 
