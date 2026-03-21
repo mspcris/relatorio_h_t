@@ -1,6 +1,6 @@
 """
 auth_db.py — Modelos SQLAlchemy e helpers do banco de autenticação.
-Banco: SQLite em AUTH_DB_PATH (default /opt/relatorio_h_t/camim_auth.db)
+Banco: SQLite em AUTH_DB_PATH (default /opt/camim-auth/camim_auth.db)
 """
 import os
 import secrets
@@ -12,7 +12,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from werkzeug.security import generate_password_hash, check_password_hash
 
-DB_PATH = os.environ.get("AUTH_DB_PATH", "/opt/relatorio_h_t/camim_auth.db")
+DB_PATH = os.environ.get("AUTH_DB_PATH", "/opt/camim-auth/camim_auth.db")
 engine = create_engine(
     f"sqlite:///{DB_PATH}",
     connect_args={"check_same_thread": False},
