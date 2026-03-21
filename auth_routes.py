@@ -108,7 +108,7 @@ def _enviar_reset(email_destino: str, token: str) -> bool:
     link = f"{base}/auth/reset/{token}"
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "CAMIM — Redefinição de senha"
+    msg["Subject"] = "KPI CAMIM — Redefinição de senha"
     msg["From"]    = os.environ.get("DEFAULT_FROM_EMAIL", "tarefas@camim.com.br")
     msg["To"]      = email_destino
 
