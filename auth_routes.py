@@ -131,13 +131,20 @@ def _enviar_reset(email_destino: str, token: str) -> bool:
 
     try:
         host = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
-        port = int(os.environ.get("EMAIL_PORT", 465))
+        port = int(os.environ.get("EMAIL_PORT", 587))
         user = os.environ.get("EMAIL_HOST_USER", "")
         pwd  = os.environ.get("EMAIL_HOST_PASSWORD", "")
 
-        with smtplib.SMTP_SSL(host, port) as s:
-            s.login(user, pwd)
-            s.sendmail(msg["From"], [email_destino], msg.as_string())
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port) as s:
+                s.login(user, pwd)
+                s.sendmail(msg["From"], [email_destino], msg.as_string())
+        else:
+            with smtplib.SMTP(host, port) as s:
+                s.ehlo()
+                s.starttls()
+                s.login(user, pwd)
+                s.sendmail(msg["From"], [email_destino], msg.as_string())
         return True
     except Exception as exc:
         print(f"[auth_routes] erro e-mail reset: {exc}")
