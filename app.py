@@ -310,7 +310,8 @@ def postos_acl_json():
     email, postos = decode_user()
     if not email:
         return ('', 401)
-    return jsonify(load_acl())
+    # Retorna apenas o mapeamento do usuário atual (do DB, não do arquivo estático)
+    return jsonify({email: postos})
 
 
 # ===============================

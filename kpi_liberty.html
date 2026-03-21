@@ -449,6 +449,29 @@
     </div>
 
 
+    <!-- INJEÇÃO DO BACKEND (obrigatório para filtrar postos) -->
+    <script>
+        window.USER_EMAIL = "{{ USER_EMAIL }}";
+
+        async function filtrarPostosPorUsuario(listaPostos) {
+            try {
+                const email = String(window.USER_EMAIL || '').trim().toLowerCase();
+                const resp = await fetch('/postos_acl.json', { cache: 'no-store' });
+                if (!resp.ok) { console.warn('ACL não encontrada.'); return []; }
+                const mapaRaw = await resp.json();
+                const mapa = {};
+                for (const k of Object.keys(mapaRaw)) mapa[k.toLowerCase()] = mapaRaw[k];
+                const postosPermitidos = mapa[email];
+                if (!postosPermitidos || postosPermitidos.length === 0) return [];
+                const allowed = new Set(postosPermitidos.map(p => p.toUpperCase()));
+                return listaPostos.filter(p => allowed.has(p.toUpperCase()));
+            } catch (err) {
+                console.error('Erro ao aplicar ACL de postos', err);
+                return [];
+            }
+        }
+    </script>
+
     <script>
         /* ============================================
            CONFIGURAÇÕES E CAMINHOS DOS JSONS
@@ -508,9 +531,15 @@
 
                 window.ROWS = rows;
 
-                const POSTOS = extrairPostos(rows);
-                if (!POSTOS.length) {
+                const postosBrutos = extrairPostos(rows);
+                if (!postosBrutos.length) {
                     el('#err').textContent = 'Nenhum posto encontrado nos dados.';
+                    return;
+                }
+
+                const POSTOS = await filtrarPostosPorUsuario(postosBrutos);
+                if (!POSTOS.length) {
+                    el('#err').textContent = 'Sem acesso a postos neste KPI.';
                     return;
                 }
 

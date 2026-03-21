@@ -160,7 +160,17 @@
         <div class="form-row">
           <div class="form-group col-md-6">
             <label>Senha <small class="text-muted">(deixe em branco para não alterar)</small></label>
-            <input type="password" id="f-senha" class="form-control" placeholder="mínimo 8 caracteres" autocomplete="new-password">
+            <div class="input-group">
+              <input type="password" id="f-senha" class="form-control" placeholder="mínimo 8 caracteres" autocomplete="new-password">
+              <div class="input-group-append">
+                <button type="button" class="btn btn-outline-secondary" id="btn-toggle-senha" tabindex="-1" title="Mostrar/ocultar senha">
+                  <i class="fas fa-eye"></i>
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="btn-gerar-senha" title="Gerar senha forte">
+                  <i class="fas fa-key"></i> Gerar
+                </button>
+              </div>
+            </div>
           </div>
           <div class="form-group col-md-3 d-flex align-items-end">
             <div class="custom-control custom-switch mb-2">
@@ -352,6 +362,34 @@ async function enviarReset(id, email) {
   if (!ok) { toast(data.erro || `Erro ${status}.`, true); return; }
   toast(data.ok ? `Link enviado para ${email}.` : 'Falha ao enviar e-mail.', !data.ok);
 }
+
+// ── Gerar senha forte ─────────────────────────────────────────────────────────
+document.getElementById('btn-gerar-senha').addEventListener('click', function () {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%&*';
+  let senha = '';
+  const arr = new Uint32Array(14);
+  crypto.getRandomValues(arr);
+  arr.forEach(n => { senha += chars[n % chars.length]; });
+  const campo = document.getElementById('f-senha');
+  campo.value = senha;
+  campo.type = 'text';
+  document.querySelector('#btn-toggle-senha i').className = 'fas fa-eye-slash';
+  campo.select();
+  document.execCommand('copy');
+  toast('Senha gerada e copiada para a área de transferência.');
+});
+
+document.getElementById('btn-toggle-senha').addEventListener('click', function () {
+  const campo = document.getElementById('f-senha');
+  const icon = this.querySelector('i');
+  if (campo.type === 'password') {
+    campo.type = 'text';
+    icon.className = 'fas fa-eye-slash';
+  } else {
+    campo.type = 'password';
+    icon.className = 'fas fa-eye';
+  }
+});
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function toast(msg, erro = false) {
