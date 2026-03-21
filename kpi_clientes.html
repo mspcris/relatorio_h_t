@@ -976,18 +976,17 @@ ORDER BY e.codigo, faixa_etaria;
         ===========================================================================*/
 
         async function filtrarPostosPorUsuario(postos) {
-            const email = String(window.USER_EMAIL || '').trim().toLowerCase();
-
             try {
-                const res = await fetch('/postos_acl.json');
-                if (!res.ok) throw new Error("Falha ao carregar postos_acl.json");
-
-                const acl = await res.json();
-                return acl[email] ?? postos;
-
+                const res = await fetch('/session/me', { cache: 'no-store', credentials: 'same-origin' });
+                if (!res.ok) return [];
+                const data = await res.json();
+                const permitidos = data.postos;
+                if (!permitidos || permitidos.length === 0) return [];
+                const allowed = new Set(permitidos.map(p => p.toUpperCase()));
+                return postos.filter(p => allowed.has(p.toUpperCase()));
             } catch (err) {
-                console.warn("ACL fallback total:", err);
-                return postos;
+                console.warn("Erro ao obter postos da sessão:", err);
+                return [];
             }
         }
 
