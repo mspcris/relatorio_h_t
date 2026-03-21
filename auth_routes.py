@@ -37,6 +37,7 @@ from auth_db import (
 # Clientes LLM (carregados sob demanda para não quebrar se a API key faltar)
 _openai_client = None
 _anthropic_client = None
+_groq_client = None
 
 def _get_openai():
     global _openai_client
@@ -51,6 +52,13 @@ def _get_anthropic():
         from llm_client_anthropic import LLMClientAnthropic
         _anthropic_client = LLMClientAnthropic()
     return _anthropic_client
+
+def _get_groq():
+    global _groq_client
+    if _groq_client is None:
+        from llm_client import LLMClient
+        _groq_client = LLMClient()
+    return _groq_client
 
 _IA_SYSTEM_PROMPT = """Você é analista de dados da CAMIM — rede de clínicas médicas.
 
@@ -490,34 +498,20 @@ def ia_chat():
     pergunta_txt = str(d.get("prompt", ""))[:2000]
     pagina_txt   = str(d.get("pagina", ""))[:200]
     provider     = str(d.get("provider", "groq")).lower().strip()
-    contexto     = str(d.get("contexto", ""))[:30000]
+    contexto     = str(d.get("contexto", ""))[:100000]
 
     resposta_json = None
     resposta_txt  = ""
 
-    # ── Groq (serviço externo ia-groq) ──────────────────────────────────────
+    # ── Groq (SDK direto, igual OpenAI/Anthropic) ────────────────────────────
     if provider == "groq":
         try:
-            gr = http_requests.post(
-                IA_GROQ_URL,
-                json=d,
-                timeout=190,
-                headers={"Content-Type": "application/json"},
-            )
-            gr.raise_for_status()
-            resposta_json = gr.json()
+            llm = _get_groq()
+            prompt_completo = f"Contexto do relatório:\n\n{contexto}\n\nPergunta do usuário:\n\n{pergunta_txt}"
+            resposta_txt  = llm.gerar_texto(prompt=prompt_completo, system_prompt=_IA_SYSTEM_PROMPT)
+            resposta_json = {"resposta": resposta_txt, "provider": "groq"}
         except Exception as exc:
             return jsonify({"erro": f"Groq indisponível: {exc}"}), 502
-
-        if isinstance(resposta_json, dict):
-            resposta_txt = (
-                resposta_json.get("html") or
-                resposta_json.get("livre") or
-                resposta_json.get("text") or
-                str(resposta_json)
-            )[:5000]
-        else:
-            resposta_txt = str(resposta_json)[:5000]
 
     # ── OpenAI ───────────────────────────────────────────────────────────────
     elif provider == "openai":

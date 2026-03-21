@@ -383,7 +383,26 @@ jobs:
           "
 
       # ================================================================
-      # 9) Restart FINAL (camim-auth + nginx)
+      # 9) Sync /opt → /var/www (copia HTMLs estáticos para nginx)
+      # ================================================================
+      - name: sync_www.sh -> /var/www
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+            if [ -f /opt/relatorio_h_t/sync_www.sh ]; then
+              bash /opt/relatorio_h_t/sync_www.sh
+            elif [ -f /opt/camim-auth/sync_www.sh ]; then
+              bash /opt/camim-auth/sync_www.sh
+            else
+              echo 'WARN: sync_www.sh não encontrado'
+            fi
+          "
+
+      # ================================================================
+      # 10) Restart FINAL (camim-auth + nginx)
       # ================================================================
       - name: Restart camim-auth + nginx
         env:
