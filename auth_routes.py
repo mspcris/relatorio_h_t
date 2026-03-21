@@ -34,6 +34,34 @@ from auth_db import (
     get_user_by_email, get_user_by_id, init_db,
 )
 
+# Clientes LLM (carregados sob demanda para não quebrar se a API key faltar)
+_openai_client = None
+_anthropic_client = None
+
+def _get_openai():
+    global _openai_client
+    if _openai_client is None:
+        from llm_client_openai import LLMClientOpenAI
+        _openai_client = LLMClientOpenAI()
+    return _openai_client
+
+def _get_anthropic():
+    global _anthropic_client
+    if _anthropic_client is None:
+        from llm_client_anthropic import LLMClientAnthropic
+        _anthropic_client = LLMClientAnthropic()
+    return _anthropic_client
+
+_IA_SYSTEM_PROMPT = """Você é analista de dados da CAMIM — rede de clínicas médicas.
+
+REGRAS OBRIGATÓRIAS:
+1. Use APENAS os dados fornecidos no contexto JSON. NUNCA invente, estime ou use conhecimento externo para gerar valores monetários.
+2. Se a pergunta mencionar um posto específico (ex: "em X", "no posto A"), use EXCLUSIVAMENTE os dados daquele posto no contexto.
+3. Campos com sufixo "_consolidado" contêm o total de TODOS os postos. NÃO os use para responder sobre um único posto.
+4. Se os dados de um posto não estiverem disponíveis no contexto, informe isso claramente.
+5. Responda em português brasileiro de forma objetiva e com os valores exatos do contexto.
+"""
+
 IA_GROQ_URL = os.environ.get("IA_GROQ_URL", "http://127.0.0.1:8030/ia/analisar")
 
 auth_bp = Blueprint("auth_bp", __name__)
@@ -453,40 +481,68 @@ def admin_reset_link(uid: int):
 
 @auth_bp.post("/ia/chat")
 def ia_chat():
-    """Proxy autenticado: encaminha ao Groq, salva pergunta+resposta no DB."""
+    """Proxy autenticado: roteia para Groq / OpenAI / Anthropic conforme campo 'provider'."""
     email, _ = decode_user()
     if not email:
         return ("", 401)
 
-    d = request.get_json(silent=True) or {}
+    d            = request.get_json(silent=True) or {}
     pergunta_txt = str(d.get("prompt", ""))[:2000]
     pagina_txt   = str(d.get("pagina", ""))[:200]
+    provider     = str(d.get("provider", "groq")).lower().strip()
+    contexto     = str(d.get("contexto", ""))[:30000]
 
-    # Encaminha ao serviço Groq
-    try:
-        gr = http_requests.post(
-            IA_GROQ_URL,
-            json=d,
-            timeout=190,
-            headers={"Content-Type": "application/json"},
-        )
-        gr.raise_for_status()
-        resposta_json = gr.json()
-    except Exception as exc:
-        return jsonify({"erro": f"Serviço IA indisponível: {exc}"}), 502
+    resposta_json = None
+    resposta_txt  = ""
 
-    # Extrai texto da resposta para persistir
-    if isinstance(resposta_json, dict):
-        resposta_txt = (
-            resposta_json.get("html") or
-            resposta_json.get("livre") or
-            resposta_json.get("text") or
-            str(resposta_json)
-        )[:5000]
+    # ── Groq (serviço externo ia-groq) ──────────────────────────────────────
+    if provider == "groq":
+        try:
+            gr = http_requests.post(
+                IA_GROQ_URL,
+                json=d,
+                timeout=190,
+                headers={"Content-Type": "application/json"},
+            )
+            gr.raise_for_status()
+            resposta_json = gr.json()
+        except Exception as exc:
+            return jsonify({"erro": f"Groq indisponível: {exc}"}), 502
+
+        if isinstance(resposta_json, dict):
+            resposta_txt = (
+                resposta_json.get("html") or
+                resposta_json.get("livre") or
+                resposta_json.get("text") or
+                str(resposta_json)
+            )[:5000]
+        else:
+            resposta_txt = str(resposta_json)[:5000]
+
+    # ── OpenAI ───────────────────────────────────────────────────────────────
+    elif provider == "openai":
+        try:
+            llm = _get_openai()
+            prompt_completo = f"Contexto do relatório:\n\n{contexto}\n\nPergunta do usuário:\n\n{pergunta_txt}"
+            resposta_txt  = llm.gerar_texto(prompt=prompt_completo, system_prompt=_IA_SYSTEM_PROMPT)
+            resposta_json = {"resposta": resposta_txt, "provider": "openai"}
+        except Exception as exc:
+            return jsonify({"erro": f"OpenAI indisponível: {exc}"}), 502
+
+    # ── Anthropic ────────────────────────────────────────────────────────────
+    elif provider == "anthropic":
+        try:
+            llm = _get_anthropic()
+            prompt_completo = f"Contexto do relatório:\n\n{contexto}\n\nPergunta do usuário:\n\n{pergunta_txt}"
+            resposta_txt  = llm.gerar_texto(prompt=prompt_completo, system_prompt=_IA_SYSTEM_PROMPT)
+            resposta_json = {"resposta": resposta_txt, "provider": "anthropic"}
+        except Exception as exc:
+            return jsonify({"erro": f"Anthropic indisponível: {exc}"}), 502
+
     else:
-        resposta_txt = str(resposta_json)[:5000]
+        return jsonify({"erro": f"Provedor desconhecido: {provider}"}), 400
 
-    # Persiste no SQLite
+    # ── Persistir no SQLite ──────────────────────────────────────────────────
     db = SessionLocal()
     try:
         u = get_user_by_email(db, email)
@@ -495,7 +551,7 @@ def ia_chat():
                 user_id  = u.id,
                 pagina   = pagina_txt or None,
                 pergunta = pergunta_txt,
-                resposta = resposta_txt,
+                resposta = resposta_txt[:5000],
             ))
             db.commit()
     except Exception as exc:

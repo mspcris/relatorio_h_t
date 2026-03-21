@@ -1,31 +1,44 @@
-/* chat.js — Painel de IA reutilizável (v4 — inclui “Resposta Objetiva” e exportação HTML)
- * Objetivo:
- *  1) Sempre pedir o COMPLETO à IA.
- *  2) IA Resumida controla apenas visualização, não o pedido.
- *  3) “Resposta Objetiva” exibe só a parte final (“Resposta à sua pergunta / Pergunta do Usuário”).
- *  4) Bolha do bot só aparece quando conteúdo está pronto.
- *  5) Exporta conversa em HTML completo e autocontido.
+/* chat.js — IA CAMIM (v5 — P/M/G, provedor Groq/OpenAI/Anthropic, saudação personalizada)
+ * - Botão "🤖 IA" inserido após o seletor anchor
+ * - Painel fixo no canto inferior direito
+ * - Tamanhos P / M / G selecionáveis no header
+ * - Provedores: Groq (padrão) | OpenAI | Anthropic
+ * - Saudação personalizada via /ia/saudacao
+ * - Sem "IA Resumida" / "Resposta Objetiva" — resposta direta
+ * - Exportar conversa em HTML (ícone ⬇)
  */
 
 (function () {
 
+  /* ─── Tamanhos disponíveis ─── */
+  const SIZES = {
+    P: { width: 'min(440px, 95vw)', maxHeight: '68vh' },
+    M: { width: 'min(740px, 95vw)', maxHeight: '82vh' },
+    G: { width: 'min(1080px, 95vw)', maxHeight: '92vh' }
+  };
+
+  /* ─── Provedores ─── */
+  const PROVIDERS = {
+    groq:      { label: 'Groq',      color: '#6366f1' },
+    openai:    { label: 'OpenAI',    color: '#10a37f' },
+    anthropic: { label: 'Anthropic', color: '#d4a017' }
+  };
+  const PROVIDER_DEFAULT = 'groq';
+
   const ChatIA = {
     _CFG: { TIMEOUT_MS: 180000 },
-    _state: { mounted: false, brief: true, opts: null },
+    _state: { mounted: false, size: 'M', provider: PROVIDER_DEFAULT, opts: null },
 
     init(options) {
       const defaults = {
-        apiUrl: (window.IA_API_URL || '/ia/chat'),
+        apiUrl: '/ia/chat',
         mountAfterSelector: '#btnComparar',
-        title: 'IA — Análise Completa & Chat',
-        briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
+        title: 'IA CAMIM',
         timeoutMs: 180000,
-        briefDefault: true,
         getPayload: async ({ userQuery }) => ({ prompt: userQuery || 'ok' })
       };
 
       this._state.opts = Object.assign({}, defaults, options || {});
-      this._state.brief = !!this._state.opts.briefDefault;
 
       this._injectStyles();
       this._injectUI();
@@ -35,319 +48,336 @@
       this._ensureBtnTimer = setInterval(() => this._ensureLauncher(), 1500);
     },
 
-    /* ===================== UI ===================== */
+    /* ═══════════════════ ESTILOS ═══════════════════ */
     _injectStyles() {
       if (document.getElementById('chatia-styles')) return;
-
       const css = `
-#iaDeepPanel{font-size:.90rem;color:#eaeaea}
+#iaDeepPanel{font-size:.90rem;color:#eaeaea;display:flex;flex-direction:column}
 #iaDeepPanel .iad-chat{display:flex;flex-direction:column;gap:10px}
-#iaDeepPanel .iad-msg{max-width:78%;padding:10px 12px;border-radius:12px;line-height:1.45;white-space:pre-wrap;word-break:break-word;text-align:justify}
+#iaDeepPanel .iad-msg{max-width:84%;padding:10px 14px;border-radius:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
 #iaDeepPanel .iad-bot{background:#2a2a2a;border:1px solid #3a3a3a;align-self:flex-start}
 #iaDeepPanel .iad-user{background:#16324f;border:1px solid #275a8a;align-self:flex-end}
-#iaDeepPanel .iad-meta{font-size:12px;color:#9aa1a9;margin-top:2px}
+#iaDeepPanel .iad-meta{font-size:11px;color:#6b7280;margin-top:3px}
 #iaDeepPanel.card{background:#1e1e1e;color:#fff;border:1px solid #2a2a2a}
 #iaDeepPanel .card-header,#iaDeepPanel .card-footer{background:#242424;color:#fff;border-color:#2a2a2a}
-#iaDeepPanel .body{background:#1e1e1e;max-height:60vh;overflow:auto;padding-bottom:80px}
-#iaDeepPanel .btn.btn-outline-secondary{color:#ddd;border-color:#5a5a5a}
+#iaDeepPanel .iad-body{background:#1e1e1e;overflow-y:auto;flex:1;padding:12px 14px}
+#iaDeepPanel .btn.btn-outline-secondary{color:#ccc;border-color:#555}
 #iaDeepPanel .btn.btn-outline-secondary:hover{background:#333}
-#iaDeep.btn{margin-left:.5rem}
-#iadBrief{display:inline-flex;align-items:center;gap:6px}
-#iadBrief input{margin:0}
-.iad-hint{font-style:italic;color:#cfcfcf}
-.iad-toolbar{opacity:.9; display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:6px}
-.iad-toolbar label{cursor:pointer; user-select:none}
-.iad-toolbar .iad-view-hint{opacity:.8}
-.iad-content h5{font-size:1em; font-weight:600; margin:.2em 0}
-.iad-content p{font-size:1em; margin:.35em 0}
-.iad-type{ --reveal:0%; -webkit-mask-image:linear-gradient(90deg,#000 calc(var(--reveal)),transparent 0); mask-image:linear-gradient(90deg,#000 calc(var(--reveal)),transparent 0); }
-.iad-type.caret::after{content:''; display:inline-block; width:2px; height:1em; vertical-align:baseline; background:#ddd; margin-left:2px; animation:iadBlink 1s step-end infinite;}
+#iaDeepPanel .btn.btn-outline-secondary.active{background:#444;color:#fff;font-weight:600}
+#iaDeep.btn{margin-left:.5rem;font-weight:600}
+.iad-content h5{font-size:1em;font-weight:600;margin:.25em 0}
+.iad-content p{font-size:1em;margin:.3em 0}
+.iad-loading{display:flex;align-items:center;gap:8px;padding:8px 12px}
+.iad-spinner{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;animation:iadSpin .8s linear infinite;display:inline-block}
+@keyframes iadSpin{to{transform:rotate(360deg)}}
+.iad-type{--reveal:0%;-webkit-mask-image:linear-gradient(90deg,#000 calc(var(--reveal)),transparent 0);mask-image:linear-gradient(90deg,#000 calc(var(--reveal)),transparent 0)}
+.iad-type.caret::after{content:'';display:inline-block;width:2px;height:1em;vertical-align:baseline;background:#ddd;margin-left:2px;animation:iadBlink 1s step-end infinite}
 @keyframes iadBlink{50%{opacity:0}}
-.iad-loading{display:flex;align-items:center;gap:8px}
-.iad-spinner{
-  width:20px; height:20px;
-  border-radius:50%;
-  border:3px solid rgba(255,255,255,.25);
-  border-top-color:#fff;
-  animation: iadSpin .8s linear infinite;
-  display:inline-block; vertical-align:middle;
-}
-@keyframes iadSpin{ to { transform: rotate(360deg); } }
+#iadProvBar{display:flex;gap:4px;padding:4px 12px 6px;background:#1a1a1a;border-bottom:1px solid #2a2a2a;flex-shrink:0}
+#iadProvBar button{font-size:.75rem;padding:2px 10px;border-radius:20px;border:1px solid #444;background:transparent;color:#aaa;cursor:pointer;transition:all .15s}
+#iadProvBar button.active{color:#fff;font-weight:600}
 `.trim();
-
       const s = document.createElement('style');
       s.id = 'chatia-styles';
       s.textContent = css;
       document.head.appendChild(s);
     },
 
+    /* ═══════════════════ BOTÃO LANÇADOR ═══════════════════ */
     _ensureLauncher() {
       const anchor = document.querySelector(this._state.opts.mountAfterSelector);
       if (!document.getElementById('iaDeep') && anchor && anchor.parentNode) {
         const btn = document.createElement('button');
         btn.id = 'iaDeep';
-        btn.className = 'btn btn-sm btn-outline-primary';
-        btn.textContent = 'IA Análise';
-        btn.title = 'Relatório completo e chat';
+        btn.className = 'btn btn-sm btn-info';
+        btn.style.cssText = 'font-weight:600;letter-spacing:.3px';
+        btn.innerHTML = '🤖 IA';
+        btn.title = 'Abrir assistente de IA';
 
         anchor.parentNode.insertBefore(btn, anchor.nextSibling);
 
         btn.addEventListener('click', () => {
           const panel = this._panel();
           if (!panel) return;
-
           const open = (panel.style.display === 'none' || panel.style.display === '');
-          panel.style.display = open ? 'block' : 'none';
+          panel.style.display = open ? 'flex' : 'none';
           this._toggleBtn(btn, open);
-
-          if (open) this._prefillInput(true);
+          if (open) {
+            const inp = this._q('#iadInput');
+            if (inp) inp.focus();
+          }
         });
-
-        btn.dataset.wired = '1';
       }
     },
 
+    /* ═══════════════════ PAINEL PRINCIPAL ═══════════════════ */
     _injectUI() {
       this._ensureLauncher();
 
       if (!document.getElementById('iaDeepPanel')) {
+        const sz = SIZES.M;
         const wrap = document.createElement('div');
         wrap.id = 'iaDeepPanel';
         wrap.className = 'card';
-        wrap.style.cssText =
-          'display:none;position:fixed;right:16px;bottom:16px;width:min(760px,95vw);max-height:85vh;z-index:9999;box-shadow:0 10px 24px rgba(0,0,0,.18)';
+        wrap.style.cssText = [
+          'display:none',
+          `width:${sz.width}`,
+          `max-height:${sz.maxHeight}`,
+          'position:fixed',
+          'right:16px',
+          'bottom:16px',
+          'z-index:9999',
+          'box-shadow:0 12px 32px rgba(0,0,0,.4)',
+          'transition:width .2s, max-height .2s'
+        ].join(';');
 
         wrap.innerHTML = `
-<div class="card-header d-flex align-items-center justify-content-between">
-  <b class="mb-0">${this._state.opts.title}</b>
+<!-- HEADER -->
+<div class="card-header d-flex align-items-center" style="gap:6px;padding:7px 10px;flex-shrink:0">
+  <b style="flex:1;font-size:.88rem" id="iadTitle">${this._state.opts.title}</b>
 
-  <div class="d-flex" style="gap:0; margin-left:auto;">
-
-    <!-- Engrenagem -->
-    <button id="iadSettings" 
-            class="btn btn-sm btn-outline-secondary"
-            style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;">
-      ⚙️
-    </button>
-
-    <!-- Fechar (X) -->
-    <button id="iadClose" 
-            class="btn btn-sm btn-outline-secondary"
-            style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;">
-      ✕
-    </button>
+  <!-- Tamanhos P/M/G -->
+  <div class="btn-group btn-group-sm" title="Tamanho da janela">
+    <button id="iadSzP" class="btn btn-sm btn-outline-secondary" title="Pequeno">P</button>
+    <button id="iadSzM" class="btn btn-sm btn-outline-secondary active" title="Médio">M</button>
+    <button id="iadSzG" class="btn btn-sm btn-outline-secondary" title="Grande">G</button>
   </div>
+
+  <!-- Exportar -->
+  <button id="iadExport" class="btn btn-sm btn-outline-secondary" title="Exportar conversa"
+          style="width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;font-size:14px">⬇</button>
+
+  <!-- Fechar -->
+  <button id="iadClose" class="btn btn-sm btn-outline-secondary" title="Fechar"
+          style="width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:15px">✕</button>
 </div>
 
-<div id="iadSettingsMenu" 
-     style="display:none; background:#1e1e1e; border-bottom:1px solid #333; padding:10px 14px;">
-  
-  <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;">
-    <input id="iadBriefChk" type="checkbox" checked>
-    <span>IA Resumida (padrão)</span>
-  </label>
-
-  <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;">
-    <input type="checkbox" id="chkObjetiva" checked>
-    <span>Resposta Objetiva</span>
-  </label>
-
-  <button id="iadSave" class="btn btn-sm btn-outline-secondary">
-    Salvar conversa
-  </button>
+<!-- BARRA DE PROVEDORES -->
+<div id="iadProvBar">
+  <span style="font-size:.72rem;color:#666;align-self:center;margin-right:2px">Provedor:</span>
+  <button id="iadProvGroq"      class="active" data-prov="groq">Groq</button>
+  <button id="iadProvOpenai"    data-prov="openai">OpenAI</button>
+  <button id="iadProvAnthropic" data-prov="anthropic">Anthropic</button>
 </div>
 
-
-  </div>
+<!-- CORPO DO CHAT -->
+<div class="iad-body" id="iadBody">
+  <div id="iadOut" class="iad-chat"></div>
 </div>
 
-<div class="card-body body">
-  <div id="iadOut" class="iad-chat ia-clean"></div>
-</div>
-
-<div class="card-footer">
+<!-- FOOTER -->
+<div class="card-footer" style="flex-shrink:0;padding:8px 10px">
   <div class="d-flex" style="gap:8px">
     <input id="iadInput" class="form-control form-control-sm"
-           placeholder="Faça perguntas sobre os dados...">
-    <button id="iadSend" class="btn btn-sm btn-primary">Iniciar</button>
+           placeholder="Faça sua pergunta sobre os dados…" autocomplete="off">
+    <button id="iadSend" class="btn btn-sm btn-primary" style="white-space:nowrap">Enviar</button>
   </div>
-  <small class="text-muted">Mensagens usam o recorte atual. Texto corrido, sem tabelas ASCII.</small>
 </div>
 `;
-
         document.body.appendChild(wrap);
-
         this._loadSaudacao();
-        this._prefillInput();
+      }
+    },
+
+    /* ═══════════════════ EVENTOS ═══════════════════ */
+    _wireUI() {
+      /* Fechar */
+      this._q('#iadClose').addEventListener('click', () => {
+        this._panel().style.display = 'none';
+        const btn = this._btn();
+        if (btn) this._toggleBtn(btn, false);
+      });
+
+      /* Exportar */
+      this._q('#iadExport').addEventListener('click', () => this._exportToHTML());
+
+      /* Tamanhos */
+      ['P', 'M', 'G'].forEach(sz => {
+        const el = this._q(`#iadSz${sz}`);
+        if (!el) return;
+        el.addEventListener('click', () => {
+          this._applySize(sz);
+          ['P', 'M', 'G'].forEach(s => {
+            const b = this._q(`#iadSz${s}`);
+            if (b) b.classList.toggle('active', s === sz);
+          });
+        });
+      });
+
+      /* Provedores */
+      this._q('#iadProvBar').addEventListener('click', e => {
+        const btn = e.target.closest('[data-prov]');
+        if (!btn) return;
+        const prov = btn.dataset.prov;
+        this._state.provider = prov;
+
+        this._q('#iadProvBar').querySelectorAll('[data-prov]').forEach(b => {
+          const active = b.dataset.prov === prov;
+          b.classList.toggle('active', active);
+          const cfg = PROVIDERS[b.dataset.prov];
+          b.style.borderColor = active ? (cfg?.color || '#888') : '#444';
+          b.style.color = active ? '#fff' : '#aaa';
+          if (active) b.style.background = (cfg?.color || '#888') + '33';
+          else b.style.background = 'transparent';
+        });
+
+        this._append('bot', `<span style="opacity:.7;font-size:.82rem">Provedor alterado para <b>${PROVIDERS[prov]?.label || prov}</b>. Nova pergunta usará este provedor.</span>`);
+      });
+
+      /* Ativa estilo inicial do provedor padrão */
+      const defBtn = this._q(`[data-prov="${PROVIDER_DEFAULT}"]`);
+      if (defBtn) {
+        const cfg = PROVIDERS[PROVIDER_DEFAULT];
+        defBtn.style.borderColor = cfg?.color || '#888';
+        defBtn.style.color = '#fff';
+        defBtn.style.background = (cfg?.color || '#888') + '33';
       }
 
-      /* Ativa Resposta Objetiva */
-      window.__IA_OBJETIVA__ = true;
-    },
-
-    _prefillInput(initial) {
+      /* Enviar */
+      const send  = this._q('#iadSend');
       const input = this._q('#iadInput');
-      const send = this._q('#iadSend');
-      if (!input || !send) return;
-      if (initial) send.textContent = 'Iniciar';
+
+      send.addEventListener('click', async () => {
+        const q = (input.value || '').trim();
+        if (!q) return;
+        input.value = '';
+        this._append('user', q);
+        await this._sendToIA(q);
+      });
+
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send.click(); }
+      });
     },
 
+    _applySize(sz) {
+      const panel = this._panel();
+      if (!panel) return;
+      const cfg = SIZES[sz] || SIZES.M;
+      panel.style.width    = cfg.width;
+      panel.style.maxHeight = cfg.maxHeight;
+      this._state.size = sz;
+    },
+
+    /* ═══════════════════ SAUDAÇÃO ═══════════════════ */
     async _loadSaudacao() {
-      let nome = this._displayNameFromEmail();
+      let nome = null;
       let perguntas = [];
 
       try {
         const resp = await fetch('/ia/saudacao', { credentials: 'same-origin', cache: 'no-store' });
         if (resp.ok) {
           const data = await resp.json();
-          if (data.nome) {
-            nome = data.nome;
-            window.USER_NOME = nome;
-          }
+          nome = data.nome || null;
+          if (nome) window.USER_NOME = nome;
           perguntas = data.perguntas_frequentes || [];
         }
-      } catch (_) { /* usa fallback silencioso */ }
+      } catch (_) {}
 
-      let saudacao = `Olá, ${nome}! Sou a Camila.AI e vou te ajudar a analisar os dados desta página. Toque em Iniciar ou digite sua pergunta.`;
-      if (perguntas.length > 0) {
-        saudacao += '\n\nVocê costuma perguntar:';
+      if (!nome) nome = window.USER_NOME || null;
+      if (!nome) {
+        const em = (window.USER_EMAIL || '').trim();
+        if (em && /@/.test(em)) {
+          const part = em.split('@')[0].replace(/[._\-\d]+/g, ' ').trim().split(' ')[0];
+          nome = part ? part.charAt(0).toUpperCase() + part.slice(1) : null;
+        }
       }
-      this._append('bot', saudacao);
+      if (!nome) nome = 'Você';
+
+      this._append('bot', `Olá, ${nome}! Sou a IA da CAMIM. Pergunte sobre os dados desta página.`);
 
       if (perguntas.length > 0) {
         const out = this._outBox();
-        const pillRow = document.createElement('div');
-        pillRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px 0;';
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px 0';
         perguntas.forEach(q => {
           const pill = document.createElement('button');
           pill.className = 'btn btn-sm btn-outline-secondary';
-          pill.style.cssText = 'font-size:.78rem;padding:2px 10px;border-radius:20px;max-width:320px;white-space:normal;text-align:left;';
+          pill.style.cssText = 'font-size:.76rem;padding:2px 10px;border-radius:20px;max-width:300px;white-space:normal;text-align:left';
           pill.textContent = q;
           pill.addEventListener('click', () => {
-            pillRow.remove();
+            row.remove();
             this._append('user', q);
             this._sendToIA(q);
           });
-          pillRow.appendChild(pill);
+          row.appendChild(pill);
         });
-        out.appendChild(pillRow);
-        const sc = this._panel().querySelector('.body');
-        if (sc) sc.scrollTop = sc.scrollHeight;
+        out.appendChild(row);
+      }
+
+      this._scrollBottom();
+    },
+
+    /* ═══════════════════ ENVIO PARA IA ═══════════════════ */
+    async _sendToIA(userQuery) {
+      this._dotsStart();
+      try {
+        const payload = await this._state.opts.getPayload({ userQuery });
+        if (payload && typeof payload === 'object') {
+          payload.pagina   = window.IA_PAGINA || window.location.pathname;
+          payload.provider = this._state.provider;  // groq | openai | anthropic
+        }
+        const raw  = await this._callIA(payload, this._state.opts.timeoutMs);
+        this._dotsStop();
+        this._renderBotMessage(this._coerceText(raw));
+      } catch (err) {
+        this._dotsStop();
+        this._append('bot', `<span style="color:#f39c12">Não foi possível responder — ${this._escapeHtml(err?.message || 'erro desconhecido.')}</span>`);
       }
     },
 
-    _wireUI() {
-      const panel = this._panel();
-      const btn = this._btn();
-      const briefChk = this._q('#iadBriefChk');
+    /* ═══════════════════ RENDERIZAÇÃO BOT ═══════════════════ */
+    _renderBotMessage(text) {
+      const row = document.createElement('div');
+      row.className = 'd-flex flex-column';
 
-      // Agora o clique é diretamente no checkbox:
-    briefChk.addEventListener('change', () => {
-    this._state.brief = !!briefChk.checked;
+      const box = document.createElement('div');
+      box.className = 'iad-msg iad-bot';
 
-    const msg = this._state.brief
-      ? 'Padrão atualizado: novas mensagens abrirão em RESUMO.'
-      : 'Padrão atualizado: novas mensagens abrirão em COMPLETO.';
+      const content = document.createElement('div');
+      content.className = 'iad-content';
 
-    this._append('bot', `<span class="iad-hint">${msg}</span>`);
-});
+      const norm = this._normalizeForView(text);
+      if (norm.mode === 'html') {
+        content.innerHTML = this._safeHtml(norm.html);
+      } else {
+        const blocks = norm.text.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+        blocks.forEach(b => {
+          const isTitle = /^###\s*/.test(b);
+          const el = document.createElement(isTitle ? 'h5' : 'p');
+          el.textContent = b.replace(/^###\s*/, '');
+          content.appendChild(el);
+        });
+        requestAnimationFrame(() => this._typeReveal(content));
+      }
 
-      const close = this._q('#iadClose');
-      const saveBtn = this._q('#iadSave');
-      const send = this._q('#iadSend');
-      
-      const input = this._q('#iadInput');
-      const objetiva = this._q('#chkObjetiva');
-      const settingsBtn = this._q('#iadSettings');
-      const settingsMenu = this._q('#iadSettingsMenu');
+      box.appendChild(content);
 
-            settingsBtn.addEventListener('click', () => {
-      const visible = settingsMenu.style.display === 'block';
-            settingsMenu.style.display = visible ? 'none' : 'block';
-      });
+      const meta = document.createElement('div');
+      meta.className = 'iad-meta';
+      meta.textContent = 'IA CAMIM · ' + (PROVIDERS[this._state.provider]?.label || this._state.provider);
 
-
-      close.addEventListener('click', () => {
-        panel.style.display = 'none';
-        this._toggleBtn(btn, false);
-      });
-
-      saveBtn.addEventListener('click', () => this._exportToHTML());
-
-      objetiva.addEventListener('change', function () {
-        window.__IA_OBJETIVA__ = this.checked;
-      });
-
-      // briefLbl.addEventListener('click', (e) => {
-      //   if (e.target.id !== 'iadBriefChk') {
-      //     e.preventDefault();
-      //     briefChk.checked = !briefChk.checked;
-      //   }
-      //   this._state.brief = !!briefChk.checked;
-      //   const msg = this._state.brief
-      //     ? 'Padrão atualizado: novas mensagens abrirão em RESUMO.'
-      //     : 'Padrão atualizado: novas mensagens abrirão em COMPLETO.';
-
-      //   this._append('bot', `<span class="iad-hint">${msg}</span>`);
-      // });
-
-      send.addEventListener('click', async () => {
-        const q = (input.value || '').trim();
-
-        if (!q && send.textContent === 'Iniciar') {
-          send.textContent = 'Enviar';
-          input.focus();
-          return;
-        }
-
-        if (!q) return;
-
-        input.value = '';
-        this._append('user', q);
-        await this._sendToIA(q);
-      });
-
-      input.addEventListener('input', () => {
-        if (send.textContent !== 'Enviar') send.textContent = 'Enviar';
-      });
-
-      input.addEventListener('keydown', e => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          send.click();
-        }
-      });
+      row.appendChild(box);
+      row.appendChild(meta);
+      this._outBox().appendChild(row);
+      this._scrollBottom();
     },
 
-    _panel() { return document.getElementById('iaDeepPanel'); },
+    /* ═══════════════════ HELPERS UI ═══════════════════ */
+    _panel()  { return document.getElementById('iaDeepPanel'); },
     _outBox() { return document.getElementById('iadOut'); },
-    _btn() { return document.getElementById('iaDeep'); },
-    _q(sel) { return document.querySelector(sel); },
+    _btn()    { return document.getElementById('iaDeep'); },
+    _q(sel)   { return document.querySelector(sel); },
+
+    _scrollBottom() {
+      const body = this._q('#iadBody');
+      if (body) requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
+    },
 
     _toggleBtn(el, on) {
       if (!el) return;
       el.classList.toggle('btn-outline-primary', !on);
-      el.classList.toggle('btn-primary', on);
-      el.classList.toggle('active', on);
-      el.setAttribute('aria-pressed', on ? 'true' : 'false');
-    },
-
-    /* ===================== Helpers ===================== */
-    _displayNameFromEmail() {
-      if (window.USER_NOME && window.USER_NOME.trim()) return window.USER_NOME.trim();
-      const email = (window.USER_EMAIL || '').trim();
-      if (!email || !/@/.test(email)) return 'Você';
-      const first = email.split('@')[0];
-      return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'Você';
-    },
-
-    _escapeHtml(str) {
-      return String(str || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+      el.classList.toggle('btn-info', on);
     },
 
     _append(role, html) {
@@ -356,422 +386,33 @@
 
       const b = document.createElement('div');
       b.className = 'iad-msg ' + (role === 'user' ? 'iad-user' : 'iad-bot');
-
       if (role === 'user') b.textContent = html;
       else b.innerHTML = html;
 
       const m = document.createElement('div');
       m.className = 'iad-meta';
-      m.textContent = role === 'user' ? this._displayNameFromEmail() : 'Camila.AI';
+      m.textContent = role === 'user'
+        ? (window.USER_NOME || 'Você')
+        : 'IA CAMIM · ' + (PROVIDERS[this._state.provider]?.label || this._state.provider);
 
       row.appendChild(b);
       row.appendChild(m);
       this._outBox().appendChild(row);
-
-      const sc = this._panel().querySelector('.body');
-      sc.scrollTop = sc.scrollHeight;
+      this._scrollBottom();
     },
 
-    /* ===================== Renderer da bolha bot ===================== */
-    _renderBotCard({ fullText, defaultBrief }) {
-      const row = document.createElement('div');
-      row.className = 'd-flex flex-column';
-
-      const box = document.createElement('div');
-      box.className = 'iad-msg iad-bot';
-
-      const meta = document.createElement('div');
-      meta.className = 'iad-meta';
-      meta.textContent = 'Camila.AI';
-
-      const toolbar = document.createElement('div');
-      toolbar.className = 'iad-toolbar';
-      toolbar.innerHTML = `
-        <label class="small mb-0">
-          <input type="checkbox" class="iad-brief-toggle"${defaultBrief ? ' checked' : ''}/>
-          <span>Resumo</span>
-        </label>
-        <small class="muted iad-view-hint"></small>
-      `;
-
-      const content = document.createElement('div');
-      content.className = 'iad-content';
-
-      box.dataset.raw = fullText || '';
-      box.dataset.full = this._cleanGroq(fullText || '');
-      box.dataset.summary = '';
-      box.dataset.mode = defaultBrief ? 'summary' : 'full';
-
-      box.appendChild(toolbar);
-      box.appendChild(content);
-
-      row.appendChild(box);
-      row.appendChild(meta);
-
-      this._outBox().appendChild(row);
-
-      const toggle = toolbar.querySelector('.iad-brief-toggle');
-      const hint = toolbar.querySelector('.iad-view-hint');
-
-      toggle.addEventListener('change', async () => {
-        const wantSummary = !!toggle.checked;
-
-        if (wantSummary) {
-
-          if (!box.dataset.summary) {
-            try {
-              const sum = await this._summarizeText(box.dataset.full || box.dataset.raw || '');
-              this._attachSummaryToCard(box, sum);
-            } catch {
-              toggle.checked = false;
-            }
-          }
-
-          if (!box.dataset.summary) {
-            toggle.checked = false;
-            this._renderCardContent(box, 'full');
-            return;
-          }
-
-          this._renderCardContent(box, 'summary');
-        }
-
-        else {
-          this._renderCardContent(box, 'full');
-        }
-      });
-
-      hint.textContent =
-        defaultBrief ? 'mostrando resumo' : 'mostrando completo';
-
-      return box;
-    },
-
-    _attachSummaryToCard(box, summaryText) {
-      if (!box) return;
-
-      const cleaned = this._cleanGroq(summaryText || '');
-      if (cleaned) box.dataset.summary = cleaned;
-    },
-
-    /* ===================== Render com Filtro “Resposta Objetiva” ===================== */
-    _renderCardContent(box, mode) {
-      if (!box) return;
-
-      const content = box.querySelector('.iad-content');
-      const hint = box.querySelector('.iad-view-hint');
-      const isSummary = (mode === 'summary');
-
-      box.dataset.mode = isSummary ? 'summary' : 'full';
-
-      let txt =
-        isSummary ? (box.dataset.summary || '') : (box.dataset.full || '');
-
-      if (!txt || !txt.trim()) {
-        const raw = isSummary
-          ? (box.dataset.full || box.dataset.raw || '')
-          : (box.dataset.raw || '');
-        txt = String(raw || '').trim();
-        if (!txt) {
-          txt = '[A IA retornou apenas tabela/código ou conteúdo vazio.]';
-        }
-      }
-
-      if (isSummary && !txt) {
-        mode = 'full';
-        txt = box.dataset.full || box.dataset.raw || '';
-        const tgl = box.querySelector('.iad-brief-toggle');
-        if (tgl) tgl.checked = false;
-      }
-
-      /* =========================
-         FILTRO RESPOSTA OBJETIVA
-         ========================= */
-      if (window.__IA_OBJETIVA__) {
-
-        const markers = [
-          "Resposta à sua pergunta",
-          "Resposta à Pergunta",
-          "Pergunta do Usuário",
-          "Pergunta do usuário"
-        ];
-
-        let pos = -1;
-
-        for (const m of markers) {
-          const i = txt.indexOf(m);
-          if (i !== -1) { pos = i; break; }
-        }
-
-        if (pos !== -1) {
-          txt = txt.substring(pos);
-        }
-      }
-
-      content.innerHTML = '';
-
-      const norm = this._normalizeForView(txt);
-
-      if (norm.mode === 'html') {
-        content.innerHTML = this._safeHtml(norm.html);
-
-        if (hint) {
-          hint.textContent =
-            mode === 'summary'
-              ? 'mostrando resumo (HTML)'
-              : 'mostrando completo (HTML)';
-        }
-
-      } else {
-
-        const cleaned = norm.text;
-        const blocks = cleaned.split(/\n{2,}/)
-          .map(s => s.trim())
-          .filter(Boolean);
-
-        blocks.forEach(b => {
-          const isTitle = /^###\s*/.test(b);
-          const text = b.replace(/^###\s*/, '');
-          const el = document.createElement(isTitle ? 'h5' : 'p');
-          if (isTitle) el.className = 'iad-h';
-          el.textContent = text;
-          content.appendChild(el);
-        });
-
-        if (hint) {
-          hint.textContent =
-            mode === 'summary'
-              ? 'mostrando resumo'
-              : 'mostrando completo';
-        }
-
-        requestAnimationFrame(() => this._typeReveal(content));
-      }
-
-      const sc = this._panel().querySelector('.body');
-      if (sc) {
-        requestAnimationFrame(() => {
-          sc.scrollTop = sc.scrollHeight;
-        });
-      }
-    },
-
-    /* ===================== Envio p/ IA ===================== */
-    async _sendToIA(userQuery, { force = false } = {}) {
-      this._dotsStart();
-
-      try {
-        const payload = await this._state.opts.getPayload({ userQuery });
-        // Adiciona pagina para persistência no servidor
-        if (payload && typeof payload === 'object') {
-          payload.pagina = window.IA_PAGINA || window.location.pathname;
-        }
-        const raw = await this._callIA(payload, this._state.opts.timeoutMs);
-
-        this._dotsStop();
-
-        const fullText = this._coerceText(raw);
-        const card = this._renderBotCard({
-          fullText,
-          defaultBrief: this._state.brief
-        });
-
-        if (this._state.brief) {
-          try {
-            const sum = await this._summarizeText(fullText);
-            this._attachSummaryToCard(card, sum);
-
-            if (card.dataset.summary) this._renderCardContent(card, 'summary');
-            else this._renderCardContent(card, 'full');
-
-          } catch {
-            this._renderCardContent(card, 'full');
-          }
-        }
-
-        else {
-          this._renderCardContent(card, 'full');
-        }
-
-      } catch (err) {
-        this._dotsStop();
-        const msg = `Não foi possível responder — ${err?.message || 'erro desconhecido.'}`;
-        this._append('bot', `<span class="text-warning">${msg}</span>`);
-      }
-    },
-
-    /* ===================== Summarização ===================== */
-    async _summarizeText(text) {
-      const prompt = `[RESUMO-ESTRITO]: ${this._state.opts.briefInstruction}
-Formate em PT-BR.
-Texto-base:
-"""${text}"""`;
-
-      this._dotsStart();
-
-      try {
-        const out = await this._callIA(
-          {
-            prompt,
-            prefs: {
-              accept_format: 'free_text',
-              temperature: 0.2,
-              max_tokens: 600
-            }
-          },
-          Math.round(this._state.opts.timeoutMs * 0.8)
-        );
-
-        return this._coerceText(out);
-
-      } finally {
-        this._dotsStop();
-      }
-    },
-
-    /* ===================== Tratamento de saída bruta ===================== */
-    _coerceText(out) {
-      const s = String(out ?? '').trim();
-
-      if (this._looksLikeJson(s)) {
-        try {
-          const obj = JSON.parse(s);
-          const picked = this._pickFields(obj, [
-            'html', 'livre', 'text', 'analysis',
-            'resumo', 'summary', 'conteudo',
-            'content', 'answer'
-          ]);
-
-          if (picked) return this._sanitizeText(picked);
-          return this._sanitizeText(JSON.stringify(obj));
-
-        } catch { /* segue */ }
-      }
-
-      return this._sanitizeText(s);
-    },
-
-    _looksLikeJson(s) {
-      return s.startsWith('{') || s.startsWith('[');
-    },
-
-    _pickFields(obj, keys) {
-      if (!obj) return '';
-
-      for (const k of keys) {
-        if (typeof obj[k] === 'string' && obj[k].trim()) return obj[k];
-      }
-
-      const parts = [];
-      Object.entries(obj).forEach(([k, v]) => {
-        if (typeof v === 'string' && v.trim()) parts.push(v.trim());
-      });
-
-      return parts.length ? parts.join('\n\n') : '';
-    },
-
-    _sanitizeText(s) {
-      let t = String(s || '');
-      const original = t;
-
-      t = t.replace(/\r\n/g, '\n')
-           .replace(/\u00A0/g, ' ');
-
-      t = t.replace(/```([\s\S]*?)```/g, '$1');
-
-      t = t.replace(/^\s*\|[- :]+\|\s*$/gm, ' ');
-
-      t = t.replace(/\*\*(.*?)\*\*/g, '$1');
-      t = t.replace(/__([^_]+)__/g, '$1');
-      t = t.replace(/_(.*?)_/g, '$1');
-
-      t = t.replace(/^\s*\|(.+?)\|\s*$/gm, (m, inner) => {
-        const cols = inner.split('|').map(c => c.trim()).filter(Boolean);
-        return cols.join(' — ');
-      });
-
-      t = t.replace(/[ \t]+\n/g, '\n');
-      t = t.replace(/([.,;:!?])(?!\s|$)/g, '$1 ');
-      t = t.replace(/\n{3,}/g, '\n\n').trim();
-
-      if (!t || t.length < 5) return original.trim();
-
-      return t;
-    },
-
-    /* ===================== HTML x MARKDOWN ===================== */
-    _looksLikeHtmlFragment(s) {
-      const txt = String(s || '').trim();
-      if (!txt) return false;
-
-      if (this._looksLikeJson(txt) || /```/.test(txt)) return false;
-
-      return /<\/?(p|h[1-6]|ul|ol|li|table|thead|tbody|tr|th|td|strong|em|b|i|div|span)[\s>]/i.test(txt);
-    },
-
-    _safeHtml(html) {
-      const tmp = document.createElement('div');
-      tmp.innerHTML = html;
-
-      const allowed = new Set([
-        'P','BR','B','STRONG','I','EM',
-        'UL','OL','LI',
-        'H1','H2','H3','H4','H5','H6',
-        'TABLE','THEAD','TBODY','TR','TH','TD',
-        'HR','SPAN','DIV','CODE','PRE'
-      ]);
-
-      const walk = node => {
-        const children = Array.from(node.childNodes);
-        for (const c of children) {
-          if (c.nodeType === Node.ELEMENT_NODE) {
-            const tag = c.tagName.toUpperCase();
-            if (!allowed.has(tag)) {
-              while (c.firstChild) node.insertBefore(c.firstChild, c);
-              node.removeChild(c);
-              continue;
-            }
-            [...c.attributes].forEach(attr => {
-              const name = attr.name.toLowerCase();
-              if (name.startsWith('on') || name === 'style') {
-                c.removeAttribute(attr.name);
-              }
-            });
-            walk(c);
-          }
-        }
-      };
-
-      walk(tmp);
-      return tmp.innerHTML;
-    },
-
-    _normalizeForView(rawText) {
-      const cleaned = this._cleanGroq(rawText || '');
-      if (this._looksLikeHtmlFragment(cleaned)) {
-        return { mode: 'html', html: cleaned };
-      }
-      return { mode: 'markdown', text: cleaned };
-    },
-
-    /* ===================== Efeito typewriter ===================== */
-    _typeReveal(container, baseMs = 25) {
+    /* ═══════════════════ TYPEWRITER ═══════════════════ */
+    _typeReveal(container, baseMs = 18) {
       if (!container) return;
-
-      const targets = container.querySelectorAll('h5, p');
-
-      targets.forEach(el => {
+      container.querySelectorAll('h5, p').forEach(el => {
         el.classList.add('iad-type', 'caret');
         el.style.setProperty('--reveal', '0%');
-
         const chars = (el.textContent || '').length || 1;
-        const dur = Math.min(8000, Math.max(600, chars * baseMs));
-
-        const anim = el.animate(
+        const dur   = Math.min(5000, Math.max(300, chars * baseMs));
+        const anim  = el.animate(
           [{ '--reveal': '0%' }, { '--reveal': '100%' }],
           { duration: dur, easing: `steps(${Math.min(chars, 2000)}, end)` }
         );
-
         anim.onfinish = () => {
           el.classList.remove('caret');
           el.style.setProperty('--reveal', '100%');
@@ -779,182 +420,138 @@ Texto-base:
       });
     },
 
-    /* ===================== Networking ===================== */
+    /* ═══════════════════ NETWORK ═══════════════════ */
     async _callIA(payload, timeout) {
-      const API = this._state.opts.apiUrl;
-      const maxAttempts = 2;
-      let lastError = null;
+      const API = this._state.opts.apiUrl || '/ia/chat';
+      const controller = new AbortController();
+      const to = setTimeout(() => controller.abort(), timeout || this._CFG.TIMEOUT_MS);
 
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const controller = new AbortController();
-        const to = setTimeout(() => controller.abort(),
-          timeout || this._state.opts.timeoutMs || this._CFG.TIMEOUT_MS);
+      try {
+        const r = await fetch(API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(typeof payload === 'string' ? { prompt: payload } : payload),
+          signal: controller.signal
+        });
+        clearTimeout(to);
 
-        try {
-          const r = await fetch(API, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body:
-              JSON.stringify(typeof payload === 'string'
-                ? { prompt: payload }
-                : payload),
-            signal: controller.signal
-          });
-
-          clearTimeout(to);
-
-          if (!r.ok) {
-            const txt = await r.text().catch(() => '');
-            throw new Error(`HTTP ${r.status}${txt ? ' — ' + txt : ''}`);
-          }
-
-          const resText = await r.text();
-          let res = null;
-
-          try { res = JSON.parse(resText); } catch { }
-
-          if (!res) return resText;
-
-          if (res.content_mode === 'free_text') return res.text || '';
-
-          if (res.content_mode === 'json') {
-            return (res.data &&
-              (res.data.html || res.data.livre || res.data.text)) ||
-              JSON.stringify(res.data);
-          }
-
-          return typeof res === 'string'
-            ? res
-            : (res.html || res.livre || JSON.stringify(res));
-
-        } catch (err) {
-          lastError = err;
-          if (attempt === maxAttempts) throw lastError;
+        if (!r.ok) {
+          const txt = await r.text().catch(() => '');
+          throw new Error(`HTTP ${r.status}${txt ? ' — ' + txt.slice(0, 200) : ''}`);
         }
-      }
 
-      throw lastError || new Error('Falha desconhecida na chamada IA');
+        const resText = await r.text();
+        let res = null;
+        try { res = JSON.parse(resText); } catch {}
+        if (!res) return resText;
+
+        // Compatível com diferentes formatos de resposta
+        if (res.content_mode === 'free_text') return res.text || '';
+        if (res.content_mode === 'json') return (res.data && (res.data.html || res.data.livre || res.data.text)) || JSON.stringify(res.data);
+        if (res.resposta) return res.resposta;  // formato OpenAI /api/ia/pergunta
+        return typeof res === 'string' ? res : (res.html || res.livre || res.text || JSON.stringify(res));
+
+      } catch (err) {
+        clearTimeout(to);
+        throw err;
+      }
     },
 
-    /* ===================== Spinner ===================== */
+    /* ═══════════════════ SPINNER ═══════════════════ */
     _dotsStart() {
       const wrap = document.createElement('div');
-      wrap.className = 'iad-msg iad-bot iad-loading';
-      wrap.innerHTML = `<span class="iad-spinner"></span>`;
+      wrap.id = '_iadSpinner';
+      wrap.className = 'iad-loading';
+      wrap.innerHTML = '<span class="iad-spinner"></span><span style="opacity:.55;font-size:.8rem">Analisando…</span>';
       this._outBox().appendChild(wrap);
-
-      const int = setInterval(() => {
-        const sc = this._panel().querySelector('.body');
-        sc.scrollTop = sc.scrollHeight;
-      }, 260);
-
-      this._dotsStop._el = wrap;
-      this._dotsStop._int = int;
+      this._scrollBottom();
     },
 
     _dotsStop() {
-      if (this._dotsStop._int) {
-        clearInterval(this._dotsStop._int);
-        this._dotsStop._int = null;
-      }
-
-      if (this._dotsStop._el) {
-        this._dotsStop._el.remove();
-        this._dotsStop._el = null;
-      }
+      const el = document.getElementById('_iadSpinner');
+      if (el) el.remove();
     },
 
-    /* ===================== Exportar conversa HTML ===================== */
+    /* ═══════════════════ TEXTO ═══════════════════ */
+    _coerceText(out) {
+      const s = String(out ?? '').trim();
+      if (s.startsWith('{') || s.startsWith('[')) {
+        try {
+          const obj = JSON.parse(s);
+          const keys = ['html','livre','text','resposta','analysis','resumo','summary','content','answer'];
+          for (const k of keys) {
+            if (typeof obj[k] === 'string' && obj[k].trim()) return this._sanitizeText(obj[k]);
+          }
+          return this._sanitizeText(JSON.stringify(obj));
+        } catch {}
+      }
+      return this._sanitizeText(s);
+    },
+
+    _sanitizeText(s) {
+      let t = String(s || '');
+      if (!t) return t;
+      t = t.replace(/\r\n/g,'\n').replace(/\\n/g,'\n').replace(/\\t/g,'  ').replace(/\u00A0/g,' ');
+      t = t.replace(/```([\s\S]*?)```/g,'$1');
+      t = t.replace(/^\s*[+\-─═┌┐└┘┼┤├┬┴]+.*$/gm,' ');
+      t = t.replace(/\*\*(.*?)\*\*/g,'$1').replace(/__([^_]+)__/g,'$1').replace(/_(.*?)_/g,'$1');
+      t = t.replace(/^\s*\|(.+?)\|\s*$/gm,(_,inner) => inner.split('|').map(c=>c.trim()).filter(Boolean).join(' — '));
+      t = t.replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
+      return t || String(s||'').trim();
+    },
+
+    _normalizeForView(rawText) {
+      const cleaned = this._sanitizeText(rawText || '');
+      if (/<\/?(p|h[1-6]|ul|ol|li|table|thead|tbody|tr|th|td|strong|em|b|i|div|span)[\s>]/i.test(cleaned)
+          && !cleaned.startsWith('{') && !/```/.test(cleaned)) {
+        return { mode: 'html', html: cleaned };
+      }
+      return { mode: 'markdown', text: cleaned };
+    },
+
+    _safeHtml(html) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const allowed = new Set(['P','BR','B','STRONG','I','EM','UL','OL','LI','H1','H2','H3','H4','H5','H6','TABLE','THEAD','TBODY','TR','TH','TD','HR','SPAN','DIV','CODE','PRE']);
+      const walk = node => {
+        [...node.childNodes].forEach(c => {
+          if (c.nodeType !== Node.ELEMENT_NODE) return;
+          if (!allowed.has(c.tagName)) { while (c.firstChild) node.insertBefore(c.firstChild, c); node.removeChild(c); return; }
+          [...c.attributes].forEach(a => { if (a.name.startsWith('on') || a.name === 'style') c.removeAttribute(a.name); });
+          walk(c);
+        });
+      };
+      walk(tmp);
+      return tmp.innerHTML;
+    },
+
+    _escapeHtml(str) {
+      return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    },
+
+    /* ═══════════════════ EXPORTAR ═══════════════════ */
     _exportToHTML() {
       const out = this._outBox();
-      if (!out) {
-        alert('Não encontrei a conversa.');
-        return;
-      }
-
+      if (!out) { alert('Sem conteúdo.'); return; }
       const cssNode = document.getElementById('chatia-styles');
-      const cssChat = cssNode ? cssNode.textContent : '';
-      const titulo = this._state.opts.title || 'Conversa IA';
-      const usuario = this._displayNameFromEmail();
-
-      const agora = new Date();
-      const nomeArquivo = `conversa_ia_${agora.toISOString().slice(0, 10)}.html`;
-      const dataStr = agora.toLocaleString('pt-BR');
-
-      const htmlDoc = `
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-<meta charset="utf-8">
-<title>${this._escapeHtml(titulo)}</title>
-<style>
-  body{
-    margin:0;padding:16px;
-    background:#111827;color:#e5e7eb;
-    font-family:system-ui,-apple-system,"Segoe UI",Roboto;
-    font-size:14px;line-height:1.5;
-  }
-  h1{font-size:1.2rem;margin:0 0 8px 0}
-  .meta{font-size:.8rem;color:#9ca3af;margin-bottom:12px}
-  hr{border:none;border-top:1px solid #374151;margin:12px 0}
-  .card{background:#111827;border:1px solid #1f2933;border-radius:8px;padding:12px}
-  ${cssChat}
-</style>
-</head>
-<body>
+      const titulo  = this._state.opts.title || 'Conversa IA';
+      const usuario = window.USER_NOME || 'Usuário';
+      const agora   = new Date();
+      const html = `<!DOCTYPE html>
+<html lang="pt-br"><head><meta charset="utf-8"><title>${this._escapeHtml(titulo)}</title>
+<style>body{margin:0;padding:16px;background:#111827;color:#e5e7eb;font-family:system-ui,sans-serif;font-size:14px;line-height:1.5}
+h1{font-size:1.1rem;margin:0 0 6px}hr{border:none;border-top:1px solid #374151;margin:10px 0}
+${cssNode ? cssNode.textContent : ''}</style></head><body>
 <h1>${this._escapeHtml(titulo)}</h1>
-<div class="meta">Exportado em ${dataStr} — Usuário: ${this._escapeHtml(usuario)}</div>
-<hr>
-
-<div class="card">
-  <div class="body">
-    <div id="iadOut" class="iad-chat ia-clean">
-${out.innerHTML}
-    </div>
-  </div>
-</div>
-
-</body>
-</html>`.trim();
-
-      const blob = new Blob([htmlDoc], { type: 'text/html;charset=utf-8' });
+<div style="font-size:.8rem;color:#9ca3af;margin-bottom:8px">Exportado em ${agora.toLocaleString('pt-BR')} — ${this._escapeHtml(usuario)}</div>
+<hr><div style="display:flex;flex-direction:column;gap:10px">${out.innerHTML}</div>
+</body></html>`;
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = nomeArquivo;
-
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
+      a.href = URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));
+      a.download = `conversa_ia_${agora.toISOString().slice(0,10)}.html`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
-    },
-
-    /* ===================== Sanitização vinda da IA ===================== */
-    _cleanGroq(raw) {
-      let s = String(raw || '');
-      const original = s;
-
-      s = s.replace(/\r\n/g, '\n')
-           .replace(/\\n/g, '\n')
-           .replace(/\\t/g, '  ');
-
-      s = s.replace(/```([\s\S]*?)```/g, '$1');
-
-      s = s.replace(/^\s*[+\-─═┌┐└┘┼┤├┬┴]+.*$/gm, ' ');
-
-      s = s.replace(/\\begin\{aligned\}[\s\S]*?\\end\{aligned\}/g, ' ')
-           .replace(/\$\$[\s\S]*?\$\$/g, ' ')
-           .replace(/\\\[[\s\S]*?\\\]/g, ' ')
-           .replace(/\\\([\s\S]*?\\\)/g, ' ');
-
-      s = s.replace(/[ \t]+\n/g, '\n')
-           .replace(/###\s*/g, '\n\n### ')
-           .replace(/\n{3,}/g, '\n\n')
-           .trim();
-
-      if (!s) return original.trim();
-      return s;
     }
   };
 
