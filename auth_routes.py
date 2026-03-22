@@ -1219,6 +1219,29 @@ def _tef_is_aprovado(erro: str) -> bool:
     return any(k in e for k in ("autoriza", "sucesso", "aprovad"))
 
 
+def _tef_ensure_table(kpi_db: str) -> None:
+    """Cria ind_tef se ainda não existir (antes do primeiro sync)."""
+    conn = sqlite3.connect(kpi_db)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS ind_tef (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            posto          TEXT NOT NULL,
+            datahora       TEXT,
+            matricula      TEXT,
+            resposta_cielo TEXT,
+            erro           TEXT,
+            valor          REAL,
+            aprovado       INTEGER DEFAULT 0,
+            synced_at      TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_tef_posto    ON ind_tef(posto);
+        CREATE INDEX IF NOT EXISTS idx_tef_datahora ON ind_tef(datahora);
+        CREATE INDEX IF NOT EXISTS idx_tef_aprovado ON ind_tef(aprovado);
+    """)
+    conn.commit()
+    conn.close()
+
+
 @auth_bp.get("/api/indicadores/tef")
 def indicadores_tef():
     """Último registro por posto para o painel de indicadores."""
@@ -1230,6 +1253,7 @@ def indicadores_tef():
     hoje   = date.today()
 
     try:
+        _tef_ensure_table(kpi_db)
         conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
 
         rows = conn.execute("""
@@ -1289,6 +1313,7 @@ def tef_dashboard():
     hoje_str = date.today().isoformat()
 
     try:
+        _tef_ensure_table(kpi_db)
         conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
 
         posto_filter = ""
@@ -1401,6 +1426,7 @@ def tef_filters():
 
     kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
     try:
+        _tef_ensure_table(kpi_db)
         conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
         erros = conn.execute("""
             SELECT DISTINCT TRIM(erro) FROM ind_tef
@@ -1472,6 +1498,7 @@ def tef_logs():
     where_str = " AND ".join(where)
 
     try:
+        _tef_ensure_table(kpi_db)
         conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
 
         total = conn.execute(
