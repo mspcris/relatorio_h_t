@@ -307,13 +307,16 @@ def envios(cid):
     if not campanha:
         return ("Campanha não encontrada", 404)
 
-    page = int(request.args.get("page", 1))
+    import math
+    page = max(1, int(request.args.get("page", 1)))
     limit = 100
     offset = (page - 1) * limit
 
     lista_envios = db.listar_envios(cid, limit=limit, offset=offset)
     lista_nao    = db.listar_nao_enviados(cid)
     resumo       = db.resumo_campanha(cid)
+
+    total_pages = max(1, math.ceil(resumo["enviados"] / limit))
 
     # Agrupa não enviados por motivo
     por_motivo: dict[str, list] = {}
@@ -328,6 +331,7 @@ def envios(cid):
         nao_enviados_por_motivo=por_motivo,
         resumo=resumo,
         page=page,
+        total_pages=total_pages,
     )
 
 

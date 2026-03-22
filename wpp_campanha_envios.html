@@ -18,6 +18,10 @@
     tr.clickable { cursor: pointer; }
     tr.clickable:hover td { background: #f0f8ff; }
     .motivo-pill { font-size: .75rem; }
+    /* paginação */
+    .pagination .page-item.active .page-link { background: #28a745; border-color: #28a745; }
+    .pagination .page-link { color: #28a745; }
+    .pg-info { font-size: .85rem; color: #6b7280; }
   </style>
 </head>
 <body class="hold-transition sidebar-mini">
@@ -89,7 +93,7 @@
       <ul class="nav nav-tabs mb-3" id="tabEnvios">
         <li class="nav-item">
           <a class="nav-link active" data-toggle="tab" href="#tab-enviados">
-            <i class="fas fa-check text-success mr-1"></i> Enviados ({{ envios|length }})
+            <i class="fas fa-check text-success mr-1"></i> Enviados ({{ resumo.enviados }})
           </a>
         </li>
         <li class="nav-item">
@@ -148,14 +152,34 @@
               </table>
             </div>
           </div>
-          {% if page > 1 or envios|length == 100 %}
-          <div class="d-flex justify-content-between mt-2">
-            {% if page > 1 %}
-            <a href="?page={{ page - 1 }}" class="btn btn-sm btn-outline-secondary">← Anterior</a>
-            {% else %}<span></span>{% endif %}
-            {% if envios|length == 100 %}
-            <a href="?page={{ page + 1 }}" class="btn btn-sm btn-outline-secondary">Próxima →</a>
-            {% endif %}
+          {% if total_pages > 1 %}
+          <div class="d-flex align-items-center justify-content-between mt-3 flex-wrap" style="gap:8px">
+            <span class="pg-info">
+              Página {{ page }} de {{ total_pages }}
+              &nbsp;·&nbsp; {{ resumo.enviados }} registros no total
+            </span>
+            <nav>
+              <ul class="pagination pagination-sm mb-0">
+                {# Anterior #}
+                <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                  <a class="page-link" href="?page={{ page - 1 }}">‹</a>
+                </li>
+                {# Páginas #}
+                {% for p in range(1, total_pages + 1) %}
+                  {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+                    <li class="page-item {% if p == page %}active{% endif %}">
+                      <a class="page-link" href="?page={{ p }}">{{ p }}</a>
+                    </li>
+                  {% elif p == page - 3 or p == page + 3 %}
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                  {% endif %}
+                {% endfor %}
+                {# Próxima #}
+                <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+                  <a class="page-link" href="?page={{ page + 1 }}">›</a>
+                </li>
+              </ul>
+            </nav>
           </div>
           {% endif %}
           {% endif %}
