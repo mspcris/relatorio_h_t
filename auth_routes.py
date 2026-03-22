@@ -868,3 +868,229 @@ def indicadores_email():
 
     except Exception as exc:
         return jsonify({"erro": str(exc)}), 500
+
+
+# ── Email Clientes: Dashboard ─────────────────────────────────────────────────
+
+POSTOS_NAMES_EMAIL = {
+    'A': 'Anchieta', 'N': 'Nilópolis', 'I': 'Nova Iguaçu', 'X': 'CGX',
+    'G': 'Campo Grande', 'Y': 'CGY', 'B': 'Bangu', 'R': 'Realengo',
+    'M': 'Madureira', 'C': 'Campinho', 'D': 'Del Castilho', 'J': 'JPA',
+    'P': 'Rio das Pedras',
+}
+
+@auth_bp.get("/api/email_clientes/dashboard")
+def email_clientes_dashboard():
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
+    hoje_str = date.today().isoformat()
+
+    try:
+        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
+
+        postos_filter = ""
+        params_p = []
+        if user_postos:
+            ph = ",".join("?" * len(user_postos))
+            postos_filter = f"AND posto IN ({ph})"
+            params_p = list(user_postos)
+
+        hoje_row = conn.execute(f"""
+            SELECT COUNT(*) AS total,
+                   COUNT(DISTINCT posto) AS postos_ativos,
+                   COUNT(DISTINCT titulo_categoria) AS categorias
+            FROM ind_email
+            WHERE date(datahora) = ? {postos_filter}
+        """, [hoje_str] + params_p).fetchone()
+
+        por_cat_7dias = conn.execute(f"""
+            SELECT date(datahora) AS dia, titulo_categoria, COUNT(*) AS total
+            FROM ind_email
+            WHERE date(datahora) >= date(?, '-6 days') {postos_filter}
+            GROUP BY date(datahora), titulo_categoria
+            ORDER BY dia, titulo_categoria
+        """, [hoje_str] + params_p).fetchall()
+
+        por_cat_hoje = conn.execute(f"""
+            SELECT titulo_categoria, COUNT(*) AS total
+            FROM ind_email
+            WHERE date(datahora) = ? {postos_filter}
+            GROUP BY titulo_categoria
+            ORDER BY total DESC
+        """, [hoje_str] + params_p).fetchall()
+
+        por_posto = conn.execute(f"""
+            SELECT posto,
+                   MAX(datahora) AS ultimo_envio,
+                   SUM(CASE WHEN date(datahora) = ? THEN 1 ELSE 0 END) AS total_hoje,
+                   COUNT(*) AS total_geral
+            FROM ind_email
+            WHERE 1=1 {postos_filter}
+            GROUP BY posto
+            ORDER BY posto
+        """, [hoje_str] + params_p).fetchall()
+
+        ultimo_batch = conn.execute(f"""
+            SELECT MAX(datahora) FROM ind_email WHERE 1=1 {postos_filter}
+        """, params_p).fetchone()
+
+        sync_row = conn.execute("""
+            SELECT synced_at, total_records, status, mensagem
+            FROM ind_sync_log WHERE indicador = 'email'
+            ORDER BY id DESC LIMIT 1
+        """).fetchone()
+
+        conn.close()
+
+        hoje_date = date.today()
+        postos_result = []
+        postos_sem_hoje = []
+        for row in por_posto:
+            p, ultimo_str, total_hoje, total_geral = row
+            p = (p or "").strip().upper()
+            try:
+                ultimo_dt = datetime.fromisoformat(str(ultimo_str)).date()
+                diff = (hoje_date - ultimo_dt).days
+                if diff == 0:
+                    status_envio = "hoje"
+                elif diff == 1:
+                    status_envio = "ontem"
+                else:
+                    status_envio = "desatualizado"
+            except Exception:
+                status_envio = "sem_dados"
+
+            if status_envio != "hoje":
+                postos_sem_hoje.append({"posto": p, "nome": POSTOS_NAMES_EMAIL.get(p, p)})
+
+            postos_result.append({
+                "posto": p,
+                "nome": POSTOS_NAMES_EMAIL.get(p, p),
+                "status_envio": status_envio,
+                "ultimo_envio": ultimo_str,
+                "total_hoje": total_hoje or 0,
+                "total_geral": total_geral or 0,
+            })
+
+        return jsonify({
+            "hoje": {
+                "total": hoje_row[0] if hoje_row else 0,
+                "postos_ativos": hoje_row[1] if hoje_row else 0,
+                "categorias": hoje_row[2] if hoje_row else 0,
+            },
+            "por_categoria_7dias": [
+                {"dia": r[0], "categoria": r[1], "total": r[2]}
+                for r in por_cat_7dias
+            ],
+            "por_categoria_hoje": [
+                {"categoria": r[0], "total": r[1]}
+                for r in por_cat_hoje
+            ],
+            "por_posto": postos_result,
+            "postos_sem_hoje": postos_sem_hoje,
+            "ultimo_batch": ultimo_batch[0] if ultimo_batch else None,
+            "sync": {
+                "synced_at":     sync_row[0] if sync_row else None,
+                "total_records": sync_row[1] if sync_row else 0,
+                "status":        sync_row[2] if sync_row else None,
+                "mensagem":      sync_row[3] if sync_row else None,
+            },
+            "total_postos": len(POSTOS_NAMES_EMAIL),
+        })
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
+
+
+# ── Email Clientes: Logs ──────────────────────────────────────────────────────
+
+@auth_bp.get("/api/email_clientes/logs")
+def email_clientes_logs():
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
+    PER_PAGE = 50
+
+    posto     = (request.args.get("posto")     or "").strip().upper()
+    categoria = (request.args.get("categoria") or "").strip()
+    status    = (request.args.get("status")    or "").strip()
+    matricula = (request.args.get("matricula") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to   = (request.args.get("date_to")   or "").strip()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except Exception:
+        page = 1
+
+    where  = ["1=1"]
+    params = []
+
+    if user_postos:
+        ph = ",".join("?" * len(user_postos))
+        where.append(f"posto IN ({ph})")
+        params.extend(list(user_postos))
+
+    if posto:
+        where.append("posto = ?")
+        params.append(posto)
+    if categoria:
+        where.append("titulo_categoria LIKE ?")
+        params.append(f"%{categoria}%")
+    if status:
+        where.append("status LIKE ?")
+        params.append(f"%{status}%")
+    if matricula:
+        where.append("matricula LIKE ?")
+        params.append(f"%{matricula}%")
+    if date_from:
+        where.append("date(datahora) >= ?")
+        params.append(date_from)
+    if date_to:
+        where.append("date(datahora) <= ?")
+        params.append(date_to)
+
+    where_str = " AND ".join(where)
+
+    try:
+        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
+
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM ind_email WHERE {where_str}", params
+        ).fetchone()[0]
+
+        rows = conn.execute(f"""
+            SELECT id, datahora, posto, matricula, titulo_categoria, status
+            FROM ind_email
+            WHERE {where_str}
+            ORDER BY datahora DESC, id DESC
+            LIMIT ? OFFSET ?
+        """, params + [PER_PAGE, (page - 1) * PER_PAGE]).fetchall()
+
+        por_posto = conn.execute(f"""
+            SELECT posto, COUNT(*) AS cnt
+            FROM ind_email
+            WHERE {where_str}
+            GROUP BY posto ORDER BY posto
+        """, params).fetchall()
+
+        conn.close()
+
+        return jsonify({
+            "rows": [
+                {"id": r[0], "datahora": r[1], "posto": r[2],
+                 "matricula": r[3], "titulo_categoria": r[4], "status": r[5]}
+                for r in rows
+            ],
+            "total":    total,
+            "page":     page,
+            "per_page": PER_PAGE,
+            "por_posto": [{"posto": r[0], "cnt": r[1]} for r in por_posto],
+        })
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500

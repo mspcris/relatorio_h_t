@@ -188,6 +188,14 @@ def render_protected_page(page_name):
 def r_mais_servicos():
     return render_protected_page("mais_servicos.html")
 
+@app.get('/email_clientes')
+def r_email_clientes():
+    return render_protected_page("email_clientes_dashboard.html")
+
+@app.get('/email_clientes/logs')
+def r_email_clientes_logs():
+    return render_protected_page("email_clientes_logs.html")
+
 @app.get('/kpi_receita_despesa_rateio')
 def r_rateio():
     return render_protected_page("kpi_receita_despesa_rateio.html")
