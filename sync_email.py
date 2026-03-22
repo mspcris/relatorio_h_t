@@ -127,7 +127,26 @@ def normalizar_titulo(titulo: str) -> str:
     t = _RE_NUMEROS.sub("", t)
     t = _RE_LIXO_FIM.sub("", t.strip())
     t = _RE_ESPACOS.sub(" ", t).strip(" .-–")
-    return t[:120] if t else (titulo or "")[:120]
+    t = t[:120] if t else (titulo or "")[:120]
+    return categorizar(t)
+
+
+# ── Categorização canônica ────────────────────────────────────────────────────
+
+_CAT_RULES = [
+    (re.compile(r'\bboleto\b',           re.I), "Boleto"),
+    (re.compile(r'\bfalta\b',            re.I), "Falta do Médico"),
+    (re.compile(r'\bcancelamento\b',     re.I), "Cancelamento"),
+    (re.compile(r'\bnota\s*fiscal\b',    re.I), "Nota Fiscal"),
+]
+
+
+def categorizar(titulo: str) -> str:
+    """Agrupa variações num nome canônico de categoria."""
+    for regex, nome in _CAT_RULES:
+        if regex.search(titulo):
+            return nome
+    return titulo
 
 
 # ── ETL por posto ─────────────────────────────────────────────────────────────

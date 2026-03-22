@@ -873,12 +873,23 @@ def indicadores_email():
 # ── Email Clientes: helpers ───────────────────────────────────────────────────
 
 import re as _re
+
 _RE_EMAIL_CODIGO_PREF = _re.compile(r'^\d[\w\d]*\s*[-–]\s*')
 
+_EMAIL_CAT_RULES = [
+    (_re.compile(r'\bboleto\b',        _re.I), "Boleto"),
+    (_re.compile(r'\bfalta\b',         _re.I), "Falta do Médico"),
+    (_re.compile(r'\bcancelamento\b',  _re.I), "Cancelamento"),
+    (_re.compile(r'\bnota\s*fiscal\b', _re.I), "Nota Fiscal"),
+]
+
 def _clean_cat(cat: str) -> str:
-    """Remove prefixo alfanumérico inicial tipo '101147P - ' ou '0Y - '."""
+    """Remove prefixo alfanumérico e agrupa em categoria canônica."""
     t = (cat or "").strip()
     t = _RE_EMAIL_CODIGO_PREF.sub("", t).strip(" .-–")
+    for regex, nome in _EMAIL_CAT_RULES:
+        if regex.search(t):
+            return nome
     return t or (cat or "")
 
 
