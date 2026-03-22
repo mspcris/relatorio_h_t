@@ -297,7 +297,8 @@ function renderTable(data) {
     return;
   }
   tbody.innerHTML = data.rows.map(r => `
-    <tr>
+    <tr style="cursor:pointer" onclick="showMsg('${esc(r.titulo_categoria)}','${esc(r.mensagem)}')"
+        title="Clique para ver a mensagem do email">
       <td class="text-muted">${r.id}</td>
       <td>${fmtDt(r.datahora)}</td>
       <td>
@@ -305,8 +306,7 @@ function renderTable(data) {
         <small class="text-muted ms-1 d-none d-lg-inline">${POSTOS_NAMES[r.posto] || ''}</small>
       </td>
       <td>${esc(r.matricula) || '–'}</td>
-      <td class="cat-cell" onclick="showMsg('Categoria','${esc(r.titulo_categoria)}')"
-          title="Clique para ver completo">${esc(r.titulo_categoria) || '–'}</td>
+      <td>${esc(r.titulo_categoria) || '–'}</td>
       <td>${esc(r.status) || '–'}</td>
     </tr>
   `).join('');
@@ -359,7 +359,12 @@ function esc(s) {
 
 function showMsg(title, msg) {
   document.getElementById('msgModalTitle').textContent = title;
-  document.getElementById('msgModalBody').textContent = msg;
+  const body = document.getElementById('msgModalBody');
+  if (msg && msg.trim()) {
+    body.innerHTML = '<pre style="white-space:pre-wrap;font-size:.85rem;margin:0">' + esc(msg) + '</pre>';
+  } else {
+    body.innerHTML = '<span class="text-muted">Mensagem não disponível (sync anterior ao campo ser adicionado).</span>';
+  }
   new bootstrap.Modal(document.getElementById('msgModal')).show();
 }
 

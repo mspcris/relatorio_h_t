@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS ind_email (
     datahora         TEXT,
     matricula        TEXT,
     status           TEXT,
+    mensagem         TEXT,
     synced_at        TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_em_posto    ON ind_email(posto);
@@ -96,6 +97,11 @@ CREATE TABLE IF NOT EXISTS ind_sync_log (
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(DDL)
+    # Migration: adiciona mensagem se a coluna ainda não existir
+    try:
+        conn.execute("ALTER TABLE ind_email ADD COLUMN mensagem TEXT")
+    except sqlite3.OperationalError:
+        pass  # coluna já existe
     conn.commit()
 
 
@@ -158,7 +164,7 @@ def sync_posto(posto: str, odbc_str: str, kpi: sqlite3.Connection,
     srv    = pyodbc.connect(odbc_str, timeout=30)
     cursor = srv.cursor()
     cursor.execute("""
-        SELECT Titulo, Datahora, Matricula, ProgramaOrigem
+        SELECT Titulo, Datahora, Matricula, ProgramaOrigem, Mensagem
         FROM   vw_cad_email
         WHERE  Desativado = 0
           AND  Datahora >= ?
@@ -175,20 +181,21 @@ def sync_posto(posto: str, odbc_str: str, kpi: sqlite3.Connection,
     registros = [
         (
             posto,
-            str(titulo  or ""),
+            str(titulo   or ""),
             normalizar_titulo(str(titulo or "")),
-            str(dh      or "")[:19],
-            str(mat     or ""),
-            str(origem  or ""),
+            str(dh       or "")[:19],
+            str(mat      or ""),
+            str(origem   or ""),
+            str(msg      or ""),
             agora,
         )
-        for titulo, dh, mat, origem in rows
+        for titulo, dh, mat, origem, msg in rows
     ]
 
     kpi.executemany("""
         INSERT INTO ind_email
-            (posto, titulo_original, titulo_categoria, datahora, matricula, status, synced_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+            (posto, titulo_original, titulo_categoria, datahora, matricula, status, mensagem, synced_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, registros)
 
     return len(registros)

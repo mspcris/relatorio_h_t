@@ -1164,7 +1164,7 @@ def email_clientes_logs():
         ).fetchone()[0]
 
         rows = conn.execute(f"""
-            SELECT id, datahora, posto, matricula, titulo_categoria, status
+            SELECT id, datahora, posto, matricula, titulo_categoria, status, mensagem
             FROM ind_email
             WHERE {where_str}
             ORDER BY datahora DESC, id DESC
@@ -1183,7 +1183,8 @@ def email_clientes_logs():
         return jsonify({
             "rows": [
                 {"id": r[0], "datahora": r[1], "posto": r[2],
-                 "matricula": r[3], "titulo_categoria": _clean_cat(r[4]), "status": r[5]}
+                 "matricula": r[3], "titulo_categoria": _clean_cat(r[4]),
+                 "status": r[5], "mensagem": r[6] or ""}
                 for r in rows
             ],
             "total":    total,
