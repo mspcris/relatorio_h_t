@@ -17,7 +17,7 @@ import sqlite3
 import json
 from datetime import datetime, timezone
 
-DB_PATH = os.getenv("WAPP_CTRL_DB", "/opt/relatorio_h_t/whatsapp_cobranca.db")
+DB_PATH = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
 
 
 def get_conn() -> sqlite3.Connection:
