@@ -18,6 +18,7 @@ import os
 import re
 import sys
 import time
+import uuid
 import logging
 import argparse
 from datetime import datetime, date, timezone
@@ -34,10 +35,48 @@ from wpp_cobranca_sql import get_conn_posto, VIEW_NAME, build_where
 # ---------------------------------------------------------------------------
 # Configuração
 # ---------------------------------------------------------------------------
-BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-WPP_API_URL = os.getenv("WAPP_API_URL",  "https://whatsapp-api.camim.com.br")
-WPP_TOKEN   = os.getenv("WAPP_TOKEN",    "")
-POSTOS_ALL  = list("ANXYBRPCDGIMJ")
+BASE_DIR      = os.path.dirname(os.path.abspath(__file__))
+WPP_API_URL   = os.getenv("WAPP_API_URL",    "https://whatsapp-api.camim.com.br")
+WPP_TOKEN     = os.getenv("WAPP_TOKEN",      "")
+CHAT_API_URL  = os.getenv("CHAT_API_URL",   "")
+CHAT_FROM     = os.getenv("WAPP_CHAT_FROM", "")
+CHAT_QUEUE_ID = os.getenv("WAPP_QUEUE_ID",  "")
+POSTOS_ALL    = list("ANXYBRPCDGIMJ")
+
+# Cache dos textos dos templates: {nome: body_text}
+_TEMPLATE_BODIES: dict = {}
+
+
+def _load_template_bodies() -> None:
+    """Carrega o texto completo de cada template aprovado da API."""
+    global _TEMPLATE_BODIES
+    try:
+        r = requests.get(
+            f"{WPP_API_URL}/templates",
+            headers={"Authorization": f"Bearer {WPP_TOKEN}"},
+            timeout=10,
+        )
+        r.raise_for_status()
+        for t in r.json().get("items", []):
+            for comp in t.get("components", []):
+                if comp.get("type") == "BODY":
+                    _TEMPLATE_BODIES[t["name"]] = comp.get("text", "")
+                    break
+        log_tmp = logging.getLogger(__name__)
+        log_tmp.info("Templates carregados: %s", list(_TEMPLATE_BODIES.keys()))
+    except Exception as e:
+        logging.getLogger(__name__).warning("Não foi possível carregar templates: %s", e)
+
+
+def _expandir_template(template_name: str, params: dict) -> str:
+    """Expande as variáveis {{key}} do template com os valores reais."""
+    body = _TEMPLATE_BODIES.get(template_name, "")
+    if not body:
+        # fallback: monta texto simples
+        return "  ".join(f"{k}: {v}" for k, v in params.items() if v)
+    for key, val in params.items():
+        body = body.replace(f"{{{{{key}}}}}", str(val))
+    return body
 
 logging.basicConfig(
     level=logging.INFO,
@@ -153,23 +192,46 @@ def fmt_venc(v) -> str:
 # Envio via API
 # ---------------------------------------------------------------------------
 
-def enviar(telefone: str, template: str, params: dict, dry_run: bool) -> tuple[str, str | None]:
+def enviar(telefone: str, nome: str, template: str, params: dict,
+           dry_run: bool) -> tuple[str, str | None]:
     if dry_run:
         return "dry_run", None
+
+    hash_id = uuid.uuid4().hex[:24]
+    texto   = _expandir_template(template, params)
+    ts      = datetime.now().astimezone().isoformat(timespec="seconds")
+
     payload = {
-        "template": template,
-        "people": [{"phone": telefone, "data": {"body": params}}],
+        "entry": [{
+            "id": hash_id,
+            "changes": [{
+                "field": "messages",
+                "value": {
+                    "contacts": [{"wa_id": telefone, "profile": {"name": nome}}],
+                    "messages": [{
+                        "id":       hash_id,
+                        "from":     CHAT_FROM,
+                        "queue_id": CHAT_QUEUE_ID,
+                        "text":     {"body": texto},
+                        "type":     "text",
+                        "timestamp": ts,
+                    }],
+                    "metadata": {"phone_number_id": "", "display_phone_number": ""},
+                    "messaging_product": "whatsapp",
+                },
+            }],
+        }],
+        "object": "whatsapp_business_account",
     }
+
     try:
         r = requests.post(
-            f"{WPP_API_URL}/templates/send",
+            f"{CHAT_API_URL}/webhooks/whatsapp",
             json=payload,
-            headers={"Authorization": f"Bearer {WPP_TOKEN}"},
             timeout=15,
         )
         r.raise_for_status()
-        data = r.json()
-        return data.get("message_status", "accepted"), data.get("id")
+        return "accepted", hash_id
     except requests.HTTPError as e:
         return f"erro:HTTP {e.response.status_code}", None
     except Exception as e:
@@ -287,7 +349,8 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                     continue
 
             params = montar_params_template(template, fatura)
-            status, wamid = enviar(telefone, template, params, dry_run)
+            nome_cliente = str(fatura.get("nome") or "")
+            status, wamid = enviar(telefone, nome_cliente, template, params, dry_run)
             telefones_run.add(telefone)
 
             nivel = logging.INFO if "erro" not in status else logging.WARNING
@@ -326,6 +389,15 @@ def main():
     parser.add_argument("--limit",     type=int, default=0,
                         help="Máximo de mensagens no total (0 = sem limite)")
     args = parser.parse_args()
+
+    # Valida variáveis obrigatórias
+    faltando = [v for v in ("CHAT_API_URL", "WAPP_CHAT_FROM", "WAPP_QUEUE_ID", "WAPP_TOKEN")
+                if not os.getenv(v)]
+    if faltando:
+        log.error("Variáveis de ambiente obrigatórias não definidas: %s", ", ".join(faltando))
+        sys.exit(1)
+
+    _load_template_bodies()
 
     rodada_em = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
