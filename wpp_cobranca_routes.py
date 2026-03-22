@@ -125,6 +125,19 @@ def api_preview():
         return jsonify({"error": str(e)[:200]}), 500
 
 
+@wpp_bp.get("/api/indicadores")
+def api_indicadores():
+    """Retorna último envio accepted por campanha ativa e posto (para painel de indicadores)."""
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        dados = db.indicadores_wpp()
+        return jsonify({"campanhas": dados})
+    except Exception as e:
+        return jsonify({"erro": str(e)[:200]}), 500
+
+
 @wpp_bp.get("/api/postos")
 def api_postos():
     email, _ = _check_auth()

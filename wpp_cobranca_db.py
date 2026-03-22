@@ -440,6 +440,57 @@ def ultimo_envio_aceito(telefone: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# INDICADORES (painel operacional)
+# ---------------------------------------------------------------------------
+
+def indicadores_wpp() -> list[dict]:
+    """Para cada campanha ativa, retorna o último envio accepted por posto.
+    Retorna lista de {id, nome, postos: {posto: {dias, ultimo_envio}}}."""
+    from datetime import date as _date, datetime as _datetime
+
+    hoje = _date.today()
+    with get_conn() as conn:
+        campanhas = conn.execute(
+            "SELECT id, nome, postos FROM campanhas WHERE ativa=1"
+        ).fetchall()
+
+        result = []
+        for c in campanhas:
+            try:
+                postos_lista = json.loads(c["postos"] or "[]")
+            except Exception:
+                postos_lista = []
+
+            postos_dados = {}
+            for posto in postos_lista:
+                row = conn.execute(
+                    "SELECT MAX(enviado_em) as ultimo FROM envios "
+                    "WHERE campanha_id=? AND posto=? AND status='accepted'",
+                    (c["id"], posto)
+                ).fetchone()
+
+                ultimo = row["ultimo"] if row and row["ultimo"] else None
+                if ultimo:
+                    try:
+                        dt = _datetime.fromisoformat(ultimo).date()
+                        dias = (hoje - dt).days
+                    except Exception:
+                        dias = 999
+                else:
+                    dias = 999
+
+                postos_dados[posto] = {"dias": dias, "ultimo_envio": ultimo}
+
+            result.append({
+                "id": c["id"],
+                "nome": c["nome"],
+                "postos": postos_dados,
+            })
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Inicialização automática ao importar
 # ---------------------------------------------------------------------------
 init_db()

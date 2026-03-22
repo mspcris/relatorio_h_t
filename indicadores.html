@@ -617,6 +617,33 @@
     });
   }
 
+  /* ── Indicador: WhatsApp Cobrança ──────────────────────────── */
+  async function loadWpp(postos) {
+    const resp = await fetch('/wpp/api/indicadores', { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error(`WPP API: ${resp.status}`);
+    const json = await resp.json();
+    if (json.erro) throw new Error(json.erro);
+
+    const { campanhas } = json;
+    const postosSet = new Set(postos);
+    const mostrar1Posto = postos.length === 1;
+
+    const itens = [];
+    for (const camp of campanhas) {
+      for (const [posto, d] of Object.entries(camp.postos)) {
+        if (!postosSet.has(posto)) continue;
+        const sKey = diasParaStatus(d.dias);
+        const nome = mostrar1Posto ? camp.nome : `${camp.nome} — Posto ${posto}`;
+        const texto = d.ultimo_envio
+          ? `${fmtDias(d.dias)} · ${d.ultimo_envio.slice(0, 16)}`
+          : fmtDias(d.dias);
+        itens.push({ html: barraHTML('WPP', nome, sKey, texto), order: STATUS[sKey].order });
+      }
+    }
+
+    return itens;
+  }
+
   /* ── Render do painel ───────────────────────────────────────── */
   async function loadAll() {
     const painel = document.getElementById('painelIndicadores');
@@ -634,10 +661,11 @@
     const todos  = [];
 
     // Carrega todos os indicadores em paralelo
-    const [resPush, resEmail, resTef] = await Promise.allSettled([
+    const [resPush, resEmail, resTef, resWpp] = await Promise.allSettled([
       loadPush(postos),
       loadEmail(postos),
       loadTef(postos),
+      loadWpp(postos),
     ]);
 
     if (resPush.status === 'fulfilled') todos.push(...resPush.value);
@@ -655,6 +683,12 @@
     if (resTef.status === 'fulfilled') todos.push(...resTef.value);
     else todos.push({
       html: `<div class="ind-err"><i class="fas fa-exclamation-triangle mr-1"></i>TEF: ${resTef.reason?.message}</div>`,
+      order: 0
+    });
+
+    if (resWpp.status === 'fulfilled') todos.push(...resWpp.value);
+    else todos.push({
+      html: `<div class="ind-err"><i class="fas fa-exclamation-triangle mr-1"></i>WPP: ${resWpp.reason?.message}</div>`,
       order: 0
     });
 
