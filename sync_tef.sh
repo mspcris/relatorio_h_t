@@ -22,3 +22,5 @@ flock -n 9 || { echo "$(date -Is) já existe execução em andamento"; exit 0; }
 source .venv/bin/activate
 
 python3 sync_tef.py "$@"
+
+/opt/relatorio_h_t/sync_www.sh >> /var/log/relatorio_h_t/sync_www.log 2>&1

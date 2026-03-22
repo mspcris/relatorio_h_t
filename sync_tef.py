@@ -106,7 +106,7 @@ def sync_posto(posto: str, odbc_str: str, kpi: sqlite3.Connection,
     srv    = pyodbc.connect(odbc_str, timeout=30)
     cursor = srv.cursor()
     cursor.execute("""
-        SELECT DataHora, Matricula, RespostaCielo, Erro, Valor
+                SELECT DataHora, Matricula, RespostaCielo, Erro, ValorTotal
         FROM   vw_Sis_TefRecorrenteHistorico
         WHERE  Desativado = 0
           AND  DataHora >= ?
