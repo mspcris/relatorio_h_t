@@ -330,6 +330,11 @@ document.addEventListener('DOMContentLoaded', () => {
     .then(r => r.json())
     .then(data => {
       _templates = data.templates || [];
+      document.getElementById('templates-loading').style.display = 'none';
+      if (_templates.length === 0) {
+        document.getElementById('templates-erro').style.display = 'block';
+        return;
+      }
       const sel = document.getElementById('template-select');
       _templates.forEach(t => {
         const opt = document.createElement('option');
@@ -338,7 +343,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (t.name === TEMPLATE_ATUAL) opt.selected = true;
         sel.appendChild(opt);
       });
-      document.getElementById('templates-loading').style.display = 'none';
       document.getElementById('templates-container').style.display = 'block';
       mostrarPreview();
     })
