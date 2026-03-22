@@ -137,13 +137,15 @@
           </div>
           <div class="col-auto">
             <label class="form-label small mb-1">Categoria</label>
-            <input type="text" class="form-control form-control-sm" id="filterCategoria"
-                   placeholder="Ex: Cobrança" style="width:130px">
+            <select class="form-select form-select-sm" id="filterCategoria" style="max-width:220px">
+              <option value="">Todas</option>
+            </select>
           </div>
           <div class="col-auto">
             <label class="form-label small mb-1">Status</label>
-            <input type="text" class="form-control form-control-sm" id="filterStatus"
-                   placeholder="Ex: Enviado" style="width:110px">
+            <select class="form-select form-select-sm" id="filterStatus" style="max-width:200px">
+              <option value="">Todos</option>
+            </select>
           </div>
           <div class="col-auto">
             <label class="form-label small mb-1">Matrícula</label>
@@ -246,6 +248,28 @@ function clearFilters() {
   loadLogs(1);
 }
 
+async function loadFilters() {
+  try {
+    const resp = await fetch('/api/email_clientes/filters');
+    const data = await resp.json();
+    if (data.erro) return;
+
+    const selCat = document.getElementById('filterCategoria');
+    data.categorias.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      selCat.appendChild(o);
+    });
+
+    const selSt = document.getElementById('filterStatus');
+    data.statuses.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s; o.textContent = s;
+      selSt.appendChild(o);
+    });
+  } catch(e) { /* silencia */ }
+}
+
 async function loadLogs(page) {
   currentPage = page;
   const f = getFilters();
@@ -339,11 +363,9 @@ function showMsg(title, msg) {
   new bootstrap.Modal(document.getElementById('msgModal')).show();
 }
 
-// Enter nos campos de texto dispara filtro
-['filterCategoria','filterStatus','filterMatricula'].forEach(id => {
-  document.getElementById(id).addEventListener('keydown', e => {
-    if (e.key === 'Enter') loadLogs(1);
-  });
+// Enter no campo matrícula dispara filtro
+document.getElementById('filterMatricula').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadLogs(1);
 });
 
 // Relógio
@@ -352,6 +374,7 @@ setInterval(() => {
     new Date().toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'});
 }, 1000);
 
+loadFilters();
 loadLogs(1);
 setInterval(() => loadLogs(currentPage), 60000);
 </script>

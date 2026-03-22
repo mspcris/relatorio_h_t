@@ -1042,6 +1042,50 @@ def email_clientes_dashboard():
         return jsonify({"erro": str(exc)}), 500
 
 
+# ── Email Clientes: Filtros (categorias e status distintos) ──────────────────
+
+@auth_bp.get("/api/email_clientes/filters")
+def email_clientes_filters():
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
+
+    postos_filter = ""
+    params_p = []
+    if user_postos:
+        ph = ",".join("?" * len(user_postos))
+        postos_filter = f"WHERE posto IN ({ph})"
+        params_p = list(user_postos)
+
+    try:
+        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
+
+        cats_raw = conn.execute(
+            f"SELECT DISTINCT titulo_categoria FROM ind_email {postos_filter} ORDER BY titulo_categoria",
+            params_p
+        ).fetchall()
+
+        statuses = conn.execute(
+            f"SELECT DISTINCT status FROM ind_email {postos_filter} ORDER BY status",
+            params_p
+        ).fetchall()
+
+        conn.close()
+
+        # Normaliza e deduplica categorias
+        cats_set = sorted({_clean_cat(r[0]) for r in cats_raw if r[0]})
+
+        return jsonify({
+            "categorias": cats_set,
+            "statuses": [r[0] for r in statuses if r[0]],
+        })
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
+
+
 # ── Email Clientes: Logs ──────────────────────────────────────────────────────
 
 @auth_bp.get("/api/email_clientes/logs")
@@ -1076,8 +1120,17 @@ def email_clientes_logs():
         where.append("posto = ?")
         params.append(posto)
     if categoria:
+        # Mapeia categoria canônica → padrão LIKE no banco (que guarda texto antes do agrupamento)
+        _cat_sql = {
+            "Boleto":                      "%boleto%",
+            "Falta do Médico":             "%falta%",
+            "Cancelamento":                "%cancelamento%",
+            "Nota Fiscal":                 "%nota%fiscal%",
+            "Solicitação de Nova Amostra": "%solicitação%amostra%",
+        }
+        like_pat = _cat_sql.get(categoria, f"%{categoria}%")
         where.append("titulo_categoria LIKE ?")
-        params.append(f"%{categoria}%")
+        params.append(like_pat)
     if status:
         where.append("status LIKE ?")
         params.append(f"%{status}%")
