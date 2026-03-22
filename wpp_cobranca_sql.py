@@ -175,7 +175,9 @@ def contar_preview(campanha: dict) -> dict:
             cur = conn.cursor()
             cur.execute(
                 f"SELECT COUNT(*) as f, COUNT(DISTINCT telefonewhatsapp) as t "
-                f"FROM {VIEW_NAME} WHERE {where}",
+                f"FROM {VIEW_NAME} WHERE {where}"
+                f" AND situacao <> 'Pré-Cadastro'"
+                f" AND descricao LIKE '%/20[0-9][0-9]'",
                 params,
             )
             row = cur.fetchone()
