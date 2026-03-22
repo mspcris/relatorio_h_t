@@ -146,6 +146,37 @@
       font-size: .75rem;
       color: #6b7280;
     }
+
+    /* legenda de cores */
+    .leg-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: .78rem;
+      font-weight: 600;
+      color: #374151;
+    }
+    .leg-item::before {
+      content: '';
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      background: var(--c);
+    }
+
+    /* prefixo do tipo de indicador dentro da barra */
+    .ind-prefix {
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      opacity: .85;
+      margin-right: 6px;
+      background: rgba(0,0,0,.18);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
   </style>
 </head>
 
@@ -325,6 +356,21 @@
         </div>
       </div>
 
+      <!-- Legenda de cores -->
+      <div class="card mb-3">
+        <div class="card-body py-2 px-3">
+          <div class="d-flex align-items-center flex-wrap" style="gap:10px">
+            <span style="font-size:.75rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-right:4px">Status</span>
+            <span class="leg-item" style="--c:#1a7f3c">Ótimo</span>
+            <span class="leg-item" style="--c:#4caf50">Bom</span>
+            <span class="leg-item" style="--c:#26a69a">Ok</span>
+            <span class="leg-item" style="--c:#f9a825">Ruim</span>
+            <span class="leg-item" style="--c:#e65100">Péssimo</span>
+            <span class="leg-item" style="--c:#c62828">Horrível</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Painel de indicadores (ordenado do pior ao melhor) -->
       <div id="painelIndicadores">
         <!-- preenchido via JS -->
@@ -375,15 +421,18 @@
   }
 
   /* ── Render de uma barra ────────────────────────────────────── */
-  function barraHTML(label, statusKey, textoDir) {
+  // prefix: ex "PUSH", nome: ex "Cobrança — Posto X"
+  function barraHTML(prefix, nome, statusKey, textoDir) {
     const s = STATUS[statusKey] || STATUS.horrivel;
-    const fillPx = Math.max(s.fill, 5); // mínimo visual de 5%
+    const fillPct = Math.max(s.fill, 5); // mínimo visual de 5%
     return `
       <div class="ind-bar"
-           style="--ind-color:${s.color}; --ind-bg:${s.bg}; --ind-fill:${fillPx}%"
-           title="${label} — ${s.label}">
+           style="--ind-color:${s.color}; --ind-bg:${s.bg}; --ind-fill:${fillPct}%"
+           title="${prefix} — ${nome} — ${s.label}">
         <div class="ind-fill"></div>
-        <span class="ind-label">${label}</span>
+        <span class="ind-label">
+          <span class="ind-prefix">${prefix}</span>${nome}
+        </span>
         <span class="ind-right">
           ${textoDir}
           <span class="ind-badge">${s.label}</span>
@@ -471,13 +520,11 @@
     return itens.map(it => {
       const sKey = diasParaStatus(it.dias);
       const s    = STATUS[sKey];
-      const label = mostrar1Posto
-        ? 'Push de Cobrança'
-        : `Push de Cobrança — Posto ${it.posto}`;
+      const nome = mostrar1Posto ? 'Cobrança' : `Cobrança — Posto ${it.posto}`;
       const texto = it.ultimo
         ? `${fmtDias(it.dias)} · ${it.ultimo.slice(0, 16)}`
         : fmtDias(it.dias);
-      return { html: barraHTML(label, sKey, texto), order: s.order };
+      return { html: barraHTML('PUSH', nome, sKey, texto), order: s.order };
     });
   }
 
