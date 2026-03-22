@@ -108,6 +108,8 @@ def buscar_faturas(cursor, campanha: dict) -> list[dict]:
             diasdebito
         FROM {VIEW_NAME}
         WHERE {where}
+          AND situacao <> 'Pré-Cadastro'
+          AND descricao LIKE '%/20[0-9][0-9]'
         ORDER BY datadevencimento ASC
     """
     cursor.execute(sql, params)
