@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="pt-br">
+<!-- Arquivo: indicadores.html — Painel de Indicadores Operacionais CAMIM -->
+
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — Indicadores</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="/css/style2.css?v=20251114">
+  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+  <style>
+    /* ── Normalização base ─────────────────────────────────────── */
+    html { font-size: 16px; }
+    body {
+      font-size: 1rem;
+      -webkit-text-size-adjust: 100%;
+      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    body.text-sm { font-size: 1rem; }
+    .text-sm .btn, .text-sm .form-control, .text-sm .nav-link { font-size: 1rem; }
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.5rem; }
+    h3, .card-title { font-size: 1.25rem; font-weight: 600; }
+    .sidebar .nav-link { font-size: .95rem; }
+    .brand-link .brand-text { font-size: 1rem; }
+
+    /* ── Posto tabs ────────────────────────────────────────────── */
+    .scroll-tabs {
+      display: flex;
+      gap: 6px;
+      overflow: auto;
+      white-space: nowrap;
+      padding: 6px 0;
+    }
+    .scroll-tabs .nav-link {
+      display: inline-block;
+      min-width: 52px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    /* ── Barra de indicador ────────────────────────────────────── */
+    .ind-bar {
+      position: relative;
+      height: 46px;
+      border-radius: 8px;
+      background: var(--ind-bg);
+      overflow: hidden;
+      cursor: default;
+      user-select: none;
+    }
+
+    .ind-fill {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: var(--ind-fill);
+      background: var(--ind-color);
+      border-radius: 8px;
+      transition: width .5s ease;
+    }
+
+    .ind-label {
+      position: absolute;
+      left: 14px; top: 50%;
+      transform: translateY(-50%);
+      font-weight: 700;
+      font-size: .88rem;
+      color: #fff;
+      text-shadow: 0 1px 4px rgba(0,0,0,.55);
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .ind-right {
+      position: absolute;
+      right: 14px; top: 50%;
+      transform: translateY(-50%);
+      font-size: .78rem;
+      font-weight: 600;
+      color: rgba(0,0,0,.65);
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    /* badge de status à direita da barra */
+    .ind-badge {
+      display: inline-block;
+      padding: .1rem .45rem;
+      border-radius: 999px;
+      font-size: .7rem;
+      font-weight: 700;
+      color: #fff;
+      background: var(--ind-color);
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* grupo de indicadores */
+    .ind-group {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .ind-group-title {
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #6b7280;
+      margin-bottom: 2px;
+    }
+
+    /* aviso de erro inline */
+    .ind-err {
+      font-size: .82rem;
+      color: #dc3545;
+      padding: 6px 0;
+    }
+
+    /* skeleton loader */
+    .ind-skeleton {
+      height: 46px;
+      border-radius: 8px;
+      background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* atualização automática */
+    #autoRefreshInfo {
+      font-size: .75rem;
+      color: #6b7280;
+    }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+
+  <!-- ── NAVBAR ──────────────────────────────────────────────── -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button">
+          <i class="fas fa-bars"></i>
+        </a>
+      </li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+      <span class="ml-2">Quem tem saúde é mais feliz!</span>
+    </span>
+  </nav>
+
+  <!-- ── SIDEBAR ─────────────────────────────────────────────── -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link">
+      <span class="brand-text font-weight-light">MENU</span>
+    </a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item">
+            <a href="index.html" class="nav-link">
+              <i class="nav-icon fas fa-home"></i>
+              <p>Home Page</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="indicadores.html" class="nav-link active">
+              <i class="nav-icon fas fa-tachometer-alt"></i>
+              <p>Indicadores</p>
+            </a>
+          </li>
+          {% if USER_IS_ADMIN %}
+          <li class="nav-item">
+            <a href="/admin" class="nav-link" style="border-left:3px solid #f39c12">
+              <i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i>
+              <p>Admin</p>
+            </a>
+          </li>
+          {% endif %}
+          <li class="nav-item">
+            <a href="kpi_home.html" class="nav-link">
+              <i class="nav-icon fas fa-book-open"></i>
+              <p>Leia-me</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="alimentacao.html" class="nav-link">
+              <i class="nav-icon fas fa-utensils"></i>
+              <p>KPI Custo Alimentação</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="medicos.html" class="nav-link">
+              <i class="nav-icon fas fa-notes-medical"></i>
+              <p>KPI Custo Médico</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="ctrlq_relatorio.html" class="nav-link">
+              <i class="nav-icon fas fa-user-md"></i>
+              <p>KPI Médicos (Qualidade)</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_v2.html" class="nav-link">
+              <i class="nav-icon fas fa-chart-line"></i>
+              <p>KPI Mensalidades</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_vendas.html" class="nav-link">
+              <i class="nav-icon fas fa-shopping-cart"></i>
+              <p>KPI Vendas</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="clientes.html" class="nav-link">
+              <i class="nav-icon fas fa-users"></i>
+              <p>KPI Clientes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="KPI_prescricao.html" class="nav-link">
+              <i class="nav-icon fas fa-prescription-bottle-alt"></i>
+              <p>KPI Prescrições</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_governo.html" class="nav-link">
+              <i class="nav-icon fas fa-landmark"></i>
+              <p>KPI Índices Oficiais</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_liberty.html" class="nav-link">
+              <i class="nav-icon fas fa-passport"></i>
+              <p>KPI CAMIM Liberty</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_receita_despesa.html" class="nav-link">
+              <i class="nav-icon fas fa-balance-scale"></i>
+              <p>KPI Receitas x Despesas</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_receita_despesa_rateio.html" class="nav-link">
+              <i class="nav-icon fas fa-balance-scale"></i>
+              <p>KPI R x D com Rateio</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_consultas_status.html" class="nav-link">
+              <i class="nav-icon fas fa-stethoscope"></i>
+              <p>KPI Consultas (Status)</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_notas_rps.html" class="nav-link">
+              <i class="nav-icon fas fa-file-invoice"></i>
+              <p>KPI Notas x RPS</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_metas_vendas_mensalidades.html" class="nav-link">
+              <i class="nav-icon fas fa-bullseye"></i>
+              <p>KPI Metas (Mens/Vendas)</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="mais_servicos.html" class="nav-link">
+              <i class="nav-icon fas fa-th-large"></i>
+              <p>Mais Serviços</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline">
+              <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                <i class="nav-icon fas fa-sign-out-alt"></i>
+                <p>Sair</p>
+              </button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- ── CONTEÚDO ────────────────────────────────────────────── -->
+  <div class="content-wrapper">
+    <nav class="navbar navbar-expand navbar-white navbar-light">
+      <div class="d-flex w-100 align-items-center">
+        <span class="ml-2 font-weight-bold">Indicadores</span>
+        <span class="ml-3" id="autoRefreshInfo"></span>
+      </div>
+    </nav>
+
+    <section class="content p-3">
+
+      <!-- Filtro de posto -->
+      <div class="card mb-3">
+        <div class="card-body py-2 px-3">
+          <div class="d-flex align-items-center flex-wrap" style="gap:12px">
+            <span class="font-weight-bold" style="font-size:.85rem">Posto</span>
+            <ul id="postoTabs" class="nav nav-pills scroll-tabs mb-0"></ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Painel de indicadores (ordenado do pior ao melhor) -->
+      <div id="painelIndicadores">
+        <!-- preenchido via JS -->
+        <div class="ind-group">
+          <div class="ind-skeleton"></div>
+          <div class="ind-skeleton"></div>
+          <div class="ind-skeleton"></div>
+        </div>
+      </div>
+
+    </section>
+  </div>
+
+  <footer class="main-footer text-sm text-muted">
+    <strong>CAMIM</strong> — Painel de Indicadores Operacionais
+  </footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ── Paleta de status ───────────────────────────────────────── */
+  const STATUS = {
+    otimo:    { label: 'Ótimo',    color: '#1a7f3c', bg: 'rgba(26,127,60,0.10)',   fill: 100, order: 6 },
+    bom:      { label: 'Bom',      color: '#4caf50', bg: 'rgba(76,175,80,0.10)',   fill: 83,  order: 5 },
+    ok:       { label: 'Ok',       color: '#26a69a', bg: 'rgba(38,166,154,0.10)',  fill: 67,  order: 4 },
+    ruim:     { label: 'Ruim',     color: '#f9a825', bg: 'rgba(249,168,37,0.10)',  fill: 50,  order: 3 },
+    pessimo:  { label: 'Péssimo',  color: '#e65100', bg: 'rgba(230,81,0,0.10)',    fill: 33,  order: 2 },
+    horrivel: { label: 'Horrível', color: '#c62828', bg: 'rgba(198,40,40,0.10)',   fill: 17,  order: 1 },
+  };
+
+  function diasParaStatus(dias) {
+    if (dias === null || dias === undefined || dias >= 999) return 'horrivel';
+    if (dias === 0) return 'otimo';
+    if (dias === 1) return 'bom';
+    if (dias === 2) return 'ok';
+    if (dias === 3) return 'ruim';
+    if (dias === 4) return 'pessimo';
+    return 'horrivel';
+  }
+
+  function fmtDias(dias) {
+    if (dias >= 999) return 'nunca enviado';
+    if (dias === 0) return 'hoje';
+    if (dias === 1) return 'ontem';
+    return `há ${dias} dias`;
+  }
+
+  /* ── Render de uma barra ────────────────────────────────────── */
+  function barraHTML(label, statusKey, textoDir) {
+    const s = STATUS[statusKey] || STATUS.horrivel;
+    const fillPx = Math.max(s.fill, 5); // mínimo visual de 5%
+    return `
+      <div class="ind-bar"
+           style="--ind-color:${s.color}; --ind-bg:${s.bg}; --ind-fill:${fillPx}%"
+           title="${label} — ${s.label}">
+        <div class="ind-fill"></div>
+        <span class="ind-label">${label}</span>
+        <span class="ind-right">
+          ${textoDir}
+          <span class="ind-badge">${s.label}</span>
+        </span>
+      </div>`;
+  }
+
+  /* ── Estado ─────────────────────────────────────────────────── */
+  let POSTOS_USER  = [];       // postos que o usuário tem acesso
+  let postosSel    = new Set(); // vazio = todos
+
+  function postosSelecionados() {
+    if (!postosSel.size) return [...POSTOS_USER];
+    return POSTOS_USER.filter(p => postosSel.has(p));
+  }
+
+  /* ── Posto tabs ─────────────────────────────────────────────── */
+  function buildPostoTabs() {
+    const ul = document.getElementById('postoTabs');
+    ul.innerHTML = '';
+
+    const allActive = !postosSel.size;
+    ul.insertAdjacentHTML('beforeend',
+      `<li class="nav-item"><a href="#" class="nav-link ${allActive ? 'active' : ''}" data-posto="ALL">Todos</a></li>`
+    );
+
+    POSTOS_USER.forEach(p => {
+      const ativo = !allActive && postosSel.has(p);
+      ul.insertAdjacentHTML('beforeend',
+        `<li class="nav-item"><a href="#" class="nav-link ${ativo ? 'active' : ''}" data-posto="${p}">${p}</a></li>`
+      );
+    });
+
+    ul.onclick = e => {
+      const link = e.target.closest('.nav-link');
+      if (!link) return;
+      e.preventDefault();
+      const posto = link.dataset.posto;
+      if (!posto) return;
+
+      if (posto === 'ALL') {
+        postosSel = new Set();
+      } else {
+        if (!postosSel.size) postosSel = new Set([posto]);
+        else {
+          if (postosSel.has(posto)) postosSel.delete(posto);
+          else postosSel.add(posto);
+        }
+      }
+
+      const allNow = !postosSel.size;
+      ul.querySelectorAll('.nav-link').forEach(a => {
+        const p = a.dataset.posto;
+        if (p === 'ALL') a.classList.toggle('active', allNow);
+        else a.classList.toggle('active', !allNow && postosSel.has(p));
+      });
+
+      loadAll();
+    };
+  }
+
+  /* ── Indicador: Push de Cobrança ────────────────────────────── */
+  async function loadPush(postos) {
+    const resp = await fetch('/api/indicadores/push', { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error(`Push API: ${resp.status}`);
+    const data = await resp.json();
+    if (data.erro) throw new Error(data.erro);
+
+    // Filtra pelos postos selecionados e monta itens
+    const itens = postos.map(p => {
+      const d = data[p];
+      if (!d) return { posto: p, dias: 999, ultimo: null };
+      return { posto: p, dias: d.dias, ultimo: d.ultimo_envio };
+    });
+
+    // Ordena do pior (menor order) ao melhor
+    itens.sort((a, b) => {
+      const oa = STATUS[diasParaStatus(a.dias)].order;
+      const ob = STATUS[diasParaStatus(b.dias)].order;
+      return oa - ob;
+    });
+
+    const mostrar1Posto = postos.length === 1;
+
+    return itens.map(it => {
+      const sKey = diasParaStatus(it.dias);
+      const s    = STATUS[sKey];
+      const label = mostrar1Posto
+        ? 'Push de Cobrança'
+        : `Push de Cobrança — Posto ${it.posto}`;
+      const texto = it.ultimo
+        ? `${fmtDias(it.dias)} · ${it.ultimo.slice(0, 16)}`
+        : fmtDias(it.dias);
+      return { html: barraHTML(label, sKey, texto), order: s.order };
+    });
+  }
+
+  /* ── Render do painel ───────────────────────────────────────── */
+  async function loadAll() {
+    const painel = document.getElementById('painelIndicadores');
+    painel.innerHTML = `
+      <div class="ind-group">
+        <div class="ind-skeleton"></div>
+        <div class="ind-skeleton"></div>
+      </div>`;
+
+    const postos = postosSelecionados();
+    const todos  = [];
+
+    try {
+      const push = await loadPush(postos);
+      todos.push(...push);
+    } catch (e) {
+      todos.push({
+        html: `<div class="ind-err"><i class="fas fa-exclamation-triangle mr-1"></i>Push: ${e.message}</div>`,
+        order: 0
+      });
+    }
+
+    // Ordenação final (pior primeiro)
+    todos.sort((a, b) => a.order - b.order);
+
+    if (!todos.length) {
+      painel.innerHTML = '<p class="text-muted">Nenhum indicador disponível para os postos selecionados.</p>';
+      return;
+    }
+
+    painel.innerHTML = `<div class="ind-group">${todos.map(i => i.html).join('')}</div>`;
+  }
+
+  /* ── Init ───────────────────────────────────────────────────── */
+  async function init() {
+    try {
+      const r = await fetch('/session/me', { credentials: 'same-origin' });
+      if (!r.ok) { location.href = '/login.html'; return; }
+      const me = await r.json();
+      POSTOS_USER = Array.isArray(me.postos) ? [...me.postos].sort() : [];
+    } catch {
+      POSTOS_USER = [];
+    }
+
+    buildPostoTabs();
+    await loadAll();
+
+    // Auto-refresh a cada 5 minutos
+    let proxima = 300;
+    const info  = document.getElementById('autoRefreshInfo');
+    setInterval(() => {
+      proxima--;
+      if (proxima <= 0) { proxima = 300; loadAll(); }
+      info.textContent = `Atualiza em ${proxima}s`;
+    }, 1000);
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+
+</body>
+</html>

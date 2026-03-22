@@ -21,6 +21,8 @@ Rotas:
 import os
 import secrets
 import smtplib
+import sqlite3
+from datetime import date, datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -728,3 +730,74 @@ def ia_saudacao():
         return jsonify({"nome": nome, "perguntas_frequentes": perguntas})
     finally:
         db.close()
+
+
+# ── Indicadores: Push de Cobrança ───────────────────────────────────────────
+
+@auth_bp.get("/api/indicadores/push")
+def indicadores_push():
+    """Retorna último envio de push por posto, para o painel de indicadores."""
+    email, user_postos = decode_user()
+    if not email:
+        return ("", 401)
+
+    push_db = os.environ.get("PUSH_LOG_DB", "/opt/push_clientes/push_log.db")
+    hoje = date.today()
+
+    try:
+        conn = sqlite3.connect(f"file:{push_db}?mode=ro", uri=True)
+
+        # Descobre o nome da tabela dinamicamente
+        tables = [r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()]
+        tabela = next(
+            (t for t in tables if "push" in t.lower() or "log" in t.lower()),
+            tables[0] if tables else None,
+        )
+        if not tabela:
+            conn.close()
+            return jsonify({"erro": "Nenhuma tabela encontrada em push_log.db"}), 500
+
+        # Descobre colunas dinamicamente
+        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({tabela})").fetchall()]
+        col_data  = next((c for c in cols if any(k in c.lower() for k in ("data", "hora", "created", "time", "sent"))), None)
+        col_posto = next((c for c in cols if "posto" in c.lower()), None)
+        col_modo  = next((c for c in cols if "modo" in c.lower()), None)
+
+        if not col_data or not col_posto:
+            conn.close()
+            return jsonify({"erro": f"Colunas não encontradas. Disponíveis: {cols}"}), 500
+
+        where = f"WHERE {col_modo} = 'producao'" if col_modo else ""
+        rows = conn.execute(f"""
+            SELECT {col_posto} AS posto,
+                   MAX({col_data}) AS ultimo_envio,
+                   COUNT(*) AS total_dia
+            FROM {tabela}
+            {where}
+            GROUP BY {col_posto}
+        """).fetchall()
+        conn.close()
+
+        result = {}
+        for posto_raw, ultimo_str, total in rows:
+            posto = str(posto_raw).strip().upper() if posto_raw else None
+            if not posto:
+                continue
+            if user_postos and posto not in user_postos:
+                continue
+            try:
+                ultimo_dt = datetime.fromisoformat(str(ultimo_str)).date()
+                dias = (hoje - ultimo_dt).days
+            except Exception:
+                dias = 999
+            result[posto] = {
+                "ultimo_envio": ultimo_str,
+                "dias": dias,
+            }
+
+        return jsonify(result)
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
