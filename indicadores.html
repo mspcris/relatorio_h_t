@@ -53,47 +53,49 @@
     .ind-bar {
       position: relative;
       height: 52px;
-      border-radius: 12px;
-      /* espectro completo sempre visível ao fundo */
+      border-radius: 14px;
+      /* espectro: vermelho (pior) → verde (melhor), esquerda → direita */
       background: linear-gradient(90deg,
-        rgba(26,127,60,.13)  0%,
-        rgba(76,175,80,.10)  20%,
-        rgba(38,166,154,.10) 38%,
-        rgba(249,168,37,.12) 57%,
-        rgba(230,81,0,.15)   76%,
-        rgba(198,40,40,.19)  100%
+        rgba(198,40,40,.22)   0%,
+        rgba(230,81,0,.17)    28%,
+        rgba(249,168,37,.14)  52%,
+        rgba(38,166,154,.11)  74%,
+        rgba(26,127,60,.14)   100%
       );
-      border: 1px solid rgba(0,0,0,.055);
-      box-shadow: 0 1px 6px rgba(0,0,0,.07), inset 0 1px 2px rgba(0,0,0,.04);
+      border: 1px solid rgba(0,0,0,.06);
+      box-shadow: 0 2px 8px rgba(0,0,0,.08), inset 0 1px 2px rgba(255,255,255,.35);
       overflow: hidden;
       cursor: default;
       user-select: none;
     }
 
-    /* fill semi-transparente — status atual se destaca sobre o espectro */
+    /* fill translúcido — pastel suave, para na posição do status */
     .ind-fill {
       position: absolute;
       left: 0; top: 0; bottom: 0;
       width: var(--ind-fill);
+      /* lavagem translúcida da cor do status, esmaece à direita */
       background: linear-gradient(90deg,
-        var(--ind-color) 0%,
-        var(--ind-color) 78%,
-        rgba(255,255,255,.22) 100%
+        rgba(255,255,255,.38) 0%,
+        var(--ind-color-rgb, var(--ind-color)) 40%,
+        var(--ind-color) 80%,
+        rgba(255,255,255,0) 100%
       );
-      opacity: .30;
-      border-radius: 12px 0 0 12px;
-      transition: width .65s cubic-bezier(.4,0,.2,1);
+      opacity: .28;
+      border-radius: 14px 0 0 14px;
+      transition: width .7s cubic-bezier(.4,0,.2,1);
     }
 
     /* marcador vertical na borda direita do fill */
     .ind-fill::after {
       content: '';
       position: absolute;
-      right: 0; top: 18%; bottom: 18%;
+      right: 0; top: 14%; bottom: 14%;
       width: 3px;
       background: var(--ind-color);
-      opacity: .75;
-      border-radius: 2px;
+      opacity: .85;
+      border-radius: 3px;
+      box-shadow: 0 0 6px var(--ind-color);
     }
 
     .ind-label {
@@ -124,15 +126,18 @@
     /* badge de status à direita da barra */
     .ind-badge {
       display: inline-block;
-      padding: .12rem .5rem;
+      padding: .1rem .48rem;
       border-radius: 999px;
-      font-size: .68rem;
+      font-size: .66rem;
       font-weight: 700;
-      color: #fff;
-      background: var(--ind-color);
+      letter-spacing: .03em;
+      color: var(--ind-color);
+      background: rgba(255,255,255,.82);
+      border: 1.5px solid var(--ind-color);
       margin-left: 8px;
       vertical-align: middle;
-      box-shadow: 0 1px 4px rgba(0,0,0,.18);
+      box-shadow: 0 1px 5px rgba(0,0,0,.10);
+      backdrop-filter: blur(4px);
     }
 
     /* grupo de indicadores */
@@ -203,12 +208,14 @@
       width: 28px;
       height: 28px;
       border-radius: 8px;
-      background: var(--ind-color);
-      opacity: .82;
-      color: #fff;
-      font-size: .95rem;
+      background: rgba(255,255,255,.72);
+      border: 1.5px solid var(--ind-color);
+      color: var(--ind-color);
+      font-size: .9rem;
       margin-right: 10px;
       flex-shrink: 0;
+      box-shadow: 0 1px 4px rgba(0,0,0,.10);
+      backdrop-filter: blur(4px);
     }
   </style>
 </head>
