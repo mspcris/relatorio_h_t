@@ -78,6 +78,7 @@ FORMATAÇÃO OBRIGATÓRIA:
 - Use ### para subseções ou postos
 - Use "- item" para listas
 - Inclua os valores monetários exatos do contexto e as variações percentuais fornecidas
+- Quando o contexto contiver seções "Aumentos significativos" ou "Reduções significativas" com itens listados, reproduza OBRIGATORIAMENTE TODOS os itens daquela seção com os valores e variações exatos. Não omita nenhum item.
 - Termine com parágrafo de conclusão/interpretação
 - NÃO use tabelas markdown, NÃO use negrito (**), NÃO use itálico (_)
 """
