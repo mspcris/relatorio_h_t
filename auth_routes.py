@@ -30,7 +30,7 @@ from itsdangerous import BadSignature, TimestampSigner
 from sqlalchemy import func
 
 from auth_db import (
-    SessionLocal, User, UserPosto, LoginHistory, IAConversa,
+    SessionLocal, User, UserPosto, LoginHistory, IAConversa, KPIContexto,
     get_user_by_email, get_user_by_id, init_db,
 )
 
@@ -62,19 +62,24 @@ def _get_groq():
 
 _IA_SYSTEM_PROMPT = """Você é analista de dados da CAMIM — rede de clínicas médicas.
 
-REGRAS OBRIGATÓRIAS:
-1. Use APENAS os dados fornecidos no contexto. NUNCA invente, estime ou use conhecimento externo para gerar valores monetários.
-2. Se a pergunta mencionar um posto específico (ex: "em X", "no posto A"), use EXCLUSIVAMENTE os dados daquele posto no contexto.
-3. Se os dados de um posto não estiverem disponíveis no contexto, informe isso claramente.
-4. Responda em português brasileiro com os valores exatos do contexto.
+REGRA FUNDAMENTAL DE NEGÓCIO:
+- Retirada e Campinho NUNCA entram nos totais de receita ou despesa operacional.
+- Elas aparecem no contexto como item separado, apenas para referência.
+- EXCEÇÃO: quando o contexto indicar explicitamente "Retirada: incluída nos totais".
 
-FORMATAÇÃO DA RESPOSTA:
-- Use ## para seções principais (ex: ## Receita, ## Despesas, ## Resultado)
-- Use ### para subseções
-- Use "- item" para listas de itens
-- Sempre inclua os valores monetários exatos (R$ X.XXX,XX) e variações percentuais
-- Termine com um parágrafo de resumo/conclusão
-- NÃO use tabelas markdown, NÃO use negrito (**), NÃO use itálico
+SEU PAPEL:
+- Os dados chegam pré-calculados pelo sistema (pandas). Use-os EXATAMENTE como fornecidos.
+- NUNCA recalcule, reestime ou invente valores. Se um número não consta no contexto, diga isso.
+- Seu trabalho é EXPLICAR o que aconteceu com base nos dados recebidos — não calcular.
+- Se a pergunta mencionar posto específico, use EXCLUSIVAMENTE os dados daquele posto.
+
+FORMATAÇÃO OBRIGATÓRIA:
+- Use ## para seções (ex: ## Receita, ## Despesas, ## Resultado)
+- Use ### para subseções ou postos
+- Use "- item" para listas
+- Inclua os valores monetários exatos do contexto e as variações percentuais fornecidas
+- Termine com parágrafo de conclusão/interpretação
+- NÃO use tabelas markdown, NÃO use negrito (**), NÃO use itálico (_)
 """
 
 IA_GROQ_URL = os.environ.get("IA_GROQ_URL", "http://127.0.0.1:8030/ia/analisar")
@@ -506,49 +511,73 @@ def ia_chat():
     pagina_txt   = str(d.get("pagina", ""))[:200]
     provider     = str(d.get("provider", "groq")).lower().strip()
 
-    # ── Monta contexto: builder pandas (novo) ou contexto enviado pelo browser (legado) ──
-    kpi = d.get("kpi", "")
+    # ── Monta contexto: builder pandas ou contexto legado ──────────────────────
+    kpi              = str(d.get("kpi", "")).strip()
+    incluir_retirada = bool(d.get("incluir_retirada", False))
+
     if kpi:
         try:
             from ia_context_builder import build_context
             postos      = d.get("postos") or []
             periodo_ini = str(d.get("periodo_ini", ""))[:7]
             periodo_fim = str(d.get("periodo_fim", ""))[:7]
-            contexto = build_context(kpi, postos, periodo_ini, periodo_fim, pergunta_txt)
+            contexto = build_context(
+                kpi, postos, periodo_ini, periodo_fim, pergunta_txt, incluir_retirada
+            )
         except Exception as exc:
             contexto = f"[Erro no context builder: {exc}]"
     else:
         contexto = str(d.get("contexto", ""))[:100000]
 
+    # ── Carrega contexto de negócio do KPI (editável pelo admin) ───────────────
+    kpi_contexto_txt = ""
+    if kpi:
+        _db = SessionLocal()
+        try:
+            kpi_ctx = _db.query(KPIContexto).filter_by(kpi_slug=kpi).first()
+            if kpi_ctx and kpi_ctx.contexto and kpi_ctx.contexto.strip():
+                kpi_contexto_txt = kpi_ctx.contexto.strip()
+        except Exception:
+            pass
+        finally:
+            _db.close()
+
+    # ── Monta system prompt dinâmico ────────────────────────────────────────────
+    system_prompt = _IA_SYSTEM_PROMPT
+    if kpi_contexto_txt:
+        system_prompt = (
+            f"{_IA_SYSTEM_PROMPT}\n"
+            f"CONTEXTO DE NEGÓCIO DESTE KPI (escrito pelo gestor):\n{kpi_contexto_txt}\n"
+        )
+
     resposta_json = None
     resposta_txt  = ""
 
-    # ── Groq (SDK direto, igual OpenAI/Anthropic) ────────────────────────────
+    prompt_completo = (
+        f"Dados do relatório (pré-calculados pelo sistema):\n\n{contexto}"
+        f"\n\nPergunta do usuário:\n{pergunta_txt}"
+    )
+
+    # ── Groq ─────────────────────────────────────────────────────────────────
     if provider == "groq":
         try:
-            llm = _get_groq()
-            prompt_completo = f"Contexto do relatório:\n\n{contexto}\n\nPergunta do usuário:\n\n{pergunta_txt}"
-            resposta_txt  = llm.gerar_texto(prompt=prompt_completo, system_prompt=_IA_SYSTEM_PROMPT)
+            resposta_txt  = _get_groq().gerar_texto(prompt=prompt_completo, system_prompt=system_prompt)
             resposta_json = {"resposta": resposta_txt, "provider": "groq"}
         except Exception as exc:
             return jsonify({"erro": f"Groq indisponível: {exc}"}), 502
 
-    # ── OpenAI ───────────────────────────────────────────────────────────────
+    # ── OpenAI ────────────────────────────────────────────────────────────────
     elif provider == "openai":
         try:
-            llm = _get_openai()
-            prompt_completo = f"Contexto do relatório:\n\n{contexto}\n\nPergunta do usuário:\n\n{pergunta_txt}"
-            resposta_txt  = llm.gerar_texto(prompt=prompt_completo, system_prompt=_IA_SYSTEM_PROMPT)
+            resposta_txt  = _get_openai().gerar_texto(prompt=prompt_completo, system_prompt=system_prompt)
             resposta_json = {"resposta": resposta_txt, "provider": "openai"}
         except Exception as exc:
             return jsonify({"erro": f"OpenAI indisponível: {exc}"}), 502
 
-    # ── Anthropic ────────────────────────────────────────────────────────────
+    # ── Anthropic ─────────────────────────────────────────────────────────────
     elif provider == "anthropic":
         try:
-            llm = _get_anthropic()
-            prompt_completo = f"Contexto do relatório:\n\n{contexto}\n\nPergunta do usuário:\n\n{pergunta_txt}"
-            resposta_txt  = llm.gerar_texto(prompt=prompt_completo, system_prompt=_IA_SYSTEM_PROMPT)
+            resposta_txt  = _get_anthropic().gerar_texto(prompt=prompt_completo, system_prompt=system_prompt)
             resposta_json = {"resposta": resposta_txt, "provider": "anthropic"}
         except Exception as exc:
             return jsonify({"erro": f"Anthropic indisponível: {exc}"}), 502
@@ -574,6 +603,47 @@ def ia_chat():
         db.close()
 
     return jsonify(resposta_json)
+
+
+@auth_bp.get("/admin/api/kpi_contexto")
+def admin_kpi_contexto_list():
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    db = SessionLocal()
+    try:
+        items = db.query(KPIContexto).order_by(KPIContexto.kpi_slug).all()
+        return jsonify([{
+            "kpi_slug":  i.kpi_slug,
+            "titulo":    i.titulo,
+            "contexto":  i.contexto or "",
+            "updated_at": i.updated_at.isoformat() if i.updated_at else None,
+        } for i in items])
+    finally:
+        db.close()
+
+
+@auth_bp.post("/admin/api/kpi_contexto/<slug>")
+def admin_kpi_contexto_save(slug: str):
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    d = request.get_json(silent=True) or {}
+    db = SessionLocal()
+    try:
+        item = db.query(KPIContexto).filter_by(kpi_slug=slug).first()
+        if not item:
+            item = KPIContexto(kpi_slug=slug, titulo=d.get("titulo", slug))
+            db.add(item)
+        item.contexto   = str(d.get("contexto", "")).strip()
+        item.titulo     = str(d.get("titulo", item.titulo or slug)).strip()
+        from datetime import datetime
+        item.updated_at = datetime.utcnow()
+        db.commit()
+        return jsonify({"ok": True})
+    except Exception as exc:
+        db.rollback()
+        return jsonify({"erro": str(exc)}), 500
+    finally:
+        db.close()
 
 
 @auth_bp.get("/api/ia/saudacao")

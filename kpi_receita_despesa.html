@@ -3263,12 +3263,14 @@ function updateExploradorDespesas(mesesSelec) {
         getPayload: async ({ userQuery }) => {
           const activeLinks = document.querySelectorAll('#postoTabs .nav-link.active[data-posto]');
           const postos = Array.from(activeLinks).map(a => a.dataset.posto).filter(p => p && p !== 'ALL');
+          const incluirRetirada = document.getElementById('chkRetirada')?.checked || false;
           return {
-            prompt:      userQuery,
-            kpi:         'receita_despesa',
+            prompt:           userQuery,
+            kpi:              'receita_despesa',
             postos,
-            periodo_ini: document.querySelector('#from2')?.value || '',
-            periodo_fim: document.querySelector('#to2')?.value   || '',
+            periodo_ini:      document.querySelector('#from2')?.value || '',
+            periodo_fim:      document.querySelector('#to2')?.value   || '',
+            incluir_retirada: incluirRetirada,
           };
         }
       });

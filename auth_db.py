@@ -100,8 +100,47 @@ class IAConversa(Base):
     user       = relationship("User", back_populates="ia_conversas")
 
 
+class KPIContexto(Base):
+    """Contexto de negócio por KPI — editável pelo admin, injetado no system prompt."""
+    __tablename__ = "kpi_contexto"
+
+    id         = Column(Integer, primary_key=True)
+    kpi_slug   = Column(String(100), unique=True, nullable=False, index=True)
+    titulo     = Column(String(200), default="")
+    contexto   = Column(Text, default="")
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+# KPIs conhecidos com títulos padrão
+_KPI_DEFAULTS = [
+    ("receita_despesa",        "KPI Receitas x Despesas"),
+    ("receita_despesa_rateio", "KPI R x D com Rateio"),
+    ("alimentacao",            "KPI Alimentação"),
+    ("vendas",                 "KPI Vendas / Metas"),
+    ("medicos",                "KPI Médicos"),
+    ("consultas",              "KPI Consultas (Status)"),
+    ("notas_rps",              "KPI Notas x RPS"),
+    ("prescricoes",            "KPI Prescrições"),
+    ("clientes",               "KPI Clientes"),
+    ("indices_oficiais",       "KPI Índices Oficiais"),
+    ("liberty",                "KPI CAMIM Liberty"),
+]
+
+
 def init_db():
     Base.metadata.create_all(engine)
+    # Garante que todos os KPIs conhecidos têm uma linha na tabela
+    db = SessionLocal()
+    try:
+        for slug, titulo in _KPI_DEFAULTS:
+            exists = db.query(KPIContexto).filter_by(kpi_slug=slug).first()
+            if not exists:
+                db.add(KPIContexto(kpi_slug=slug, titulo=titulo, contexto=""))
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 def get_user_by_email(db, email: str):
