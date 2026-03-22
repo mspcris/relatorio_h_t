@@ -1206,3 +1206,307 @@ def email_clientes_logs():
 
     except Exception as exc:
         return jsonify({"erro": str(exc)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TEF Recorrente
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _tef_is_aprovado(erro: str) -> bool:
+    if not erro:
+        return True
+    e = erro.lower()
+    return any(k in e for k in ("autoriza", "sucesso", "aprovad"))
+
+
+@auth_bp.get("/api/indicadores/tef")
+def indicadores_tef():
+    """Último registro por posto para o painel de indicadores."""
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
+    hoje   = date.today()
+
+    try:
+        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
+
+        rows = conn.execute("""
+            SELECT posto, MAX(datahora) AS ultimo, COUNT(*) AS total
+            FROM ind_tef
+            GROUP BY posto
+            ORDER BY posto
+        """).fetchall()
+
+        sync_row = conn.execute("""
+            SELECT synced_at, total_records, status, mensagem
+            FROM   ind_sync_log
+            WHERE  indicador = 'tef'
+            ORDER BY id DESC LIMIT 1
+        """).fetchone()
+
+        conn.close()
+
+        dados = {}
+        for posto, ultimo_str, total in rows:
+            posto = (posto or "").strip().upper()
+            if user_postos and posto not in user_postos:
+                continue
+            try:
+                ultimo_dt = datetime.fromisoformat(str(ultimo_str)).date()
+                dias = (hoje - ultimo_dt).days
+            except Exception:
+                dias = 999
+            dados[posto] = {
+                "posto":       posto,
+                "ultimo_tef":  ultimo_str,
+                "dias":        dias,
+                "total":       total,
+            }
+
+        return jsonify({
+            "dados": dados,
+            "sync": {
+                "synced_at":     sync_row[0] if sync_row else None,
+                "total_records": sync_row[1] if sync_row else 0,
+                "status":        sync_row[2] if sync_row else None,
+                "mensagem":      sync_row[3] if sync_row else None,
+            },
+        })
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
+
+
+@auth_bp.get("/api/tef/dashboard")
+def tef_dashboard():
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
+    hoje_str = date.today().isoformat()
+
+    try:
+        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
+
+        posto_filter = ""
+        posto_params = []
+        if user_postos:
+            ph = ",".join("?" * len(user_postos))
+            posto_filter = f"AND posto IN ({ph})"
+            posto_params = list(user_postos)
+
+        # KPIs de hoje
+        hoje_row = conn.execute(f"""
+            SELECT COUNT(*),
+                   SUM(CASE WHEN aprovado=1 THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN aprovado=0 THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN aprovado=1 THEN valor ELSE 0 END)
+            FROM ind_tef
+            WHERE date(datahora) = ? {posto_filter}
+        """, [hoje_str] + posto_params).fetchone()
+
+        total_hoje    = hoje_row[0] or 0
+        aprov_hoje    = hoje_row[1] or 0
+        negad_hoje    = hoje_row[2] or 0
+        valor_hoje    = hoje_row[3] or 0.0
+
+        # Últimos 7 dias por dia
+        trend7 = conn.execute(f"""
+            SELECT date(datahora) AS dia,
+                   SUM(CASE WHEN aprovado=1 THEN 1 ELSE 0 END) AS aprovadas,
+                   SUM(CASE WHEN aprovado=0 THEN 1 ELSE 0 END) AS negadas
+            FROM ind_tef
+            WHERE date(datahora) >= date(?, '-6 days') {posto_filter}
+            GROUP BY dia ORDER BY dia
+        """, [hoje_str] + posto_params).fetchall()
+
+        # Top erros de negação (últimos 7 dias)
+        top_erros = conn.execute(f"""
+            SELECT COALESCE(NULLIF(TRIM(erro),''), '(sem descrição)') AS motivo,
+                   COUNT(*) AS cnt
+            FROM ind_tef
+            WHERE aprovado = 0
+              AND date(datahora) >= date(?, '-6 days') {posto_filter}
+            GROUP BY motivo ORDER BY cnt DESC LIMIT 10
+        """, [hoje_str] + posto_params).fetchall()
+
+        # Por posto
+        por_posto = conn.execute(f"""
+            SELECT posto,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN aprovado=1 THEN 1 ELSE 0 END) AS aprovadas,
+                   SUM(CASE WHEN aprovado=0 THEN 1 ELSE 0 END) AS negadas,
+                   SUM(CASE WHEN aprovado=1 THEN valor ELSE 0 END) AS valor_aprov,
+                   MAX(datahora) AS ultimo
+            FROM ind_tef
+            WHERE date(datahora) = ? {posto_filter}
+            GROUP BY posto ORDER BY posto
+        """, [hoje_str] + posto_params).fetchall()
+
+        # Por posto — total geral (60 dias)
+        por_posto_total = conn.execute(f"""
+            SELECT posto, COUNT(*), SUM(CASE WHEN aprovado=1 THEN 1 ELSE 0 END)
+            FROM ind_tef
+            WHERE 1=1 {posto_filter}
+            GROUP BY posto ORDER BY posto
+        """, posto_params).fetchall()
+        posto_total_map = {r[0]: {"total": r[1], "aprovadas": r[2]} for r in por_posto_total}
+
+        # Sync
+        sync_row = conn.execute("""
+            SELECT synced_at, status, mensagem FROM ind_sync_log
+            WHERE indicador='tef' ORDER BY id DESC LIMIT 1
+        """).fetchone()
+
+        conn.close()
+
+        return jsonify({
+            "hoje": {
+                "total":      total_hoje,
+                "aprovadas":  aprov_hoje,
+                "negadas":    negad_hoje,
+                "valor":      round(valor_hoje, 2),
+            },
+            "trend7": [
+                {"dia": r[0], "aprovadas": r[1], "negadas": r[2]}
+                for r in trend7
+            ],
+            "top_erros": [{"motivo": r[0], "cnt": r[1]} for r in top_erros],
+            "por_posto_hoje": [
+                {"posto": r[0], "total": r[1], "aprovadas": r[2],
+                 "negadas": r[3], "valor": round(r[4] or 0, 2), "ultimo": r[5],
+                 "total_geral": posto_total_map.get(r[0], {}).get("total", 0),
+                 "aprov_geral": posto_total_map.get(r[0], {}).get("aprovadas", 0)}
+                for r in por_posto
+            ],
+            "sync": {
+                "synced_at": sync_row[0] if sync_row else None,
+                "status":    sync_row[1] if sync_row else None,
+                "mensagem":  sync_row[2] if sync_row else None,
+            },
+        })
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
+
+
+@auth_bp.get("/api/tef/filters")
+def tef_filters():
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
+    try:
+        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
+        erros = conn.execute("""
+            SELECT DISTINCT TRIM(erro) FROM ind_tef
+            WHERE erro IS NOT NULL AND TRIM(erro) != ''
+            ORDER BY 1
+        """).fetchall()
+        respostas = conn.execute("""
+            SELECT DISTINCT TRIM(resposta_cielo) FROM ind_tef
+            WHERE resposta_cielo IS NOT NULL AND TRIM(resposta_cielo) != ''
+            ORDER BY 1
+        """).fetchall()
+        conn.close()
+        return jsonify({
+            "erros":     [r[0] for r in erros],
+            "respostas": [r[0] for r in respostas],
+        })
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
+
+
+@auth_bp.get("/api/tef/logs")
+def tef_logs():
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
+    PER_PAGE = 50
+
+    posto     = (request.args.get("posto")    or "").strip().upper()
+    status    = (request.args.get("status")   or "").strip()   # "aprovada" | "negada"
+    matricula = (request.args.get("matricula") or "").strip()
+    erro_f    = (request.args.get("erro")     or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to   = (request.args.get("date_to")   or "").strip()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except Exception:
+        page = 1
+
+    where  = ["1=1"]
+    params = []
+
+    if user_postos:
+        ph = ",".join("?" * len(user_postos))
+        where.append(f"posto IN ({ph})")
+        params.extend(list(user_postos))
+
+    if posto:
+        where.append("posto = ?")
+        params.append(posto)
+    if status == "aprovada":
+        where.append("aprovado = 1")
+    elif status == "negada":
+        where.append("aprovado = 0")
+    if matricula:
+        where.append("matricula LIKE ?")
+        params.append(f"%{matricula}%")
+    if erro_f:
+        where.append("erro LIKE ?")
+        params.append(f"%{erro_f}%")
+    if date_from:
+        where.append("date(datahora) >= ?")
+        params.append(date_from)
+    if date_to:
+        where.append("date(datahora) <= ?")
+        params.append(date_to)
+
+    where_str = " AND ".join(where)
+
+    try:
+        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
+
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM ind_tef WHERE {where_str}", params
+        ).fetchone()[0]
+
+        rows = conn.execute(f"""
+            SELECT id, datahora, posto, matricula, resposta_cielo, erro, valor, aprovado
+            FROM ind_tef
+            WHERE {where_str}
+            ORDER BY datahora DESC, id DESC
+            LIMIT ? OFFSET ?
+        """, params + [PER_PAGE, (page - 1) * PER_PAGE]).fetchall()
+
+        por_posto = conn.execute(f"""
+            SELECT posto, COUNT(*) AS cnt,
+                   SUM(CASE WHEN aprovado=1 THEN 1 ELSE 0 END) AS aprov
+            FROM ind_tef WHERE {where_str}
+            GROUP BY posto ORDER BY posto
+        """, params).fetchall()
+
+        conn.close()
+
+        return jsonify({
+            "rows": [
+                {"id": r[0], "datahora": r[1], "posto": r[2],
+                 "matricula": r[3], "resposta_cielo": r[4] or "",
+                 "erro": r[5] or "", "valor": r[6], "aprovado": r[7]}
+                for r in rows
+            ],
+            "total":    total,
+            "page":     page,
+            "per_page": PER_PAGE,
+            "por_posto": [{"posto": r[0], "cnt": r[1], "aprov": r[2]} for r in por_posto],
+        })
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500

@@ -196,6 +196,14 @@ def r_email_clientes():
 def r_email_clientes_logs():
     return render_protected_page("email_clientes_logs.html")
 
+@app.get('/tef')
+def r_tef():
+    return render_protected_page("tef_dashboard.html")
+
+@app.get('/tef/logs')
+def r_tef_logs():
+    return render_protected_page("tef_logs.html")
+
 @app.get('/kpi_receita_despesa_rateio')
 def r_rateio():
     return render_protected_page("kpi_receita_despesa_rateio.html")

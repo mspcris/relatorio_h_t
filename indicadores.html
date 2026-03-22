@@ -589,6 +589,34 @@
     return itens;
   }
 
+  /* ── Indicador: TEF Recorrente ──────────────────────────────── */
+  async function loadTef(postos) {
+    const resp = await fetch('/api/indicadores/tef', { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error(`TEF API: ${resp.status}`);
+    const json = await resp.json();
+    if (json.erro) throw new Error(json.erro);
+
+    const { dados } = json;
+    const mostrar1Posto = postos.length === 1;
+
+    const itens = postos.map(p => {
+      const d = dados[p];
+      if (!d) return { posto: p, dias: 999, ultimo: null };
+      return { posto: p, dias: d.dias, ultimo: d.ultimo_tef };
+    });
+
+    itens.sort((a, b) => STATUS[diasParaStatus(a.dias)].order - STATUS[diasParaStatus(b.dias)].order);
+
+    return itens.map(it => {
+      const sKey = diasParaStatus(it.dias);
+      const nome = mostrar1Posto ? 'TEF Recorrente' : `TEF Recorrente — Posto ${it.posto}`;
+      const texto = it.ultimo
+        ? `${fmtDias(it.dias)} · ${it.ultimo.slice(0, 16)}`
+        : fmtDias(it.dias);
+      return { html: barraHTML('TEF', nome, sKey, texto), order: STATUS[sKey].order };
+    });
+  }
+
   /* ── Render do painel ───────────────────────────────────────── */
   async function loadAll() {
     const painel = document.getElementById('painelIndicadores');
@@ -606,9 +634,10 @@
     const todos  = [];
 
     // Carrega todos os indicadores em paralelo
-    const [resPush, resEmail] = await Promise.allSettled([
+    const [resPush, resEmail, resTef] = await Promise.allSettled([
       loadPush(postos),
       loadEmail(postos),
+      loadTef(postos),
     ]);
 
     if (resPush.status === 'fulfilled') todos.push(...resPush.value);
@@ -620,6 +649,12 @@
     if (resEmail.status === 'fulfilled') todos.push(...resEmail.value);
     else todos.push({
       html: `<div class="ind-err"><i class="fas fa-exclamation-triangle mr-1"></i>Email: ${resEmail.reason?.message}</div>`,
+      order: 0
+    });
+
+    if (resTef.status === 'fulfilled') todos.push(...resTef.value);
+    else todos.push({
+      html: `<div class="ind-err"><i class="fas fa-exclamation-triangle mr-1"></i>TEF: ${resTef.reason?.message}</div>`,
       order: 0
     });
 

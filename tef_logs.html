@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TEF Recorrente — Logs</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+  <style>
+    :root { --sidebar-w: 220px; --sidebar-bg: #1a1d2e; --sidebar-active: #16213e; }
+    body { display: flex; min-height: 100vh; background: #f0f2f5; margin: 0; }
+    #sidebar {
+      width: var(--sidebar-w); min-width: var(--sidebar-w);
+      background: var(--sidebar-bg); color: #aab;
+      display: flex; flex-direction: column;
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 200; overflow-y: auto;
+    }
+    #sidebar .brand {
+      padding: 1rem 1.2rem; font-weight: 700; font-size: .95rem;
+      color: #fff; border-bottom: 1px solid #2d3050;
+      display: flex; align-items: center; gap: .6rem; flex-shrink: 0;
+    }
+    #sidebar .brand i { color: #4dabf7; font-size: 1.2rem; }
+    .nav-section {
+      padding: .5rem 1.2rem .15rem; font-size: .65rem; text-transform: uppercase;
+      color: #4a5070; letter-spacing: .08em; margin-top: .4rem;
+    }
+    #sidebar a.nav-link {
+      color: #8892b0; padding: .6rem 1.2rem; display: flex; align-items: center; gap: .55rem;
+      font-size: .875rem; border-left: 3px solid transparent;
+      transition: background .15s, color .15s; text-decoration: none;
+    }
+    #sidebar a.nav-link:hover { background: #232640; color: #cdd; }
+    #sidebar a.nav-link.active { background: var(--sidebar-active); color: #fff; border-left-color: #4dabf7; }
+    .sidebar-spacer { flex: 1; }
+    .sidebar-footer { border-top: 1px solid #2d3050; padding: .5rem 0; flex-shrink: 0; }
+    #main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    #topbar {
+      background: #fff; border-bottom: 1px solid #e2e6ea;
+      padding: .65rem 1.5rem; display: flex; align-items: center;
+      justify-content: space-between; position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .page-content { padding: 1.5rem; }
+    .stat-card { border: none; border-radius: .6rem; box-shadow: 0 1px 6px rgba(0,0,0,.07); }
+    .table th { font-size: .78rem; }
+    .table td { font-size: .82rem; vertical-align: middle; }
+  </style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="brand">
+    <i class="bi bi-credit-card-2-front-fill"></i>
+    TEF Recorrente
+  </div>
+  <nav class="mt-1">
+    <div class="nav-section">Painel</div>
+    <a href="/tef" class="nav-link">
+      <i class="bi bi-speedometer2"></i> Dashboard
+    </a>
+    <a href="/tef/logs" class="nav-link active">
+      <i class="bi bi-table"></i> Logs de Cobrança
+    </a>
+    <div class="nav-section mt-2">Navegação</div>
+    <a href="/mais_servicos" class="nav-link">
+      <i class="bi bi-grid-3x3-gap"></i> Mais Serviços
+    </a>
+    <a href="/" class="nav-link">
+      <i class="bi bi-house"></i> KPIs Home
+    </a>
+  </nav>
+  <div class="sidebar-spacer"></div>
+  <div class="sidebar-footer">
+    <form method="POST" action="/session/logout" style="display:inline;width:100%">
+      <button type="submit" class="nav-link btn btn-link w-100 text-start" style="color:#e06c75;border:none;background:none">
+        <i class="bi bi-box-arrow-left"></i> Sair
+      </button>
+    </form>
+  </div>
+</div>
+
+<div id="main">
+  <div id="topbar">
+    <div>
+      <small class="text-muted">
+        <i class="bi bi-credit-card-2-front-fill me-1" style="color:#4dabf7"></i>
+        Logs de Cobrança
+      </small>
+    </div>
+    <div><small class="text-muted" id="clock"></small></div>
+  </div>
+
+  <div class="page-content">
+
+    <!-- Filtros -->
+    <div class="card stat-card mb-3">
+      <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+          <div class="col-auto">
+            <label class="form-label small mb-1">Posto</label>
+            <select class="form-select form-select-sm" id="filterPosto">
+              <option value="">Todos</option>
+              <option value="A">A – Anchieta</option>
+              <option value="N">N – Nilópolis</option>
+              <option value="I">I – Nova Iguaçu</option>
+              <option value="X">X – CGX</option>
+              <option value="G">G – Campo Grande</option>
+              <option value="Y">Y – CGY</option>
+              <option value="B">B – Bangu</option>
+              <option value="R">R – Realengo</option>
+              <option value="M">M – Madureira</option>
+              <option value="C">C – Campinho</option>
+              <option value="D">D – Del Castilho</option>
+              <option value="J">J – JPA</option>
+              <option value="P">P – Rio das Pedras</option>
+            </select>
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">Status</label>
+            <select class="form-select form-select-sm" id="filterStatus">
+              <option value="">Todos</option>
+              <option value="aprovada">Aprovada</option>
+              <option value="negada">Negada</option>
+            </select>
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">Motivo</label>
+            <select class="form-select form-select-sm" id="filterErro" style="max-width:260px">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">Matrícula</label>
+            <input type="text" class="form-control form-control-sm" id="filterMatricula"
+                   placeholder="Ex: 12345" style="width:110px">
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">De</label>
+            <input type="date" class="form-control form-control-sm" id="filterDateFrom">
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">Até</label>
+            <input type="date" class="form-control form-control-sm" id="filterDateTo">
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-primary btn-sm" onclick="loadLogs(1)">
+              <i class="bi bi-search me-1"></i>Filtrar
+            </button>
+            <button class="btn btn-outline-secondary btn-sm ms-1" onclick="clearFilters()">
+              <i class="bi bi-x-lg me-1"></i>Limpar
+            </button>
+          </div>
+          <div class="col-auto ms-auto">
+            <span class="text-muted small" id="totalCount"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contagem por posto -->
+    <div id="postoCounts" class="mb-3 d-flex flex-wrap gap-2" style="display:none!important"></div>
+
+    <!-- Tabela -->
+    <div class="card stat-card">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover table-bordered mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>#</th>
+                <th>Data/Hora</th>
+                <th>Posto</th>
+                <th>Matrícula</th>
+                <th>Valor</th>
+                <th>Status</th>
+                <th>Resposta Cielo</th>
+                <th>Motivo</th>
+              </tr>
+            </thead>
+            <tbody id="logsBody">
+              <tr><td colspan="8" class="text-center py-4 text-muted">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paginação -->
+    <div class="d-flex justify-content-center mt-3" id="pagination"></div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const POSTOS_NAMES = {
+  'A': 'Anchieta', 'N': 'Nilópolis', 'I': 'Nova Iguaçu', 'X': 'CGX',
+  'G': 'Campo Grande', 'Y': 'CGY', 'B': 'Bangu', 'R': 'Realengo',
+  'M': 'Madureira', 'C': 'Campinho', 'D': 'Del Castilho', 'J': 'JPA',
+  'P': 'Rio das Pedras',
+};
+
+let currentPage = 1;
+
+function getFilters() {
+  return {
+    posto:     document.getElementById('filterPosto').value,
+    status:    document.getElementById('filterStatus').value,
+    erro:      document.getElementById('filterErro').value,
+    matricula: document.getElementById('filterMatricula').value,
+    date_from: document.getElementById('filterDateFrom').value,
+    date_to:   document.getElementById('filterDateTo').value,
+  };
+}
+
+function clearFilters() {
+  ['filterPosto','filterStatus','filterErro','filterMatricula','filterDateFrom','filterDateTo']
+    .forEach(id => document.getElementById(id).value = '');
+  loadLogs(1);
+}
+
+async function loadFilters() {
+  try {
+    const resp = await fetch('/api/tef/filters');
+    const data = await resp.json();
+    if (data.erro) return;
+    const selErro = document.getElementById('filterErro');
+    data.erros.forEach(e => {
+      const o = document.createElement('option');
+      o.value = e; o.textContent = e;
+      selErro.appendChild(o);
+    });
+  } catch(e) { /* silencia */ }
+}
+
+async function loadLogs(page) {
+  currentPage = page;
+  const f = getFilters();
+  const params = new URLSearchParams({ page });
+  Object.entries(f).forEach(([k, v]) => { if (v) params.set(k, v); });
+
+  try {
+    const resp = await fetch('/api/tef/logs?' + params);
+    const data = await resp.json();
+    if (data.erro || !data.rows) {
+      document.getElementById('logsBody').innerHTML =
+        `<tr><td colspan="8" class="text-center text-danger py-3">${data.erro || 'Resposta inválida da API'}</td></tr>`;
+      document.getElementById('totalCount').textContent = '';
+      document.getElementById('pagination').innerHTML = '';
+      return;
+    }
+    renderTable(data);
+    renderPagination(data);
+    renderPostoCounts(data.por_posto);
+    document.getElementById('totalCount').textContent =
+      data.total.toLocaleString('pt-BR') + ' registros';
+  } catch(e) {
+    document.getElementById('logsBody').innerHTML =
+      `<tr><td colspan="8" class="text-center text-danger py-3">Erro: ${e.message}</td></tr>`;
+  }
+}
+
+function renderTable(data) {
+  const tbody = document.getElementById('logsBody');
+  if (!data.rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Nenhum registro encontrado</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.rows.map(r => {
+    const aprov = r.aprovado === 1;
+    const badge = aprov
+      ? '<span class="badge bg-success">Aprovada</span>'
+      : '<span class="badge bg-danger">Negada</span>';
+    const valor = r.valor != null
+      ? 'R$ ' + Number(r.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})
+      : '–';
+    const rowCls = aprov ? '' : 'table-danger';
+    return `<tr class="${rowCls}">
+      <td class="text-muted">${r.id}</td>
+      <td>${fmtDt(r.datahora)}</td>
+      <td>
+        <span class="badge bg-dark">${r.posto || '–'}</span>
+        <small class="text-muted ms-1 d-none d-lg-inline">${POSTOS_NAMES[r.posto] || ''}</small>
+      </td>
+      <td>${esc(r.matricula) || '–'}</td>
+      <td class="text-end">${valor}</td>
+      <td>${badge}</td>
+      <td><code class="small">${esc(r.resposta_cielo) || '–'}</code></td>
+      <td class="text-truncate" style="max-width:220px" title="${esc(r.erro)}">${esc(r.erro) || '–'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderPostoCounts(porPosto) {
+  const wrap = document.getElementById('postoCounts');
+  if (!porPosto?.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  wrap.innerHTML =
+    '<small class="text-muted me-1 align-self-center">Por posto:</small>' +
+    porPosto.map(p => `
+      <span class="badge rounded-pill text-bg-light border" style="font-size:.75rem">
+        <strong>${p.posto}</strong>
+        <span class="text-muted ms-1">${POSTOS_NAMES[p.posto] || p.posto}</span>
+        <span class="ms-1 text-success">${p.aprov.toLocaleString('pt-BR')}✓</span>
+        <span class="ms-1 text-danger">${(p.cnt - p.aprov).toLocaleString('pt-BR')}✗</span>
+      </span>`).join('');
+}
+
+function renderPagination(data) {
+  const total = Math.ceil(data.total / data.per_page);
+  const pag = document.getElementById('pagination');
+  if (total <= 1) { pag.innerHTML = ''; return; }
+  const cur = data.page;
+  let items = `<li class="page-item ${cur===1?'disabled':''}">
+    <a class="page-link" href="#" onclick="loadLogs(${cur-1});return false">«</a></li>`;
+  const start = Math.max(1, cur-2), end = Math.min(total, cur+2);
+  for (let i = start; i <= end; i++) {
+    items += `<li class="page-item ${i===cur?'active':''}">
+      <a class="page-link" href="#" onclick="loadLogs(${i});return false">${i}</a></li>`;
+  }
+  items += `<li class="page-item ${cur===total?'disabled':''}">
+    <a class="page-link" href="#" onclick="loadLogs(${cur+1});return false">»</a></li>`;
+  pag.innerHTML = `<ul class="pagination pagination-sm">${items}</ul>`;
+}
+
+function fmtDt(dt) {
+  if (!dt) return '–';
+  return dt.replace('T', ' ').substring(0, 16);
+}
+
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+document.getElementById('filterMatricula').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadLogs(1);
+});
+
+setInterval(() => {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'});
+}, 1000);
+
+loadFilters();
+loadLogs(1);
+setInterval(() => loadLogs(currentPage), 60000);
+</script>
+</body>
+</html>
