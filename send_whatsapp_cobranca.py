@@ -24,21 +24,19 @@ from datetime import datetime, date, timezone
 from urllib.parse import quote_plus
 
 import requests
-import pyodbc
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 import wpp_cobranca_db as db
+from wpp_cobranca_sql import get_conn_posto, VIEW_NAME, build_where
 
 # ---------------------------------------------------------------------------
 # Configuração
 # ---------------------------------------------------------------------------
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 WPP_API_URL = os.getenv("WAPP_API_URL",  "https://whatsapp-api.camim.com.br")
-WPP_TOKEN   = os.getenv("WAPP_TOKEN",    "E2qv49VB(8E#%V3jkHeEskgtH*RbnJ{y")
-VIEW_NAME   = os.getenv("WAPP_VIEW",     "WEB_COB_DebitoEmAberto6Meses")
-ODBC_DRIVER = os.getenv("ODBC_DRIVER",   "ODBC Driver 17 for SQL Server")
+WPP_TOKEN   = os.getenv("WAPP_TOKEN",    "")
 POSTOS_ALL  = list("ANXYBRPCDGIMJ")
 
 logging.basicConfig(
@@ -53,99 +51,11 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Conexão SQL Server por posto
-# ---------------------------------------------------------------------------
-
-def _env(key, default=""):
-    v = os.getenv(key, default)
-    return v.strip() if isinstance(v, str) else v
-
-
-def get_conn_posto(posto: str):
-    host = _env(f"DB_HOST_{posto}")
-    base = _env(f"DB_BASE_{posto}")
-    if not host or not base:
-        return None
-    user = _env(f"DB_USER_{posto}")
-    pwd  = _env(f"DB_PASSWORD_{posto}")
-    port = _env(f"DB_PORT_{posto}", "1433")
-    encrypt    = _env("DB_ENCRYPT", "yes")
-    trust_cert = _env("DB_TRUST_CERT", "yes")
-    timeout    = _env("DB_TIMEOUT", "20")
-
-    conn_str = (
-        f"DRIVER={{{ODBC_DRIVER}}};"
-        f"SERVER=tcp:{host},{port};"
-        f"DATABASE={base};"
-        f"Encrypt={encrypt};TrustServerCertificate={trust_cert};"
-        f"Connection Timeout={timeout};"
-    )
-    if user:
-        conn_str += f"UID={user};PWD={pwd}"
-    else:
-        conn_str += "Trusted_Connection=yes"
-
-    try:
-        return pyodbc.connect(conn_str, timeout=int(timeout))
-    except Exception as e:
-        log.error(f"Erro ao conectar posto {posto}: {e}")
-        return None
-
-# ---------------------------------------------------------------------------
 # Query com filtros da campanha
 # ---------------------------------------------------------------------------
 
 def buscar_faturas(cursor, campanha: dict) -> list[dict]:
-    filtros = [
-        "telefonewhatsapp IS NOT NULL",
-        "telefonewhatsapp <> ''",
-        f"diasdebito >= {int(campanha['dias_atraso_min'])}",
-    ]
-    params = []
-
-    if campanha.get("dias_atraso_max"):
-        filtros.append(f"diasdebito <= {int(campanha['dias_atraso_max'])}")
-
-    if not campanha.get("incluir_cancelados"):
-        filtros.append("canceladoans = 0")
-
-    if campanha.get("sem_email"):
-        filtros.append("(email IS NULL OR email = '')")
-
-    if campanha.get("sexo"):
-        filtros.append("sexo = ?")
-        params.append(campanha["sexo"])
-
-    if campanha.get("idade_min") is not None:
-        filtros.append(f"idade >= {int(campanha['idade_min'])}")
-
-    if campanha.get("idade_max") is not None:
-        filtros.append(f"idade <= {int(campanha['idade_max'])}")
-
-    if campanha.get("nao_recorrente"):
-        filtros.append("clienterecorrente = 'NÃO'")
-
-    if campanha.get("operadora"):
-        filtros.append("operadora = ?")
-        params.append(campanha["operadora"])
-
-    if campanha.get("cobrador"):
-        filtros.append("cobradornome LIKE ?")
-        params.append(f"%{campanha['cobrador']}%")
-
-    if campanha.get("corretor"):
-        filtros.append("Corretor LIKE ?")
-        params.append(f"%{campanha['corretor']}%")
-
-    if campanha.get("bairro"):
-        filtros.append("bairro LIKE ?")
-        params.append(f"%{campanha['bairro']}%")
-
-    if campanha.get("rua"):
-        filtros.append("endereco LIKE ?")
-        params.append(f"%{campanha['rua']}%")
-
-    where = " AND ".join(filtros)
+    where, params = build_where(campanha)
     sql = f"""
         SELECT
             idreceita,

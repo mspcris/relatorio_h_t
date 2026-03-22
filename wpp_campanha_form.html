@@ -7,26 +7,40 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">
   <link rel="stylesheet" href="/css/style2.css">
   <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
   <style>
     html { font-size: 16px; }
     body { font-family: "Source Sans Pro", system-ui, sans-serif; font-size: 1rem; }
-    .section-title { font-weight: 700; font-size: .8rem; text-transform: uppercase;
-                     letter-spacing: .06em; color: #6c757d; margin: 1.2rem 0 .5rem; }
     .template-preview { background: #e9f5e9; border-left: 4px solid #28a745;
                          padding: .6rem .8rem; border-radius: 4px; font-size: .9rem;
                          white-space: pre-wrap; margin-top: .4rem; }
     .param-tags .badge { font-size: .8rem; margin-right: 4px; }
+    .select2-container--default .select2-selection--single {
+      height: calc(2.25rem + 2px);
+      border: 1px solid #ced4da;
+      border-radius: .25rem;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+      line-height: calc(2.25rem);
+      color: #495057;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+      height: calc(2.25rem + 2px);
+    }
+    .opcoes-carregando { color: #6c757d; font-size: .85rem; }
+    .preview-card { border: 1px solid #17a2b8; border-radius: .25rem; }
+    .preview-card .card-body { padding: .75rem 1rem; }
   </style>
 </head>
 <body class="hold-transition sidebar-mini">
 <div class="wrapper">
 
-  <!-- NAVBAR -->
   <nav class="main-header navbar navbar-expand navbar-white navbar-light">
     <ul class="navbar-nav">
       <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a></li>
@@ -34,7 +48,6 @@
     <span class="ml-2 font-weight-bold">{{ titulo }}</span>
   </nav>
 
-  <!-- SIDEBAR -->
   <aside class="main-sidebar sidebar-dark-primary elevation-4">
     <a href="/" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
     <div class="sidebar"><nav class="mt-2">
@@ -54,7 +67,6 @@
     </nav></div>
   </aside>
 
-  <!-- CONTEÚDO -->
   <div class="content-wrapper">
     <section class="content-header px-3 pt-3 pb-1">
       <h1>{{ titulo }}</h1>
@@ -62,7 +74,8 @@
     </section>
     <section class="content px-3 pb-4">
 
-    <form method="POST" action="{{ '/wpp/' + campanha.id|string + '/editar' if campanha else '/wpp/nova' }}">
+    <form method="POST" id="formCampanha"
+          action="{{ '/wpp/' + campanha.id|string + '/editar' if campanha else '/wpp/nova' }}">
 
       <!-- ── IDENTIFICAÇÃO ─────────────────────────────────────── -->
       <div class="card">
@@ -88,23 +101,23 @@
             </div>
           </div>
 
-          <!-- Template (busca dinâmica da API) -->
-          <div class="section-title">Template WhatsApp</div>
-          <div id="templates-loading" class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i> Carregando templates da Meta...</div>
-          <div id="templates-container" style="display:none">
-            <div class="form-group">
-              <label>Template <span class="text-danger">*</span></label>
-              <select name="template" id="template-select" class="form-control" onchange="mostrarPreview()">
-              </select>
+          <!-- Template WhatsApp -->
+          <div class="form-group mt-2">
+            <label class="font-weight-bold" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:#6c757d">
+              Template WhatsApp
+            </label>
+            <div id="templates-loading" class="text-muted small"><i class="fas fa-spinner fa-spin mr-1"></i> Carregando templates...</div>
+            <div id="templates-container" style="display:none">
+              <select name="template" id="template-select" class="form-control" onchange="mostrarPreview()"></select>
               <div id="template-preview" class="template-preview mt-2" style="display:none"></div>
               <div id="template-params" class="param-tags mt-1"></div>
             </div>
-          </div>
-          <div id="templates-erro" class="text-danger" style="display:none">
-            <i class="fas fa-exclamation-triangle mr-1"></i> Não foi possível carregar templates.
-            <input type="text" name="template" class="form-control mt-1"
-                   value="{{ campanha.template if campanha else 'notificacao_de_fatura' }}"
-                   placeholder="Nome do template">
+            <div id="templates-erro" style="display:none">
+              <div class="text-warning small mb-1"><i class="fas fa-exclamation-triangle mr-1"></i> Templates não carregados — digite o nome manualmente.</div>
+              <input type="text" name="template" class="form-control"
+                     value="{{ campanha.template if campanha else 'notificacao_de_fatura' }}"
+                     placeholder="Nome do template">
+            </div>
           </div>
         </div>
       </div>
@@ -113,18 +126,21 @@
       <div class="card">
         <div class="card-header"><strong>Postos</strong></div>
         <div class="card-body">
-          <p class="text-muted small">Selecione os postos que esta campanha deve processar.</p>
+          <p class="text-muted small mb-2">Selecione os postos. Os filtros de cliente abaixo serão carregados automaticamente.</p>
           <div class="row">
             {% for p in postos_disponiveis %}
             <div class="col-auto">
               <div class="custom-control custom-checkbox">
-                <input type="checkbox" class="custom-control-input" id="posto_{{ p }}"
+                <input type="checkbox" class="custom-control-input posto-cb" id="posto_{{ p }}"
                        name="postos" value="{{ p }}"
                        {{ 'checked' if campanha and p in campanha.postos else '' }}>
                 <label class="custom-control-label font-weight-bold" for="posto_{{ p }}">{{ p }}</label>
               </div>
             </div>
             {% endfor %}
+          </div>
+          <div id="postos-hint" class="text-muted small mt-2" style="display:none">
+            <i class="fas fa-spinner fa-spin mr-1"></i> Carregando opções dos postos...
           </div>
         </div>
       </div>
@@ -149,6 +165,21 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- ── PRÉ-VISUALIZAÇÃO ─────────────────────────────────────── -->
+      <div class="mb-3">
+        <button type="button" id="btn-preview" class="btn btn-outline-info"
+                onclick="preVisualizarRegistros()">
+          <i class="fas fa-search mr-1"></i> Pré-visualizar registros
+        </button>
+        <small class="text-muted ml-2">Quantos clientes se enquadram nos filtros definidos?</small>
+      </div>
+      <div id="preview-result" class="preview-card card mb-3" style="display:none">
+        <div class="card-body">
+          <h6 class="text-info mb-2"><i class="fas fa-chart-bar mr-1"></i> Estimativa de Alcance</h6>
+          <div id="preview-body"></div>
         </div>
       </div>
 
@@ -187,9 +218,12 @@
             <div class="col-md-3">
               <div class="form-group">
                 <label>Operadora</label>
-                <input type="text" name="operadora" class="form-control"
-                       value="{{ campanha.operadora if campanha and campanha.operadora else '' }}"
-                       placeholder="Ex: CAMIM (vazio = todas)">
+                <select name="operadora" id="sel_operadora" class="form-control wpp-sel2">
+                  <option value="">— Todas —</option>
+                  {% if campanha and campanha.operadora %}
+                  <option value="{{ campanha.operadora }}" selected>{{ campanha.operadora }}</option>
+                  {% endif %}
+                </select>
               </div>
             </div>
 
@@ -198,19 +232,25 @@
 
             <div class="col-md-4">
               <div class="form-group">
-                <label>Cobrador <small class="text-muted">(busca parcial)</small></label>
-                <input type="text" name="cobrador" class="form-control"
-                       value="{{ campanha.cobrador if campanha and campanha.cobrador else '' }}"
-                       placeholder="Ex: DIEGO (vazio = todos)">
+                <label>Cobrador</label>
+                <select name="cobrador" id="sel_cobrador" class="form-control wpp-sel2">
+                  <option value="">— Todos —</option>
+                  {% if campanha and campanha.cobrador %}
+                  <option value="{{ campanha.cobrador }}" selected>{{ campanha.cobrador }}</option>
+                  {% endif %}
+                </select>
               </div>
             </div>
 
             <div class="col-md-4">
               <div class="form-group">
-                <label>Corretor <small class="text-muted">(busca parcial)</small></label>
-                <input type="text" name="corretor" class="form-control"
-                       value="{{ campanha.corretor if campanha and campanha.corretor else '' }}"
-                       placeholder="Ex: SEDE (vazio = todos)">
+                <label>Corretor</label>
+                <select name="corretor" id="sel_corretor" class="form-control wpp-sel2">
+                  <option value="">— Todos —</option>
+                  {% if campanha and campanha.corretor %}
+                  <option value="{{ campanha.corretor }}" selected>{{ campanha.corretor }}</option>
+                  {% endif %}
+                </select>
               </div>
             </div>
 
@@ -219,24 +259,30 @@
 
             <div class="col-md-4">
               <div class="form-group">
-                <label>Bairro <small class="text-muted">(busca parcial)</small></label>
-                <input type="text" name="bairro" class="form-control"
-                       value="{{ campanha.bairro if campanha and campanha.bairro else '' }}"
-                       placeholder="Ex: Anchieta">
+                <label>Bairro</label>
+                <select name="bairro" id="sel_bairro" class="form-control wpp-sel2">
+                  <option value="">— Todos —</option>
+                  {% if campanha and campanha.bairro %}
+                  <option value="{{ campanha.bairro }}" selected>{{ campanha.bairro }}</option>
+                  {% endif %}
+                </select>
               </div>
             </div>
 
             <div class="col-md-4">
               <div class="form-group">
-                <label>Rua / Endereço <small class="text-muted">(busca parcial)</small></label>
-                <input type="text" name="rua" class="form-control"
-                       value="{{ campanha.rua if campanha and campanha.rua else '' }}"
-                       placeholder="Ex: Rua Betonica">
+                <label>Rua / Endereço</label>
+                <select name="rua" id="sel_rua" class="form-control wpp-sel2">
+                  <option value="">— Todas —</option>
+                  {% if campanha and campanha.rua %}
+                  <option value="{{ campanha.rua }}" selected>{{ campanha.rua }}</option>
+                  {% endif %}
+                </select>
               </div>
             </div>
 
           </div>
-          <div class="row">
+          <div class="row mt-2">
             <div class="col-auto">
               <div class="custom-control custom-switch">
                 <input type="checkbox" class="custom-control-input" id="sw_cancelados"
@@ -258,7 +304,7 @@
                 <input type="checkbox" class="custom-control-input" id="sw_nrec"
                        name="nao_recorrente" value="1"
                        {{ 'checked' if campanha and campanha.nao_recorrente }}>
-                <label class="custom-control-label" for="sw_nrec">Apenas clientes não recorrentes</label>
+                <label class="custom-control-label" for="sw_nrec">Apenas não recorrentes</label>
               </div>
             </div>
           </div>
@@ -289,16 +335,16 @@
                 <label>Dias da semana</label>
                 <select name="dias_semana" class="form-control">
                   {% set ds = campanha.dias_semana if campanha else '0,1,2,3,4' %}
-                  <option value="0,1,2,3,4"       {{ 'selected' if ds == '0,1,2,3,4' }}>Seg–Sex</option>
-                  <option value="0,1,2,3,4,5"     {{ 'selected' if ds == '0,1,2,3,4,5' }}>Seg–Sáb</option>
-                  <option value="0,1,2,3,4,5,6"   {{ 'selected' if ds == '0,1,2,3,4,5,6' }}>Todos os dias</option>
-                  <option value="0,2,4"            {{ 'selected' if ds == '0,2,4' }}>Seg, Qua, Sex</option>
+                  <option value="0,1,2,3,4"     {{ 'selected' if ds == '0,1,2,3,4' }}>Seg–Sex</option>
+                  <option value="0,1,2,3,4,5"   {{ 'selected' if ds == '0,1,2,3,4,5' }}>Seg–Sáb</option>
+                  <option value="0,1,2,3,4,5,6" {{ 'selected' if ds == '0,1,2,3,4,5,6' }}>Todos os dias</option>
+                  <option value="0,2,4"          {{ 'selected' if ds == '0,2,4' }}>Seg, Qua, Sex</option>
                 </select>
               </div>
             </div>
             <div class="col-md-2">
               <div class="form-group">
-                <label>Intervalo entre reenvios (dias)</label>
+                <label>Intervalo reenvios (dias)</label>
                 <input type="number" name="intervalo_dias" class="form-control" min="1"
                        value="{{ campanha.intervalo_dias if campanha else 7 }}">
               </div>
@@ -321,17 +367,155 @@
 </div>
 
 <script>
-// Dados dos templates carregados da API
+// ── Templates ────────────────────────────────────────────────────────────────
 let _templates = [];
 const TEMPLATE_ATUAL = "{{ campanha.template if campanha else 'notificacao_de_fatura' }}";
 
+function mostrarPreview() {
+  const sel  = document.getElementById('template-select');
+  const nome = sel ? sel.value : '';
+  const t    = _templates.find(x => x.name === nome);
+  const prev = document.getElementById('template-preview');
+  const tags = document.getElementById('template-params');
+  if (t) {
+    prev.textContent  = t.preview || '(sem preview)';
+    prev.style.display = 'block';
+    tags.innerHTML = t.params && t.params.length
+      ? '<small class="text-muted mr-1">Parâmetros:</small>' + t.params.map(p => `<span class="badge badge-info">${p}</span>`).join(' ')
+      : '';
+  }
+}
+
+// ── Selects dinâmicos ─────────────────────────────────────────────────────────
+const CAMPOS_SEL = ['operadora','cobrador','corretor','bairro','rua'];
+
+function postosChecados() {
+  return Array.from(document.querySelectorAll('.posto-cb:checked')).map(x => x.value);
+}
+
+async function carregarOpcoes(campo) {
+  const postos = postosChecados();
+  const selId  = `sel_${campo}`;
+  const sel    = document.getElementById(selId);
+  if (!sel) return;
+
+  const valorAtual = sel.value;
+
+  // Esvazia mantendo placeholder e valor atual (para modo edição)
+  $(sel).empty().append('<option value="">— ' + (campo === 'rua' ? 'Todas' : 'Todos') + ' —</option>');
+
+  if (!postos.length) {
+    $(sel).trigger('change');
+    return;
+  }
+
+  try {
+    const qs = new URLSearchParams({ campo, postos: postos.join(',') });
+    const r  = await fetch(`/wpp/api/opcoes?${qs}`);
+    const data = await r.json();
+    (data.opcoes || []).forEach(op => {
+      const selected = (op === valorAtual);
+      $(sel).append(new Option(op, op, false, selected));
+    });
+  } catch (e) {
+    console.warn('opcoes erro:', campo, e);
+  }
+  $(sel).trigger('change'); // atualiza select2
+}
+
+function carregarTodasOpcoes() {
+  document.getElementById('postos-hint').style.display = 'block';
+  Promise.all(CAMPOS_SEL.map(carregarOpcoes)).finally(() => {
+    document.getElementById('postos-hint').style.display = 'none';
+  });
+}
+
+// ── Preview ───────────────────────────────────────────────────────────────────
+async function preVisualizarRegistros() {
+  const postos = postosChecados();
+  if (!postos.length) {
+    alert('Selecione pelo menos um posto antes de pré-visualizar.');
+    return;
+  }
+  const btn = document.getElementById('btn-preview');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Consultando...';
+
+  const resultDiv  = document.getElementById('preview-result');
+  const bodyDiv    = document.getElementById('preview-body');
+  resultDiv.style.display = 'none';
+
+  try {
+    const formData = new FormData(document.getElementById('formCampanha'));
+    const r = await fetch('/wpp/api/preview', { method: 'POST', body: formData });
+    const data = await r.json();
+
+    if (data.error) {
+      bodyDiv.innerHTML = `<span class="text-danger"><i class="fas fa-times mr-1"></i>${data.error}</span>`;
+    } else {
+      const nf = (data.total_faturas  || 0).toLocaleString('pt-BR');
+      const nt = (data.total_telefones || 0).toLocaleString('pt-BR');
+      let html = `
+        <div class="row">
+          <div class="col-auto mr-4">
+            <div class="text-muted small">Faturas em aberto</div>
+            <div class="h4 text-info mb-0">${nf}</div>
+          </div>
+          <div class="col-auto">
+            <div class="text-muted small">Telefones únicos <span class="badge badge-info">envios estimados</span></div>
+            <div class="h4 text-success mb-0">${nt}</div>
+          </div>
+        </div>`;
+
+      const pp = data.por_posto || {};
+      const postosKeys = Object.keys(pp);
+      if (postosKeys.length > 1) {
+        html += '<div class="mt-2"><small class="text-muted">Por posto: </small>';
+        postosKeys.forEach(p => {
+          const v = pp[p];
+          if (v.erro) {
+            html += `<span class="badge badge-danger mr-1">${p}: erro</span>`;
+          } else {
+            html += `<span class="badge badge-secondary mr-1">${p}: ${(v.telefones||0)} tel / ${(v.faturas||0)} fat</span>`;
+          }
+        });
+        html += '</div>';
+      }
+      bodyDiv.innerHTML = html;
+    }
+    resultDiv.style.display = 'block';
+  } catch (e) {
+    bodyDiv.innerHTML = `<span class="text-danger"><i class="fas fa-times mr-1"></i>Erro ao consultar: ${e.message}</span>`;
+    resultDiv.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-search mr-1"></i> Pré-visualizar registros';
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+
+  // Inicializa select2 em todos os selects de filtro
+  $('.wpp-sel2').select2({ placeholder: '— Todos —', allowClear: true, width: '100%' });
+
+  // Checkboxes de posto → recarregar opções
+  document.querySelectorAll('.posto-cb').forEach(cb => {
+    cb.addEventListener('change', carregarTodasOpcoes);
+  });
+
+  // Se já há postos marcados (modo edição), carrega opções imediatamente
+  if (postosChecados().length > 0) {
+    carregarTodasOpcoes();
+  }
+
+  // Templates
   fetch('/wpp/api/templates')
     .then(r => r.json())
     .then(data => {
       _templates = data.templates || [];
       document.getElementById('templates-loading').style.display = 'none';
-      if (_templates.length === 0) {
+      if (!_templates.length) {
         document.getElementById('templates-erro').style.display = 'block';
         return;
       }
@@ -351,24 +535,6 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('templates-erro').style.display = 'block';
     });
 });
-
-function mostrarPreview() {
-  const sel = document.getElementById('template-select');
-  const nome = sel.value;
-  const t = _templates.find(x => x.name === nome);
-  const prev = document.getElementById('template-preview');
-  const params = document.getElementById('template-params');
-  if (t) {
-    prev.textContent = t.preview || '(sem preview)';
-    prev.style.display = 'block';
-    if (t.params && t.params.length) {
-      params.innerHTML = '<small class="text-muted mr-1">Parâmetros:</small>' +
-        t.params.map(p => `<span class="badge badge-info">${p}</span>`).join(' ');
-    } else {
-      params.innerHTML = '';
-    }
-  }
-}
 </script>
 </body>
 </html>

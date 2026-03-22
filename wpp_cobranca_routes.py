@@ -25,6 +25,7 @@ from flask import Blueprint, request, jsonify, render_template, redirect, url_fo
 # Importa db do diretório de ETL
 sys.path.insert(0, '/opt/relatorio_h_t')
 import wpp_cobranca_db as db
+import wpp_cobranca_sql as sql_helper
 
 from dotenv import load_dotenv
 load_dotenv('/opt/relatorio_h_t/.env')
@@ -88,6 +89,41 @@ def _fetch_templates() -> list[dict]:
 # ---------------------------------------------------------------------------
 # API helpers (JSON)
 # ---------------------------------------------------------------------------
+
+@wpp_bp.get("/api/opcoes")
+def api_opcoes():
+    """Retorna valores distintos de um campo da view para os postos informados."""
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    campo  = request.args.get("campo", "")
+    postos = [p.strip() for p in request.args.get("postos", "").split(",") if p.strip()]
+    if campo not in sql_helper.CAMPO_SQL:
+        return jsonify({"error": "campo inválido"}), 400
+    if not postos:
+        return jsonify({"opcoes": []})
+    try:
+        opcoes = sql_helper.buscar_opcoes(postos, campo)
+        return jsonify({"opcoes": opcoes})
+    except Exception as e:
+        return jsonify({"opcoes": [], "erro": str(e)[:200]})
+
+
+@wpp_bp.post("/api/preview")
+def api_preview():
+    """Conta registros que se enquadram nos filtros da campanha (sem enviar)."""
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    campanha = _form_to_dict(request.form)
+    if not campanha.get("postos"):
+        return jsonify({"error": "nenhum posto selecionado"}), 400
+    try:
+        resultado = sql_helper.contar_preview(campanha)
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"error": str(e)[:200]}), 500
+
 
 @wpp_bp.get("/api/postos")
 def api_postos():
