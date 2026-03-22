@@ -384,12 +384,24 @@ function renderPostoTable(postos) {
   }).join('');
 }
 
+function showApiError(msg) {
+  document.getElementById('alertBanner').innerHTML =
+    `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Erro na API:</strong> ${msg}</div>`;
+}
+
 async function loadDashboard() {
   try {
     const resp = await fetch('/api/email_clientes/dashboard');
+    if (!resp.ok) {
+      showApiError(`HTTP ${resp.status} — ${resp.statusText}`);
+      return;
+    }
     const data = await resp.json();
 
-    if (data.erro) { console.error(data.erro); return; }
+    if (data.erro) {
+      showApiError(data.erro);
+      return;
+    }
 
     updateKPIs(data.hoje, data.sync);
     updateAlerts(data.postos_sem_hoje, data.ultimo_batch);
@@ -400,7 +412,7 @@ async function loadDashboard() {
     document.getElementById('lastUpdated').textContent =
       'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
   } catch(e) {
-    console.error('Erro ao carregar dashboard:', e);
+    showApiError(e.message);
   }
 }
 
