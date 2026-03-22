@@ -297,15 +297,19 @@ function renderEvolucaoChart(dados) {
   // Coletar categorias únicas
   const cats = [...new Set(dados.map(r => r.categoria))].sort();
 
-  const datasets = cats.map((cat, i) => ({
-    label: cat,
-    data: days.map(d => {
+  const datasets = cats.map((cat, i) => {
+    const data = days.map(d => {
       const e = dados.find(x => x.dia === d && x.categoria === cat);
       return e ? e.total : 0;
-    }),
-    backgroundColor: CAT_COLORS[i % CAT_COLORS.length],
-    stack: 's',
-  }));
+    });
+    const total = data.reduce((a, b) => a + b, 0);
+    return {
+      label: `${cat}  ${total.toLocaleString('pt-BR')}`,
+      data,
+      backgroundColor: CAT_COLORS[i % CAT_COLORS.length],
+      stack: 's',
+    };
+  });
 
   chartEvolucao = new Chart(document.getElementById('evolucaoChart'), {
     type: 'bar',
@@ -319,7 +323,10 @@ function renderEvolucaoChart(dados) {
         legend: { position: 'bottom', labels: { boxWidth: 12 } },
         tooltip: {
           callbacks: {
-            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString('pt-BR')}`,
+            label: ctx => {
+              const cat = ctx.dataset.label.replace(/\s+[\d.,]+$/, '').trim();
+              return ` ${cat}: ${ctx.parsed.y.toLocaleString('pt-BR')}`;
+            },
           },
         },
       },
