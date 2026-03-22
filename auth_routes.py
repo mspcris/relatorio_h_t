@@ -801,3 +801,70 @@ def indicadores_push():
 
     except Exception as exc:
         return jsonify({"erro": str(exc)}), 500
+
+
+# ── Indicadores: Email de Cobrança ───────────────────────────────────────────
+
+@auth_bp.get("/api/indicadores/email")
+def indicadores_email():
+    """Retorna último envio de email por (posto, categoria) a partir do camim_kpi.db."""
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
+    hoje   = date.today()
+
+    try:
+        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
+
+        rows = conn.execute("""
+            SELECT posto,
+                   titulo_categoria,
+                   MAX(datahora)  AS ultimo_envio,
+                   COUNT(*)       AS total
+            FROM ind_email
+            GROUP BY posto, titulo_categoria
+            ORDER BY posto, titulo_categoria
+        """).fetchall()
+
+        sync_row = conn.execute("""
+            SELECT synced_at, total_records, status, mensagem
+            FROM   ind_sync_log
+            WHERE  indicador = 'email'
+            ORDER BY id DESC LIMIT 1
+        """).fetchone()
+
+        conn.close()
+
+        dados = {}
+        for posto, categoria, ultimo_str, total in rows:
+            posto = (posto or "").strip().upper()
+            if user_postos and posto not in user_postos:
+                continue
+            try:
+                ultimo_dt = datetime.fromisoformat(str(ultimo_str)).date()
+                dias = (hoje - ultimo_dt).days
+            except Exception:
+                dias = 999
+            chave = f"{posto}|{categoria}"
+            dados[chave] = {
+                "posto":         posto,
+                "categoria":     categoria,
+                "ultimo_envio":  ultimo_str,
+                "dias":          dias,
+                "total":         total,
+            }
+
+        return jsonify({
+            "dados": dados,
+            "sync":  {
+                "synced_at":     sync_row[0] if sync_row else None,
+                "total_records": sync_row[1] if sync_row else 0,
+                "status":        sync_row[2] if sync_row else None,
+                "mensagem":      sync_row[3] if sync_row else None,
+            },
+        })
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500

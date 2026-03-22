@@ -371,6 +371,9 @@
         </div>
       </div>
 
+      <!-- Aviso de sync desatualizado (preenchido via JS só se necessário) -->
+      <div id="syncAviso" style="font-size:.78rem;color:#e65100;margin-bottom:6px"></div>
+
       <!-- Painel de indicadores (ordenado do pior ao melhor) -->
       <div id="painelIndicadores">
         <!-- preenchido via JS -->
@@ -528,6 +531,64 @@
     });
   }
 
+  /* ── Indicador: Email de Cobrança ──────────────────────────── */
+  async function loadEmail(postos) {
+    const resp = await fetch('/api/indicadores/email', { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error(`Email API: ${resp.status}`);
+    const json = await resp.json();
+    if (json.erro) throw new Error(json.erro);
+
+    const { dados, sync } = json;
+
+    // Mostra aviso de sync se houver erro ou dado antigo
+    if (sync?.synced_at) {
+      const syncDt = new Date(sync.synced_at.replace(' ', 'T'));
+      const horas  = Math.round((Date.now() - syncDt) / 36e5);
+      if (sync.status === 'erro' || horas > 26) {
+        const aviso = document.getElementById('syncAviso');
+        if (aviso) aviso.textContent =
+          `⚠ Email: último sync ${sync.synced_at} (${horas}h atrás)${sync.status === 'erro' ? ' — ERRO' : ''}`;
+      }
+    }
+
+    const postosSet = new Set(postos);
+    const mostrar1Posto = postos.length === 1;
+
+    // Agrupa por categoria, filtra por postos selecionados
+    const porCategoria = {};
+    for (const item of Object.values(dados)) {
+      if (!postosSet.has(item.posto)) continue;
+      const cat = item.categoria || '(sem categoria)';
+      if (!porCategoria[cat]) porCategoria[cat] = [];
+      porCategoria[cat].push(item);
+    }
+
+    const itens = [];
+    for (const [cat, lista] of Object.entries(porCategoria)) {
+      // Para cada categoria, mostra um item por posto (ou o pior quando "Todos")
+      if (mostrar1Posto) {
+        const it = lista[0];
+        const sKey = diasParaStatus(it.dias);
+        const texto = it.ultimo_envio
+          ? `${fmtDias(it.dias)} · ${it.ultimo_envio.slice(0, 16)} · ${it.total} enviados`
+          : fmtDias(it.dias);
+        itens.push({ html: barraHTML('EMAIL', cat, sKey, texto), order: STATUS[sKey].order });
+      } else {
+        // vários postos: um item por posto dentro da categoria
+        for (const it of lista) {
+          const sKey = diasParaStatus(it.dias);
+          const texto = it.ultimo_envio
+            ? `${fmtDias(it.dias)} · ${it.ultimo_envio.slice(0, 16)}`
+            : fmtDias(it.dias);
+          const nome = `${cat} — Posto ${it.posto}`;
+          itens.push({ html: barraHTML('EMAIL', nome, sKey, texto), order: STATUS[sKey].order });
+        }
+      }
+    }
+
+    return itens;
+  }
+
   /* ── Render do painel ───────────────────────────────────────── */
   async function loadAll() {
     const painel = document.getElementById('painelIndicadores');
@@ -535,22 +596,34 @@
       <div class="ind-group">
         <div class="ind-skeleton"></div>
         <div class="ind-skeleton"></div>
+        <div class="ind-skeleton"></div>
       </div>`;
+
+    const aviso = document.getElementById('syncAviso');
+    if (aviso) aviso.textContent = '';
 
     const postos = postosSelecionados();
     const todos  = [];
 
-    try {
-      const push = await loadPush(postos);
-      todos.push(...push);
-    } catch (e) {
-      todos.push({
-        html: `<div class="ind-err"><i class="fas fa-exclamation-triangle mr-1"></i>Push: ${e.message}</div>`,
-        order: 0
-      });
-    }
+    // Carrega todos os indicadores em paralelo
+    const [resPush, resEmail] = await Promise.allSettled([
+      loadPush(postos),
+      loadEmail(postos),
+    ]);
 
-    // Ordenação final (pior primeiro)
+    if (resPush.status === 'fulfilled') todos.push(...resPush.value);
+    else todos.push({
+      html: `<div class="ind-err"><i class="fas fa-exclamation-triangle mr-1"></i>Push: ${resPush.reason?.message}</div>`,
+      order: 0
+    });
+
+    if (resEmail.status === 'fulfilled') todos.push(...resEmail.value);
+    else todos.push({
+      html: `<div class="ind-err"><i class="fas fa-exclamation-triangle mr-1"></i>Email: ${resEmail.reason?.message}</div>`,
+      order: 0
+    });
+
+    // Ordenação final: pior (menor order) primeiro
     todos.sort((a, b) => a.order - b.order);
 
     if (!todos.length) {
