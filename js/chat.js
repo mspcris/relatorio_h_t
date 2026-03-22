@@ -23,6 +23,13 @@
     openai:    { label: 'OpenAI',    color: '#10a37f' },
     anthropic: { label: 'Anthropic', color: '#d4a017' }
   };
+
+  /* ─── Ícones dos provedores ─── */
+  const PROVIDER_ICONS = {
+    groq: '<span style="font-size:15px;line-height:1">🤖</span>',
+    openai: `<svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#10a37f" d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zm-9.022 12.61a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681V9.134l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.475 4.475 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071.008L4.25 14.633a4.504 4.504 0 0 1-1.91-6.737zm16.597 3.855l-5.843-3.387 2.02-1.164a.076.076 0 0 1 .071-.008l4.57 2.638a4.5 4.5 0 0 1-.696 8.118v-5.569a.795.795 0 0 0-.463-.628zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.572-2.638a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08-4.78 2.76a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/></svg>`,
+    anthropic: `<svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#d4a017" d="M13.827 3.52h-3.654L5.443 20h3.33l.862-2.538h4.73l.862 2.538h3.33L13.827 3.52zm-3.237 11.19 1.61-4.74 1.61 4.74H10.59z"/></svg>`
+  };
   const PROVIDER_DEFAULT = 'groq';
 
   const ChatIA = {
@@ -73,6 +80,9 @@
 .iad-type{--reveal:0%;-webkit-mask-image:linear-gradient(90deg,#000 calc(var(--reveal)),transparent 0);mask-image:linear-gradient(90deg,#000 calc(var(--reveal)),transparent 0)}
 .iad-type.caret::after{content:'';display:inline-block;width:2px;height:1em;vertical-align:baseline;background:#ddd;margin-left:2px;animation:iadBlink 1s step-end infinite}
 @keyframes iadBlink{50%{opacity:0}}
+.iad-prov-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.iad-status-msg{opacity:.75;font-size:.82rem;transition:opacity .22s ease}
+.iad-status-msg.iad-fade-out{opacity:0}
 #iadProvBar{display:flex;gap:4px;padding:4px 12px 6px;background:#1a1a1a;border-bottom:1px solid #2a2a2a;flex-shrink:0}
 #iadProvBar button{font-size:.75rem;padding:2px 10px;border-radius:20px;border:1px solid #444;background:transparent;color:#aaa;cursor:pointer;transition:all .15s}
 #iadProvBar button.active{color:#fff;font-weight:600}
@@ -461,15 +471,45 @@
 
     /* ═══════════════════ SPINNER ═══════════════════ */
     _dotsStart() {
+      const msgs = [
+        'Recebendo dados…',
+        'Analisando KPI…',
+        'Enviando dados para Pandas…',
+        'Enviando para LLM…',
+        'Recebendo Resposta…',
+      ];
+      // Insere "Gastando seus tokens :)" em posição aleatória
+      msgs.splice(Math.floor(Math.random() * (msgs.length + 1)), 0, 'Gastando seus tokens :)');
+
+      const icon = PROVIDER_ICONS[this._state.provider] || PROVIDER_ICONS.groq;
+
       const wrap = document.createElement('div');
       wrap.id = '_iadSpinner';
       wrap.className = 'iad-loading';
-      wrap.innerHTML = '<span class="iad-spinner"></span><span style="opacity:.55;font-size:.8rem">Analisando…</span>';
+      wrap.style.gap = '8px';
+      wrap.innerHTML = `<span class="iad-prov-icon">${icon}</span><span class="iad-spinner"></span><span id="_iadStatusMsg" class="iad-status-msg">${msgs[0]}</span>`;
       this._outBox().appendChild(wrap);
       this._scrollBottom();
+
+      let idx = 1;
+      this._dotsInterval = setInterval(() => {
+        const el = document.getElementById('_iadStatusMsg');
+        if (!el) return;
+        el.classList.add('iad-fade-out');
+        setTimeout(() => {
+          if (!document.getElementById('_iadStatusMsg')) return;
+          el.textContent = msgs[idx % msgs.length];
+          el.classList.remove('iad-fade-out');
+          idx++;
+        }, 230);
+      }, 1700);
     },
 
     _dotsStop() {
+      if (this._dotsInterval) {
+        clearInterval(this._dotsInterval);
+        this._dotsInterval = null;
+      }
       const el = document.getElementById('_iadSpinner');
       if (el) el.remove();
     },
