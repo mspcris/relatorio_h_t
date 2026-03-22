@@ -134,10 +134,11 @@ def normalizar_titulo(titulo: str) -> str:
 # ── Categorização canônica ────────────────────────────────────────────────────
 
 _CAT_RULES = [
-    (re.compile(r'\bboleto\b',           re.I), "Boleto"),
-    (re.compile(r'\bfalta\b',            re.I), "Falta do Médico"),
-    (re.compile(r'\bcancelamento\b',     re.I), "Cancelamento"),
-    (re.compile(r'\bnota\s*fiscal\b',    re.I), "Nota Fiscal"),
+    (re.compile(r'\bboleto\b',                    re.I), "Boleto"),
+    (re.compile(r'\bfalta\b',                     re.I), "Falta do Médico"),
+    (re.compile(r'\bcancelamento\b',              re.I), "Cancelamento"),
+    (re.compile(r'\bnota\s*fiscal\b',             re.I), "Nota Fiscal"),
+    (re.compile(r'\bsolicitação\s+de\s+nova\s+amostra\b', re.I), "Solicitação de Nova Amostra"),
 ]
 
 

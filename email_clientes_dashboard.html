@@ -315,7 +315,14 @@ function renderEvolucaoChart(dados) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString('pt-BR')}`,
+          },
+        },
+      },
       scales: {
         x: { stacked: true, grid: { display: false } },
         y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },

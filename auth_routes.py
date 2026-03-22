@@ -877,10 +877,11 @@ import re as _re
 _RE_EMAIL_CODIGO_PREF = _re.compile(r'^\d[\w\d]*\s*[-–]\s*')
 
 _EMAIL_CAT_RULES = [
-    (_re.compile(r'\bboleto\b',        _re.I), "Boleto"),
-    (_re.compile(r'\bfalta\b',         _re.I), "Falta do Médico"),
-    (_re.compile(r'\bcancelamento\b',  _re.I), "Cancelamento"),
-    (_re.compile(r'\bnota\s*fiscal\b', _re.I), "Nota Fiscal"),
+    (_re.compile(r'\bboleto\b',                             _re.I), "Boleto"),
+    (_re.compile(r'\bfalta\b',                              _re.I), "Falta do Médico"),
+    (_re.compile(r'\bcancelamento\b',                       _re.I), "Cancelamento"),
+    (_re.compile(r'\bnota\s*fiscal\b',                      _re.I), "Nota Fiscal"),
+    (_re.compile(r'\bsolicitação\s+de\s+nova\s+amostra\b',  _re.I), "Solicitação de Nova Amostra"),
 ]
 
 def _clean_cat(cat: str) -> str:
