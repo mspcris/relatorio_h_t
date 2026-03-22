@@ -262,7 +262,7 @@ jobs:
           set -euxo pipefail
           DEST=/opt/camim-auth
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
-          for f in app.py auth_db.py auth_routes.py migrate_usuarios.py ia_router_openai.py llm_client_openai.py llm_client_anthropic.py llm_client.py ia_context_builder.py; do
+          for f in app.py auth_db.py auth_routes.py migrate_usuarios.py ia_router_openai.py llm_client_openai.py llm_client_anthropic.py llm_client.py ia_context_builder.py wpp_cobranca_routes.py; do
             if [ -f "$f" ]; then
               echo "Copiando $f → $DEST"
               rsync -rlvz \

@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8"/>
+  <title>CAMIM — {{ titulo }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style2.css">
+  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <style>
+    html { font-size: 16px; }
+    body { font-family: "Source Sans Pro", system-ui, sans-serif; font-size: 1rem; }
+    .section-title { font-weight: 700; font-size: .8rem; text-transform: uppercase;
+                     letter-spacing: .06em; color: #6c757d; margin: 1.2rem 0 .5rem; }
+    .template-preview { background: #e9f5e9; border-left: 4px solid #28a745;
+                         padding: .6rem .8rem; border-radius: 4px; font-size: .9rem;
+                         white-space: pre-wrap; margin-top: .4rem; }
+    .param-tags .badge { font-size: .8rem; margin-right: 4px; }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+
+  <!-- NAVBAR -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a></li>
+    </ul>
+    <span class="ml-2 font-weight-bold">{{ titulo }}</span>
+  </nav>
+
+  <!-- SIDEBAR -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="/" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar"><nav class="mt-2">
+      <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+        <li class="nav-item"><a href="/index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home</p></a></li>
+        <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+        <li class="nav-item"><a href="/wpp" class="nav-link active"><i class="nav-icon fab fa-whatsapp"></i><p>Campanhas</p></a></li>
+        <li class="nav-item"><a href="/wpp/auditoria" class="nav-link"><i class="nav-icon fas fa-history"></i><p>Auditoria</p></a></li>
+        <li class="nav-item">
+          <form method="POST" action="/session/logout" style="display:inline">
+            <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+              <i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p>
+            </button>
+          </form>
+        </li>
+      </ul>
+    </nav></div>
+  </aside>
+
+  <!-- CONTEÚDO -->
+  <div class="content-wrapper">
+    <section class="content-header px-3 pt-3 pb-1">
+      <h1>{{ titulo }}</h1>
+      <a href="/wpp" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left mr-1"></i> Voltar</a>
+    </section>
+    <section class="content px-3 pb-4">
+
+    <form method="POST" action="{{ '/wpp/' + campanha.id|string + '/editar' if campanha else '/wpp/nova' }}">
+
+      <!-- ── IDENTIFICAÇÃO ─────────────────────────────────────── -->
+      <div class="card">
+        <div class="card-header"><strong>Identificação</strong></div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label>Nome da campanha <span class="text-danger">*</span></label>
+                <input type="text" name="nome" class="form-control" required
+                       value="{{ campanha.nome if campanha else '' }}"
+                       placeholder="Ex: Inadimplentes Maio — Posto A">
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label>Status</label>
+                <select name="ativa" class="form-control">
+                  <option value="1" {{ 'selected' if not campanha or campanha.ativa }}>Ativa</option>
+                  <option value="0" {{ 'selected' if campanha and not campanha.ativa }}>Inativa</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Template (busca dinâmica da API) -->
+          <div class="section-title">Template WhatsApp</div>
+          <div id="templates-loading" class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i> Carregando templates da Meta...</div>
+          <div id="templates-container" style="display:none">
+            <div class="form-group">
+              <label>Template <span class="text-danger">*</span></label>
+              <select name="template" id="template-select" class="form-control" onchange="mostrarPreview()">
+              </select>
+              <div id="template-preview" class="template-preview mt-2" style="display:none"></div>
+              <div id="template-params" class="param-tags mt-1"></div>
+            </div>
+          </div>
+          <div id="templates-erro" class="text-danger" style="display:none">
+            <i class="fas fa-exclamation-triangle mr-1"></i> Não foi possível carregar templates.
+            <input type="text" name="template" class="form-control mt-1"
+                   value="{{ campanha.template if campanha else 'notificacao_de_fatura' }}"
+                   placeholder="Nome do template">
+          </div>
+        </div>
+      </div>
+
+      <!-- ── POSTOS ──────────────────────────────────────────────── -->
+      <div class="card">
+        <div class="card-header"><strong>Postos</strong></div>
+        <div class="card-body">
+          <p class="text-muted small">Selecione os postos que esta campanha deve processar.</p>
+          <div class="row">
+            {% for p in postos_disponiveis %}
+            <div class="col-auto">
+              <div class="custom-control custom-checkbox">
+                <input type="checkbox" class="custom-control-input" id="posto_{{ p }}"
+                       name="postos" value="{{ p }}"
+                       {{ 'checked' if campanha and p in campanha.postos else '' }}>
+                <label class="custom-control-label font-weight-bold" for="posto_{{ p }}">{{ p }}</label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <!-- ── FILTROS DE ATRASO ───────────────────────────────────── -->
+      <div class="card">
+        <div class="card-header"><strong>Filtros de Atraso</strong></div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-3">
+              <div class="form-group">
+                <label>Dias mínimos de atraso</label>
+                <input type="number" name="dias_atraso_min" class="form-control" min="0"
+                       value="{{ campanha.dias_atraso_min if campanha else 1 }}">
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label>Dias máximos de atraso <small class="text-muted">(vazio = sem limite)</small></label>
+                <input type="number" name="dias_atraso_max" class="form-control" min="0"
+                       value="{{ campanha.dias_atraso_max if campanha and campanha.dias_atraso_max else '' }}">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── FILTROS DE CLIENTE ──────────────────────────────────── -->
+      <div class="card">
+        <div class="card-header"><strong>Filtros de Cliente</strong></div>
+        <div class="card-body">
+          <div class="row">
+
+            <div class="col-md-3">
+              <div class="form-group">
+                <label>Sexo</label>
+                <select name="sexo" class="form-control">
+                  <option value="" {{ 'selected' if not campanha or not campanha.sexo }}>Ambos</option>
+                  <option value="M" {{ 'selected' if campanha and campanha.sexo == 'M' }}>Masculino (M)</option>
+                  <option value="F" {{ 'selected' if campanha and campanha.sexo == 'F' }}>Feminino (F)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="col-md-2">
+              <div class="form-group">
+                <label>Idade mínima</label>
+                <input type="number" name="idade_min" class="form-control" min="0"
+                       value="{{ campanha.idade_min if campanha and campanha.idade_min is not none else '' }}">
+              </div>
+            </div>
+            <div class="col-md-2">
+              <div class="form-group">
+                <label>Idade máxima</label>
+                <input type="number" name="idade_max" class="form-control" min="0"
+                       value="{{ campanha.idade_max if campanha and campanha.idade_max is not none else '' }}">
+              </div>
+            </div>
+
+            <div class="col-md-3">
+              <div class="form-group">
+                <label>Operadora</label>
+                <input type="text" name="operadora" class="form-control"
+                       value="{{ campanha.operadora if campanha and campanha.operadora else '' }}"
+                       placeholder="Ex: CAMIM (vazio = todas)">
+              </div>
+            </div>
+
+          </div>
+          <div class="row">
+
+            <div class="col-md-4">
+              <div class="form-group">
+                <label>Cobrador <small class="text-muted">(busca parcial)</small></label>
+                <input type="text" name="cobrador" class="form-control"
+                       value="{{ campanha.cobrador if campanha and campanha.cobrador else '' }}"
+                       placeholder="Ex: DIEGO (vazio = todos)">
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="form-group">
+                <label>Corretor <small class="text-muted">(busca parcial)</small></label>
+                <input type="text" name="corretor" class="form-control"
+                       value="{{ campanha.corretor if campanha and campanha.corretor else '' }}"
+                       placeholder="Ex: SEDE (vazio = todos)">
+              </div>
+            </div>
+
+          </div>
+          <div class="row">
+
+            <div class="col-md-4">
+              <div class="form-group">
+                <label>Bairro <small class="text-muted">(busca parcial)</small></label>
+                <input type="text" name="bairro" class="form-control"
+                       value="{{ campanha.bairro if campanha and campanha.bairro else '' }}"
+                       placeholder="Ex: Anchieta">
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="form-group">
+                <label>Rua / Endereço <small class="text-muted">(busca parcial)</small></label>
+                <input type="text" name="rua" class="form-control"
+                       value="{{ campanha.rua if campanha and campanha.rua else '' }}"
+                       placeholder="Ex: Rua Betonica">
+              </div>
+            </div>
+
+          </div>
+          <div class="row">
+            <div class="col-auto">
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="sw_cancelados"
+                       name="incluir_cancelados" value="1"
+                       {{ 'checked' if campanha and campanha.incluir_cancelados }}>
+                <label class="custom-control-label" for="sw_cancelados">Incluir cancelados ANS</label>
+              </div>
+            </div>
+            <div class="col-auto ml-4">
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="sw_sem_email"
+                       name="sem_email" value="1"
+                       {{ 'checked' if campanha and campanha.sem_email }}>
+                <label class="custom-control-label" for="sw_sem_email">Apenas clientes sem e-mail</label>
+              </div>
+            </div>
+            <div class="col-auto ml-4">
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="sw_nrec"
+                       name="nao_recorrente" value="1"
+                       {{ 'checked' if campanha and campanha.nao_recorrente }}>
+                <label class="custom-control-label" for="sw_nrec">Apenas clientes não recorrentes</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── JANELA DE ENVIO ─────────────────────────────────────── -->
+      <div class="card">
+        <div class="card-header"><strong>Janela de Envio</strong></div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-2">
+              <div class="form-group">
+                <label>Hora início</label>
+                <input type="time" name="hora_inicio" class="form-control"
+                       value="{{ campanha.hora_inicio if campanha else '08:00' }}">
+              </div>
+            </div>
+            <div class="col-md-2">
+              <div class="form-group">
+                <label>Hora fim</label>
+                <input type="time" name="hora_fim" class="form-control"
+                       value="{{ campanha.hora_fim if campanha else '20:00' }}">
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-group">
+                <label>Dias da semana</label>
+                <select name="dias_semana" class="form-control">
+                  {% set ds = campanha.dias_semana if campanha else '0,1,2,3,4' %}
+                  <option value="0,1,2,3,4"       {{ 'selected' if ds == '0,1,2,3,4' }}>Seg–Sex</option>
+                  <option value="0,1,2,3,4,5"     {{ 'selected' if ds == '0,1,2,3,4,5' }}>Seg–Sáb</option>
+                  <option value="0,1,2,3,4,5,6"   {{ 'selected' if ds == '0,1,2,3,4,5,6' }}>Todos os dias</option>
+                  <option value="0,2,4"            {{ 'selected' if ds == '0,2,4' }}>Seg, Qua, Sex</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-md-2">
+              <div class="form-group">
+                <label>Intervalo entre reenvios (dias)</label>
+                <input type="number" name="intervalo_dias" class="form-control" min="1"
+                       value="{{ campanha.intervalo_dias if campanha else 7 }}">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── BOTÕES ───────────────────────────────────────────────── -->
+      <div class="d-flex justify-content-between">
+        <a href="/wpp" class="btn btn-outline-secondary">Cancelar</a>
+        <button type="submit" class="btn btn-success px-5">
+          <i class="fas fa-save mr-1"></i> Salvar Campanha
+        </button>
+      </div>
+
+    </form>
+    </section>
+  </div>
+</div>
+
+<script>
+// Dados dos templates carregados da API
+let _templates = [];
+const TEMPLATE_ATUAL = "{{ campanha.template if campanha else 'notificacao_de_fatura' }}";
+
+document.addEventListener('DOMContentLoaded', () => {
+  fetch('/wpp/api/templates')
+    .then(r => r.json())
+    .then(data => {
+      _templates = data.templates || [];
+      const sel = document.getElementById('template-select');
+      _templates.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.name;
+        opt.textContent = `${t.name} (${t.language}) — ${t.status}`;
+        if (t.name === TEMPLATE_ATUAL) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      document.getElementById('templates-loading').style.display = 'none';
+      document.getElementById('templates-container').style.display = 'block';
+      mostrarPreview();
+    })
+    .catch(() => {
+      document.getElementById('templates-loading').style.display = 'none';
+      document.getElementById('templates-erro').style.display = 'block';
+    });
+});
+
+function mostrarPreview() {
+  const sel = document.getElementById('template-select');
+  const nome = sel.value;
+  const t = _templates.find(x => x.name === nome);
+  const prev = document.getElementById('template-preview');
+  const params = document.getElementById('template-params');
+  if (t) {
+    prev.textContent = t.preview || '(sem preview)';
+    prev.style.display = 'block';
+    if (t.params && t.params.length) {
+      params.innerHTML = '<small class="text-muted mr-1">Parâmetros:</small>' +
+        t.params.map(p => `<span class="badge badge-info">${p}</span>`).join(' ');
+    } else {
+      params.innerHTML = '';
+    }
+  }
+}
+</script>
+</body>
+</html>

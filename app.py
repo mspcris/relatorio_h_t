@@ -31,6 +31,9 @@ from auth_routes import auth_bp, init_auth, decode_user
 app.register_blueprint(auth_bp)
 init_auth(SESS_NAME, SECRET, TTL_SECONDS)
 
+from wpp_cobranca_routes import wpp_bp
+app.register_blueprint(wpp_bp)
+
 # ===============================
 # Funções auxiliares
 # ===============================
