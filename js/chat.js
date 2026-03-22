@@ -391,6 +391,7 @@
 
       const m = document.createElement('div');
       m.className = 'iad-meta';
+      if (role === 'user') m.style.alignSelf = 'flex-end';
       m.textContent = role === 'user'
         ? (window.USER_NOME || 'Você')
         : 'IA CAMIM · ' + (PROVIDERS[this._state.provider]?.label || this._state.provider);
