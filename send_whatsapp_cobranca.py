@@ -343,10 +343,6 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
             if ultimo:
                 dias_desde = (hoje - datetime.fromisoformat(ultimo).date()).days
                 if dias_desde < intervalo:
-                    motivo = f"dentro_intervalo_{intervalo}d_ultimo_ha_{dias_desde}d"
-                    if not dry_run:
-                        db.registrar_nao_enviado(campanha["id"], posto, fatura,
-                                                 rodada_em, telefone, motivo)
                     telefones_run.add(telefone)
                     continue
 

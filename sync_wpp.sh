@@ -1,13 +1,23 @@
-#!/bin/bash
-# sync_wpp.sh — Wrapper cron para o engine WhatsApp Cobrança
-#
-# Configurar no crontab:
-#   crontab -e
-#   */15 * * * * /opt/relatorio_h_t/sync_wpp.sh >> /var/log/sync_wpp.log 2>&1
-
+#!/usr/bin/env bash
 set -euo pipefail
 
-echo "=== $(date '+%Y-%m-%d %H:%M:%S') ==="
+# Ambiente mínimo p/ cron
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export LANG=pt_BR.UTF-8
+export LC_ALL=pt_BR.UTF-8
+
 cd /opt/relatorio_h_t
+mkdir -p /var/log/relatorio_h_t
+
+# Auditoria mínima de runtime
+echo "$(date -Is) user=$(whoami) py=$(command -v python3) ver=$(python3 -V 2>&1)" \
+  >> /var/log/relatorio_h_t/job_audit.log
+
+# Evita concorrência
+exec 9> /opt/relatorio_h_t/.sync_wpp.lock
+flock -n 9 || { echo "$(date -Is) já existe execução em andamento"; exit 0; }
+
+# shellcheck disable=SC1091
 source .venv/bin/activate
-python send_whatsapp_cobranca.py
+
+python3 send_whatsapp_cobranca.py "$@"
