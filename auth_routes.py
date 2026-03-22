@@ -30,7 +30,7 @@ from itsdangerous import BadSignature, TimestampSigner
 from sqlalchemy import func
 
 from auth_db import (
-    SessionLocal, User, UserPosto, LoginHistory, IAConversa, KPIContexto,
+    SessionLocal, User, UserPosto, LoginHistory, IAConversa, KPIContexto, IAConfigGlobal,
     get_user_by_email, get_user_by_id, init_db,
 )
 
@@ -542,13 +542,24 @@ def ia_chat():
         finally:
             _db.close()
 
+    # ── Carrega regras gerais (editáveis pelo admin) ────────────────────────────
+    regras_gerais_txt = ""
+    _db2 = SessionLocal()
+    try:
+        cfg = _db2.query(IAConfigGlobal).filter_by(chave="regras_gerais").first()
+        if cfg and cfg.valor and cfg.valor.strip():
+            regras_gerais_txt = cfg.valor.strip()
+    except Exception:
+        pass
+    finally:
+        _db2.close()
+
     # ── Monta system prompt dinâmico ────────────────────────────────────────────
     system_prompt = _IA_SYSTEM_PROMPT
+    if regras_gerais_txt:
+        system_prompt += f"\nREGRAS GERAIS (aplicam-se a todos os KPIs):\n{regras_gerais_txt}\n"
     if kpi_contexto_txt:
-        system_prompt = (
-            f"{_IA_SYSTEM_PROMPT}\n"
-            f"CONTEXTO DE NEGÓCIO DESTE KPI (escrito pelo gestor):\n{kpi_contexto_txt}\n"
-        )
+        system_prompt += f"\nCONTEXTO DE NEGÓCIO DESTE KPI (escrito pelo gestor):\n{kpi_contexto_txt}\n"
 
     resposta_json = None
     resposta_txt  = ""
@@ -635,6 +646,45 @@ def admin_kpi_contexto_save(slug: str):
             db.add(item)
         item.contexto   = str(d.get("contexto", "")).strip()
         item.titulo     = str(d.get("titulo", item.titulo or slug)).strip()
+        from datetime import datetime
+        item.updated_at = datetime.utcnow()
+        db.commit()
+        return jsonify({"ok": True})
+    except Exception as exc:
+        db.rollback()
+        return jsonify({"erro": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@auth_bp.get("/admin/api/config_global")
+def admin_config_global_list():
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    db = SessionLocal()
+    try:
+        items = db.query(IAConfigGlobal).order_by(IAConfigGlobal.chave).all()
+        return jsonify([{
+            "chave":      i.chave,
+            "valor":      i.valor or "",
+            "updated_at": i.updated_at.isoformat() if i.updated_at else None,
+        } for i in items])
+    finally:
+        db.close()
+
+
+@auth_bp.post("/admin/api/config_global/<chave>")
+def admin_config_global_save(chave: str):
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    d = request.get_json(silent=True) or {}
+    db = SessionLocal()
+    try:
+        item = db.query(IAConfigGlobal).filter_by(chave=chave).first()
+        if not item:
+            item = IAConfigGlobal(chave=chave)
+            db.add(item)
+        item.valor = str(d.get("valor", "")).strip()
         from datetime import datetime
         item.updated_at = datetime.utcnow()
         db.commit()

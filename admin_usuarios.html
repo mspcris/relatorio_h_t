@@ -115,6 +115,11 @@
             <i class="fas fa-brain mr-1"></i>Contexto por KPI
           </a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link" id="tab-regras-lnk" data-toggle="tab" href="#tab-regras" onclick="carregarRegrasGerais()">
+            <i class="fas fa-gavel mr-1"></i>Regras Gerais
+          </a>
+        </li>
       </ul>
 
       <div class="tab-content">
@@ -162,6 +167,36 @@
           </div>
           <div id="kpi-lista">
             <div class="text-center text-muted py-4">Carregando…</div>
+          </div>
+        </div>
+
+        <!-- ── Tab Regras Gerais ────────────────────────────────────────── -->
+        <div class="tab-pane fade" id="tab-regras">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h2 class="mb-0">Regras Gerais da IA</h2>
+              <small class="text-muted">
+                Aplicam-se a todos os KPIs. Injetadas no system prompt antes do contexto específico de cada página.
+              </small>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <label class="small font-weight-bold text-muted mb-1">
+                Regras globais (formatação, comportamento, análise de outliers, etc.):
+              </label>
+              <textarea id="regras-gerais-txt"
+                class="form-control"
+                rows="18"
+                placeholder="Escreva as regras que a IA deve seguir em todas as análises..."
+                style="font-size:.85rem;resize:vertical;font-family:monospace"></textarea>
+              <div class="mt-3 d-flex justify-content-between align-items-center">
+                <small class="text-muted" id="regras-updated">—</small>
+                <button class="btn btn-primary" onclick="salvarRegrasGerais()">
+                  <i class="fas fa-save mr-1"></i> Salvar Regras Gerais
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -559,6 +594,37 @@ async function salvarKpiContexto(slug, titulo) {
 
 function escHtml(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Regras Gerais ──────────────────────────────────────────────────────────────
+let _regrasCarregado = false;
+
+async function carregarRegrasGerais() {
+  if (_regrasCarregado) return;
+  const { ok, data } = await api('/admin/api/config_global');
+  if (!ok) { toast('Erro ao carregar regras gerais.', true); return; }
+  _regrasCarregado = true;
+  const item = Array.isArray(data) ? data.find(x => x.chave === 'regras_gerais') : null;
+  if (item) {
+    document.getElementById('regras-gerais-txt').value = item.valor || '';
+    const el = document.getElementById('regras-updated');
+    if (el && item.updated_at) el.textContent = 'Atualizado: ' + fmtDt(item.updated_at);
+  }
+}
+
+async function salvarRegrasGerais() {
+  const valor = document.getElementById('regras-gerais-txt').value;
+  const { ok, data } = await api('/admin/api/config_global/regras_gerais', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ valor }),
+  });
+  if (ok) {
+    toast('Regras gerais salvas.');
+    _regrasCarregado = false;
+  } else {
+    toast(data.erro || 'Erro ao salvar.', true);
+  }
 }
 </script>
 </body>

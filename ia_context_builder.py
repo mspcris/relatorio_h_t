@@ -232,6 +232,61 @@ def _split_retirada(
 
 
 # ─────────────────────────────────────────────────────────────
+# Outlier detection — IQR sobre variação absoluta E percentual
+# ─────────────────────────────────────────────────────────────
+
+def _find_outliers(
+    diffs: List[Tuple[str, float, float, float]]
+) -> Tuple[List, List]:
+    """
+    Recebe lista de (tipo, v1, v2, delta) e retorna (aumentos_outliers, reducoes_outliers).
+
+    Algoritmo IQR: um item é outlier se sua variação absoluta OU percentual
+    ultrapassa Q3 + 1.5×IQR da distribuição do grupo.
+    Se não houver outliers estatísticos, retorna os 5 maiores de cada direção.
+    Cada lado (aumento / redução) é analisado independentemente.
+    """
+    if not diffs:
+        return [], []
+
+    aumentos = [(t, v1, v2, d) for t, v1, v2, d in diffs if d > 0]
+    reducoes = [(t, v1, v2, d) for t, v1, v2, d in diffs if d < 0]
+
+    def _iqr_threshold(values: List[float]) -> float:
+        if not values:
+            return float("inf")
+        s = sorted(values)
+        n = len(s)
+        q1 = s[max(0, n // 4)]
+        q3 = s[min(n - 1, (3 * n) // 4)]
+        iqr = q3 - q1
+        return q3 + 1.5 * iqr if iqr > 0 else q3 * 1.5
+
+    def _filter_outliers(group: List) -> List:
+        if len(group) <= 3:
+            return sorted(group, key=lambda x: abs(x[3]), reverse=True)
+
+        abs_vals = [abs(d) for _, _, _, d in group]
+        pct_vals = [abs(d / v1 * 100) if v1 != 0 else abs(d) * 100 for _, v1, _, d in group]
+
+        thr_abs = _iqr_threshold(abs_vals)
+        thr_pct = _iqr_threshold(pct_vals)
+
+        outliers = [
+            item for item, av, pv in zip(group, abs_vals, pct_vals)
+            if av > thr_abs or pv > thr_pct
+        ]
+
+        # fallback: sem outliers estatísticos → top 5 por valor absoluto
+        if not outliers:
+            outliers = sorted(group, key=lambda x: abs(x[3]), reverse=True)[:5]
+
+        return sorted(outliers, key=lambda x: abs(x[3]), reverse=True)
+
+    return _filter_outliers(aumentos), _filter_outliers(reducoes)
+
+
+# ─────────────────────────────────────────────────────────────
 # Analytics blocks
 # ─────────────────────────────────────────────────────────────
 
@@ -272,11 +327,16 @@ def _comparison_block(
                 (t, float(g1.get(t, 0)), float(g2.get(t, 0)), float(g2.get(t, 0) - g1.get(t, 0)))
                 for t in all_tipos
             ]
-            diffs.sort(key=lambda x: abs(x[3]), reverse=True)
             if diffs:
-                lines.append(f"\n#### Variações por categoria ({lbl1} → {lbl2}):")
-                for tipo, v1, v2, diff in diffs[:12]:
-                    lines.append(f"  - {tipo}: {_fmt(v1)} → {_fmt(v2)}  ({_delta(v1, v2)})")
+                aumentos_out, reducoes_out = _find_outliers(diffs)
+                if aumentos_out:
+                    lines.append(f"\n#### Aumentos significativos ({lbl1} → {lbl2}):")
+                    for tipo, v1, v2, _ in aumentos_out:
+                        lines.append(f"  - {tipo}: {_fmt(v1)} → {_fmt(v2)}  ({_delta(v1, v2)})")
+                if reducoes_out:
+                    lines.append(f"\n#### Reduções significativas ({lbl1} → {lbl2}):")
+                    for tipo, v1, v2, _ in reducoes_out:
+                        lines.append(f"  - {tipo}: {_fmt(v1)} → {_fmt(v2)}  ({_delta(v1, v2)})")
 
         # retirada separada
         if not df_ret.empty:
