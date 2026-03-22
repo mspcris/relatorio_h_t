@@ -870,6 +870,18 @@ def indicadores_email():
         return jsonify({"erro": str(exc)}), 500
 
 
+# ── Email Clientes: helpers ───────────────────────────────────────────────────
+
+import re as _re
+_RE_EMAIL_CODIGO_PREF = _re.compile(r'^\d[\w\d]*\s*[-–]\s*')
+
+def _clean_cat(cat: str) -> str:
+    """Remove prefixo alfanumérico inicial tipo '101147P - ' ou '0Y - '."""
+    t = (cat or "").strip()
+    t = _RE_EMAIL_CODIGO_PREF.sub("", t).strip(" .-–")
+    return t or (cat or "")
+
+
 # ── Email Clientes: Dashboard ─────────────────────────────────────────────────
 
 POSTOS_NAMES_EMAIL = {
@@ -975,20 +987,33 @@ def email_clientes_dashboard():
                 "total_geral": total_geral or 0,
             })
 
+        # Re-agrega por categoria já limpa (corrige dados históricos no DB)
+        from collections import defaultdict
+        cat7_agg: dict = defaultdict(lambda: defaultdict(int))
+        for r in por_cat_7dias:
+            cat7_agg[r[0]][_clean_cat(r[1])] += r[2]
+        por_cat_7dias_clean = [
+            {"dia": dia, "categoria": cat, "total": total}
+            for dia, cats in sorted(cat7_agg.items())
+            for cat, total in sorted(cats.items(), key=lambda x: -x[1])
+        ]
+
+        cat_hoje_agg: dict = defaultdict(int)
+        for r in por_cat_hoje:
+            cat_hoje_agg[_clean_cat(r[0])] += r[1]
+        por_cat_hoje_clean = [
+            {"categoria": cat, "total": total}
+            for cat, total in sorted(cat_hoje_agg.items(), key=lambda x: -x[1])
+        ]
+
         return jsonify({
             "hoje": {
                 "total": hoje_row[0] if hoje_row else 0,
                 "postos_ativos": hoje_row[1] if hoje_row else 0,
-                "categorias": hoje_row[2] if hoje_row else 0,
+                "categorias": len(cat_hoje_agg) if cat_hoje_agg else (hoje_row[2] if hoje_row else 0),
             },
-            "por_categoria_7dias": [
-                {"dia": r[0], "categoria": r[1], "total": r[2]}
-                for r in por_cat_7dias
-            ],
-            "por_categoria_hoje": [
-                {"categoria": r[0], "total": r[1]}
-                for r in por_cat_hoje
-            ],
+            "por_categoria_7dias": por_cat_7dias_clean,
+            "por_categoria_hoje": por_cat_hoje_clean,
             "por_posto": postos_result,
             "postos_sem_hoje": postos_sem_hoje,
             "ultimo_batch": ultimo_batch[0] if ultimo_batch else None,
@@ -1083,7 +1108,7 @@ def email_clientes_logs():
         return jsonify({
             "rows": [
                 {"id": r[0], "datahora": r[1], "posto": r[2],
-                 "matricula": r[3], "titulo_categoria": r[4], "status": r[5]}
+                 "matricula": r[3], "titulo_categoria": _clean_cat(r[4]), "status": r[5]}
                 for r in rows
             ],
             "total":    total,

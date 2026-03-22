@@ -101,23 +101,25 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 # ── Normalização de título ────────────────────────────────────────────────────
 
-_RE_PREFIXO   = re.compile(r'^Camim\s*[-–]\s*', re.I)
-_RE_MATRICULA = re.compile(r'Matr[íi]cula\s+[\w]+\.?\s*', re.I)
-_RE_MES_ANO   = re.compile(
+_RE_PREFIXO      = re.compile(r'^Camim\s*[-–]\s*', re.I)
+_RE_CODIGO_PREF  = re.compile(r'^\d[\w\d]*\s*[-–]\s*')   # ex: "101147P - " ou "0Y - "
+_RE_MATRICULA    = re.compile(r'Matr[íi]cula\s+[\w]+\.?\s*', re.I)
+_RE_MES_ANO      = re.compile(
     r'\b(?:janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|'
     r'outubro|novembro|dezembro|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)'
     r'\w*/\d{4}\b', re.I
 )
-_RE_DATA      = re.compile(r'\b\d{2}/\d{2}/\d{4}\b')
-_RE_DINHEIRO  = re.compile(r'R\$\s*[\d.,]+')
-_RE_NUMEROS   = re.compile(r'\b\d[\d.,]*\b')
-_RE_LIXO_FIM  = re.compile(r'[-–:,;]\s*$')
-_RE_ESPACOS   = re.compile(r'\s{2,}')
+_RE_DATA         = re.compile(r'\b\d{2}/\d{2}/\d{4}\b')
+_RE_DINHEIRO     = re.compile(r'R\$\s*[\d.,]+')
+_RE_NUMEROS      = re.compile(r'\b\d[\d.,]*\b')
+_RE_LIXO_FIM     = re.compile(r'[-–:,;]\s*$')
+_RE_ESPACOS      = re.compile(r'\s{2,}')
 
 
 def normalizar_titulo(titulo: str) -> str:
     t = titulo or ""
     t = _RE_PREFIXO.sub("", t)
+    t = _RE_CODIGO_PREF.sub("", t)   # remove código alfanumérico inicial tipo "101147P - "
     t = _RE_MATRICULA.sub("", t)
     t = _RE_MES_ANO.sub("", t)
     t = _RE_DATA.sub("", t)
