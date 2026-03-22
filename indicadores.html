@@ -52,33 +52,62 @@
     /* ── Barra de indicador ────────────────────────────────────── */
     .ind-bar {
       position: relative;
-      height: 46px;
-      border-radius: 8px;
-      background: var(--ind-bg);
+      height: 52px;
+      border-radius: 12px;
+      /* espectro completo sempre visível ao fundo */
+      background: linear-gradient(90deg,
+        rgba(26,127,60,.13)  0%,
+        rgba(76,175,80,.10)  20%,
+        rgba(38,166,154,.10) 38%,
+        rgba(249,168,37,.12) 57%,
+        rgba(230,81,0,.15)   76%,
+        rgba(198,40,40,.19)  100%
+      );
+      border: 1px solid rgba(0,0,0,.055);
+      box-shadow: 0 1px 6px rgba(0,0,0,.07), inset 0 1px 2px rgba(0,0,0,.04);
       overflow: hidden;
       cursor: default;
       user-select: none;
     }
 
+    /* fill semi-transparente — status atual se destaca sobre o espectro */
     .ind-fill {
       position: absolute;
       left: 0; top: 0; bottom: 0;
       width: var(--ind-fill);
+      background: linear-gradient(90deg,
+        var(--ind-color) 0%,
+        var(--ind-color) 78%,
+        rgba(255,255,255,.22) 100%
+      );
+      opacity: .30;
+      border-radius: 12px 0 0 12px;
+      transition: width .65s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* marcador vertical na borda direita do fill */
+    .ind-fill::after {
+      content: '';
+      position: absolute;
+      right: 0; top: 18%; bottom: 18%;
+      width: 3px;
       background: var(--ind-color);
-      border-radius: 8px;
-      transition: width .5s ease;
+      opacity: .75;
+      border-radius: 2px;
     }
 
     .ind-label {
       position: absolute;
       left: 14px; top: 50%;
       transform: translateY(-50%);
-      font-weight: 700;
+      font-weight: 600;
       font-size: .88rem;
-      color: #fff;
-      text-shadow: 0 1px 4px rgba(0,0,0,.55);
+      color: #1a202c;
       z-index: 2;
       pointer-events: none;
+      display: flex;
+      align-items: center;
+      gap: 0px;
     }
 
     .ind-right {
@@ -87,7 +116,7 @@
       transform: translateY(-50%);
       font-size: .78rem;
       font-weight: 600;
-      color: rgba(0,0,0,.65);
+      color: rgba(0,0,0,.5);
       z-index: 2;
       pointer-events: none;
     }
@@ -95,21 +124,22 @@
     /* badge de status à direita da barra */
     .ind-badge {
       display: inline-block;
-      padding: .1rem .45rem;
+      padding: .12rem .5rem;
       border-radius: 999px;
-      font-size: .7rem;
+      font-size: .68rem;
       font-weight: 700;
       color: #fff;
       background: var(--ind-color);
-      margin-left: 6px;
+      margin-left: 8px;
       vertical-align: middle;
+      box-shadow: 0 1px 4px rgba(0,0,0,.18);
     }
 
     /* grupo de indicadores */
     .ind-group {
       display: flex;
       flex-direction: column;
-      gap: 7px;
+      gap: 6px;
     }
 
     .ind-group-title {
@@ -130,8 +160,8 @@
 
     /* skeleton loader */
     .ind-skeleton {
-      height: 46px;
-      border-radius: 8px;
+      height: 52px;
+      border-radius: 12px;
       background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
       background-size: 200% 100%;
       animation: shimmer 1.4s infinite;
@@ -165,17 +195,20 @@
       background: var(--c);
     }
 
-    /* prefixo do tipo de indicador dentro da barra */
+    /* ícone + label do tipo de indicador */
     .ind-prefix {
-      font-size: .65rem;
-      font-weight: 800;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      opacity: .85;
-      margin-right: 6px;
-      background: rgba(0,0,0,.18);
-      padding: 1px 5px;
-      border-radius: 3px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--ind-color);
+      opacity: .82;
+      color: #fff;
+      font-size: .95rem;
+      margin-right: 10px;
+      flex-shrink: 0;
     }
   </style>
 </head>
@@ -424,17 +457,25 @@
   }
 
   /* ── Render de uma barra ────────────────────────────────────── */
+  const PREFIX_ICON = {
+    WPP:   'fab fa-whatsapp',
+    EMAIL: 'fas fa-envelope',
+    TEF:   'fas fa-credit-card',
+    PUSH:  'fas fa-bell',
+  };
+
   // prefix: ex "PUSH", nome: ex "Cobrança — Posto X"
   function barraHTML(prefix, nome, statusKey, textoDir) {
     const s = STATUS[statusKey] || STATUS.horrivel;
     const fillPct = Math.max(s.fill, 5); // mínimo visual de 5%
+    const iconCls = PREFIX_ICON[prefix] || 'fas fa-circle';
     return `
       <div class="ind-bar"
            style="--ind-color:${s.color}; --ind-bg:${s.bg}; --ind-fill:${fillPct}%"
            title="${prefix} — ${nome} — ${s.label}">
         <div class="ind-fill"></div>
         <span class="ind-label">
-          <span class="ind-prefix">${prefix}</span>${nome}
+          <span class="ind-prefix"><i class="${iconCls}"></i></span>${nome}
         </span>
         <span class="ind-right">
           ${textoDir}
@@ -628,17 +669,35 @@
     const postosSet = new Set(postos);
     const mostrar1Posto = postos.length === 1;
 
-    const itens = [];
+    // Consolida: para cada posto relevante, pega o melhor (menor dias) entre campanhas
+    // Postos sem nenhum envio em qualquer campanha ficam com dias=999
+    const melhorPorPosto = {}; // posto → {dias, ultimo_envio, campNome}
     for (const camp of campanhas) {
       for (const [posto, d] of Object.entries(camp.postos)) {
         if (!postosSet.has(posto)) continue;
-        const sKey = diasParaStatus(d.dias);
-        const nome = mostrar1Posto ? camp.nome : `${camp.nome} — Posto ${posto}`;
-        const texto = d.ultimo_envio
-          ? `${fmtDias(d.dias)} · ${d.ultimo_envio.slice(0, 16)}`
-          : fmtDias(d.dias);
-        itens.push({ html: barraHTML('WPP', nome, sKey, texto), order: STATUS[sKey].order });
+        const atual = melhorPorPosto[posto];
+        if (!atual || d.dias < atual.dias) {
+          melhorPorPosto[posto] = { dias: d.dias, ultimo_envio: d.ultimo_envio, campNome: camp.nome };
+        }
       }
+    }
+
+    // Garante que TODOS os postos do usuário apareçam (mesmo sem campanha ou envio)
+    for (const p of postos) {
+      if (!melhorPorPosto[p]) {
+        melhorPorPosto[p] = { dias: 999, ultimo_envio: null, campNome: null };
+      }
+    }
+
+    const itens = [];
+    for (const [posto, d] of Object.entries(melhorPorPosto)) {
+      const sKey = diasParaStatus(d.dias);
+      const labelCamp = d.campNome ? d.campNome : 'WhatsApp Cobrança';
+      const nome = mostrar1Posto ? labelCamp : `${labelCamp} — Posto ${posto}`;
+      const texto = d.ultimo_envio
+        ? `${fmtDias(d.dias)} · ${d.ultimo_envio.slice(0, 16)}`
+        : fmtDias(d.dias);
+      itens.push({ html: barraHTML('WPP', nome, sKey, texto), order: STATUS[sKey].order });
     }
 
     return itens;
