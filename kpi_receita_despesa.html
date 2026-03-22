@@ -3260,33 +3260,13 @@ function updateExploradorDespesas(mesesSelec) {
         title: 'IA CAMIM',
         briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
         briefDefault: true,
-        getPayload: async ({ userQuery }) => {
-          let ctx = '';
-          try {
-            const raw = window.__kpi_contexto;
-            if (raw) {
-              const d = JSON.parse(raw);
-              // Detecta posto específico na pergunta (ex: "posto X", "no A", "em B")
-              const m = userQuery.match(/\bposto\s+([A-Y])\b/i) || userQuery.match(/\b(?:no|em|do|para o)\s+posto\s+([A-Y])\b/i);
-              const posto = m ? m[1].toUpperCase() : null;
-              if (posto) {
-                // Filtra apenas o posto mencionado
-                if (d.evolucao_por_posto)      d.evolucao_por_posto      = { [posto]: d.evolucao_por_posto[posto] };
-                if (d.despesas_tipo_por_posto) d.despesas_tipo_por_posto = { [posto]: d.despesas_tipo_por_posto[posto] };
-                if (d.despesas_pp_mensal)      d.despesas_pp_mensal      = d.despesas_pp_mensal.map(m => ({ mes: m.mes, [posto]: m[posto] }));
-              } else {
-                // Sem posto específico: limita despesas_tipo_por_posto aos últimos 3 meses
-                if (d.despesas_tipo_por_posto) {
-                  Object.keys(d.despesas_tipo_por_posto).forEach(p => {
-                    d.despesas_tipo_por_posto[p] = d.despesas_tipo_por_posto[p].slice(-3);
-                  });
-                }
-              }
-              ctx = JSON.stringify(d);
-            }
-          } catch(e) { ctx = window.__kpi_contexto || ''; }
-          return { prompt: userQuery, produto: 'receita_despesa', contexto: ctx };
-        }
+        getPayload: async ({ userQuery }) => ({
+          prompt:      userQuery,
+          kpi:         'receita_despesa',
+          postos:      postosSelecionados(),
+          periodo_ini: el('#from2')?.value || '',
+          periodo_fim: el('#to2')?.value   || '',
+        })
       });
     }
   </script>

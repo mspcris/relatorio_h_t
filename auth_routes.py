@@ -498,7 +498,20 @@ def ia_chat():
     pergunta_txt = str(d.get("prompt", ""))[:2000]
     pagina_txt   = str(d.get("pagina", ""))[:200]
     provider     = str(d.get("provider", "groq")).lower().strip()
-    contexto     = str(d.get("contexto", ""))[:100000]
+
+    # ── Monta contexto: builder pandas (novo) ou contexto enviado pelo browser (legado) ──
+    kpi = d.get("kpi", "")
+    if kpi:
+        try:
+            from ia_context_builder import build_context
+            postos      = d.get("postos") or []
+            periodo_ini = str(d.get("periodo_ini", ""))[:7]
+            periodo_fim = str(d.get("periodo_fim", ""))[:7]
+            contexto = build_context(kpi, postos, periodo_ini, periodo_fim, pergunta_txt)
+        except Exception as exc:
+            contexto = f"[Erro no context builder: {exc}]"
+    else:
+        contexto = str(d.get("contexto", ""))[:100000]
 
     resposta_json = None
     resposta_txt  = ""

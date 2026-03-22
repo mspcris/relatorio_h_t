@@ -3406,10 +3406,11 @@ function updateExploradorDespesas(mesesSelec) {
         briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
         briefDefault: true,
         getPayload: async ({ userQuery }) => ({
-          prompt: userQuery,
-          produto: 'rateio',
-          contexto: window.__kpi_contexto || '',
-          prefs: { accept_format: 'free_text' }
+          prompt:      userQuery,
+          kpi:         'receita_despesa_rateio',
+          postos:      postosSelecionados(),
+          periodo_ini: el('#from2')?.value || '',
+          periodo_fim: el('#to2')?.value   || '',
         })
       });
     });
