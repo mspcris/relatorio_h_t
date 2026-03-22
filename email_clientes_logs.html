@@ -230,6 +230,7 @@ const POSTOS_NAMES = {
 };
 
 let currentPage = 1;
+let _rowData = {}; // id → {titulo_categoria, mensagem}
 
 function getFilters() {
   return {
@@ -303,9 +304,10 @@ function renderTable(data) {
     tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">Nenhum registro encontrado</td></tr>';
     return;
   }
+  _rowData = {};
+  data.rows.forEach(r => { _rowData[r.id] = { titulo: r.titulo_categoria, msg: r.mensagem }; });
   tbody.innerHTML = data.rows.map(r => `
-    <tr style="cursor:pointer" onclick="showMsg('${esc(r.titulo_categoria)}','${esc(r.mensagem)}')"
-        title="Clique para ver a mensagem do email">
+    <tr style="cursor:pointer" data-rid="${r.id}" title="Clique para ver a mensagem do email">
       <td class="text-muted">${r.id}</td>
       <td>${fmtDt(r.datahora)}</td>
       <td>
@@ -317,6 +319,12 @@ function renderTable(data) {
       <td>${esc(r.status) || '–'}</td>
     </tr>
   `).join('');
+  tbody.querySelectorAll('tr[data-rid]').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const d = _rowData[tr.dataset.rid];
+      if (d) showMsg(d.titulo, d.msg);
+    });
+  });
 }
 
 function renderPostoCounts(porPosto) {
