@@ -27,6 +27,11 @@
     font-weight: 600;
     margin: 1px;
   }
+  .badge-posto.restrito {
+    background: #fdecea;
+    color: #c62828;
+    border-color: #ef9a9a;
+  }
   .posto-check label {
     display: inline-flex;
     align-items: center;
@@ -35,6 +40,7 @@
     font-size: .9rem;
     cursor: pointer;
   }
+  .posto-check label.restrito { color: #c62828; font-weight: 600; }
   .table td, .table th { vertical-align: middle; }
   #toast-wrap {
     position: fixed;
@@ -310,6 +316,7 @@
 
 <script>
 const TODOS_POSTOS = ['A','B','C','D','G','I','J','M','N','P','R','X','Y'];
+const POSTOS_RESTRITOS = new Set(['C','D','J','M','P']);
 let _usuarios = [];
 
 // ── Inicialização ─────────────────────────────────────────────────────────────
@@ -317,8 +324,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // monta checkboxes de postos
   const wrap = document.getElementById('postos-check');
   TODOS_POSTOS.forEach(p => {
+    const cls = POSTOS_RESTRITOS.has(p) ? ' class="restrito"' : '';
     wrap.innerHTML += `
-      <label>
+      <label${cls}>
         <input type="checkbox" class="posto-cb" value="${p}"> ${p}
       </label>`;
   });
@@ -350,7 +358,7 @@ function renderTabela() {
     <tr>
       <td>${u.email}</td>
       <td>${u.nome || '<span class="text-muted">—</span>'}</td>
-      <td>${u.postos.map(p => `<span class="badge-posto">${p}</span>`).join('') || '<span class="text-muted">nenhum</span>'}</td>
+      <td>${u.postos.map(p => `<span class="badge-posto${POSTOS_RESTRITOS.has(p) ? ' restrito' : ''}">${p}</span>`).join('') || '<span class="text-muted">nenhum</span>'}</td>
       <td class="text-center">${u.is_admin ? '<i class="fas fa-shield-alt text-warning" title="Admin"></i>' : ''}</td>
       <td class="text-center">
         <span class="badge badge-${u.ativo ? 'success' : 'secondary'}">${u.ativo ? 'Sim' : 'Não'}</span>
