@@ -1157,6 +1157,15 @@ def email_clientes_logs():
     where_str = " AND ".join(where)
 
     try:
+        # Abre rw só para garantir migração da coluna mensagem (adicionada em versão posterior)
+        conn_rw = sqlite3.connect(kpi_db)
+        try:
+            conn_rw.execute("ALTER TABLE ind_email ADD COLUMN mensagem TEXT")
+            conn_rw.commit()
+        except Exception:
+            pass  # coluna já existe
+        conn_rw.close()
+
         conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
 
         total = conn.execute(

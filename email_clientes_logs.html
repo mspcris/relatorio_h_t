@@ -279,6 +279,13 @@ async function loadLogs(page) {
   try {
     const resp = await fetch('/api/email_clientes/logs?' + params);
     const data = await resp.json();
+    if (data.erro || !data.rows) {
+      document.getElementById('logsBody').innerHTML =
+        `<tr><td colspan="6" class="text-center text-danger py-3">${data.erro || 'Resposta inválida da API'}</td></tr>`;
+      document.getElementById('totalCount').textContent = '';
+      document.getElementById('pagination').innerHTML = '';
+      return;
+    }
     renderTable(data);
     renderPagination(data);
     renderPostoCounts(data.por_posto);
