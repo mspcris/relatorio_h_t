@@ -52,7 +52,7 @@
     /* ── Barra de indicador ────────────────────────────────────── */
     .ind-bar {
       position: relative;
-      height: 52px;
+      min-height: 52px;
       border-radius: 14px;
       /* espectro: vermelho (pior) → verde (melhor), esquerda → direita */
       background: linear-gradient(90deg,
@@ -74,10 +74,9 @@
       position: absolute;
       left: 0; top: 0; bottom: 0;
       width: var(--ind-fill);
-      /* lavagem translúcida da cor do status, esmaece à direita */
       background: linear-gradient(90deg,
         rgba(255,255,255,.38) 0%,
-        var(--ind-color-rgb, var(--ind-color)) 40%,
+        var(--ind-color) 40%,
         var(--ind-color) 80%,
         rgba(255,255,255,0) 100%
       );
@@ -98,29 +97,60 @@
       box-shadow: 0 0 6px var(--ind-color);
     }
 
+    /* container do conteúdo — flexbox, cresce em mobile */
+    .ind-content {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 14px;
+      min-height: 52px;
+      pointer-events: none;
+    }
+
     .ind-label {
-      position: absolute;
-      left: 14px; top: 50%;
-      transform: translateY(-50%);
       font-weight: 600;
       font-size: .88rem;
       color: #1a202c;
-      z-index: 2;
-      pointer-events: none;
       display: flex;
       align-items: center;
-      gap: 0px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .ind-label-text {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .ind-right {
-      position: absolute;
-      right: 14px; top: 50%;
-      transform: translateY(-50%);
       font-size: .78rem;
       font-weight: 600;
       color: rgba(0,0,0,.5);
-      z-index: 2;
-      pointer-events: none;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* ── Mobile: quebra em duas linhas ──────────────────────────── */
+    @media (max-width: 576px) {
+      .ind-content {
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 3px;
+        padding: 10px 14px;
+        min-height: 64px;
+      }
+      .ind-label-text {
+        white-space: normal;
+        word-break: break-word;
+      }
+      .ind-right {
+        font-size: .74rem;
+      }
     }
 
     /* badge de status à direita da barra */
@@ -481,13 +511,16 @@
            style="--ind-color:${s.color}; --ind-bg:${s.bg}; --ind-fill:${fillPct}%"
            title="${prefix} — ${nome} — ${s.label}">
         <div class="ind-fill"></div>
-        <span class="ind-label">
-          <span class="ind-prefix"><i class="${iconCls}"></i></span>${nome}
-        </span>
-        <span class="ind-right">
-          ${textoDir}
-          <span class="ind-badge">${s.label}</span>
-        </span>
+        <div class="ind-content">
+          <span class="ind-label">
+            <span class="ind-prefix"><i class="${iconCls}"></i></span>
+            <span class="ind-label-text">${nome}</span>
+          </span>
+          <span class="ind-right">
+            ${textoDir}
+            <span class="ind-badge">${s.label}</span>
+          </span>
+        </div>
       </div>`;
   }
 
