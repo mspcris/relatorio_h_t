@@ -164,6 +164,14 @@
           </div>
         </div>
       </div>
+      <div class="col-6 col-md-6 col-xl">
+        <div class="card stat-card kpi-card c-red h-100">
+          <div class="card-body">
+            <div class="kpi-label mb-2">Emails com erro <small class="text-muted">(SMTP)</small></div>
+            <div class="kpi-value text-danger" id="kpiErros">–</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ── Gráficos ── -->
@@ -209,6 +217,7 @@
                 <th>Status</th>
                 <th>Último envio</th>
                 <th class="text-end">Emails hoje</th>
+                <th class="text-end">Erros SMTP</th>
                 <th class="text-end">Total geral</th>
               </tr>
             </thead>
@@ -257,12 +266,12 @@ function getLast7Days() {
   return days;
 }
 
-function updateKPIs(hoje, sync) {
-  document.getElementById('kpiTotal').textContent     = (hoje.total     || 0).toLocaleString('pt-BR');
-  document.getElementById('kpiPostos').textContent    = (hoje.postos_ativos || 0).toLocaleString('pt-BR');
-  document.getElementById('kpiCategorias').textContent = (hoje.categorias  || 0).toLocaleString('pt-BR');
-  document.getElementById('kpiSync').textContent      = sync && sync.synced_at
-    ? fmtDt(sync.synced_at) : '–';
+function updateKPIs(hoje, sync, erros_total) {
+  document.getElementById('kpiTotal').textContent      = (hoje.total        || 0).toLocaleString('pt-BR');
+  document.getElementById('kpiPostos').textContent     = (hoje.postos_ativos|| 0).toLocaleString('pt-BR');
+  document.getElementById('kpiCategorias').textContent = (hoje.categorias   || 0).toLocaleString('pt-BR');
+  document.getElementById('kpiSync').textContent       = sync && sync.synced_at ? fmtDt(sync.synced_at) : '–';
+  document.getElementById('kpiErros').textContent      = (erros_total       || 0).toLocaleString('pt-BR');
 }
 
 function updateAlerts(semHoje, ultimoBatch) {
@@ -393,6 +402,9 @@ function renderPostoTable(postos) {
         </td>
         <td>${fmtDt(p.ultimo_envio) || '–'}</td>
         <td class="text-end">${(p.total_hoje || 0).toLocaleString('pt-BR')}</td>
+        <td class="text-end ${p.total_erros > 0 ? 'text-danger fw-bold' : 'text-muted'}">
+          ${(p.total_erros || 0).toLocaleString('pt-BR')}
+        </td>
         <td class="text-end text-muted">${(p.total_geral || 0).toLocaleString('pt-BR')}</td>
       </tr>`;
   }).join('');
@@ -417,7 +429,7 @@ async function loadDashboard() {
       return;
     }
 
-    updateKPIs(data.hoje, data.sync);
+    updateKPIs(data.hoje, data.sync, data.erros_total);
     updateAlerts(data.postos_sem_hoje, data.ultimo_batch);
     renderEvolucaoChart(data.por_categoria_7dias);
     renderCatHojeChart(data.por_categoria_hoje);

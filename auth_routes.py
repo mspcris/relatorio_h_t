@@ -946,16 +946,24 @@ def email_clientes_dashboard():
             ORDER BY total DESC
         """, [hoje_str] + params_p).fetchall()
 
+        _ERR_COND = "(titulo_original LIKE '%SMTP Error%' OR titulo_original LIKE 'Erro :%')"
+
         por_posto = conn.execute(f"""
             SELECT posto,
                    MAX(datahora) AS ultimo_envio,
                    SUM(CASE WHEN date(datahora) = ? THEN 1 ELSE 0 END) AS total_hoje,
-                   COUNT(*) AS total_geral
+                   COUNT(*) AS total_geral,
+                   SUM(CASE WHEN {_ERR_COND} THEN 1 ELSE 0 END) AS total_erros
             FROM ind_email
             WHERE 1=1 {postos_filter}
             GROUP BY posto
             ORDER BY posto
         """, [hoje_str] + params_p).fetchall()
+
+        erros_total = conn.execute(f"""
+            SELECT COUNT(*) FROM ind_email
+            WHERE {_ERR_COND} {postos_filter}
+        """, params_p).fetchone()
 
         ultimo_batch = conn.execute(f"""
             SELECT MAX(datahora) FROM ind_email WHERE 1=1 {postos_filter}
@@ -973,7 +981,7 @@ def email_clientes_dashboard():
         postos_result = []
         postos_sem_hoje = []
         for row in por_posto:
-            p, ultimo_str, total_hoje, total_geral = row
+            p, ultimo_str, total_hoje, total_geral, total_erros = row
             p = (p or "").strip().upper()
             try:
                 ultimo_dt = datetime.fromisoformat(str(ultimo_str)).date()
@@ -997,6 +1005,7 @@ def email_clientes_dashboard():
                 "ultimo_envio": ultimo_str,
                 "total_hoje": total_hoje or 0,
                 "total_geral": total_geral or 0,
+                "total_erros": total_erros or 0,
             })
 
         # Re-agrega por categoria já limpa (corrige dados históricos no DB)
@@ -1028,6 +1037,7 @@ def email_clientes_dashboard():
             "por_categoria_hoje": por_cat_hoje_clean,
             "por_posto": postos_result,
             "postos_sem_hoje": postos_sem_hoje,
+            "erros_total": erros_total[0] if erros_total else 0,
             "ultimo_batch": ultimo_batch[0] if ultimo_batch else None,
             "sync": {
                 "synced_at":     sync_row[0] if sync_row else None,
