@@ -103,10 +103,10 @@ def api_opcoes():
     if not postos:
         return jsonify({"opcoes": []})
     try:
-        opcoes = sql_helper.buscar_opcoes(postos, campo)
-        return jsonify({"opcoes": opcoes})
+        opcoes, erros = sql_helper.buscar_opcoes_debug(postos, campo)
+        return jsonify({"opcoes": opcoes, "erros": erros})
     except Exception as e:
-        return jsonify({"opcoes": [], "erro": str(e)[:200]})
+        return jsonify({"opcoes": [], "erros": [str(e)[:300]]})
 
 
 @wpp_bp.post("/api/preview")

@@ -121,15 +121,22 @@ def build_where(campanha: dict) -> tuple:
 
 
 def buscar_opcoes(postos: list, campo: str) -> list:
-    """Retorna lista ordenada de valores distintos não nulos do campo
-    para os postos informados. Seguro contra SQL injection (campo validado via CAMPO_SQL)."""
+    """Retorna lista ordenada de valores distintos não nulos do campo."""
+    valores, _ = buscar_opcoes_debug(postos, campo)
+    return valores
+
+
+def buscar_opcoes_debug(postos: list, campo: str) -> tuple:
+    """Retorna (lista_de_valores, lista_de_erros) para diagnóstico."""
     col = CAMPO_SQL.get(campo)
     if not col:
-        return []
+        return [], [f"campo inválido: {campo}"]
     valores = set()
+    erros = []
     for posto in postos:
         conn = get_conn_posto(posto)
         if not conn:
+            erros.append(f"posto {posto}: sem conexão (verifique DB_HOST_{posto} e DB_BASE_{posto} no .env)")
             continue
         try:
             cur = conn.cursor()
@@ -142,10 +149,12 @@ def buscar_opcoes(postos: list, campo: str) -> list:
                 if row[0] is not None:
                     valores.add(str(row[0]).strip())
         except Exception as e:
-            log.error("buscar_opcoes posto=%s campo=%s: %s", posto, campo, e)
+            msg = f"posto {posto} campo {campo}: {e}"
+            log.error("buscar_opcoes %s", msg)
+            erros.append(msg)
         finally:
             conn.close()
-    return sorted(valores)
+    return sorted(valores), erros
 
 
 def contar_preview(campanha: dict) -> dict:
