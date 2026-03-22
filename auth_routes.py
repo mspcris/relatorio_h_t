@@ -824,6 +824,8 @@ def indicadores_email():
                    MAX(datahora)  AS ultimo_envio,
                    COUNT(*)       AS total
             FROM ind_email
+            WHERE titulo_categoria LIKE '%boleto%'
+               OR titulo_original  LIKE '%boleto%'
             GROUP BY posto, titulo_categoria
             ORDER BY posto, titulo_categoria
         """).fetchall()
@@ -847,10 +849,10 @@ def indicadores_email():
                 dias = (hoje - ultimo_dt).days
             except Exception:
                 dias = 999
-            chave = f"{posto}|{categoria}"
+            chave = f"{posto}|Boleto"
             dados[chave] = {
                 "posto":         posto,
-                "categoria":     categoria,
+                "categoria":     "Boleto",
                 "ultimo_envio":  ultimo_str,
                 "dias":          dias,
                 "total":         total,
