@@ -718,6 +718,12 @@
                 <p>Home Page</p>
               </a>
             </li>
+            <li class="nav-item">
+              <a href="indicadores.html" class="nav-link">
+                <i class="nav-icon fas fa-tachometer-alt"></i>
+                <p>Indicadores</p>
+              </a>
+            </li>
               {% if USER_IS_ADMIN %}
             <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
               {% endif %}
@@ -857,7 +863,7 @@
                 Quando desligado, RETIRADA / CAMPINHO não entram na despesa.
               </span>
             </div>
-            <!-- Botão IA será injetado por /js/chat.js se configurado -->
+            <span id="ia-anchor"></span>
           </div>
         </div>
       </nav>
@@ -3401,16 +3407,23 @@ function updateExploradorDespesas(mesesSelec) {
     document.addEventListener('DOMContentLoaded', () => {
       ChatIA.init({
         apiUrl: window.IA_API_URL || '/api/ia/chat',
-        mountAfterSelector: '#reset2',
+        mountAfterSelector: '#ia-anchor',
         title: 'IA CAMIM',
         briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
         briefDefault: true,
-        getPayload: async ({ userQuery }) => ({
-          prompt: userQuery,
-          produto: 'rateio',
-          contexto: window.__kpi_contexto || '',
-          prefs: { accept_format: 'free_text' }
-        })
+        getPayload: async ({ userQuery }) => {
+          const activeLinks = document.querySelectorAll('#postoTabs .nav-link.active[data-posto]');
+          const postos = Array.from(activeLinks).map(a => a.dataset.posto).filter(p => p && p !== 'ALL');
+          const incluirRetirada = document.getElementById('chkRetirada')?.checked || false;
+          return {
+            prompt:           userQuery,
+            kpi:              'receita_despesa_rateio',
+            postos,
+            periodo_ini:      document.querySelector('#from2')?.value || '',
+            periodo_fim:      document.querySelector('#to2')?.value   || '',
+            incluir_retirada: incluirRetirada,
+          };
+        }
       });
     });
   </script>

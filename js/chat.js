@@ -23,6 +23,13 @@
     openai:    { label: 'OpenAI',    color: '#10a37f' },
     anthropic: { label: 'Anthropic', color: '#d4a017' }
   };
+
+  /* ─── Ícones dos provedores ─── */
+  const PROVIDER_ICONS = {
+    groq: '<span style="font-size:15px;line-height:1">🤖</span>',
+    openai: `<svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#10a37f" d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zm-9.022 12.61a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681V9.134l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.475 4.475 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071.008L4.25 14.633a4.504 4.504 0 0 1-1.91-6.737zm16.597 3.855l-5.843-3.387 2.02-1.164a.076.076 0 0 1 .071-.008l4.57 2.638a4.5 4.5 0 0 1-.696 8.118v-5.569a.795.795 0 0 0-.463-.628zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.572-2.638a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08-4.78 2.76a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/></svg>`,
+    anthropic: `<svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#d4a017" d="M13.827 3.52h-3.654L5.443 20h3.33l.862-2.538h4.73l.862 2.538h3.33L13.827 3.52zm-3.237 11.19 1.61-4.74 1.61 4.74H10.59z"/></svg>`
+  };
   const PROVIDER_DEFAULT = 'groq';
 
   const ChatIA = {
@@ -73,6 +80,9 @@
 .iad-type{--reveal:0%;-webkit-mask-image:linear-gradient(90deg,#000 calc(var(--reveal)),transparent 0);mask-image:linear-gradient(90deg,#000 calc(var(--reveal)),transparent 0)}
 .iad-type.caret::after{content:'';display:inline-block;width:2px;height:1em;vertical-align:baseline;background:#ddd;margin-left:2px;animation:iadBlink 1s step-end infinite}
 @keyframes iadBlink{50%{opacity:0}}
+.iad-prov-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.iad-status-msg{opacity:.75;font-size:.82rem;transition:opacity .22s ease}
+.iad-status-msg.iad-fade-out{opacity:0}
 #iadProvBar{display:flex;gap:4px;padding:4px 12px 6px;background:#1a1a1a;border-bottom:1px solid #2a2a2a;flex-shrink:0}
 #iadProvBar button{font-size:.75rem;padding:2px 10px;border-radius:20px;border:1px solid #444;background:transparent;color:#aaa;cursor:pointer;transition:all .15s}
 #iadProvBar button.active{color:#fff;font-weight:600}
@@ -337,19 +347,39 @@
       const content = document.createElement('div');
       content.className = 'iad-content';
 
-      const norm = this._normalizeForView(text);
-      if (norm.mode === 'html') {
-        content.innerHTML = this._safeHtml(norm.html);
+      const blocks = this._parseBlocks(this._coerceText(text));
+      if (!blocks.length) {
+        const p = document.createElement('p');
+        p.style.margin = '.3em 0';
+        p.textContent = String(text || '').trim();
+        content.appendChild(p);
       } else {
-        const blocks = norm.text.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
         blocks.forEach(b => {
-          const isTitle = /^###\s*/.test(b);
-          const el = document.createElement(isTitle ? 'h5' : 'p');
-          el.textContent = b.replace(/^###\s*/, '');
+          let el;
+          if (b.type === 'h2') {
+            el = document.createElement('h5');
+            el.style.cssText = 'font-size:1em;font-weight:700;margin:.6em 0 .2em;color:#e0e0e0;border-bottom:1px solid #3a3a3a;padding-bottom:3px';
+          } else if (b.type === 'h3') {
+            el = document.createElement('h6');
+            el.style.cssText = 'font-size:.92em;font-weight:600;margin:.45em 0 .15em;color:#ccc';
+          } else if (b.type === 'li') {
+            el = document.createElement('p');
+            el.style.cssText = 'margin:.15em 0 .15em 1em';
+            b.text = '• ' + b.text;
+          } else if (b.type === 'li2') {
+            el = document.createElement('p');
+            el.style.cssText = 'margin:.1em 0 .1em 2em;opacity:.85';
+            b.text = '◦ ' + b.text;
+          } else {
+            el = document.createElement('p');
+            el.style.cssText = 'margin:.35em 0';
+          }
+          el.textContent = b.text;
           content.appendChild(el);
         });
-        requestAnimationFrame(() => this._typeReveal(content));
       }
+
+      requestAnimationFrame(() => this._typeReveal(content));
 
       box.appendChild(content);
 
@@ -361,6 +391,57 @@
       row.appendChild(meta);
       this._outBox().appendChild(row);
       this._scrollBottom();
+    },
+
+    /* ═══════════════════ PARSER MARKDOWN → BLOCOS ═══════════════════ */
+    _parseBlocks(rawText) {
+      let t = String(rawText || '').trim();
+      t = t.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '  ');
+      // Remove code fences (keep inner text)
+      t = t.replace(/```\w*\n?([\s\S]*?)```/g, '$1');
+      // Remove bold/italic markers
+      t = t.replace(/\*\*(.*?)\*\*/g, '$1').replace(/__(.*?)__/g, '$1');
+      t = t.replace(/ _(.*?)_ /g, ' $1 ');
+      // Convert markdown table separator lines (|---|---|) to nothing
+      t = t.replace(/^\|?[\s:]*[-|: ]{3,}[\s:]*\|?\s*$/gm, '');
+      // Convert markdown table rows to readable format
+      t = t.replace(/^\|(.+)\|\s*$/gm, (_, inner) =>
+        inner.split('|').map(c => c.trim()).filter(Boolean).join('  —  ')
+      );
+      // Normalize whitespace
+      t = t.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+
+      const blocks = [];
+      let paraLines = [];
+
+      const flushPara = () => {
+        const txt = paraLines.join(' ').trim();
+        if (txt) blocks.push({ type: 'p', text: txt });
+        paraLines = [];
+      };
+
+      for (const raw of t.split('\n')) {
+        const line = raw.trim();
+        if (!line) { flushPara(); continue; }
+
+        if (/^#{1,2} /.test(line)) {
+          flushPara();
+          blocks.push({ type: 'h2', text: line.replace(/^#+\s+/, '') });
+        } else if (/^#{3,} /.test(line)) {
+          flushPara();
+          blocks.push({ type: 'h3', text: line.replace(/^#+\s+/, '') });
+        } else if (/^\s{2,}[-*•] /.test(raw)) {
+          flushPara();
+          blocks.push({ type: 'li2', text: line.replace(/^[-*•]\s+/, '') });
+        } else if (/^[-*•] /.test(line)) {
+          flushPara();
+          blocks.push({ type: 'li', text: line.replace(/^[-*•]\s+/, '') });
+        } else {
+          paraLines.push(line);
+        }
+      }
+      flushPara();
+      return blocks;
     },
 
     /* ═══════════════════ HELPERS UI ═══════════════════ */
@@ -391,6 +472,7 @@
 
       const m = document.createElement('div');
       m.className = 'iad-meta';
+      if (role === 'user') m.style.alignSelf = 'flex-end';
       m.textContent = role === 'user'
         ? (window.USER_NOME || 'Você')
         : 'IA CAMIM · ' + (PROVIDERS[this._state.provider]?.label || this._state.provider);
@@ -401,23 +483,53 @@
       this._scrollBottom();
     },
 
-    /* ═══════════════════ TYPEWRITER ═══════════════════ */
-    _typeReveal(container, baseMs = 18) {
+    /* ═══════════════════ TYPEWRITER (rAF, char-by-char) ═══════════════════ */
+    _typeReveal(container) {
       if (!container) return;
-      container.querySelectorAll('h5, p').forEach(el => {
-        el.classList.add('iad-type', 'caret');
-        el.style.setProperty('--reveal', '0%');
-        const chars = (el.textContent || '').length || 1;
-        const dur   = Math.min(5000, Math.max(300, chars * baseMs));
-        const anim  = el.animate(
-          [{ '--reveal': '0%' }, { '--reveal': '100%' }],
-          { duration: dur, easing: `steps(${Math.min(chars, 2000)}, end)` }
-        );
-        anim.onfinish = () => {
-          el.classList.remove('caret');
-          el.style.setProperty('--reveal', '100%');
-        };
+      const els = [...container.querySelectorAll('h5, h6, p')];
+      if (!els.length) return;
+
+      // Salva texto completo e esvazia cada elemento
+      const texts = els.map(el => {
+        const t = el.textContent || '';
+        el.textContent = '';
+        return t;
       });
+
+      const totalChars = texts.reduce((s, t) => s + t.length, 0) || 1;
+      // Alvo ~5s para textos curtos, mais rápido para longos
+      const msPerChar = Math.max(2, Math.min(18, 5000 / totalChars));
+
+      let elIdx = 0, charIdx = 0, acc = 0, lastTs = 0;
+
+      const frame = (ts) => {
+        if (elIdx >= els.length) { this._scrollBottom(); return; }
+        if (lastTs === 0) { lastTs = ts; requestAnimationFrame(frame); return; }
+
+        acc += ts - lastTs;
+        lastTs = ts;
+
+        const toAdd = Math.min(Math.floor(acc / msPerChar), 40);
+        if (toAdd > 0) {
+          acc -= toAdd * msPerChar;
+          for (let i = 0; i < toAdd; i++) {
+            if (elIdx >= els.length) break;
+            charIdx++;
+            if (charIdx > texts[elIdx].length) {
+              els[elIdx].textContent = texts[elIdx]; // finaliza elemento
+              elIdx++;
+              charIdx = 0;
+            } else {
+              els[elIdx].textContent = texts[elIdx].slice(0, charIdx);
+            }
+          }
+          this._scrollBottom();
+        }
+
+        if (elIdx < els.length) requestAnimationFrame(frame);
+      };
+
+      requestAnimationFrame(frame);
     },
 
     /* ═══════════════════ NETWORK ═══════════════════ */
@@ -460,15 +572,45 @@
 
     /* ═══════════════════ SPINNER ═══════════════════ */
     _dotsStart() {
+      const msgs = [
+        'Recebendo dados…',
+        'Analisando KPI…',
+        'Enviando dados para Pandas…',
+        'Enviando para LLM…',
+        'Recebendo Resposta…',
+      ];
+      // Insere "Gastando seus tokens :)" em posição aleatória
+      msgs.splice(Math.floor(Math.random() * (msgs.length + 1)), 0, 'Gastando seus tokens :)');
+
+      const icon = PROVIDER_ICONS[this._state.provider] || PROVIDER_ICONS.groq;
+
       const wrap = document.createElement('div');
       wrap.id = '_iadSpinner';
       wrap.className = 'iad-loading';
-      wrap.innerHTML = '<span class="iad-spinner"></span><span style="opacity:.55;font-size:.8rem">Analisando…</span>';
+      wrap.style.gap = '8px';
+      wrap.innerHTML = `<span class="iad-prov-icon">${icon}</span><span class="iad-spinner"></span><span id="_iadStatusMsg" class="iad-status-msg">${msgs[0]}</span>`;
       this._outBox().appendChild(wrap);
       this._scrollBottom();
+
+      let idx = 1;
+      this._dotsInterval = setInterval(() => {
+        const el = document.getElementById('_iadStatusMsg');
+        if (!el) return;
+        el.classList.add('iad-fade-out');
+        setTimeout(() => {
+          if (!document.getElementById('_iadStatusMsg')) return;
+          el.textContent = msgs[idx % msgs.length];
+          el.classList.remove('iad-fade-out');
+          idx++;
+        }, 230);
+      }, 1700);
     },
 
     _dotsStop() {
+      if (this._dotsInterval) {
+        clearInterval(this._dotsInterval);
+        this._dotsInterval = null;
+      }
       const el = document.getElementById('_iadSpinner');
       if (el) el.remove();
     },

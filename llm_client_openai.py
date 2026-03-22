@@ -7,7 +7,7 @@ from openai import OpenAI
 
 @dataclass
 class LLMConfig:
-    model: str = os.getenv("OPENAI_MODEL", "gpt-4.1")
+    model: str = os.getenv("OPENAI_MODEL", "gpt-4o")
     temperature: float = 0.1
     max_tokens: int = 4096
 

@@ -21,6 +21,8 @@ Rotas:
 import os
 import secrets
 import smtplib
+import sqlite3
+from datetime import date, datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -30,13 +32,14 @@ from itsdangerous import BadSignature, TimestampSigner
 from sqlalchemy import func
 
 from auth_db import (
-    SessionLocal, User, UserPosto, LoginHistory, IAConversa,
+    SessionLocal, User, UserPosto, LoginHistory, IAConversa, KPIContexto, IAConfigGlobal,
     get_user_by_email, get_user_by_id, init_db,
 )
 
 # Clientes LLM (carregados sob demanda para não quebrar se a API key faltar)
 _openai_client = None
 _anthropic_client = None
+_groq_client = None
 
 def _get_openai():
     global _openai_client
@@ -52,14 +55,34 @@ def _get_anthropic():
         _anthropic_client = LLMClientAnthropic()
     return _anthropic_client
 
+def _get_groq():
+    global _groq_client
+    if _groq_client is None:
+        from llm_client import LLMClient
+        _groq_client = LLMClient()
+    return _groq_client
+
 _IA_SYSTEM_PROMPT = """Você é analista de dados da CAMIM — rede de clínicas médicas.
 
-REGRAS OBRIGATÓRIAS:
-1. Use APENAS os dados fornecidos no contexto JSON. NUNCA invente, estime ou use conhecimento externo para gerar valores monetários.
-2. Se a pergunta mencionar um posto específico (ex: "em X", "no posto A"), use EXCLUSIVAMENTE os dados daquele posto no contexto.
-3. Campos com sufixo "_consolidado" contêm o total de TODOS os postos. NÃO os use para responder sobre um único posto.
-4. Se os dados de um posto não estiverem disponíveis no contexto, informe isso claramente.
-5. Responda em português brasileiro de forma objetiva e com os valores exatos do contexto.
+REGRA FUNDAMENTAL DE NEGÓCIO:
+- Retirada e Campinho NUNCA entram nos totais de receita ou despesa operacional.
+- Elas aparecem no contexto como item separado, apenas para referência.
+- EXCEÇÃO: quando o contexto indicar explicitamente "Retirada: incluída nos totais".
+
+SEU PAPEL:
+- Os dados chegam pré-calculados pelo sistema (pandas). Use-os EXATAMENTE como fornecidos.
+- NUNCA recalcule, reestime ou invente valores. Se um número não consta no contexto, diga isso.
+- Seu trabalho é EXPLICAR o que aconteceu com base nos dados recebidos — não calcular.
+- Se a pergunta mencionar posto específico, use EXCLUSIVAMENTE os dados daquele posto.
+
+FORMATAÇÃO OBRIGATÓRIA:
+- Use ## para seções (ex: ## Receita, ## Despesas, ## Resultado)
+- Use ### para subseções ou postos
+- Use "- item" para listas
+- Inclua os valores monetários exatos do contexto e as variações percentuais fornecidas
+- Quando o contexto contiver seções "Aumentos significativos" ou "Reduções significativas" com itens listados, reproduza OBRIGATORIAMENTE TODOS os itens daquela seção com os valores e variações exatos. Não omita nenhum item.
+- Termine com parágrafo de conclusão/interpretação
+- NÃO use tabelas markdown, NÃO use negrito (**), NÃO use itálico (_)
 """
 
 IA_GROQ_URL = os.environ.get("IA_GROQ_URL", "http://127.0.0.1:8030/ia/analisar")
@@ -490,51 +513,85 @@ def ia_chat():
     pergunta_txt = str(d.get("prompt", ""))[:2000]
     pagina_txt   = str(d.get("pagina", ""))[:200]
     provider     = str(d.get("provider", "groq")).lower().strip()
-    contexto     = str(d.get("contexto", ""))[:30000]
+
+    # ── Monta contexto: builder pandas ou contexto legado ──────────────────────
+    kpi              = str(d.get("kpi", "")).strip()
+    incluir_retirada = bool(d.get("incluir_retirada", False))
+
+    if kpi:
+        try:
+            from ia_context_builder import build_context
+            postos      = d.get("postos") or []
+            periodo_ini = str(d.get("periodo_ini", ""))[:7]
+            periodo_fim = str(d.get("periodo_fim", ""))[:7]
+            contexto = build_context(
+                kpi, postos, periodo_ini, periodo_fim, pergunta_txt, incluir_retirada
+            )
+        except Exception as exc:
+            contexto = f"[Erro no context builder: {exc}]"
+    else:
+        contexto = str(d.get("contexto", ""))[:100000]
+
+    # ── Carrega contexto de negócio do KPI (editável pelo admin) ───────────────
+    kpi_contexto_txt = ""
+    if kpi:
+        _db = SessionLocal()
+        try:
+            kpi_ctx = _db.query(KPIContexto).filter_by(kpi_slug=kpi).first()
+            if kpi_ctx and kpi_ctx.contexto and kpi_ctx.contexto.strip():
+                kpi_contexto_txt = kpi_ctx.contexto.strip()
+        except Exception:
+            pass
+        finally:
+            _db.close()
+
+    # ── Carrega regras gerais (editáveis pelo admin) ────────────────────────────
+    regras_gerais_txt = ""
+    _db2 = SessionLocal()
+    try:
+        cfg = _db2.query(IAConfigGlobal).filter_by(chave="regras_gerais").first()
+        if cfg and cfg.valor and cfg.valor.strip():
+            regras_gerais_txt = cfg.valor.strip()
+    except Exception:
+        pass
+    finally:
+        _db2.close()
+
+    # ── Monta system prompt dinâmico ────────────────────────────────────────────
+    system_prompt = _IA_SYSTEM_PROMPT
+    if regras_gerais_txt:
+        system_prompt += f"\nREGRAS GERAIS (aplicam-se a todos os KPIs):\n{regras_gerais_txt}\n"
+    if kpi_contexto_txt:
+        system_prompt += f"\nCONTEXTO DE NEGÓCIO DESTE KPI (escrito pelo gestor):\n{kpi_contexto_txt}\n"
 
     resposta_json = None
     resposta_txt  = ""
 
-    # ── Groq (serviço externo ia-groq) ──────────────────────────────────────
+    prompt_completo = (
+        f"Dados do relatório (pré-calculados pelo sistema):\n\n{contexto}"
+        f"\n\nPergunta do usuário:\n{pergunta_txt}"
+    )
+
+    # ── Groq ─────────────────────────────────────────────────────────────────
     if provider == "groq":
         try:
-            gr = http_requests.post(
-                IA_GROQ_URL,
-                json=d,
-                timeout=190,
-                headers={"Content-Type": "application/json"},
-            )
-            gr.raise_for_status()
-            resposta_json = gr.json()
+            resposta_txt  = _get_groq().gerar_texto(prompt=prompt_completo, system_prompt=system_prompt)
+            resposta_json = {"resposta": resposta_txt, "provider": "groq"}
         except Exception as exc:
             return jsonify({"erro": f"Groq indisponível: {exc}"}), 502
 
-        if isinstance(resposta_json, dict):
-            resposta_txt = (
-                resposta_json.get("html") or
-                resposta_json.get("livre") or
-                resposta_json.get("text") or
-                str(resposta_json)
-            )[:5000]
-        else:
-            resposta_txt = str(resposta_json)[:5000]
-
-    # ── OpenAI ───────────────────────────────────────────────────────────────
+    # ── OpenAI ────────────────────────────────────────────────────────────────
     elif provider == "openai":
         try:
-            llm = _get_openai()
-            prompt_completo = f"Contexto do relatório:\n\n{contexto}\n\nPergunta do usuário:\n\n{pergunta_txt}"
-            resposta_txt  = llm.gerar_texto(prompt=prompt_completo, system_prompt=_IA_SYSTEM_PROMPT)
+            resposta_txt  = _get_openai().gerar_texto(prompt=prompt_completo, system_prompt=system_prompt)
             resposta_json = {"resposta": resposta_txt, "provider": "openai"}
         except Exception as exc:
             return jsonify({"erro": f"OpenAI indisponível: {exc}"}), 502
 
-    # ── Anthropic ────────────────────────────────────────────────────────────
+    # ── Anthropic ─────────────────────────────────────────────────────────────
     elif provider == "anthropic":
         try:
-            llm = _get_anthropic()
-            prompt_completo = f"Contexto do relatório:\n\n{contexto}\n\nPergunta do usuário:\n\n{pergunta_txt}"
-            resposta_txt  = llm.gerar_texto(prompt=prompt_completo, system_prompt=_IA_SYSTEM_PROMPT)
+            resposta_txt  = _get_anthropic().gerar_texto(prompt=prompt_completo, system_prompt=system_prompt)
             resposta_json = {"resposta": resposta_txt, "provider": "anthropic"}
         except Exception as exc:
             return jsonify({"erro": f"Anthropic indisponível: {exc}"}), 502
@@ -560,6 +617,86 @@ def ia_chat():
         db.close()
 
     return jsonify(resposta_json)
+
+
+@auth_bp.get("/admin/api/kpi_contexto")
+def admin_kpi_contexto_list():
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    db = SessionLocal()
+    try:
+        items = db.query(KPIContexto).order_by(KPIContexto.kpi_slug).all()
+        return jsonify([{
+            "kpi_slug":  i.kpi_slug,
+            "titulo":    i.titulo,
+            "contexto":  i.contexto or "",
+            "updated_at": i.updated_at.isoformat() if i.updated_at else None,
+        } for i in items])
+    finally:
+        db.close()
+
+
+@auth_bp.post("/admin/api/kpi_contexto/<slug>")
+def admin_kpi_contexto_save(slug: str):
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    d = request.get_json(silent=True) or {}
+    db = SessionLocal()
+    try:
+        item = db.query(KPIContexto).filter_by(kpi_slug=slug).first()
+        if not item:
+            item = KPIContexto(kpi_slug=slug, titulo=d.get("titulo", slug))
+            db.add(item)
+        item.contexto   = str(d.get("contexto", "")).strip()
+        item.titulo     = str(d.get("titulo", item.titulo or slug)).strip()
+        from datetime import datetime
+        item.updated_at = datetime.utcnow()
+        db.commit()
+        return jsonify({"ok": True})
+    except Exception as exc:
+        db.rollback()
+        return jsonify({"erro": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@auth_bp.get("/admin/api/config_global")
+def admin_config_global_list():
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    db = SessionLocal()
+    try:
+        items = db.query(IAConfigGlobal).order_by(IAConfigGlobal.chave).all()
+        return jsonify([{
+            "chave":      i.chave,
+            "valor":      i.valor or "",
+            "updated_at": i.updated_at.isoformat() if i.updated_at else None,
+        } for i in items])
+    finally:
+        db.close()
+
+
+@auth_bp.post("/admin/api/config_global/<chave>")
+def admin_config_global_save(chave: str):
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    d = request.get_json(silent=True) or {}
+    db = SessionLocal()
+    try:
+        item = db.query(IAConfigGlobal).filter_by(chave=chave).first()
+        if not item:
+            item = IAConfigGlobal(chave=chave)
+            db.add(item)
+        item.valor = str(d.get("valor", "")).strip()
+        from datetime import datetime
+        item.updated_at = datetime.utcnow()
+        db.commit()
+        return jsonify({"ok": True})
+    except Exception as exc:
+        db.rollback()
+        return jsonify({"erro": str(exc)}), 500
+    finally:
+        db.close()
 
 
 @auth_bp.get("/api/ia/saudacao")
@@ -593,3 +730,367 @@ def ia_saudacao():
         return jsonify({"nome": nome, "perguntas_frequentes": perguntas})
     finally:
         db.close()
+
+
+# ── Indicadores: Push de Cobrança ───────────────────────────────────────────
+
+@auth_bp.get("/api/indicadores/push")
+def indicadores_push():
+    """Retorna último envio de push por posto, para o painel de indicadores."""
+    email, user_postos = decode_user()
+    if not email:
+        return ("", 401)
+
+    push_db = os.environ.get("PUSH_LOG_DB", "/opt/push_clientes/push_log.db")
+    hoje = date.today()
+
+    try:
+        conn = sqlite3.connect(f"file:{push_db}?mode=ro", uri=True)
+
+        # Descobre o nome da tabela dinamicamente
+        tables = [r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()]
+        tabela = next(
+            (t for t in tables if "push" in t.lower() or "log" in t.lower()),
+            tables[0] if tables else None,
+        )
+        if not tabela:
+            conn.close()
+            return jsonify({"erro": "Nenhuma tabela encontrada em push_log.db"}), 500
+
+        # Descobre colunas dinamicamente
+        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({tabela})").fetchall()]
+        col_data  = next((c for c in cols if any(k in c.lower() for k in ("data", "hora", "created", "time", "sent"))), None)
+        col_posto = next((c for c in cols if "posto" in c.lower()), None)
+        col_modo  = next((c for c in cols if "modo" in c.lower()), None)
+
+        if not col_data or not col_posto:
+            conn.close()
+            return jsonify({"erro": f"Colunas não encontradas. Disponíveis: {cols}"}), 500
+
+        where = f"WHERE {col_modo} = 'producao'" if col_modo else ""
+        rows = conn.execute(f"""
+            SELECT {col_posto} AS posto,
+                   MAX({col_data}) AS ultimo_envio,
+                   COUNT(*) AS total_dia
+            FROM {tabela}
+            {where}
+            GROUP BY {col_posto}
+        """).fetchall()
+        conn.close()
+
+        result = {}
+        for posto_raw, ultimo_str, total in rows:
+            posto = str(posto_raw).strip().upper() if posto_raw else None
+            if not posto:
+                continue
+            if user_postos and posto not in user_postos:
+                continue
+            try:
+                ultimo_dt = datetime.fromisoformat(str(ultimo_str)).date()
+                dias = (hoje - ultimo_dt).days
+            except Exception:
+                dias = 999
+            result[posto] = {
+                "ultimo_envio": ultimo_str,
+                "dias": dias,
+            }
+
+        return jsonify(result)
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
+
+
+# ── Indicadores: Email de Cobrança ───────────────────────────────────────────
+
+@auth_bp.get("/api/indicadores/email")
+def indicadores_email():
+    """Retorna último envio de email por (posto, categoria) a partir do camim_kpi.db."""
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
+    hoje   = date.today()
+
+    try:
+        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
+
+        rows = conn.execute("""
+            SELECT posto,
+                   titulo_categoria,
+                   MAX(datahora)  AS ultimo_envio,
+                   COUNT(*)       AS total
+            FROM ind_email
+            GROUP BY posto, titulo_categoria
+            ORDER BY posto, titulo_categoria
+        """).fetchall()
+
+        sync_row = conn.execute("""
+            SELECT synced_at, total_records, status, mensagem
+            FROM   ind_sync_log
+            WHERE  indicador = 'email'
+            ORDER BY id DESC LIMIT 1
+        """).fetchone()
+
+        conn.close()
+
+        dados = {}
+        for posto, categoria, ultimo_str, total in rows:
+            posto = (posto or "").strip().upper()
+            if user_postos and posto not in user_postos:
+                continue
+            try:
+                ultimo_dt = datetime.fromisoformat(str(ultimo_str)).date()
+                dias = (hoje - ultimo_dt).days
+            except Exception:
+                dias = 999
+            chave = f"{posto}|{categoria}"
+            dados[chave] = {
+                "posto":         posto,
+                "categoria":     categoria,
+                "ultimo_envio":  ultimo_str,
+                "dias":          dias,
+                "total":         total,
+            }
+
+        return jsonify({
+            "dados": dados,
+            "sync":  {
+                "synced_at":     sync_row[0] if sync_row else None,
+                "total_records": sync_row[1] if sync_row else 0,
+                "status":        sync_row[2] if sync_row else None,
+                "mensagem":      sync_row[3] if sync_row else None,
+            },
+        })
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
+
+
+# ── Email Clientes: Dashboard ─────────────────────────────────────────────────
+
+POSTOS_NAMES_EMAIL = {
+    'A': 'Anchieta', 'N': 'Nilópolis', 'I': 'Nova Iguaçu', 'X': 'CGX',
+    'G': 'Campo Grande', 'Y': 'CGY', 'B': 'Bangu', 'R': 'Realengo',
+    'M': 'Madureira', 'C': 'Campinho', 'D': 'Del Castilho', 'J': 'JPA',
+    'P': 'Rio das Pedras',
+}
+
+@auth_bp.get("/api/email_clientes/dashboard")
+def email_clientes_dashboard():
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
+    hoje_str = date.today().isoformat()
+
+    try:
+        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
+
+        postos_filter = ""
+        params_p = []
+        if user_postos:
+            ph = ",".join("?" * len(user_postos))
+            postos_filter = f"AND posto IN ({ph})"
+            params_p = list(user_postos)
+
+        hoje_row = conn.execute(f"""
+            SELECT COUNT(*) AS total,
+                   COUNT(DISTINCT posto) AS postos_ativos,
+                   COUNT(DISTINCT titulo_categoria) AS categorias
+            FROM ind_email
+            WHERE date(datahora) = ? {postos_filter}
+        """, [hoje_str] + params_p).fetchone()
+
+        por_cat_7dias = conn.execute(f"""
+            SELECT date(datahora) AS dia, titulo_categoria, COUNT(*) AS total
+            FROM ind_email
+            WHERE date(datahora) >= date(?, '-6 days') {postos_filter}
+            GROUP BY date(datahora), titulo_categoria
+            ORDER BY dia, titulo_categoria
+        """, [hoje_str] + params_p).fetchall()
+
+        por_cat_hoje = conn.execute(f"""
+            SELECT titulo_categoria, COUNT(*) AS total
+            FROM ind_email
+            WHERE date(datahora) = ? {postos_filter}
+            GROUP BY titulo_categoria
+            ORDER BY total DESC
+        """, [hoje_str] + params_p).fetchall()
+
+        por_posto = conn.execute(f"""
+            SELECT posto,
+                   MAX(datahora) AS ultimo_envio,
+                   SUM(CASE WHEN date(datahora) = ? THEN 1 ELSE 0 END) AS total_hoje,
+                   COUNT(*) AS total_geral
+            FROM ind_email
+            WHERE 1=1 {postos_filter}
+            GROUP BY posto
+            ORDER BY posto
+        """, [hoje_str] + params_p).fetchall()
+
+        ultimo_batch = conn.execute(f"""
+            SELECT MAX(datahora) FROM ind_email WHERE 1=1 {postos_filter}
+        """, params_p).fetchone()
+
+        sync_row = conn.execute("""
+            SELECT synced_at, total_records, status, mensagem
+            FROM ind_sync_log WHERE indicador = 'email'
+            ORDER BY id DESC LIMIT 1
+        """).fetchone()
+
+        conn.close()
+
+        hoje_date = date.today()
+        postos_result = []
+        postos_sem_hoje = []
+        for row in por_posto:
+            p, ultimo_str, total_hoje, total_geral = row
+            p = (p or "").strip().upper()
+            try:
+                ultimo_dt = datetime.fromisoformat(str(ultimo_str)).date()
+                diff = (hoje_date - ultimo_dt).days
+                if diff == 0:
+                    status_envio = "hoje"
+                elif diff == 1:
+                    status_envio = "ontem"
+                else:
+                    status_envio = "desatualizado"
+            except Exception:
+                status_envio = "sem_dados"
+
+            if status_envio != "hoje":
+                postos_sem_hoje.append({"posto": p, "nome": POSTOS_NAMES_EMAIL.get(p, p)})
+
+            postos_result.append({
+                "posto": p,
+                "nome": POSTOS_NAMES_EMAIL.get(p, p),
+                "status_envio": status_envio,
+                "ultimo_envio": ultimo_str,
+                "total_hoje": total_hoje or 0,
+                "total_geral": total_geral or 0,
+            })
+
+        return jsonify({
+            "hoje": {
+                "total": hoje_row[0] if hoje_row else 0,
+                "postos_ativos": hoje_row[1] if hoje_row else 0,
+                "categorias": hoje_row[2] if hoje_row else 0,
+            },
+            "por_categoria_7dias": [
+                {"dia": r[0], "categoria": r[1], "total": r[2]}
+                for r in por_cat_7dias
+            ],
+            "por_categoria_hoje": [
+                {"categoria": r[0], "total": r[1]}
+                for r in por_cat_hoje
+            ],
+            "por_posto": postos_result,
+            "postos_sem_hoje": postos_sem_hoje,
+            "ultimo_batch": ultimo_batch[0] if ultimo_batch else None,
+            "sync": {
+                "synced_at":     sync_row[0] if sync_row else None,
+                "total_records": sync_row[1] if sync_row else 0,
+                "status":        sync_row[2] if sync_row else None,
+                "mensagem":      sync_row[3] if sync_row else None,
+            },
+            "total_postos": len(POSTOS_NAMES_EMAIL),
+        })
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
+
+
+# ── Email Clientes: Logs ──────────────────────────────────────────────────────
+
+@auth_bp.get("/api/email_clientes/logs")
+def email_clientes_logs():
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
+    PER_PAGE = 50
+
+    posto     = (request.args.get("posto")     or "").strip().upper()
+    categoria = (request.args.get("categoria") or "").strip()
+    status    = (request.args.get("status")    or "").strip()
+    matricula = (request.args.get("matricula") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to   = (request.args.get("date_to")   or "").strip()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except Exception:
+        page = 1
+
+    where  = ["1=1"]
+    params = []
+
+    if user_postos:
+        ph = ",".join("?" * len(user_postos))
+        where.append(f"posto IN ({ph})")
+        params.extend(list(user_postos))
+
+    if posto:
+        where.append("posto = ?")
+        params.append(posto)
+    if categoria:
+        where.append("titulo_categoria LIKE ?")
+        params.append(f"%{categoria}%")
+    if status:
+        where.append("status LIKE ?")
+        params.append(f"%{status}%")
+    if matricula:
+        where.append("matricula LIKE ?")
+        params.append(f"%{matricula}%")
+    if date_from:
+        where.append("date(datahora) >= ?")
+        params.append(date_from)
+    if date_to:
+        where.append("date(datahora) <= ?")
+        params.append(date_to)
+
+    where_str = " AND ".join(where)
+
+    try:
+        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
+
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM ind_email WHERE {where_str}", params
+        ).fetchone()[0]
+
+        rows = conn.execute(f"""
+            SELECT id, datahora, posto, matricula, titulo_categoria, status
+            FROM ind_email
+            WHERE {where_str}
+            ORDER BY datahora DESC, id DESC
+            LIMIT ? OFFSET ?
+        """, params + [PER_PAGE, (page - 1) * PER_PAGE]).fetchall()
+
+        por_posto = conn.execute(f"""
+            SELECT posto, COUNT(*) AS cnt
+            FROM ind_email
+            WHERE {where_str}
+            GROUP BY posto ORDER BY posto
+        """, params).fetchall()
+
+        conn.close()
+
+        return jsonify({
+            "rows": [
+                {"id": r[0], "datahora": r[1], "posto": r[2],
+                 "matricula": r[3], "titulo_categoria": r[4], "status": r[5]}
+                for r in rows
+            ],
+            "total":    total,
+            "page":     page,
+            "per_page": PER_PAGE,
+            "por_posto": [{"posto": r[0], "cnt": r[1]} for r in por_posto],
+        })
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500

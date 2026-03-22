@@ -100,8 +100,80 @@ class IAConversa(Base):
     user       = relationship("User", back_populates="ia_conversas")
 
 
+class KPIContexto(Base):
+    """Contexto de negócio por KPI — editável pelo admin, injetado no system prompt."""
+    __tablename__ = "kpi_contexto"
+
+    id         = Column(Integer, primary_key=True)
+    kpi_slug   = Column(String(100), unique=True, nullable=False, index=True)
+    titulo     = Column(String(200), default="")
+    contexto   = Column(Text, default="")
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class IAConfigGlobal(Base):
+    """Configurações globais da IA — chave/valor editáveis pelo admin."""
+    __tablename__ = "ia_config_global"
+
+    id         = Column(Integer, primary_key=True)
+    chave      = Column(String(100), unique=True, nullable=False, index=True)
+    valor      = Column(Text, default="")
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+_REGRAS_GERAIS_DEFAULT = """\
+Em perguntas comparativas (quando o usuário perguntar sobre diferenças, variações, aumentos, quedas entre períodos), \
+siga estas regras obrigatoriamente:
+
+1. OUTLIERS OBRIGATÓRIOS: O sistema já entrega os dados pré-calculados com as maiores variações. \
+Apresente TODOS os itens com variação discrepante em relação ao padrão do período — não limite a top 3 ou top 5. \
+Se 95% dos itens variam 10% e alguns variam 30%, mostre TODOS esses casos anômalos, um por linha.
+
+2. FORMATO DAS VARIAÇÕES: Cada item de despesa ou receita em uma linha separada, com valor absoluto e percentual. \
+Exemplo: "- DAS/Simples Nacional: R$31.877,21 → R$45.973,58  (+R$14.096,37 / +44,2%)"
+
+3. SEPARAÇÃO CLARA: Primeiro os aumentos significativos (ordenados do maior ao menor variação), \
+depois as reduções significativas. Seção separada para cada direção.
+
+4. CONTEXTO DO OUTLIER: Após listar os itens anômalos, explique brevemente o que pode ter causado \
+cada variação expressiva, com base no conhecimento do setor de saúde.
+
+5. CONCLUSÃO: Feche com um parágrafo sintetizando o impacto geral no resultado e na margem.\
+"""
+
+
+# KPIs conhecidos com títulos padrão
+_KPI_DEFAULTS = [
+    ("receita_despesa",        "KPI Receitas x Despesas"),
+    ("receita_despesa_rateio", "KPI R x D com Rateio"),
+    ("alimentacao",            "KPI Alimentação"),
+    ("vendas",                 "KPI Vendas / Metas"),
+    ("medicos",                "KPI Médicos"),
+    ("consultas",              "KPI Consultas (Status)"),
+    ("notas_rps",              "KPI Notas x RPS"),
+    ("prescricoes",            "KPI Prescrições"),
+    ("clientes",               "KPI Clientes"),
+    ("indices_oficiais",       "KPI Índices Oficiais"),
+    ("liberty",                "KPI CAMIM Liberty"),
+]
+
+
 def init_db():
     Base.metadata.create_all(engine)
+    db = SessionLocal()
+    try:
+        # KPIs conhecidos
+        for slug, titulo in _KPI_DEFAULTS:
+            if not db.query(KPIContexto).filter_by(kpi_slug=slug).first():
+                db.add(KPIContexto(kpi_slug=slug, titulo=titulo, contexto=""))
+        # Regras gerais — seed com valor padrão se ainda não existe
+        if not db.query(IAConfigGlobal).filter_by(chave="regras_gerais").first():
+            db.add(IAConfigGlobal(chave="regras_gerais", valor=_REGRAS_GERAIS_DEFAULT))
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 def get_user_by_email(db, email: str):

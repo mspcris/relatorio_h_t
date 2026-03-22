@@ -27,6 +27,11 @@
     font-weight: 600;
     margin: 1px;
   }
+  .badge-posto.restrito {
+    background: #fdecea;
+    color: #c62828;
+    border-color: #ef9a9a;
+  }
   .posto-check label {
     display: inline-flex;
     align-items: center;
@@ -35,6 +40,7 @@
     font-size: .9rem;
     cursor: pointer;
   }
+  .posto-check label.restrito { color: #c62828; font-weight: 600; }
   .table td, .table th { vertical-align: middle; }
   #toast-wrap {
     position: fixed;
@@ -103,33 +109,104 @@
   <div class="content-wrapper">
     <section class="content p-3">
 
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="mb-0">Usuários do sistema</h2>
-        <button class="btn btn-primary" onclick="abrirModalNovo()">
-          <i class="fas fa-plus mr-1"></i> Novo usuário
-        </button>
-      </div>
+      <!-- Tabs principais -->
+      <ul class="nav nav-tabs mb-3" id="adminTabs">
+        <li class="nav-item">
+          <a class="nav-link active" id="tab-usuarios-lnk" data-toggle="tab" href="#tab-usuarios">
+            <i class="fas fa-users mr-1"></i>Usuários
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" id="tab-kpi-lnk" data-toggle="tab" href="#tab-kpi" onclick="carregarKpiContexto()">
+            <i class="fas fa-brain mr-1"></i>Contexto por KPI
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" id="tab-regras-lnk" data-toggle="tab" href="#tab-regras" onclick="carregarRegrasGerais()">
+            <i class="fas fa-gavel mr-1"></i>Regras Gerais
+          </a>
+        </li>
+      </ul>
 
-      <div class="card">
-        <div class="card-body p-0">
-          <table class="table table-hover table-sm mb-0" id="tbl">
-            <thead class="thead-light">
-              <tr>
-                <th>E-mail</th>
-                <th>Nome</th>
-                <th>Postos</th>
-                <th style="width:80px">Admin</th>
-                <th style="width:80px">Ativo</th>
-                <th style="width:160px">Último Login</th>
-                <th style="width:180px">Ações</th>
-              </tr>
-            </thead>
-            <tbody id="tbody">
-              <tr><td colspan="7" class="text-center text-muted py-4">Carregando…</td></tr>
-            </tbody>
-          </table>
+      <div class="tab-content">
+
+        <!-- ── Tab Usuários ────────────────────────────────────────────── -->
+        <div class="tab-pane fade show active" id="tab-usuarios">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="mb-0">Usuários do sistema</h2>
+            <button class="btn btn-primary" onclick="abrirModalNovo()">
+              <i class="fas fa-plus mr-1"></i> Novo usuário
+            </button>
+          </div>
+          <div class="card">
+            <div class="card-body p-0">
+              <table class="table table-hover table-sm mb-0" id="tbl">
+                <thead class="thead-light">
+                  <tr>
+                    <th>E-mail</th>
+                    <th>Nome</th>
+                    <th>Postos</th>
+                    <th style="width:80px">Admin</th>
+                    <th style="width:80px">Ativo</th>
+                    <th style="width:160px">Último Login</th>
+                    <th style="width:180px">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody">
+                  <tr><td colspan="7" class="text-center text-muted py-4">Carregando…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </div>
+
+        <!-- ── Tab Contexto KPI ────────────────────────────────────────── -->
+        <div class="tab-pane fade" id="tab-kpi">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h2 class="mb-0">Contexto de negócio por KPI</h2>
+              <small class="text-muted">
+                Escreva regras, particularidades e conhecimentos de negócio que a IA deve considerar em cada página KPI.
+                Esse texto é injetado no system prompt antes de cada resposta.
+              </small>
+            </div>
+          </div>
+          <div id="kpi-lista">
+            <div class="text-center text-muted py-4">Carregando…</div>
+          </div>
+        </div>
+
+        <!-- ── Tab Regras Gerais ────────────────────────────────────────── -->
+        <div class="tab-pane fade" id="tab-regras">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h2 class="mb-0">Regras Gerais da IA</h2>
+              <small class="text-muted">
+                Aplicam-se a todos os KPIs. Injetadas no system prompt antes do contexto específico de cada página.
+              </small>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <label class="small font-weight-bold text-muted mb-1">
+                Regras globais (formatação, comportamento, análise de outliers, etc.):
+              </label>
+              <textarea id="regras-gerais-txt"
+                class="form-control"
+                rows="18"
+                placeholder="Escreva as regras que a IA deve seguir em todas as análises..."
+                style="font-size:.85rem;resize:vertical;font-family:monospace"></textarea>
+              <div class="mt-3 d-flex justify-content-between align-items-center">
+                <small class="text-muted" id="regras-updated">—</small>
+                <button class="btn btn-primary" onclick="salvarRegrasGerais()">
+                  <i class="fas fa-save mr-1"></i> Salvar Regras Gerais
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /tab-content -->
 
     </section>
   </div>
@@ -239,6 +316,7 @@
 
 <script>
 const TODOS_POSTOS = ['A','B','C','D','G','I','J','M','N','P','R','X','Y'];
+const POSTOS_RESTRITOS = new Set(['C','D','J','M','P']);
 let _usuarios = [];
 
 // ── Inicialização ─────────────────────────────────────────────────────────────
@@ -246,8 +324,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // monta checkboxes de postos
   const wrap = document.getElementById('postos-check');
   TODOS_POSTOS.forEach(p => {
+    const cls = POSTOS_RESTRITOS.has(p) ? ' class="restrito"' : '';
     wrap.innerHTML += `
-      <label>
+      <label${cls}>
         <input type="checkbox" class="posto-cb" value="${p}"> ${p}
       </label>`;
   });
@@ -279,7 +358,7 @@ function renderTabela() {
     <tr>
       <td>${u.email}</td>
       <td>${u.nome || '<span class="text-muted">—</span>'}</td>
-      <td>${u.postos.map(p => `<span class="badge-posto">${p}</span>`).join('') || '<span class="text-muted">nenhum</span>'}</td>
+      <td>${u.postos.map(p => `<span class="badge-posto${POSTOS_RESTRITOS.has(p) ? ' restrito' : ''}">${p}</span>`).join('') || '<span class="text-muted">nenhum</span>'}</td>
       <td class="text-center">${u.is_admin ? '<i class="fas fa-shield-alt text-warning" title="Admin"></i>' : ''}</td>
       <td class="text-center">
         <span class="badge badge-${u.ativo ? 'success' : 'secondary'}">${u.ativo ? 'Sim' : 'Não'}</span>
@@ -465,6 +544,95 @@ function toast(msg, erro = false) {
   el.innerHTML = `<i class="fas fa-${erro ? 'exclamation-circle' : 'check-circle'} mr-2"></i>${msg}`;
   wrap.appendChild(el);
   setTimeout(() => el.remove(), 3500);
+}
+
+// ── Contexto KPI ──────────────────────────────────────────────────────────────
+let _kpiCarregado = false;
+
+async function carregarKpiContexto() {
+  if (_kpiCarregado) return;
+  const { ok, data } = await api('/admin/api/kpi_contexto');
+  const el = document.getElementById('kpi-lista');
+  if (!ok) { el.innerHTML = `<div class="text-danger">Erro ao carregar.</div>`; return; }
+  _kpiCarregado = true;
+  el.innerHTML = data.map(k => `
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center py-2">
+        <div>
+          <b>${escHtml(k.titulo)}</b>
+          <code class="ml-2 text-muted" style="font-size:.78rem">${escHtml(k.kpi_slug)}</code>
+        </div>
+        ${k.updated_at ? `<small class="text-muted">Atualizado: ${fmtDt(k.updated_at)}</small>` : ''}
+      </div>
+      <div class="card-body">
+        <label class="small font-weight-bold text-muted mb-1">
+          Regras de negócio / instruções para a IA neste KPI:
+        </label>
+        <textarea id="kpi-ctx-${escHtml(k.kpi_slug)}"
+          class="form-control form-control-sm"
+          rows="5"
+          placeholder="Ex: Receita e despesa nunca incluem retirada. Margem é calculada sobre receita total. Meses com ausência de dados são normais em postos em implantação..."
+          style="font-size:.85rem;resize:vertical">${escHtml(k.contexto)}</textarea>
+        <div class="mt-2 d-flex justify-content-end">
+          <button class="btn btn-sm btn-primary" onclick="salvarKpiContexto('${escHtml(k.kpi_slug)}', '${escHtml(k.titulo)}')">
+            <i class="fas fa-save mr-1"></i> Salvar
+          </button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function salvarKpiContexto(slug, titulo) {
+  const el = document.getElementById(`kpi-ctx-${slug}`);
+  if (!el) return;
+  const contexto = el.value;
+  const { ok, data } = await api(`/admin/api/kpi_contexto/${slug}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contexto, titulo }),
+  });
+  if (ok) {
+    toast(`Contexto de "${titulo}" salvo.`);
+    _kpiCarregado = false; // força reload na próxima abertura
+  } else {
+    toast(data.erro || 'Erro ao salvar.', true);
+  }
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Regras Gerais ──────────────────────────────────────────────────────────────
+let _regrasCarregado = false;
+
+async function carregarRegrasGerais() {
+  if (_regrasCarregado) return;
+  const { ok, data } = await api('/admin/api/config_global');
+  if (!ok) { toast('Erro ao carregar regras gerais.', true); return; }
+  _regrasCarregado = true;
+  const item = Array.isArray(data) ? data.find(x => x.chave === 'regras_gerais') : null;
+  if (item) {
+    document.getElementById('regras-gerais-txt').value = item.valor || '';
+    const el = document.getElementById('regras-updated');
+    if (el && item.updated_at) el.textContent = 'Atualizado: ' + fmtDt(item.updated_at);
+  }
+}
+
+async function salvarRegrasGerais() {
+  const valor = document.getElementById('regras-gerais-txt').value;
+  const { ok, data } = await api('/admin/api/config_global/regras_gerais', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ valor }),
+  });
+  if (ok) {
+    toast('Regras gerais salvas.');
+    _regrasCarregado = false;
+  } else {
+    toast(data.erro || 'Erro ao salvar.', true);
+  }
 }
 </script>
 </body>
