@@ -204,15 +204,15 @@
     <!-- ── Paginação ── -->
     <div class="d-flex justify-content-center mt-3" id="pagination"></div>
 
-    <!-- ── Modal: Categoria completa ── -->
+    <!-- ── Modal: Visualização do email ── -->
     <div class="modal fade" id="msgModal" tabindex="-1">
-      <div class="modal-dialog">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
-          <div class="modal-header">
+          <div class="modal-header py-2">
             <h6 class="modal-title" id="msgModalTitle"></h6>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
-          <div class="modal-body" id="msgModalBody"></div>
+          <div class="modal-body p-0" id="msgModalBody" style="min-height:400px"></div>
         </div>
       </div>
     </div>
@@ -376,9 +376,15 @@ function showMsg(title, msg) {
   document.getElementById('msgModalTitle').textContent = title;
   const body = document.getElementById('msgModalBody');
   if (msg && msg.trim()) {
-    body.innerHTML = '<pre style="white-space:pre-wrap;font-size:.85rem;margin:0">' + esc(msg) + '</pre>';
+    // Renderiza o HTML do email num iframe isolado (sandbox bloqueia scripts)
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'width:100%;height:600px;border:none;display:block';
+    iframe.sandbox = 'allow-same-origin';
+    body.innerHTML = '';
+    body.appendChild(iframe);
+    iframe.srcdoc = msg;
   } else {
-    body.innerHTML = '<span class="text-muted">Mensagem não disponível (sync anterior ao campo ser adicionado).</span>';
+    body.innerHTML = '<div class="p-3 text-muted">Mensagem não disponível (sync anterior ao campo ser adicionado).</div>';
   }
   new bootstrap.Modal(document.getElementById('msgModal')).show();
 }
