@@ -409,6 +409,23 @@ def listar_auditoria(limit: int = 500) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# CONTADOR HOJE
+# ---------------------------------------------------------------------------
+
+def enviados_hoje(campanha_id: int) -> int:
+    """Quantidade de envios accepted hoje para esta campanha."""
+    from datetime import date
+    hoje = date.today().isoformat()
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as n FROM envios "
+            "WHERE campanha_id=? AND status='accepted' AND date(enviado_em)=?",
+            (campanha_id, hoje)
+        ).fetchone()
+    return row["n"] if row else 0
+
+
+# ---------------------------------------------------------------------------
 # CONTROLE DE INTERVALO (por telefone, global entre campanhas)
 # ---------------------------------------------------------------------------
 

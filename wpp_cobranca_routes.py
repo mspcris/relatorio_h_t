@@ -174,7 +174,8 @@ def campanhas():
         return ('', 401)
     lista = db.listar_campanhas()
     for c in lista:
-        c["resumo"] = db.resumo_campanha(c["id"])
+        c["resumo"]        = db.resumo_campanha(c["id"])
+        c["enviados_hoje"] = db.enviados_hoje(c["id"])
     return render_template(
         "wpp_campanhas.html",
         USER_EMAIL=email, USER_IS_ADMIN=is_admin,
