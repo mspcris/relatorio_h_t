@@ -3405,13 +3405,17 @@ function updateExploradorDespesas(mesesSelec) {
         title: 'IA CAMIM',
         briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
         briefDefault: true,
-        getPayload: async ({ userQuery }) => ({
-          prompt:      userQuery,
-          kpi:         'receita_despesa_rateio',
-          postos:      postosSelecionados(),
-          periodo_ini: el('#from2')?.value || '',
-          periodo_fim: el('#to2')?.value   || '',
-        })
+        getPayload: async ({ userQuery }) => {
+          const activeLinks = document.querySelectorAll('#postoTabs .nav-link.active[data-posto]');
+          const postos = Array.from(activeLinks).map(a => a.dataset.posto).filter(p => p && p !== 'ALL');
+          return {
+            prompt:      userQuery,
+            kpi:         'receita_despesa_rateio',
+            postos,
+            periodo_ini: document.querySelector('#from2')?.value || '',
+            periodo_fim: document.querySelector('#to2')?.value   || '',
+          };
+        }
       });
     });
   </script>
