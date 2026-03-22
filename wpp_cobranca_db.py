@@ -318,14 +318,13 @@ def resumo_campanha(campanha_id: int) -> dict:
     }
 
 
-def listar_nao_enviados(campanha_id: int, limit: int = 200) -> list[dict]:
+def listar_nao_enviados(campanha_id: int) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
             """SELECT * FROM nao_enviados
                WHERE campanha_id=?
-               ORDER BY rodada_em DESC, motivo
-               LIMIT ?""",
-            (campanha_id, limit)
+               ORDER BY rodada_em DESC, motivo""",
+            (campanha_id,)
         ).fetchall()
     return [dict(r) for r in rows]
 

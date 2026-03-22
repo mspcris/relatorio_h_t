@@ -312,7 +312,7 @@ def envios(cid):
     offset = (page - 1) * limit
 
     lista_envios = db.listar_envios(cid, limit=limit, offset=offset)
-    lista_nao    = db.listar_nao_enviados(cid, limit=200)
+    lista_nao    = db.listar_nao_enviados(cid)
     resumo       = db.resumo_campanha(cid)
 
     # Agrupa não enviados por motivo

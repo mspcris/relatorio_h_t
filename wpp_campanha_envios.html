@@ -166,54 +166,82 @@
           {% if not nao_enviados_por_motivo %}
           <div class="callout callout-success">Nenhum registro pulado.</div>
           {% else %}
+
+          <!-- Filtros por motivo -->
+          <div class="mb-3 d-flex flex-wrap gap-2" id="filtroMotivos" style="gap:6px">
+            <span class="text-muted small mr-2 align-self-center">Filtrar:</span>
+            {% for motivo, registros in nao_enviados_por_motivo.items() %}
+            <button type="button"
+                    class="btn btn-sm btn-outline-warning btn-filtro-motivo active"
+                    data-motivo="{{ motivo }}"
+                    style="font-size:.75rem">
+              {{ motivo }}
+              <span class="badge badge-warning text-dark ml-1">{{ registros|length }}</span>
+            </button>
+            {% endfor %}
+          </div>
+
           {% for motivo, registros in nao_enviados_por_motivo.items() %}
-          <div class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
+          <div class="card mb-3 card-motivo" data-motivo="{{ motivo }}">
+            <div class="card-header d-flex justify-content-between align-items-center" style="cursor:pointer"
+                 data-toggle="collapse" data-target="#motivo-{{ loop.index }}">
               <span>
                 <i class="fas fa-exclamation-circle text-warning mr-1"></i>
                 <strong>{{ motivo }}</strong>
               </span>
-              <span class="badge badge-warning text-dark">{{ registros|length }}</span>
+              <span>
+                <span class="badge badge-warning text-dark">{{ registros|length }}</span>
+                <i class="fas fa-chevron-down ml-2 text-muted" style="font-size:.75rem"></i>
+              </span>
             </div>
-            <div class="card-body p-0">
-              <table class="table table-sm mb-0">
-                <thead class="thead-light">
+            <div class="collapse show" id="motivo-{{ loop.index }}">
+              <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                  <thead class="thead-light">
+                    <tr>
+                      <th>Rodada</th>
+                      <th>Posto</th>
+                      <th>idreceita</th>
+                      <th>Matrícula</th>
+                      <th>Nome</th>
+                      <th>Atraso</th>
+                      <th>Tel raw</th>
+                      <th>Tel limpo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                  {% for r in registros %}
                   <tr>
-                    <th>Rodada</th>
-                    <th>Posto</th>
-                    <th>idreceita</th>
-                    <th>Matrícula</th>
-                    <th>Nome</th>
-                    <th>Atraso</th>
-                    <th>Tel raw</th>
-                    <th>Tel limpo</th>
+                    <td><small>{{ r.rodada_em[:16].replace('T',' ') }}</small></td>
+                    <td><span class="badge badge-secondary">{{ r.posto or '' }}</span></td>
+                    <td><small>{{ r.idreceita or '' }}</small></td>
+                    <td>{{ r.matricula or '' }}</td>
+                    <td>{{ (r.nome or '')[:28] }}</td>
+                    <td>{{ r.dias_atraso or '' }}d</td>
+                    <td><small class="text-muted">{{ (r.telefone_raw or '')[:25] }}</small></td>
+                    <td><small>{{ r.telefone_ok or '—' }}</small></td>
                   </tr>
-                </thead>
-                <tbody>
-                {% for r in registros[:50] %}
-                <tr>
-                  <td><small>{{ r.rodada_em[:16].replace('T',' ') }}</small></td>
-                  <td><span class="badge badge-secondary">{{ r.posto or '' }}</span></td>
-                  <td><small>{{ r.idreceita or '' }}</small></td>
-                  <td>{{ r.matricula or '' }}</td>
-                  <td>{{ (r.nome or '')[:28] }}</td>
-                  <td>{{ r.dias_atraso or '' }}d</td>
-                  <td><small class="text-muted">{{ (r.telefone_raw or '')[:25] }}</small></td>
-                  <td><small>{{ r.telefone_ok or '—' }}</small></td>
-                </tr>
-                {% endfor %}
-                {% if registros|length > 50 %}
-                <tr><td colspan="8" class="text-center text-muted">
-                  <small>... e mais {{ registros|length - 50 }} registros</small>
-                </td></tr>
-                {% endif %}
-                </tbody>
-              </table>
+                  {% endfor %}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
           {% endfor %}
           {% endif %}
         </div>
+
+        <script>
+          // Filtro por motivo: toggle visibilidade do card
+          document.querySelectorAll('.btn-filtro-motivo').forEach(btn => {
+            btn.addEventListener('click', function() {
+              this.classList.toggle('active');
+              const motivo = this.dataset.motivo;
+              document.querySelectorAll(`.card-motivo[data-motivo="${motivo}"]`)
+                .forEach(card => card.style.display = this.classList.contains('active') ? '' : 'none');
+            });
+          });
+        </script>
 
       </div><!-- /.tab-content -->
     </section>
