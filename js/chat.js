@@ -347,19 +347,39 @@
       const content = document.createElement('div');
       content.className = 'iad-content';
 
-      const norm = this._normalizeForView(text);
-      if (norm.mode === 'html') {
-        content.innerHTML = this._safeHtml(norm.html);
+      const blocks = this._parseBlocks(this._coerceText(text));
+      if (!blocks.length) {
+        const p = document.createElement('p');
+        p.style.margin = '.3em 0';
+        p.textContent = String(text || '').trim();
+        content.appendChild(p);
       } else {
-        const blocks = norm.text.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
         blocks.forEach(b => {
-          const isTitle = /^###\s*/.test(b);
-          const el = document.createElement(isTitle ? 'h5' : 'p');
-          el.textContent = b.replace(/^###\s*/, '');
+          let el;
+          if (b.type === 'h2') {
+            el = document.createElement('h5');
+            el.style.cssText = 'font-size:1em;font-weight:700;margin:.6em 0 .2em;color:#e0e0e0;border-bottom:1px solid #3a3a3a;padding-bottom:3px';
+          } else if (b.type === 'h3') {
+            el = document.createElement('h6');
+            el.style.cssText = 'font-size:.92em;font-weight:600;margin:.45em 0 .15em;color:#ccc';
+          } else if (b.type === 'li') {
+            el = document.createElement('p');
+            el.style.cssText = 'margin:.15em 0 .15em 1em';
+            b.text = '• ' + b.text;
+          } else if (b.type === 'li2') {
+            el = document.createElement('p');
+            el.style.cssText = 'margin:.1em 0 .1em 2em;opacity:.85';
+            b.text = '◦ ' + b.text;
+          } else {
+            el = document.createElement('p');
+            el.style.cssText = 'margin:.35em 0';
+          }
+          el.textContent = b.text;
           content.appendChild(el);
         });
-        requestAnimationFrame(() => this._typeReveal(content));
       }
+
+      requestAnimationFrame(() => this._typeReveal(content));
 
       box.appendChild(content);
 
@@ -371,6 +391,57 @@
       row.appendChild(meta);
       this._outBox().appendChild(row);
       this._scrollBottom();
+    },
+
+    /* ═══════════════════ PARSER MARKDOWN → BLOCOS ═══════════════════ */
+    _parseBlocks(rawText) {
+      let t = String(rawText || '').trim();
+      t = t.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '  ');
+      // Remove code fences (keep inner text)
+      t = t.replace(/```\w*\n?([\s\S]*?)```/g, '$1');
+      // Remove bold/italic markers
+      t = t.replace(/\*\*(.*?)\*\*/g, '$1').replace(/__(.*?)__/g, '$1');
+      t = t.replace(/ _(.*?)_ /g, ' $1 ');
+      // Convert markdown table separator lines (|---|---|) to nothing
+      t = t.replace(/^\|?[\s:]*[-|: ]{3,}[\s:]*\|?\s*$/gm, '');
+      // Convert markdown table rows to readable format
+      t = t.replace(/^\|(.+)\|\s*$/gm, (_, inner) =>
+        inner.split('|').map(c => c.trim()).filter(Boolean).join('  —  ')
+      );
+      // Normalize whitespace
+      t = t.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+
+      const blocks = [];
+      let paraLines = [];
+
+      const flushPara = () => {
+        const txt = paraLines.join(' ').trim();
+        if (txt) blocks.push({ type: 'p', text: txt });
+        paraLines = [];
+      };
+
+      for (const raw of t.split('\n')) {
+        const line = raw.trim();
+        if (!line) { flushPara(); continue; }
+
+        if (/^#{1,2} /.test(line)) {
+          flushPara();
+          blocks.push({ type: 'h2', text: line.replace(/^#+\s+/, '') });
+        } else if (/^#{3,} /.test(line)) {
+          flushPara();
+          blocks.push({ type: 'h3', text: line.replace(/^#+\s+/, '') });
+        } else if (/^\s{2,}[-*•] /.test(raw)) {
+          flushPara();
+          blocks.push({ type: 'li2', text: line.replace(/^[-*•]\s+/, '') });
+        } else if (/^[-*•] /.test(line)) {
+          flushPara();
+          blocks.push({ type: 'li', text: line.replace(/^[-*•]\s+/, '') });
+        } else {
+          paraLines.push(line);
+        }
+      }
+      flushPara();
+      return blocks;
     },
 
     /* ═══════════════════ HELPERS UI ═══════════════════ */
@@ -412,23 +483,53 @@
       this._scrollBottom();
     },
 
-    /* ═══════════════════ TYPEWRITER ═══════════════════ */
-    _typeReveal(container, baseMs = 18) {
+    /* ═══════════════════ TYPEWRITER (rAF, char-by-char) ═══════════════════ */
+    _typeReveal(container) {
       if (!container) return;
-      container.querySelectorAll('h5, p').forEach(el => {
-        el.classList.add('iad-type', 'caret');
-        el.style.setProperty('--reveal', '0%');
-        const chars = (el.textContent || '').length || 1;
-        const dur   = Math.min(5000, Math.max(300, chars * baseMs));
-        const anim  = el.animate(
-          [{ '--reveal': '0%' }, { '--reveal': '100%' }],
-          { duration: dur, easing: `steps(${Math.min(chars, 2000)}, end)` }
-        );
-        anim.onfinish = () => {
-          el.classList.remove('caret');
-          el.style.setProperty('--reveal', '100%');
-        };
+      const els = [...container.querySelectorAll('h5, h6, p')];
+      if (!els.length) return;
+
+      // Salva texto completo e esvazia cada elemento
+      const texts = els.map(el => {
+        const t = el.textContent || '';
+        el.textContent = '';
+        return t;
       });
+
+      const totalChars = texts.reduce((s, t) => s + t.length, 0) || 1;
+      // Alvo ~5s para textos curtos, mais rápido para longos
+      const msPerChar = Math.max(2, Math.min(18, 5000 / totalChars));
+
+      let elIdx = 0, charIdx = 0, acc = 0, lastTs = 0;
+
+      const frame = (ts) => {
+        if (elIdx >= els.length) { this._scrollBottom(); return; }
+        if (lastTs === 0) { lastTs = ts; requestAnimationFrame(frame); return; }
+
+        acc += ts - lastTs;
+        lastTs = ts;
+
+        const toAdd = Math.min(Math.floor(acc / msPerChar), 40);
+        if (toAdd > 0) {
+          acc -= toAdd * msPerChar;
+          for (let i = 0; i < toAdd; i++) {
+            if (elIdx >= els.length) break;
+            charIdx++;
+            if (charIdx > texts[elIdx].length) {
+              els[elIdx].textContent = texts[elIdx]; // finaliza elemento
+              elIdx++;
+              charIdx = 0;
+            } else {
+              els[elIdx].textContent = texts[elIdx].slice(0, charIdx);
+            }
+          }
+          this._scrollBottom();
+        }
+
+        if (elIdx < els.length) requestAnimationFrame(frame);
+      };
+
+      requestAnimationFrame(frame);
     },
 
     /* ═══════════════════ NETWORK ═══════════════════ */
