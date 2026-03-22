@@ -17,6 +17,10 @@
     body { font-family: "Source Sans Pro", system-ui, sans-serif; font-size: 1rem; }
     .acao-badge { font-size: .75rem; min-width: 80px; display: inline-block; text-align: center; }
     pre.detalhe { font-size: .75rem; max-height: 300px; overflow-y: auto; background: #f8f9fa; border: 1px solid #dee2e6; padding: 8px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; }
+    @media (max-width: 767px) {
+      .content-wrapper { margin-left: 0 !important; }
+      .main-sidebar { z-index: 1050; }
+    }
   </style>
 </head>
 <body class="hold-transition sidebar-mini">
@@ -60,6 +64,7 @@
       {% else %}
       <div class="card">
         <div class="card-body p-0">
+          <div class="table-responsive">
           <table class="table table-sm table-hover mb-0">
             <thead class="thead-light">
               <tr>
@@ -119,6 +124,7 @@
             {% endfor %}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
       <small class="text-muted">Exibindo até 500 registros mais recentes.</small>
@@ -127,5 +133,9 @@
     </section>
   </div>
 </div>
+<script>
+// Collapse sidebar on mobile
+if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
+</script>
 </body>
 </html>

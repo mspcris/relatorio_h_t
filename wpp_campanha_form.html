@@ -36,6 +36,10 @@
     .opcoes-carregando { color: #6c757d; font-size: .85rem; }
     .preview-card { border: 1px solid #17a2b8; border-radius: .25rem; }
     .preview-card .card-body { padding: .75rem 1rem; }
+    @media (max-width: 767px) {
+      .content-wrapper { margin-left: 0 !important; }
+      .main-sidebar { z-index: 1050; }
+    }
   </style>
 </head>
 <body class="hold-transition sidebar-mini">
@@ -367,6 +371,9 @@
 </div>
 
 <script>
+// Collapse sidebar on mobile
+if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
+
 // ── Templates ────────────────────────────────────────────────────────────────
 let _templates = [];
 const TEMPLATE_ATUAL = "{{ campanha.template if campanha else 'notificacao_de_fatura' }}";

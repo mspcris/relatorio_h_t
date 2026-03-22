@@ -71,6 +71,39 @@
     .row-ontem            { background: rgba(255,212,59,.05); }
     .row-desatualizado    { background: rgba(255,107,107,.06); }
     .row-sem_dados        { background: #fafafa; }
+
+    /* ── Hamburger button (hidden on desktop) ─── */
+    #hamburger {
+      display: none;
+      background: none; border: none; cursor: pointer;
+      padding: 4px 8px; margin-right: 8px;
+      color: #4dabf7; font-size: 1.3rem; line-height: 1;
+      align-items: center;
+    }
+    /* ── Sidebar overlay (mobile only) ──────── */
+    #sidebar-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 199;
+    }
+    @media (max-width: 767px) {
+      #sidebar {
+        transform: translateX(-100%);
+        transition: transform .25s ease;
+        box-shadow: none;
+      }
+      #sidebar.mobile-open {
+        transform: translateX(0);
+        box-shadow: 4px 0 20px rgba(0,0,0,.3);
+      }
+      #sidebar.mobile-open + #sidebar-overlay { display: block; }
+      #main { margin-left: 0 !important; }
+      #hamburger { display: flex !important; }
+      .page-content { padding: 1rem .75rem; }
+      .kpi-val { font-size: 1.5rem !important; }
+      .kpi-label { font-size: .7rem; }
+    }
   </style>
 </head>
 <body>
@@ -111,9 +144,12 @@
   </div>
 </div>
 
+<div id="sidebar-overlay"></div>
+
 <!-- ═══ MAIN ═══ -->
 <div id="main">
   <div id="topbar">
+    <button id="hamburger" aria-label="Menu">&#9776;</button>
     <div>
       <small class="text-muted">
         <i class="bi bi-envelope-fill me-1" style="color:#4dabf7"></i>
@@ -450,6 +486,19 @@ setInterval(() => {
 
 loadDashboard();
 setInterval(loadDashboard, 5 * 60 * 1000);
+</script>
+<script>
+// Mobile sidebar toggle
+(function() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebar-overlay');
+  const hb = document.getElementById('hamburger');
+  if (!sb || !ov || !hb) return;
+  function open()  { sb.classList.add('mobile-open');    document.body.style.overflow='hidden'; }
+  function close() { sb.classList.remove('mobile-open'); document.body.style.overflow='';       }
+  hb.addEventListener('click', open);
+  ov.addEventListener('click', close);
+})();
 </script>
 </body>
 </html>
