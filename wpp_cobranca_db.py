@@ -19,6 +19,25 @@ from datetime import datetime, timezone
 
 DB_PATH = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
 
+# Motivos "normais" de controle de cadência (não são erro operacional).
+# Não entram nos indicadores de "Não enviados".
+_MOTIVOS_NAO_CONTABILIZAR = (
+    "bloqueado_rodada_global",
+    "bloqueado_intervalo_global",
+    "bloqueado_intervalo",
+    "dentro_intervalo",
+    "fora_intervalo",
+    "intervalo",
+    "ja_enviado_recente",
+)
+
+
+def _motivo_contabilizavel(motivo: str | None) -> bool:
+    m = (motivo or "").strip().lower()
+    if not m:
+        return True
+    return not any(m.startswith(prefixo) for prefixo in _MOTIVOS_NAO_CONTABILIZAR)
+
 
 def get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -308,7 +327,11 @@ def resumo_campanha(campanha_id: int) -> dict:
             "FROM envios WHERE campanha_id=?", (campanha_id,)
         ).fetchone()
         nenv = conn.execute(
-            "SELECT COUNT(*) as total FROM nao_enviados WHERE campanha_id=?",
+            "SELECT COUNT(*) as total FROM nao_enviados "
+            "WHERE campanha_id=? "
+            "AND LOWER(motivo) NOT LIKE '%intervalo%' "
+            "AND LOWER(motivo) NOT LIKE 'bloqueado_rodada_global%' "
+            "AND LOWER(motivo) NOT LIKE 'ja_enviado_recente%'",
             (campanha_id,)
         ).fetchone()
     return {
@@ -323,6 +346,9 @@ def listar_nao_enviados(campanha_id: int) -> list[dict]:
         rows = conn.execute(
             """SELECT * FROM nao_enviados
                WHERE campanha_id=?
+                 AND LOWER(motivo) NOT LIKE '%intervalo%'
+                 AND LOWER(motivo) NOT LIKE 'bloqueado_rodada_global%'
+                 AND LOWER(motivo) NOT LIKE 'ja_enviado_recente%'
                ORDER BY rodada_em DESC, motivo""",
             (campanha_id,)
         ).fetchall()
@@ -360,6 +386,8 @@ def registrar_envio(campanha_id: int, posto: str, fatura: dict,
 def registrar_nao_enviado(campanha_id: int, posto: str, fatura: dict,
                            rodada_em: str, telefone_ok: str | None,
                            motivo: str) -> None:
+    if not _motivo_contabilizavel(motivo):
+        return
     with get_conn() as conn:
         conn.execute(
             """INSERT INTO nao_enviados
