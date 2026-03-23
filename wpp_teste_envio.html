@@ -185,6 +185,8 @@
   const resBox = document.getElementById('resultBox');
   const resTitle = document.getElementById('resultTitle');
   const resTxt   = document.getElementById('resultTexto');
+  const OPEN_VAR = '{' + '{';
+  const CLOSE_VAR = '}' + '}';
 
   // Extrai {{variaveis}} do texto
   function extrairVars(body) {
@@ -204,8 +206,9 @@
     let texto = body;
     varsW.querySelectorAll('input[data-var]').forEach(inp => {
       const k = inp.dataset.var;
-      const v = inp.value || `{{${k}}}`;
-      texto = texto.replaceAll(`{{${k}}}`, v);
+      const token = `${OPEN_VAR}${k}${CLOSE_VAR}`;
+      const v = inp.value || token;
+      texto = texto.replaceAll(token, v);
     });
     prevB.textContent = texto;
   }
@@ -238,13 +241,14 @@
       vars.forEach(v => {
         const fg = document.createElement('div');
         fg.className = 'form-group';
+        const token = `${OPEN_VAR}${v}${CLOSE_VAR}`;
         fg.innerHTML = `
           <label class="d-flex align-items-center gap-1">
-            <span class="var-tag">{{${v}}}</span>
+            <span class="var-tag">${token}</span>
             <span class="ml-1">${v}</span>
           </label>
           <input type="text" class="form-control" data-var="${v}"
-                 placeholder="valor para {{${v}}}">
+                 placeholder="valor para ${token}">
         `;
         fg.querySelector('input').addEventListener('input', atualizarPreview);
         varsW.appendChild(fg);
