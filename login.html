@@ -299,6 +299,57 @@ html, body { height: 100%; overflow: hidden; font-family: "Segoe UI", system-ui,
 }
 .forgot-wrap a i { margin-right: 5px; }
 
+/* divisor "ou" */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0 16px;
+  color: rgba(255,255,255,.25);
+  font-size: .75rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,.1);
+}
+
+/* botão idcamim */
+.btn-idcamim {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(0,180,220,.35);
+  border-radius: 10px;
+  background: rgba(0,120,180,.12);
+  color: rgba(180,230,255,.9);
+  font-size: .92rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  cursor: pointer;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  transition: background .2s, border-color .2s, box-shadow .2s, transform .15s;
+}
+.btn-idcamim:hover {
+  background: rgba(0,140,210,.22);
+  border-color: rgba(0,200,240,.6);
+  box-shadow: 0 4px 20px rgba(0,160,220,.3);
+  transform: translateY(-1px);
+}
+.btn-idcamim:active { transform: scale(.98); }
+.btn-idcamim img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  filter: brightness(1.4);
+}
+
 /* mensagem de erro/sucesso */
 #msg {
   min-height: 18px;
@@ -419,6 +470,12 @@ html, body { height: 100%; overflow: hidden; font-family: "Segoe UI", system-ui,
 
     </form>
 
+    <div class="divider">ou</div>
+
+    <a href="/auth/idcamim" class="btn-idcamim">
+      <i class="fas fa-id-badge"></i>Entrar com idCamim
+    </a>
+
     <div class="forgot-wrap">
       <a href="/auth/reset">
         <i class="fas fa-key"></i>Esqueci minha senha
@@ -465,6 +522,8 @@ document.getElementById('togglePwd').addEventListener('click', function () {
   if (!msg) return;
   if (p.get('e') === '1') {
     msg.textContent = 'E-mail ou senha incorretos.';
+  } else if (p.get('e') === 'acesso') {
+    msg.textContent = 'Acesso não permitido. Usuário não cadastrado neste painel.';
   } else if (p.get('reset') === '1') {
     msg.className = 'ok';
     msg.textContent = 'Se o e-mail existir, o link chegará em instantes.';

@@ -27,7 +27,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import requests as http_requests
-from flask import Blueprint, jsonify, make_response, render_template, request
+from flask import Blueprint, jsonify, make_response, redirect, render_template, request
 from itsdangerous import BadSignature, TimestampSigner
 from sqlalchemy import func
 
@@ -244,6 +244,120 @@ def logout():
     r = make_response("", 302)
     r.delete_cookie(_SESS_NAME, path="/")
     r.headers["Location"] = "/login"
+    return r
+
+
+# ── Login via idCamim (OAuth2/OIDC) ───────────────────────────────────────────
+
+_IDCAMIM_BASE        = "https://auth.camim.com.br"
+_IDCAMIM_CLIENT_ID   = os.environ.get("IDCAMIM_CLIENT_ID", "")
+_IDCAMIM_CLIENT_SECRET = os.environ.get("IDCAMIM_CLIENT_SECRET", "")
+_IDCAMIM_REDIRECT_URI = os.environ.get(
+    "IDCAMIM_REDIRECT_URI",
+    "https://teste-ia.camim.com.br/auth/idcamim/callback",
+)
+
+# estado OAuth armazenado em memória (processo único; suficiente para esse caso)
+_oauth_states: dict[str, str] = {}
+
+
+@auth_bp.get("/auth/idcamim")
+def idcamim_login():
+    """Inicia o fluxo OAuth2 — redireciona para auth.camim.com.br/authorize."""
+    import urllib.parse
+    state = secrets.token_urlsafe(16)
+    _oauth_states[state] = "pending"
+    params = {
+        "client_id":     _IDCAMIM_CLIENT_ID,
+        "redirect_uri":  _IDCAMIM_REDIRECT_URI,
+        "response_type": "code",
+        "scope":         "openid profile email",
+        "state":         state,
+    }
+    url = f"{_IDCAMIM_BASE}/authorize?" + urllib.parse.urlencode(params)
+    return redirect(url)
+
+
+@auth_bp.get("/auth/idcamim/callback")
+def idcamim_callback():
+    """Recebe o código OAuth2, troca por token, valida usuário no banco local."""
+    state = request.args.get("state", "")
+    code  = request.args.get("code", "")
+    error = request.args.get("error", "")
+
+    if error or state not in _oauth_states:
+        r = make_response("", 302)
+        r.headers["Location"] = "/login?e=1"
+        return r
+
+    _oauth_states.pop(state, None)
+
+    # Trocar código por tokens
+    try:
+        token_resp = http_requests.post(
+            f"{_IDCAMIM_BASE}/token",
+            auth=(_IDCAMIM_CLIENT_ID, _IDCAMIM_CLIENT_SECRET),
+            data={
+                "grant_type":   "authorization_code",
+                "code":         code,
+                "redirect_uri": _IDCAMIM_REDIRECT_URI,
+            },
+            timeout=10,
+        )
+        token_resp.raise_for_status()
+        access_token = token_resp.json().get("access_token", "")
+    except Exception as exc:
+        print(f"[idcamim] erro ao trocar código: {exc}")
+        r = make_response("", 302)
+        r.headers["Location"] = "/login?e=1"
+        return r
+
+    # Buscar dados do usuário no idCamim
+    try:
+        me_resp = http_requests.get(
+            f"{_IDCAMIM_BASE}/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        me_resp.raise_for_status()
+        me = me_resp.json()
+    except Exception as exc:
+        print(f"[idcamim] erro ao buscar /me: {exc}")
+        r = make_response("", 302)
+        r.headers["Location"] = "/login?e=1"
+        return r
+
+    email = (me.get("email") or "").strip().lower()
+    if not email:
+        r = make_response("", 302)
+        r.headers["Location"] = "/login?e=1"
+        return r
+
+    # Verificar se o usuário JÁ existe e está ativo no banco local
+    db = SessionLocal()
+    try:
+        user = get_user_by_email(db, email)
+        if not user or not user.ativo:
+            # Usuário não cadastrado — acesso negado
+            r = make_response("", 302)
+            r.headers["Location"] = "/login?e=acesso"
+            return r
+
+        ip = (
+            request.headers.get("X-Real-IP")
+            or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+            or request.remote_addr
+            or ""
+        )
+        db.add(LoginHistory(user_id=user.id, ip=ip))
+        db.commit()
+    finally:
+        db.close()
+
+    token = _signer.sign(f"{email}:{secrets.token_hex(8)}").decode()
+    r = make_response("", 302)
+    _set_cookie(r, token)
+    r.headers["Location"] = "/"
     return r
 
 
