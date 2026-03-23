@@ -374,6 +374,103 @@ def auditoria():
 
 
 # ---------------------------------------------------------------------------
+# Teste de envio manual
+# ---------------------------------------------------------------------------
+
+@wpp_bp.get("/teste")
+def teste_envio_page():
+    email, is_admin = _check_auth()
+    if not email:
+        return ('', 401)
+    templates = _fetch_templates()
+    return render_template(
+        "wpp_teste_envio.html",
+        USER_EMAIL=email, USER_IS_ADMIN=is_admin,
+        templates=templates,
+    )
+
+
+@wpp_bp.post("/api/envio_teste")
+def api_envio_teste():
+    """Envia mensagem de teste para um número, com variáveis preenchidas manualmente."""
+    import uuid as _uuid
+    import re as _re
+    from datetime import datetime as _dt
+
+    email, is_admin = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data         = request.get_json(force=True) or {}
+    telefone     = (data.get("telefone") or "").strip()
+    template_name = (data.get("template") or "").strip()
+    params       = data.get("params") or {}
+
+    if not telefone or not template_name:
+        return jsonify({"error": "telefone e template são obrigatórios"}), 400
+
+    # Busca o body do template na API
+    body = ""
+    for t in _fetch_templates():
+        if t.get("name") == template_name:
+            for comp in t.get("components", []):
+                if comp.get("type") == "BODY":
+                    body = comp.get("text", "")
+                    break
+            break
+
+    if not body:
+        return jsonify({"error": f"Template '{template_name}' não encontrado ou sem BODY"}), 400
+
+    # Substitui variáveis
+    texto = body
+    for key, val in params.items():
+        texto = texto.replace(f"{{{{{key}}}}}", str(val))
+
+    CHAT_API_URL  = os.getenv("CHAT_API_URL",   "")
+    CHAT_FROM     = os.getenv("WAPP_CHAT_FROM", "")
+    CHAT_QUEUE_ID = os.getenv("WAPP_QUEUE_ID",  "")
+
+    if not CHAT_API_URL:
+        return jsonify({"error": "CHAT_API_URL não configurado no .env"}), 500
+
+    hash_id = _uuid.uuid4().hex[:24]
+    ts      = _dt.now().astimezone().isoformat(timespec="seconds")
+
+    payload = {
+        "entry": [{
+            "id": hash_id,
+            "changes": [{
+                "field": "messages",
+                "value": {
+                    "contacts": [{"wa_id": telefone, "profile": {"name": "Teste"}}],
+                    "messages": [{
+                        "id":        hash_id,
+                        "from":      CHAT_FROM,
+                        "queue_id":  CHAT_QUEUE_ID,
+                        "text":      {"body": texto},
+                        "type":      "text",
+                        "timestamp": ts,
+                    }],
+                    "metadata":          {"phone_number_id": "", "display_phone_number": ""},
+                    "messaging_product": "whatsapp",
+                },
+            }],
+        }],
+        "object": "whatsapp_business_account",
+    }
+
+    try:
+        r = requests.post(f"{CHAT_API_URL}/webhooks/whatsapp", json=payload, timeout=15)
+        r.raise_for_status()
+        return jsonify({"status": "accepted", "texto": texto})
+    except requests.HTTPError as e:
+        return jsonify({"status": f"erro:HTTP {e.response.status_code}", "texto": texto}), 502
+    except Exception as e:
+        return jsonify({"status": f"erro:{str(e)[:120]}", "texto": texto}), 500
+
+
+# ---------------------------------------------------------------------------
 # Helper: form → dict
 # ---------------------------------------------------------------------------
 

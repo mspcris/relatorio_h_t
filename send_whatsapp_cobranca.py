@@ -242,27 +242,23 @@ def enviar(telefone: str, nome: str, template: str, params: dict,
 
 def montar_params_template(template_name: str, fatura: dict) -> dict:
     """
-    Monta o dict de parâmetros conforme o template.
-    Templates conhecidos:
-      notificacao_de_fatura       → ref, valor, venc
-      fatura_do_contrato_gerado   → matricula, idreceita, ref, valor, venc
-    Outros templates: tenta enviar vazio (sem parâmetros dinâmicos).
+    Extrai as variáveis {{key}} do corpo do template e mapeia com os campos da fatura.
+    Funciona dinamicamente para qualquer template — não precisa de hardcode por nome.
     """
-    if template_name == "notificacao_de_fatura":
-        return {
-            "ref":   str(fatura.get("ref") or ""),
-            "valor": fatura.get("_valor_fmt", ""),
-            "venc":  fatura.get("_venc_fmt", ""),
-        }
-    if template_name == "fatura_do_contrato_gerado":
-        return {
-            "matricula": str(fatura.get("matricula") or ""),
-            "idreceita": str(fatura.get("idreceita") or ""),
-            "ref":       str(fatura.get("ref") or ""),
-            "valor":     fatura.get("_valor_fmt", ""),
-            "venc":      fatura.get("_venc_fmt", ""),
-        }
-    return {}
+    CAMPO_MAP = {
+        "ref":       str(fatura.get("ref") or ""),
+        "valor":     fatura.get("_valor_fmt", ""),
+        "venc":      fatura.get("_venc_fmt", ""),
+        "matricula": str(fatura.get("matricula") or ""),
+        "idreceita": str(fatura.get("idreceita") or ""),
+        "nome":      str(fatura.get("nome") or ""),
+    }
+    body = _TEMPLATE_BODIES.get(template_name, "")
+    if body:
+        keys = re.findall(r'\{\{(\w+)\}\}', body)
+        return {k: CAMPO_MAP.get(k, "") for k in keys}
+    # fallback caso os bodies ainda não tenham sido carregados
+    return {k: v for k, v in CAMPO_MAP.items() if k in ("ref", "valor", "venc")}
 
 # ---------------------------------------------------------------------------
 # Execução de uma campanha
