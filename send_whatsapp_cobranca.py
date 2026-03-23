@@ -333,10 +333,6 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                 continue
 
             if telefone in telefones_run:
-                if not dry_run:
-                    db.registrar_nao_enviado(campanha["id"], posto, fatura,
-                                             rodada_em, telefone,
-                                             "multi_fatura_mesmo_tel_nesta_rodada")
                 continue
 
             ultimo = db.ultimo_envio_aceito(telefone)

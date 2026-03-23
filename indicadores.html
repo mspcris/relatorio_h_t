@@ -247,10 +247,242 @@
       box-shadow: 0 1px 4px rgba(0,0,0,.10);
       backdrop-filter: blur(4px);
     }
-  </style>
+
+  /* ══════════════════════════════════════════════════════
+     LOADING OVERLAY — mesmo estilo do login
+  ══════════════════════════════════════════════════════ */
+  #loadingOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    overflow: hidden;
+    transition: opacity .7s ease, visibility .7s ease;
+  }
+  #loadingOverlay.lo-hide {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .lo-bg {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+  }
+  .lo-bg-cell {
+    background-size: cover;
+    background-position: center;
+    animation: lo-kenburns 20s ease-in-out infinite alternate;
+    filter: brightness(.55) saturate(1.1);
+  }
+  @keyframes lo-kenburns {
+    0%   { transform: scale(1) translate(0,0); }
+    100% { transform: scale(1.12) translate(-2%,-2%); }
+  }
+  .lo-overlay {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 60% 80% at 50% 50%, rgba(0,20,10,.45) 0%, rgba(0,10,5,.82) 100%);
+  }
+  .lo-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,180,80,.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,180,80,.06) 1px, transparent 1px);
+    background-size: 48px 48px;
+    animation: lo-gridpulse 6s ease-in-out infinite;
+  }
+  @keyframes lo-gridpulse {
+    0%, 100% { opacity: .6; }
+    50%       { opacity: 1; }
+  }
+  .lo-scanline {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(0,220,100,.4), transparent);
+    animation: lo-scan 8s linear infinite;
+  }
+  @keyframes lo-scan {
+    0%   { top: -2px; opacity: 0; }
+    5%   { opacity: 1; }
+    95%  { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+  }
+  .lo-stage {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .lo-brand {
+    text-align: center;
+    margin-bottom: 32px;
+    animation: lo-fadeDown .8s ease both;
+  }
+  @keyframes lo-fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .lo-logo-wrap {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 16px;
+  }
+  .lo-logo-wrap img {
+    height: 80px;
+    width: auto;
+    animation: lo-logopulse 3s ease-in-out infinite;
+  }
+  @keyframes lo-logopulse {
+    0%, 100% { filter: drop-shadow(0 0 18px rgba(0,220,100,.4)); }
+    50%       { filter: drop-shadow(0 0 36px rgba(0,220,100,.75)); }
+  }
+  .lo-ring {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(0,200,80,.3);
+    animation: lo-ringout 3s ease-out infinite;
+  }
+  .lo-ring:nth-child(2) { animation-delay: 1s; }
+  .lo-ring:nth-child(3) { animation-delay: 2s; }
+  @keyframes lo-ringout {
+    0%   { transform: translate(-50%,-50%) scale(.6); opacity: .8; }
+    100% { transform: translate(-50%,-50%) scale(2.4); opacity: 0; }
+  }
+  .lo-brand-name {
+    font-size: 2.4rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: .06em;
+    text-shadow: 0 0 40px rgba(0,200,80,.4);
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  .lo-brand-slogan {
+    font-size: .95rem;
+    color: rgba(255,255,255,.55);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    margin-top: 4px;
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  .lo-card {
+    width: min(380px, 100%);
+    background: rgba(5,20,10,.72);
+    border: 1px solid rgba(0,200,80,.2);
+    border-radius: 20px;
+    padding: 32px 36px;
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    box-shadow:
+      0 0 0 1px rgba(0,200,80,.08),
+      0 8px 40px rgba(0,0,0,.6),
+      inset 0 1px 0 rgba(255,255,255,.06);
+    animation: lo-fadeUp .9s ease .2s both;
+    text-align: center;
+  }
+  @keyframes lo-fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .lo-card-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 20px;
+    letter-spacing: .02em;
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  .lo-progress-wrap {
+    height: 3px;
+    background: rgba(0,200,80,.15);
+    border-radius: 99px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .lo-progress-bar {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, transparent 0%, rgba(0,220,100,.9) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: lo-sweep 1.6s ease-in-out infinite;
+    border-radius: 99px;
+  }
+  @keyframes lo-sweep {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  .lo-dots {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+  .lo-dots span {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: rgba(0,200,80,.6);
+    animation: lo-dot 1.2s ease-in-out infinite;
+  }
+  .lo-dots span:nth-child(2) { animation-delay: .2s; }
+  .lo-dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes lo-dot {
+    0%, 100% { transform: scale(.7); opacity: .4; }
+    50%       { transform: scale(1.1); opacity: 1; }
+  }
+</style>
 </head>
 
 <body class="hold-transition sidebar-mini">
+
+<!-- ── LOADING OVERLAY ──────────────────────────────────────────── -->
+<div id="loadingOverlay">
+  <div class="lo-bg">
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2021/06/15145129/home.jpg');animation-delay:0s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/04/30163026/Campo-Grande-e1562878167161.jpg');animation-delay:-3s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2022/03/09151823/cg2fachada-scaled.jpg');animation-delay:-6s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/07/11123612/BANGU-1-as-Smart-Object-1-copy.jpg');animation-delay:-9s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2020/10/19144653/del_castilho.jpg');animation-delay:-2s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/04/30162346/jpa-e1562878253339.jpg');animation-delay:-5s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2020/10/19144328/Recepcao-Del-Castilho.jpg');animation-delay:-8s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2024/04/05115830/madureira.jpg');animation-delay:-11s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2022/03/09152145/cpnhofachada.jpg');animation-delay:-4s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2020/02/21140942/nillopolis2102.jpg');animation-delay:-7s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/07/11130213/REALENGO-1-as-Smart-Object-1-copy.jpg');animation-delay:-1s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/04/30162920/NI-e1562878495907.jpg');animation-delay:-10s"></div>
+  </div>
+  <div class="lo-overlay"></div>
+  <div class="lo-grid"></div>
+  <div class="lo-scanline"></div>
+  <div class="lo-stage">
+    <div class="lo-brand">
+      <div class="lo-logo-wrap">
+        <div class="lo-ring"></div>
+        <div class="lo-ring"></div>
+        <div class="lo-ring"></div>
+        <img src="/images/Logo Camim-01_200px.png" alt="CAMIM">
+      </div>
+      <div class="lo-brand-name">CAMIM</div>
+      <div class="lo-brand-slogan">Quem tem saúde é mais feliz</div>
+    </div>
+    <div class="lo-card">
+      <div class="lo-card-title">Carregando indicadores…</div>
+      <div class="lo-progress-wrap">
+        <div class="lo-progress-bar"></div>
+      </div>
+      <div class="lo-dots">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="wrapper">
 
   <!-- ── NAVBAR ──────────────────────────────────────────────── -->
@@ -815,6 +1047,12 @@
 
     buildPostoTabs();
     await loadAll();
+
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+      overlay.classList.add('lo-hide');
+      setTimeout(() => overlay.remove(), 750);
+    }
 
     // Auto-refresh a cada 5 minutos
     let proxima = 300;
