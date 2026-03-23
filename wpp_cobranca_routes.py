@@ -402,12 +402,15 @@ def api_envio_teste():
         return jsonify({"error": "unauthorized"}), 401
 
     data         = request.get_json(force=True) or {}
-    telefone     = (data.get("telefone") or "").strip()
+    telefone_raw = (data.get("telefone") or "").strip()
     template_name = (data.get("template") or "").strip()
     params       = data.get("params") or {}
+    telefone     = _re.sub(r"\D+", "", telefone_raw)
 
     if not telefone or not template_name:
         return jsonify({"error": "telefone e template são obrigatórios"}), 400
+    if len(telefone) < 12 or len(telefone) > 15:
+        return jsonify({"error": "telefone inválido (use DDI+DDD+número, ex.: 5521999999999)"}), 400
 
     # Busca o body do template na API
     body = ""
@@ -433,6 +436,10 @@ def api_envio_teste():
 
     if not CHAT_API_URL:
         return jsonify({"error": "CHAT_API_URL não configurado no .env"}), 500
+    if not CHAT_FROM:
+        return jsonify({"error": "WAPP_CHAT_FROM não configurado no .env"}), 500
+    if not CHAT_QUEUE_ID:
+        return jsonify({"error": "WAPP_QUEUE_ID não configurado no .env"}), 500
 
     hash_id = _uuid.uuid4().hex[:24]
     ts      = _dt.now().astimezone().isoformat(timespec="seconds")
@@ -463,9 +470,33 @@ def api_envio_teste():
     try:
         r = requests.post(f"{CHAT_API_URL}/webhooks/whatsapp", json=payload, timeout=15)
         r.raise_for_status()
-        return jsonify({"status": "accepted", "texto": texto})
+        body_json = None
+        body_text = ""
+        try:
+            body_json = r.json()
+        except Exception:
+            body_text = (r.text or "")[:800]
+        return jsonify({
+            "status": "accepted",
+            "texto": texto,
+            "telefone": telefone,
+            "hash_id": hash_id,
+            "gateway_http": r.status_code,
+            "gateway_body": body_json if body_json is not None else body_text,
+        })
     except requests.HTTPError as e:
-        return jsonify({"status": f"erro:HTTP {e.response.status_code}", "texto": texto}), 502
+        body_text = ""
+        try:
+            body_text = (e.response.text or "")[:800]
+        except Exception:
+            body_text = ""
+        return jsonify({
+            "status": f"erro:HTTP {e.response.status_code}",
+            "texto": texto,
+            "telefone": telefone,
+            "hash_id": hash_id,
+            "gateway_body": body_text,
+        }), 502
     except Exception as e:
         return jsonify({"status": f"erro:{str(e)[:120]}", "texto": texto}), 500
 
