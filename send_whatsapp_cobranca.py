@@ -265,7 +265,7 @@ def montar_params_template(template_name: str, fatura: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
-                   rodada_em: str) -> int:
+                   rodada_em: str, telefones_rodada: set[str]) -> int:
     """Retorna quantidade de mensagens enviadas (ou simuladas)."""
 
     janela = JanelaEnvio(
@@ -278,6 +278,9 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
         log.warning(f"  [{campanha['nome']}] Fora da janela: {janela.motivo()}")
         return 0
 
+    # Regra por campanha com histórico global:
+    # cada campanha respeita seu próprio intervalo_dias, considerando o último
+    # envio accepted do telefone em qualquer campanha.
     intervalo = int(campanha.get("intervalo_dias") or 7)
     template  = campanha.get("template", "notificacao_de_fatura")
     postos    = campanha.get("postos") or []
@@ -287,7 +290,6 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
         return 0
 
     enviados_campanha   = 0
-    telefones_run: set[str] = set()
     hoje = date.today()
 
     for posto in postos:
@@ -328,20 +330,31 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                                              rodada_em, None, "sem_telefone_valido")
                 continue
 
-            if telefone in telefones_run:
+            # Controle global na rodada (cross-campanha).
+            if telefone in telefones_rodada:
+                log.info(
+                    f"    {telefone} | {(fatura.get('nome') or '')[:25]} | "
+                    f"{fatura.get('diasdebito',0)}d | {fatura.get('ref','')} | "
+                    "→ bloqueado_rodada_global"
+                )
                 continue
 
             ultimo = db.ultimo_envio_aceito(telefone)
             if ultimo:
                 dias_desde = (hoje - datetime.fromisoformat(ultimo).date()).days
                 if dias_desde < intervalo:
-                    telefones_run.add(telefone)
+                    telefones_rodada.add(telefone)
+                    log.info(
+                        f"    {telefone} | {(fatura.get('nome') or '')[:25]} | "
+                        f"{fatura.get('diasdebito',0)}d | {fatura.get('ref','')} | "
+                        f"→ bloqueado_intervalo_global:{dias_desde}d<{intervalo}d"
+                    )
                     continue
 
             params = montar_params_template(template, fatura)
             nome_cliente = str(fatura.get("nome") or "")
             status, wamid = enviar(telefone, nome_cliente, template, params, dry_run)
-            telefones_run.add(telefone)
+            telefones_rodada.add(telefone)
 
             nivel = logging.INFO if "erro" not in status else logging.WARNING
             log.log(nivel,
@@ -404,6 +417,7 @@ def main():
     log.info(f"Rodada {rodada_em} | campanhas={len(campanhas)} | dry_run={args.dry_run}")
 
     total_enviado = 0
+    telefones_rodada: set[str] = set()
     for campanha in campanhas:
         log.info(f"Campanha [{campanha['id']}] {campanha['nome']} | "
                  f"postos={campanha.get('postos')} | "
@@ -411,7 +425,9 @@ def main():
                  f"intervalo={campanha.get('intervalo_dias')}d")
 
         limit_restante = max(0, args.limit - total_enviado) if args.limit else 0
-        enviados = rodar_campanha(campanha, args.dry_run, limit_restante, rodada_em)
+        enviados = rodar_campanha(
+            campanha, args.dry_run, limit_restante, rodada_em, telefones_rodada
+        )
         total_enviado += enviados
         log.info(f"  [{campanha['nome']}] enviados nesta campanha: {enviados}")
 
