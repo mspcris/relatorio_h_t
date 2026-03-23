@@ -936,7 +936,7 @@ def indicadores_email():
             SELECT posto,
                    titulo_categoria,
                    MAX(datahora)  AS ultimo_envio,
-                   COUNT(*)       AS total
+                   COUNT(CASE WHEN DATE(datahora) = DATE('now','localtime') THEN 1 END) AS total
             FROM ind_email
             WHERE titulo_categoria = 'Boleto'
             GROUP BY posto, titulo_categoria
