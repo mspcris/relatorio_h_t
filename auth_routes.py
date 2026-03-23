@@ -938,8 +938,7 @@ def indicadores_email():
                    MAX(datahora)  AS ultimo_envio,
                    COUNT(*)       AS total
             FROM ind_email
-            WHERE titulo_categoria LIKE '%boleto%'
-               OR titulo_original  LIKE '%boleto%'
+            WHERE titulo_categoria = 'Boleto'
             GROUP BY posto, titulo_categoria
             ORDER BY posto, titulo_categoria
         """).fetchall()
