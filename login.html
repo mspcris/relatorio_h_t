@@ -278,12 +278,15 @@ html, body { height: 100%; overflow: hidden; font-family: "Segoe UI", system-ui,
   45%       { left: 130%; opacity: 1; }
 }
 
-/* esqueci minha senha — destaque */
+/* links de rodapé do card */
 .forgot-wrap {
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  gap: 24px;
   margin-top: 18px;
   padding-top: 18px;
   border-top: 1px solid rgba(255,255,255,.07);
+  flex-wrap: wrap;
 }
 .forgot-wrap a {
   color: rgba(0,220,100,.75);
@@ -439,10 +442,16 @@ html, body { height: 100%; overflow: hidden; font-family: "Segoe UI", system-ui,
     <div class="card-title">Bem-vindo de volta</div>
     <div class="card-sub">Faça login para acessar seus indicadores</div>
 
+    <a href="/auth/idcamim" class="btn-idcamim">
+      <i class="fas fa-id-badge"></i>Entrar com IDCamim
+    </a>
+
+    <div class="divider">ou</div>
+
     <form method="POST" action="/session/login" novalidate>
 
       <div class="field">
-        <label for="email">E-mail</label>
+        <label for="email">Email Institucional</label>
         <div class="input-row">
           <span class="icon"><i class="far fa-envelope"></i></span>
           <input id="email" name="email" type="email"
@@ -465,18 +474,15 @@ html, body { height: 100%; overflow: hidden; font-family: "Segoe UI", system-ui,
       </div>
 
       <button type="submit" class="btn-login">
-        <i class="fas fa-sign-in-alt" style="margin-right:8px"></i>Entrar no painel
+        <i class="fas fa-sign-in-alt" style="margin-right:8px"></i>Entrar
       </button>
 
     </form>
 
-    <div class="divider">ou</div>
-
-    <a href="/auth/idcamim" class="btn-idcamim">
-      <i class="fas fa-id-badge"></i>Entrar com idCamim
-    </a>
-
     <div class="forgot-wrap">
+      <a href="/auth/primeiro-login">
+        <i class="fas fa-user-plus"></i>Primeiro login?
+      </a>
       <a href="/auth/reset">
         <i class="fas fa-key"></i>Esqueci minha senha
       </a>
