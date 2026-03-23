@@ -34,7 +34,7 @@ WPP_API_URL = os.getenv("WAPP_API_URL",  "https://whatsapp-api.camim.com.br")
 WPP_TOKEN   = os.getenv("WAPP_TOKEN",    "")
 POSTOS_ALL  = list("ANXYBRPCDGIMJ")
 
-wpp_bp = Blueprint("wpp", __name__, url_prefix="/wpp")
+wpp_bp = Blueprint("wpp", __name__, url_prefix="/wpp", template_folder=".")
 
 # ---------------------------------------------------------------------------
 # Auth helper (reutiliza decode_user do app principal)
