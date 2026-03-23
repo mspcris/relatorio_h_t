@@ -274,7 +274,7 @@ def idcamim_login():
         "scope":         "openid profile email",
         "state":         state,
     }
-    url = f"{_IDCAMIM_BASE}/authorize?" + urllib.parse.urlencode(params)
+    url = f"{_IDCAMIM_BASE}/auth?" + urllib.parse.urlencode(params)
     return redirect(url)
 
 
