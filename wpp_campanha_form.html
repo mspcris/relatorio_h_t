@@ -273,9 +273,12 @@
               <div class="col-md-3">
                 <div class="form-group">
                   <label>Situação do cliente</label>
-                  <input type="text" name="situacao_cliente" class="form-control"
-                         placeholder="Ex: Ativo, Cancelado..."
-                         value="{{ campanha.situacao_cliente if campanha and campanha.situacao_cliente else '' }}">
+                  <select name="situacao_cliente" id="sel_cli_situacao_efetiva" class="form-control wpp-sel2-cli">
+                    <option value="">— Todas —</option>
+                    {% if campanha and campanha.situacao_cliente %}
+                    <option value="{{ campanha.situacao_cliente }}" selected>{{ campanha.situacao_cliente }}</option>
+                    {% endif %}
+                  </select>
                 </div>
               </div>
             </div>
@@ -598,7 +601,7 @@ function mostrarPreview() {
 
 // ── Selects dinâmicos ─────────────────────────────────────────────────────────
 const CAMPOS_SEL     = ['operadora','cobrador','corretor','bairro','rua'];
-const CAMPOS_SEL_CLI = ['cobrador','corretor','bairro','origem'];
+const CAMPOS_SEL_CLI = ['cobrador','corretor','bairro','origem','situacao_efetiva'];
 
 function postosChecados() {
   return Array.from(document.querySelectorAll('.posto-cb:checked')).map(x => x.value);

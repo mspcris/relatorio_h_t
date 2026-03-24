@@ -181,10 +181,11 @@ CAMPO_SQL = {
 
 # Mapeamento para modo clientes_admissao (usa SOURCE_CLIENTES)
 CAMPO_SQL_CLIENTES = {
-    "cobrador": "cobradornome",
-    "corretor": "Corretor",
-    "bairro":   "bairro",
-    "origem":   "origem",
+    "cobrador":        "cobradornome",
+    "corretor":        "Corretor",
+    "bairro":          "bairro",
+    "origem":          "origem",
+    "situacao_efetiva": "situacao_efetiva",
 }
 
 
