@@ -68,6 +68,34 @@
     return li;
   }
 
+  function makeAnchorGeneric(item) {
+    const a = document.createElement('a');
+    a.className = 'nav-link';
+    a.href = item.href;
+    a.innerHTML = '<i class="' + item.icon + '"></i> ' + item.text;
+    return a;
+  }
+
+  function insertGeneric(ctr, item) {
+    if (!ctr) return;
+    const tag = (ctr.tagName || '').toLowerCase();
+    if (tag === 'ul') {
+      ctr.insertBefore(makeLiGeneric(item), ctr.firstChild);
+      return;
+    }
+    if (tag === 'nav' || tag === 'div') {
+      const firstLink = ctr.querySelector('a.nav-link, a.menu-link, a[href]');
+      const node = makeAnchorGeneric(item);
+      if (firstLink && firstLink.parentNode === ctr) {
+        ctr.insertBefore(node, firstLink);
+      } else {
+        ctr.insertBefore(node, ctr.firstChild);
+      }
+      return;
+    }
+    ctr.insertBefore(makeAnchorGeneric(item), ctr.firstChild);
+  }
+
   function ensureInAdminLteMenus() {
     const lists = Array.from(document.querySelectorAll('ul.nav-sidebar'));
     lists.forEach((ul) => {
@@ -82,11 +110,11 @@
   function ensureInGenericSidebars() {
     const sidebars = Array.from(document.querySelectorAll('#sidebar, .sidebar'));
     sidebars.forEach((sb) => {
-      const ul = sb.querySelector('ul.nav, ul.nav-sidebar, ul.menu-list');
-      if (!ul) return;
+      const ctr = sb.querySelector('ul.nav, ul.nav-sidebar, ul.menu-list, nav');
+      if (!ctr) return;
       ITEMS.forEach((item) => {
-        if (!hasAnyPath(ul, item.paths)) {
-          ul.insertBefore(makeLiGeneric(item), ul.firstChild);
+        if (!hasAnyPath(ctr, item.paths)) {
+          insertGeneric(ctr, item);
         }
       });
     });
@@ -112,10 +140,10 @@
         });
 
         Array.from(document.querySelectorAll('#sidebar, .sidebar')).forEach((sb) => {
-          const ul = sb.querySelector('ul.nav, ul.nav-sidebar, ul.menu-list');
-          if (!ul) return;
-          if (!hasAnyPath(ul, adminItem.paths)) {
-            ul.insertBefore(makeLiGeneric(adminItem), ul.firstChild);
+          const ctr = sb.querySelector('ul.nav, ul.nav-sidebar, ul.menu-list, nav');
+          if (!ctr) return;
+          if (!hasAnyPath(ctr, adminItem.paths)) {
+            insertGeneric(ctr, adminItem);
           }
         });
       })
