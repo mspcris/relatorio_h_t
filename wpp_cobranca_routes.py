@@ -99,7 +99,8 @@ def api_opcoes():
     campo  = request.args.get("campo", "")
     modo_envio = request.args.get("modo_envio", "atraso")
     postos = [p.strip() for p in request.args.get("postos", "").split(",") if p.strip()]
-    if campo not in sql_helper.CAMPO_SQL:
+    valid = sql_helper.CAMPO_SQL_CLIENTES if modo_envio == "clientes_admissao" else sql_helper.CAMPO_SQL
+    if campo not in valid:
         return jsonify({"error": "campo inválido"}), 400
     if not postos:
         return jsonify({"opcoes": []})
@@ -509,11 +510,14 @@ def api_envio_teste():
 def _form_to_dict(form) -> dict:
     """Converte o MultiDict do form HTML para o dict esperado pelos helpers do DB."""
     postos = form.getlist("postos")  # checkboxes múltiplos
+    modo = (form.get("modo_envio", "atraso") or "atraso").strip()
+    is_cli = (modo == "clientes_admissao")
     return {
         "nome":               form.get("nome", "").strip(),
         "template":           form.get("template", "notificacao_de_fatura"),
-        "modo_envio":         (form.get("modo_envio", "atraso") or "atraso").strip(),
+        "modo_envio":         modo,
         "postos":             postos,
+        "queue_id":           form.get("queue_id") or None,
         "dias_atraso_min":    _int(form.get("dias_atraso_min"), 1),
         "dias_atraso_max":    _int(form.get("dias_atraso_max"), None),
         "dias_ref_min":       _int(form.get("dias_ref_min"), 4),
@@ -521,19 +525,32 @@ def _form_to_dict(form) -> dict:
         "incluir_cancelados": form.get("incluir_cancelados") == "1",
         "sem_email":          form.get("sem_email") == "1",
         "sexo":               form.get("sexo") or None,
-        "idade_min":          _int(form.get("idade_min"), None),
-        "idade_max":          _int(form.get("idade_max"), None),
+        # Para modo clientes, age mín/máx vêm de campos prefixados cli_
+        "idade_min":          _int(form.get("cli_idade_min" if is_cli else "idade_min"), None),
+        "idade_max":          _int(form.get("cli_idade_max" if is_cli else "idade_max"), None),
         "nao_recorrente":     form.get("nao_recorrente") == "1",
         "operadora":          form.get("operadora") or None,
-        "cobrador":           form.get("cobrador") or None,
-        "corretor":           form.get("corretor") or None,
-        "bairro":             form.get("bairro") or None,
+        # cobrador/corretor/bairro: prefixo cli_ no modo clientes
+        "cobrador":           form.get("cli_cobrador" if is_cli else "cobrador") or None,
+        "corretor":           form.get("cli_corretor" if is_cli else "corretor") or None,
+        "bairro":             form.get("cli_bairro"   if is_cli else "bairro")   or None,
         "rua":                form.get("rua") or None,
         "hora_inicio":        form.get("hora_inicio", "08:00"),
         "hora_fim":           form.get("hora_fim", "20:00"),
         "dias_semana":        form.get("dias_semana", "0,1,2,3,4"),
         "intervalo_dias":     _int(form.get("intervalo_dias"), 7),
         "ativa":              form.get("ativa", "1") == "1",
+        # Campos exclusivos do modo clientes_admissao
+        "adm_data_ini":       form.get("adm_data_ini") or None,
+        "adm_data_fim":       form.get("adm_data_fim") or None,
+        "tipo_cliente":       form.get("tipo_cliente") or None,
+        "titular_dependente": form.get("titular_dependente") or None,
+        "situacao_cliente":   form.get("situacao_cliente") or None,
+        "tipo_fj":            form.get("tipo_fj") or None,
+        "clube_beneficio":    form.get("clube_beneficio") == "1",
+        "clube_beneficio_joy": form.get("clube_beneficio_joy") == "1",
+        "plano_premium":      form.get("plano_premium") == "1",
+        "origem":             form.get("origem") or None,
     }
 
 

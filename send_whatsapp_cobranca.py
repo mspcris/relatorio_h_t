@@ -36,6 +36,7 @@ from wpp_cobranca_sql import (
     source_sql,
     where_extras,
     modo_envio as campanha_modo_envio,
+    MODO_CLIENTES,
 )
 
 # ---------------------------------------------------------------------------
@@ -103,21 +104,41 @@ def buscar_faturas(cursor, campanha: dict) -> list[dict]:
     where, params = build_where(campanha)
     src = source_sql(campanha)
     extra = where_extras(campanha)
-    sql = f"""
-        SELECT
-            idreceita,
-            matricula,
-            nomecadastro     AS nome,
-            codigoendereco   AS posto,
-            telefonewhatsapp,
-            descricao        AS ref,
-            valordevido      AS valor,
-            datadevencimento AS venc,
-            diasdebito
-        FROM {src}
-        WHERE {where}{extra}
-        ORDER BY datadevencimento ASC
-    """
+    if campanha_modo_envio(campanha) == MODO_CLIENTES:
+        sql = f"""
+            SELECT
+                idcliente        AS idreceita,
+                matricula,
+                nomecadastro     AS nome,
+                codigoendereco   AS posto,
+                telefone_efetivo AS telefonewhatsapp,
+                CONVERT(VARCHAR, dataadmissao, 103) AS ref,
+                NULL             AS valor,
+                NULL             AS venc,
+                0                AS diasdebito,
+                tipo_cliente,
+                situacao_efetiva,
+                planotipo
+            FROM {src}
+            WHERE {where}{extra}
+            ORDER BY dataadmissao ASC
+        """
+    else:
+        sql = f"""
+            SELECT
+                idreceita,
+                matricula,
+                nomecadastro     AS nome,
+                codigoendereco   AS posto,
+                telefonewhatsapp,
+                descricao        AS ref,
+                valordevido      AS valor,
+                datadevencimento AS venc,
+                diasdebito
+            FROM {src}
+            WHERE {where}{extra}
+            ORDER BY datadevencimento ASC
+        """
     cursor.execute(sql, params)
     cols = [c[0] for c in cursor.description]
     return [dict(zip(cols, row)) for row in cursor.fetchall()]
@@ -201,13 +222,14 @@ def fmt_venc(v) -> str:
 # ---------------------------------------------------------------------------
 
 def enviar(telefone: str, nome: str, template: str, params: dict,
-           dry_run: bool) -> tuple[str, str | None]:
+           dry_run: bool, queue_id: str | None = None) -> tuple[str, str | None]:
     if dry_run:
         return "dry_run", None
 
-    hash_id = uuid.uuid4().hex[:24]
-    texto   = _expandir_template(template, params)
-    ts      = datetime.now().astimezone().isoformat(timespec="seconds")
+    hash_id  = uuid.uuid4().hex[:24]
+    texto    = _expandir_template(template, params)
+    ts       = datetime.now().astimezone().isoformat(timespec="seconds")
+    fila_id  = queue_id or CHAT_QUEUE_ID
 
     payload = {
         "entry": [{
@@ -219,7 +241,7 @@ def enviar(telefone: str, nome: str, template: str, params: dict,
                     "messages": [{
                         "id":       hash_id,
                         "from":     CHAT_FROM,
-                        "queue_id": CHAT_QUEUE_ID,
+                        "queue_id": fila_id,
                         "text":     {"body": texto},
                         "type":     "text",
                         "timestamp": ts,
@@ -252,12 +274,17 @@ def montar_params_template(template_name: str, fatura: dict) -> dict:
     Funciona dinamicamente para qualquer template — não precisa de hardcode por nome.
     """
     CAMPO_MAP = {
-        "ref":       str(fatura.get("ref") or ""),
-        "valor":     fatura.get("_valor_fmt", ""),
-        "venc":      fatura.get("_venc_fmt", ""),
-        "matricula": str(fatura.get("matricula") or ""),
-        "idreceita": str(fatura.get("idreceita") or ""),
-        "nome":      str(fatura.get("nome") or ""),
+        "ref":          str(fatura.get("ref") or ""),
+        "valor":        fatura.get("_valor_fmt", ""),
+        "venc":         fatura.get("_venc_fmt", ""),
+        "matricula":    str(fatura.get("matricula") or ""),
+        "idreceita":    str(fatura.get("idreceita") or ""),
+        "nome":         str(fatura.get("nome") or ""),
+        # Campos do modo clientes_admissao
+        "admissao":     str(fatura.get("ref") or ""),   # ref = dataadmissao formatada
+        "tipo_cliente": str(fatura.get("tipo_cliente") or ""),
+        "situacao":     str(fatura.get("situacao_efetiva") or ""),
+        "planotipo":    str(fatura.get("planotipo") or ""),
     }
     body = _TEMPLATE_BODIES.get(template_name, "")
     if body:
@@ -290,6 +317,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
     intervalo = int(campanha.get("intervalo_dias") or 7)
     template  = campanha.get("template", "notificacao_de_fatura")
     postos    = campanha.get("postos") or []
+    queue_id  = campanha.get("queue_id") or None
 
     if not postos:
         log.warning(f"  [{campanha['nome']}] Nenhum posto configurado.")
@@ -359,7 +387,8 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
 
             params = montar_params_template(template, fatura)
             nome_cliente = str(fatura.get("nome") or "")
-            status, wamid = enviar(telefone, nome_cliente, template, params, dry_run)
+            status, wamid = enviar(telefone, nome_cliente, template, params, dry_run,
+                                   queue_id=queue_id)
             telefones_rodada.add(telefone)
 
             nivel = logging.INFO if "erro" not in status else logging.WARNING
@@ -430,6 +459,11 @@ def main():
             regra = (
                 f"ref+{campanha.get('dias_ref_min', 4)}"
                 f"–{campanha.get('dias_ref_max') if campanha.get('dias_ref_max') is not None else '∞'}d"
+            )
+        elif modo == MODO_CLIENTES:
+            regra = (
+                f"adm={campanha.get('adm_data_ini', '?')}"
+                f"–{campanha.get('adm_data_fim', '?')}"
             )
         else:
             regra = (

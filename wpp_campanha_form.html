@@ -108,9 +108,24 @@
                 <label>Tipo de envio</label>
                 {% set modo = campanha.modo_envio if campanha and campanha.modo_envio else 'atraso' %}
                 <select name="modo_envio" id="modo_envio" class="form-control">
-                  <option value="atraso" {{ 'selected' if modo == 'atraso' }}>Cobrança por atraso</option>
-                  <option value="pre_vencimento" {{ 'selected' if modo == 'pre_vencimento' }}>Lembrete antes do vencimento</option>
+                  <option value="atraso"             {{ 'selected' if modo == 'atraso' }}>Cobrança por atraso</option>
+                  <option value="pre_vencimento"   {{ 'selected' if modo == 'pre_vencimento' }}>Lembrete antes do vencimento</option>
+                  <option value="clientes_admissao" {{ 'selected' if modo == 'clientes_admissao' }}>Campanha de clientes (admissão)</option>
                 </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- ID da Fila WhatsApp -->
+          <div class="row mt-2">
+            <div class="col-md-5">
+              <div class="form-group mb-0">
+                <label class="font-weight-bold" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:#6c757d">
+                  ID da Fila WhatsApp <small class="text-muted font-weight-normal" style="text-transform:none">(vazio = usa WAPP_QUEUE_ID do .env)</small>
+                </label>
+                <input type="text" name="queue_id" class="form-control"
+                       value="{{ campanha.queue_id if campanha and campanha.queue_id else '' }}"
+                       placeholder="Ex: cmn54op7f06dov9jbqwvhfb8s">
               </div>
             </div>
           </div>
@@ -200,6 +215,161 @@
               </small>
             </div>
           </div>
+
+          <!-- ── FILTROS DE ADMISSÃO (modo clientes_admissao) ──────────────── -->
+          <div id="box-clientes" style="display:none">
+            <div class="row">
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>DataAdmissão a partir de</label>
+                  <input type="date" name="adm_data_ini" class="form-control"
+                         value="{{ campanha.adm_data_ini if campanha and campanha.adm_data_ini else '' }}">
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>DataAdmissão até <small class="text-muted">(exclusive)</small></label>
+                  <input type="date" name="adm_data_fim" class="form-control"
+                         value="{{ campanha.adm_data_fim if campanha and campanha.adm_data_fim else '' }}">
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Tipo de cliente</label>
+                  {% set tc = campanha.tipo_cliente if campanha and campanha.tipo_cliente else '' %}
+                  <select name="tipo_cliente" class="form-control">
+                    <option value="" {{ 'selected' if not tc }}>— Todos —</option>
+                    <option value="camim"      {{ 'selected' if tc == 'camim' }}>Camim</option>
+                    <option value="clube"      {{ 'selected' if tc == 'clube' }}>Clube</option>
+                    <option value="edige"      {{ 'selected' if tc == 'edige' }}>Edigê</option>
+                    <option value="particular" {{ 'selected' if tc == 'particular' }}>Particular</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Titular / Dependente</label>
+                  {% set td = campanha.titular_dependente if campanha and campanha.titular_dependente else '' %}
+                  <select name="titular_dependente" class="form-control">
+                    <option value="" {{ 'selected' if not td }}>— Todos —</option>
+                    <option value="T" {{ 'selected' if td == 'T' }}>Titular</option>
+                    <option value="D" {{ 'selected' if td == 'D' }}>Dependente</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Tipo PF / PJ</label>
+                  {% set tfj = campanha.tipo_fj if campanha and campanha.tipo_fj else '' %}
+                  <select name="tipo_fj" class="form-control">
+                    <option value="" {{ 'selected' if not tfj }}>— Todos —</option>
+                    <option value="F" {{ 'selected' if tfj == 'F' }}>Pessoa Física</option>
+                    <option value="J" {{ 'selected' if tfj == 'J' }}>Pessoa Jurídica</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label>Situação do cliente</label>
+                  <input type="text" name="situacao_cliente" class="form-control"
+                         placeholder="Ex: Ativo, Cancelado..."
+                         value="{{ campanha.situacao_cliente if campanha and campanha.situacao_cliente else '' }}">
+                </div>
+              </div>
+            </div>
+            <div class="row mt-1">
+              <div class="col-auto">
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox" class="custom-control-input" id="sw_clube_ben"
+                         name="clube_beneficio" value="1"
+                         {{ 'checked' if campanha and campanha.clube_beneficio }}>
+                  <label class="custom-control-label" for="sw_clube_ben">Clube de Benefício</label>
+                </div>
+              </div>
+              <div class="col-auto ml-3">
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox" class="custom-control-input" id="sw_clube_joy"
+                         name="clube_beneficio_joy" value="1"
+                         {{ 'checked' if campanha and campanha.clube_beneficio_joy }}>
+                  <label class="custom-control-label" for="sw_clube_joy">Clube de Benefício Joy</label>
+                </div>
+              </div>
+              <div class="col-auto ml-3">
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox" class="custom-control-input" id="sw_plano_premium"
+                         name="plano_premium" value="1"
+                         {{ 'checked' if campanha and campanha.plano_premium }}>
+                  <label class="custom-control-label" for="sw_plano_premium">Plano Premium</label>
+                </div>
+              </div>
+            </div>
+            <div class="row mt-3">
+              <div class="col-md-2">
+                <div class="form-group">
+                  <label>Idade mínima</label>
+                  <input type="number" name="cli_idade_min" class="form-control" min="0"
+                         value="{{ campanha.idade_min if campanha and campanha.idade_min is not none else '' }}">
+                </div>
+              </div>
+              <div class="col-md-2">
+                <div class="form-group">
+                  <label>Idade máxima</label>
+                  <input type="number" name="cli_idade_max" class="form-control" min="0"
+                         value="{{ campanha.idade_max if campanha and campanha.idade_max is not none else '' }}">
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-group">
+                  <label>Origem</label>
+                  <select name="origem" id="sel_cli_origem" class="form-control wpp-sel2-cli">
+                    <option value="">— Todas —</option>
+                    {% if campanha and campanha.origem %}
+                    <option value="{{ campanha.origem }}" selected>{{ campanha.origem }}</option>
+                    {% endif %}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-md-4">
+                <div class="form-group">
+                  <label>Cobrador</label>
+                  <select name="cli_cobrador" id="sel_cli_cobrador" class="form-control wpp-sel2-cli">
+                    <option value="">— Todos —</option>
+                    {% if campanha and campanha.cobrador %}
+                    <option value="{{ campanha.cobrador }}" selected>{{ campanha.cobrador }}</option>
+                    {% endif %}
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-group">
+                  <label>Corretor</label>
+                  <select name="cli_corretor" id="sel_cli_corretor" class="form-control wpp-sel2-cli">
+                    <option value="">— Todos —</option>
+                    {% if campanha and campanha.corretor %}
+                    <option value="{{ campanha.corretor }}" selected>{{ campanha.corretor }}</option>
+                    {% endif %}
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-group">
+                  <label>Bairro</label>
+                  <select name="cli_bairro" id="sel_cli_bairro" class="form-control wpp-sel2-cli">
+                    <option value="">— Todos —</option>
+                    {% if campanha and campanha.bairro %}
+                    <option value="{{ campanha.bairro }}" selected>{{ campanha.bairro }}</option>
+                    {% endif %}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- ── fim box-clientes ───────────────────────────────────────────── -->
+
         </div>
       </div>
 
@@ -219,7 +389,7 @@
       </div>
 
       <!-- ── FILTROS DE CLIENTE ──────────────────────────────────── -->
-      <div class="card">
+      <div class="card" id="card-filtros-cliente">
         <div class="card-header"><strong>Filtros de Cliente</strong></div>
         <div class="card-body">
           <div class="row">
@@ -409,6 +579,7 @@ if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
 let _templates = [];
 const TEMPLATE_ATUAL = "{{ campanha.template if campanha else 'notificacao_de_fatura' }}";
 const MODO_ENVIO_ATUAL = "{{ campanha.modo_envio if campanha and campanha.modo_envio else 'atraso' }}";
+const QUEUE_ID_ATUAL   = "{{ campanha.queue_id if campanha and campanha.queue_id else '' }}";
 
 function mostrarPreview() {
   const sel  = document.getElementById('template-select');
@@ -426,7 +597,8 @@ function mostrarPreview() {
 }
 
 // ── Selects dinâmicos ─────────────────────────────────────────────────────────
-const CAMPOS_SEL = ['operadora','cobrador','corretor','bairro','rua'];
+const CAMPOS_SEL     = ['operadora','cobrador','corretor','bairro','rua'];
+const CAMPOS_SEL_CLI = ['cobrador','corretor','bairro','origem'];
 
 function postosChecados() {
   return Array.from(document.querySelectorAll('.posto-cb:checked')).map(x => x.value);
@@ -440,34 +612,55 @@ async function carregarOpcoes(campo) {
   if (!sel) return;
 
   const valorAtual = sel.value;
-
-  // Esvazia mantendo placeholder e valor atual (para modo edição)
   $(sel).empty().append('<option value="">— ' + (campo === 'rua' ? 'Todas' : 'Todos') + ' —</option>');
 
-  if (!postos.length) {
-    $(sel).trigger('change');
-    return;
-  }
+  if (!postos.length) { $(sel).trigger('change'); return; }
 
   try {
     const qs = new URLSearchParams({ campo, postos: postos.join(','), modo_envio: modoEnvio });
     const r  = await fetch(`/wpp/api/opcoes?${qs}`);
     const data = await r.json();
     (data.opcoes || []).forEach(op => {
-      const selected = (op === valorAtual);
-      $(sel).append(new Option(op, op, false, selected));
+      $(sel).append(new Option(op, op, false, op === valorAtual));
     });
-  } catch (e) {
-    console.warn('opcoes erro:', campo, e);
-  }
-  $(sel).trigger('change'); // atualiza select2
+  } catch (e) { console.warn('opcoes erro:', campo, e); }
+  $(sel).trigger('change');
+}
+
+async function carregarOpcoesClientes(campo) {
+  const postos = postosChecados();
+  const selId  = `sel_cli_${campo}`;
+  const sel    = document.getElementById(selId);
+  if (!sel) return;
+
+  const valorAtual = sel.value;
+  $(sel).empty().append('<option value="">— ' + (campo === 'origem' ? 'Todas' : 'Todos') + ' —</option>');
+
+  if (!postos.length) { $(sel).trigger('change'); return; }
+
+  try {
+    const qs = new URLSearchParams({ campo, postos: postos.join(','), modo_envio: 'clientes_admissao' });
+    const r  = await fetch(`/wpp/api/opcoes?${qs}`);
+    const data = await r.json();
+    (data.opcoes || []).forEach(op => {
+      $(sel).append(new Option(op, op, false, op === valorAtual));
+    });
+  } catch (e) { console.warn('opcoes cli erro:', campo, e); }
+  $(sel).trigger('change');
 }
 
 function carregarTodasOpcoes() {
+  const modo = (document.getElementById('modo_envio') || {}).value || 'atraso';
   document.getElementById('postos-hint').style.display = 'block';
-  Promise.all(CAMPOS_SEL.map(carregarOpcoes)).finally(() => {
-    document.getElementById('postos-hint').style.display = 'none';
-  });
+  if (modo === 'clientes_admissao') {
+    Promise.all(CAMPOS_SEL_CLI.map(carregarOpcoesClientes)).finally(() => {
+      document.getElementById('postos-hint').style.display = 'none';
+    });
+  } else {
+    Promise.all(CAMPOS_SEL.map(carregarOpcoes)).finally(() => {
+      document.getElementById('postos-hint').style.display = 'none';
+    });
+  }
 }
 
 // ── Preview ───────────────────────────────────────────────────────────────────
@@ -495,14 +688,19 @@ async function preVisualizarRegistros() {
     } else {
       const nf = (data.total_faturas  || 0).toLocaleString('pt-BR');
       const nt = (data.total_telefones || 0).toLocaleString('pt-BR');
+      const isCliMode = (document.getElementById('modo_envio') || {}).value === 'clientes_admissao';
+      const labelF = isCliMode ? 'Clientes encontrados' : 'Faturas em aberto';
+      const labelT = isCliMode
+        ? 'Telefones únicos'
+        : 'Telefones únicos <span class="badge badge-info">envios estimados</span>';
       let html = `
         <div class="row">
           <div class="col-auto mr-4">
-            <div class="text-muted small">Faturas em aberto</div>
+            <div class="text-muted small">${labelF}</div>
             <div class="h4 text-info mb-0">${nf}</div>
           </div>
           <div class="col-auto">
-            <div class="text-muted small">Telefones únicos <span class="badge badge-info">envios estimados</span></div>
+            <div class="text-muted small">${labelT}</div>
             <div class="h4 text-success mb-0">${nt}</div>
           </div>
         </div>`;
@@ -535,16 +733,29 @@ async function preVisualizarRegistros() {
 
 function atualizarModoEnvio() {
   const modo = (document.getElementById('modo_envio') || {}).value || 'atraso';
-  const boxAtraso = document.getElementById('box-atraso');
-  const boxPre = document.getElementById('box-pre-vencimento');
-  const titulo = document.getElementById('titulo-regra-envio');
+  const boxAtraso   = document.getElementById('box-atraso');
+  const boxPre      = document.getElementById('box-pre-vencimento');
+  const boxClientes = document.getElementById('box-clientes');
+  const cardFiltros = document.getElementById('card-filtros-cliente');
+  const titulo      = document.getElementById('titulo-regra-envio');
+
   if (modo === 'pre_vencimento') {
-    boxAtraso.style.display = 'none';
-    boxPre.style.display = '';
+    boxAtraso.style.display   = 'none';
+    boxPre.style.display      = '';
+    boxClientes.style.display = 'none';
+    cardFiltros.style.display = '';
     titulo.textContent = 'Lembrete Antes do Vencimento';
+  } else if (modo === 'clientes_admissao') {
+    boxAtraso.style.display   = 'none';
+    boxPre.style.display      = 'none';
+    boxClientes.style.display = '';
+    cardFiltros.style.display = 'none';
+    titulo.textContent = 'Filtros de Admissão';
   } else {
-    boxAtraso.style.display = '';
-    boxPre.style.display = 'none';
+    boxAtraso.style.display   = '';
+    boxPre.style.display      = 'none';
+    boxClientes.style.display = 'none';
+    cardFiltros.style.display = '';
     titulo.textContent = 'Filtros de Atraso';
   }
 }
@@ -554,6 +765,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Inicializa select2 em todos os selects de filtro
   $('.wpp-sel2').select2({ placeholder: '— Todos —', allowClear: true, width: '100%' });
+  $('.wpp-sel2-cli').select2({ placeholder: '— Todos —', allowClear: true, width: '100%' });
 
   // Checkboxes de posto → recarregar opções
   document.querySelectorAll('.posto-cb').forEach(cb => {

@@ -22,6 +22,7 @@ VIEW_NAME   = os.getenv("WAPP_VIEW",   "WEB_COB_DebitoEmAberto6Meses")
 
 MODO_ATRASO = "atraso"
 MODO_PRE_VENCIMENTO = "pre_vencimento"
+MODO_CLIENTES = "clientes_admissao"
 
 # Fonte para lembrete antes do vencimento, mantendo aliases compatíveis
 # com WEB_COB_DebitoEmAberto6Meses.
@@ -103,6 +104,72 @@ SOURCE_PRE_VENCIMENTO = """
 ) src
 """
 
+# Fonte para campanhas de boas-vindas/admissão de clientes
+SOURCE_CLIENTES = """
+(
+    SELECT
+          f5.idcliente
+        , f5.Matricula                    AS matricula
+        , f5.nome                         AS nomecadastro
+        , e.codigo                        AS codigoendereco
+        , f5.Tipo                         AS titular_dependente
+        , f5.idade                        AS idade
+        , f5.DataAdmissao                 AS dataadmissao
+        , f5.cobrador                     AS cobradornome
+        , f5.corretor                     AS Corretor
+        , f5.situação                     AS situacao
+        , f5.[Dia cobrança]               AS diacobranca
+        , f5.Nascimento                   AS DataNascimento
+        , f5.Bairro                       AS bairro
+        , f5.origem                       AS origem
+        , f5.TelefoneWhatsApp             AS telefonewhatsapp
+        , f5.canceladoans                 AS canceladoans
+        , f5.tipo_FJ                      AS tipo_fj
+        , f5.Responsavel                  AS responsavel
+        , cc.responsaveltelefonewhatsApp  AS responsaveltelefonewhatsapp
+        , vcc.SituaçãoClube               AS situacaoclube
+        , ISNULL(p.ClubeBeneficio,    0)  AS clubebeneficio
+        , ISNULL(p.ClubeBeneficioJoy, 0)  AS clubebeneficiojoy
+        , ISNULL(p.PlanoPremium,      0)  AS planopremium
+        -- Classificação do cliente conforme regras de negócio
+        , CASE
+              WHEN f5.idplano IS NULL AND f5.Matricula > 0             THEN 'edige'
+              WHEN f5.Matricula = 0                                     THEN 'particular'
+              WHEN f5.Matricula > 999999 AND f5.idplano IS NOT NULL    THEN 'clube'
+              WHEN f5.Matricula BETWEEN 1 AND 999999
+                   AND f5.idplano IS NOT NULL                          THEN 'camim'
+              ELSE 'outro'
+          END AS tipo_cliente
+        -- Situação efetiva: clube usa situacaoclube, demais usam situação
+        , CASE
+              WHEN f5.Matricula > 999999 AND f5.idplano IS NOT NULL
+                   THEN vcc.SituaçãoClube
+              ELSE f5.situação
+          END AS situacao_efetiva
+        -- Tipo de plano
+        , CASE
+              WHEN ISNULL(p.ClubeBeneficio,    0) = 1 THEN 'clubebeneficio'
+              WHEN ISNULL(p.ClubeBeneficioJoy, 0) = 1 THEN 'joy'
+              WHEN ISNULL(p.PlanoPremium,      0) = 1 THEN 'premium'
+              WHEN f5.idplano IS NOT NULL              THEN 'camim padrao'
+              ELSE ''
+          END AS planotipo
+        -- Telefone efetivo: usa responsável como fallback
+        , COALESCE(
+              NULLIF(LTRIM(RTRIM(ISNULL(f5.TelefoneWhatsApp, ''))), ''),
+              cc.responsaveltelefonewhatsApp
+          )   AS telefone_efetivo
+    FROM vw_Cad_PacienteView f5
+    LEFT JOIN sis_empresa empresa ON empresa.idEndereco = f5.idEndereco
+    JOIN  cad_cliente cc          ON cc.idcliente       = f5.idCliente
+    JOIN  vw_cad_cliente vcc      ON vcc.idcliente      = f5.idCliente
+    LEFT JOIN cad_plano p         ON p.idplano          = f5.idPlano
+    JOIN  cad_endereco e          ON e.idendereco       = f5.idEndereco
+    WHERE f5.Desativado = 0
+      AND f5.idEndereco = empresa.idEndereco
+) src_cli
+"""
+
 # Mapeamento: nome do campo no form → coluna SQL na view
 CAMPO_SQL = {
     "operadora": "operadora",
@@ -110,6 +177,14 @@ CAMPO_SQL = {
     "corretor":  "Corretor",
     "bairro":    "bairro",
     "rua":       "endereco",
+}
+
+# Mapeamento para modo clientes_admissao (usa SOURCE_CLIENTES)
+CAMPO_SQL_CLIENTES = {
+    "cobrador": "cobradornome",
+    "corretor": "Corretor",
+    "bairro":   "bairro",
+    "origem":   "origem",
 }
 
 
@@ -120,16 +195,21 @@ def _env(key, default=""):
 
 def modo_envio(campanha: dict | None) -> str:
     m = str((campanha or {}).get("modo_envio") or MODO_ATRASO).strip().lower()
-    return m if m in (MODO_ATRASO, MODO_PRE_VENCIMENTO) else MODO_ATRASO
+    return m if m in (MODO_ATRASO, MODO_PRE_VENCIMENTO, MODO_CLIENTES) else MODO_ATRASO
 
 
 def source_sql(campanha: dict | None) -> str:
-    return SOURCE_PRE_VENCIMENTO if modo_envio(campanha) == MODO_PRE_VENCIMENTO else VIEW_NAME
+    m = modo_envio(campanha)
+    if m == MODO_PRE_VENCIMENTO:
+        return SOURCE_PRE_VENCIMENTO
+    if m == MODO_CLIENTES:
+        return SOURCE_CLIENTES
+    return VIEW_NAME
 
 
 def where_extras(campanha: dict | None) -> str:
-    # Filtros legados específicos da view WEB_COB
-    if modo_envio(campanha) == MODO_PRE_VENCIMENTO:
+    # Filtros legados específicos da view WEB_COB (não se aplicam a outros modos)
+    if modo_envio(campanha) in (MODO_PRE_VENCIMENTO, MODO_CLIENTES):
         return ""
     return (
         " AND situacao <> 'Pré-Cadastro'"
@@ -165,11 +245,79 @@ def get_conn_posto(posto: str):
         return None
 
 
+def _build_where_clientes(campanha: dict) -> tuple:
+    """WHERE para modo clientes_admissao — filtra sobre SOURCE_CLIENTES."""
+    filtros = [
+        "telefone_efetivo IS NOT NULL",
+        "telefone_efetivo <> ''",
+    ]
+    params = []
+
+    if campanha.get("adm_data_ini"):
+        filtros.append("dataadmissao >= ?")
+        params.append(campanha["adm_data_ini"])
+    if campanha.get("adm_data_fim"):
+        filtros.append("dataadmissao < ?")
+        params.append(campanha["adm_data_fim"])
+
+    if campanha.get("tipo_cliente"):
+        filtros.append("tipo_cliente = ?")
+        params.append(campanha["tipo_cliente"])
+
+    if campanha.get("titular_dependente"):
+        filtros.append("titular_dependente = ?")
+        params.append(campanha["titular_dependente"])
+
+    if campanha.get("situacao_cliente"):
+        filtros.append("situacao_efetiva = ?")
+        params.append(campanha["situacao_cliente"])
+
+    if campanha.get("tipo_fj"):
+        filtros.append("tipo_fj = ?")
+        params.append(campanha["tipo_fj"])
+
+    if campanha.get("clube_beneficio"):
+        filtros.append("clubebeneficio = 1")
+
+    if campanha.get("clube_beneficio_joy"):
+        filtros.append("clubebeneficiojoy = 1")
+
+    if campanha.get("plano_premium"):
+        filtros.append("planopremium = 1")
+
+    if campanha.get("origem"):
+        filtros.append("origem LIKE ?")
+        params.append(f"%{campanha['origem']}%")
+
+    if campanha.get("cobrador"):
+        filtros.append("cobradornome LIKE ?")
+        params.append(f"%{campanha['cobrador']}%")
+
+    if campanha.get("corretor"):
+        filtros.append("Corretor LIKE ?")
+        params.append(f"%{campanha['corretor']}%")
+
+    if campanha.get("bairro"):
+        filtros.append("bairro LIKE ?")
+        params.append(f"%{campanha['bairro']}%")
+
+    if campanha.get("idade_min") is not None:
+        filtros.append(f"idade >= {int(campanha['idade_min'])}")
+
+    if campanha.get("idade_max") is not None:
+        filtros.append(f"idade <= {int(campanha['idade_max'])}")
+
+    return " AND ".join(filtros), params
+
+
 def build_where(campanha: dict) -> tuple:
-    """Monta cláusula WHERE para filtrar registros da view conforme as regras da campanha.
+    """Monta cláusula WHERE para filtrar registros conforme as regras da campanha.
     Não inclui filtro de posto (cada posto tem seu próprio DB).
     Retorna (where_str, params_list).
     """
+    if modo_envio(campanha) == MODO_CLIENTES:
+        return _build_where_clientes(campanha)
+
     filtros = [
         "telefonewhatsapp IS NOT NULL",
         "telefonewhatsapp <> ''",
@@ -241,10 +389,22 @@ def buscar_opcoes(postos: list, campo: str, modo: str = MODO_ATRASO) -> list:
 
 def buscar_opcoes_debug(postos: list, campo: str, modo: str = MODO_ATRASO) -> tuple:
     """Retorna (lista_de_valores, lista_de_erros) para diagnóstico."""
-    modo = modo if modo in (MODO_ATRASO, MODO_PRE_VENCIMENTO) else MODO_ATRASO
-    col = CAMPO_SQL.get(campo)
-    if not col:
-        return [], [f"campo inválido: {campo}"]
+    if modo == MODO_CLIENTES:
+        col = CAMPO_SQL_CLIENTES.get(campo)
+        if not col:
+            return [], [f"campo inválido para modo clientes: {campo}"]
+        src = SOURCE_CLIENTES
+        extra = ""
+    else:
+        modo = modo if modo in (MODO_ATRASO, MODO_PRE_VENCIMENTO) else MODO_ATRASO
+        col = CAMPO_SQL.get(campo)
+        if not col:
+            return [], [f"campo inválido: {campo}"]
+        src = SOURCE_PRE_VENCIMENTO if modo == MODO_PRE_VENCIMENTO else VIEW_NAME
+        extra = "" if modo == MODO_PRE_VENCIMENTO else (
+            " AND situacao <> 'Pré-Cadastro'"
+            " AND descricao LIKE '%/20[0-9][0-9]'"
+        )
     valores = set()
     erros = []
     for posto in postos:
@@ -254,11 +414,6 @@ def buscar_opcoes_debug(postos: list, campo: str, modo: str = MODO_ATRASO) -> tu
             continue
         try:
             cur = conn.cursor()
-            src = SOURCE_PRE_VENCIMENTO if modo == MODO_PRE_VENCIMENTO else VIEW_NAME
-            extra = "" if modo == MODO_PRE_VENCIMENTO else (
-                " AND situacao <> 'Pré-Cadastro'"
-                " AND descricao LIKE '%/20[0-9][0-9]'"
-            )
             cur.execute(
                 f"SELECT DISTINCT {col} FROM {src} "
                 f"WHERE {col} IS NOT NULL AND LTRIM(RTRIM(CAST({col} AS NVARCHAR(500)))) <> '' "
@@ -294,8 +449,9 @@ def contar_preview(campanha: dict) -> dict:
             continue
         try:
             cur = conn.cursor()
+            tel_col = "telefone_efetivo" if modo_envio(campanha) == MODO_CLIENTES else "telefonewhatsapp"
             cur.execute(
-                f"SELECT COUNT(*) as f, COUNT(DISTINCT telefonewhatsapp) as t "
+                f"SELECT COUNT(*) as f, COUNT(DISTINCT {tel_col}) as t "
                 f"FROM {src} WHERE {where}{extra}",
                 params,
             )

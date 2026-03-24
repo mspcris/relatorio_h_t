@@ -90,7 +90,22 @@ def init_db() -> None:
             -- Status
             ativa               INTEGER NOT NULL DEFAULT 1,
             created_at          TEXT    NOT NULL,
-            updated_at          TEXT    NOT NULL
+            updated_at          TEXT    NOT NULL,
+
+            -- Fila WhatsApp por campanha (NULL = usa WAPP_QUEUE_ID do .env)
+            queue_id            TEXT,
+
+            -- Filtros de admissão (modo clientes_admissao)
+            adm_data_ini        TEXT,
+            adm_data_fim        TEXT,
+            tipo_cliente        TEXT,
+            titular_dependente  TEXT,
+            situacao_cliente    TEXT,
+            tipo_fj             TEXT,
+            clube_beneficio     INTEGER NOT NULL DEFAULT 0,
+            clube_beneficio_joy INTEGER NOT NULL DEFAULT 0,
+            plano_premium       INTEGER NOT NULL DEFAULT 0,
+            origem              TEXT
         );
 
         CREATE TABLE IF NOT EXISTS envios (
@@ -159,6 +174,22 @@ def init_db() -> None:
             )
         if "dias_ref_max" not in cols:
             conn.execute("ALTER TABLE campanhas ADD COLUMN dias_ref_max INTEGER")
+        _novos = {
+            "queue_id":            "ALTER TABLE campanhas ADD COLUMN queue_id TEXT",
+            "adm_data_ini":        "ALTER TABLE campanhas ADD COLUMN adm_data_ini TEXT",
+            "adm_data_fim":        "ALTER TABLE campanhas ADD COLUMN adm_data_fim TEXT",
+            "tipo_cliente":        "ALTER TABLE campanhas ADD COLUMN tipo_cliente TEXT",
+            "titular_dependente":  "ALTER TABLE campanhas ADD COLUMN titular_dependente TEXT",
+            "situacao_cliente":    "ALTER TABLE campanhas ADD COLUMN situacao_cliente TEXT",
+            "tipo_fj":             "ALTER TABLE campanhas ADD COLUMN tipo_fj TEXT",
+            "clube_beneficio":     "ALTER TABLE campanhas ADD COLUMN clube_beneficio INTEGER NOT NULL DEFAULT 0",
+            "clube_beneficio_joy": "ALTER TABLE campanhas ADD COLUMN clube_beneficio_joy INTEGER NOT NULL DEFAULT 0",
+            "plano_premium":       "ALTER TABLE campanhas ADD COLUMN plano_premium INTEGER NOT NULL DEFAULT 0",
+            "origem":              "ALTER TABLE campanhas ADD COLUMN origem TEXT",
+        }
+        for _col, _ddl in _novos.items():
+            if _col not in cols:
+                conn.execute(_ddl)
 
 
 # ---------------------------------------------------------------------------
@@ -215,8 +246,13 @@ def criar_campanha(dados: dict) -> int:
                 bairro, rua,
                 hora_inicio, hora_fim, dias_semana,
                 intervalo_dias, ativa,
+                queue_id,
+                adm_data_ini, adm_data_fim,
+                tipo_cliente, titular_dependente, situacao_cliente, tipo_fj,
+                clube_beneficio, clube_beneficio_joy, plano_premium,
+                origem,
                 created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 dados["nome"], dados.get("template", "notificacao_de_fatura"),
                 dados.get("modo_envio", "atraso"), postos_json,
@@ -237,6 +273,17 @@ def criar_campanha(dados: dict) -> int:
                 dados.get("dias_semana", "0,1,2,3,4"),
                 dados.get("intervalo_dias", 7),
                 1 if dados.get("ativa", True) else 0,
+                dados.get("queue_id") or None,
+                dados.get("adm_data_ini") or None,
+                dados.get("adm_data_fim") or None,
+                dados.get("tipo_cliente") or None,
+                dados.get("titular_dependente") or None,
+                dados.get("situacao_cliente") or None,
+                dados.get("tipo_fj") or None,
+                1 if dados.get("clube_beneficio") else 0,
+                1 if dados.get("clube_beneficio_joy") else 0,
+                1 if dados.get("plano_premium") else 0,
+                dados.get("origem") or None,
                 now, now,
             )
         )
@@ -256,7 +303,13 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 operadora=?, cobrador=?, corretor=?,
                 bairro=?, rua=?,
                 hora_inicio=?, hora_fim=?, dias_semana=?,
-                intervalo_dias=?, ativa=?, updated_at=?
+                intervalo_dias=?, ativa=?,
+                queue_id=?,
+                adm_data_ini=?, adm_data_fim=?,
+                tipo_cliente=?, titular_dependente=?, situacao_cliente=?, tipo_fj=?,
+                clube_beneficio=?, clube_beneficio_joy=?, plano_premium=?,
+                origem=?,
+                updated_at=?
             WHERE id=?""",
             (
                 dados["nome"], dados.get("template", "notificacao_de_fatura"),
@@ -278,6 +331,17 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 dados.get("dias_semana", "0,1,2,3,4"),
                 dados.get("intervalo_dias", 7),
                 1 if dados.get("ativa", True) else 0,
+                dados.get("queue_id") or None,
+                dados.get("adm_data_ini") or None,
+                dados.get("adm_data_fim") or None,
+                dados.get("tipo_cliente") or None,
+                dados.get("titular_dependente") or None,
+                dados.get("situacao_cliente") or None,
+                dados.get("tipo_fj") or None,
+                1 if dados.get("clube_beneficio") else 0,
+                1 if dados.get("clube_beneficio_joy") else 0,
+                1 if dados.get("plano_premium") else 0,
+                dados.get("origem") or None,
                 now,
                 campanha_id,
             )
