@@ -430,6 +430,10 @@ def r3(): return render_protected_page("kpi_governo.html")
 @app.get('/kpi_home')
 def r4(): return render_protected_page("kpi_home.html")
 
+@app.get('/indicadores')
+def r_indicadores():
+    return render_protected_page("indicadores.html")
+
 @app.get('/kpi_prescricao')
 def r5(): return render_protected_page("kpi_prescricao.html")
 
