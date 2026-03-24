@@ -36,68 +36,334 @@
 
 
     <style>
-        h1,
-        h2,
-        h3 {
-            margin: 16px 0 8px;
+        * {
+            box-sizing: border-box;
         }
 
-        p {
-            margin: 8px 0 16px;
+        html,
+        body {
+            min-height: 100%;
+            margin: 0;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            background: #04130a;
+            color: #e8fff2;
         }
 
-        ul {
-            margin: 0 0 16px 20px;
-        }
-
-        code,
-        pre {
-            background: #f6f8fa;
-            border: 1px solid #eaecef;
-            border-radius: 6px;
-        }
-
-        pre {
-            padding: 12px;
-            overflow: auto;
-        }
-
-        .kpi {
+        .bg {
+            position: fixed;
+            inset: 0;
             display: grid;
-            grid-template-columns: repeat(4, minmax(180px, 1fr));
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            z-index: 0;
+        }
+
+        .bg-cell {
+            background-size: cover;
+            background-position: center;
+            animation: kenburns 20s ease-in-out infinite alternate;
+            filter: brightness(.55) saturate(1.1);
+        }
+
+        .bg-cell:nth-child(1) {
+            background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2021/06/15145129/home.jpg');
+            animation-delay: 0s;
+        }
+
+        .bg-cell:nth-child(2) {
+            background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/04/30163026/Campo-Grande-e1562878167161.jpg');
+            animation-delay: -3s;
+        }
+
+        .bg-cell:nth-child(3) {
+            background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2022/03/09151823/cg2fachada-scaled.jpg');
+            animation-delay: -6s;
+        }
+
+        .bg-cell:nth-child(4) {
+            background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/07/11123612/BANGU-1-as-Smart-Object-1-copy.jpg');
+            animation-delay: -9s;
+        }
+
+        .bg-cell:nth-child(5) {
+            background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2020/10/19144653/del_castilho.jpg');
+            animation-delay: -2s;
+        }
+
+        .bg-cell:nth-child(6) {
+            background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/04/30162346/jpa-e1562878253339.jpg');
+            animation-delay: -5s;
+        }
+
+        .bg-cell:nth-child(7) {
+            background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2020/10/19144328/Recepcao-Del-Castilho.jpg');
+            animation-delay: -8s;
+        }
+
+        .bg-cell:nth-child(8) {
+            background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2024/04/05115830/madureira.jpg');
+            animation-delay: -11s;
+        }
+
+        .bg-cell:nth-child(9) {
+            background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2022/03/09152145/cpnhofachada.jpg');
+            animation-delay: -4s;
+        }
+
+        .bg-cell:nth-child(10) {
+            background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2020/02/21140942/nillopolis2102.jpg');
+            animation-delay: -7s;
+        }
+
+        .bg-cell:nth-child(11) {
+            background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/07/11130213/REALENGO-1-as-Smart-Object-1-copy.jpg');
+            animation-delay: -1s;
+        }
+
+        .bg-cell:nth-child(12) {
+            background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/04/30162920/NI-e1562878495907.jpg');
+            animation-delay: -10s;
+        }
+
+        @keyframes kenburns {
+            0% {
+                transform: scale(1) translate(0, 0);
+            }
+
+            100% {
+                transform: scale(1.12) translate(-2%, -2%);
+            }
+        }
+
+        .bg-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1;
+            background: radial-gradient(ellipse 60% 80% at 50% 50%, rgba(0, 20, 10, .45) 0%, rgba(0, 10, 5, .82) 100%);
+        }
+
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            z-index: 2;
+            background-image:
+                linear-gradient(rgba(0, 180, 80, .06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 180, 80, .06) 1px, transparent 1px);
+            background-size: 48px 48px;
+            animation: gridpulse 6s ease-in-out infinite;
+        }
+
+        @keyframes gridpulse {
+            0%,
+            100% {
+                opacity: .6;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        .scanline {
+            position: fixed;
+            left: 0;
+            right: 0;
+            height: 2px;
+            z-index: 3;
+            background: linear-gradient(90deg, transparent, rgba(0, 220, 100, .35), transparent);
+            animation: scan 10s linear infinite;
+        }
+
+        @keyframes scan {
+            0% {
+                top: -2px;
+                opacity: 0;
+            }
+
+            5% {
+                opacity: 1;
+            }
+
+            95% {
+                opacity: 1;
+            }
+
+            100% {
+                top: 100%;
+                opacity: 0;
+            }
+        }
+
+        .stage {
+            position: relative;
+            z-index: 10;
+            min-height: 100vh;
+            padding: 22px 16px 24px;
+        }
+
+        .shell {
+            max-width: 1250px;
+            margin: 0 auto;
+        }
+
+        .hero {
+            border: 1px solid rgba(0, 200, 80, .2);
+            border-radius: 20px;
+            padding: 22px 24px;
+            background: rgba(5, 20, 10, .72);
+            backdrop-filter: blur(16px) saturate(1.3);
+            -webkit-backdrop-filter: blur(16px) saturate(1.3);
+            box-shadow: 0 8px 40px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .08);
+        }
+
+        .hero-top {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 8px;
+        }
+
+        .logo-chip {
+            width: 44px;
+            height: 44px;
+            border-radius: 999px;
+            border: 1px solid rgba(0, 200, 80, .35);
+            display: grid;
+            place-items: center;
+            background: rgba(0, 200, 80, .1);
+            box-shadow: 0 0 24px rgba(0, 220, 100, .2);
+        }
+
+        .logo-chip img {
+            width: 26px;
+            height: 26px;
+            object-fit: contain;
+        }
+
+        .hero-title {
+            margin: 0;
+            font-size: 1.6rem;
+            line-height: 1.15;
+            color: #f4fff8;
+            font-weight: 800;
+            letter-spacing: .02em;
+        }
+
+        .hero-sub {
+            margin: 0;
+            color: rgba(228, 255, 240, .7);
+            font-size: .93rem;
+        }
+
+        .stats {
+            margin-top: 14px;
+            display: flex;
+            flex-wrap: wrap;
             gap: 12px;
-            margin: 16px 0;
+            color: rgba(212, 255, 230, .95);
+            font-size: .95rem;
         }
 
-        .card {
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
+        .stats strong {
+            color: #00e676;
+            font-size: 1.05rem;
+        }
+
+        #pagesGrid {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 12px;
+        }
+
+        .link-card {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+            border-radius: 16px;
+            border: 1px solid rgba(0, 200, 80, .2);
+            background: rgba(5, 20, 10, .74);
+            padding: 14px;
+            transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, .3);
+        }
+
+        .link-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(0, 220, 100, .55);
+            box-shadow: 0 10px 28px rgba(0, 0, 0, .46);
+        }
+
+        .link-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .link-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            background: rgba(0, 200, 80, .12);
+            color: #7dffb2;
+            flex-shrink: 0;
+        }
+
+        .link-title {
+            margin: 0;
+            font-size: .98rem;
+            line-height: 1.2;
+            color: #f4fff8;
+            flex: 1;
+        }
+
+        .link-rank {
+            color: rgba(200, 245, 216, .8);
+            font-size: .82rem;
+            font-weight: 700;
+        }
+
+        .link-url {
+            color: rgba(202, 240, 214, .62);
+            font-size: .84rem;
+            margin: 0 0 10px;
+            word-break: break-all;
+        }
+
+        .link-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: .9rem;
+        }
+
+        .link-hits {
+            color: #94ffbe;
+            font-weight: 700;
+        }
+
+        .link-open {
+            color: #d8ffea;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+        }
+
+        .err-card {
+            border: 1px solid rgba(255, 130, 130, .5);
+            border-radius: 14px;
             padding: 12px;
+            background: rgba(48, 10, 10, .75);
+            color: #ffd3d3;
         }
 
-        .muted {
-            color: #555;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 12px 0 16px;
-        }
-
-        th,
-        td {
-            border: 1px solid #e5e7eb;
-            padding: 8px 10px;
-            text-align: left;
-        }
-
-        th {
-            background: #fafafa;
-        }
-
-        small {
-            color: #666;
+        .menu-btn {
+            z-index: 30;
         }
 
         /* estado inicial de cada item do menu */
@@ -163,6 +429,20 @@
             font-size: 1rem;
             opacity: .95
         }
+
+        @media (max-width: 640px) {
+            .hero {
+                padding: 16px;
+            }
+
+            .hero-title {
+                font-size: 1.3rem;
+            }
+
+            .hero-sub {
+                font-size: .85rem;
+            }
+        }
     </style>
 
 
@@ -172,6 +452,14 @@
 
 
 <body>
+    <div class="bg" aria-hidden="true">
+        <div class="bg-cell"></div><div class="bg-cell"></div><div class="bg-cell"></div><div class="bg-cell"></div>
+        <div class="bg-cell"></div><div class="bg-cell"></div><div class="bg-cell"></div><div class="bg-cell"></div>
+        <div class="bg-cell"></div><div class="bg-cell"></div><div class="bg-cell"></div><div class="bg-cell"></div>
+    </div>
+    <div class="bg-overlay" aria-hidden="true"></div>
+    <div class="bg-grid" aria-hidden="true"></div>
+    <div class="scanline" aria-hidden="true"></div>
 
 
     <!-- Botão hamburguer que abre o menu -->
@@ -451,26 +739,24 @@
 
 
 
-    <main class="page" style="max-width:1200px;margin:20px auto;padding:0 16px;">
-        <article class="card" style="margin-bottom:16px;">
-            <h2 style="margin:0 0 8px 0;">Páginas do Projeto</h2>
-            <p class="muted" style="margin:0;">Ordenadas por número de acessos (não únicos).</p>
-            <div id="resumoAcessos" class="muted" style="margin-top:8px;"></div>
-        </article>
+    <main class="stage">
+        <section class="shell">
+            <article class="hero">
+                <div class="hero-top">
+                    <div class="logo-chip">
+                        <img src="/images/Logo Camim-01_50px.png" alt="CAMIM">
+                    </div>
+                    <div>
+                        <h1 class="hero-title">Acessos do Projeto</h1>
+                        <p class="hero-sub">Recursos do menu ordenados por uso. Contagem simples por abertura de página.</p>
+                    </div>
+                </div>
+                <div id="resumoAcessos" class="stats"></div>
+            </article>
 
-        <section id="pagesGrid"
-            style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;"></section>
+            <section id="pagesGrid"></section>
+        </section>
     </main>
-
-    <script>
-        document.addEventListener('click', (e) => {
-            const a = e.target.closest('#btnLogout');
-            if (!a) return;
-            e.preventDefault();
-            fetch('/session/logout', { method: 'POST', credentials: 'include' })
-                .finally(() => { location.href = '/login.html'; });
-        });
-    </script>
 
     <script>
         function fmt(n) {
@@ -482,27 +768,26 @@
             const resumo = document.getElementById('resumoAcessos');
             const items = (data && data.items) || [];
 
-            resumo.textContent = `${fmt(data.total_pages)} páginas rastreadas • ${fmt(data.total_hits)} acessos totais`;
+            resumo.innerHTML = `
+                <span><strong>${fmt(data.total_pages)}</strong> recursos rastreados</span>
+                <span><strong>${fmt(data.total_hits)}</strong> acessos totais</span>
+            `;
             grid.innerHTML = '';
 
             items.forEach((p, idx) => {
                 const card = document.createElement('a');
                 card.href = p.url;
-                card.className = 'card';
-                card.style.display = 'block';
-                card.style.padding = '12px';
-                card.style.textDecoration = 'none';
-                card.style.color = 'inherit';
+                card.className = 'link-card';
                 card.innerHTML = `
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                        <i class="${p.icon || 'fas fa-file-alt'}" style="font-size:1.1rem;color:#2c7be5"></i>
-                        <strong style="flex:1;line-height:1.2;text-decoration:underline;">${p.title || p.path}</strong>
-                        <span class="muted">#${idx + 1}</span>
+                    <div class="link-row">
+                        <span class="link-icon"><i class="${p.icon || 'fas fa-file-alt'}"></i></span>
+                        <h2 class="link-title">${p.title || p.path}</h2>
+                        <span class="link-rank">#${idx + 1}</span>
                     </div>
-                    <div class="muted" style="font-size:.88rem;margin-bottom:10px;word-break:break-all;">${p.url}</div>
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                        <span style="font-weight:700;">${fmt(p.hits)} acessos</span>
-                        <span class="menu-link" style="text-decoration:none;">
+                    <p class="link-url">${p.url}</p>
+                    <div class="link-bottom">
+                        <span class="link-hits">${fmt(p.hits)} acessos</span>
+                        <span class="link-open">
                             <i class="fas fa-arrow-right"></i>
                             <span>Abrir</span>
                         </span>
@@ -517,7 +802,7 @@
             .then(renderCards)
             .catch((e) => {
                 const grid = document.getElementById('pagesGrid');
-                grid.innerHTML = `<article class="card"><span class="muted">${e.message}</span></article>`;
+                grid.innerHTML = `<article class="err-card">${e.message}</article>`;
             });
     </script>
 </body>
