@@ -117,6 +117,10 @@ def _allowed_resource(path: str) -> bool:
         return False
     if p in ("/logout", "/login", "/login.html", "/teste", "/teste.html", "/overlay", "/overlay.html", "/header", "/footer"):
         return False
+    if p.startswith("/te/"):
+        return False
+    if p.startswith("/tef/") and p != "/tef":
+        return False
     if p.startswith("/wpp/"):
         return False
     return True

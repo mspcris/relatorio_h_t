@@ -13,8 +13,8 @@
     {
       key: 'indicadores',
       text: 'Indicadores',
-      href: '/kpi_home',
-      paths: ['/kpi_home', '/indicadores', '/indicadores.html'],
+      href: '/indicadores',
+      paths: ['/indicadores', '/indicadores.html'],
       icon: 'fas fa-chart-line',
     },
     {
