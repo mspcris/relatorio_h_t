@@ -422,7 +422,6 @@ def buscar_opcoes_debug(postos: list, campo: str, modo: str = MODO_ATRASO) -> tu
             continue
         try:
             cur = conn.cursor()
-            cur.timeout = 25
             cur.execute(
                 f"SELECT DISTINCT {col} FROM {src} "
                 f"WHERE {col} IS NOT NULL AND LTRIM(RTRIM(CAST({col} AS NVARCHAR(500)))) <> '' "
@@ -458,7 +457,6 @@ def contar_preview(campanha: dict) -> dict:
             continue
         try:
             cur = conn.cursor()
-            cur.timeout = 25
             tel_col = "telefone_efetivo" if modo_envio(campanha) == MODO_CLIENTES else "telefonewhatsapp"
             _sql = f"SELECT COUNT(*) as f, COUNT(DISTINCT {tel_col}) as t FROM {src} WHERE {where}{extra}"
             log.warning("DEBUG preview posto=%s SQL=%s PARAMS=%s", posto, _sql[:400], params)
