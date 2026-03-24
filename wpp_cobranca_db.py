@@ -29,6 +29,8 @@ _MOTIVOS_NAO_CONTABILIZAR = (
     "fora_intervalo",
     "intervalo",
     "ja_enviado_recente",
+    "multi_fatura",
+    "mesmo_tel_nesta_rodada",
 )
 
 
@@ -350,7 +352,9 @@ def resumo_campanha(campanha_id: int) -> dict:
             "WHERE campanha_id=? "
             "AND LOWER(motivo) NOT LIKE '%intervalo%' "
             "AND LOWER(motivo) NOT LIKE 'bloqueado_rodada_global%' "
-            "AND LOWER(motivo) NOT LIKE 'ja_enviado_recente%'",
+            "AND LOWER(motivo) NOT LIKE 'ja_enviado_recente%' "
+            "AND LOWER(motivo) NOT LIKE '%multi_fatura%' "
+            "AND LOWER(motivo) NOT LIKE '%mesmo_tel_nesta_rodada%'",
             (campanha_id,)
         ).fetchone()
     return {
@@ -368,6 +372,8 @@ def listar_nao_enviados(campanha_id: int) -> list[dict]:
                  AND LOWER(motivo) NOT LIKE '%intervalo%'
                  AND LOWER(motivo) NOT LIKE 'bloqueado_rodada_global%'
                  AND LOWER(motivo) NOT LIKE 'ja_enviado_recente%'
+                 AND LOWER(motivo) NOT LIKE '%multi_fatura%'
+                 AND LOWER(motivo) NOT LIKE '%mesmo_tel_nesta_rodada%'
                ORDER BY rodada_em DESC, motivo""",
             (campanha_id,)
         ).fetchall()
