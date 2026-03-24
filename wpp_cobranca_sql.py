@@ -460,11 +460,9 @@ def contar_preview(campanha: dict) -> dict:
             cur = conn.cursor()
             cur.timeout = 25
             tel_col = "telefone_efetivo" if modo_envio(campanha) == MODO_CLIENTES else "telefonewhatsapp"
-            cur.execute(
-                f"SELECT COUNT(*) as f, COUNT(DISTINCT {tel_col}) as t "
-                f"FROM {src} WHERE {where}{extra}",
-                params,
-            )
+            _sql = f"SELECT COUNT(*) as f, COUNT(DISTINCT {tel_col}) as t FROM {src} WHERE {where}{extra}"
+            log.warning("DEBUG preview posto=%s SQL=%s PARAMS=%s", posto, _sql[:400], params)
+            cur.execute(_sql, params)
             row = cur.fetchone()
             f = row[0] or 0
             t = row[1] or 0
