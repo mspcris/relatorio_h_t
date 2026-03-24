@@ -520,22 +520,26 @@
             grid.innerHTML = '';
 
             items.forEach((p, idx) => {
-                const card = document.createElement('article');
+                const card = document.createElement('a');
+                card.href = p.url;
                 card.className = 'card';
+                card.style.display = 'block';
                 card.style.padding = '12px';
+                card.style.textDecoration = 'none';
+                card.style.color = 'inherit';
                 card.innerHTML = `
                     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
                         <i class="${p.icon || 'fas fa-file-alt'}" style="font-size:1.1rem;color:#2c7be5"></i>
-                        <strong style="flex:1;line-height:1.2">${p.title || p.path}</strong>
+                        <strong style="flex:1;line-height:1.2;text-decoration:underline;">${p.title || p.path}</strong>
                         <span class="muted">#${idx + 1}</span>
                     </div>
                     <div class="muted" style="font-size:.88rem;margin-bottom:10px;word-break:break-all;">${p.url}</div>
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                         <span style="font-weight:700;">${fmt(p.hits)} acessos</span>
-                        <a href="${p.url}" class="menu-link" style="text-decoration:none;">
+                        <span class="menu-link" style="text-decoration:none;">
                             <i class="fas fa-arrow-right"></i>
                             <span>Abrir</span>
-                        </a>
+                        </span>
                     </div>
                 `;
                 grid.appendChild(card);
