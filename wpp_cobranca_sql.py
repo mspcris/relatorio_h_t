@@ -111,7 +111,7 @@ SOURCE_CLIENTES = """
           f5.idcliente
         , f5.Matricula                    AS matricula
         , f5.nome                         AS nomecadastro
-        , e.codigo                        AS codigoendereco
+        , CAST(f5.idEndereco AS VARCHAR(20)) AS codigoendereco
         , f5.Tipo                         AS titular_dependente
         , f5.idade                        AS idade
         , f5.DataAdmissao                 AS dataadmissao
@@ -164,7 +164,6 @@ SOURCE_CLIENTES = """
     JOIN  cad_cliente cc          ON cc.idcliente       = f5.idCliente
     JOIN  vw_cad_cliente vcc      ON vcc.idcliente      = f5.idCliente
     LEFT JOIN cad_plano p         ON p.idplano          = f5.idPlano
-    JOIN  cad_endereco e          ON e.idendereco       = f5.idEndereco
     WHERE f5.Desativado = 0
       AND f5.idEndereco = empresa.idEndereco
 ) src_cli
