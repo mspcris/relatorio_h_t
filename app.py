@@ -1,9 +1,10 @@
 from flask import Flask, request, make_response, jsonify, render_template
-import os, secrets, json
+import os, secrets, json, sqlite3
 from datetime import date, datetime
 import re
 import time
 from urllib.parse import quote_plus
+from pathlib import Path
 
 from sqlalchemy import create_engine, text
 
@@ -37,6 +38,130 @@ try:
 except Exception as _e:
     import logging
     logging.getLogger(__name__).error("wpp_bp não carregado: %s", _e)
+
+PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
+
+
+def _page_db():
+    conn = sqlite3.connect(PAGE_ACCESS_DB)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS page_access (
+            path      TEXT PRIMARY KEY,
+            hits      INTEGER NOT NULL DEFAULT 0,
+            last_hit  TEXT    NOT NULL
+        )
+    """)
+    return conn
+
+
+def _route_paths() -> set[str]:
+    paths = set()
+    for rule in app.url_map.iter_rules():
+        if "<" in rule.rule:
+            continue
+        paths.add(rule.rule)
+    return paths
+
+
+def _canonical_path(path: str) -> str:
+    p = (path or "/").strip()
+    if not p.startswith("/"):
+        p = "/" + p
+    p = re.sub(r"/{2,}", "/", p)
+    if p in ("/", "/index", "/index.html"):
+        return "/index.html"
+    if p.endswith(".html"):
+        return p[:-5]
+    return p
+
+
+def _is_trackable_path(path: str) -> bool:
+    p = (path or "").lower()
+    if not p or p.startswith("/api/"):
+        return False
+    if p.startswith(("/js/", "/css/", "/images/", "/fonts/", "/public/")):
+        return False
+    if p.startswith(("/session/", "/admin/api/", "/auth/")):
+        return False
+    if p.startswith("/json_") or p.startswith("/export_") or p.startswith("/sql_"):
+        return False
+    if p in ("/favicon.ico",):
+        return False
+    if "." in p and not p.endswith(".html"):
+        return False
+    return True
+
+
+def _title_from_path(path: str) -> str:
+    slug = path.strip("/").split("/")[-1]
+    slug = slug.replace(".html", "")
+    if not slug:
+        return "Home page"
+    if slug == "kpi_home":
+        return "Indicadores"
+    return slug.replace("_", " ").replace("-", " ").title()
+
+
+def _icon_from_path(path: str) -> str:
+    p = path.lower()
+    if "kpi" in p or "indicador" in p:
+        return "fas fa-chart-line"
+    if "wpp" in p or "whatsapp" in p:
+        return "fab fa-whatsapp"
+    if "admin" in p:
+        return "fas fa-users-cog"
+    if "tef" in p:
+        return "fas fa-credit-card"
+    if "email" in p:
+        return "fas fa-envelope"
+    if "trello" in p:
+        return "fab fa-trello"
+    if "harvest" in p:
+        return "fas fa-stopwatch"
+    if "servico" in p:
+        return "fas fa-th-large"
+    return "fas fa-file-alt"
+
+
+def _link_for_path(canonical: str, routes: set[str]) -> str:
+    if canonical == "/index.html":
+        return "/index.html"
+    if canonical in routes:
+        return canonical
+    if canonical + ".html" in routes:
+        return canonical + ".html"
+    return canonical
+
+
+@app.before_request
+def track_page_hits():
+    if request.method != "GET":
+        return
+    if not _is_trackable_path(request.path):
+        return
+    email, _ = decode_user()
+    if not email:
+        return
+    canonical = _canonical_path(request.path)
+    if canonical == "/index.html":
+        return
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    try:
+        with _page_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO page_access(path, hits, last_hit)
+                VALUES(?, 1, ?)
+                ON CONFLICT(path) DO UPDATE SET
+                  hits = hits + 1,
+                  last_hit = excluded.last_hit
+                """,
+                (canonical, now),
+            )
+    except Exception:
+        return
 
 # ===============================
 # Funções auxiliares
@@ -313,6 +438,63 @@ def h13(): return render_protected_page("index.html")
 
 @app.get('/overlay.html')
 def h14(): return render_protected_page("overlay.html")
+
+
+# ===============================
+# API Acessos de Páginas
+# ===============================
+
+@app.get("/api/pages/acessos")
+def api_pages_acessos():
+    email, postos = decode_user()
+    if not email:
+        return ("", 401)
+
+    routes = _route_paths()
+    tpl_dir = Path(app.template_folder or ".")
+    pages = []
+    try:
+        for fp in sorted(tpl_dir.glob("*.html")):
+            name = fp.name
+            if name in ("index.html", "login.html", "login_admin.html", "nova_senha.html", "reset_senha.html"):
+                continue
+            canonical = _canonical_path("/" + name)
+            pages.append(canonical)
+    except Exception:
+        pass
+
+    # rotas sem .html relevantes do projeto
+    for p in routes:
+        if p in ("/", "/index.html"):
+            continue
+        if not _is_trackable_path(p):
+            continue
+        pages.append(_canonical_path(p))
+
+    uniq = sorted(set(pages))
+    counts = {}
+    try:
+        with _page_db() as conn:
+            rows = conn.execute("SELECT path, hits, last_hit FROM page_access").fetchall()
+            counts = {r["path"]: {"hits": int(r["hits"]), "last_hit": r["last_hit"]} for r in rows}
+    except Exception:
+        counts = {}
+
+    items = []
+    for canonical in uniq:
+        info = counts.get(canonical, {"hits": 0, "last_hit": None})
+        items.append({
+            "path": canonical,
+            "url": _link_for_path(canonical, routes),
+            "title": _title_from_path(canonical),
+            "icon": _icon_from_path(canonical),
+            "hits": info["hits"],
+            "last_hit": info["last_hit"],
+        })
+
+    items.sort(key=lambda x: (x["hits"], x["title"]), reverse=True)
+    total_hits = sum(x["hits"] for x in items)
+    return jsonify({"ok": True, "total_hits": total_hits, "total_pages": len(items), "items": items})
 
 
 # ===============================
