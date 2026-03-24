@@ -40,6 +40,7 @@ except Exception as _e:
     logging.getLogger(__name__).error("wpp_bp não carregado: %s", _e)
 
 PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
+_MENU_RESOURCES_CACHE = None
 
 
 def _page_db():
@@ -65,6 +66,35 @@ def _route_paths() -> set[str]:
     return paths
 
 
+def _extract_menu_links(html: str) -> list[dict]:
+    links = []
+    for m in re.finditer(r'<a\b([^>]*?)>', html, flags=re.I | re.S):
+        attrs = m.group(1)
+        attrs_l = attrs.lower()
+        if "nav-link" not in attrs_l and "menu-link" not in attrs_l:
+            continue
+        href_m = re.search(r'href\s*=\s*["\']([^"\']+)["\']', attrs, flags=re.I)
+        if not href_m:
+            continue
+        href = href_m.group(1).strip()
+        after = html[m.end(): m.end() + 350]
+        icon_m = re.search(r'<i\b[^>]*class\s*=\s*["\']([^"\']+)["\']', after, flags=re.I)
+        title_m = re.search(r'<p[^>]*>(.*?)</p>', after, flags=re.I | re.S)
+        title = re.sub(r'\s+', ' ', title_m.group(1)).strip() if title_m else ""
+        icon = icon_m.group(1).strip() if icon_m else "fas fa-file-alt"
+        links.append({"href": href, "title": title, "icon": icon})
+    return links
+
+
+def _is_internal_href(href: str) -> bool:
+    h = (href or "").strip()
+    if not h or h.startswith(("#", "javascript:", "mailto:", "tel:")):
+        return False
+    if h.startswith(("http://", "https://", "//")):
+        return False
+    return True
+
+
 def _canonical_path(path: str) -> str:
     p = (path or "/").strip()
     if not p.startswith("/"):
@@ -72,26 +102,63 @@ def _canonical_path(path: str) -> str:
     p = re.sub(r"/{2,}", "/", p)
     if p in ("/", "/index", "/index.html"):
         return "/index.html"
+    if p.endswith("/") and len(p) > 1:
+        p = p[:-1]
     if p.endswith(".html"):
         return p[:-5]
     return p
 
 
-def _is_trackable_path(path: str) -> bool:
+def _allowed_resource(path: str) -> bool:
     p = (path or "").lower()
-    if not p or p.startswith("/api/"):
+    if p == "/index":
         return False
-    if p.startswith(("/js/", "/css/", "/images/", "/fonts/", "/public/")):
+    if p.startswith("/api/") or p.startswith("/session/") or p.startswith("/admin/api/"):
         return False
-    if p.startswith(("/session/", "/admin/api/", "/auth/")):
+    if p in ("/logout", "/login", "/login.html", "/teste", "/teste.html", "/overlay", "/overlay.html", "/header", "/footer"):
         return False
-    if p.startswith("/json_") or p.startswith("/export_") or p.startswith("/sql_"):
-        return False
-    if p in ("/favicon.ico",):
-        return False
-    if "." in p and not p.endswith(".html"):
+    if p.startswith("/wpp/"):
         return False
     return True
+
+
+def _menu_resources() -> dict:
+    global _MENU_RESOURCES_CACHE
+    if _MENU_RESOURCES_CACHE is not None:
+        return _MENU_RESOURCES_CACHE
+
+    resources = {}
+    tpl_dir = Path(app.template_folder or ".")
+    for fp in tpl_dir.glob("*.html"):
+        try:
+            html = fp.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        for item in _extract_menu_links(html):
+            href = item["href"]
+            if not _is_internal_href(href):
+                continue
+            canonical = _canonical_path(href)
+            if not _allowed_resource(canonical):
+                continue
+            if canonical == "/wpp":
+                # Mantém somente home do módulo WPP.
+                item["title"] = item["title"] or "WhatsApp Cobranca"
+            url = href if href.startswith("/") else "/" + href
+            if canonical not in resources:
+                resources[canonical] = {
+                    "path": canonical,
+                    "url": url,
+                    "title": item["title"] or _title_from_path(canonical),
+                    "icon": item["icon"] or _icon_from_path(canonical),
+                }
+    _MENU_RESOURCES_CACHE = resources
+    return resources
+
+
+def _is_trackable_path(path: str) -> bool:
+    p = _canonical_path(path)
+    return p in _menu_resources()
 
 
 def _title_from_path(path: str) -> str:
@@ -146,6 +213,8 @@ def track_page_hits():
         return
     canonical = _canonical_path(request.path)
     if canonical == "/index.html":
+        return
+    if not _is_trackable_path(canonical):
         return
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     try:
@@ -376,7 +445,8 @@ def r9(): return render_protected_page("medicos.html")
 def r10(): return render_protected_page("carregando.html")
 
 @app.get('/teste')
-def r11(): return render_protected_page("teste.html")
+def r11():
+    return ('', 404)
 
 @app.get('/trello_harvest')
 def r12(): return render_protected_page("trello_harvest.html")
@@ -428,7 +498,8 @@ def h9(): return render_protected_page("medicos.html")
 def h10(): return render_protected_page("carregando.html")
 
 @app.get('/teste.html')
-def h11(): return render_protected_page("teste.html")
+def h11():
+    return ('', 404)
 
 @app.get('/trello_harvest.html')
 def h12(): return render_protected_page("trello_harvest.html")
@@ -437,7 +508,8 @@ def h12(): return render_protected_page("trello_harvest.html")
 def h13(): return render_protected_page("index.html")
 
 @app.get('/overlay.html')
-def h14(): return render_protected_page("overlay.html")
+def h14():
+    return ('', 404)
 
 
 # ===============================
@@ -450,28 +522,7 @@ def api_pages_acessos():
     if not email:
         return ("", 401)
 
-    routes = _route_paths()
-    tpl_dir = Path(app.template_folder or ".")
-    pages = []
-    try:
-        for fp in sorted(tpl_dir.glob("*.html")):
-            name = fp.name
-            if name in ("index.html", "login.html", "login_admin.html", "nova_senha.html", "reset_senha.html"):
-                continue
-            canonical = _canonical_path("/" + name)
-            pages.append(canonical)
-    except Exception:
-        pass
-
-    # rotas sem .html relevantes do projeto
-    for p in routes:
-        if p in ("/", "/index.html"):
-            continue
-        if not _is_trackable_path(p):
-            continue
-        pages.append(_canonical_path(p))
-
-    uniq = sorted(set(pages))
+    resources = _menu_resources()
     counts = {}
     try:
         with _page_db() as conn:
@@ -481,13 +532,13 @@ def api_pages_acessos():
         counts = {}
 
     items = []
-    for canonical in uniq:
+    for canonical, meta in resources.items():
         info = counts.get(canonical, {"hits": 0, "last_hit": None})
         items.append({
             "path": canonical,
-            "url": _link_for_path(canonical, routes),
-            "title": _title_from_path(canonical),
-            "icon": _icon_from_path(canonical),
+            "url": meta["url"],
+            "title": meta["title"],
+            "icon": meta["icon"],
             "hits": info["hits"],
             "last_hit": info["last_hit"],
         })
