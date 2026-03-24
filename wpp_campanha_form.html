@@ -103,6 +103,16 @@
                 </select>
               </div>
             </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label>Tipo de envio</label>
+                {% set modo = campanha.modo_envio if campanha and campanha.modo_envio else 'atraso' %}
+                <select name="modo_envio" id="modo_envio" class="form-control">
+                  <option value="atraso" {{ 'selected' if modo == 'atraso' }}>Cobrança por atraso</option>
+                  <option value="pre_vencimento" {{ 'selected' if modo == 'pre_vencimento' }}>Lembrete antes do vencimento</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           <!-- Template WhatsApp -->
@@ -151,9 +161,9 @@
 
       <!-- ── FILTROS DE ATRASO ───────────────────────────────────── -->
       <div class="card">
-        <div class="card-header"><strong>Filtros de Atraso</strong></div>
+        <div class="card-header"><strong id="titulo-regra-envio">Filtros de Atraso</strong></div>
         <div class="card-body">
-          <div class="row">
+          <div class="row" id="box-atraso">
             <div class="col-md-3">
               <div class="form-group">
                 <label>Dias mínimos de atraso</label>
@@ -167,6 +177,27 @@
                 <input type="number" name="dias_atraso_max" class="form-control" min="0"
                        value="{{ campanha.dias_atraso_max if campanha and campanha.dias_atraso_max else '' }}">
               </div>
+            </div>
+          </div>
+          <div class="row" id="box-pre-vencimento" style="display:none">
+            <div class="col-md-3">
+              <div class="form-group">
+                <label>Dias mínimos à frente (Data Referência)</label>
+                <input type="number" name="dias_ref_min" class="form-control" min="0"
+                       value="{{ campanha.dias_ref_min if campanha and campanha.dias_ref_min is not none else 4 }}">
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label>Dias máximos à frente <small class="text-muted">(vazio = sem limite)</small></label>
+                <input type="number" name="dias_ref_max" class="form-control" min="0"
+                       value="{{ campanha.dias_ref_max if campanha and campanha.dias_ref_max else '' }}">
+              </div>
+            </div>
+            <div class="col-md-6 d-flex align-items-end">
+              <small class="text-muted mb-3">
+                A campanha vai buscar mensalidades em aberto por Data Referência entre hoje+min e hoje+max.
+              </small>
             </div>
           </div>
         </div>
@@ -377,6 +408,7 @@ if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
 // ── Templates ────────────────────────────────────────────────────────────────
 let _templates = [];
 const TEMPLATE_ATUAL = "{{ campanha.template if campanha else 'notificacao_de_fatura' }}";
+const MODO_ENVIO_ATUAL = "{{ campanha.modo_envio if campanha and campanha.modo_envio else 'atraso' }}";
 
 function mostrarPreview() {
   const sel  = document.getElementById('template-select');
@@ -402,6 +434,7 @@ function postosChecados() {
 
 async function carregarOpcoes(campo) {
   const postos = postosChecados();
+  const modoEnvio = (document.getElementById('modo_envio') || {}).value || 'atraso';
   const selId  = `sel_${campo}`;
   const sel    = document.getElementById(selId);
   if (!sel) return;
@@ -417,7 +450,7 @@ async function carregarOpcoes(campo) {
   }
 
   try {
-    const qs = new URLSearchParams({ campo, postos: postos.join(',') });
+    const qs = new URLSearchParams({ campo, postos: postos.join(','), modo_envio: modoEnvio });
     const r  = await fetch(`/wpp/api/opcoes?${qs}`);
     const data = await r.json();
     (data.opcoes || []).forEach(op => {
@@ -500,6 +533,22 @@ async function preVisualizarRegistros() {
   }
 }
 
+function atualizarModoEnvio() {
+  const modo = (document.getElementById('modo_envio') || {}).value || 'atraso';
+  const boxAtraso = document.getElementById('box-atraso');
+  const boxPre = document.getElementById('box-pre-vencimento');
+  const titulo = document.getElementById('titulo-regra-envio');
+  if (modo === 'pre_vencimento') {
+    boxAtraso.style.display = 'none';
+    boxPre.style.display = '';
+    titulo.textContent = 'Lembrete Antes do Vencimento';
+  } else {
+    boxAtraso.style.display = '';
+    boxPre.style.display = 'none';
+    titulo.textContent = 'Filtros de Atraso';
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -510,6 +559,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.posto-cb').forEach(cb => {
     cb.addEventListener('change', carregarTodasOpcoes);
   });
+  const modoSel = document.getElementById('modo_envio');
+  if (modoSel) {
+    if (!modoSel.value) modoSel.value = MODO_ENVIO_ATUAL;
+    modoSel.addEventListener('change', () => {
+      atualizarModoEnvio();
+      carregarTodasOpcoes();
+    });
+  }
+  atualizarModoEnvio();
 
   // Se já há postos marcados (modo edição), carrega opções imediatamente
   if (postosChecados().length > 0) {

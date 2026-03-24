@@ -116,7 +116,7 @@
               <tr>
                 <th>Campanha</th>
                 <th>Postos</th>
-                <th>Atraso (dias)</th>
+                <th>Regra (dias)</th>
                 <th>Template</th>
                 <th>Intervalo</th>
                 <th>Enviados</th>
@@ -136,7 +136,11 @@
                 {% for p in c.postos %}<span class="badge badge-secondary mr-1">{{ p }}</span>{% endfor %}
               </td>
               <td>
-                {{ c.dias_atraso_min }}{% if c.dias_atraso_max %}–{{ c.dias_atraso_max }}{% else %}+{% endif %}
+                {% if c.modo_envio == 'pre_vencimento' %}
+                  ref+{{ c.dias_ref_min if c.dias_ref_min is not none else 4 }}{% if c.dias_ref_max %}–{{ c.dias_ref_max }}{% else %}+{% endif %}
+                {% else %}
+                  atraso {{ c.dias_atraso_min }}{% if c.dias_atraso_max %}–{{ c.dias_atraso_max }}{% else %}+{% endif %}
+                {% endif %}
               </td>
               <td><small>{{ c.template }}</small></td>
               <td>{{ c.intervalo_dias }}d</td>

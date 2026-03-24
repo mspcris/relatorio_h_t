@@ -53,11 +53,14 @@ def init_db() -> None:
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,
             nome                TEXT    NOT NULL,
             template            TEXT    NOT NULL DEFAULT 'notificacao_de_fatura',
+            modo_envio          TEXT    NOT NULL DEFAULT 'atraso', -- atraso | pre_vencimento
             postos              TEXT    NOT NULL DEFAULT '[]',  -- JSON array ex: ["A","X"]
 
             -- Filtros de atraso
             dias_atraso_min     INTEGER NOT NULL DEFAULT 1,
             dias_atraso_max     INTEGER,          -- NULL = sem limite superior
+            dias_ref_min        INTEGER NOT NULL DEFAULT 4, -- dias a frente por datareferencia
+            dias_ref_max        INTEGER,
 
             -- Filtros de cliente
             incluir_cancelados  INTEGER NOT NULL DEFAULT 0,   -- 0=não, 1=sim
@@ -142,6 +145,18 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_auditoria_user  ON auditoria(usuario);
         CREATE INDEX IF NOT EXISTS idx_auditoria_camp  ON auditoria(campanha_id);
         """)
+        # Migração leve para bases já existentes.
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(campanhas)").fetchall()}
+        if "modo_envio" not in cols:
+            conn.execute(
+                "ALTER TABLE campanhas ADD COLUMN modo_envio TEXT NOT NULL DEFAULT 'atraso'"
+            )
+        if "dias_ref_min" not in cols:
+            conn.execute(
+                "ALTER TABLE campanhas ADD COLUMN dias_ref_min INTEGER NOT NULL DEFAULT 4"
+            )
+        if "dias_ref_max" not in cols:
+            conn.execute("ALTER TABLE campanhas ADD COLUMN dias_ref_max INTEGER")
 
 
 # ---------------------------------------------------------------------------
@@ -190,8 +205,8 @@ def criar_campanha(dados: dict) -> int:
     with get_conn() as conn:
         cur = conn.execute(
             """INSERT INTO campanhas (
-                nome, template, postos,
-                dias_atraso_min, dias_atraso_max,
+                nome, template, modo_envio, postos,
+                dias_atraso_min, dias_atraso_max, dias_ref_min, dias_ref_max,
                 incluir_cancelados, sem_email, sexo,
                 idade_min, idade_max, nao_recorrente,
                 operadora, cobrador, corretor,
@@ -199,10 +214,12 @@ def criar_campanha(dados: dict) -> int:
                 hora_inicio, hora_fim, dias_semana,
                 intervalo_dias, ativa,
                 created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                dados["nome"], dados.get("template", "notificacao_de_fatura"), postos_json,
+                dados["nome"], dados.get("template", "notificacao_de_fatura"),
+                dados.get("modo_envio", "atraso"), postos_json,
                 dados.get("dias_atraso_min", 1), dados.get("dias_atraso_max") or None,
+                dados.get("dias_ref_min", 4), dados.get("dias_ref_max") or None,
                 1 if dados.get("incluir_cancelados") else 0,
                 1 if dados.get("sem_email") else 0,
                 dados.get("sexo") or None,
@@ -230,8 +247,8 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
     with get_conn() as conn:
         conn.execute(
             """UPDATE campanhas SET
-                nome=?, template=?, postos=?,
-                dias_atraso_min=?, dias_atraso_max=?,
+                nome=?, template=?, modo_envio=?, postos=?,
+                dias_atraso_min=?, dias_atraso_max=?, dias_ref_min=?, dias_ref_max=?,
                 incluir_cancelados=?, sem_email=?, sexo=?,
                 idade_min=?, idade_max=?, nao_recorrente=?,
                 operadora=?, cobrador=?, corretor=?,
@@ -240,8 +257,10 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 intervalo_dias=?, ativa=?, updated_at=?
             WHERE id=?""",
             (
-                dados["nome"], dados.get("template", "notificacao_de_fatura"), postos_json,
+                dados["nome"], dados.get("template", "notificacao_de_fatura"),
+                dados.get("modo_envio", "atraso"), postos_json,
                 dados.get("dias_atraso_min", 1), dados.get("dias_atraso_max") or None,
+                dados.get("dias_ref_min", 4), dados.get("dias_ref_max") or None,
                 1 if dados.get("incluir_cancelados") else 0,
                 1 if dados.get("sem_email") else 0,
                 dados.get("sexo") or None,

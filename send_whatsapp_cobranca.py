@@ -30,7 +30,13 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 import wpp_cobranca_db as db
-from wpp_cobranca_sql import get_conn_posto, VIEW_NAME, build_where
+from wpp_cobranca_sql import (
+    get_conn_posto,
+    build_where,
+    source_sql,
+    where_extras,
+    modo_envio as campanha_modo_envio,
+)
 
 # ---------------------------------------------------------------------------
 # Configuração
@@ -95,6 +101,8 @@ log = logging.getLogger(__name__)
 
 def buscar_faturas(cursor, campanha: dict) -> list[dict]:
     where, params = build_where(campanha)
+    src = source_sql(campanha)
+    extra = where_extras(campanha)
     sql = f"""
         SELECT
             idreceita,
@@ -106,10 +114,8 @@ def buscar_faturas(cursor, campanha: dict) -> list[dict]:
             valordevido      AS valor,
             datadevencimento AS venc,
             diasdebito
-        FROM {VIEW_NAME}
-        WHERE {where}
-          AND situacao <> 'Pré-Cadastro'
-          AND descricao LIKE '%/20[0-9][0-9]'
+        FROM {src}
+        WHERE {where}{extra}
         ORDER BY datadevencimento ASC
     """
     cursor.execute(sql, params)
@@ -419,9 +425,21 @@ def main():
     total_enviado = 0
     telefones_rodada: set[str] = set()
     for campanha in campanhas:
+        modo = campanha_modo_envio(campanha)
+        if modo == "pre_vencimento":
+            regra = (
+                f"ref+{campanha.get('dias_ref_min', 4)}"
+                f"–{campanha.get('dias_ref_max') if campanha.get('dias_ref_max') is not None else '∞'}d"
+            )
+        else:
+            regra = (
+                f"atraso={campanha.get('dias_atraso_min')}–"
+                f"{campanha.get('dias_atraso_max') or '∞'}d"
+            )
         log.info(f"Campanha [{campanha['id']}] {campanha['nome']} | "
+                 f"modo={modo} | "
                  f"postos={campanha.get('postos')} | "
-                 f"atraso={campanha.get('dias_atraso_min')}–{campanha.get('dias_atraso_max') or '∞'}d | "
+                 f"{regra} | "
                  f"intervalo={campanha.get('intervalo_dias')}d")
 
         limit_restante = max(0, args.limit - total_enviado) if args.limit else 0

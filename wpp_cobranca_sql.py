@@ -20,6 +20,89 @@ log = logging.getLogger(__name__)
 ODBC_DRIVER = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 VIEW_NAME   = os.getenv("WAPP_VIEW",   "WEB_COB_DebitoEmAberto6Meses")
 
+MODO_ATRASO = "atraso"
+MODO_PRE_VENCIMENTO = "pre_vencimento"
+
+# Fonte para lembrete antes do vencimento, mantendo aliases compatíveis
+# com WEB_COB_DebitoEmAberto6Meses.
+SOURCE_PRE_VENCIMENTO = """
+(
+    SELECT
+          c.idcliente as idcliente
+        , c.dataadmissao as dataadmissao
+        , c.matricula as matricula
+        , e.codigo as codigoendereco
+        , c.nome as nomecadastro
+        , CASE
+              WHEN c.tipoplano = 'j' THEN c.cnpj
+              ELSE c.cpf
+          END as cnpjcpf
+        , CASE
+              WHEN c.tipo = 'j' THEN c.razaosocial
+              ELSE c.nome
+          END as nomeexibicao
+        , c.nomesocial as nomesocial
+        , c.responsavel as responsavel
+        , c.responsavelcpf as responsavelcpf
+        , c.responsaveltelefonecelular as responsaveltelefonecelular
+        , c.responsaveltelefonewhatsapp as responsaveltelefonewhatsapp
+        , c.endereco as endereco
+        , c.numero as numero
+        , c.complemento as complemento
+        , c.bairro as bairro
+        , c.cidade as cidade
+        , c.cep as cep
+        , c.telefonecelular as telefonecelular
+        , c.telefonewhatsapp as telefonewhatsapp
+        , c.telefoneresidencial as telefoneresidencial
+        , c.email as email
+        , c.idadecomputada as idade
+        , c.diacobranca as diacobranca
+        , c.sexo as sexo
+        , cc.nome as cobradornome
+        , c.canceladoans as canceladoans
+        , c.datacancelamentoans as datacancelamentoans
+        , CASE
+              WHEN p.clubebeneficio = 1 THEN 'clubebeneficio'
+              WHEN p.clubebeneficiojoy = 1 THEN 'joy'
+              WHEN p.planopremium = 1 THEN 'premium'
+              ELSE 'camim padrao'
+          END as planotipo
+        , r2.idreceita as idreceita
+        , r2.[Data Referencia] as datareferencia
+        , r2.[Valor Devido] as valordevido
+        , r2.[Valor Pago] as valorpago
+        , r2.[Descrição] as descricao
+        , r2.[Tipo] as tipo
+        , r2.[Situação] as situacao
+        , r2.[Registrado] as registrado
+        , r2.[ClienteRecorrente] as clienterecorrente
+        , r2.[Operadora] as operadora
+        , r2.[TipoCobranca] as tipocobranca
+        , DATEDIFF(year, c.dataadmissao, CAST(GETDATE() as date)) as anoscliente
+        , DATEDIFF(month, c.dataadmissao, CAST(GETDATE() as date)) as mesescliente
+        , DATEDIFF(
+              day
+            , MIN(r2.[Data Referencia]) OVER (PARTITION BY c.idcliente)
+            , CAST(GETDATE() as date)
+          ) as diasdebito
+        , c.CodigoPessoal
+        , r2.[Data De Vencimento] as datadevencimento
+        , r2.[Cobrador] as Cobrador
+        , r2.[Corretor] as Corretor
+        , c.DataNascimento
+    FROM cad_cliente c
+    JOIN sis_empresa emp on c.idendereco = emp.idendereco
+    JOIN cad_cobrador cc on cc.idcobrador = c.idcobrador
+    JOIN cad_plano p on p.idplano = c.idplano
+    JOIN cad_endereco e on e.idendereco = c.idendereco
+    LEFT JOIN vw_fin_receita2 r2 on r2.idcliente = c.idcliente
+    WHERE r2.[Situação] = 'aberto'
+      AND r2.[Tipo] = 'Mensalidade'
+      AND r2.[Data de Cancelamento] IS NULL
+) src
+"""
+
 # Mapeamento: nome do campo no form → coluna SQL na view
 CAMPO_SQL = {
     "operadora": "operadora",
@@ -33,6 +116,25 @@ CAMPO_SQL = {
 def _env(key, default=""):
     v = os.getenv(key, default)
     return v.strip() if isinstance(v, str) else v
+
+
+def modo_envio(campanha: dict | None) -> str:
+    m = str((campanha or {}).get("modo_envio") or MODO_ATRASO).strip().lower()
+    return m if m in (MODO_ATRASO, MODO_PRE_VENCIMENTO) else MODO_ATRASO
+
+
+def source_sql(campanha: dict | None) -> str:
+    return SOURCE_PRE_VENCIMENTO if modo_envio(campanha) == MODO_PRE_VENCIMENTO else VIEW_NAME
+
+
+def where_extras(campanha: dict | None) -> str:
+    # Filtros legados específicos da view WEB_COB
+    if modo_envio(campanha) == MODO_PRE_VENCIMENTO:
+        return ""
+    return (
+        " AND situacao <> 'Pré-Cadastro'"
+        " AND descricao LIKE '%/20[0-9][0-9]'"
+    )
 
 
 def get_conn_posto(posto: str):
@@ -71,12 +173,23 @@ def build_where(campanha: dict) -> tuple:
     filtros = [
         "telefonewhatsapp IS NOT NULL",
         "telefonewhatsapp <> ''",
-        f"diasdebito >= {int(campanha.get('dias_atraso_min') or 1)}",
     ]
     params = []
 
-    if campanha.get("dias_atraso_max"):
-        filtros.append(f"diasdebito <= {int(campanha['dias_atraso_max'])}")
+    if modo_envio(campanha) == MODO_PRE_VENCIMENTO:
+        dias_min = int(campanha.get("dias_ref_min") or 0)
+        filtros.append(
+            f"DATEDIFF(day, CAST(GETDATE() as date), CAST(datareferencia as date)) >= {dias_min}"
+        )
+        if campanha.get("dias_ref_max") is not None:
+            filtros.append(
+                "DATEDIFF(day, CAST(GETDATE() as date), CAST(datareferencia as date)) <= "
+                f"{int(campanha['dias_ref_max'])}"
+            )
+    else:
+        filtros.append(f"diasdebito >= {int(campanha.get('dias_atraso_min') or 1)}")
+        if campanha.get("dias_atraso_max"):
+            filtros.append(f"diasdebito <= {int(campanha['dias_atraso_max'])}")
 
     if not campanha.get("incluir_cancelados"):
         filtros.append("canceladoans = 0")
@@ -120,14 +233,15 @@ def build_where(campanha: dict) -> tuple:
     return " AND ".join(filtros), params
 
 
-def buscar_opcoes(postos: list, campo: str) -> list:
+def buscar_opcoes(postos: list, campo: str, modo: str = MODO_ATRASO) -> list:
     """Retorna lista ordenada de valores distintos não nulos do campo."""
-    valores, _ = buscar_opcoes_debug(postos, campo)
+    valores, _ = buscar_opcoes_debug(postos, campo, modo)
     return valores
 
 
-def buscar_opcoes_debug(postos: list, campo: str) -> tuple:
+def buscar_opcoes_debug(postos: list, campo: str, modo: str = MODO_ATRASO) -> tuple:
     """Retorna (lista_de_valores, lista_de_erros) para diagnóstico."""
+    modo = modo if modo in (MODO_ATRASO, MODO_PRE_VENCIMENTO) else MODO_ATRASO
     col = CAMPO_SQL.get(campo)
     if not col:
         return [], [f"campo inválido: {campo}"]
@@ -140,10 +254,15 @@ def buscar_opcoes_debug(postos: list, campo: str) -> tuple:
             continue
         try:
             cur = conn.cursor()
+            src = SOURCE_PRE_VENCIMENTO if modo == MODO_PRE_VENCIMENTO else VIEW_NAME
+            extra = "" if modo == MODO_PRE_VENCIMENTO else (
+                " AND situacao <> 'Pré-Cadastro'"
+                " AND descricao LIKE '%/20[0-9][0-9]'"
+            )
             cur.execute(
-                f"SELECT DISTINCT {col} FROM {VIEW_NAME} "
+                f"SELECT DISTINCT {col} FROM {src} "
                 f"WHERE {col} IS NOT NULL AND LTRIM(RTRIM(CAST({col} AS NVARCHAR(500)))) <> '' "
-                f"ORDER BY {col}"
+                f"{extra} ORDER BY {col}"
             )
             for row in cur.fetchall():
                 if row[0] is not None:
@@ -162,6 +281,8 @@ def contar_preview(campanha: dict) -> dict:
     Retorna {total_faturas, total_telefones, por_posto}."""
     postos = campanha.get("postos") or []
     where, params = build_where(campanha)
+    src = source_sql(campanha)
+    extra = where_extras(campanha)
     total_faturas = 0
     total_tel = 0
     por_posto = {}
@@ -175,9 +296,7 @@ def contar_preview(campanha: dict) -> dict:
             cur = conn.cursor()
             cur.execute(
                 f"SELECT COUNT(*) as f, COUNT(DISTINCT telefonewhatsapp) as t "
-                f"FROM {VIEW_NAME} WHERE {where}"
-                f" AND situacao <> 'Pré-Cadastro'"
-                f" AND descricao LIKE '%/20[0-9][0-9]'",
+                f"FROM {src} WHERE {where}{extra}",
                 params,
             )
             row = cur.fetchone()

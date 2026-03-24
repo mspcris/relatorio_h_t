@@ -97,13 +97,14 @@ def api_opcoes():
     if not email:
         return jsonify({"error": "unauthorized"}), 401
     campo  = request.args.get("campo", "")
+    modo_envio = request.args.get("modo_envio", "atraso")
     postos = [p.strip() for p in request.args.get("postos", "").split(",") if p.strip()]
     if campo not in sql_helper.CAMPO_SQL:
         return jsonify({"error": "campo inválido"}), 400
     if not postos:
         return jsonify({"opcoes": []})
     try:
-        opcoes, erros = sql_helper.buscar_opcoes_debug(postos, campo)
+        opcoes, erros = sql_helper.buscar_opcoes_debug(postos, campo, modo_envio)
         return jsonify({"opcoes": opcoes, "erros": erros})
     except Exception as e:
         return jsonify({"opcoes": [], "erros": [str(e)[:300]]})
@@ -511,9 +512,12 @@ def _form_to_dict(form) -> dict:
     return {
         "nome":               form.get("nome", "").strip(),
         "template":           form.get("template", "notificacao_de_fatura"),
+        "modo_envio":         (form.get("modo_envio", "atraso") or "atraso").strip(),
         "postos":             postos,
         "dias_atraso_min":    _int(form.get("dias_atraso_min"), 1),
         "dias_atraso_max":    _int(form.get("dias_atraso_max"), None),
+        "dias_ref_min":       _int(form.get("dias_ref_min"), 4),
+        "dias_ref_max":       _int(form.get("dias_ref_max"), None),
         "incluir_cancelados": form.get("incluir_cancelados") == "1",
         "sem_email":          form.get("sem_email") == "1",
         "sexo":               form.get("sexo") or None,
