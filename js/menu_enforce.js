@@ -29,10 +29,20 @@
   function normHref(href) {
     try {
       const u = new URL(href, location.origin);
-      return u.pathname.toLowerCase();
+      return canonicalPath(u.pathname);
     } catch (_) {
-      return String(href || '').toLowerCase();
+      return canonicalPath(String(href || ''));
     }
+  }
+
+  function canonicalPath(path) {
+    let p = String(path || '').trim().toLowerCase();
+    if (!p) return '/';
+    if (!p.startsWith('/')) p = '/' + p;
+    p = p.replace(/\/{2,}/g, '/');
+    if (p.endsWith('/') && p !== '/') p = p.slice(0, -1);
+    if (p.endsWith('.html')) p = p.slice(0, -5);
+    return p || '/';
   }
 
   function findLinks(root) {
@@ -40,7 +50,7 @@
   }
 
   function hasAnyPath(root, paths) {
-    const wanted = (paths || []).map((p) => String(p || '').toLowerCase());
+    const wanted = (paths || []).map((p) => canonicalPath(p));
     return findLinks(root).some((a) => wanted.includes(normHref(a.getAttribute('href'))));
   }
 
