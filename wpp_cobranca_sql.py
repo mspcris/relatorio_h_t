@@ -245,10 +245,11 @@ def get_conn_posto(posto: str):
         return None
 
 
-def _iso_to_br(val: str) -> str:
-    """Converte YYYY-MM-DD para DD/MM/YYYY (formato esperado pelo SQL Server)."""
+def _iso_to_sqlserver(val: str) -> str:
+    """Converte YYYY-MM-DD para YYYYMMDD — formato ISO sem traços, sempre
+    reconhecido pelo SQL Server independente do DATEFORMAT da sessão ODBC."""
     if val and len(val) == 10 and val[4] == '-':
-        return f"{val[8:10]}/{val[5:7]}/{val[0:4]}"
+        return val.replace('-', '')   # '2026-03-01' → '20260301'
     return val
 
 
@@ -262,10 +263,10 @@ def _build_where_clientes(campanha: dict) -> tuple:
 
     if campanha.get("adm_data_ini"):
         filtros.append("dataadmissao >= ?")
-        params.append(_iso_to_br(campanha["adm_data_ini"]))
+        params.append(_iso_to_sqlserver(campanha["adm_data_ini"]))
     if campanha.get("adm_data_fim"):
         filtros.append("dataadmissao < ?")
-        params.append(_iso_to_br(campanha["adm_data_fim"]))
+        params.append(_iso_to_sqlserver(campanha["adm_data_fim"]))
 
     if campanha.get("tipo_cliente"):
         filtros.append("tipo_cliente = ?")
