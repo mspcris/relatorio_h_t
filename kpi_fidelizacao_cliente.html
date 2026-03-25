@@ -186,7 +186,6 @@
 
         .heatmap {
             overflow-x: auto;
-            max-height: 600px;
         }
 
         .heatmap table {
@@ -334,22 +333,12 @@
                     <div class="card-body kpi" id="statsCards"></div>
                 </div>
 
-                <!-- TABELA COM TODOS OS MESES -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title mb-0">Fidelização por Mês de Admissão (QTD e %)</h3>
-                    </div>
-                    <div class="card-body heatmap" id="tableContainer">
-                        <div class="text-muted text-center p-3">Carregando dados...</div>
-                    </div>
-                </div>
-
                 <!-- CHARTS (BAR CHARTS POR PERÍODO) -->
                 <div class="row">
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Retenção 1 mês (por Posto)</h3>
+                                <h3 class="card-title mb-0" id="title1m">Retenção em - referente adesão em -. 1 mês - Por posto.</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart1m"></canvas>
@@ -359,7 +348,7 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Retenção 3 meses (por Posto)</h3>
+                                <h3 class="card-title mb-0" id="title3m">Retenção em - referente adesão em -. 3 meses - Por posto.</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart3m"></canvas>
@@ -369,7 +358,7 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Retenção 6 meses (por Posto)</h3>
+                                <h3 class="card-title mb-0" id="title6m">Retenção em - referente adesão em -. 6 meses - Por posto.</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart6m"></canvas>
@@ -379,12 +368,22 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Retenção 12 meses (por Posto)</h3>
+                                <h3 class="card-title mb-0" id="title12m">Retenção em - referente adesão em -. 12 meses - Por posto.</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart12m"></canvas>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- TABELA COM TODOS OS MESES -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Fidelização por Mês de Admissão (QTD e %)</h3>
+                    </div>
+                    <div class="card-body heatmap" id="tableContainer">
+                        <div class="text-muted text-center p-3">Carregando dados...</div>
                     </div>
                 </div>
             </section>
@@ -524,10 +523,41 @@
             return selPostos === 'ALL' ? POSTOS : Array.from(selPostos);
         }
 
+        function formatMonth(yyyymm) {
+            const [year, month] = yyyymm.split('-');
+            const months = ['', 'jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+            return `${months[parseInt(month)]}/${year.slice(2)}`;
+        }
+
+        function addMonths(yyyymm, n) {
+            const [year, month] = yyyymm.split('-').map(Number);
+            let newMonth = month + n;
+            let newYear = year;
+            while (newMonth > 12) {
+                newMonth -= 12;
+                newYear += 1;
+            }
+            return `${newYear}-${String(newMonth).padStart(2, '0')}`;
+        }
+
+        function updateChartTitles() {
+            const adm = formatMonth(selMonth);
+            const ret1m = formatMonth(addMonths(selMonth, 1));
+            const ret3m = formatMonth(addMonths(selMonth, 3));
+            const ret6m = formatMonth(addMonths(selMonth, 6));
+            const ret12m = formatMonth(addMonths(selMonth, 12));
+
+            el('title1m').textContent = `Retenção em ${ret1m} referente adesão em ${adm}. 1 mês - Por posto.`;
+            el('title3m').textContent = `Retenção em ${ret3m} referente adesão em ${adm}. 3 meses - Por posto.`;
+            el('title6m').textContent = `Retenção em ${ret6m} referente adesão em ${adm}. 6 meses - Por posto.`;
+            el('title12m').textContent = `Retenção em ${ret12m} referente adesão em ${adm}. 12 meses - Por posto.`;
+        }
+
         function render() {
+            updateChartTitles();
             renderStats();
-            renderTable();
             renderCharts();
+            renderTable();
         }
 
         function renderStats() {
