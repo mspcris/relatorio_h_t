@@ -344,12 +344,12 @@
                     </div>
                 </div>
 
-                <!-- CHARTS (1/3/6/12 MESES APENAS) -->
+                <!-- CHARTS (BAR CHARTS POR PERÍODO) -->
                 <div class="row">
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Evolução - Retenção 1 mês</h3>
+                                <h3 class="card-title mb-0">Retenção 1 mês (por Posto)</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart1m"></canvas>
@@ -359,7 +359,7 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Evolução - Retenção 3 meses</h3>
+                                <h3 class="card-title mb-0">Retenção 3 meses (por Posto)</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart3m"></canvas>
@@ -369,7 +369,7 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Evolução - Retenção 6 meses</h3>
+                                <h3 class="card-title mb-0">Retenção 6 meses (por Posto)</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart6m"></canvas>
@@ -379,7 +379,7 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Evolução - Retenção 12 meses</h3>
+                                <h3 class="card-title mb-0">Retenção 12 meses (por Posto)</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart12m"></canvas>
@@ -402,7 +402,7 @@
 
         let allData = {};
         let chartInstances = {};
-        let selPostos = 'ALL'; // 'ALL' ou Set de postos
+        let selPostos = 'ALL';
         let selMonth = '';
 
         // ========================= INIT =========================
@@ -412,9 +412,10 @@
         });
 
         function initUI() {
-            // Data padrão: mês atual
+            // Data padrão: 13 meses para trás
             const today = new Date();
-            selMonth = today.toISOString().slice(0, 7);
+            const thirteenMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 13, 1);
+            selMonth = thirteenMonthsAgo.toISOString().slice(0, 7);
             el('monthSelect').value = selMonth;
             el('monthSelect').addEventListener('change', (e) => {
                 selMonth = e.target.value;
@@ -531,10 +532,12 @@
 
         function renderStats() {
             const postos = getSelectedPostos();
+            const rowData = allData[selMonth] || {};
+
             let totalAdm = 0, total1m = 0, total3m = 0, total6m = 0, total12m = 0;
 
             for (const p of postos) {
-                const poData = allData[selMonth]?.[p];
+                const poData = rowData[p];
                 if (!poData) continue;
                 totalAdm += poData.admissoes || 0;
                 total1m += poData.retencao_por_mes[1]?.qtd || 0;
@@ -593,36 +596,33 @@
 
             for (const ym of Object.keys(allData).sort()) {
                 const row = allData[ym];
-                let r1_qtd = 0, r1_pct = 0, r3_qtd = 0, r3_pct = 0, r6_qtd = 0, r6_pct = 0, r12_qtd = 0, r12_pct = 0;
+                let admTotal = 0, r1_qtd = 0, r3_qtd = 0, r6_qtd = 0, r12_qtd = 0;
 
                 for (const p of postos) {
                     if (!row[p]) continue;
+                    admTotal += row[p].admissoes || 0;
                     r1_qtd += row[p].retencao_por_mes[1]?.qtd || 0;
-                    r1_pct += row[p].retencao_por_mes[1]?.percentual || 0;
                     r3_qtd += row[p].retencao_por_mes[3]?.qtd || 0;
-                    r3_pct += row[p].retencao_por_mes[3]?.percentual || 0;
                     r6_qtd += row[p].retencao_por_mes[6]?.qtd || 0;
-                    r6_pct += row[p].retencao_por_mes[6]?.percentual || 0;
                     r12_qtd += row[p].retencao_por_mes[12]?.qtd || 0;
-                    r12_pct += row[p].retencao_por_mes[12]?.percentual || 0;
                 }
 
-                const count = postos.filter(p => row[p]).length;
-                const avg_r1 = count > 0 ? Math.round(r1_pct / count) : 0;
-                const avg_r3 = count > 0 ? Math.round(r3_pct / count) : 0;
-                const avg_r6 = count > 0 ? Math.round(r6_pct / count) : 0;
-                const avg_r12 = count > 0 ? Math.round(r12_pct / count) : 0;
+                // Calcular percentuais corretamente
+                const r1_pct = admTotal > 0 ? Math.round((r1_qtd / admTotal) * 100) : 0;
+                const r3_pct = admTotal > 0 ? Math.round((r3_qtd / admTotal) * 100) : 0;
+                const r6_pct = admTotal > 0 ? Math.round((r6_qtd / admTotal) * 100) : 0;
+                const r12_pct = admTotal > 0 ? Math.round((r12_qtd / admTotal) * 100) : 0;
 
-                const cls1 = avg_r1 >= 70 ? 'cell-high' : avg_r1 >= 40 ? 'cell-medium' : 'cell-low';
-                const cls3 = avg_r3 >= 70 ? 'cell-high' : avg_r3 >= 40 ? 'cell-medium' : 'cell-low';
-                const cls6 = avg_r6 >= 70 ? 'cell-high' : avg_r6 >= 40 ? 'cell-medium' : 'cell-low';
-                const cls12 = avg_r12 >= 70 ? 'cell-high' : avg_r12 >= 40 ? 'cell-medium' : 'cell-low';
+                const cls1 = r1_pct >= 70 ? 'cell-high' : r1_pct >= 40 ? 'cell-medium' : 'cell-low';
+                const cls3 = r3_pct >= 70 ? 'cell-high' : r3_pct >= 40 ? 'cell-medium' : 'cell-low';
+                const cls6 = r6_pct >= 70 ? 'cell-high' : r6_pct >= 40 ? 'cell-medium' : 'cell-low';
+                const cls12 = r12_pct >= 70 ? 'cell-high' : r12_pct >= 40 ? 'cell-medium' : 'cell-low';
 
                 html += `<tr><td><strong>${ym}</strong></td>`;
-                html += `<td>${r1_qtd}</td><td class="${cls1}">${avg_r1}%</td>`;
-                html += `<td>${r3_qtd}</td><td class="${cls3}">${avg_r3}%</td>`;
-                html += `<td>${r6_qtd}</td><td class="${cls6}">${avg_r6}%</td>`;
-                html += `<td>${r12_qtd}</td><td class="${cls12}">${avg_r12}%</td></tr>`;
+                html += `<td>${r1_qtd}</td><td class="${cls1}">${r1_pct}%</td>`;
+                html += `<td>${r3_qtd}</td><td class="${cls3}">${r3_pct}%</td>`;
+                html += `<td>${r6_qtd}</td><td class="${cls6}">${r6_pct}%</td>`;
+                html += `<td>${r12_qtd}</td><td class="${cls12}">${r12_pct}%</td></tr>`;
             }
 
             html += '</tbody></table>';
@@ -631,53 +631,62 @@
 
         function renderCharts() {
             const postos = getSelectedPostos();
-            const meses = Object.keys(allData).sort();
+            const rowData = allData[selMonth] || {};
 
-            const datasets = {
-                '1m': [],
-                '3m': [],
-                '6m': [],
-                '12m': []
-            };
+            // Dados para cada período
+            const data1m = [], data3m = [], data6m = [], data12m = [];
 
-            const cores = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#66BB6A', '#AB47BC'];
+            for (const p of postos) {
+                const poData = rowData[p];
+                if (!poData) {
+                    data1m.push(0);
+                    data3m.push(0);
+                    data6m.push(0);
+                    data12m.push(0);
+                } else {
+                    const adm = poData.admissoes || 0;
+                    data1m.push(adm > 0 ? Math.round((poData.retencao_por_mes[1]?.qtd || 0) / adm * 100) : 0);
+                    data3m.push(adm > 0 ? Math.round((poData.retencao_por_mes[3]?.qtd || 0) / adm * 100) : 0);
+                    data6m.push(adm > 0 ? Math.round((poData.retencao_por_mes[6]?.qtd || 0) / adm * 100) : 0);
+                    data12m.push(adm > 0 ? Math.round((poData.retencao_por_mes[12]?.qtd || 0) / adm * 100) : 0);
+                }
+            }
 
-            postos.forEach((p, idx) => {
-                const data1m = meses.map(ym => allData[ym][p]?.retencao_por_mes[1]?.percentual || 0);
-                const data3m = meses.map(ym => allData[ym][p]?.retencao_por_mes[3]?.percentual || 0);
-                const data6m = meses.map(ym => allData[ym][p]?.retencao_por_mes[6]?.percentual || 0);
-                const data12m = meses.map(ym => allData[ym][p]?.retencao_por_mes[12]?.percentual || 0);
-
-                const cor = cores[idx % cores.length];
-
-                datasets['1m'].push({ label: `Posto ${p}`, data: data1m, borderColor: cor, backgroundColor: cor + '40', tension: 0.3 });
-                datasets['3m'].push({ label: `Posto ${p}`, data: data3m, borderColor: cor, backgroundColor: cor + '40', tension: 0.3 });
-                datasets['6m'].push({ label: `Posto ${p}`, data: data6m, borderColor: cor, backgroundColor: cor + '40', tension: 0.3 });
-                datasets['12m'].push({ label: `Posto ${p}`, data: data12m, borderColor: cor, backgroundColor: cor + '40', tension: 0.3 });
-            });
-
-            drawChart('chart1m', meses, datasets['1m']);
-            drawChart('chart3m', meses, datasets['3m']);
-            drawChart('chart6m', meses, datasets['6m']);
-            drawChart('chart12m', meses, datasets['12m']);
+            drawChart('chart1m', postos, data1m);
+            drawChart('chart3m', postos, data3m);
+            drawChart('chart6m', postos, data6m);
+            drawChart('chart12m', postos, data12m);
         }
 
-        function drawChart(canvasId, labels, datasets) {
+        function drawChart(canvasId, labels, data) {
             const ctx = el(canvasId).getContext('2d');
             if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
 
             chartInstances[canvasId] = new Chart(ctx, {
-                type: 'line',
-                data: { labels, datasets },
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Percentual (%)',
+                        data: data,
+                        backgroundColor: 'rgba(23, 162, 184, 0.7)',
+                        borderColor: 'rgba(23, 162, 184, 1)',
+                        borderWidth: 1
+                    }]
+                },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    indexAxis: 'x',
                     plugins: {
-                        legend: { display: true, position: 'top' },
-                        filler: { propagate: true }
+                        legend: { display: false }
                     },
                     scales: {
-                        y: { min: 0, max: 100, title: { display: true, text: 'Percentual (%)' } }
+                        y: {
+                            min: 0,
+                            max: 100,
+                            title: { display: true, text: 'Percentual (%)' }
+                        }
                     }
                 }
             });
