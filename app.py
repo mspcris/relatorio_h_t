@@ -567,6 +567,67 @@ def api_pages_acessos():
 
 
 # ===============================
+# API KPI Registry (Manus Integration)
+# ===============================
+
+try:
+    from kpi_registry import get_manifest, get_kpi_by_id, get_kpis_by_category, search_kpis
+except ImportError:
+    # Fallback se o módulo não estiver disponível
+    def get_manifest():
+        return {"version": "1.0.0", "kpis": []}
+    def get_kpi_by_id(kpi_id):
+        return None
+    def get_kpis_by_category(category):
+        return []
+    def search_kpis(query):
+        return []
+
+
+@app.get("/api/kpis/manifest")
+def api_kpis_manifest():
+    """
+    Retorna o catálogo completo de KPIs com metadata para integração com sistemas externos.
+    Sem autenticação para facilitar descoberta automática.
+    """
+    return jsonify(get_manifest())
+
+
+@app.get("/api/kpis/metadata/<kpi_id>")
+def api_kpis_metadata(kpi_id):
+    """
+    Retorna metadata de um KPI específico.
+    """
+    kpi = get_kpi_by_id(kpi_id)
+    if not kpi:
+        return jsonify({"ok": False, "error": f"KPI '{kpi_id}' não encontrado"}), 404
+    return jsonify({"ok": True, "kpi": kpi})
+
+
+@app.get("/api/kpis/category/<category>")
+def api_kpis_by_category(category):
+    """
+    Retorna todos os KPIs de uma categoria específica.
+    """
+    kpis = get_kpis_by_category(category)
+    return jsonify({"ok": True, "category": category, "kpis": kpis})
+
+
+@app.get("/api/kpis/search")
+def api_kpis_search():
+    """
+    Busca KPIs por keywords ou título.
+    Query params: q=search_term
+    """
+    query = (request.args.get("q") or "").strip()
+    if not query:
+        return jsonify({"ok": False, "error": "Parâmetro 'q' é obrigatório"}), 400
+
+    kpis = search_kpis(query)
+    return jsonify({"ok": True, "query": query, "results": kpis})
+
+
+# ===============================
 # ROTAS PÚBLICAS (SEM LOGIN)
 # ===============================
 
