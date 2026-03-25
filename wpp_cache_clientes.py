@@ -55,7 +55,8 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 DB_PATH             = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
 ODBC_DRIVER         = os.getenv("ODBC_DRIVER",  "ODBC Driver 17 for SQL Server")
-BATCH_SIZE          = 500        # IDs por batch
+BATCH_SIZE          = 500        # IDs por batch (tamanho normal)
+RETRY_BATCH_SIZE    = 50         # IDs por sub-batch ao retentar após falha
 SLEEP_SECS          = 3          # pausa entre batches (s)
 QUERY_TIMEOUT_SECS  = 180        # timeout por query (s) — cur.cancel() é chamado
 WATCHDOG_INTERVAL   = 15         # a cada X segundos loga "ainda aguardando..."
@@ -394,10 +395,11 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
                 posto, total_batches, BATCH_SIZE,
             )
             batches_pulados = 0
-            falhas_consecutivas = 0
-            MAX_FALHAS_CONSECUTIVAS = 3
+            abort_posto = False
 
             for batch_num, i in enumerate(range(0, len(pendentes), BATCH_SIZE), start=1):
+                if abort_posto:
+                    break
                 batch_ids = pendentes[i: i + BATCH_SIZE]
                 pct = batch_num / total_batches * 100
                 log.info(
@@ -414,20 +416,12 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
                 rows, err = _executar_com_watchdog(cur, sql, batch_ids, label)
 
                 if err:
-                    batches_pulados += 1
-                    falhas_consecutivas += 1
                     log.warning(
-                        "Posto %s: batch %d PULADO após %.1fs — %s. "
-                        "Reconectando ao SQL Server... (falha %d/%d consecutiva)",
-                        posto, batch_num, time.time() - t_batch, err,
-                        falhas_consecutivas, MAX_FALHAS_CONSECUTIVAS,
+                        "Posto %s: batch %d falhou após %.1fs — %s. "
+                        "Retentando em sub-batches de %d IDs...",
+                        posto, batch_num, time.time() - t_batch, err, RETRY_BATCH_SIZE,
                     )
-                    if falhas_consecutivas >= MAX_FALHAS_CONSECUTIVAS:
-                        log.error(
-                            "Posto %s: %d falhas consecutivas — abortando restante do posto.",
-                            posto, falhas_consecutivas,
-                        )
-                        break
+                    # Reconecta antes de tentar sub-batches
                     try:
                         sql_conn.close()
                     except Exception:
@@ -439,13 +433,98 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
                             "Abortando restante do posto.",
                             posto, batch_num,
                         )
+                        abort_posto = True
                         break
                     cur = sql_conn.cursor()
-                    log.info("Posto %s: reconectado. Continuando no batch %d.", posto, batch_num + 1)
                     time.sleep(SLEEP_SECS)
-                    continue
 
-                falhas_consecutivas = 0  # reset ao ter sucesso
+                    # Sub-batches de RETRY_BATCH_SIZE
+                    sub_inseridos = 0
+                    sub_pulados = 0
+                    for sub_i in range(0, len(batch_ids), RETRY_BATCH_SIZE):
+                        sub_ids = batch_ids[sub_i: sub_i + RETRY_BATCH_SIZE]
+                        sub_label = (
+                            f"Posto {posto} / batch {batch_num} sub "
+                            f"{sub_i // RETRY_BATCH_SIZE + 1}"
+                        )
+                        log.info(
+                            "Posto %s: sub-batch %d IDs — range %d..%d",
+                            posto, len(sub_ids), sub_ids[0], sub_ids[-1],
+                        )
+                        sub_ph  = ",".join("?" * len(sub_ids))
+                        sub_sql = _SQL_FETCH.format(placeholders=sub_ph)
+                        sub_rows, sub_err = _executar_com_watchdog(cur, sub_sql, sub_ids, sub_label)
+                        if sub_err:
+                            log.warning(
+                                "Posto %s: sub-batch %d..%d PULADO — %s.",
+                                posto, sub_ids[0], sub_ids[-1], sub_err,
+                            )
+                            sub_pulados += len(sub_ids)
+                            batches_pulados += 1
+                            # Reconecta após sub-batch falho
+                            try:
+                                sql_conn.close()
+                            except Exception:
+                                pass
+                            sql_conn = _get_conn_posto_com_timeout(posto)
+                            if not sql_conn:
+                                log.error(
+                                    "Posto %s: não conseguiu reconectar após sub-batch. "
+                                    "Abortando restante do posto.",
+                                    posto,
+                                )
+                                abort_posto = True
+                                break
+                            cur = sql_conn.cursor()
+                            time.sleep(SLEEP_SECS)
+                            continue
+
+                        agora = datetime.now().isoformat(timespec="seconds")
+                        try:
+                            registros = [
+                                (
+                                    r[0],  r[1],  posto, r[2],
+                                    r[3],
+                                    int(r[4] or 0), int(r[5] or 0), int(r[6] or 0),
+                                    r[7],  r[8],  r[9],
+                                    r[10], r[11], r[12],
+                                    r[13], r[14], r[15],
+                                    r[16], r[17], r[18],
+                                    r[19], r[20], int(r[21] or 0),
+                                    r[22], r[23], r[24],
+                                    r[25], r[26], r[27],
+                                    r[28], 1 if r[0] in atrasados_set else 0,
+                                    agora,
+                                )
+                                for r in sub_rows
+                            ]
+                            sqlite_conn.executemany(_INSERT_SQL, registros)
+                            sqlite_conn.commit()
+                            sub_inseridos += len(registros)
+                            inseridos += len(registros)
+                        except Exception as e_ins:
+                            log.warning(
+                                "Posto %s: sub-batch erro ao inserir no SQLite (%s) — pulando.",
+                                posto, e_ins,
+                            )
+                            try:
+                                sqlite_conn.rollback()
+                            except Exception:
+                                pass
+                            sub_pulados += len(sub_ids)
+                            batches_pulados += 1
+
+                    if abort_posto:
+                        break
+
+                    log.info(
+                        "Posto %s: batch %d concluído via sub-batches — "
+                        "%d inseridos, %d pulados.",
+                        posto, batch_num, sub_inseridos, sub_pulados,
+                    )
+                    if i + BATCH_SIZE < len(pendentes):
+                        time.sleep(SLEEP_SECS)
+                    continue  # próximo batch normal
 
                 t_query = time.time() - t_batch
                 log.info(
