@@ -899,11 +899,11 @@
           <div class="card-body">
             <div class="form-row">
               <div class="col-md-3 mb-2">
-                <label class="mb-0 small d-block">Mês de referência</label>
+                <label class="mb-0 small d-block">Comparar com</label>
                 <select id="selVarMesRef" class="form-control form-control-sm"></select>
               </div>
               <div class="col-md-3 mb-2">
-                <label class="mb-0 small d-block">Comparar com</label>
+                <label class="mb-0 small d-block">Mês de referência</label>
                 <select id="selVarMesComp" class="form-control form-control-sm"></select>
               </div>
               <div class="col-md-6 mb-2 d-flex align-items-end justify-content-md-end">
@@ -2407,7 +2407,7 @@ if (ctxTipo) {
             (it.goodWhen === 'down' && it.deltaAbs <= 0);
 
           const cls = good ? 'good' : 'bad';
-          const arrow = good ? '↑' : '↓';
+          const arrow = (it.deltaAbs >= 0) ? '↑' : '↓';
 
           let intensity = 0;
           if (it.deltaPct != null && Number.isFinite(it.deltaPct)) {
@@ -2467,8 +2467,8 @@ if (ctxTipo) {
   const selComp = el('#selVarMesComp');
   if (!selRef || !selComp) return;
 
-  const mesRef = selRef.value;   // referência (base)
-  const mesComp = selComp.value; // comparar
+  const mesRef = selComp.value;   // mês de referência (o mais recente, selecionado no 2º select)
+  const mesComp = selRef.value;   // mês de comparação (base, selecionado no 1º select)
 
   // headers “neutros” quando inválido
   if (!mesRef || !mesComp || mesRef === mesComp) {
@@ -2498,8 +2498,8 @@ if (ctxTipo) {
   const margemRef = receitaRef > 0 ? (resultadoRef / receitaRef) * 100 : null;
   const margemComp = receitaComp > 0 ? (resultadoComp / receitaComp) * 100 : null;
 
-  function dAbs(comp, ref) { return comp - ref; }
-  function dPct(comp, ref) { return ref ? ((comp - ref) / ref) * 100 : null; }
+  function dAbs(comp, ref) { return ref - comp; }
+  function dPct(comp, ref) { return comp ? ((ref - comp) / comp) * 100 : null; }
 
   const vRecAbs = dAbs(receitaComp, receitaRef);
   const vRecPct = dPct(receitaComp, receitaRef);
@@ -2586,11 +2586,8 @@ if (contextoEl) {
 const insightDesp = el('#insightDespesa');
 
 function setaMelhora(kind, delta) {
-  // seta representa melhora/piora (não só subiu/desceu)
-  // Receita: melhora quando sobe
-  // Despesa: melhora quando cai
-  const good = (kind === 'receita') ? (delta >= 0) : (delta <= 0);
-  return good ? '↑' : '↓';
+  // seta aponta na direção real da variação; cor indica bom/ruim
+  return (delta >= 0) ? '↑' : '↓';
 }
 
 if (insightRec) {
