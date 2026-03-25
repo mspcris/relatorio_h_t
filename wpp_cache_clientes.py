@@ -38,8 +38,8 @@ log = logging.getLogger(__name__)
 
 DB_PATH      = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
 ODBC_DRIVER  = os.getenv("ODBC_DRIVER",  "ODBC Driver 17 for SQL Server")
-BATCH_SIZE   = 2000
-SLEEP_SECS   = 10
+BATCH_SIZE   = 500
+SLEEP_SECS   = 3
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +172,9 @@ def _get_conn_posto(posto: str):
     )
     conn_str += f"UID={user};PWD={pwd}" if user else "Trusted_Connection=yes"
     try:
-        return pyodbc.connect(conn_str)
+        conn = pyodbc.connect(conn_str)
+        conn.timeout = 300  # 5 min por query
+        return conn
     except Exception as e:
         log.error("Posto %s: erro ao conectar: %s", posto, e)
         return None
