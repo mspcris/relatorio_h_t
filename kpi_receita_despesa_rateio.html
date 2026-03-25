@@ -3379,6 +3379,11 @@ function updateExploradorDespesas(mesesSelec) {
 
           POSTOS = await carregarPostosDoUsuario(metaPostos.filter(Boolean).sort());
 
+          if (!POSTOS.length) {
+            showErr('Sem acesso a postos. Solicite permissão ao administrador.');
+            return;
+          }
+
           const lastFull = lastCompleteMonth(MESES);
           LAST_FULL = lastFull;
 

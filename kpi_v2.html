@@ -934,9 +934,8 @@
                 ? POSTOS
                 : [...selection];
 
-            // se por algum motivo não tiver posto permitido, cai para o consolidado geral como fallback
             if (!postos || !postos.length) {
-                return srcMens(geral[ym] || {});
+                return srcMens({});
             }
 
             const rows = postos.map(p => base[p] || {});
@@ -1393,6 +1392,10 @@
                 const postosUsuario = await carregarPostosDoUsuario();
                 POSTOS = postosDisponiveis.filter(p => postosUsuario.includes(p));
 
+                if (!POSTOS.length) {
+                    if (el('#err')) el('#err').textContent = 'Sem acesso a postos. Solicite permissão ao administrador.';
+                    return;
+                }
 
                 if (el('#from1')) el('#from1').value = MESES[0];
                 if (el('#to1')) el('#to1').value = lastFull;

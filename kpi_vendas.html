@@ -1536,6 +1536,11 @@
                 const postosUsuario = await carregarPostosDoUsuario();
                 POSTOS = postosDisponiveis.filter(p => postosUsuario.includes(p));
 
+                if (!POSTOS.length) {
+                    if (el('#err')) el('#err').textContent = 'Sem acesso a postos. Solicite permissão ao administrador.';
+                    return;
+                }
+
                 if (el('#from1')) el('#from1').value = MESES[0];
                 if (el('#to1')) el('#to1').value = lastFull;
 
