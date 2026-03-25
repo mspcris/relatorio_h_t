@@ -551,6 +551,7 @@ def _form_to_dict(form) -> dict:
         "clube_beneficio_joy": form.get("clube_beneficio_joy") == "1",
         "plano_premium":      form.get("plano_premium") == "1",
         "origem":             form.get("origem") or None,
+        "pagador_atrasado":   form.get("pagador_atrasado") == "1",
     }
 
 
