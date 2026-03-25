@@ -851,7 +851,13 @@
         </div>
             <div class="flex-grow-1">
               <label class="mb-0 small d-block">Posto</label>
-              <ul id="postoTabs" class="nav nav-pills scroll-tabs"></ul>
+              <div class="d-flex align-items-center">
+                <ul id="postoTabs" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
+                <div class="ml-2 flex-shrink-0">
+                  <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
+                  <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
+                </div>
+              </div>
             </div>
           </div>
     </div>
@@ -1772,8 +1778,54 @@
             else a.classList.toggle('active', !allNow && selectedPostos.has(p));
           });
 
+          _atualizarBotoesGrupo();
           updateAll();
         };
+
+        _atualizarBotoesGrupo();
+      }
+
+      // ============================================================
+      // GRUPOS DE POSTOS
+      // ============================================================
+
+      const GRUPOS_POSTO = {
+        altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+        couto:    ['C', 'D', 'J', 'M', 'P'],
+      };
+
+      function _grupoAtivo() {
+        if (!selectedPostos || selectedPostos.size === 0) return null;
+        const sel = [...selectedPostos].sort().join(',');
+        for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+          const intersec = lista.filter(p => POSTOS.includes(p)).sort().join(',');
+          if (intersec && sel === intersec) return nome;
+        }
+        return null;
+      }
+
+      function _atualizarBotoesGrupo() {
+        const ativo = _grupoAtivo();
+        const btnA = el('#btnGrupoAltamiro');
+        const btnC = el('#btnGrupoCouto');
+        if (btnA) btnA.classList.toggle('btn-secondary',    ativo === 'altamiro');
+        if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
+        if (btnC) btnC.classList.toggle('btn-secondary',    ativo === 'couto');
+        if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+      }
+
+      function selectGrupo(grupo) {
+        const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p));
+        selectedPostos = new Set(intersec);
+        buildPostoTabs();
+        updateAll();
+      }
+
+      function wireGrupoButtons() {
+        const btnA = el('#btnGrupoAltamiro');
+        const btnC = el('#btnGrupoCouto');
+        if (btnA) btnA.onclick = () => selectGrupo('altamiro');
+        if (btnC) btnC.onclick = () => selectGrupo('couto');
       }
 
       // ============================================================
@@ -3241,6 +3293,7 @@ function updateExploradorDespesas(mesesSelec) {
 
           initCharts();
           buildPostoTabs();
+          wireGrupoButtons();
           wireDimTabs();
           wirePeriodo(lastFull);
           wireRetiradaSwitch();
