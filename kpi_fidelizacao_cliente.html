@@ -134,12 +134,6 @@
             padding: 10px;
         }
 
-        .month-inputs {
-            display: flex;
-            gap: 6px;
-            align-items: center;
-        }
-
         .scroll-tabs {
             display: flex;
             gap: 6px;
@@ -179,6 +173,7 @@
         .table td,
         .table th {
             vertical-align: middle;
+            font-size: 0.9rem;
         }
 
         .badge-soft {
@@ -190,36 +185,45 @@
         }
 
         .heatmap {
-            overflow: auto;
-            max-height: 500px;
+            overflow-x: auto;
+            max-height: 600px;
         }
 
         .heatmap table {
-            border-collapse: separate;
-            border-spacing: 1px;
+            border-collapse: collapse;
             width: 100%;
+            font-size: 0.85rem;
         }
 
         .heatmap th,
         .heatmap td {
+            padding: 6px;
             text-align: center;
-            padding: 4px;
-            font-size: 11px;
+            border: 1px solid #ddd;
         }
 
-        .heatmap .cell {
-            padding: 4px 6px;
-            border-radius: 4px;
-            text-align: center;
+        .heatmap th {
+            background: #f5f5f5;
+            font-weight: 600;
+        }
+
+        .cell-high {
+            background: #d4edda;
+            color: #155724;
             font-weight: 500;
-            color: #111;
         }
 
-        .cell-0 { background: #f0f0f0; color: #999; }
-        .cell-1to30 { background: #ffcccc; color: #333; }
-        .cell-31to50 { background: #ffaa99; color: #333; }
-        .cell-51to70 { background: #99ccff; color: #333; }
-        .cell-71to100 { background: #99ff99; color: #333; }
+        .cell-medium {
+            background: #fff3cd;
+            color: #856404;
+            font-weight: 500;
+        }
+
+        .cell-low {
+            background: #f8d7da;
+            color: #721c24;
+            font-weight: 500;
+        }
     </style>
 </head>
 
@@ -294,7 +298,6 @@
                 <div class="d-flex w-100 align-items-center">
                     <span class="ml-2 font-weight-bold">KPI Fidelização de Clientes</span>
                     <div class="ml-auto">
-                        <button id="btnViewMode" class="btn btn-sm btn-outline-secondary" title="Alternar entre vista simples e detalhada">Modo: 1/3/6/12m</button>
                         <span id="ia-anchor"></span>
                     </div>
                 </div>
@@ -307,15 +310,11 @@
                 <div class="card">
                     <div class="filter-bar">
                         <div>
-                            <label class="mb-0 small d-block">Selecione o Período</label>
-                            <div class="month-inputs">
-                                <input id="fromMonth" type="month" class="form-control form-control-sm" />
-                                <input id="toMonth" type="month" class="form-control form-control-sm" />
-                                <button id="resetDates" class="btn btn-sm btn-outline-secondary">Reset</button>
-                            </div>
+                            <label class="mb-0 small d-block">Mês de Referência</label>
+                            <input id="monthSelect" type="month" class="form-control form-control-sm" style="width: 140px;" />
                         </div>
                         <div class="flex-grow-1">
-                            <label class="mb-0 small d-block">Posto</label>
+                            <label class="mb-0 small d-block">Posto(s) de Admissão</label>
                             <div class="d-flex align-items-center">
                                 <ul id="postoTabs" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
                                 <div class="ml-2 flex-shrink-0">
@@ -335,22 +334,22 @@
                     <div class="card-body kpi" id="statsCards"></div>
                 </div>
 
-                <!-- HEATMAP / TABELA -->
+                <!-- TABELA COM TODOS OS MESES -->
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="card-title mb-0">Fidelização por Mês de Admissão e Período</h3>
+                        <h3 class="card-title mb-0">Fidelização por Mês de Admissão (QTD e %)</h3>
                     </div>
-                    <div class="card-body heatmap" id="heatmapContainer">
+                    <div class="card-body heatmap" id="tableContainer">
                         <div class="text-muted text-center p-3">Carregando dados...</div>
                     </div>
                 </div>
 
-                <!-- CHARTS -->
+                <!-- CHARTS (1/3/6/12 MESES APENAS) -->
                 <div class="row">
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Evolução de Retenção (1 mês)</h3>
+                                <h3 class="card-title mb-0">Evolução - Retenção 1 mês</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart1m"></canvas>
@@ -360,7 +359,7 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Evolução de Retenção (3 meses)</h3>
+                                <h3 class="card-title mb-0">Evolução - Retenção 3 meses</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart3m"></canvas>
@@ -370,7 +369,7 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Evolução de Retenção (6 meses)</h3>
+                                <h3 class="card-title mb-0">Evolução - Retenção 6 meses</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart6m"></canvas>
@@ -380,7 +379,7 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Evolução de Retenção (12 meses)</h3>
+                                <h3 class="card-title mb-0">Evolução - Retenção 12 meses</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart12m"></canvas>
@@ -394,15 +393,17 @@
 
     <!-- SCRIPT PRINCIPAL -->
     <script>
-        // Constantes
+        const el = id => document.getElementById(id);
         const POSTOS = ['A', 'N', 'X', 'Y', 'B', 'R', 'P', 'C', 'D', 'G', 'I', 'M', 'J'];
-        const GRUPO_ALTAMIRO = ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'];
-        const GRUPO_COUTO = ['C', 'D', 'J', 'M', 'P'];
-        const DATA_LIMITE = '2024-03-01'; // Dados começam em 01/03/2024
+        const GRUPOS_POSTO = {
+            altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+            couto: ['C', 'D', 'J', 'M', 'P'],
+        };
 
         let allData = {};
         let chartInstances = {};
-        let viewMode = 'simple'; // 'simple' = 1/3/6/12m | 'detailed' = todos os meses
+        let selPostos = 'ALL'; // 'ALL' ou Set de postos
+        let selMonth = '';
 
         // ========================= INIT =========================
         document.addEventListener('DOMContentLoaded', () => {
@@ -411,33 +412,97 @@
         });
 
         function initUI() {
-            // Render postos
-            const postoTabs = document.getElementById('postoTabs');
-            postoTabs.innerHTML = `<li class="nav-item"><a href="#" class="nav-link active" data-posto="ALL"><span>Todos</span></a></li>`;
-            POSTOS.forEach(p => {
-                postoTabs.innerHTML += `<li class="nav-item"><a href="#" class="nav-link" data-posto="${p}"><span>${p}</span></a></li>`;
+            // Data padrão: mês atual
+            const today = new Date();
+            selMonth = today.toISOString().slice(0, 7);
+            el('monthSelect').value = selMonth;
+            el('monthSelect').addEventListener('change', (e) => {
+                selMonth = e.target.value;
+                render();
             });
 
-            // Event listeners
-            document.getElementById('btnGrupoAltamiro').addEventListener('click', () => selectPostos(GRUPO_ALTAMIRO));
-            document.getElementById('btnGrupoCouto').addEventListener('click', () => selectPostos(GRUPO_COUTO));
-            document.getElementById('btnViewMode').addEventListener('click', toggleViewMode);
-            document.getElementById('resetDates').addEventListener('click', resetDates);
+            // Postos
+            buildPostoTabs('#postoTabs', () => selPostos, v => { selPostos = v; }, () => render());
 
-            postoTabs.addEventListener('click', (e) => {
-                if (e.target.closest('.nav-link')) {
-                    e.preventDefault();
-                    document.querySelectorAll('#postoTabs .nav-link').forEach(a => a.classList.remove('active'));
-                    e.target.closest('.nav-link').classList.add('active');
-                    render();
+            // Grupos
+            el('btnGrupoAltamiro').addEventListener('click', () => selectGrupo('altamiro'));
+            el('btnGrupoCouto').addEventListener('click', () => selectGrupo('couto'));
+        }
+
+        function buildPostoTabs(ulId, getSel, setSel, onChange) {
+            const ul = el(ulId.substring(1));
+            if (!ul) return;
+            ul.innerHTML = '';
+            ul.insertAdjacentHTML('beforeend',
+                `<li class="nav-item">
+                    <a data-posto="ALL" class="nav-link" href="#">Todos</a>
+                 </li>`);
+            POSTOS.forEach(p => ul.insertAdjacentHTML('beforeend',
+                `<li class="nav-item">
+                    <a data-posto="${p}" class="nav-link" href="#">${p}</a>
+                 </li>`));
+            markActiveMulti(ulId, getSel());
+            ul.addEventListener('click', e => {
+                if (!e.target.matches('.nav-link')) return;
+                e.preventDefault();
+                const p = e.target.dataset.posto;
+                let sel = getSel();
+                if (p === 'ALL') {
+                    sel = 'ALL';
+                } else {
+                    if (sel === 'ALL') sel = new Set();
+                    if (sel.has(p)) sel.delete(p); else sel.add(p);
+                    if (sel.size === POSTOS.length || sel.size === 0) sel = 'ALL';
+                }
+                setSel(sel);
+                markActiveMulti(ulId, sel);
+                _atualizarBotoesGrupo();
+                onChange();
+            });
+        }
+
+        function markActiveMulti(scopeId, selection) {
+            const isAll = selection === 'ALL';
+            document.querySelectorAll(`${scopeId} .nav-link`).forEach(a => {
+                const p = a.dataset.posto;
+                if (p === 'ALL') {
+                    a.classList.toggle('active', isAll);
+                } else {
+                    a.classList.toggle('active', !isAll && selection.has(p));
                 }
             });
+        }
 
-            // Datas padrão
-            const today = new Date();
-            const oneYearAgo = new Date(today.getFullYear() - 1, today.getMonth(), 1);
-            document.getElementById('fromMonth').value = oneYearAgo.toISOString().slice(0, 7);
-            document.getElementById('toMonth').value = today.toISOString().slice(0, 7);
+        function selectGrupo(grupo) {
+            const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p));
+            selPostos = new Set(intersec);
+            buildPostoTabs('#postoTabs', () => selPostos, v => { selPostos = v; }, () => render());
+            _atualizarBotoesGrupo();
+            render();
+        }
+
+        function _grupoAtivo() {
+            if (!selPostos || selPostos === 'ALL') return null;
+            const selArr = [...selPostos].sort().join(',');
+            for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+                const intersec = lista.filter(p => POSTOS.includes(p)).sort().join(',');
+                if (intersec && selArr === intersec) return nome;
+            }
+            return null;
+        }
+
+        function _atualizarBotoesGrupo() {
+            const ativo = _grupoAtivo();
+            const btnA = el('btnGrupoAltamiro');
+            const btnC = el('btnGrupoCouto');
+            if (btnA) {
+                btnA.classList.toggle('btn-secondary', ativo === 'altamiro');
+                btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
+            }
+            if (btnC) {
+                btnC.classList.toggle('btn-secondary', ativo === 'couto');
+                btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+            }
         }
 
         async function loadData() {
@@ -446,72 +511,36 @@
                 if (!response.ok) throw new Error('Erro ao carregar dados');
                 const json = await response.json();
 
-                document.getElementById('jsonInfo').textContent = `Atualizado em: ${json.periodo?.fim || 'N/A'}`;
-
-                // Processar dados
+                el('jsonInfo').textContent = `Atualizado em: ${json.periodo?.fim || 'N/A'}`;
                 allData = json.dados || {};
                 render();
             } catch (err) {
-                document.getElementById('err').textContent = `Erro: ${err.message}`;
+                el('err').textContent = `Erro: ${err.message}`;
             }
         }
 
         function getSelectedPostos() {
-            const active = document.querySelector('#postoTabs .nav-link.active');
-            const posto = active.getAttribute('data-posto');
-            return posto === 'ALL' ? POSTOS : [posto];
-        }
-
-        function getDateRange() {
-            const from = document.getElementById('fromMonth').value || '2024-03';
-            const to = document.getElementById('toMonth').value || new Date().toISOString().slice(0, 7);
-            return { from, to };
-        }
-
-        function selectPostos(postos) {
-            // Selecionar múltiplos postos (agregar "Todos")
-            document.querySelectorAll('#postoTabs .nav-link').forEach(a => a.classList.remove('active'));
-            document.querySelector('#postoTabs .nav-link[data-posto="ALL"]').classList.add('active');
-            render();
-        }
-
-        function toggleViewMode() {
-            viewMode = viewMode === 'simple' ? 'detailed' : 'simple';
-            const btn = document.getElementById('btnViewMode');
-            btn.textContent = `Modo: ${viewMode === 'simple' ? '1/3/6/12m' : 'Todos'}`;
-            render();
-        }
-
-        function resetDates() {
-            const today = new Date();
-            const oneYearAgo = new Date(today.getFullYear() - 1, today.getMonth(), 1);
-            document.getElementById('fromMonth').value = oneYearAgo.toISOString().slice(0, 7);
-            document.getElementById('toMonth').value = today.toISOString().slice(0, 7);
-            render();
+            return selPostos === 'ALL' ? POSTOS : Array.from(selPostos);
         }
 
         function render() {
             renderStats();
-            renderHeatmap();
+            renderTable();
             renderCharts();
         }
 
         function renderStats() {
             const postos = getSelectedPostos();
-            const { from, to } = getDateRange();
             let totalAdm = 0, total1m = 0, total3m = 0, total6m = 0, total12m = 0;
 
-            for (const ym in allData) {
-                if (ym < from || ym > to) continue;
-                for (const p of postos) {
-                    const poData = allData[ym][p];
-                    if (!poData) continue;
-                    totalAdm += poData.admissoes || 0;
-                    total1m += poData.retencao_por_mes[1]?.qtd || 0;
-                    total3m += poData.retencao_por_mes[3]?.qtd || 0;
-                    total6m += poData.retencao_por_mes[6]?.qtd || 0;
-                    total12m += poData.retencao_por_mes[12]?.qtd || 0;
-                }
+            for (const p of postos) {
+                const poData = allData[selMonth]?.[p];
+                if (!poData) continue;
+                totalAdm += poData.admissoes || 0;
+                total1m += poData.retencao_por_mes[1]?.qtd || 0;
+                total3m += poData.retencao_por_mes[3]?.qtd || 0;
+                total6m += poData.retencao_por_mes[6]?.qtd || 0;
+                total12m += poData.retencao_por_mes[12]?.qtd || 0;
             }
 
             const pct1m = totalAdm > 0 ? Math.round((total1m / totalAdm) * 100) : 0;
@@ -551,84 +580,58 @@
                     </div>
                 </div>
             `;
-            document.getElementById('statsCards').innerHTML = html;
+            el('statsCards').innerHTML = html;
         }
 
-        function renderHeatmap() {
+        function renderTable() {
             const postos = getSelectedPostos();
-            const { from, to } = getDateRange();
             let html = '<table class="table table-sm mb-0"><thead><tr><th>Mês Admissão</th>';
 
-            if (viewMode === 'simple') {
-                html += '<th>Adm.</th><th>1m (%)</th><th>3m (%)</th><th>6m (%)</th><th>12m (%)</th></tr></thead><tbody>';
+            // Headers para cada período
+            html += '<th colspan="2">1 mês</th><th colspan="2">3 meses</th><th colspan="2">6 meses</th><th colspan="2">12 meses</th></tr>';
+            html += '<tr><th></th><th>QTD</th><th>%</th><th>QTD</th><th>%</th><th>QTD</th><th>%</th><th>QTD</th><th>%</th></tr></thead><tbody>';
 
-                for (const ym of Object.keys(allData).sort()) {
-                    if (ym < from || ym > to) continue;
-                    const row = allData[ym];
-                    let admTotal = 0, r1 = 0, r3 = 0, r6 = 0, r12 = 0;
+            for (const ym of Object.keys(allData).sort()) {
+                const row = allData[ym];
+                let r1_qtd = 0, r1_pct = 0, r3_qtd = 0, r3_pct = 0, r6_qtd = 0, r6_pct = 0, r12_qtd = 0, r12_pct = 0;
 
-                    for (const p of postos) {
-                        if (!row[p]) continue;
-                        admTotal += row[p].admissoes || 0;
-                        r1 += row[p].retencao_por_mes[1]?.percentual || 0;
-                        r3 += row[p].retencao_por_mes[3]?.percentual || 0;
-                        r6 += row[p].retencao_por_mes[6]?.percentual || 0;
-                        r12 += row[p].retencao_por_mes[12]?.percentual || 0;
-                    }
-
-                    const count = postos.filter(p => row[p]).length;
-                    html += `<tr><td>${ym}</td><td>${admTotal}</td>`;
-                    html += `<td class="cell-${getColorClass(r1/count)}">${Math.round(r1/count)}%</td>`;
-                    html += `<td class="cell-${getColorClass(r3/count)}">${Math.round(r3/count)}%</td>`;
-                    html += `<td class="cell-${getColorClass(r6/count)}">${Math.round(r6/count)}%</td>`;
-                    html += `<td class="cell-${getColorClass(r12/count)}">${Math.round(r12/count)}%</td></tr>`;
+                for (const p of postos) {
+                    if (!row[p]) continue;
+                    r1_qtd += row[p].retencao_por_mes[1]?.qtd || 0;
+                    r1_pct += row[p].retencao_por_mes[1]?.percentual || 0;
+                    r3_qtd += row[p].retencao_por_mes[3]?.qtd || 0;
+                    r3_pct += row[p].retencao_por_mes[3]?.percentual || 0;
+                    r6_qtd += row[p].retencao_por_mes[6]?.qtd || 0;
+                    r6_pct += row[p].retencao_por_mes[6]?.percentual || 0;
+                    r12_qtd += row[p].retencao_por_mes[12]?.qtd || 0;
+                    r12_pct += row[p].retencao_por_mes[12]?.percentual || 0;
                 }
-            } else {
-                // Modo detalhado: todos os meses
-                html += '<th>Adm.</th>';
-                for (let i = 1; i <= 24; i++) html += `<th>${i}m</th>`;
-                html += '</tr></thead><tbody>';
 
-                for (const ym of Object.keys(allData).sort()) {
-                    if (ym < from || ym > to) continue;
-                    const row = allData[ym];
-                    let admTotal = 0;
-                    const retencoes = {};
+                const count = postos.filter(p => row[p]).length;
+                const avg_r1 = count > 0 ? Math.round(r1_pct / count) : 0;
+                const avg_r3 = count > 0 ? Math.round(r3_pct / count) : 0;
+                const avg_r6 = count > 0 ? Math.round(r6_pct / count) : 0;
+                const avg_r12 = count > 0 ? Math.round(r12_pct / count) : 0;
 
-                    for (const p of postos) {
-                        if (!row[p]) continue;
-                        admTotal += row[p].admissoes || 0;
-                        for (const mes in row[p].retencao_por_mes) {
-                            retencoes[mes] = (retencoes[mes] || 0) + (row[p].retencao_por_mes[mes]?.percentual || 0);
-                        }
-                    }
+                const cls1 = avg_r1 >= 70 ? 'cell-high' : avg_r1 >= 40 ? 'cell-medium' : 'cell-low';
+                const cls3 = avg_r3 >= 70 ? 'cell-high' : avg_r3 >= 40 ? 'cell-medium' : 'cell-low';
+                const cls6 = avg_r6 >= 70 ? 'cell-high' : avg_r6 >= 40 ? 'cell-medium' : 'cell-low';
+                const cls12 = avg_r12 >= 70 ? 'cell-high' : avg_r12 >= 40 ? 'cell-medium' : 'cell-low';
 
-                    html += `<tr><td>${ym}</td><td>${admTotal}</td>`;
-                    const count = postos.filter(p => row[p]).length;
-                    for (let i = 1; i <= 24; i++) {
-                        const pct = retencoes[i] ? Math.round(retencoes[i] / count) : 0;
-                        html += `<td class="cell-${getColorClass(pct)}">${pct}%</td>`;
-                    }
-                    html += '</tr>';
-                }
+                html += `<tr><td><strong>${ym}</strong></td>`;
+                html += `<td>${r1_qtd}</td><td class="${cls1}">${avg_r1}%</td>`;
+                html += `<td>${r3_qtd}</td><td class="${cls3}">${avg_r3}%</td>`;
+                html += `<td>${r6_qtd}</td><td class="${cls6}">${avg_r6}%</td>`;
+                html += `<td>${r12_qtd}</td><td class="${cls12}">${avg_r12}%</td></tr>`;
             }
 
             html += '</tbody></table>';
-            document.getElementById('heatmapContainer').innerHTML = html;
-        }
-
-        function getColorClass(pct) {
-            if (pct === 0) return '0';
-            if (pct <= 30) return '1to30';
-            if (pct <= 50) return '31to50';
-            if (pct <= 70) return '51to70';
-            return '71to100';
+            el('tableContainer').innerHTML = html;
         }
 
         function renderCharts() {
             const postos = getSelectedPostos();
-            const { from, to } = getDateRange();
-            const labels = Object.keys(allData).filter(ym => ym >= from && ym <= to).sort();
+            const meses = Object.keys(allData).sort();
 
             const datasets = {
                 '1m': [],
@@ -637,26 +640,30 @@
                 '12m': []
             };
 
-            for (const p of postos) {
-                const data1m = labels.map(ym => allData[ym][p]?.retencao_por_mes[1]?.percentual || 0);
-                const data3m = labels.map(ym => allData[ym][p]?.retencao_por_mes[3]?.percentual || 0);
-                const data6m = labels.map(ym => allData[ym][p]?.retencao_por_mes[6]?.percentual || 0);
-                const data12m = labels.map(ym => allData[ym][p]?.retencao_por_mes[12]?.percentual || 0);
+            const cores = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#66BB6A', '#AB47BC'];
 
-                datasets['1m'].push({ label: `Posto ${p}`, data: data1m, borderColor: getRandomColor(), tension: 0.3 });
-                datasets['3m'].push({ label: `Posto ${p}`, data: data3m, borderColor: getRandomColor(), tension: 0.3 });
-                datasets['6m'].push({ label: `Posto ${p}`, data: data6m, borderColor: getRandomColor(), tension: 0.3 });
-                datasets['12m'].push({ label: `Posto ${p}`, data: data12m, borderColor: getRandomColor(), tension: 0.3 });
-            }
+            postos.forEach((p, idx) => {
+                const data1m = meses.map(ym => allData[ym][p]?.retencao_por_mes[1]?.percentual || 0);
+                const data3m = meses.map(ym => allData[ym][p]?.retencao_por_mes[3]?.percentual || 0);
+                const data6m = meses.map(ym => allData[ym][p]?.retencao_por_mes[6]?.percentual || 0);
+                const data12m = meses.map(ym => allData[ym][p]?.retencao_por_mes[12]?.percentual || 0);
 
-            drawChart('chart1m', labels, datasets['1m']);
-            drawChart('chart3m', labels, datasets['3m']);
-            drawChart('chart6m', labels, datasets['6m']);
-            drawChart('chart12m', labels, datasets['12m']);
+                const cor = cores[idx % cores.length];
+
+                datasets['1m'].push({ label: `Posto ${p}`, data: data1m, borderColor: cor, backgroundColor: cor + '40', tension: 0.3 });
+                datasets['3m'].push({ label: `Posto ${p}`, data: data3m, borderColor: cor, backgroundColor: cor + '40', tension: 0.3 });
+                datasets['6m'].push({ label: `Posto ${p}`, data: data6m, borderColor: cor, backgroundColor: cor + '40', tension: 0.3 });
+                datasets['12m'].push({ label: `Posto ${p}`, data: data12m, borderColor: cor, backgroundColor: cor + '40', tension: 0.3 });
+            });
+
+            drawChart('chart1m', meses, datasets['1m']);
+            drawChart('chart3m', meses, datasets['3m']);
+            drawChart('chart6m', meses, datasets['6m']);
+            drawChart('chart12m', meses, datasets['12m']);
         }
 
         function drawChart(canvasId, labels, datasets) {
-            const ctx = document.getElementById(canvasId).getContext('2d');
+            const ctx = el(canvasId).getContext('2d');
             if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
 
             chartInstances[canvasId] = new Chart(ctx, {
@@ -665,15 +672,15 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: true, position: 'top' } },
-                    scales: { y: { min: 0, max: 100 } }
+                    plugins: {
+                        legend: { display: true, position: 'top' },
+                        filler: { propagate: true }
+                    },
+                    scales: {
+                        y: { min: 0, max: 100, title: { display: true, text: 'Percentual (%)' } }
+                    }
                 }
             });
-        }
-
-        function getRandomColor() {
-            const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
-            return colors[Math.floor(Math.random() * colors.length)];
         }
     </script>
 </body>
