@@ -2603,10 +2603,10 @@ if (ctxTipo) {
           const vRef = mapRef.get(g) || 0;
           const vComp = mapComp.get(g) || 0;
 
-          const delta = vComp - vRef; // COMP - REF
+          const delta = vRef - vComp; // REF - COMP (positivo = ref cresceu)
           if (!delta) return;
 
-          const deltaPct = vRef ? (delta / vRef) * 100 : null; // base REF
+          const deltaPct = vComp ? (delta / vComp) * 100 : null; // base COMP
           itens.push({ grupo: g, ref: vRef, comp: vComp, delta, deltaPct });
         });
 
