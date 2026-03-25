@@ -118,14 +118,56 @@
 
           <!-- ID da Fila WhatsApp -->
           <div class="row mt-2">
-            <div class="col-md-5">
+            <div class="col-md-6">
               <div class="form-group mb-0">
                 <label class="font-weight-bold" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:#6c757d">
-                  ID da Fila WhatsApp <small class="text-muted font-weight-normal" style="text-transform:none">(vazio = usa WAPP_QUEUE_ID do .env)</small>
+                  Fila WhatsApp <small class="text-muted font-weight-normal" style="text-transform:none">(vazio = usa WAPP_QUEUE_ID do .env)</small>
                 </label>
-                <input type="text" name="queue_id" class="form-control"
-                       value="{{ campanha.queue_id if campanha and campanha.queue_id else '' }}"
-                       placeholder="Ex: cmn54op7f06dov9jbqwvhfb8s">
+                <!-- hidden: valor real enviado ao servidor -->
+                <input type="hidden" name="queue_id" id="queue_id_val"
+                       value="{{ campanha.queue_id if campanha and campanha.queue_id else '' }}">
+                <!-- select com filas conhecidas -->
+                <select id="queue_id_sel" class="form-control">
+                  <option value="">— Padrão do .env —</option>
+                  <optgroup label="Atendimento">
+                    <option value="cme7lb9ae00016ss6bf5i0tem">Atendimento Geral</option>
+                    <option value="cme7niv70000njbjrc9oycd31">Suporte ao APP</option>
+                    <option value="cme7o638z003ijbjrc2ojgwhq">Orçamentos de exames e procedimentos</option>
+                    <option value="cmeiy6l7e007wjbs4ahmpicas">ADESÃO - Quero informações sobre o plano</option>
+                    <option value="cmekcydw502vdjbzmx48eib4i">TeleVendas Campinho</option>
+                    <option value="cmkzx4g2902e93fjb906z0a6x">Convênio CMD</option>
+                    <option value="cme8lppmp001ijbjsik9mb8fp">CENTRAL DE ATENDIMENTOS C</option>
+                    <option value="cme8gw7y100hhjbyt6lurb8sn">CENTRAL DE ATENDIMENTOS G</option>
+                  </optgroup>
+                  <optgroup label="Financeiro">
+                    <option value="cme8gx4id00hijbyt6s5j3ycl">FINANCEIRO G/X/Y</option>
+                    <option value="cme8gxfzi00hjjbyt9h50x3y0">FINANCEIRO E ATENDIMENTO C/D/M/J/P</option>
+                    <option value="cme8gxvv900hkjbyt19jah1uo">FINANCEIRO E ATENDIMENTO A</option>
+                    <option value="cme8gy8o800hnjbyt74n7vkcx">FINANCEIRO E ATENDIMENTO N</option>
+                    <option value="cme8gyfcj00hojbytukmi9gw8">FINANCEIRO E ATENDIMENTO R</option>
+                    <option value="cme8gylfd00hpjbyto9yyix9u">FINANCEIRO E ATENDIMENTO B</option>
+                    <option value="cme8l2a91010rjbytymaaop2d">FINANCEIRO E ATENDIMENTO I</option>
+                  </optgroup>
+                  <optgroup label="Ouvidoria">
+                    <option value="cme7o6ywm003jjbjro1vis2xe">Ouvidoria Campo Grande</option>
+                    <option value="cme7o740m003kjbjrbnkm1z30">Ouvidoria Campo Grande X</option>
+                    <option value="cme7o7am8003ljbjrwhvy3h32">Ouvidoria Campo Grande Y</option>
+                    <option value="cme7o7o40003mjbjrzxfms8us">Ouvidoria Bangu</option>
+                    <option value="cme7o7w2o003njbjrjot5p8gr">Ouvidoria Realengo</option>
+                    <option value="cme7o8139003ojbjrqmkoji47">Ouvidoria Anchieta</option>
+                    <option value="cme7o866i003pjbjr2xym47gm">Ouvidoria Nilópolis</option>
+                    <option value="cme7o8jg1003qjbjrvoirnxwg">Ouvidoria Nova Iguaçu</option>
+                    <option value="cme7o9edx003xjbjra22xqdd1">Ouvidoria Postos Campinho, Madureira, Del Castilho, Jacarepaguá e Rio das Pedras</option>
+                  </optgroup>
+                  <optgroup label="Cobrança / MKT">
+                    <option value="cmmzcumqu00a4zejb323r63ac">Template Enviado ao Cliente</option>
+                    <option value="cmn54op7f06dov9jbqwvhfb8s">Mensagens MKT</option>
+                  </optgroup>
+                  <option value="_outro">— Outro (digitar ID) —</option>
+                </select>
+                <!-- campo visível apenas quando "_outro" -->
+                <input type="text" id="queue_id_custom" class="form-control mt-1"
+                       style="display:none" placeholder="Cole ou digite o ID da fila">
               </div>
             </div>
           </div>
@@ -594,6 +636,52 @@ let _templates = [];
 const TEMPLATE_ATUAL = "{{ campanha.template if campanha else 'notificacao_de_fatura' }}";
 const MODO_ENVIO_ATUAL = "{{ campanha.modo_envio if campanha and campanha.modo_envio else 'atraso' }}";
 const QUEUE_ID_ATUAL   = "{{ campanha.queue_id if campanha and campanha.queue_id else '' }}";
+const QUEUE_PADRAO_COBRANCA = "cmmzcumqu00a4zejb323r63ac";  // Template Enviado ao Cliente
+const QUEUE_PADRAO_CLIENTES = "cmn54op7f06dov9jbqwvhfb8s";  // Mensagens MKT
+
+// Inicializa o select de fila: restaura valor salvo ou aplica padrão por modo
+function initQueueSel() {
+  const sel    = document.getElementById('queue_id_sel');
+  const custom = document.getElementById('queue_id_custom');
+  const hidden = document.getElementById('queue_id_val');
+  if (!sel) return;
+
+  const val = hidden.value || '';
+  // Verifica se é um dos valores conhecidos
+  const optFound = Array.from(sel.options).some(o => o.value === val && o.value !== '_outro');
+  if (val && !optFound) {
+    sel.value = '_outro';
+    custom.value = val;
+    custom.style.display = '';
+  } else {
+    sel.value = val;
+    custom.style.display = 'none';
+  }
+}
+
+function syncQueueId() {
+  const sel    = document.getElementById('queue_id_sel');
+  const custom = document.getElementById('queue_id_custom');
+  const hidden = document.getElementById('queue_id_val');
+  if (!sel) return;
+  if (sel.value === '_outro') {
+    custom.style.display = '';
+    hidden.value = custom.value.trim();
+  } else {
+    custom.style.display = 'none';
+    hidden.value = sel.value;
+  }
+}
+
+// Aplica fila padrão conforme modo, apenas se o campo estiver vazio (nova campanha)
+function aplicarQueuePadrao(modo) {
+  const hidden = document.getElementById('queue_id_val');
+  const sel    = document.getElementById('queue_id_sel');
+  if (!sel || hidden.value) return;  // não sobrescreve valor já salvo
+  const padrao = (modo === 'clientes_admissao') ? QUEUE_PADRAO_CLIENTES : QUEUE_PADRAO_COBRANCA;
+  sel.value    = padrao;
+  hidden.value = padrao;
+}
 
 function mostrarPreview() {
   const sel  = document.getElementById('template-select');
@@ -791,9 +879,23 @@ document.addEventListener('DOMContentLoaded', () => {
     modoSel.addEventListener('change', () => {
       atualizarModoEnvio();
       carregarTodasOpcoes();
+      aplicarQueuePadrao(modoSel.value);
     });
   }
   atualizarModoEnvio();
+
+  // Fila WhatsApp
+  initQueueSel();
+  const queueSel    = document.getElementById('queue_id_sel');
+  const queueCustom = document.getElementById('queue_id_custom');
+  if (queueSel) {
+    queueSel.addEventListener('change', syncQueueId);
+    // aplica padrão só em nova campanha (QUEUE_ID_ATUAL vazio)
+    if (!QUEUE_ID_ATUAL) aplicarQueuePadrao(MODO_ENVIO_ATUAL);
+  }
+  if (queueCustom) {
+    queueCustom.addEventListener('input', syncQueueId);
+  }
 
   // Se já há postos marcados (modo edição), carrega opções imediatamente
   if (postosChecados().length > 0) {
