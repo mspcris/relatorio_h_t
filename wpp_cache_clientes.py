@@ -80,7 +80,7 @@ SELECT
     , f5.Bairro                                 AS bairro
     , f5.origem
     , f5.TelefoneWhatsApp                       AS telefone_whatsapp
-    , f5.canceladoans
+    , vcc.canceladoans                          AS canceladoans
     , f5.tipo_FJ                                AS tipo_fj
     , f5.Responsavel                            AS responsavel
     , cc.responsaveltelefonewhatsApp            AS responsavel_tel_wpp
