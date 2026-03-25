@@ -516,16 +516,11 @@
       el('#dataIni').value = dataIni;
       el('#dataFim').value = dataFim;
 
-      // 1) sessão
+      // 1) sessão — sem fallback: lista vazia = sem acesso
       POSTOS = (postosUsuario && postosUsuario.length) ? postosUsuario : [];
 
-      // 2) fallback local (HEAD)
       if(!POSTOS.length){
-        POSTOS = await detectPostosDisponiveis(ymSel);
-      }
-
-      if(!POSTOS.length){
-        el('#err').textContent = 'Sem JSONs encontrados em /json_notas_rps para o mês selecionado.';
+        el('#err').textContent = 'Sem acesso a postos. Solicite permissão ao administrador.';
         return;
       } else {
         el('#err').textContent = '';

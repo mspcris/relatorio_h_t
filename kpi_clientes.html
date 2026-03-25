@@ -1008,7 +1008,7 @@ ORDER BY e.codigo, faixa_etaria;
                 if (!res.ok) return [];
                 const data = await res.json();
                 const permitidos = data.postos;
-                if (!permitidos || permitidos.length === 0) return [];
+                if (!permitidos || permitidos.length === 0) return postos; // sem restrição de posto = vê todos
                 const allowed = new Set(permitidos.map(p => p.toUpperCase()));
                 return postos.filter(p => allowed.has(p.toUpperCase()));
             } catch (err) {

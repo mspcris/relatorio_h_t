@@ -1534,11 +1534,7 @@
                 const postosDisponiveis = Object.keys(ultimo).filter(x => /^[A-Z]$/.test(x)).sort();
 
                 const postosUsuario = await carregarPostosDoUsuario();
-                if (postosUsuario.length) {
-                    POSTOS = postosDisponiveis.filter(p => postosUsuario.includes(p));
-                } else {
-                    POSTOS = postosDisponiveis;
-                }
+                POSTOS = postosDisponiveis.filter(p => postosUsuario.includes(p));
 
                 if (el('#from1')) el('#from1').value = MESES[0];
                 if (el('#to1')) el('#to1').value = lastFull;

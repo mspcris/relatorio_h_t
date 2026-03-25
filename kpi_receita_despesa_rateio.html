@@ -1526,11 +1526,10 @@
           if (!r.ok) throw new Error('Falha ao obter postos do usuário');
           const data = await r.json();
           const doUsuario = Array.isArray(data.postos) ? data.postos : [];
-          const intersec = metaPostos.filter(p => doUsuario.includes(p));
-          return intersec.length ? intersec : metaPostos;
+          return metaPostos.filter(p => doUsuario.includes(p));
         } catch (e) {
-          console.warn('Erro ao usar postos da sessão, fallback para JSON:', e);
-          return metaPostos;
+          console.warn('Erro ao obter postos da sessão:', e);
+          return [];
         }
       }
 
