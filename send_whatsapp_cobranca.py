@@ -229,7 +229,8 @@ def fmt_venc(v) -> str:
 # ---------------------------------------------------------------------------
 
 def enviar(telefone: str, nome: str, template: str, params: dict,
-           dry_run: bool, queue_id: str | None = None) -> tuple[str, str | None]:
+           dry_run: bool, queue_id: str | None = None,
+           from_user_id: str | None = None) -> tuple[str, str | None]:
     if dry_run:
         return "dry_run", None
 
@@ -237,6 +238,7 @@ def enviar(telefone: str, nome: str, template: str, params: dict,
     texto    = _expandir_template(template, params)
     ts       = datetime.now().astimezone().isoformat(timespec="seconds")
     fila_id  = queue_id or CHAT_QUEUE_ID
+    remetente = from_user_id or CHAT_FROM
 
     payload = {
         "entry": [{
@@ -247,7 +249,7 @@ def enviar(telefone: str, nome: str, template: str, params: dict,
                     "contacts": [{"wa_id": telefone, "profile": {"name": nome}}],
                     "messages": [{
                         "id":       hash_id,
-                        "from":     CHAT_FROM,
+                        "from":     remetente,
                         "queue_id": fila_id,
                         "text":     {"body": texto},
                         "type":     "text",
@@ -321,10 +323,11 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
     # Regra por campanha com histórico global:
     # cada campanha respeita seu próprio intervalo_dias, considerando o último
     # envio accepted do telefone em qualquer campanha.
-    intervalo = int(campanha.get("intervalo_dias") or 7)
-    template  = campanha.get("template", "notificacao_de_fatura")
-    postos    = campanha.get("postos") or []
-    queue_id  = campanha.get("queue_id") or None
+    intervalo    = int(campanha.get("intervalo_dias") or 7)
+    template     = campanha.get("template", "notificacao_de_fatura")
+    postos       = campanha.get("postos") or []
+    queue_id     = campanha.get("queue_id") or None
+    from_user_id = campanha.get("from_user_id") or None
 
     if not postos:
         log.warning(f"  [{campanha['nome']}] Nenhum posto configurado.")
@@ -395,7 +398,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
             params = montar_params_template(template, fatura)
             nome_cliente = str(fatura.get("nome") or "")
             status, wamid = enviar(telefone, nome_cliente, template, params, dry_run,
-                                   queue_id=queue_id)
+                                   queue_id=queue_id, from_user_id=from_user_id)
             telefones_rodada.add(telefone)
 
             nivel = logging.INFO if "erro" not in status else logging.WARNING

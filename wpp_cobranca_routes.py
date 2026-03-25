@@ -552,6 +552,7 @@ def _form_to_dict(form) -> dict:
         "plano_premium":      form.get("plano_premium") == "1",
         "origem":             form.get("origem") or None,
         "pagador_atrasado":   form.get("pagador_atrasado") == "1",
+        "from_user_id":       form.get("from_user_id") or "cmg8cum8g0519jbbm6r9l93f7",
     }
 
 

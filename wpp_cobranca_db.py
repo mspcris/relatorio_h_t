@@ -105,7 +105,9 @@ def init_db() -> None:
             clube_beneficio     INTEGER NOT NULL DEFAULT 0,
             clube_beneficio_joy INTEGER NOT NULL DEFAULT 0,
             plano_premium       INTEGER NOT NULL DEFAULT 0,
-            origem              TEXT
+            origem              TEXT,
+            pagador_atrasado    INTEGER NOT NULL DEFAULT 0,
+            from_user_id        TEXT    NOT NULL DEFAULT 'cmg8cum8g0519jbbm6r9l93f7'
         );
 
         CREATE TABLE IF NOT EXISTS envios (
@@ -231,6 +233,7 @@ def init_db() -> None:
             "plano_premium":       "ALTER TABLE campanhas ADD COLUMN plano_premium INTEGER NOT NULL DEFAULT 0",
             "origem":              "ALTER TABLE campanhas ADD COLUMN origem TEXT",
             "pagador_atrasado":    "ALTER TABLE campanhas ADD COLUMN pagador_atrasado INTEGER NOT NULL DEFAULT 0",
+            "from_user_id":        "ALTER TABLE campanhas ADD COLUMN from_user_id TEXT NOT NULL DEFAULT 'cmg8cum8g0519jbbm6r9l93f7'",
         }
         for _col, _ddl in _novos.items():
             if _col not in cols:
@@ -302,9 +305,9 @@ def criar_campanha(dados: dict) -> int:
                 adm_data_ini, adm_data_fim,
                 tipo_cliente, titular_dependente, situacao_cliente, tipo_fj,
                 clube_beneficio, clube_beneficio_joy, plano_premium,
-                origem, pagador_atrasado,
+                origem, pagador_atrasado, from_user_id,
                 created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 dados["nome"], dados.get("template", "notificacao_de_fatura"),
                 dados.get("modo_envio", "atraso"), postos_json,
@@ -337,6 +340,7 @@ def criar_campanha(dados: dict) -> int:
                 1 if dados.get("plano_premium") else 0,
                 dados.get("origem") or None,
                 1 if dados.get("pagador_atrasado") else 0,
+                dados.get("from_user_id") or "cmg8cum8g0519jbbm6r9l93f7",
                 now, now,
             )
         )
@@ -361,7 +365,7 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 adm_data_ini=?, adm_data_fim=?,
                 tipo_cliente=?, titular_dependente=?, situacao_cliente=?, tipo_fj=?,
                 clube_beneficio=?, clube_beneficio_joy=?, plano_premium=?,
-                origem=?, pagador_atrasado=?,
+                origem=?, pagador_atrasado=?, from_user_id=?,
                 updated_at=?
             WHERE id=?""",
             (
@@ -396,6 +400,7 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 1 if dados.get("plano_premium") else 0,
                 dados.get("origem") or None,
                 1 if dados.get("pagador_atrasado") else 0,
+                dados.get("from_user_id") or "cmg8cum8g0519jbbm6r9l93f7",
                 now,
                 campanha_id,
             )
