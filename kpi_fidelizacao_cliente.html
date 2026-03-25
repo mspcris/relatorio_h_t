@@ -2,676 +2,680 @@
 <html lang="pt-br">
 
 <head>
-  <meta charset="UTF-8" />
-  <title>CAMIM — KPI Fidelização de Clientes</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="UTF-8" />
+    <title>CAMIM — KPI Fidelização de Clientes</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- CORE CSS -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap">
-  <link rel="stylesheet" href="/css/style2.css?v=20251114">
-  <link rel="stylesheet" href="/css/style_kpi.css?v=20251114">
+    <!-- CORE CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap">
 
-  <!-- Favicon -->
-  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+    <!-- CSS DO PROJETO -->
+    <link rel="stylesheet" href="/css/style2.css?v=20251114">
+    <link rel="stylesheet" href="/css/style_kpi.css?v=20251114&force=1">
 
-  <!-- JS BASE -->
-  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Favicon -->
+    <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
 
-  <!-- Contexto de IA -->
-  <script>
-    window.IA_API_URL = '/api/ia/chat';
-    window.PROMPTS_API_BASE = '/prompts';
+    <!-- JS BASE -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
-    fetch("/session/me", { credentials: 'same-origin' })
-      .then(r => r.json())
-      .then(data => {
-        window.USER_EMAIL = data.email;
-        window.USER_POSTOS = data.postos || [];
-        window.USER_NOME = (data.nome || '').split(' ')[0] || '';
-      })
-      .catch(() => {
-        window.USER_EMAIL = null;
-        window.USER_POSTOS = [];
-        window.USER_NOME = '';
-      });
-  </script>
+    <!-- CONTEXTO IA + SESSÃO -->
+    <script>
+        window.IA_API_URL = '/ia/analisar';
+        window.PROMPTS_API_BASE = '/prompts';
 
-  <script src="/js/chat.js?v=20251114"></script>
+        fetch("/session/me", { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(data => {
+                window.USER_EMAIL = data.email;
+                window.USER_POSTOS = data.postos;
+            })
+            .catch(() => {
+                window.USER_EMAIL = null;
+                window.USER_POSTOS = [];
+            });
+    </script>
 
-  <style>
-    :root {
-      --cor-fidelizacao: #17a2b8;
-      --cor-bg-fidelizacao: rgba(23, 162, 184, 0.06);
-    }
+    <!-- Chat / IA -->
+    <script src="/js/chat.js?v=20251114"></script>
 
-    html {
-      font-size: 16px;
-      zoom: 1;
-    }
+    <style>
+        :root {
+            --kpi-loaded: 1;
+        }
 
-    body {
-      font-size: 1rem;
-      -webkit-text-size-adjust: 100%;
-      -webkit-font-smoothing: antialiased;
-      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    }
+        html {
+            font-size: 16px;
+            zoom: 1;
+        }
 
-    .stack {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
+        body {
+            font-size: 1rem;
+            -webkit-text-size-adjust: 100%;
+            -webkit-font-smoothing: antialiased;
+            font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
 
-    .filter-bar {
-      display: flex;
-      gap: 12px;
-      align-items: flex-end;
-      flex-wrap: wrap;
-      padding: 12px;
-      background: rgba(0, 0, 0, 0.025);
-      border-radius: 6px;
-    }
+        body.text-sm {
+            font-size: 1rem;
+        }
 
-    .scroll-tabs {
-      overflow-x: auto;
-      white-space: nowrap;
-      flex-wrap: nowrap;
-    }
+        .text-sm .btn,
+        .text-sm .form-control,
+        .text-sm .custom-select,
+        .text-sm .page-link,
+        .text-sm .breadcrumb,
+        .text-sm .nav-link,
+        .text-sm .card-title {
+            font-size: 1rem;
+        }
 
-    .scroll-tabs .nav-item {
-      display: inline-block;
-    }
+        h1,
+        h2,
+        h3 {
+            margin-top: 0;
+            margin-bottom: .5rem;
+            font-weight: 600;
+            line-height: 1.25;
+        }
 
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(180px, 1fr));
-      gap: 10px;
-    }
+        h1 { font-size: 2rem; }
+        h2 { font-size: 1.5rem; }
+        h3,
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
 
-    @media (max-width: 1200px) {
-      .kpi-grid {
-        grid-template-columns: repeat(2, minmax(180px, 1fr));
-      }
-    }
+        .sidebar .nav-link {
+            font-size: .95rem;
+        }
 
-    @media (max-width: 768px) {
-      .filter-bar {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 10px;
-        padding: 10px;
-      }
+        .brand-link .brand-text {
+            font-size: 1rem;
+        }
 
-      .kpi-grid {
-        grid-template-columns: 1fr;
-      }
+        .muted {
+            color: #6b7280;
+        }
 
-      .content-wrapper .content {
-        padding: 10px !important;
-      }
-    }
+        .mini {
+            font-size: .85rem;
+        }
 
-    .chart-card .card-body {
-      height: 320px;
-    }
+        .text-right {
+            text-align: right;
+        }
 
-    .mini {
-      font-size: 0.85rem;
-    }
+        .small-td {
+            white-space: nowrap;
+        }
 
-    .muted {
-      color: #6c757d;
-    }
+        .table-responsive {
+            width: 100%;
+        }
 
-    .table td,
-    .table th {
-      vertical-align: middle;
-    }
+        .stack>*+* {
+            margin-top: 14px;
+        }
 
-    .badge-soft {
-      background: rgba(0, 0, 0, 0.06);
-    }
+        .filter-bar {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            padding: 10px;
+        }
 
-    .clickable {
-      cursor: pointer;
-    }
+        .month-inputs {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
 
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: rgba(0, 0, 0, 0.06);
-    }
+        .scroll-tabs {
+            display: flex;
+            gap: 6px;
+            overflow: auto;
+            white-space: nowrap;
+            padding: 6px 0;
+        }
 
-    input[type="month"].form-control {
-      -webkit-appearance: none;
-      appearance: none;
-      line-height: 1.5;
-      padding-right: 0.5rem;
-    }
+        .scroll-tabs .nav-link {
+            display: inline-block;
+            min-width: 52px;
+            text-align: center;
+            cursor: pointer;
+        }
 
-    input[type="month"].form-control::-webkit-datetime-edit {
-      padding: 0;
-    }
+        .kpi,
+        .card-body.kpi {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 8px;
+        }
 
-    input[type="month"].form-control::-webkit-calendar-picker-indicator {
-      cursor: pointer;
-      opacity: 0.75;
-    }
+        .kpi .card,
+        .card-body.kpi .card {
+            border-radius: 12px;
+            margin: 0;
+        }
 
-    .stat-box {
-      background: white;
-      padding: 15px;
-      border-radius: 6px;
-      border-left: 4px solid var(--cor-fidelizacao);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
+        .card-body.kpi .card .card-body {
+            padding: .5rem .75rem;
+        }
 
-    .stat-box .stat-value {
-      font-size: 1.8rem;
-      font-weight: 600;
-      color: var(--cor-fidelizacao);
-    }
+        .chart-card .card-body {
+            height: 360px;
+        }
 
-    .stat-box .stat-label {
-      font-size: 0.85rem;
-      color: #6c757d;
-      margin-top: 4px;
-    }
+        .table td,
+        .table th {
+            vertical-align: middle;
+        }
 
-    .retention-badge {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-weight: 600;
-      font-size: 0.85rem;
-    }
+        .badge-soft {
+            background: rgba(0, 0, 0, 0.06);
+        }
 
-    .retention-badge.high {
-      background: rgba(40, 167, 69, 0.1);
-      color: #28a745;
-    }
+        .clickable {
+            cursor: pointer;
+        }
 
-    .retention-badge.medium {
-      background: rgba(255, 193, 7, 0.1);
-      color: #ffc107;
-    }
+        .heatmap {
+            overflow: auto;
+            max-height: 500px;
+        }
 
-    .retention-badge.low {
-      background: rgba(220, 53, 69, 0.1);
-      color: #dc3545;
-    }
-  </style>
+        .heatmap table {
+            border-collapse: separate;
+            border-spacing: 1px;
+            width: 100%;
+        }
+
+        .heatmap th,
+        .heatmap td {
+            text-align: center;
+            padding: 4px;
+            font-size: 11px;
+        }
+
+        .heatmap .cell {
+            padding: 4px 6px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: 500;
+            color: #111;
+        }
+
+        .cell-0 { background: #f0f0f0; color: #999; }
+        .cell-1to30 { background: #ffcccc; color: #333; }
+        .cell-31to50 { background: #ffaa99; color: #333; }
+        .cell-51to70 { background: #99ccff; color: #333; }
+        .cell-71to100 { background: #99ff99; color: #333; }
+    </style>
 </head>
 
-<body class="hold-transition sidebar-mini layout-fixed text-sm">
-  <div class="wrapper">
-    <!-- Navbar -->
-    <nav class="main-header navbar navbar-expand navbar-white navbar-light">
-      <ul class="navbar-nav">
-        <li class="nav-item">
-          <a class="nav-link" data-widget="pushmenu" href="#" role="button">
-            <i class="fas fa-bars"></i>
-          </a>
-        </li>
-      </ul>
-      <ul class="navbar-nav ml-auto">
-        <li class="nav-item dropdown">
-          <a class="nav-link" data-toggle="dropdown" href="#">
-            <i class="fas fa-user"></i>
-          </a>
-          <div class="dropdown-menu dropdown-menu-right">
-            <a href="/logout" class="dropdown-item">Logout</a>
-          </div>
-        </li>
-      </ul>
-    </nav>
-
-    <!-- Sidebar -->
-    <aside class="main-sidebar sidebar-dark-primary elevation-4">
-      <a href="/" class="brand-link">
-        <img src="images/Logo Camim-01_200px.png" alt="CAMIM" class="brand-image img-circle elevation-3"
-          style="opacity: .8; width: 50px; height: 50px; margin-right: 10px;">
-        <span class="brand-text font-weight-light">CAMIM</span>
-      </a>
-      <div class="sidebar">
-        <nav class="mt-2">
-          <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
-            <li class="nav-item">
-              <a href="/" class="nav-link">
-                <i class="nav-icon fas fa-home"></i>
-                <p>Home Page</p>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a href="/indicadores" class="nav-link">
-                <i class="nav-icon fas fa-chart-bar"></i>
-                <p>Indicadores</p>
-              </a>
-            </li>
-          </ul>
+<body class="hold-transition sidebar-mini">
+    <div class="wrapper">
+        <!-- NAVBAR -->
+        <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i
+                            class="fas fa-bars"></i></a></li>
+            </ul>
+            <span class="ml-2 font-weight-bold d-flex align-items-center">
+                <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+                <span class="ml-2">Quem tem saúde é mais feliz!</span>
+                <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+            </span>
         </nav>
-      </div>
-    </aside>
 
-    <!-- Content -->
-    <div class="content-wrapper">
-      <div class="content-header">
-        <div class="container-fluid">
-          <div class="row mb-2">
-            <div class="col-sm-6">
-              <h1 class="m-0">KPI Fidelização de Clientes</h1>
+        <!-- SIDEBAR -->
+        <aside class="main-sidebar sidebar-dark-primary elevation-4">
+            <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+            <div class="sidebar">
+                <nav class="mt-2">
+                    <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu"
+                        data-accordion="false">
+                        <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i>
+                                <p>Home Page</p>
+                            </a></li>
+                        <li class="nav-item">
+                            <a href="indicadores.html" class="nav-link">
+                                <i class="nav-icon fas fa-tachometer-alt"></i>
+                                <p>Indicadores</p>
+                            </a>
+                        </li>
+                        {% if USER_IS_ADMIN %}
+                        <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+                        {% endif %}
+                        <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i class="nav-icon fas fa-book-open"></i><p>Leia-me</p></a></li>
+                        <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i class="nav-icon fas fa-utensils"></i><p>KPI Custo Alimentação</p></a></li>
+                        <li class="nav-item"><a href="medicos.html" class="nav-link"><i class="nav-icon fas fa-notes-medical"></i><p>KPI Custo Médico</p></a></li>
+                        <li class="nav-item"><a href="ctrlq_relatorio.html" class="nav-link"><i class="nav-icon fas fa-user-md"></i><p>KPI Médicos (Qualidade)</p></a></li>
+                        <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i class="nav-icon fas fa-chart-line"></i><p>KPI Mensalidades</p></a></li>
+                        <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i class="nav-icon fas fa-shopping-cart"></i><p>KPI Vendas</p></a></li>
+                        <li class="nav-item"><a href="clientes.html" class="nav-link"><i class="nav-icon fas fa-users"></i><p>KPI Clientes</p></a></li>
+                        <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i class="nav-icon fas fa-prescription-bottle-alt"></i><p>KPI Prescrições</p></a></li>
+                        <li class="nav-item"><a href="kpi_fidelizacao_cliente.html" class="nav-link active"><i class="nav-icon fas fa-handshake"></i><p>KPI Fidelização</p></a></li>
+                        <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i class="nav-icon fas fa-landmark"></i><p>KPI Índices Oficiais</p></a></li>
+                        <li class="nav-item"><a href="kpi_liberty.html" class="nav-link"><i class="nav-icon fas fa-passport"></i><p>KPI CAMIM Liberty</p></a></li>
+                        <li class="nav-item"><a href="kpi_receita_despesa.html" class="nav-link"><i class="nav-icon fas fa-balance-scale"></i><p>KPI Receitas x Despesas</p></a></li>
+                        <li class="nav-item"><a href="kpi_receita_despesa_rateio.html" class="nav-link"><i class="nav-icon fas fa-balance-scale"></i><p>KPI R x D com Rateio</p></a></li>
+                        <li class="nav-item"><a href="kpi_consultas_status.html" class="nav-link"><i class="nav-icon fas fa-stethoscope"></i><p>KPI Consultas (Status)</p></a></li>
+                        <li class="nav-item"><a href="kpi_notas_rps.html" class="nav-link"><i class="nav-icon fas fa-file-invoice"></i><p>KPI Notas x RPS</p></a></li>
+                        <li class="nav-item"><a href="kpi_metas_vendas_mensalidades.html" class="nav-link"><i class="nav-icon fas fa-bullseye"></i><p>KPI Metas (Mens/Vendas)</p></a></li>
+                        <li class="nav-item"><a href="mais_servicos.html" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+                        <li class="nav-item">
+                            <form method="POST" action="/session/logout" style="display:inline">
+                                <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                                    <p>Sair</p>
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </nav>
             </div>
-          </div>
+        </aside>
+
+        <!-- CONTEÚDO -->
+        <div class="content-wrapper">
+            <!-- Header da página -->
+            <nav class="navbar navbar-expand navbar-white navbar-light">
+                <div class="d-flex w-100 align-items-center">
+                    <span class="ml-2 font-weight-bold">KPI Fidelização de Clientes</span>
+                    <div class="ml-auto">
+                        <button id="btnViewMode" class="btn btn-sm btn-outline-secondary" title="Alternar entre vista simples e detalhada">Modo: 1/3/6/12m</button>
+                        <span id="ia-anchor"></span>
+                    </div>
+                </div>
+            </nav>
+
+            <section class="content p-3 stack">
+                <div id="err" class="text-danger mb-1"></div>
+
+                <!-- FILTROS -->
+                <div class="card">
+                    <div class="filter-bar">
+                        <div>
+                            <label class="mb-0 small d-block">Selecione o Período</label>
+                            <div class="month-inputs">
+                                <input id="fromMonth" type="month" class="form-control form-control-sm" />
+                                <input id="toMonth" type="month" class="form-control form-control-sm" />
+                                <button id="resetDates" class="btn btn-sm btn-outline-secondary">Reset</button>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1">
+                            <label class="mb-0 small d-block">Posto</label>
+                            <div class="d-flex align-items-center">
+                                <ul id="postoTabs" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
+                                <div class="ml-2 flex-shrink-0">
+                                    <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
+                                    <button id="btnGrupoCouto" class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RESUMO ESTATÍSTICO -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Resumo de Fidelização</h3>
+                    </div>
+                    <div class="card-body kpi" id="statsCards"></div>
+                </div>
+
+                <!-- HEATMAP / TABELA -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Fidelização por Mês de Admissão e Período</h3>
+                    </div>
+                    <div class="card-body heatmap" id="heatmapContainer">
+                        <div class="text-muted text-center p-3">Carregando dados...</div>
+                    </div>
+                </div>
+
+                <!-- CHARTS -->
+                <div class="row">
+                    <div class="col-lg-6">
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">Evolução de Retenção (1 mês)</h3>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="chart1m"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">Evolução de Retenção (3 meses)</h3>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="chart3m"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">Evolução de Retenção (6 meses)</h3>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="chart6m"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">Evolução de Retenção (12 meses)</h3>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="chart12m"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </div>
-      </div>
-
-      <div class="content">
-        <div class="container-fluid">
-          <!-- Filtros -->
-          <div class="card">
-            <div class="card-body">
-              <div class="filter-bar">
-                <div class="input-group" style="width: 200px;">
-                  <input type="month" id="filtroMes" class="form-control" />
-                  <div class="input-group-append">
-                    <button class="btn btn-outline-secondary" type="button" id="btnReset" title="Limpar filtro">
-                      <i class="fas fa-redo"></i>
-                    </button>
-                  </div>
-                </div>
-
-                <div style="flex: 1; min-width: 250px;">
-                  <div class="btn-group btn-group-toggle btn-block" data-toggle="buttons">
-                    <label class="btn btn-outline-primary active">
-                      <input type="radio" name="filtro_posto" value="todos" checked /> Todos
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="A" /> A
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="N" /> N
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="X" /> X
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="Y" /> Y
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="B" /> B
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="R" /> R
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="P" /> P
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="C" /> C
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="D" /> D
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="G" /> G
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="I" /> I
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="M" /> M
-                    </label>
-                    <label class="btn btn-outline-primary">
-                      <input type="radio" name="filtro_posto" value="J" /> J
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- KPIs -->
-          <div class="stack">
-            <div class="card">
-              <div class="card-header">
-                <h3 class="card-title">Resumo de Admissões e Retenção</h3>
-              </div>
-              <div class="card-body">
-                <div class="kpi-grid">
-                  <div class="stat-box">
-                    <div class="stat-label">Total de Admissões</div>
-                    <div class="stat-value" id="kpi_total_admissoes">0</div>
-                  </div>
-                  <div class="stat-box">
-                    <div class="stat-label">Clientes Retidos (1 mês)</div>
-                    <div class="stat-value" id="kpi_retencao_1m">0</div>
-                    <div class="stat-label mini muted" id="pct_1m">0%</div>
-                  </div>
-                  <div class="stat-box">
-                    <div class="stat-label">Clientes Retidos (3 meses)</div>
-                    <div class="stat-value" id="kpi_retencao_3m">0</div>
-                    <div class="stat-label mini muted" id="pct_3m">0%</div>
-                  </div>
-                  <div class="stat-box">
-                    <div class="stat-label">Clientes Retidos (6 meses)</div>
-                    <div class="stat-value" id="kpi_retencao_6m">0</div>
-                    <div class="stat-label mini muted" id="pct_6m">0%</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tabela de Detalhe -->
-            <div class="card">
-              <div class="card-header">
-                <h3 class="card-title">Detalhe por Período de Admissão e Posto</h3>
-              </div>
-              <div class="card-body">
-                <div style="overflow-x: auto;">
-                  <table class="table table-hover table-sm">
-                    <thead>
-                      <tr>
-                        <th>Mês Admissão</th>
-                        <th>Posto</th>
-                        <th>Admissões</th>
-                        <th>1 mês</th>
-                        <th>3 meses</th>
-                        <th>6 meses</th>
-                        <th>12 meses</th>
-                      </tr>
-                    </thead>
-                    <tbody id="tabela_detalhe">
-                      <tr>
-                        <td colspan="7" class="text-center text-muted">Carregando dados...</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            <!-- Gráfico de Retenção por Mês -->
-            <div class="card chart-card">
-              <div class="card-header">
-                <h3 class="card-title">Evolução de Retenção (12 meses)</h3>
-              </div>
-              <div class="card-body">
-                <canvas id="chartRetencao"></canvas>
-              </div>
-            </div>
-
-            <!-- Gráfico de Admissões -->
-            <div class="card chart-card">
-              <div class="card-header">
-                <h3 class="card-title">Admissões por Mês</h3>
-              </div>
-              <div class="card-body">
-                <canvas id="chartAdmissoes"></canvas>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
-    <!-- Chat IA -->
-    <div id="ia-container"></div>
-  </div>
+    <!-- SCRIPT PRINCIPAL -->
+    <script>
+        // Constantes
+        const POSTOS = ['A', 'N', 'X', 'Y', 'B', 'R', 'P', 'C', 'D', 'G', 'I', 'M', 'J'];
+        const GRUPO_ALTAMIRO = ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'];
+        const GRUPO_COUTO = ['C', 'D', 'J', 'M', 'P'];
+        const DATA_LIMITE = '2024-03-01'; // Dados começam em 01/03/2024
 
-  <script>
-    // ========================================
-    // ESTADO GLOBAL
-    // ========================================
-    let dadosGlobais = {
-      json: null,
-      filtroMes: null,
-      filtroPosto: 'todos'
-    };
+        let allData = {};
+        let chartInstances = {};
+        let viewMode = 'simple'; // 'simple' = 1/3/6/12m | 'detailed' = todos os meses
 
-    let chartInstances = {
-      retencao: null,
-      admissoes: null
-    };
-
-    // ========================================
-    // CARREGAMENTO INICIAL
-    // ========================================
-    $(document).ready(function () {
-      // Set default month to 13 months ago
-      const hoje = new Date();
-      let targetMonth = new Date(hoje.getFullYear(), hoje.getMonth() - 13, 1);
-      const ym = targetMonth.getFullYear() + '-' + String(targetMonth.getMonth() + 1).padStart(2, '0');
-      $('#filtroMes').val(ym);
-
-      // Carregar dados
-      loadJSON();
-
-      // Event listeners
-      $('#filtroMes').on('change', loadJSON);
-      $('input[name="filtro_posto"]').on('change', function () {
-        dadosGlobais.filtroPosto = $(this).val();
-        renderizar();
-      });
-      $('#btnReset').on('click', function () {
-        const hoje = new Date();
-        let targetMonth = new Date(hoje.getFullYear(), hoje.getMonth() - 13, 1);
-        const ym = targetMonth.getFullYear() + '-' + String(targetMonth.getMonth() + 1).padStart(2, '0');
-        $('#filtroMes').val(ym).trigger('change');
-      });
-    });
-
-    // ========================================
-    // CARREGA JSON DO BACKEND
-    // ========================================
-    function loadJSON() {
-      const ym = $('#filtroMes').val();
-      dadosGlobais.filtroMes = ym;
-
-      $.ajax({
-        url: '/json_consolidado/fidelizacao_cliente.json',
-        dataType: 'json',
-        success: function (data) {
-          dadosGlobais.json = data;
-          renderizar();
-        },
-        error: function () {
-          alert('Erro ao carregar dados de fidelização.');
-        }
-      });
-    }
-
-    // ========================================
-    // RENDERIZAR
-    // ========================================
-    function renderizar() {
-      if (!dadosGlobais.json) return;
-
-      const data = dadosGlobais.json;
-      const ym = dadosGlobais.filtroMes;
-      const posto = dadosGlobais.filtroPosto;
-
-      // Filtrar dados
-      let dadosFiltrados = {};
-      if (data.dados[ym]) {
-        if (posto === 'todos') {
-          dadosFiltrados = data.dados[ym];
-        } else {
-          dadosFiltrados[posto] = data.dados[ym][posto];
-        }
-      }
-
-      // Calcular KPIs
-      calcularKPIs(dadosFiltrados);
-
-      // Renderizar tabela
-      renderTabela(ym, data.dados);
-
-      // Renderizar gráficos
-      renderGraficos(data.dados);
-    }
-
-    function calcularKPIs(dados) {
-      let totalAdmissoes = 0;
-      let totalRetencao1m = 0;
-      let totalRetencao3m = 0;
-      let totalRetencao6m = 0;
-
-      Object.values(dados).forEach(postoData => {
-        if (!postoData) return;
-        totalAdmissoes += postoData.admissoes || 0;
-        const ret = postoData.retencao_por_mes || {};
-        totalRetencao1m += (ret[1] && ret[1].qtd) || 0;
-        totalRetencao3m += (ret[3] && ret[3].qtd) || 0;
-        totalRetencao6m += (ret[6] && ret[6].qtd) || 0;
-      });
-
-      const pct1m = totalAdmissoes > 0 ? ((totalRetencao1m / totalAdmissoes) * 100).toFixed(1) : 0;
-      const pct3m = totalAdmissoes > 0 ? ((totalRetencao3m / totalAdmissoes) * 100).toFixed(1) : 0;
-      const pct6m = totalAdmissoes > 0 ? ((totalRetencao6m / totalAdmissoes) * 100).toFixed(1) : 0;
-
-      $('#kpi_total_admissoes').text(totalAdmissoes.toLocaleString('pt-BR'));
-      $('#kpi_retencao_1m').text(totalRetencao1m.toLocaleString('pt-BR'));
-      $('#pct_1m').text(pct1m + '%');
-      $('#kpi_retencao_3m').text(totalRetencao3m.toLocaleString('pt-BR'));
-      $('#pct_3m').text(pct3m + '%');
-      $('#kpi_retencao_6m').text(totalRetencao6m.toLocaleString('pt-BR'));
-      $('#pct_6m').text(pct6m + '%');
-    }
-
-    function renderTabela(ymSelecionado, todosDados) {
-      if (!todosDados[ymSelecionado]) {
-        $('#tabela_detalhe').html('<tr><td colspan="7" class="text-center text-muted">Sem dados para este período</td></tr>');
-        return;
-      }
-
-      const postoData = todosDados[ymSelecionado];
-      let html = '';
-
-      Object.entries(postoData).forEach(([posto, dados]) => {
-        if (dadosGlobais.filtroPosto !== 'todos' && dadosGlobais.filtroPosto !== posto) return;
-
-        const admissoes = dados.admissoes || 0;
-        const ret = dados.retencao_por_mes || {};
-
-        const r1 = ret[1] || { qtd: 0, percentual: 0 };
-        const r3 = ret[3] || { qtd: 0, percentual: 0 };
-        const r6 = ret[6] || { qtd: 0, percentual: 0 };
-        const r12 = ret[12] || { qtd: 0, percentual: 0 };
-
-        const badge1 = getRetencaoBadge(r1.percentual);
-        const badge3 = getRetencaoBadge(r3.percentual);
-        const badge6 = getRetencaoBadge(r6.percentual);
-        const badge12 = getRetencaoBadge(r12.percentual);
-
-        html += `<tr>
-          <td><strong>${ymSelecionado}</strong></td>
-          <td><strong>${posto}</strong></td>
-          <td>${admissoes}</td>
-          <td><span class="retention-badge ${badge1}">${r1.qtd} (${r1.percentual}%)</span></td>
-          <td><span class="retention-badge ${badge3}">${r3.qtd} (${r3.percentual}%)</span></td>
-          <td><span class="retention-badge ${badge6}">${r6.qtd} (${r6.percentual}%)</span></td>
-          <td><span class="retention-badge ${badge12}">${r12.qtd} (${r12.percentual}%)</span></td>
-        </tr>`;
-      });
-
-      $('#tabela_detalhe').html(html || '<tr><td colspan="7" class="text-center text-muted">Sem dados</td></tr>');
-    }
-
-    function getRetencaoBadge(pct) {
-      if (pct >= 70) return 'high';
-      if (pct >= 40) return 'medium';
-      return 'low';
-    }
-
-    function renderGraficos(todosDados) {
-      // Preparar dados para gráfico de retenção
-      const meses = Object.keys(todosDados).sort();
-      const linhas = {};
-
-      meses.forEach(ym => {
-        Object.entries(todosDados[ym]).forEach(([posto, dados]) => {
-          if (!linhas[posto]) {
-            linhas[posto] = [];
-          }
-          const r12 = (dados.retencao_por_mes && dados.retencao_por_mes[12]) || { percentual: 0 };
-          linhas[posto].push({ ym, pct: r12.percentual });
+        // ========================= INIT =========================
+        document.addEventListener('DOMContentLoaded', () => {
+            initUI();
+            loadData();
         });
-      });
 
-      const cores = ['#17a2b8', '#28a745', '#dc3545', '#ffc107', '#007bff', '#6f42c1', '#fd7e14', '#20c997', '#e83e8c', '#6c757d', '#343a40', '#0c5460', '#155724'];
-      const datasets = [];
-      Object.entries(linhas).forEach(([posto, dados], idx) => {
-        const sorted = dados.sort((a, b) => a.ym.localeCompare(b.ym));
-        datasets.push({
-          label: `Posto ${posto}`,
-          data: sorted.map(d => d.pct),
-          borderColor: cores[idx % cores.length],
-          backgroundColor: cores[idx % cores.length] + '20',
-          tension: 0.3,
-          fill: false
-        });
-      });
+        function initUI() {
+            // Render postos
+            const postoTabs = document.getElementById('postoTabs');
+            postoTabs.innerHTML = `<li class="nav-item"><a href="#" class="nav-link active" data-posto="ALL"><span>Todos</span></a></li>`;
+            POSTOS.forEach(p => {
+                postoTabs.innerHTML += `<li class="nav-item"><a href="#" class="nav-link" data-posto="${p}"><span>${p}</span></a></li>`;
+            });
 
-      if (chartInstances.retencao) chartInstances.retencao.destroy();
-      const ctxRetencao = document.getElementById('chartRetencao').getContext('2d');
-      chartInstances.retencao = new Chart(ctxRetencao, {
-        type: 'line',
-        data: {
-          labels: meses,
-          datasets: datasets
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { position: 'top' } },
-          scales: {
-            y: { beginAtZero: true, max: 100, title: { display: true, text: 'Taxa de Retenção (%)' } }
-          }
+            // Event listeners
+            document.getElementById('btnGrupoAltamiro').addEventListener('click', () => selectPostos(GRUPO_ALTAMIRO));
+            document.getElementById('btnGrupoCouto').addEventListener('click', () => selectPostos(GRUPO_COUTO));
+            document.getElementById('btnViewMode').addEventListener('click', toggleViewMode);
+            document.getElementById('resetDates').addEventListener('click', resetDates);
+
+            postoTabs.addEventListener('click', (e) => {
+                if (e.target.closest('.nav-link')) {
+                    e.preventDefault();
+                    document.querySelectorAll('#postoTabs .nav-link').forEach(a => a.classList.remove('active'));
+                    e.target.closest('.nav-link').classList.add('active');
+                    render();
+                }
+            });
+
+            // Datas padrão
+            const today = new Date();
+            const oneYearAgo = new Date(today.getFullYear() - 1, today.getMonth(), 1);
+            document.getElementById('fromMonth').value = oneYearAgo.toISOString().slice(0, 7);
+            document.getElementById('toMonth').value = today.toISOString().slice(0, 7);
         }
-      });
 
-      // Gráfico de admissões
-      const admissoesPorMes = {};
-      meses.forEach(ym => {
-        let total = 0;
-        Object.entries(todosDados[ym]).forEach(([_, dados]) => {
-          total += dados.admissoes || 0;
-        });
-        admissoesPorMes[ym] = total;
-      });
+        async function loadData() {
+            try {
+                const response = await fetch('/json_consolidado/fidelizacao_cliente.json');
+                if (!response.ok) throw new Error('Erro ao carregar dados');
+                const json = await response.json();
 
-      if (chartInstances.admissoes) chartInstances.admissoes.destroy();
-      const ctxAdmissoes = document.getElementById('chartAdmissoes').getContext('2d');
-      chartInstances.admissoes = new Chart(ctxAdmissoes, {
-        type: 'bar',
-        data: {
-          labels: meses,
-          datasets: [{
-            label: 'Admissões',
-            data: meses.map(ym => admissoesPorMes[ym]),
-            backgroundColor: '#17a2b8'
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { beginAtZero: true }
-          }
+                document.getElementById('jsonInfo').textContent = `Atualizado em: ${json.periodo?.fim || 'N/A'}`;
+
+                // Processar dados
+                allData = json.dados || {};
+                render();
+            } catch (err) {
+                document.getElementById('err').textContent = `Erro: ${err.message}`;
+            }
         }
-      });
-    }
-  </script>
+
+        function getSelectedPostos() {
+            const active = document.querySelector('#postoTabs .nav-link.active');
+            const posto = active.getAttribute('data-posto');
+            return posto === 'ALL' ? POSTOS : [posto];
+        }
+
+        function getDateRange() {
+            const from = document.getElementById('fromMonth').value || '2024-03';
+            const to = document.getElementById('toMonth').value || new Date().toISOString().slice(0, 7);
+            return { from, to };
+        }
+
+        function selectPostos(postos) {
+            // Selecionar múltiplos postos (agregar "Todos")
+            document.querySelectorAll('#postoTabs .nav-link').forEach(a => a.classList.remove('active'));
+            document.querySelector('#postoTabs .nav-link[data-posto="ALL"]').classList.add('active');
+            render();
+        }
+
+        function toggleViewMode() {
+            viewMode = viewMode === 'simple' ? 'detailed' : 'simple';
+            const btn = document.getElementById('btnViewMode');
+            btn.textContent = `Modo: ${viewMode === 'simple' ? '1/3/6/12m' : 'Todos'}`;
+            render();
+        }
+
+        function resetDates() {
+            const today = new Date();
+            const oneYearAgo = new Date(today.getFullYear() - 1, today.getMonth(), 1);
+            document.getElementById('fromMonth').value = oneYearAgo.toISOString().slice(0, 7);
+            document.getElementById('toMonth').value = today.toISOString().slice(0, 7);
+            render();
+        }
+
+        function render() {
+            renderStats();
+            renderHeatmap();
+            renderCharts();
+        }
+
+        function renderStats() {
+            const postos = getSelectedPostos();
+            const { from, to } = getDateRange();
+            let totalAdm = 0, total1m = 0, total3m = 0, total6m = 0, total12m = 0;
+
+            for (const ym in allData) {
+                if (ym < from || ym > to) continue;
+                for (const p of postos) {
+                    const poData = allData[ym][p];
+                    if (!poData) continue;
+                    totalAdm += poData.admissoes || 0;
+                    total1m += poData.retencao_por_mes[1]?.qtd || 0;
+                    total3m += poData.retencao_por_mes[3]?.qtd || 0;
+                    total6m += poData.retencao_por_mes[6]?.qtd || 0;
+                    total12m += poData.retencao_por_mes[12]?.qtd || 0;
+                }
+            }
+
+            const pct1m = totalAdm > 0 ? Math.round((total1m / totalAdm) * 100) : 0;
+            const pct3m = totalAdm > 0 ? Math.round((total3m / totalAdm) * 100) : 0;
+            const pct6m = totalAdm > 0 ? Math.round((total6m / totalAdm) * 100) : 0;
+            const pct12m = totalAdm > 0 ? Math.round((total12m / totalAdm) * 100) : 0;
+
+            const html = `
+                <div class="card">
+                    <div class="card-body">
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #17a2b8;">${totalAdm}</div>
+                        <div style="font-size: 0.85rem; color: #666;">Total de Admissões</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #17a2b8;">${pct1m}%</div>
+                        <div style="font-size: 0.85rem; color: #666;">Retenção (1 mês)</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #17a2b8;">${pct3m}%</div>
+                        <div style="font-size: 0.85rem; color: #666;">Retenção (3 meses)</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #17a2b8;">${pct6m}%</div>
+                        <div style="font-size: 0.85rem; color: #666;">Retenção (6 meses)</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #17a2b8;">${pct12m}%</div>
+                        <div style="font-size: 0.85rem; color: #666;">Retenção (12 meses)</div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('statsCards').innerHTML = html;
+        }
+
+        function renderHeatmap() {
+            const postos = getSelectedPostos();
+            const { from, to } = getDateRange();
+            let html = '<table class="table table-sm mb-0"><thead><tr><th>Mês Admissão</th>';
+
+            if (viewMode === 'simple') {
+                html += '<th>Adm.</th><th>1m (%)</th><th>3m (%)</th><th>6m (%)</th><th>12m (%)</th></tr></thead><tbody>';
+
+                for (const ym of Object.keys(allData).sort()) {
+                    if (ym < from || ym > to) continue;
+                    const row = allData[ym];
+                    let admTotal = 0, r1 = 0, r3 = 0, r6 = 0, r12 = 0;
+
+                    for (const p of postos) {
+                        if (!row[p]) continue;
+                        admTotal += row[p].admissoes || 0;
+                        r1 += row[p].retencao_por_mes[1]?.percentual || 0;
+                        r3 += row[p].retencao_por_mes[3]?.percentual || 0;
+                        r6 += row[p].retencao_por_mes[6]?.percentual || 0;
+                        r12 += row[p].retencao_por_mes[12]?.percentual || 0;
+                    }
+
+                    const count = postos.filter(p => row[p]).length;
+                    html += `<tr><td>${ym}</td><td>${admTotal}</td>`;
+                    html += `<td class="cell-${getColorClass(r1/count)}">${Math.round(r1/count)}%</td>`;
+                    html += `<td class="cell-${getColorClass(r3/count)}">${Math.round(r3/count)}%</td>`;
+                    html += `<td class="cell-${getColorClass(r6/count)}">${Math.round(r6/count)}%</td>`;
+                    html += `<td class="cell-${getColorClass(r12/count)}">${Math.round(r12/count)}%</td></tr>`;
+                }
+            } else {
+                // Modo detalhado: todos os meses
+                html += '<th>Adm.</th>';
+                for (let i = 1; i <= 24; i++) html += `<th>${i}m</th>`;
+                html += '</tr></thead><tbody>';
+
+                for (const ym of Object.keys(allData).sort()) {
+                    if (ym < from || ym > to) continue;
+                    const row = allData[ym];
+                    let admTotal = 0;
+                    const retencoes = {};
+
+                    for (const p of postos) {
+                        if (!row[p]) continue;
+                        admTotal += row[p].admissoes || 0;
+                        for (const mes in row[p].retencao_por_mes) {
+                            retencoes[mes] = (retencoes[mes] || 0) + (row[p].retencao_por_mes[mes]?.percentual || 0);
+                        }
+                    }
+
+                    html += `<tr><td>${ym}</td><td>${admTotal}</td>`;
+                    const count = postos.filter(p => row[p]).length;
+                    for (let i = 1; i <= 24; i++) {
+                        const pct = retencoes[i] ? Math.round(retencoes[i] / count) : 0;
+                        html += `<td class="cell-${getColorClass(pct)}">${pct}%</td>`;
+                    }
+                    html += '</tr>';
+                }
+            }
+
+            html += '</tbody></table>';
+            document.getElementById('heatmapContainer').innerHTML = html;
+        }
+
+        function getColorClass(pct) {
+            if (pct === 0) return '0';
+            if (pct <= 30) return '1to30';
+            if (pct <= 50) return '31to50';
+            if (pct <= 70) return '51to70';
+            return '71to100';
+        }
+
+        function renderCharts() {
+            const postos = getSelectedPostos();
+            const { from, to } = getDateRange();
+            const labels = Object.keys(allData).filter(ym => ym >= from && ym <= to).sort();
+
+            const datasets = {
+                '1m': [],
+                '3m': [],
+                '6m': [],
+                '12m': []
+            };
+
+            for (const p of postos) {
+                const data1m = labels.map(ym => allData[ym][p]?.retencao_por_mes[1]?.percentual || 0);
+                const data3m = labels.map(ym => allData[ym][p]?.retencao_por_mes[3]?.percentual || 0);
+                const data6m = labels.map(ym => allData[ym][p]?.retencao_por_mes[6]?.percentual || 0);
+                const data12m = labels.map(ym => allData[ym][p]?.retencao_por_mes[12]?.percentual || 0);
+
+                datasets['1m'].push({ label: `Posto ${p}`, data: data1m, borderColor: getRandomColor(), tension: 0.3 });
+                datasets['3m'].push({ label: `Posto ${p}`, data: data3m, borderColor: getRandomColor(), tension: 0.3 });
+                datasets['6m'].push({ label: `Posto ${p}`, data: data6m, borderColor: getRandomColor(), tension: 0.3 });
+                datasets['12m'].push({ label: `Posto ${p}`, data: data12m, borderColor: getRandomColor(), tension: 0.3 });
+            }
+
+            drawChart('chart1m', labels, datasets['1m']);
+            drawChart('chart3m', labels, datasets['3m']);
+            drawChart('chart6m', labels, datasets['6m']);
+            drawChart('chart12m', labels, datasets['12m']);
+        }
+
+        function drawChart(canvasId, labels, datasets) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+            chartInstances[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true, position: 'top' } },
+                    scales: { y: { min: 0, max: 100 } }
+                }
+            });
+        }
+
+        function getRandomColor() {
+            const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+    </script>
 </body>
 
 </html>
