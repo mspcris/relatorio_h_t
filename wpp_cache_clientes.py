@@ -5,21 +5,24 @@ wpp_cache_clientes.py — ETL diário: SQL Server → SQLite (cache_clientes).
 Fluxo por posto:
   1. Busca todos os idcliente distintos e ativos do SQL Server (query leve)
   2. Compara com idcliente já no SQLite → só processa os pendentes
-  3. Busca os dados completos em batches de 2000 idclientes (IN clause)
+  3. Busca os dados completos em batches de BATCH_SIZE idclientes (IN clause)
   4. Insere no SQLite com INSERT OR REPLACE
-  5. Dorme 10s entre batches para não sobrecarregar o banco de produção
+  5. Dorme SLEEP_SECS entre batches para não sobrecarregar o banco de produção
 
 Uso:
   python3 wpp_cache_clientes.py                # incremental (só novos idcliente)
   python3 wpp_cache_clientes.py --full         # apaga cache do posto e recarrega tudo
   python3 wpp_cache_clientes.py --posto A      # só um posto específico
   python3 wpp_cache_clientes.py --full --posto A
+
+Log: wpp_cache_clientes.log (mesmo diretório do script)
 """
 
 import argparse
 import logging
 import os
 import sqlite3
+import threading
 import time
 from datetime import datetime
 
@@ -28,18 +31,34 @@ from dotenv import load_dotenv
 
 from wpp_cache_clientes_schema import criar_schema
 
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-)
+# ---------------------------------------------------------------------------
+# Logging: console + arquivo
+# ---------------------------------------------------------------------------
+LOG_FILE = os.path.join(BASE_DIR, "wpp_cache_clientes.log")
+
+_fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+_stream_h = logging.StreamHandler()
+_stream_h.setFormatter(_fmt)
+_file_h = logging.FileHandler(LOG_FILE, encoding="utf-8")
+_file_h.setFormatter(_fmt)
+
+logging.root.setLevel(logging.DEBUG)
+logging.root.addHandler(_stream_h)
+logging.root.addHandler(_file_h)
 log = logging.getLogger(__name__)
 
-DB_PATH      = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
-ODBC_DRIVER  = os.getenv("ODBC_DRIVER",  "ODBC Driver 17 for SQL Server")
-BATCH_SIZE   = 500
-SLEEP_SECS   = 3
+# ---------------------------------------------------------------------------
+# Constantes
+# ---------------------------------------------------------------------------
+DB_PATH             = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
+ODBC_DRIVER         = os.getenv("ODBC_DRIVER",  "ODBC Driver 17 for SQL Server")
+BATCH_SIZE          = 500        # IDs por batch
+SLEEP_SECS          = 3          # pausa entre batches (s)
+QUERY_TIMEOUT_SECS  = 180        # timeout por query (s) — cur.cancel() é chamado
+WATCHDOG_INTERVAL   = 15         # a cada X segundos loga "ainda aguardando..."
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +134,7 @@ ORDER BY f5.idcliente
 """
 
 # ---------------------------------------------------------------------------
-# Query: idclientes que pagaram atrasado em mais da metade das últimas 12 mensalidades
+# Query: pagadores atrasados
 # ---------------------------------------------------------------------------
 _SQL_PAGADORES_ATRASADOS = """
 WITH ranked AS (
@@ -155,6 +174,71 @@ INSERT OR REPLACE INTO cache_clientes (
 """
 
 
+# ---------------------------------------------------------------------------
+# Watchdog: executa query em thread separada e monitora progresso
+# ---------------------------------------------------------------------------
+
+def _executar_com_watchdog(cur, sql, params, label: str):
+    """
+    Executa cur.execute(sql, params) + fetchall() em thread separada.
+    A cada WATCHDOG_INTERVAL segundos loga "ainda aguardando...".
+    Se QUERY_TIMEOUT_SECS for atingido, chama cur.cancel() e retorna None.
+
+    Retorna (rows, None) em sucesso ou (None, Exception) em falha/timeout.
+    """
+    result   = {"rows": None}
+    error    = {"exc": None}
+    finished = threading.Event()
+
+    def _worker():
+        try:
+            log.debug("%s: enviando SQL ao servidor...", label)
+            cur.execute(sql, params)
+            log.debug("%s: SQL enviado, aguardando fetchall()...", label)
+            result["rows"] = cur.fetchall()
+            log.debug("%s: fetchall() concluído — %d linhas.", label, len(result["rows"]))
+        except Exception as exc:
+            error["exc"] = exc
+        finally:
+            finished.set()
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t_start = time.time()
+    t.start()
+
+    while not finished.wait(timeout=WATCHDOG_INTERVAL):
+        elapsed = time.time() - t_start
+        if elapsed >= QUERY_TIMEOUT_SECS:
+            log.warning(
+                "%s: TIMEOUT de %.0fs atingido — chamando cur.cancel().",
+                label, elapsed,
+            )
+            try:
+                cur.cancel()
+            except Exception as ce:
+                log.warning("%s: cur.cancel() falhou: %s", label, ce)
+            # Aguarda a thread encerrar após o cancel (até 10s)
+            t.join(timeout=10)
+            return None, TimeoutError(f"{label}: timeout após {elapsed:.0f}s")
+        log.info(
+            "%s: aguardando resposta do SQL Server... %.0fs decorridos "
+            "(timeout em %.0fs).",
+            label, elapsed, QUERY_TIMEOUT_SECS,
+        )
+
+    elapsed = time.time() - t_start
+    if error["exc"]:
+        log.warning("%s: query falhou após %.1fs — %s", label, elapsed, error["exc"])
+        return None, error["exc"]
+
+    log.debug("%s: query OK em %.1fs.", label, elapsed)
+    return result["rows"], None
+
+
+# ---------------------------------------------------------------------------
+# Conexão
+# ---------------------------------------------------------------------------
+
 def _get_conn_posto(posto: str):
     host = os.getenv(f"DB_HOST_{posto}", "").strip()
     base = os.getenv(f"DB_BASE_{posto}", "").strip()
@@ -171,9 +255,11 @@ def _get_conn_posto(posto: str):
         f"Connection Timeout=30;"
     )
     conn_str += f"UID={user};PWD={pwd}" if user else "Trusted_Connection=yes"
+    log.debug("Posto %s: conectando em %s/%s...", posto, host, base)
     try:
         conn = pyodbc.connect(conn_str)
-        conn.timeout = 300  # 5 min por query
+        conn.timeout = QUERY_TIMEOUT_SECS
+        log.debug("Posto %s: conexão estabelecida.", posto)
         return conn
     except Exception as e:
         log.error("Posto %s: erro ao conectar: %s", posto, e)
@@ -194,7 +280,14 @@ def _postos_configurados() -> list:
     return sorted(postos)
 
 
+# ---------------------------------------------------------------------------
+# Carga por posto
+# ---------------------------------------------------------------------------
+
 def _carregar_posto(posto: str, full: bool = False) -> dict:
+    t0_posto = time.time()
+    log.info("Posto %s: iniciando carga (full=%s).", posto, full)
+
     sql_conn = _get_conn_posto(posto)
     if not sql_conn:
         log.warning("Posto %s: sem conexão configurada, pulando.", posto)
@@ -202,6 +295,7 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
 
     sqlite_conn = _get_sqlite()
     inseridos = 0
+    todos_ids = []
 
     try:
         if full:
@@ -209,20 +303,41 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
             sqlite_conn.execute("DELETE FROM cache_clientes WHERE posto = ?", (posto,))
             sqlite_conn.commit()
 
-        # 1. Todos os idcliente ativos no SQL Server
-        log.info("Posto %s: buscando idclientes do SQL Server...", posto)
+        # 1. IDs ativos
+        log.info("Posto %s: [1/4] buscando idclientes ativos no SQL Server...", posto)
         cur = sql_conn.cursor()
-        cur.execute(_SQL_IDS)
-        todos_ids = [row[0] for row in cur.fetchall()]
-        log.info("Posto %s: %d idclientes ativos no SQL Server.", posto, len(todos_ids))
+        t1 = time.time()
+        rows_ids, err = _executar_com_watchdog(cur, _SQL_IDS, [], f"Posto {posto} / IDS")
+        if err:
+            log.error("Posto %s: falha ao buscar IDs — %s. Abortando posto.", posto, err)
+            return {"inseridos": 0, "pulados": 0, "erro": True}
+        todos_ids = [r[0] for r in rows_ids]
+        log.info(
+            "Posto %s: %d idclientes ativos (%.1fs).",
+            posto, len(todos_ids), time.time() - t1,
+        )
 
-        # 1b. Pagadores atrasados (>50% das últimas 12 mensalidades pagas com atraso)
-        log.info("Posto %s: calculando pagadores atrasados...", posto)
-        cur.execute(_SQL_PAGADORES_ATRASADOS)
-        atrasados_set = {row[0] for row in cur.fetchall()}
-        log.info("Posto %s: %d idclientes classificados como pagadores atrasados.", posto, len(atrasados_set))
+        # 2. Pagadores atrasados
+        log.info("Posto %s: [2/4] calculando pagadores atrasados...", posto)
+        t2 = time.time()
+        rows_atr, err = _executar_com_watchdog(
+            cur, _SQL_PAGADORES_ATRASADOS, [], f"Posto {posto} / PAGADORES_ATRASADOS"
+        )
+        if err:
+            log.warning(
+                "Posto %s: falha ao calcular pagadores atrasados (%s) — "
+                "continuando sem esse filtro.", posto, err
+            )
+            atrasados_set = set()
+        else:
+            atrasados_set = {r[0] for r in rows_atr}
+        log.info(
+            "Posto %s: %d pagadores atrasados (%.1fs).",
+            posto, len(atrasados_set), time.time() - t2,
+        )
 
-        # 2. Quais já estão no SQLite?
+        # 3. Pendentes
+        log.info("Posto %s: [3/4] verificando cache local...", posto)
         if not full:
             ja_cache = {
                 row[0]
@@ -232,46 +347,69 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
             }
             pendentes = [i for i in todos_ids if i not in ja_cache]
             log.info(
-                "Posto %s: %d já em cache, %d pendentes.",
+                "Posto %s: %d já em cache, %d pendentes de carga.",
                 posto, len(ja_cache), len(pendentes),
             )
         else:
             pendentes = todos_ids
+            log.info("Posto %s: modo full — %d pendentes.", posto, len(pendentes))
 
         if not pendentes:
             log.info("Posto %s: nenhum cliente novo para inserir.", posto)
         else:
-            # 3. Batches de BATCH_SIZE idclientes
             total_batches = (len(pendentes) + BATCH_SIZE - 1) // BATCH_SIZE
+            log.info(
+                "Posto %s: iniciando %d batches de até %d IDs cada.",
+                posto, total_batches, BATCH_SIZE,
+            )
+            batches_pulados = 0
+
             for batch_num, i in enumerate(range(0, len(pendentes), BATCH_SIZE), start=1):
                 batch_ids = pendentes[i: i + BATCH_SIZE]
+                pct = batch_num / total_batches * 100
                 log.info(
-                    "Posto %s: batch %d/%d — %d idclientes...",
-                    posto, batch_num, total_batches, len(batch_ids),
+                    "Posto %s: [batch %d/%d | %.0f%%] %d IDs — range %d..%d",
+                    posto, batch_num, total_batches, pct,
+                    len(batch_ids), batch_ids[0], batch_ids[-1],
                 )
 
                 ph  = ",".join("?" * len(batch_ids))
                 sql = _SQL_FETCH.format(placeholders=ph)
-                try:
-                    cur.execute(sql, batch_ids)
-                    rows = cur.fetchall()
-                except Exception as e_batch:
+                label = f"Posto {posto} / batch {batch_num}/{total_batches}"
+
+                t_batch = time.time()
+                rows, err = _executar_com_watchdog(cur, sql, batch_ids, label)
+
+                if err:
+                    batches_pulados += 1
                     log.warning(
-                        "Posto %s: batch %d falhou (%s) — pulando e reconectando.",
-                        posto, batch_num, e_batch,
+                        "Posto %s: batch %d PULADO após %.1fs — %s. "
+                        "Reconectando ao SQL Server...",
+                        posto, batch_num, time.time() - t_batch, err,
                     )
-                    # Reconecta para limpar estado corrompido do cursor
                     try:
                         sql_conn.close()
                     except Exception:
                         pass
                     sql_conn = _get_conn_posto(posto)
                     if not sql_conn:
-                        log.error("Posto %s: não conseguiu reconectar. Abortando.", posto)
+                        log.error(
+                            "Posto %s: não conseguiu reconectar após batch %d. "
+                            "Abortando restante do posto.",
+                            posto, batch_num,
+                        )
                         break
                     cur = sql_conn.cursor()
+                    log.info("Posto %s: reconectado. Continuando no batch %d.", posto, batch_num + 1)
                     time.sleep(SLEEP_SECS)
                     continue
+
+                t_query = time.time() - t_batch
+                log.info(
+                    "Posto %s: batch %d — %d linhas recebidas em %.1fs. "
+                    "Inserindo no SQLite...",
+                    posto, batch_num, len(rows), t_query,
+                )
 
                 agora = datetime.now().isoformat(timespec="seconds")
                 try:
@@ -295,21 +433,34 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
                     sqlite_conn.executemany(_INSERT_SQL, registros)
                     sqlite_conn.commit()
                     inseridos += len(registros)
-                    log.info("Posto %s: batch %d concluído — %d linhas inseridas.", posto, batch_num, len(registros))
+                    log.info(
+                        "Posto %s: batch %d OK — %d registros inseridos "
+                        "(total acumulado: %d | %.0f%% concluído).",
+                        posto, batch_num, len(registros), inseridos, pct,
+                    )
                 except Exception as e_ins:
                     log.warning(
                         "Posto %s: batch %d erro ao inserir no SQLite (%s) — pulando.",
                         posto, batch_num, e_ins,
                     )
-                    sqlite_conn.rollback()
+                    try:
+                        sqlite_conn.rollback()
+                    except Exception:
+                        pass
+                    batches_pulados += 1
 
                 if i + BATCH_SIZE < len(pendentes):
-                    log.info("Aguardando %ds antes do próximo batch...", SLEEP_SECS)
+                    log.debug("Posto %s: aguardando %ds antes do próximo batch...", posto, SLEEP_SECS)
                     time.sleep(SLEEP_SECS)
 
-        # 4. Atualiza pagador_atrasado para TODOS os idcliente do posto
-        #    (incluindo os já em cache de execuções anteriores)
-        log.info("Posto %s: atualizando pagador_atrasado no cache...", posto)
+            if batches_pulados:
+                log.warning(
+                    "Posto %s: %d batches foram pulados por erro/timeout.",
+                    posto, batches_pulados,
+                )
+
+        # 4. Atualiza pagador_atrasado para todos
+        log.info("Posto %s: [4/4] atualizando pagador_atrasado no cache...", posto)
         sqlite_conn.execute("UPDATE cache_clientes SET pagador_atrasado = 0 WHERE posto = ?", (posto,))
         if atrasados_set:
             atrasados_list = list(atrasados_set)
@@ -326,13 +477,24 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
         log.info("Posto %s: pagador_atrasado atualizado.", posto)
 
     finally:
-        sql_conn.close()
+        try:
+            sql_conn.close()
+        except Exception:
+            pass
         sqlite_conn.close()
 
     pulados = len(todos_ids) - len(pendentes) if not full else 0
-    log.info("Posto %s: concluído. inseridos=%d pulados=%d", posto, inseridos, pulados)
+    elapsed = time.time() - t0_posto
+    log.info(
+        "Posto %s: CONCLUÍDO em %.0fs — inseridos=%d pulados=%d.",
+        posto, elapsed, inseridos, pulados,
+    )
     return {"inseridos": inseridos, "pulados": pulados, "erro": False}
 
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(
@@ -348,7 +510,6 @@ def main():
     )
     args = parser.parse_args()
 
-    # Garante que o schema existe antes de qualquer coisa
     criar_schema(DB_PATH)
 
     postos = [args.posto.upper()] if args.posto else _postos_configurados()
@@ -356,11 +517,18 @@ def main():
         log.error("Nenhum posto configurado (DB_HOST_X não encontrado no .env).")
         return
 
-    log.info("=== wpp_cache_clientes: início | postos=%s full=%s ===", postos, args.full)
+    log.info(
+        "=== wpp_cache_clientes: início | postos=%s full=%s | log=%s ===",
+        postos, args.full, LOG_FILE,
+    )
+    t0 = time.time()
     for posto in postos:
         result = _carregar_posto(posto, full=args.full)
         log.info("Posto %s resultado: %s", posto, result)
-    log.info("=== wpp_cache_clientes: fim ===")
+    log.info(
+        "=== wpp_cache_clientes: fim | tempo total=%.0fs ===",
+        time.time() - t0,
+    )
 
 
 if __name__ == "__main__":
