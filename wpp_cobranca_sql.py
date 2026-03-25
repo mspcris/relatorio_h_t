@@ -272,6 +272,9 @@ def _build_where_clientes_sqlite(campanha: dict) -> tuple:
     if campanha.get("idade_max") is not None:
         filtros.append(f"idade <= {int(campanha['idade_max'])}")
 
+    if campanha.get("pagador_atrasado"):
+        filtros.append("pagador_atrasado = 1")
+
     return " AND ".join(filtros), params
 
 

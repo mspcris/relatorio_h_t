@@ -114,6 +114,31 @@ WHERE f5.Desativado = 0
 ORDER BY f5.idcliente
 """
 
+# ---------------------------------------------------------------------------
+# Query: idclientes que pagaram atrasado em mais da metade das últimas 12 mensalidades
+# ---------------------------------------------------------------------------
+_SQL_PAGADORES_ATRASADOS = """
+WITH ranked AS (
+    SELECT
+        idCliente,
+        DataVencimento,
+        DataPagamento,
+        ROW_NUMBER() OVER (
+            PARTITION BY idCliente
+            ORDER BY DataMensalidade DESC
+        ) AS rn
+    FROM fin_receita
+    WHERE DataPagamento IS NOT NULL
+      AND DataCancelamento IS NULL
+)
+SELECT idCliente
+FROM ranked
+WHERE rn <= 12
+GROUP BY idCliente
+HAVING SUM(CASE WHEN DataPagamento > DataVencimento THEN 1 ELSE 0 END)
+       > COUNT(*) / 2.0
+"""
+
 _INSERT_SQL = """
 INSERT OR REPLACE INTO cache_clientes (
     idcliente, row_id, posto, id_endereco,
@@ -125,8 +150,8 @@ INSERT OR REPLACE INTO cache_clientes (
     origem, telefone_whatsapp, canceladoans,
     tipo_fj, responsavel, responsavel_tel_wpp,
     situacaoclube, tipo_cliente, situacao_efetiva,
-    telefone_efetivo, carregado_em
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    telefone_efetivo, pagador_atrasado, carregado_em
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 """
 
 
@@ -189,6 +214,12 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
         todos_ids = [row[0] for row in cur.fetchall()]
         log.info("Posto %s: %d idclientes ativos no SQL Server.", posto, len(todos_ids))
 
+        # 1b. Pagadores atrasados (>50% das últimas 12 mensalidades pagas com atraso)
+        log.info("Posto %s: calculando pagadores atrasados...", posto)
+        cur.execute(_SQL_PAGADORES_ATRASADOS)
+        atrasados_set = {row[0] for row in cur.fetchall()}
+        log.info("Posto %s: %d idclientes classificados como pagadores atrasados.", posto, len(atrasados_set))
+
         # 2. Quais já estão no SQLite?
         if not full:
             ja_cache = {
@@ -206,49 +237,67 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
             pendentes = todos_ids
 
         if not pendentes:
-            log.info("Posto %s: nada a carregar.", posto)
-            return {"inseridos": 0, "pulados": len(todos_ids), "erro": False}
-
-        # 3. Batches de BATCH_SIZE idclientes
-        total_batches = (len(pendentes) + BATCH_SIZE - 1) // BATCH_SIZE
-        for batch_num, i in enumerate(range(0, len(pendentes), BATCH_SIZE), start=1):
-            batch_ids = pendentes[i: i + BATCH_SIZE]
-            log.info(
-                "Posto %s: batch %d/%d — %d idclientes...",
-                posto, batch_num, total_batches, len(batch_ids),
-            )
-
-            ph  = ",".join("?" * len(batch_ids))
-            sql = _SQL_FETCH.format(placeholders=ph)
-            cur.execute(sql, batch_ids)
-            rows = cur.fetchall()
-
-            agora = datetime.now().isoformat(timespec="seconds")
-            registros = [
-                (
-                    r[0],  r[1],  posto, r[2],
-                    r[3],
-                    int(r[4] or 0), int(r[5] or 0), int(r[6] or 0),
-                    r[7],  r[8],  r[9],
-                    r[10], r[11], r[12],
-                    r[13], r[14], r[15],
-                    r[16], r[17], r[18],
-                    r[19], r[20], int(r[21] or 0),
-                    r[22], r[23], r[24],
-                    r[25], r[26], r[27],
-                    r[28], agora,
+            log.info("Posto %s: nenhum cliente novo para inserir.", posto)
+        else:
+            # 3. Batches de BATCH_SIZE idclientes
+            total_batches = (len(pendentes) + BATCH_SIZE - 1) // BATCH_SIZE
+            for batch_num, i in enumerate(range(0, len(pendentes), BATCH_SIZE), start=1):
+                batch_ids = pendentes[i: i + BATCH_SIZE]
+                log.info(
+                    "Posto %s: batch %d/%d — %d idclientes...",
+                    posto, batch_num, total_batches, len(batch_ids),
                 )
-                for r in rows
-            ]
 
-            sqlite_conn.executemany(_INSERT_SQL, registros)
-            sqlite_conn.commit()
-            inseridos += len(registros)
-            log.info("Posto %s: batch %d concluído — %d linhas inseridas.", posto, batch_num, len(registros))
+                ph  = ",".join("?" * len(batch_ids))
+                sql = _SQL_FETCH.format(placeholders=ph)
+                cur.execute(sql, batch_ids)
+                rows = cur.fetchall()
 
-            if i + BATCH_SIZE < len(pendentes):
-                log.info("Aguardando %ds antes do próximo batch...", SLEEP_SECS)
-                time.sleep(SLEEP_SECS)
+                agora = datetime.now().isoformat(timespec="seconds")
+                registros = [
+                    (
+                        r[0],  r[1],  posto, r[2],
+                        r[3],
+                        int(r[4] or 0), int(r[5] or 0), int(r[6] or 0),
+                        r[7],  r[8],  r[9],
+                        r[10], r[11], r[12],
+                        r[13], r[14], r[15],
+                        r[16], r[17], r[18],
+                        r[19], r[20], int(r[21] or 0),
+                        r[22], r[23], r[24],
+                        r[25], r[26], r[27],
+                        r[28], 1 if r[0] in atrasados_set else 0,
+                        agora,
+                    )
+                    for r in rows
+                ]
+
+                sqlite_conn.executemany(_INSERT_SQL, registros)
+                sqlite_conn.commit()
+                inseridos += len(registros)
+                log.info("Posto %s: batch %d concluído — %d linhas inseridas.", posto, batch_num, len(registros))
+
+                if i + BATCH_SIZE < len(pendentes):
+                    log.info("Aguardando %ds antes do próximo batch...", SLEEP_SECS)
+                    time.sleep(SLEEP_SECS)
+
+        # 4. Atualiza pagador_atrasado para TODOS os idcliente do posto
+        #    (incluindo os já em cache de execuções anteriores)
+        log.info("Posto %s: atualizando pagador_atrasado no cache...", posto)
+        sqlite_conn.execute("UPDATE cache_clientes SET pagador_atrasado = 0 WHERE posto = ?", (posto,))
+        if atrasados_set:
+            atrasados_list = list(atrasados_set)
+            update_batch = 5000
+            for i in range(0, len(atrasados_list), update_batch):
+                batch = atrasados_list[i: i + update_batch]
+                ph = ",".join("?" * len(batch))
+                sqlite_conn.execute(
+                    f"UPDATE cache_clientes SET pagador_atrasado = 1 "
+                    f"WHERE posto = ? AND idcliente IN ({ph})",
+                    [posto] + batch,
+                )
+        sqlite_conn.commit()
+        log.info("Posto %s: pagador_atrasado atualizado.", posto)
 
     finally:
         sql_conn.close()

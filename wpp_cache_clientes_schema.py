@@ -66,18 +66,22 @@ def criar_schema(db_path: str = DB_PATH) -> None:
         telefone_whatsapp   TEXT,
         telefone_efetivo    TEXT,   -- wpp próprio ou do responsável (pré-calculado)
 
+        -- Histórico de pagamento (pré-calculado pelo ETL)
+        pagador_atrasado    INTEGER NOT NULL DEFAULT 0,  -- 1 = pagou atrasado em >50% das últimas 12 mensalidades
+
         -- Controle de carga
         carregado_em        TEXT,
 
         PRIMARY KEY (idcliente, row_id, posto)
     );
 
-    CREATE INDEX IF NOT EXISTS idx_cc_posto         ON cache_clientes(posto);
-    CREATE INDEX IF NOT EXISTS idx_cc_idcliente     ON cache_clientes(idcliente, posto);
-    CREATE INDEX IF NOT EXISTS idx_cc_dataadmissao  ON cache_clientes(dataadmissao);
-    CREATE INDEX IF NOT EXISTS idx_cc_tipo_cliente  ON cache_clientes(tipo_cliente);
-    CREATE INDEX IF NOT EXISTS idx_cc_situacao      ON cache_clientes(situacao_efetiva);
-    CREATE INDEX IF NOT EXISTS idx_cc_tel           ON cache_clientes(telefone_efetivo);
+    CREATE INDEX IF NOT EXISTS idx_cc_posto             ON cache_clientes(posto);
+    CREATE INDEX IF NOT EXISTS idx_cc_idcliente         ON cache_clientes(idcliente, posto);
+    CREATE INDEX IF NOT EXISTS idx_cc_dataadmissao      ON cache_clientes(dataadmissao);
+    CREATE INDEX IF NOT EXISTS idx_cc_tipo_cliente      ON cache_clientes(tipo_cliente);
+    CREATE INDEX IF NOT EXISTS idx_cc_situacao          ON cache_clientes(situacao_efetiva);
+    CREATE INDEX IF NOT EXISTS idx_cc_tel               ON cache_clientes(telefone_efetivo);
+    CREATE INDEX IF NOT EXISTS idx_cc_pagador_atrasado  ON cache_clientes(pagador_atrasado);
     """)
     conn.commit()
     conn.close()

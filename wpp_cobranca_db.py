@@ -194,15 +194,17 @@ def init_db() -> None:
             responsavel_tel_wpp TEXT,
             telefone_whatsapp   TEXT,
             telefone_efetivo    TEXT,
+            pagador_atrasado    INTEGER NOT NULL DEFAULT 0,
             carregado_em        TEXT,
             PRIMARY KEY (idcliente, row_id, posto)
         );
-        CREATE INDEX IF NOT EXISTS idx_cc_posto         ON cache_clientes(posto);
-        CREATE INDEX IF NOT EXISTS idx_cc_idcliente     ON cache_clientes(idcliente, posto);
-        CREATE INDEX IF NOT EXISTS idx_cc_dataadmissao  ON cache_clientes(dataadmissao);
-        CREATE INDEX IF NOT EXISTS idx_cc_tipo_cliente  ON cache_clientes(tipo_cliente);
-        CREATE INDEX IF NOT EXISTS idx_cc_situacao      ON cache_clientes(situacao_efetiva);
-        CREATE INDEX IF NOT EXISTS idx_cc_tel           ON cache_clientes(telefone_efetivo);
+        CREATE INDEX IF NOT EXISTS idx_cc_posto             ON cache_clientes(posto);
+        CREATE INDEX IF NOT EXISTS idx_cc_idcliente         ON cache_clientes(idcliente, posto);
+        CREATE INDEX IF NOT EXISTS idx_cc_dataadmissao      ON cache_clientes(dataadmissao);
+        CREATE INDEX IF NOT EXISTS idx_cc_tipo_cliente      ON cache_clientes(tipo_cliente);
+        CREATE INDEX IF NOT EXISTS idx_cc_situacao          ON cache_clientes(situacao_efetiva);
+        CREATE INDEX IF NOT EXISTS idx_cc_tel               ON cache_clientes(telefone_efetivo);
+        CREATE INDEX IF NOT EXISTS idx_cc_pagador_atrasado  ON cache_clientes(pagador_atrasado);
         """)
         # Migração leve para bases já existentes.
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(campanhas)").fetchall()}
@@ -228,10 +230,18 @@ def init_db() -> None:
             "clube_beneficio_joy": "ALTER TABLE campanhas ADD COLUMN clube_beneficio_joy INTEGER NOT NULL DEFAULT 0",
             "plano_premium":       "ALTER TABLE campanhas ADD COLUMN plano_premium INTEGER NOT NULL DEFAULT 0",
             "origem":              "ALTER TABLE campanhas ADD COLUMN origem TEXT",
+            "pagador_atrasado":    "ALTER TABLE campanhas ADD COLUMN pagador_atrasado INTEGER NOT NULL DEFAULT 0",
         }
         for _col, _ddl in _novos.items():
             if _col not in cols:
                 conn.execute(_ddl)
+
+        # Migração: adiciona coluna pagador_atrasado no cache_clientes se ainda não existe
+        cc_cols = {r["name"] for r in conn.execute("PRAGMA table_info(cache_clientes)").fetchall()}
+        if "pagador_atrasado" not in cc_cols:
+            conn.execute(
+                "ALTER TABLE cache_clientes ADD COLUMN pagador_atrasado INTEGER NOT NULL DEFAULT 0"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -292,9 +302,9 @@ def criar_campanha(dados: dict) -> int:
                 adm_data_ini, adm_data_fim,
                 tipo_cliente, titular_dependente, situacao_cliente, tipo_fj,
                 clube_beneficio, clube_beneficio_joy, plano_premium,
-                origem,
+                origem, pagador_atrasado,
                 created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 dados["nome"], dados.get("template", "notificacao_de_fatura"),
                 dados.get("modo_envio", "atraso"), postos_json,
@@ -326,6 +336,7 @@ def criar_campanha(dados: dict) -> int:
                 1 if dados.get("clube_beneficio_joy") else 0,
                 1 if dados.get("plano_premium") else 0,
                 dados.get("origem") or None,
+                1 if dados.get("pagador_atrasado") else 0,
                 now, now,
             )
         )
@@ -350,7 +361,7 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 adm_data_ini=?, adm_data_fim=?,
                 tipo_cliente=?, titular_dependente=?, situacao_cliente=?, tipo_fj=?,
                 clube_beneficio=?, clube_beneficio_joy=?, plano_premium=?,
-                origem=?,
+                origem=?, pagador_atrasado=?,
                 updated_at=?
             WHERE id=?""",
             (
@@ -384,6 +395,7 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 1 if dados.get("clube_beneficio_joy") else 0,
                 1 if dados.get("plano_premium") else 0,
                 dados.get("origem") or None,
+                1 if dados.get("pagador_atrasado") else 0,
                 now,
                 campanha_id,
             )
