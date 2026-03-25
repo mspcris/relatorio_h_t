@@ -21,7 +21,7 @@ DB_PATH = os.path.join(BASE_DIR, "fidelizacao.db")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 LOG_FILE = os.path.join(LOG_DIR, f"export_fidelizacao_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
 
-EARLIEST_ALLOWED = date(2020, 1, 1)
+EARLIEST_ALLOWED = date(2024, 3, 1)
 POSTOS = list("ANXYBRPCDGIMJ")
 ODBC_DRIVER = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 
