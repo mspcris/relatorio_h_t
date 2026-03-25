@@ -409,6 +409,10 @@ def r_tef():
 def r_tef_logs():
     return render_protected_page("tef_logs.html")
 
+@app.get('/chat_avaliacoes')
+def r_chat_avaliacoes():
+    return render_protected_page("chat_avaliacoes.html")
+
 @app.get('/kpi_receita_despesa_rateio')
 def r_rateio():
     return render_protected_page("kpi_receita_despesa_rateio.html")

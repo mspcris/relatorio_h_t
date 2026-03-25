@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAMIM — CHAT Avaliações</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root { --sidebar-w: 220px; --sidebar-bg: #1a1d2e; --sidebar-active: #16213e; }
+    body { display: flex; min-height: 100vh; background: #f0f2f5; margin: 0; }
+
+    #sidebar {
+      width: var(--sidebar-w); min-width: var(--sidebar-w);
+      background: var(--sidebar-bg); color: #aab;
+      display: flex; flex-direction: column;
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 200;
+      overflow-y: auto;
+    }
+    #sidebar .brand {
+      padding: 1rem 1.2rem; font-weight: 700; font-size: .95rem;
+      color: #fff; border-bottom: 1px solid #2d3050;
+      display: flex; align-items: center; gap: .6rem; flex-shrink: 0;
+    }
+    #sidebar .brand i { color: #f6c90e; font-size: 1.2rem; }
+    .nav-section {
+      padding: .5rem 1.2rem .15rem;
+      font-size: .65rem; text-transform: uppercase;
+      color: #4a5070; letter-spacing: .08em; margin-top: .4rem;
+    }
+    #sidebar a.nav-link {
+      color: #8892b0; padding: .6rem 1.2rem;
+      display: flex; align-items: center; gap: .55rem;
+      font-size: .875rem; border-left: 3px solid transparent;
+      transition: background .15s, color .15s; text-decoration: none;
+    }
+    #sidebar a.nav-link:hover { background: #232640; color: #cdd; }
+    #sidebar a.nav-link.active { background: var(--sidebar-active); color: #fff; border-left-color: #f6c90e; }
+    .sidebar-spacer { flex: 1; }
+    .sidebar-footer { border-top: 1px solid #2d3050; padding: .5rem 0; flex-shrink: 0; }
+
+    #main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    #topbar {
+      background: #fff; border-bottom: 1px solid #e2e6ea;
+      padding: .65rem 1.5rem; display: flex; align-items: center;
+      justify-content: space-between; position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .page-content { padding: 1.5rem; }
+    .stat-card { border: none; border-radius: .6rem; box-shadow: 0 1px 6px rgba(0,0,0,.07); }
+    .kpi-val { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+    .kpi-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: #6c757d; }
+    .table th { font-size: .78rem; }
+    .table td { font-size: .82rem; vertical-align: middle; }
+    .score-badge {
+      display: inline-block; width: 28px; height: 28px;
+      border-radius: 50%; font-weight: 700; font-size: .8rem;
+      text-align: center; line-height: 28px; color: #fff;
+    }
+    .score-1 { background: #dc3545; }
+    .score-2 { background: #e67e22; }
+    .score-3 { background: #f0ad4e; color: #333; }
+    .score-4 { background: #5bc0de; }
+    .score-5 { background: #28a745; }
+    .score-null { background: #adb5bd; }
+
+    #hamburger {
+      display: none; background: none; border: none; cursor: pointer;
+      padding: 4px 8px; margin-right: 8px;
+      color: #f6c90e; font-size: 1.3rem; line-height: 1;
+      align-items: center;
+    }
+    #sidebar-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); z-index: 199;
+    }
+    @media (max-width: 767px) {
+      #sidebar { transform: translateX(-100%); transition: transform .25s ease; box-shadow: none; }
+      #sidebar.mobile-open { transform: translateX(0); box-shadow: 4px 0 16px rgba(0,0,0,.3); }
+      #sidebar-overlay.visible { display: block; }
+      #hamburger { display: flex; }
+      #main { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="brand">
+    <i class="bi bi-star-fill"></i> CHAT Avaliações
+  </div>
+  <nav class="mt-1">
+    <div class="nav-section">Navegação</div>
+    <a href="/mais_servicos" class="nav-link"><i class="bi bi-grid-3x3-gap"></i> Mais Serviços</a>
+    <a href="https://chat.camim.com.br/" target="_blank" class="nav-link"><i class="bi bi-chat-dots"></i> Chat</a>
+    <a href="/chat_avaliacoes" class="nav-link active"><i class="bi bi-star-fill"></i> CHAT Avaliações</a>
+    <div class="nav-section">Cobrança</div>
+    <a href="/email_clientes" class="nav-link"><i class="bi bi-envelope"></i> Email de Cobrança</a>
+    <a href="/tef" class="nav-link"><i class="bi bi-credit-card"></i> TEF Recorrente</a>
+    <a href="/wpp" class="nav-link"><i class="bi bi-whatsapp"></i> WhatsApp Cobrança</a>
+    <div class="nav-section">KPIs</div>
+    <a href="/kpi_home" class="nav-link"><i class="bi bi-house"></i> Home</a>
+    <a href="/indicadores" class="nav-link"><i class="bi bi-speedometer2"></i> Indicadores</a>
+  </nav>
+  <div class="sidebar-spacer"></div>
+  <div class="sidebar-footer">
+    <form method="POST" action="/session/logout">
+      <button class="nav-link w-100 border-0 bg-transparent text-start" style="color:#8892b0">
+        <i class="bi bi-box-arrow-right me-2"></i> Sair
+      </button>
+    </form>
+  </div>
+</div>
+
+<div id="sidebar-overlay"></div>
+
+<div id="main">
+  <div id="topbar">
+    <div class="d-flex align-items-center gap-2">
+      <button id="hamburger" aria-label="Menu"><i class="bi bi-list"></i></button>
+      <img src="/images/Logo Camim-01_200px.png" alt="CAMIM" style="height:28px">
+      <span class="fw-bold ms-1 d-none d-sm-inline">CHAT Avaliações</span>
+    </div>
+    <span class="text-muted small" id="topbar-info">—</span>
+  </div>
+
+  <div class="page-content">
+
+    <!-- Filtros -->
+    <div class="card stat-card mb-3">
+      <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-3 col-6">
+            <label class="form-label small mb-1">Data início (fechamento)</label>
+            <input type="date" id="f_ini" class="form-control form-control-sm">
+          </div>
+          <div class="col-sm-3 col-6">
+            <label class="form-label small mb-1">Data fim</label>
+            <input type="date" id="f_fim" class="form-control form-control-sm">
+          </div>
+          <div class="col-sm-3 col-6">
+            <div class="form-check mt-3">
+              <input class="form-check-input" type="checkbox" id="f_com_obs">
+              <label class="form-check-label small" for="f_com_obs">Apenas com comentário</label>
+            </div>
+          </div>
+          <div class="col-sm-3 col-6">
+            <button class="btn btn-warning btn-sm w-100" onclick="loadData()">
+              <i class="bi bi-search me-1"></i> Filtrar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="row g-3 mb-3" id="kpi-cards">
+      <div class="col-6 col-md-3">
+        <div class="card stat-card h-100">
+          <div class="card-body text-center">
+            <div class="kpi-val text-warning" id="kpi-media">—</div>
+            <div class="kpi-label">Média Geral</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card stat-card h-100">
+          <div class="card-body text-center">
+            <div class="kpi-val text-primary" id="kpi-total">—</div>
+            <div class="kpi-label">Total Avaliações</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card stat-card h-100">
+          <div class="card-body text-center">
+            <div class="kpi-val text-success" id="kpi-positivas">—</div>
+            <div class="kpi-label">Notas 4 e 5</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card stat-card h-100">
+          <div class="card-body text-center">
+            <div class="kpi-val text-danger" id="kpi-negativas">—</div>
+            <div class="kpi-label">Notas 1 e 2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="row g-3 mb-3">
+      <div class="col-md-8">
+        <div class="card stat-card h-100">
+          <div class="card-body">
+            <h6 class="card-title small text-uppercase text-muted mb-3">Média diária por data de fechamento</h6>
+            <canvas id="chart-trend" height="100"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card stat-card h-100">
+          <div class="card-body">
+            <h6 class="card-title small text-uppercase text-muted mb-3">Distribuição por nota</h6>
+            <canvas id="chart-dist" height="180"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabela -->
+    <div class="card stat-card">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="card-title small text-uppercase text-muted mb-0">Avaliações individuais</h6>
+          <span class="badge bg-secondary" id="badge-exibindo">—</span>
+        </div>
+        <div id="alert-erro" class="alert alert-danger d-none small"></div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle" id="tabela">
+            <thead class="table-light">
+              <tr>
+                <th>Fechamento</th>
+                <th>Ticket</th>
+                <th class="text-center">Nota</th>
+                <th>Comentário</th>
+                <th>Criado em</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mt-2">
+          <button class="btn btn-outline-secondary btn-sm" id="btn-prev" onclick="changePage(-1)" disabled>
+            <i class="bi bi-chevron-left"></i> Anterior
+          </button>
+          <span class="small text-muted" id="page-info">—</span>
+          <button class="btn btn-outline-secondary btn-sm" id="btn-next" onclick="changePage(1)" disabled>
+            Próxima <i class="bi bi-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page-content -->
+</div><!-- /main -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Sidebar mobile
+document.getElementById('hamburger').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('mobile-open');
+  document.getElementById('sidebar-overlay').classList.toggle('visible');
+});
+document.getElementById('sidebar-overlay').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+});
+
+// Estado
+let currentPage = 1;
+let lastData = null;
+let chartTrend = null;
+let chartDist  = null;
+
+// Inicializa período padrão: últimos 30 dias
+(function initDates() {
+  const today = new Date();
+  const ini   = new Date(today);
+  ini.setDate(ini.getDate() - 30);
+  document.getElementById('f_fim').value = today.toISOString().slice(0, 10);
+  document.getElementById('f_ini').value = ini.toISOString().slice(0, 10);
+})();
+
+function buildUrl(page) {
+  const ini    = document.getElementById('f_ini').value;
+  const fim    = document.getElementById('f_fim').value;
+  const comObs = document.getElementById('f_com_obs').checked ? '1' : '0';
+  let url = `/api/chat_avaliacoes?page=${page}&com_obs=${comObs}`;
+  if (ini) url += `&ini=${ini}`;
+  if (fim) url += `&fim=${fim}`;
+  return url;
+}
+
+async function loadData(page) {
+  if (!page) page = 1;
+  currentPage = page;
+
+  document.getElementById('alert-erro').classList.add('d-none');
+  document.getElementById('tbody').innerHTML =
+    '<tr><td colspan="5" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-2"></span>Carregando…</td></tr>';
+
+  try {
+    const resp = await fetch(buildUrl(page), { credentials: 'same-origin' });
+    const data = await resp.json();
+    if (data.erro) throw new Error(data.erro);
+    lastData = data;
+    renderKpis(data);
+    renderTable(data);
+    renderChartTrend(data.trend || []);
+    renderChartDist(data.dist || []);
+    const ini = document.getElementById('f_ini').value;
+    const fim = document.getElementById('f_fim').value;
+    document.getElementById('topbar-info').textContent =
+      ini && fim ? `${ini} → ${fim}` : 'Todos os registros';
+  } catch (e) {
+    const el = document.getElementById('alert-erro');
+    el.textContent = 'Erro ao carregar dados: ' + e.message;
+    el.classList.remove('d-none');
+    document.getElementById('tbody').innerHTML =
+      '<tr><td colspan="5" class="text-center text-muted">—</td></tr>';
+  }
+}
+
+function renderKpis(data) {
+  const media = data.media != null ? parseFloat(data.media).toFixed(2) : '—';
+  document.getElementById('kpi-media').textContent   = media;
+  document.getElementById('kpi-total').textContent   = (data.total || 0).toLocaleString('pt-BR');
+
+  const positivas = (data.dist || []).filter(d => d.score >= 4).reduce((s, d) => s + d.cnt, 0);
+  const negativas = (data.dist || []).filter(d => d.score <= 2).reduce((s, d) => s + d.cnt, 0);
+  document.getElementById('kpi-positivas').textContent = positivas.toLocaleString('pt-BR');
+  document.getElementById('kpi-negativas').textContent = negativas.toLocaleString('pt-BR');
+}
+
+const SCORE_COLORS = ['', '#dc3545', '#e67e22', '#f0ad4e', '#5bc0de', '#28a745'];
+
+function renderChartTrend(trend) {
+  const ctx = document.getElementById('chart-trend').getContext('2d');
+  if (chartTrend) chartTrend.destroy();
+  chartTrend = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: trend.map(r => r.dia),
+      datasets: [{
+        label: 'Média',
+        data: trend.map(r => r.media),
+        borderColor: '#f6c90e',
+        backgroundColor: 'rgba(246,201,14,.15)',
+        tension: 0.3,
+        fill: true,
+        pointRadius: 3,
+      }, {
+        label: 'Qtd',
+        data: trend.map(r => r.cnt),
+        borderColor: '#6c757d',
+        borderDash: [4, 3],
+        backgroundColor: 'transparent',
+        tension: 0.3,
+        pointRadius: 2,
+        yAxisID: 'y2',
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { font: { size: 11 } } } },
+      scales: {
+        y:  { min: 0, max: 5.5, title: { display: true, text: 'Média', font: { size: 10 } } },
+        y2: { position: 'right', title: { display: true, text: 'Qtd', font: { size: 10 } }, grid: { drawOnChartArea: false } },
+      },
+    },
+  });
+}
+
+function renderChartDist(dist) {
+  const ctx = document.getElementById('chart-dist').getContext('2d');
+  if (chartDist) chartDist.destroy();
+  // Garante todas as notas 1-5 + null apareçam
+  const map = {};
+  dist.forEach(d => { map[d.score ?? 'null'] = d.cnt; });
+  const labels = ['1', '2', '3', '4', '5', '—'];
+  const values = [
+    map[1] || 0, map[2] || 0, map[3] || 0,
+    map[4] || 0, map[5] || 0, map['null'] || 0,
+  ];
+  const colors = ['#dc3545', '#e67e22', '#f0ad4e', '#5bc0de', '#28a745', '#adb5bd'];
+  chartDist = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: colors, borderRadius: 4 }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+    },
+  });
+}
+
+function scoreBadge(score) {
+  if (score == null) return '<span class="score-badge score-null">—</span>';
+  const cls = `score-${score}`;
+  return `<span class="score-badge ${cls}">${score}</span>`;
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderTable(data) {
+  const tbody = document.getElementById('tbody');
+  if (!data.rows || !data.rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Nenhum registro encontrado.</td></tr>';
+  } else {
+    tbody.innerHTML = data.rows.map(r => `
+      <tr>
+        <td class="text-nowrap">${fmtDate(r.closedAt)}</td>
+        <td><a href="https://chat.camim.com.br/" target="_blank" class="text-decoration-none">#${r.ticketId || r.id}</a></td>
+        <td class="text-center">${scoreBadge(r.score)}</td>
+        <td class="text-break">${r.obs ? escHtml(r.obs) : '<span class="text-muted">—</span>'}</td>
+        <td class="text-nowrap">${fmtDate(r.createdAt)}</td>
+      </tr>
+    `).join('');
+  }
+
+  const total    = data.total || 0;
+  const perPage  = data.per_page || 200;
+  const totalPg  = Math.max(1, Math.ceil(total / perPage));
+  const page     = data.page || 1;
+  const exibindo = Math.min(perPage, total - (page - 1) * perPage);
+
+  document.getElementById('badge-exibindo').textContent =
+    `Exibindo ${exibindo} de ${total.toLocaleString('pt-BR')}`;
+  document.getElementById('page-info').textContent = `Página ${page} de ${totalPg}`;
+  document.getElementById('btn-prev').disabled = page <= 1;
+  document.getElementById('btn-next').disabled = page >= totalPg;
+}
+
+function changePage(delta) {
+  loadData(currentPage + delta);
+}
+
+function escHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Carrega ao entrar
+loadData(1);
+</script>
+</body>
+</html>
