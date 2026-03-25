@@ -239,6 +239,8 @@ def _executar_com_watchdog(cur, sql, params, label: str):
 # Conexão
 # ---------------------------------------------------------------------------
 
+CONNECT_TIMEOUT_SECS = 60   # timeout para tentar conectar/reconectar
+
 def _get_conn_posto(posto: str):
     host = os.getenv(f"DB_HOST_{posto}", "").strip()
     base = os.getenv(f"DB_BASE_{posto}", "").strip()
@@ -266,6 +268,35 @@ def _get_conn_posto(posto: str):
         return None
 
 
+def _get_conn_posto_com_timeout(posto: str) -> "pyodbc.Connection | None":
+    """Abre conexão com SQL Server dentro de um thread com timeout.
+    Evita travar indefinidamente quando o servidor não responde."""
+    result   = {"conn": None}
+    error    = {"exc": None}
+    finished = threading.Event()
+
+    def _worker():
+        try:
+            result["conn"] = _get_conn_posto(posto)
+        except Exception as exc:
+            error["exc"] = exc
+        finally:
+            finished.set()
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    if not finished.wait(timeout=CONNECT_TIMEOUT_SECS):
+        log.warning(
+            "Posto %s: reconexão travou após %ds — abandonando reconexão.",
+            posto, CONNECT_TIMEOUT_SECS,
+        )
+        return None
+    if error["exc"]:
+        log.error("Posto %s: erro na reconexão: %s", posto, error["exc"])
+        return None
+    return result["conn"]
+
+
 def _get_sqlite() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA journal_mode=WAL")
@@ -288,7 +319,7 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
     t0_posto = time.time()
     log.info("Posto %s: iniciando carga (full=%s).", posto, full)
 
-    sql_conn = _get_conn_posto(posto)
+    sql_conn = _get_conn_posto_com_timeout(posto)
     if not sql_conn:
         log.warning("Posto %s: sem conexão configurada, pulando.", posto)
         return {"inseridos": 0, "pulados": 0, "erro": True}
@@ -363,6 +394,8 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
                 posto, total_batches, BATCH_SIZE,
             )
             batches_pulados = 0
+            falhas_consecutivas = 0
+            MAX_FALHAS_CONSECUTIVAS = 3
 
             for batch_num, i in enumerate(range(0, len(pendentes), BATCH_SIZE), start=1):
                 batch_ids = pendentes[i: i + BATCH_SIZE]
@@ -382,16 +415,24 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
 
                 if err:
                     batches_pulados += 1
+                    falhas_consecutivas += 1
                     log.warning(
                         "Posto %s: batch %d PULADO após %.1fs — %s. "
-                        "Reconectando ao SQL Server...",
+                        "Reconectando ao SQL Server... (falha %d/%d consecutiva)",
                         posto, batch_num, time.time() - t_batch, err,
+                        falhas_consecutivas, MAX_FALHAS_CONSECUTIVAS,
                     )
+                    if falhas_consecutivas >= MAX_FALHAS_CONSECUTIVAS:
+                        log.error(
+                            "Posto %s: %d falhas consecutivas — abortando restante do posto.",
+                            posto, falhas_consecutivas,
+                        )
+                        break
                     try:
                         sql_conn.close()
                     except Exception:
                         pass
-                    sql_conn = _get_conn_posto(posto)
+                    sql_conn = _get_conn_posto_com_timeout(posto)
                     if not sql_conn:
                         log.error(
                             "Posto %s: não conseguiu reconectar após batch %d. "
@@ -403,6 +444,8 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
                     log.info("Posto %s: reconectado. Continuando no batch %d.", posto, batch_num + 1)
                     time.sleep(SLEEP_SECS)
                     continue
+
+                falhas_consecutivas = 0  # reset ao ter sucesso
 
                 t_query = time.time() - t_batch
                 log.info(
