@@ -252,32 +252,56 @@ def _carregar_posto(posto: str, full: bool = False) -> dict:
 
                 ph  = ",".join("?" * len(batch_ids))
                 sql = _SQL_FETCH.format(placeholders=ph)
-                cur.execute(sql, batch_ids)
-                rows = cur.fetchall()
+                try:
+                    cur.execute(sql, batch_ids)
+                    rows = cur.fetchall()
+                except Exception as e_batch:
+                    log.warning(
+                        "Posto %s: batch %d falhou (%s) — pulando e reconectando.",
+                        posto, batch_num, e_batch,
+                    )
+                    # Reconecta para limpar estado corrompido do cursor
+                    try:
+                        sql_conn.close()
+                    except Exception:
+                        pass
+                    sql_conn = _get_conn_posto(posto)
+                    if not sql_conn:
+                        log.error("Posto %s: não conseguiu reconectar. Abortando.", posto)
+                        break
+                    cur = sql_conn.cursor()
+                    time.sleep(SLEEP_SECS)
+                    continue
 
                 agora = datetime.now().isoformat(timespec="seconds")
-                registros = [
-                    (
-                        r[0],  r[1],  posto, r[2],
-                        r[3],
-                        int(r[4] or 0), int(r[5] or 0), int(r[6] or 0),
-                        r[7],  r[8],  r[9],
-                        r[10], r[11], r[12],
-                        r[13], r[14], r[15],
-                        r[16], r[17], r[18],
-                        r[19], r[20], int(r[21] or 0),
-                        r[22], r[23], r[24],
-                        r[25], r[26], r[27],
-                        r[28], 1 if r[0] in atrasados_set else 0,
-                        agora,
+                try:
+                    registros = [
+                        (
+                            r[0],  r[1],  posto, r[2],
+                            r[3],
+                            int(r[4] or 0), int(r[5] or 0), int(r[6] or 0),
+                            r[7],  r[8],  r[9],
+                            r[10], r[11], r[12],
+                            r[13], r[14], r[15],
+                            r[16], r[17], r[18],
+                            r[19], r[20], int(r[21] or 0),
+                            r[22], r[23], r[24],
+                            r[25], r[26], r[27],
+                            r[28], 1 if r[0] in atrasados_set else 0,
+                            agora,
+                        )
+                        for r in rows
+                    ]
+                    sqlite_conn.executemany(_INSERT_SQL, registros)
+                    sqlite_conn.commit()
+                    inseridos += len(registros)
+                    log.info("Posto %s: batch %d concluído — %d linhas inseridas.", posto, batch_num, len(registros))
+                except Exception as e_ins:
+                    log.warning(
+                        "Posto %s: batch %d erro ao inserir no SQLite (%s) — pulando.",
+                        posto, batch_num, e_ins,
                     )
-                    for r in rows
-                ]
-
-                sqlite_conn.executemany(_INSERT_SQL, registros)
-                sqlite_conn.commit()
-                inseridos += len(registros)
-                log.info("Posto %s: batch %d concluído — %d linhas inseridas.", posto, batch_num, len(registros))
+                    sqlite_conn.rollback()
 
                 if i + BATCH_SIZE < len(pendentes):
                     log.info("Aguardando %ds antes do próximo batch...", SLEEP_SECS)
