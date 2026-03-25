@@ -324,8 +324,6 @@
                                     <input id="dtFim" type="month" class="form-control" />
                                 </div>
                                 <div class="col-md-6 d-flex align-items-end">
-                                    <span class="small">Sempre mostra 12 meses completos por padrão. Alterou um mês,
-                                        aplica na hora.</span>
                                 </div>
                             </div>
                         </div>
@@ -602,12 +600,12 @@
             }));
         }
 
-        /* ====== Range padrão: últimos 12 meses completos ====== */
+        /* ====== Range padrão: últimos 13 meses (12 + atual) ====== */
         function lastCompleteWindow() {
             const today = new Date();
-            const end = new Date(today.getFullYear(), today.getMonth(), 1); // 1º do mês atual
-            end.setMonth(end.getMonth() - 1);                                // mês anterior
-            const start = new Date(end.getFullYear(), end.getMonth() - 11, 1);
+            const end = new Date(today.getFullYear(), today.getMonth() + 1, 1); // 1º do próximo mês (inclui atual)
+            end.setMonth(end.getMonth() - 1);                                    // último dia do mês atual
+            const start = new Date(end.getFullYear(), end.getMonth() - 12, 1);   // 12 meses antes
             const toYM = d => d.toISOString().slice(0, 7);
             return { ini: toYM(start), fim: toYM(end) };
         }
