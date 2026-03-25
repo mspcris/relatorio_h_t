@@ -211,55 +211,94 @@ def build_json_fidelizacao():
 # Execução
 # =========================
 
-def run_extraction():
-    """Extrai dados de todos os postos para todos os meses."""
+def month_iter(start: date, end_exclusive: date):
+    """Itera por meses entre start e end_exclusive."""
+    y, m = start.year, start.month
+    while True:
+        ini = date(y, m, 1)
+        if ini >= end_exclusive:
+            break
+        yield ini
+        m = 1 if m == 12 else m + 1
+        y = y + 1 if m == 1 else y
+
+def run_extraction_filtered(start_date: date, end_date: date, postos_str: str):
+    """Extrai dados de postos filtrados para período especificado."""
+    import pyodbc
+
     print("========== EXPORT FIDELIZAÇÃO ==========")
     print("[ETAPA 1/3] Setup")
 
     ensure_dir(JSON_DIR)
     init_db()
 
-    conns = build_conns_from_env()
+    # Filtrar apenas os postos solicitados
+    postos_filtrados = [c.upper() for c in postos_str if c.isalpha()]
+    if not postos_filtrados:
+        postos_filtrados = POSTOS
+
+    conns = build_conns_from_env(postos_filtrados)
     if not conns:
-        print("ERRO: .env sem DB_HOST_*/DB_BASE_* configurados.")
+        print("ERRO: .env sem DB_HOST_*/DB_BASE_* configurados para os postos informados.")
         sys.exit(1)
 
     print(f"- Postos: {list(conns.keys())}")
     print(f"- DB local: {DB_PATH}")
+    print(f"- Período: {start_date} ... < {end_date}")
 
-    print("\n[ETAPA 2/3] Execução por posto")
+    print("\n[ETAPA 2/3] Execução por mês/posto")
 
-    for posto, odbc_str in conns.items():
-        print(f"\n[{posto}] conectando...")
-        try:
-            engine = make_engine(odbc_str)
-        except Exception as e:
-            print(f"[{posto}] ERRO engine: {e}")
-            continue
+    total_linhas = 0
+    meses_com_dados = set()
 
-        # A procedure precisa de uma data para executar
-        # Iteraremos mês a mês desde 2020 até hoje
-        print(f"[{posto}] extraindo fidelização...")
-        try:
-            with engine.connect() as con:
-                # Executar procedure para retornar dados consolidados
-                df = pd.read_sql_query(
-                    text('EXEC PC_Fin_Fidelizacao @database = :ini'),
-                    con,
-                    params={'ini': date(2020, 1, 1)}
-                )
+    # Iterar mês a mês dentro do período especificado
+    for month_date in month_iter(start_date, end_date):
+        ym = f"{month_date.year:04d}-{month_date.month:02d}"
+        print(f"\n{ym}:")
 
-            if not df.empty:
-                upsert_fidelizacao_batch(posto, df)
-                print(f"[{posto}] OK linhas={len(df)}")
-            else:
-                print(f"[{posto}] VAZIO (sem dados)")
+        for posto, odbc_str in conns.items():
+            try:
+                cnx = pyodbc.connect(odbc_str, timeout=20)
+                cursor = cnx.cursor()
+            except Exception as e:
+                print(f"  [{posto}] ERRO conexão: {e}")
+                continue
 
-        except Exception as e:
-            print(f"[{posto}] ERRO exec: {e}")
-            continue
+            try:
+                # Executar procedure para este mês
+                cursor.execute('EXEC PC_Fin_Fidelizacao ?', (month_date,))
 
-    print("\n[ETAPA 3/3] Gerando JSON")
+                all_rows = []
+                columns = None
+
+                while True:
+                    if cursor.description:
+                        columns = [desc[0] for desc in cursor.description]
+                        rows = cursor.fetchall()
+                        all_rows.extend(rows)
+
+                    if not cursor.nextset():
+                        break
+
+                if all_rows and columns:
+                    df = pd.DataFrame([dict(zip(columns, row)) for row in all_rows])
+                    upsert_fidelizacao_batch(posto, df)
+                    print(f"  [{posto}] OK {len(df)} linhas")
+                    total_linhas += len(df)
+                    meses_com_dados.add(ym)
+
+            except Exception as e:
+                print(f"  [{posto}] ERRO: {e}")
+            finally:
+                try:
+                    cursor.close()
+                    cnx.close()
+                except:
+                    pass
+
+    print(f"\n[ETAPA 3/3] Gerando JSON")
+    print(f"Total de linhas importadas: {total_linhas}")
+    print(f"Meses com dados: {len(meses_com_dados)}")
     build_json_fidelizacao()
 
     print("\n✅ Finalizado export_fidelizacao.")
@@ -269,9 +308,11 @@ def parse_args():
         description="Fidelização: extrai dados de PC_Fin_Fidelizacao por posto.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--postos", default="".join(POSTOS), help="Subset de postos. Ex: ANX.")
+    p.add_argument("--postos", default="".join(POSTOS), help="Subset de postos. Ex: ANX ou Y.")
     p.add_argument("--force", action="store_true", help="Limpa SQLite antes de executar.")
     p.add_argument("--dry-run", action="store_true", help="Executa sem gravar SQLite/JSON.")
+    p.add_argument("--from", dest="from_ym", default=None, help="Início YYYY-MM. Default=2020-01.")
+    p.add_argument("--to", dest="to_ym", default=None, help="Fim exclusivo YYYY-MM. Default=mês corrente.")
     return p.parse_args()
 
 if __name__ == "__main__":
@@ -282,7 +323,14 @@ if __name__ == "__main__":
             os.remove(DB_PATH)
             print(f"[INFO] Base {DB_PATH} removida para reprocessamento.")
 
+    # Determinar período
+    def ym_to_date(ym: str) -> date:
+        return date(int(ym[0:4]), int(ym[5:7]), 1)
+
+    start_date = ym_to_date(args.from_ym) if args.from_ym else EARLIEST_ALLOWED
+    end_date = ym_to_date(args.to_ym) if args.to_ym else date.today()
+
     if not args.dry_run:
-        run_extraction()
+        run_extraction_filtered(start_date, end_date, args.postos)
     else:
         print("[DRY-RUN] Nenhuma alteração realizada.")
