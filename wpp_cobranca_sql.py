@@ -25,6 +25,36 @@ SQLITE_PATH  = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
 MODO_ATRASO = "atraso"
 MODO_PRE_VENCIMENTO = "pre_vencimento"
 MODO_CLIENTES = "clientes_admissao"
+MODO_CLIENTE_NOVO = "cliente_novo"
+
+# Lookback para encontrar clientes novos (dias antes de hoje)
+CLIENTE_NOVO_LOOKBACK_DIAS = 7
+CLIENTE_NOVO_PREVIEW_DIAS  = 30
+
+_SQL_CLIENTE_NOVO = """
+SELECT DISTINCT
+    r.idCliente                                    AS idreceita,
+    cl.Matricula                                   AS matricula,
+    cl.nome                                        AS nomecadastro,
+    COALESCE(
+        NULLIF(LTRIM(RTRIM(ISNULL(cl.TelefoneWhatsApp,   ''))), ''),
+        NULLIF(LTRIM(RTRIM(ISNULL(cl.responsaveltelefonewhatsapp, ''))), '')
+    )                                              AS telefonewhatsapp,
+    CONVERT(VARCHAR(10), cl.DataAdmissao, 120)     AS ref,
+    NULL                                           AS valor,
+    NULL                                           AS venc,
+    0                                              AS diasdebito
+FROM fin_receita r
+JOIN cad_cliente cl ON cl.idCliente = r.idCliente
+WHERE r.idContaTipo = 5
+  AND r.DataPagamentoAuto IS NOT NULL
+  AND cl.Desativado = 0
+  AND MONTH(r.DataMensalidade) = MONTH(cl.DataAdmissao)
+  AND YEAR(r.DataMensalidade)  = YEAR(cl.DataAdmissao)
+  AND r.DataPagamentoAuto >= ?
+  AND r.DataPagamentoAuto <  ?
+ORDER BY r.idCliente
+"""
 
 # Fonte para lembrete antes do vencimento, mantendo aliases compatíveis
 # com WEB_COB_DebitoEmAberto6Meses.
@@ -229,9 +259,12 @@ def _build_where_clientes_sqlite(campanha: dict) -> tuple:
         filtros.append("titular_dependente = ?")
         params.append(campanha["titular_dependente"])
 
-    if campanha.get("situacao_cliente"):
-        filtros.append("situacao_efetiva = ?")
-        params.append(campanha["situacao_cliente"])
+    situacao_raw = campanha.get("situacao_cliente") or ""
+    situacoes = [s.strip() for s in situacao_raw.split(",") if s.strip()]
+    if situacoes:
+        ph = ",".join("?" * len(situacoes))
+        filtros.append(f"situacao_efetiva IN ({ph})")
+        params.extend(situacoes)
 
     if campanha.get("tipo_fj"):
         filtros.append("tipo_fj = ?")
@@ -346,7 +379,16 @@ def _env(key, default=""):
 
 def modo_envio(campanha: dict | None) -> str:
     m = str((campanha or {}).get("modo_envio") or MODO_ATRASO).strip().lower()
-    return m if m in (MODO_ATRASO, MODO_PRE_VENCIMENTO, MODO_CLIENTES) else MODO_ATRASO
+    return m if m in (MODO_ATRASO, MODO_PRE_VENCIMENTO, MODO_CLIENTES, MODO_CLIENTE_NOVO) else MODO_ATRASO
+
+
+def get_query_cliente_novo(lookback_dias: int = CLIENTE_NOVO_LOOKBACK_DIAS) -> tuple:
+    """Retorna (sql, [ini_str, fim_str]) para a query de clientes novos."""
+    from datetime import date, timedelta
+    hoje = date.today()
+    ini  = str(hoje - timedelta(days=lookback_dias))
+    fim  = str(hoje + timedelta(days=1))
+    return _SQL_CLIENTE_NOVO, [ini, fim]
 
 
 def source_sql(campanha: dict | None) -> str:
@@ -427,9 +469,12 @@ def _build_where_clientes(campanha: dict) -> tuple:
         filtros.append("titular_dependente = ?")
         params.append(campanha["titular_dependente"])
 
-    if campanha.get("situacao_cliente"):
-        filtros.append("situacao_efetiva = ?")
-        params.append(campanha["situacao_cliente"])
+    situacao_raw = campanha.get("situacao_cliente") or ""
+    situacoes = [s.strip() for s in situacao_raw.split(",") if s.strip()]
+    if situacoes:
+        ph = ",".join("?" * len(situacoes))
+        filtros.append(f"situacao_efetiva IN ({ph})")
+        params.extend(situacoes)
 
     if campanha.get("tipo_fj"):
         filtros.append("tipo_fj = ?")
@@ -587,12 +632,65 @@ def buscar_opcoes_debug(postos: list, campo: str, modo: str = MODO_ATRASO) -> tu
     return sorted(valores), erros
 
 
+def _contar_preview_cliente_novo(campanha: dict) -> dict:
+    """Preview para modo cliente_novo — consulta SQL Server com janela de 30 dias."""
+    from datetime import date, timedelta
+    postos = campanha.get("postos") or []
+    sql_count = (
+        "SELECT COUNT(DISTINCT r.idCliente) AS f, "
+        "COUNT(DISTINCT COALESCE("
+        "  NULLIF(LTRIM(RTRIM(ISNULL(cl.TelefoneWhatsApp, ''))), ''), "
+        "  NULLIF(LTRIM(RTRIM(ISNULL(cl.responsaveltelefonewhatsapp, ''))), '')"
+        ")) AS t "
+        "FROM fin_receita r "
+        "JOIN cad_cliente cl ON cl.idCliente = r.idCliente "
+        "WHERE r.idContaTipo = 5 "
+        "  AND r.DataPagamentoAuto IS NOT NULL "
+        "  AND cl.Desativado = 0 "
+        "  AND MONTH(r.DataMensalidade) = MONTH(cl.DataAdmissao) "
+        "  AND YEAR(r.DataMensalidade)  = YEAR(cl.DataAdmissao) "
+        "  AND r.DataPagamentoAuto >= ? "
+        "  AND r.DataPagamentoAuto <  ?"
+    )
+    hoje  = date.today()
+    ini   = str(hoje - timedelta(days=CLIENTE_NOVO_PREVIEW_DIAS))
+    fim   = str(hoje + timedelta(days=1))
+    params = [ini, fim]
+
+    total_faturas = 0
+    total_tel = 0
+    por_posto = {}
+    for posto in postos:
+        conn = get_conn_posto(posto)
+        if not conn:
+            por_posto[posto] = {"erro": "sem conexão"}
+            continue
+        try:
+            cur = conn.cursor()
+            cur.execute(sql_count, params)
+            row = cur.fetchone()
+            f = row[0] or 0
+            t = row[1] or 0
+            por_posto[posto] = {"faturas": f, "telefones": t}
+            total_faturas += f
+            total_tel += t
+        except Exception as e:
+            por_posto[posto] = {"erro": str(e)[:120]}
+            log.error("contar_preview cliente_novo posto=%s: %s", posto, e)
+        finally:
+            conn.close()
+    return {"total_faturas": total_faturas, "total_telefones": total_tel, "por_posto": por_posto}
+
+
 def contar_preview(campanha: dict) -> dict:
     """Conta registros e telefones únicos para os filtros da campanha.
     Retorna {total_faturas, total_telefones, por_posto}."""
     if modo_envio(campanha) == MODO_CLIENTES:
         # Modo clientes: lê do cache SQLite (rápido, sem tocar SQL Server)
         return _contar_preview_clientes_sqlite(campanha)
+
+    if modo_envio(campanha) == MODO_CLIENTE_NOVO:
+        return _contar_preview_cliente_novo(campanha)
 
     postos = campanha.get("postos") or []
     where, params = build_where(campanha)

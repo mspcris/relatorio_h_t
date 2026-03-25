@@ -109,8 +109,9 @@
                 {% set modo = campanha.modo_envio if campanha and campanha.modo_envio else 'atraso' %}
                 <select name="modo_envio" id="modo_envio" class="form-control">
                   <option value="atraso"             {{ 'selected' if modo == 'atraso' }}>Cobrança por atraso</option>
-                  <option value="pre_vencimento"   {{ 'selected' if modo == 'pre_vencimento' }}>Lembrete antes do vencimento</option>
+                  <option value="pre_vencimento"    {{ 'selected' if modo == 'pre_vencimento' }}>Lembrete antes do vencimento</option>
                   <option value="clientes_admissao" {{ 'selected' if modo == 'clientes_admissao' }}>Campanha de clientes (admissão)</option>
+                  <option value="cliente_novo"      {{ 'selected' if modo == 'cliente_novo' }}>Cliente Novo — Seja Bem-Vindo!</option>
                 </select>
               </div>
             </div>
@@ -118,14 +119,56 @@
 
           <!-- ID da Fila WhatsApp -->
           <div class="row mt-2">
-            <div class="col-md-5">
+            <div class="col-md-6">
               <div class="form-group mb-0">
                 <label class="font-weight-bold" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:#6c757d">
-                  ID da Fila WhatsApp <small class="text-muted font-weight-normal" style="text-transform:none">(vazio = usa WAPP_QUEUE_ID do .env)</small>
+                  Fila WhatsApp <small class="text-muted font-weight-normal" style="text-transform:none">(vazio = usa WAPP_QUEUE_ID do .env)</small>
                 </label>
-                <input type="text" name="queue_id" class="form-control"
-                       value="{{ campanha.queue_id if campanha and campanha.queue_id else '' }}"
-                       placeholder="Ex: cmn54op7f06dov9jbqwvhfb8s">
+                <!-- hidden: valor real enviado ao servidor -->
+                <input type="hidden" name="queue_id" id="queue_id_val"
+                       value="{{ campanha.queue_id if campanha and campanha.queue_id else '' }}">
+                <!-- select com filas conhecidas -->
+                <select id="queue_id_sel" class="form-control">
+                  <option value="">— Padrão do .env —</option>
+                  <optgroup label="Atendimento">
+                    <option value="cme7lb9ae00016ss6bf5i0tem">Atendimento Geral</option>
+                    <option value="cme7niv70000njbjrc9oycd31">Suporte ao APP</option>
+                    <option value="cme7o638z003ijbjrc2ojgwhq">Orçamentos de exames e procedimentos</option>
+                    <option value="cmeiy6l7e007wjbs4ahmpicas">ADESÃO - Quero informações sobre o plano</option>
+                    <option value="cmekcydw502vdjbzmx48eib4i">TeleVendas Campinho</option>
+                    <option value="cmkzx4g2902e93fjb906z0a6x">Convênio CMD</option>
+                    <option value="cme8lppmp001ijbjsik9mb8fp">CENTRAL DE ATENDIMENTOS C</option>
+                    <option value="cme8gw7y100hhjbyt6lurb8sn">CENTRAL DE ATENDIMENTOS G</option>
+                  </optgroup>
+                  <optgroup label="Financeiro">
+                    <option value="cme8gx4id00hijbyt6s5j3ycl">FINANCEIRO G/X/Y</option>
+                    <option value="cme8gxfzi00hjjbyt9h50x3y0">FINANCEIRO E ATENDIMENTO C/D/M/J/P</option>
+                    <option value="cme8gxvv900hkjbyt19jah1uo">FINANCEIRO E ATENDIMENTO A</option>
+                    <option value="cme8gy8o800hnjbyt74n7vkcx">FINANCEIRO E ATENDIMENTO N</option>
+                    <option value="cme8gyfcj00hojbytukmi9gw8">FINANCEIRO E ATENDIMENTO R</option>
+                    <option value="cme8gylfd00hpjbyto9yyix9u">FINANCEIRO E ATENDIMENTO B</option>
+                    <option value="cme8l2a91010rjbytymaaop2d">FINANCEIRO E ATENDIMENTO I</option>
+                  </optgroup>
+                  <optgroup label="Ouvidoria">
+                    <option value="cme7o6ywm003jjbjro1vis2xe">Ouvidoria Campo Grande</option>
+                    <option value="cme7o740m003kjbjrbnkm1z30">Ouvidoria Campo Grande X</option>
+                    <option value="cme7o7am8003ljbjrwhvy3h32">Ouvidoria Campo Grande Y</option>
+                    <option value="cme7o7o40003mjbjrzxfms8us">Ouvidoria Bangu</option>
+                    <option value="cme7o7w2o003njbjrjot5p8gr">Ouvidoria Realengo</option>
+                    <option value="cme7o8139003ojbjrqmkoji47">Ouvidoria Anchieta</option>
+                    <option value="cme7o866i003pjbjr2xym47gm">Ouvidoria Nilópolis</option>
+                    <option value="cme7o8jg1003qjbjrvoirnxwg">Ouvidoria Nova Iguaçu</option>
+                    <option value="cme7o9edx003xjbjra22xqdd1">Ouvidoria Postos Campinho, Madureira, Del Castilho, Jacarepaguá e Rio das Pedras</option>
+                  </optgroup>
+                  <optgroup label="Cobrança / MKT">
+                    <option value="cmmzcumqu00a4zejb323r63ac">Template Enviado ao Cliente</option>
+                    <option value="cmn54op7f06dov9jbqwvhfb8s">Mensagens MKT</option>
+                  </optgroup>
+                  <option value="_outro">— Outro (digitar ID) —</option>
+                </select>
+                <!-- campo visível apenas quando "_outro" -->
+                <input type="text" id="queue_id_custom" class="form-control mt-1"
+                       style="display:none" placeholder="Cole ou digite o ID da fila">
               </div>
             </div>
           </div>
@@ -272,11 +315,13 @@
               </div>
               <div class="col-md-3">
                 <div class="form-group">
-                  <label>Situação do cliente</label>
-                  <select name="situacao_cliente" id="sel_cli_situacao_efetiva" class="form-control wpp-sel2-cli">
-                    <option value="">— Todas —</option>
+                  <label>Situação do cliente <span class="text-danger" title="Obrigatório ao menos uma">*</span></label>
+                  <select name="situacao_cliente" id="sel_cli_situacao_efetiva"
+                          class="form-control wpp-sel2-cli" multiple>
                     {% if campanha and campanha.situacao_cliente %}
-                    <option value="{{ campanha.situacao_cliente }}" selected>{{ campanha.situacao_cliente }}</option>
+                      {% for s in campanha.situacao_cliente.split(',') %}
+                        {% if s.strip() %}<option value="{{ s.strip() }}" selected>{{ s.strip() }}</option>{% endif %}
+                      {% endfor %}
                     {% endif %}
                   </select>
                 </div>
@@ -572,6 +617,92 @@
         </div>
       </div>
 
+      <!-- ── USUÁRIO REMETENTE ────────────────────────────────────── -->
+      <div class="card card-outline card-secondary mb-3">
+        <div class="card-header py-2"><strong>Usuário remetente</strong></div>
+        <div class="card-body py-2">
+          <div class="row">
+            <div class="col-md-5">
+              <div class="form-group mb-0">
+                <label>Enviar como</label>
+                <select name="from_user_id" id="from_user_id" class="form-control">
+                  {% set _fuid = campanha.from_user_id if campanha and campanha.from_user_id else 'cmg8cum8g0519jbbm6r9l93f7' %}
+                  <option value="cmg8cum8g0519jbbm6r9l93f7" {{ 'selected' if _fuid == 'cmg8cum8g0519jbbm6r9l93f7' }}>Camila.ai</option>
+                  <option value="cme8jjauk00u2jbytjdw1sb9d" {{ 'selected' if _fuid == 'cme8jjauk00u2jbytjdw1sb9d' }}>Adriana Nina</option>
+                  <option value="cme8ta3o400rujbjsyfqlzbax" {{ 'selected' if _fuid == 'cme8ta3o400rujbjsyfqlzbax' }}>Agatha Saldanha</option>
+                  <option value="cme8tdool00sqjbjstgub76ll" {{ 'selected' if _fuid == 'cme8tdool00sqjbjstgub76ll' }}>Ana Marcele</option>
+                  <option value="cmea6qesn01m2jbutcfgkrh7s" {{ 'selected' if _fuid == 'cmea6qesn01m2jbutcfgkrh7s' }}>Beatriz Abreu</option>
+                  <option value="cmdrmkb47005qjbbvok31rx99" {{ 'selected' if _fuid == 'cmdrmkb47005qjbbvok31rx99' }}>Beatriz Lacerda</option>
+                  <option value="cme8jcc4i00s9jbytdlwapbb0" {{ 'selected' if _fuid == 'cme8jcc4i00s9jbytdlwapbb0' }}>Cassiano Faria</option>
+                  <option value="cmdt0lfya00oijb0xwtf67ezz" {{ 'selected' if _fuid == 'cmdt0lfya00oijb0xwtf67ezz' }}>Cauã Sant'Anna</option>
+                  <option value="cmfy73ze303h4jbn2mcevv544" {{ 'selected' if _fuid == 'cmfy73ze303h4jbn2mcevv544' }}>Cleidilane Vieira</option>
+                  <option value="cmk5q2st00432jbzvk7c51poy" {{ 'selected' if _fuid == 'cmk5q2st00432jbzvk7c51poy' }}>Cleidilane</option>
+                  <option value="cmea8b28u01sljbutw8bjx3t9" {{ 'selected' if _fuid == 'cmea8b28u01sljbutw8bjx3t9' }}>Daniela Souza</option>
+                  <option value="cmeautea9007ijbyjmu5w83qf" {{ 'selected' if _fuid == 'cmeautea9007ijbyjmu5w83qf' }}>Davi Macedo</option>
+                  <option value="cmevnrztp021ujb4vwci3klob" {{ 'selected' if _fuid == 'cmevnrztp021ujb4vwci3klob' }}>Dayene Fernandes</option>
+                  <option value="cme8tawl000s3jbjssrgerxaz" {{ 'selected' if _fuid == 'cme8tawl000s3jbjssrgerxaz' }}>Fabiana Nicário</option>
+                  <option value="cmkh92e6j02f91yjbxgkvofqr" {{ 'selected' if _fuid == 'cmkh92e6j02f91yjbxgkvofqr' }}>Fabiana Viter</option>
+                  <option value="cmf1ahlw6021mjb18gun5ijx5" {{ 'selected' if _fuid == 'cmf1ahlw6021mjb18gun5ijx5' }}>Fabricio da Costa</option>
+                  <option value="cmm238and024czbjbdjnzn9yk" {{ 'selected' if _fuid == 'cmm238and024czbjbdjnzn9yk' }}>Fernanda Catarcione</option>
+                  <option value="cmd7f2vu40005jb2y0w5atibz" {{ 'selected' if _fuid == 'cmd7f2vu40005jb2y0w5atibz' }}>Gabriel Gonçalves</option>
+                  <option value="cmea8abzj01rsjbutky6qc0u8" {{ 'selected' if _fuid == 'cmea8abzj01rsjbutky6qc0u8' }}>Isabelle Felix</option>
+                  <option value="cmdsqe9jj00cnjbz29ek1aycf" {{ 'selected' if _fuid == 'cmdsqe9jj00cnjbz29ek1aycf' }}>Jonatas Costa</option>
+                  <option value="cmkibsaa700df02jb09qfmp5d" {{ 'selected' if _fuid == 'cmkibsaa700df02jb09qfmp5d' }}>Julia de Moraes Marques</option>
+                  <option value="cmdsq89sm00c3jbz27uimu4u1" {{ 'selected' if _fuid == 'cmdsq89sm00c3jbz27uimu4u1' }}>Kevin Costa</option>
+                  <option value="cmdpya8t50005jb0riuh8hx0f" {{ 'selected' if _fuid == 'cmdpya8t50005jb0riuh8hx0f' }}>Leonardo Carneiro</option>
+                  <option value="cme8l4ecm0111jbyth5farf0j" {{ 'selected' if _fuid == 'cme8l4ecm0111jbyth5farf0j' }}>Lincoln Menezes</option>
+                  <option value="cmddbwec2000djbt3mgtesyw1" {{ 'selected' if _fuid == 'cmddbwec2000djbt3mgtesyw1' }}>Lucas Paes</option>
+                  <option value="cmdrmaiwv0052jbbvj8hhkfb4" {{ 'selected' if _fuid == 'cmdrmaiwv0052jbbvj8hhkfb4' }}>Lucas Motta</option>
+                  <option value="cmd7f3yl10008jb2y6ga522ll" {{ 'selected' if _fuid == 'cmd7f3yl10008jb2y6ga522ll' }}>Luis Garritano</option>
+                  <option value="cmi34wirj012ejb39m1d59j18" {{ 'selected' if _fuid == 'cmi34wirj012ejb39m1d59j18' }}>Lumara Vitória</option>
+                  <option value="cme8jlrwi00upjbythch084uy" {{ 'selected' if _fuid == 'cme8jlrwi00upjbythch084uy' }}>Maria Caroline</option>
+                  <option value="cmhdsc5nl04lwjb05zrerm5xm" {{ 'selected' if _fuid == 'cmhdsc5nl04lwjb05zrerm5xm' }}>Mariana Abreu</option>
+                  <option value="cmdt0moiv00omjb0xyhwfiq1t" {{ 'selected' if _fuid == 'cmdt0moiv00omjb0xyhwfiq1t' }}>Marta Assis</option>
+                  <option value="cme8jd3tp00sojbyt2mfowoex" {{ 'selected' if _fuid == 'cme8jd3tp00sojbyt2mfowoex' }}>Matheus Avelar</option>
+                  <option value="cme8te2ri00sujbjs3ho8bz0i" {{ 'selected' if _fuid == 'cme8te2ri00sujbjs3ho8bz0i' }}>Marcia Regina</option>
+                  <option value="cmd7f15e90002jb2yiy0roa96" {{ 'selected' if _fuid == 'cmd7f15e90002jb2yiy0roa96' }}>Marcelle Santos</option>
+                  <option value="cmfl8yaww02rkjba6ax1521zs" {{ 'selected' if _fuid == 'cmfl8yaww02rkjba6ax1521zs' }}>Marcelo Melo</option>
+                  <option value="cme8ipefi00otjbyt71tfb7b3" {{ 'selected' if _fuid == 'cme8ipefi00otjbyt71tfb7b3' }}>Michelle Ferreira</option>
+                  <option value="cmd4pt2680000o127h8sp1m6l" {{ 'selected' if _fuid == 'cmd4pt2680000o127h8sp1m6l' }}>Milena Carvalho</option>
+                  <option value="cmen8641z02bojb562mtxrdqx" {{ 'selected' if _fuid == 'cmen8641z02bojb562mtxrdqx' }}>Mylena Maia</option>
+                  <option value="cmdsq9owr00ccjbz2yei11hva" {{ 'selected' if _fuid == 'cmdsq9owr00ccjbz2yei11hva' }}>Nathan Consoli</option>
+                  <option value="cmdrmhcl6005ijbbvk7v00wxj" {{ 'selected' if _fuid == 'cmdrmhcl6005ijbbvk7v00wxj' }}>Nathalia Correa</option>
+                  <option value="cmj901eej04ohjbzu0b7zs9wg" {{ 'selected' if _fuid == 'cmj901eej04ohjbzu0b7zs9wg' }}>Paulo Felipe</option>
+                  <option value="cme8tby4600sfjbjs4ggmnxtx" {{ 'selected' if _fuid == 'cme8tby4600sfjbjs4ggmnxtx' }}>Pedro Paulo</option>
+                  <option value="cmi67jh2n02w3jb0q9rezr7m8" {{ 'selected' if _fuid == 'cmi67jh2n02w3jb0q9rezr7m8' }}>Raquel De Moura</option>
+                  <option value="cme8tcg4p00sijbjs60x0q54i" {{ 'selected' if _fuid == 'cme8tcg4p00sijbjs60x0q54i' }}>Rayane Bandeira</option>
+                  <option value="cmmcek5nh04l02tjbjc42fvqd" {{ 'selected' if _fuid == 'cmmcek5nh04l02tjbjc42fvqd' }}>Renato de Souza</option>
+                  <option value="cmit08m8q01sejb24zk3k0pbo" {{ 'selected' if _fuid == 'cmit08m8q01sejb24zk3k0pbo' }}>Ricardo Welbert</option>
+                  <option value="cmekcxj0302vajbzmxcg8g7e8" {{ 'selected' if _fuid == 'cmekcxj0302vajbzmxcg8g7e8' }}>Roberta Braga</option>
+                  <option value="cmdrm07rv004tjbbv1phvsdai" {{ 'selected' if _fuid == 'cmdrm07rv004tjbbv1phvsdai' }}>Roberta Soares</option>
+                  <option value="cmmcffj8q04s72tjbwrl3egby" {{ 'selected' if _fuid == 'cmmcffj8q04s72tjbwrl3egby' }}>Robson Fernandes</option>
+                  <option value="cmfh0eave021njb3w6abp39z9" {{ 'selected' if _fuid == 'cmfh0eave021njb3w6abp39z9' }}>Ronald Fernandes</option>
+                  <option value="cme8jfav600tajbyt7iwyero6" {{ 'selected' if _fuid == 'cme8jfav600tajbyt7iwyero6' }}>Romulo Azevedo</option>
+                  <option value="cmeizqak300e2jbs4pha73ao8" {{ 'selected' if _fuid == 'cmeizqak300e2jbs4pha73ao8' }}>Ruthe Barros</option>
+                  <option value="cmmxfq89001232ajb6vqe6ai6" {{ 'selected' if _fuid == 'cmmxfq89001232ajb6vqe6ai6' }}>Sara Jaqueline</option>
+                  <option value="cme8jbe4800rujbytige3xdyw" {{ 'selected' if _fuid == 'cme8jbe4800rujbytige3xdyw' }}>Sergio Velloso</option>
+                  <option value="cme8jicjc00trjbytcljestvd" {{ 'selected' if _fuid == 'cme8jicjc00trjbytcljestvd' }}>Stefany Alexandra</option>
+                  <option value="cme8td73000snjbjs6gsu312t" {{ 'selected' if _fuid == 'cme8td73000snjbjs6gsu312t' }}>Taiane Candido</option>
+                  <option value="cme8jl2y800ufjbytma09biai" {{ 'selected' if _fuid == 'cme8jl2y800ufjbytma09biai' }}>Thais Lima</option>
+                  <option value="cmkeblmh602f2yljb1n46ighw" {{ 'selected' if _fuid == 'cmkeblmh602f2yljb1n46ighw' }}>Thais Rodrigues</option>
+                  <option value="cme8inig300oljbytm18j3rv6" {{ 'selected' if _fuid == 'cme8inig300oljbytm18j3rv6' }}>Thiago Silva</option>
+                  <option value="cmmjao0al03flzcjbnvcc8g55" {{ 'selected' if _fuid == 'cmmjao0al03flzcjbnvcc8g55' }}>Thiago de Menezes</option>
+                  <option value="cmd4r4a8z0000o1k8tvgch28p" {{ 'selected' if _fuid == 'cmd4r4a8z0000o1k8tvgch28p' }}>Usuária</option>
+                  <option value="cmdrlyu9f004ojbbvbp6ahx5k" {{ 'selected' if _fuid == 'cmdrlyu9f004ojbbvbp6ahx5k' }}>Vanessa Farias</option>
+                  <option value="cme8l57pi011gjbytkiaqx4co" {{ 'selected' if _fuid == 'cme8l57pi011gjbytkiaqx4co' }}>Vinícius Pereira</option>
+                  <option value="cmeausp09007djbyje29ml8nf" {{ 'selected' if _fuid == 'cmeausp09007djbyje29ml8nf' }}>Vinícius Ribeiro</option>
+                  <option value="cmd7fbx3i000jjb2yy66owwqs" {{ 'selected' if _fuid == 'cmd7fbx3i000jjb2yy66owwqs' }}>Victoria</option>
+                  <option value="cmfr0ir4302wtjbkg59h5it5v" {{ 'selected' if _fuid == 'cmfr0ir4302wtjbkg59h5it5v' }}>Victoria Utrini</option>
+                  <option value="cme8tbhpv00s9jbjs6crvsi29" {{ 'selected' if _fuid == 'cme8tbhpv00s9jbjs6crvsi29' }}>Ygor Vieira</option>
+                  <option value="cmd7f9uqg000gjb2y24b7u1od" {{ 'selected' if _fuid == 'cmd7f9uqg000gjb2y24b7u1od' }}>Cristiano Souza</option>
+                </select>
+                <small class="form-text text-muted">Agente que aparece como remetente no WhatsApp</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── BOTÕES ───────────────────────────────────────────────── -->
       <div class="d-flex justify-content-between">
         <a href="/wpp" class="btn btn-outline-secondary">Cancelar</a>
@@ -594,6 +725,53 @@ let _templates = [];
 const TEMPLATE_ATUAL = "{{ campanha.template if campanha else 'notificacao_de_fatura' }}";
 const MODO_ENVIO_ATUAL = "{{ campanha.modo_envio if campanha and campanha.modo_envio else 'atraso' }}";
 const QUEUE_ID_ATUAL   = "{{ campanha.queue_id if campanha and campanha.queue_id else '' }}";
+const QUEUE_PADRAO_COBRANCA = "cmmzcumqu00a4zejb323r63ac";  // Template Enviado ao Cliente
+const QUEUE_PADRAO_CLIENTES = "cmn54op7f06dov9jbqwvhfb8s";  // Mensagens MKT
+
+// Inicializa o select de fila: restaura valor salvo ou aplica padrão por modo
+function initQueueSel() {
+  const sel    = document.getElementById('queue_id_sel');
+  const custom = document.getElementById('queue_id_custom');
+  const hidden = document.getElementById('queue_id_val');
+  if (!sel) return;
+
+  const val = hidden.value || '';
+  // Verifica se é um dos valores conhecidos
+  const optFound = Array.from(sel.options).some(o => o.value === val && o.value !== '_outro');
+  if (val && !optFound) {
+    sel.value = '_outro';
+    custom.value = val;
+    custom.style.display = '';
+  } else {
+    sel.value = val;
+    custom.style.display = 'none';
+  }
+}
+
+function syncQueueId() {
+  const sel    = document.getElementById('queue_id_sel');
+  const custom = document.getElementById('queue_id_custom');
+  const hidden = document.getElementById('queue_id_val');
+  if (!sel) return;
+  if (sel.value === '_outro') {
+    custom.style.display = '';
+    hidden.value = custom.value.trim();
+  } else {
+    custom.style.display = 'none';
+    hidden.value = sel.value;
+  }
+}
+
+// Aplica fila padrão conforme modo, apenas se o campo estiver vazio (nova campanha)
+function aplicarQueuePadrao(modo) {
+  const hidden = document.getElementById('queue_id_val');
+  const sel    = document.getElementById('queue_id_sel');
+  if (!sel || hidden.value) return;  // não sobrescreve valor já salvo
+  const padrao = (modo === 'clientes_admissao' || modo === 'cliente_novo')
+      ? QUEUE_PADRAO_CLIENTES : QUEUE_PADRAO_COBRANCA;
+  sel.value    = padrao;
+  hidden.value = padrao;
+}
 
 function mostrarPreview() {
   const sel  = document.getElementById('template-select');
@@ -765,6 +943,12 @@ function atualizarModoEnvio() {
     boxClientes.style.display = '';
     cardFiltros.style.display = 'none';
     titulo.textContent = 'Filtros de Admissão';
+  } else if (modo === 'cliente_novo') {
+    boxAtraso.style.display   = 'none';
+    boxPre.style.display      = 'none';
+    boxClientes.style.display = 'none';
+    cardFiltros.style.display = 'none';
+    titulo.textContent        = 'Cliente Novo — Seja Bem-Vindo!';
   } else {
     boxAtraso.style.display   = '';
     boxPre.style.display      = 'none';
@@ -779,7 +963,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Inicializa select2 em todos os selects de filtro
   $('.wpp-sel2').select2({ placeholder: '— Todos —', allowClear: true, width: '100%' });
-  $('.wpp-sel2-cli').select2({ placeholder: '— Todos —', allowClear: true, width: '100%' });
+  // Situação: multi-select com placeholder diferenciado
+  $('#sel_cli_situacao_efetiva').select2({
+    placeholder: '— Selecione ao menos uma —',
+    allowClear: true,
+    width: '100%',
+  });
+  // Demais selects de clientes (exceto situação, já inicializado acima)
+  $('.wpp-sel2-cli:not(#sel_cli_situacao_efetiva)').select2({ placeholder: '— Todos —', allowClear: true, width: '100%' });
+
+  // Validação: situação obrigatória no modo clientes_admissao
+  document.getElementById('formCampanha').addEventListener('submit', function(e) {
+    if ((document.getElementById('modo_envio') || {}).value === 'clientes_admissao') {
+      const vals = $('#sel_cli_situacao_efetiva').val();
+      if (!vals || vals.length === 0) {
+        e.preventDefault();
+        alert('Selecione ao menos uma Situação do cliente antes de salvar.');
+        document.getElementById('sel_cli_situacao_efetiva').focus();
+      }
+    }
+  });
 
   // Checkboxes de posto → recarregar opções
   document.querySelectorAll('.posto-cb').forEach(cb => {
@@ -791,9 +994,23 @@ document.addEventListener('DOMContentLoaded', () => {
     modoSel.addEventListener('change', () => {
       atualizarModoEnvio();
       carregarTodasOpcoes();
+      aplicarQueuePadrao(modoSel.value);
     });
   }
   atualizarModoEnvio();
+
+  // Fila WhatsApp
+  initQueueSel();
+  const queueSel    = document.getElementById('queue_id_sel');
+  const queueCustom = document.getElementById('queue_id_custom');
+  if (queueSel) {
+    queueSel.addEventListener('change', syncQueueId);
+    // aplica padrão só em nova campanha (QUEUE_ID_ATUAL vazio)
+    if (!QUEUE_ID_ATUAL) aplicarQueuePadrao(MODO_ENVIO_ATUAL);
+  }
+  if (queueCustom) {
+    queueCustom.addEventListener('input', syncQueueId);
+  }
 
   // Se já há postos marcados (modo edição), carrega opções imediatamente
   if (postosChecados().length > 0) {

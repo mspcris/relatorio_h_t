@@ -331,7 +331,13 @@
 
                             <div class="flex-grow-1 ml-3">
                                 <label class="mb-0 small d-block">Filtro por posto (multi-seleção)</label>
-                                <ul id="postoTabsClientes" class="nav nav-pills scroll-tabs"></ul>
+                                <div class="d-flex align-items-center">
+                                  <ul id="postoTabsClientes" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
+                                  <div class="ml-2 flex-shrink-0">
+                                    <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
+                                    <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
+                                  </div>
+                                </div>
                             </div>
 
                         </div>
@@ -988,6 +994,7 @@ ORDER BY e.codigo, faixa_etaria;
 
                 selPostos = "ALL";
                 buildPostoTabs();
+                wireGrupoButtons();
                 setupDatasetSwitch();
                 refreshDashboard();
 
@@ -1008,7 +1015,7 @@ ORDER BY e.codigo, faixa_etaria;
                 if (!res.ok) return [];
                 const data = await res.json();
                 const permitidos = data.postos;
-                if (!permitidos || permitidos.length === 0) return [];
+                if (!permitidos || permitidos.length === 0) return postos; // sem restrição de posto = vê todos
                 const allowed = new Set(permitidos.map(p => p.toUpperCase()));
                 return postos.filter(p => allowed.has(p.toUpperCase()));
             } catch (err) {
@@ -1064,6 +1071,7 @@ ORDER BY e.codigo, faixa_etaria;
                 li.appendChild(a);
                 ul.appendChild(li);
             });
+            _atualizarBotoesGrupo();
         }
 
         function togglePostoSelecao(p) {
@@ -1085,6 +1093,47 @@ ORDER BY e.codigo, faixa_etaria;
             return selPostos === 'ALL' || selPostos.has(p);
         }
 
+        /* =========================================================================
+           GRUPOS DE POSTOS
+        ===========================================================================*/
+        const GRUPOS_POSTO = {
+            altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+            couto:    ['C', 'D', 'J', 'M', 'P'],
+        };
+
+        function _grupoAtivo() {
+            if (!selPostos || selPostos === 'ALL') return null;
+            const selArr = [...selPostos].sort().join(',');
+            for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+                const intersec = lista.filter(p => POSTOS_PERMITIDOS.includes(p)).sort().join(',');
+                if (intersec && selArr === intersec) return nome;
+            }
+            return null;
+        }
+
+        function _atualizarBotoesGrupo() {
+            const ativo = _grupoAtivo();
+            const btnA = document.getElementById('btnGrupoAltamiro');
+            const btnC = document.getElementById('btnGrupoCouto');
+            if (btnA) btnA.classList.toggle('btn-secondary',         ativo === 'altamiro');
+            if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
+            if (btnC) btnC.classList.toggle('btn-secondary',         ativo === 'couto');
+            if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+        }
+
+        function selectGrupo(grupo) {
+            const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS_PERMITIDOS.includes(p));
+            selPostos = new Set(intersec);
+            buildPostoTabs();
+            refreshDashboard();
+        }
+
+        function wireGrupoButtons() {
+            const btnA = document.getElementById('btnGrupoAltamiro');
+            const btnC = document.getElementById('btnGrupoCouto');
+            if (btnA) btnA.onclick = () => selectGrupo('altamiro');
+            if (btnC) btnC.onclick = () => selectGrupo('couto');
+        }
 
         /* =========================================================================
            SWITCH VIDAS / BENEFICIÁRIOS / BENEFICIÁRIOS PJ

@@ -183,8 +183,10 @@
 
         selPostos = sel;
         markActiveMulti(ulSel, selPostos);
+        _atualizarBotoesGrupo();
         render();
     };
+    _atualizarBotoesGrupo();
     }
 
 
@@ -194,6 +196,46 @@
 
     function showByPosto(){
     return selPostos === 'ALL' || (selPostos instanceof Set && selPostos.size > 1);
+    }
+
+    // ====== Grupos de Postos ======
+    const GRUPOS_POSTO = {
+      altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+      couto:    ['C', 'D', 'J', 'M', 'P'],
+    };
+
+    function _grupoAtivo() {
+      if (!selPostos || selPostos === 'ALL') return null;
+      const selArr = [...selPostos].sort().join(',');
+      for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+        const intersec = lista.filter(p => POSTOS.includes(p)).sort().join(',');
+        if (intersec && selArr === intersec) return nome;
+      }
+      return null;
+    }
+
+    function _atualizarBotoesGrupo() {
+      const ativo = _grupoAtivo();
+      const btnA = el('#btnGrupoAltamiro');
+      const btnC = el('#btnGrupoCouto');
+      if (btnA) btnA.classList.toggle('btn-secondary',         ativo === 'altamiro');
+      if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
+      if (btnC) btnC.classList.toggle('btn-secondary',         ativo === 'couto');
+      if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+    }
+
+    function selectGrupo(grupo) {
+      const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p));
+      selPostos = new Set(intersec);
+      buildPostoTabs('#postoTabs');
+      render();
+    }
+
+    function wireGrupoButtons() {
+      const btnA = el('#btnGrupoAltamiro');
+      const btnC = el('#btnGrupoCouto');
+      if (btnA) btnA.onclick = () => selectGrupo('altamiro');
+      if (btnC) btnC.onclick = () => selectGrupo('couto');
     }
 
     // =========================
@@ -516,22 +558,18 @@
       el('#dataIni').value = dataIni;
       el('#dataFim').value = dataFim;
 
-      // 1) sessão
+      // 1) sessão — sem fallback: lista vazia = sem acesso
       POSTOS = (postosUsuario && postosUsuario.length) ? postosUsuario : [];
 
-      // 2) fallback local (HEAD)
       if(!POSTOS.length){
-        POSTOS = await detectPostosDisponiveis(ymSel);
-      }
-
-      if(!POSTOS.length){
-        el('#err').textContent = 'Sem JSONs encontrados em /json_notas_rps para o mês selecionado.';
+        el('#err').textContent = 'Sem acesso a postos. Solicite permissão ao administrador.';
         return;
       } else {
         el('#err').textContent = '';
       }
 
       buildPostoTabs('#postoTabs');
+      wireGrupoButtons();
 
       // listeners
       el('#dataIni').addEventListener('change', async ()=>{
@@ -805,7 +843,13 @@
 
           <div class="flex-grow-1">
             <label class="mb-0 small d-block">Posto</label>
-            <ul id="postoTabs" class="nav nav-pills scroll-tabs"></ul>
+            <div class="d-flex align-items-center">
+              <ul id="postoTabs" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
+              <div class="ml-2 flex-shrink-0">
+                <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
+                <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
+              </div>
+            </div>
           </div>
 
           <div class="ml-auto">

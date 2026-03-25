@@ -1650,3 +1650,138 @@ def tef_logs():
 
     except Exception as exc:
         return jsonify({"erro": str(exc)}), 500
+
+
+# ============================================================
+# API — Chat Avaliações (MySQL camim_chat_production)
+# ============================================================
+
+@auth_bp.get("/api/chat_avaliacoes")
+def chat_avaliacoes_api():
+    email_usr, _ = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    ini      = request.args.get("ini", "")
+    fim      = request.args.get("fim", "")
+    com_obs  = request.args.get("com_obs", "0") == "1"
+    page     = max(1, int(request.args.get("page", 1) or 1))
+    PER_PAGE = 200
+
+    try:
+        import pymysql
+        host = os.environ.get("CHAT_MYSQL_HOST", "")
+        port = int(os.environ.get("CHAT_MYSQL_PORT", 3306))
+        user = os.environ.get("CHAT_MYSQL_USER", "")
+        pwd  = os.environ.get("CHAT_MYSQL_PASSWORD", "")
+        db   = os.environ.get("CHAT_MYSQL_DATABASE", "camim_chat_production")
+
+        conn = pymysql.connect(
+            host=host, port=port, user=user, password=pwd,
+            database=db, charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor,
+            connect_timeout=10,
+        )
+        cur = conn.cursor()
+
+        where_parts = ["te.deletedAt IS NULL"]
+        params = []
+        if ini:
+            where_parts.append("DATE(t.closedAt) >= %s")
+            params.append(ini)
+        if fim:
+            where_parts.append("DATE(t.closedAt) <= %s")
+            params.append(fim)
+        if com_obs:
+            where_parts.append("te.obs IS NOT NULL AND te.obs != ''")
+        where_str = " AND ".join(where_parts)
+
+        # Total
+        cur.execute(
+            f"SELECT COUNT(*) AS n FROM TicketEvaluation te "
+            f"LEFT JOIN Ticket t ON t.id = te.ticketId WHERE {where_str}",
+            params,
+        )
+        total = (cur.fetchone() or {}).get("n", 0)
+
+        # Distribuição por nota
+        cur.execute(f"""
+            SELECT te.score, COUNT(*) AS cnt
+            FROM TicketEvaluation te
+            LEFT JOIN Ticket t ON t.id = te.ticketId
+            WHERE {where_str}
+            GROUP BY te.score ORDER BY te.score
+        """, params)
+        dist = [{"score": r["score"], "cnt": r["cnt"]} for r in cur.fetchall()]
+
+        # Média
+        cur.execute(f"""
+            SELECT ROUND(AVG(te.score), 2) AS media, COUNT(*) AS total_com_nota
+            FROM TicketEvaluation te
+            LEFT JOIN Ticket t ON t.id = te.ticketId
+            WHERE {where_str} AND te.score IS NOT NULL
+        """, params)
+        stats_row = cur.fetchone() or {}
+        media          = stats_row.get("media")
+        total_com_nota = stats_row.get("total_com_nota", 0)
+
+        # Tendência diária
+        cur.execute(f"""
+            SELECT DATE(t.closedAt) AS dia,
+                   ROUND(AVG(te.score), 2) AS media,
+                   COUNT(*) AS cnt
+            FROM TicketEvaluation te
+            LEFT JOIN Ticket t ON t.id = te.ticketId
+            WHERE {where_str} AND te.score IS NOT NULL AND t.closedAt IS NOT NULL
+            GROUP BY dia ORDER BY dia
+        """, params)
+        trend = [
+            {"dia": str(r["dia"]), "media": float(r["media"] or 0), "cnt": r["cnt"]}
+            for r in cur.fetchall()
+        ]
+
+        # Linhas paginadas
+        offset = (page - 1) * PER_PAGE
+        cur.execute(f"""
+            SELECT te.id, te.ticketId, te.score, te.obs,
+                   te.createdAt, t.closedAt
+            FROM TicketEvaluation te
+            LEFT JOIN Ticket t ON t.id = te.ticketId
+            WHERE {where_str}
+            ORDER BY t.closedAt DESC, te.id DESC
+            LIMIT %s OFFSET %s
+        """, params + [PER_PAGE, offset])
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        def _fmt(v):
+            if v is None:
+                return None
+            if hasattr(v, "isoformat"):
+                return v.isoformat()
+            return str(v)
+
+        return jsonify({
+            "total":          total,
+            "total_com_nota": total_com_nota,
+            "media":          float(media) if media is not None else None,
+            "dist":           dist,
+            "trend":          trend,
+            "page":           page,
+            "per_page":       PER_PAGE,
+            "rows": [
+                {
+                    "id":        r["id"],
+                    "ticketId":  r["ticketId"],
+                    "score":     r["score"],
+                    "obs":       r["obs"] or "",
+                    "createdAt": _fmt(r["createdAt"]),
+                    "closedAt":  _fmt(r["closedAt"]),
+                }
+                for r in rows
+            ],
+        })
+
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500

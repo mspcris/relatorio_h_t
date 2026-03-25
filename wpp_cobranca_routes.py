@@ -545,12 +545,14 @@ def _form_to_dict(form) -> dict:
         "adm_data_fim":       form.get("adm_data_fim") or None,
         "tipo_cliente":       form.get("tipo_cliente") or None,
         "titular_dependente": form.get("titular_dependente") or None,
-        "situacao_cliente":   form.get("situacao_cliente") or None,
+        "situacao_cliente":   ",".join(v for v in form.getlist("situacao_cliente") if v) or None,
         "tipo_fj":            form.get("tipo_fj") or None,
         "clube_beneficio":    form.get("clube_beneficio") == "1",
         "clube_beneficio_joy": form.get("clube_beneficio_joy") == "1",
         "plano_premium":      form.get("plano_premium") == "1",
         "origem":             form.get("origem") or None,
+        "pagador_atrasado":   form.get("pagador_atrasado") == "1",
+        "from_user_id":       form.get("from_user_id") or "cmg8cum8g0519jbbm6r9l93f7",
     }
 
 

@@ -256,7 +256,13 @@
                         </div>
                         <div class="flex-grow-1">
                             <label class="mb-0 small d-block">Posto</label>
-                            <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
+                            <div class="d-flex align-items-center">
+                              <ul id="postoTabs2" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
+                              <div class="ml-2 flex-shrink-0">
+                                <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
+                                <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
+                              </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -604,6 +610,47 @@
         const inRange = (labels, from, to) => labels.filter(m => (!from || m >= from) && (!to || m <= to));
         const setMonth = (sel, val) => { const e = document.querySelector(sel); if (e) e.value = (val || '').slice(0, 7); };
 
+        // ====== Grupos de Postos ======
+        const GRUPOS_POSTO = {
+          altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+          couto:    ['C', 'D', 'J', 'M', 'P'],
+        };
+
+        function _grupoAtivo() {
+          if (!sel2 || sel2 === 'ALL') return null;
+          const selArr = [...sel2].sort().join(',');
+          for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+            const intersec = lista.filter(p => POSTOS.includes(p)).sort().join(',');
+            if (intersec && selArr === intersec) return nome;
+          }
+          return null;
+        }
+
+        function _atualizarBotoesGrupo() {
+          const ativo = _grupoAtivo();
+          const btnA = el('#btnGrupoAltamiro');
+          const btnC = el('#btnGrupoCouto');
+          if (btnA) btnA.classList.toggle('btn-secondary',         ativo === 'altamiro');
+          if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
+          if (btnC) btnC.classList.toggle('btn-secondary',         ativo === 'couto');
+          if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+        }
+
+        function selectGrupo(grupo) {
+          const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p));
+          sel2 = new Set(intersec);
+          window.buildPostoTabs('#postoTabs2', () => sel2, v => sel2 = v, refreshMain);
+          _atualizarBotoesGrupo();
+          refreshMain();
+        }
+
+        function wireGrupoButtons() {
+          const btnA = el('#btnGrupoAltamiro');
+          const btnC = el('#btnGrupoCouto');
+          if (btnA) btnA.onclick = () => selectGrupo('altamiro');
+          if (btnC) btnC.onclick = () => selectGrupo('couto');
+        }
+
         function aggMes(ym, selection) {
             const rows = porPosto[ym] || {};
             let postos = selection === 'ALL' ? POSTOS.slice() : [...selection];
@@ -836,6 +883,7 @@
             // 4) Abas de posto (multi)
             buildPostoTabs('#postoTabs2', () => sel2, v => sel2 = v, refreshMain);
             buildPostoTabs('#postoTabs1', () => sel1, v => sel1 = v, refreshCompare);
+            wireGrupoButtons();
 
             // 5) Helpers “globais” para IA Deep
             window.__MESES_FN__ = () => mesesSel2DeepAli();
@@ -912,6 +960,7 @@
                 el('#g_pct').textContent = `% Alimentação sobre Mensalidade — ${postoLabel(sel2)}`;
                 el('#g_val').textContent = `Evolução: Mensalidade e Alimentação — ${postoLabel(sel2)}`;
                 el('#g_stack').textContent = `Composição: Alimentação × Margem — ${postoLabel(sel2)}`;
+                _atualizarBotoesGrupo();
             }
 
             function refreshCompare() {
