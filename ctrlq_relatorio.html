@@ -462,7 +462,13 @@ canvas { max-width: 100% !important; }
     <div class="w-100">
 
       <label class="mb-0 small d-block">Posto</label>
-      <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
+      <div class="d-flex align-items-center">
+        <ul id="postoTabs2" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
+        <div class="ml-2 flex-shrink-0">
+          <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
+          <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
+        </div>
+      </div>
     </div>
   
 
@@ -939,6 +945,47 @@ function getPickerYM(sel) {
         return [...selection];
       }
 
+      // ====== Grupos de Postos ======
+      const GRUPOS_POSTO = {
+        altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+        couto:    ['C', 'D', 'J', 'M', 'P'],
+      };
+
+      function _grupoAtivo() {
+        if (!sel2 || sel2 === 'ALL') return null;
+        const selArr = [...sel2].sort().join(',');
+        for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+          const intersec = lista.filter(p => POSTOS.includes(p)).sort().join(',');
+          if (intersec && selArr === intersec) return nome;
+        }
+        return null;
+      }
+
+      function _atualizarBotoesGrupo() {
+        const ativo = _grupoAtivo();
+        const btnA = document.querySelector('#btnGrupoAltamiro');
+        const btnC = document.querySelector('#btnGrupoCouto');
+        if (btnA) btnA.classList.toggle('btn-secondary',         ativo === 'altamiro');
+        if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
+        if (btnC) btnC.classList.toggle('btn-secondary',         ativo === 'couto');
+        if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+      }
+
+      function selectGrupo(grupo) {
+        const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p));
+        sel2 = new Set(intersec);
+        buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; }, () => renderSel2());
+        _atualizarBotoesGrupo();
+        renderSel2();
+      }
+
+      function wireGrupoButtons() {
+        const btnA = document.querySelector('#btnGrupoAltamiro');
+        const btnC = document.querySelector('#btnGrupoCouto');
+        if (btnA) btnA.onclick = () => selectGrupo('altamiro');
+        if (btnC) btnC.onclick = () => selectGrupo('couto');
+      }
+
       // ================== DATA ACCESS ==================
       function inRange(labels, from, to) {
         return labels.filter(m => (!from || m >= from) && (!to || m <= to));
@@ -1413,6 +1460,7 @@ setPickerYM('#to2', DEF_TO);
           MESES.forEach(m => paretoSel.insertAdjacentHTML('beforeend', `<option value="${m}">${mFmt(m)}</option>`));
 
           buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; }, () => renderSel2());
+          wireGrupoButtons();
           initCharts();
           renderSel2();
 
@@ -1466,6 +1514,7 @@ setPickerYM('#to2', DEF_TO);
 
         if (!wanted || wanted < months[0] || wanted > last) paretoSel.value = last;
         updatePareto(paretoSel.value);
+        _atualizarBotoesGrupo();
       }
 
     })();

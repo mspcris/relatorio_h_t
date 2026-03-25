@@ -370,7 +370,13 @@
                         </div>
                         <div class="flex-grow-1">
                             <label class="mb-0 small d-block">Posto</label>
-                            <ul id="postoTabs" class="nav nav-pills scroll-tabs"></ul>
+                            <div class="d-flex align-items-center">
+                              <ul id="postoTabs" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
+                              <div class="ml-2 flex-shrink-0">
+                                <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
+                                <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
+                              </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -587,6 +593,7 @@
             dateTo = el('#toD').value;
 
             buildPostoTabs();
+            wireGrupoButtons();
             wireHandlers();
             initCharts();
             renderAll();
@@ -612,8 +619,56 @@
                 const p = e.target.dataset.posto;
                 if (p === 'ALL') { selPosto = 'ALL'; postoSet = null; } else { selPosto = p; postoSet = new Set([p]); }
                 ul.querySelectorAll('.nav-link').forEach(a => a.classList.toggle('active', a.dataset.posto === selPosto));
+                _atualizarBotoesGrupo();
                 renderAll();
             });
+            _atualizarBotoesGrupo();
+        }
+
+        /* =================== Grupos de Postos =================== */
+        const GRUPOS_POSTO = {
+            altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+            couto:    ['C', 'D', 'J', 'M', 'P'],
+        };
+
+        function _grupoAtivo() {
+            if (!postoSet || postoSet.size === 0) return null;
+            const selArr = [...postoSet].sort().join(',');
+            for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+                const intersec = lista.filter(p => POSTOS.includes(p)).sort().join(',');
+                if (intersec && selArr === intersec) return nome;
+            }
+            return null;
+        }
+
+        function _atualizarBotoesGrupo() {
+            const ativo = _grupoAtivo();
+            const btnA = el('#btnGrupoAltamiro');
+            const btnC = el('#btnGrupoCouto');
+            if (btnA) btnA.classList.toggle('btn-secondary',         ativo === 'altamiro');
+            if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
+            if (btnC) btnC.classList.toggle('btn-secondary',         ativo === 'couto');
+            if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+        }
+
+        function selectGrupo(grupo) {
+            const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p));
+            postoSet = new Set(intersec);
+            selPosto = intersec.join('+');
+            const ul = el('#postoTabs');
+            if (ul) ul.querySelectorAll('.nav-link').forEach(a => {
+                const p = a.dataset.posto;
+                a.classList.toggle('active', p !== 'ALL' && postoSet.has(p));
+            });
+            _atualizarBotoesGrupo();
+            renderAll();
+        }
+
+        function wireGrupoButtons() {
+            const btnA = el('#btnGrupoAltamiro');
+            const btnC = el('#btnGrupoCouto');
+            if (btnA) btnA.onclick = () => selectGrupo('altamiro');
+            if (btnC) btnC.onclick = () => selectGrupo('couto');
         }
 
         function wireHandlers() {

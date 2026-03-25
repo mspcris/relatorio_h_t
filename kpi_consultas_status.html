@@ -241,7 +241,13 @@
           </div>
           <div class="flex-grow-1">
             <label class="mb-0 small d-block">Posto</label>
-            <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
+            <div class="d-flex align-items-center">
+              <ul id="postoTabs2" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
+              <div class="ml-2 flex-shrink-0">
+                <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
+                <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -451,6 +457,47 @@
     if(selection === 'ALL') return 'Todos';
     const arr = [...selection].sort();
     return arr.length ? arr.join('+') : 'Todos';
+  }
+
+  // ====== Grupos de Postos ======
+  const GRUPOS_POSTO = {
+    altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+    couto:    ['C', 'D', 'J', 'M', 'P'],
+  };
+
+  function _grupoAtivo() {
+    if (!sel2 || sel2 === 'ALL') return null;
+    const selArr = [...sel2].sort().join(',');
+    for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+      const intersec = lista.filter(p => POSTOS.includes(p)).sort().join(',');
+      if (intersec && selArr === intersec) return nome;
+    }
+    return null;
+  }
+
+  function _atualizarBotoesGrupo() {
+    const ativo = _grupoAtivo();
+    const btnA = el('#btnGrupoAltamiro');
+    const btnC = el('#btnGrupoCouto');
+    if (btnA) btnA.classList.toggle('btn-secondary',         ativo === 'altamiro');
+    if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
+    if (btnC) btnC.classList.toggle('btn-secondary',         ativo === 'couto');
+    if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+  }
+
+  function selectGrupo(grupo) {
+    const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p));
+    sel2 = new Set(intersec);
+    buildPostoTabs('#postoTabs2', ()=>sel2, v=>{ sel2=v; window.sel2=sel2; }, ()=>renderSel2());
+    _atualizarBotoesGrupo();
+    renderSel2();
+  }
+
+  function wireGrupoButtons() {
+    const btnA = el('#btnGrupoAltamiro');
+    const btnC = el('#btnGrupoCouto');
+    if (btnA) btnA.onclick = () => selectGrupo('altamiro');
+    if (btnC) btnC.onclick = () => selectGrupo('couto');
   }
 
   // =========================================================
@@ -999,6 +1046,7 @@
 
     buildTable(series);
     updateCharts(series, agg);
+    _atualizarBotoesGrupo();
   }
 
   function setPressed(btn, on, variant='primary'){
@@ -1093,6 +1141,7 @@
 
       buildPostoTabs('#postoTabs1', ()=>sel1, v=>{ sel1=v; }, ()=>renderSel1());
       buildPostoTabs('#postoTabs2', ()=>sel2, v=>{ sel2=v; window.sel2=sel2; }, ()=>renderSel2());
+      wireGrupoButtons();
 
       initCharts();
       attachHandlers();

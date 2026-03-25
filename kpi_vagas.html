@@ -145,7 +145,13 @@
 
                         <div class="flex-grow-1">
                             <label class="small mb-0">Posto</label>
-                            <ul id="postoTabs" class="nav nav-pills scroll-tabs"></ul>
+                            <div class="d-flex align-items-center">
+                              <ul id="postoTabs" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
+                              <div class="ml-2 flex-shrink-0">
+                                <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
+                                <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
+                              </div>
+                            </div>
                         </div>
 
                         <button id="reset" class="btn btn-outline-secondary btn-sm">Reset</button>
@@ -206,8 +212,55 @@
         let DATA = {};
         let POSTOS = [];
         let selPosto = "ALL";
+        let selPostoGrupo = null; // Set de postos quando grupo ativo
 
         const el = s => document.querySelector(s);
+
+        // ====== Grupos de Postos ======
+        const GRUPOS_POSTO = {
+            altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+            couto:    ['C', 'D', 'J', 'M', 'P'],
+        };
+
+        function _grupoAtivo() {
+            if (!selPostoGrupo) return null;
+            const selArr = [...selPostoGrupo].sort().join(',');
+            for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+                const intersec = lista.filter(p => POSTOS.includes(p)).sort().join(',');
+                if (intersec && selArr === intersec) return nome;
+            }
+            return null;
+        }
+
+        function _atualizarBotoesGrupo() {
+            const ativo = _grupoAtivo();
+            const btnA = el('#btnGrupoAltamiro');
+            const btnC = el('#btnGrupoCouto');
+            if (btnA) btnA.classList.toggle('btn-secondary',         ativo === 'altamiro');
+            if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
+            if (btnC) btnC.classList.toggle('btn-secondary',         ativo === 'couto');
+            if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+        }
+
+        function selectGrupo(grupo) {
+            const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p));
+            selPosto = intersec.join('+');
+            selPostoGrupo = new Set(intersec);
+            const ul = el('#postoTabs');
+            if (ul) ul.querySelectorAll('.nav-link').forEach(a => {
+                const p = a.dataset.p;
+                a.classList.toggle('active', p !== 'ALL' && selPostoGrupo.has(p));
+            });
+            _atualizarBotoesGrupo();
+            render();
+        }
+
+        function wireGrupoButtons() {
+            const btnA = el('#btnGrupoAltamiro');
+            const btnC = el('#btnGrupoCouto');
+            if (btnA) btnA.onclick = () => selectGrupo('altamiro');
+            if (btnC) btnC.onclick = () => selectGrupo('couto');
+        }
 
         function fmt(n) {
             return new Intl.NumberFormat('pt-BR').format(n ?? 0);
@@ -234,6 +287,7 @@
                 POSTOS = POSTOS.filter(p => USER_POSTOS.includes(p));
 
             montarTabs();
+            wireGrupoButtons();
             ajustarPeriodo();
 
             render();
@@ -249,8 +303,10 @@
             ul.onclick = e => {
                 if (!e.target.dataset.p) return;
                 selPosto = e.target.dataset.p;
+                selPostoGrupo = null;
                 Array.from(ul.querySelectorAll(".nav-link"))
                     .forEach(a => a.classList.toggle("active", a.dataset.p === selPosto));
+                _atualizarBotoesGrupo();
                 render();
             }
         }
@@ -262,6 +318,8 @@
                 el("#from").value = MESES[0];
                 el("#to").value = MESES.at(-1);
                 selPosto = "ALL";
+                selPostoGrupo = null;
+                _atualizarBotoesGrupo();
                 render();
             };
         }
@@ -274,6 +332,18 @@
 
         function aggMes(ym) {
             if (selPosto === "ALL") return DATA[ym];
+
+            if (selPostoGrupo && selPostoGrupo.size > 0) {
+                const postos = [...selPostoGrupo];
+                const sum = (field) => postos.reduce((acc, p) => acc + (DATA[ym + "_posto"]?.[p]?.[field] ?? 0), 0);
+                return {
+                    total_vagas: sum('total_vagas'),
+                    reservadas: sum('reservadas'),
+                    faltas: sum('faltas'),
+                    disponiveis: sum('disponiveis'),
+                    ocupadas: sum('ocupadas'),
+                };
+            }
 
             return DATA[ym + "_posto"]?.[selPosto] ?? {};
         }
