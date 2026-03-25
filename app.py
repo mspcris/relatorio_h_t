@@ -450,6 +450,9 @@ def r7(): return render_protected_page("kpi_v2.html")
 @app.get('/kpi_vendas')
 def r8(): return render_protected_page("kpi_vendas.html")
 
+@app.get('/kpi_fidelizacao_cliente')
+def r_fidelizacao(): return render_protected_page("kpi_fidelizacao_cliente.html")
+
 @app.get('/medicos')
 def r9(): return render_protected_page("medicos.html")
 
@@ -496,6 +499,9 @@ def h5(): return render_protected_page("kpi_prescricao.html")
 
 @app.get('/kpi_receita_despesa.html')
 def h6(): return render_protected_page("kpi_receita_despesa.html")
+
+@app.get('/kpi_fidelizacao_cliente.html')
+def h_fidelizacao(): return render_protected_page("kpi_fidelizacao_cliente.html")
 
 @app.get('/kpi_v2.html')
 def h7(): return render_protected_page("kpi_v2.html")
