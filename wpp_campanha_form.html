@@ -109,8 +109,9 @@
                 {% set modo = campanha.modo_envio if campanha and campanha.modo_envio else 'atraso' %}
                 <select name="modo_envio" id="modo_envio" class="form-control">
                   <option value="atraso"             {{ 'selected' if modo == 'atraso' }}>Cobrança por atraso</option>
-                  <option value="pre_vencimento"   {{ 'selected' if modo == 'pre_vencimento' }}>Lembrete antes do vencimento</option>
+                  <option value="pre_vencimento"    {{ 'selected' if modo == 'pre_vencimento' }}>Lembrete antes do vencimento</option>
                   <option value="clientes_admissao" {{ 'selected' if modo == 'clientes_admissao' }}>Campanha de clientes (admissão)</option>
+                  <option value="cliente_novo"      {{ 'selected' if modo == 'cliente_novo' }}>Cliente Novo — Seja Bem-Vindo!</option>
                 </select>
               </div>
             </div>
@@ -314,11 +315,13 @@
               </div>
               <div class="col-md-3">
                 <div class="form-group">
-                  <label>Situação do cliente</label>
-                  <select name="situacao_cliente" id="sel_cli_situacao_efetiva" class="form-control wpp-sel2-cli">
-                    <option value="">— Todas —</option>
+                  <label>Situação do cliente <span class="text-danger" title="Obrigatório ao menos uma">*</span></label>
+                  <select name="situacao_cliente" id="sel_cli_situacao_efetiva"
+                          class="form-control wpp-sel2-cli" multiple>
                     {% if campanha and campanha.situacao_cliente %}
-                    <option value="{{ campanha.situacao_cliente }}" selected>{{ campanha.situacao_cliente }}</option>
+                      {% for s in campanha.situacao_cliente.split(',') %}
+                        {% if s.strip() %}<option value="{{ s.strip() }}" selected>{{ s.strip() }}</option>{% endif %}
+                      {% endfor %}
                     {% endif %}
                   </select>
                 </div>
@@ -678,7 +681,8 @@ function aplicarQueuePadrao(modo) {
   const hidden = document.getElementById('queue_id_val');
   const sel    = document.getElementById('queue_id_sel');
   if (!sel || hidden.value) return;  // não sobrescreve valor já salvo
-  const padrao = (modo === 'clientes_admissao') ? QUEUE_PADRAO_CLIENTES : QUEUE_PADRAO_COBRANCA;
+  const padrao = (modo === 'clientes_admissao' || modo === 'cliente_novo')
+      ? QUEUE_PADRAO_CLIENTES : QUEUE_PADRAO_COBRANCA;
   sel.value    = padrao;
   hidden.value = padrao;
 }
@@ -853,6 +857,12 @@ function atualizarModoEnvio() {
     boxClientes.style.display = '';
     cardFiltros.style.display = 'none';
     titulo.textContent = 'Filtros de Admissão';
+  } else if (modo === 'cliente_novo') {
+    boxAtraso.style.display   = 'none';
+    boxPre.style.display      = 'none';
+    boxClientes.style.display = 'none';
+    cardFiltros.style.display = 'none';
+    titulo.textContent        = 'Cliente Novo — Seja Bem-Vindo!';
   } else {
     boxAtraso.style.display   = '';
     boxPre.style.display      = 'none';
@@ -867,7 +877,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Inicializa select2 em todos os selects de filtro
   $('.wpp-sel2').select2({ placeholder: '— Todos —', allowClear: true, width: '100%' });
-  $('.wpp-sel2-cli').select2({ placeholder: '— Todos —', allowClear: true, width: '100%' });
+  // Situação: multi-select com placeholder diferenciado
+  $('#sel_cli_situacao_efetiva').select2({
+    placeholder: '— Selecione ao menos uma —',
+    allowClear: true,
+    width: '100%',
+  });
+  // Demais selects de clientes (exceto situação, já inicializado acima)
+  $('.wpp-sel2-cli:not(#sel_cli_situacao_efetiva)').select2({ placeholder: '— Todos —', allowClear: true, width: '100%' });
+
+  // Validação: situação obrigatória no modo clientes_admissao
+  document.getElementById('formCampanha').addEventListener('submit', function(e) {
+    if ((document.getElementById('modo_envio') || {}).value === 'clientes_admissao') {
+      const vals = $('#sel_cli_situacao_efetiva').val();
+      if (!vals || vals.length === 0) {
+        e.preventDefault();
+        alert('Selecione ao menos uma Situação do cliente antes de salvar.');
+        document.getElementById('sel_cli_situacao_efetiva').focus();
+      }
+    }
+  });
 
   // Checkboxes de posto → recarregar opções
   document.querySelectorAll('.posto-cb').forEach(cb => {

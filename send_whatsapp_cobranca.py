@@ -37,6 +37,8 @@ from wpp_cobranca_sql import (
     where_extras,
     modo_envio as campanha_modo_envio,
     MODO_CLIENTES,
+    MODO_CLIENTE_NOVO,
+    get_query_cliente_novo,
 )
 
 # ---------------------------------------------------------------------------
@@ -104,6 +106,11 @@ def buscar_faturas(cursor, campanha: dict) -> list[dict]:
     where, params = build_where(campanha)
     src = source_sql(campanha)
     extra = where_extras(campanha)
+    if campanha_modo_envio(campanha) == MODO_CLIENTE_NOVO:
+        sql, qparams = get_query_cliente_novo()
+        cursor.execute(sql, qparams)
+        cols = [c[0] for c in cursor.description]
+        return [dict(zip(cols, row)) for row in cursor.fetchall()]
     if campanha_modo_envio(campanha) == MODO_CLIENTES:
         sql = f"""
             SELECT
@@ -460,6 +467,8 @@ def main():
                 f"ref+{campanha.get('dias_ref_min', 4)}"
                 f"–{campanha.get('dias_ref_max') if campanha.get('dias_ref_max') is not None else '∞'}d"
             )
+        elif modo == MODO_CLIENTE_NOVO:
+            regra = "primeiro-pagamento-últimos-7d"
         elif modo == MODO_CLIENTES:
             regra = (
                 f"adm={campanha.get('adm_data_ini', '?')}"
