@@ -161,6 +161,48 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_auditoria_data  ON auditoria(ocorrido_em);
         CREATE INDEX IF NOT EXISTS idx_auditoria_user  ON auditoria(usuario);
         CREATE INDEX IF NOT EXISTS idx_auditoria_camp  ON auditoria(campanha_id);
+
+        -- Cache local de clientes (populado pelo ETL wpp_cache_clientes.py)
+        CREATE TABLE IF NOT EXISTS cache_clientes (
+            idcliente           INTEGER NOT NULL,
+            row_id              INTEGER NOT NULL,
+            posto               TEXT    NOT NULL,
+            id_endereco         INTEGER,
+            sexo                TEXT,
+            matricula           INTEGER,
+            nomecadastro        TEXT,
+            titular_dependente  TEXT,
+            plano               TEXT,
+            idade               INTEGER,
+            dataadmissao        TEXT,
+            nascimento          TEXT,
+            canceladoans        INTEGER NOT NULL DEFAULT 0,
+            tipo_fj             TEXT,
+            tipo_cliente        TEXT,
+            situacao_efetiva    TEXT,
+            situacaoclube       TEXT,
+            situacao            TEXT,
+            clubebeneficio      INTEGER NOT NULL DEFAULT 0,
+            clubebeneficiojoy   INTEGER NOT NULL DEFAULT 0,
+            planopremium        INTEGER NOT NULL DEFAULT 0,
+            cobradornome        TEXT,
+            corretor            TEXT,
+            bairro              TEXT,
+            origem              TEXT,
+            diacobranca         INTEGER,
+            responsavel         TEXT,
+            responsavel_tel_wpp TEXT,
+            telefone_whatsapp   TEXT,
+            telefone_efetivo    TEXT,
+            carregado_em        TEXT,
+            PRIMARY KEY (idcliente, row_id, posto)
+        );
+        CREATE INDEX IF NOT EXISTS idx_cc_posto         ON cache_clientes(posto);
+        CREATE INDEX IF NOT EXISTS idx_cc_idcliente     ON cache_clientes(idcliente, posto);
+        CREATE INDEX IF NOT EXISTS idx_cc_dataadmissao  ON cache_clientes(dataadmissao);
+        CREATE INDEX IF NOT EXISTS idx_cc_tipo_cliente  ON cache_clientes(tipo_cliente);
+        CREATE INDEX IF NOT EXISTS idx_cc_situacao      ON cache_clientes(situacao_efetiva);
+        CREATE INDEX IF NOT EXISTS idx_cc_tel           ON cache_clientes(telefone_efetivo);
         """)
         # Migração leve para bases já existentes.
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(campanhas)").fetchall()}

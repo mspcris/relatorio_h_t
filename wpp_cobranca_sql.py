@@ -9,6 +9,7 @@ Usado por:
 
 import os
 import logging
+import sqlite3
 
 import pyodbc
 from dotenv import load_dotenv
@@ -17,8 +18,9 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 log = logging.getLogger(__name__)
 
-ODBC_DRIVER = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
-VIEW_NAME   = os.getenv("WAPP_VIEW",   "WEB_COB_DebitoEmAberto6Meses")
+ODBC_DRIVER  = os.getenv("ODBC_DRIVER",  "ODBC Driver 17 for SQL Server")
+VIEW_NAME    = os.getenv("WAPP_VIEW",    "WEB_COB_DebitoEmAberto6Meses")
+SQLITE_PATH  = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
 
 MODO_ATRASO = "atraso"
 MODO_PRE_VENCIMENTO = "pre_vencimento"
@@ -178,14 +180,160 @@ CAMPO_SQL = {
     "rua":       "endereco",
 }
 
-# Mapeamento para modo clientes_admissao (usa SOURCE_CLIENTES)
+# Mapeamento para modo clientes_admissao (usa SOURCE_CLIENTES — SQL Server legado)
 CAMPO_SQL_CLIENTES = {
-    "cobrador":        "cobradornome",
-    "corretor":        "Corretor",
-    "bairro":          "bairro",
-    "origem":          "origem",
+    "cobrador":         "cobradornome",
+    "corretor":         "Corretor",
+    "bairro":           "bairro",
+    "origem":           "origem",
     "situacao_efetiva": "situacao_efetiva",
 }
+
+# Mapeamento para cache SQLite (cache_clientes)
+CAMPO_CACHE_CLIENTES = {
+    "cobrador":         "cobradornome",
+    "corretor":         "corretor",
+    "bairro":           "bairro",
+    "origem":           "origem",
+    "situacao_efetiva": "situacao_efetiva",
+}
+
+
+def _get_sqlite_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(SQLITE_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _build_where_clientes_sqlite(campanha: dict) -> tuple:
+    """WHERE para modo clientes sobre cache_clientes (SQLite, datas YYYY-MM-DD)."""
+    filtros = [
+        "telefone_efetivo IS NOT NULL",
+        "TRIM(telefone_efetivo) != ''",
+    ]
+    params = []
+
+    if campanha.get("adm_data_ini"):
+        filtros.append("dataadmissao >= ?")
+        params.append(campanha["adm_data_ini"])   # YYYY-MM-DD — comparação de texto funciona
+
+    if campanha.get("adm_data_fim"):
+        filtros.append("dataadmissao < ?")
+        params.append(campanha["adm_data_fim"])
+
+    if campanha.get("tipo_cliente"):
+        filtros.append("tipo_cliente = ?")
+        params.append(campanha["tipo_cliente"])
+
+    if campanha.get("titular_dependente"):
+        filtros.append("titular_dependente = ?")
+        params.append(campanha["titular_dependente"])
+
+    if campanha.get("situacao_cliente"):
+        filtros.append("situacao_efetiva = ?")
+        params.append(campanha["situacao_cliente"])
+
+    if campanha.get("tipo_fj"):
+        filtros.append("tipo_fj = ?")
+        params.append(campanha["tipo_fj"])
+
+    if campanha.get("clube_beneficio"):
+        filtros.append("clubebeneficio = 1")
+
+    if campanha.get("clube_beneficio_joy"):
+        filtros.append("clubebeneficiojoy = 1")
+
+    if campanha.get("plano_premium"):
+        filtros.append("planopremium = 1")
+
+    if campanha.get("origem"):
+        filtros.append("origem LIKE ?")
+        params.append(f"%{campanha['origem']}%")
+
+    if campanha.get("cobrador"):
+        filtros.append("cobradornome LIKE ?")
+        params.append(f"%{campanha['cobrador']}%")
+
+    if campanha.get("corretor"):
+        filtros.append("corretor LIKE ?")
+        params.append(f"%{campanha['corretor']}%")
+
+    if campanha.get("bairro"):
+        filtros.append("bairro LIKE ?")
+        params.append(f"%{campanha['bairro']}%")
+
+    if campanha.get("sexo"):
+        filtros.append("sexo = ?")
+        params.append(campanha["sexo"])
+
+    if campanha.get("idade_min") is not None:
+        filtros.append(f"idade >= {int(campanha['idade_min'])}")
+
+    if campanha.get("idade_max") is not None:
+        filtros.append(f"idade <= {int(campanha['idade_max'])}")
+
+    return " AND ".join(filtros), params
+
+
+def _buscar_opcoes_clientes_sqlite(postos: list, campo: str) -> tuple:
+    col = CAMPO_CACHE_CLIENTES.get(campo)
+    if not col:
+        return [], [f"campo inválido para clientes: {campo}"]
+    valores = set()
+    erros = []
+    conn = _get_sqlite_conn()
+    try:
+        for posto in postos:
+            try:
+                rows = conn.execute(
+                    f"SELECT DISTINCT {col} FROM cache_clientes "
+                    f"WHERE posto=? AND {col} IS NOT NULL AND TRIM({col}) != '' "
+                    f"ORDER BY {col}",
+                    (posto,),
+                ).fetchall()
+                for r in rows:
+                    valores.add(str(r[0]).strip())
+            except Exception as e:
+                erros.append(f"posto {posto} campo {campo}: {e}")
+                log.error("opcoes_sqlite posto=%s campo=%s: %s", posto, campo, e)
+    finally:
+        conn.close()
+    return sorted(valores), erros
+
+
+def _contar_preview_clientes_sqlite(campanha: dict) -> dict:
+    postos = campanha.get("postos") or []
+    where, params = _build_where_clientes_sqlite(campanha)
+    total_faturas = 0
+    total_tel = 0
+    por_posto = {}
+
+    conn = _get_sqlite_conn()
+    try:
+        for posto in postos:
+            try:
+                sql = (
+                    "SELECT COUNT(*) AS f, COUNT(DISTINCT telefone_efetivo) AS t "
+                    "FROM cache_clientes "
+                    f"WHERE posto=? AND {where}"
+                )
+                row = conn.execute(sql, [posto] + params).fetchone()
+                f = row[0] or 0
+                t = row[1] or 0
+                por_posto[posto] = {"faturas": f, "telefones": t}
+                total_faturas += f
+                total_tel += t
+            except Exception as e:
+                por_posto[posto] = {"erro": str(e)[:120]}
+                log.error("preview_sqlite posto=%s: %s", posto, e)
+    finally:
+        conn.close()
+
+    return {
+        "total_faturas":   total_faturas,
+        "total_telefones": total_tel,
+        "por_posto":       por_posto,
+    }
 
 
 def _env(key, default=""):
@@ -398,11 +546,8 @@ def buscar_opcoes(postos: list, campo: str, modo: str = MODO_ATRASO) -> list:
 def buscar_opcoes_debug(postos: list, campo: str, modo: str = MODO_ATRASO) -> tuple:
     """Retorna (lista_de_valores, lista_de_erros) para diagnóstico."""
     if modo == MODO_CLIENTES:
-        col = CAMPO_SQL_CLIENTES.get(campo)
-        if not col:
-            return [], [f"campo inválido para modo clientes: {campo}"]
-        src = SOURCE_CLIENTES
-        extra = ""
+        # Modo clientes: lê do cache SQLite (rápido, sem tocar SQL Server)
+        return _buscar_opcoes_clientes_sqlite(postos, campo)
     else:
         modo = modo if modo in (MODO_ATRASO, MODO_PRE_VENCIMENTO) else MODO_ATRASO
         col = CAMPO_SQL.get(campo)
@@ -440,8 +585,12 @@ def buscar_opcoes_debug(postos: list, campo: str, modo: str = MODO_ATRASO) -> tu
 
 
 def contar_preview(campanha: dict) -> dict:
-    """Conta faturas e telefones únicos para os filtros da campanha.
+    """Conta registros e telefones únicos para os filtros da campanha.
     Retorna {total_faturas, total_telefones, por_posto}."""
+    if modo_envio(campanha) == MODO_CLIENTES:
+        # Modo clientes: lê do cache SQLite (rápido, sem tocar SQL Server)
+        return _contar_preview_clientes_sqlite(campanha)
+
     postos = campanha.get("postos") or []
     where, params = build_where(campanha)
     src = source_sql(campanha)
@@ -457,9 +606,8 @@ def contar_preview(campanha: dict) -> dict:
             continue
         try:
             cur = conn.cursor()
-            tel_col = "telefone_efetivo" if modo_envio(campanha) == MODO_CLIENTES else "telefonewhatsapp"
+            tel_col = "telefonewhatsapp"
             _sql = f"SELECT COUNT(*) as f, COUNT(DISTINCT {tel_col}) as t FROM {src} WHERE {where}{extra}"
-            log.warning("DEBUG preview posto=%s SQL=%s PARAMS=%s", posto, _sql[:400], params)
             cur.execute(_sql, params)
             row = cur.fetchone()
             f = row[0] or 0
