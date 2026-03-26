@@ -882,9 +882,11 @@
           <div class="filter-bar">
             <div>
               <label class="mb-0 small d-block">Selecione o Período - KPI Receitas x Despesas</label>              <div class="month-inputs">
-                <input id="from2" type="month" class="form-control form-control-sm" />
-                <input id="to2" type="month" class="form-control form-control-sm" />
+                <input id="from2" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
+                <input id="to2" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
+                <button id="btnFiltrar2" class="btn btn-sm btn-primary" title="Aplicar filtro">🔍 Filtrar</button>
                 <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
+                <button id="btnMesAtual2" class="btn btn-sm btn-outline-info">Mês Atual</button>
             </div>
         </div>
             <div class="flex-grow-1">
@@ -1931,9 +1933,12 @@
       function setMonthValue(selector, value) {
         const input = el(selector);
         if (!input) return;
-            input.value = value || '';
-  // força update em alguns browsers/handlers
-            input.dispatchEvent(new Event('change', { bubbles: true }));
+        if (input.type === 'text' && value) {
+          const [anno, mese] = value.split('-');
+          input.value = `${mese}/${anno}`;
+        } else {
+          input.value = value || '';
+        }
       }
 
         function wirePeriodo(lastFull) {
@@ -1942,19 +1947,45 @@
           const btnReset = el('#reset2');
 
           if (fromEl && toEl && lastFull) {
-            // REGRA: mês imediatamente anterior ao atual
             setMonthValue('#from2', lastFull);
             setMonthValue('#to2', lastFull);
           }
 
-          if (fromEl) fromEl.addEventListener('change', updateAll);
-          if (toEl) toEl.addEventListener('change', updateAll);
+          if (fromEl) fromEl.addEventListener('input', (e) => {
+            let v = e.target.value.replace(/\D/g, '');
+            if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2, 6);
+            e.target.value = v;
+          });
+          if (toEl) toEl.addEventListener('input', (e) => {
+            let v = e.target.value.replace(/\D/g, '');
+            if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2, 6);
+            e.target.value = v;
+          });
+
+          const btnFiltrar = el('#btnFiltrar2');
+          if (btnFiltrar) {
+            btnFiltrar.addEventListener('click', () => {
+              updateAll();
+            });
+          }
 
           if (btnReset) {
             btnReset.addEventListener('click', () => {
-              // Reset também volta para o mês anterior
               setMonthValue('#from2', lastFull);
               setMonthValue('#to2', lastFull);
+              updateAll();
+            });
+          }
+
+          const btnMesAtual = el('#btnMesAtual2');
+          if (btnMesAtual) {
+            btnMesAtual.addEventListener('click', () => {
+              const hoje = new Date();
+              const mesStr = String(hoje.getMonth() + 1).padStart(2, '0');
+              const anoStr = String(hoje.getFullYear());
+              const currentMonthVal = `${anoStr}-${mesStr}`;
+              setMonthValue('#from2', currentMonthVal);
+              setMonthValue('#to2', currentMonthVal);
               updateAll();
             });
           }

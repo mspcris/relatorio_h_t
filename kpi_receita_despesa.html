@@ -849,11 +849,14 @@
         <div class="card">
           <div class="filter-bar">
             <div>
-              <label class="mb-0 small d-block">Selecione o Período - KPI Receitas x Despesas</label>              <div class="month-inputs">
-                <input id="from2" type="month" class="form-control form-control-sm" />
-                <input id="to2" type="month" class="form-control form-control-sm" />
+              <label class="mb-0 small d-block">Selecione o Período - KPI Receitas x Despesas</label>
+              <div class="month-inputs">
+                <input id="from2" type="text" class="form-control form-control-sm" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" />
+                <input id="to2" type="text" class="form-control form-control-sm" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" />
+                <button id="btnFiltrar2" class="btn btn-sm btn-primary" title="Aplicar filtro">🔍 Filtrar</button>
                 <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
-            </div>
+                <button id="btnMesAtual2" class="btn btn-sm btn-outline-info">Mês Atual</button>
+              </div>
         </div>
             <div class="flex-grow-1">
               <label class="mb-0 small d-block">Posto</label>
@@ -1879,9 +1882,13 @@
       function setMonthValue(selector, value) {
         const input = el(selector);
         if (!input) return;
-            input.value = value || '';
-  // força update em alguns browsers/handlers
-            input.dispatchEvent(new Event('change', { bubbles: true }));
+        if (input.type === 'text' && value) {
+          // Converter YYYY-MM para MM/YYYY
+          const [anno, mese] = value.split('-');
+          input.value = `${mese}/${anno}`;
+        } else {
+          input.value = value || '';
+        }
       }
 
 
@@ -1897,15 +1904,57 @@
           setMonthValue('#to2', lastFull);
         }
 
-        if (fromEl) fromEl.addEventListener('change', updateAll);
-        if (toEl) toEl.addEventListener('change', updateAll);
+        // Máscara de entrada
+        if (fromEl) fromEl.addEventListener('input', (e) => {
+          let v = e.target.value.replace(/\D/g, '');
+          if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2, 6);
+          e.target.value = v;
+        });
+        if (toEl) toEl.addEventListener('input', (e) => {
+          let v = e.target.value.replace(/\D/g, '');
+          if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2, 6);
+          e.target.value = v;
+        });
 
+        // Botão Filtrar
+        const btnFiltrar = el('#btnFiltrar2');
+        if (btnFiltrar) {
+          btnFiltrar.addEventListener('click', () => {
+            const fromVal = fromEl?.value.trim().match(/^(\d{2})\/(\d{4})$/);
+            const toVal = toEl?.value.trim().match(/^(\d{2})\/(\d{4})$/);
+            if (fromVal) {
+              const fromYm = `${fromVal[2]}-${fromVal[1]}`;
+              if (toVal) {
+                const toYm = `${toVal[2]}-${toVal[1]}`;
+                if (MESES.includes(fromYm) && MESES.includes(toYm)) {
+                  updateAll();
+                }
+              }
+            }
+          });
+        }
+
+        // Botão Reset
         if (btnReset) {
           btnReset.addEventListener('click', () => {
             const idx = MESES.indexOf(lastFull);
             const startIdx = idx > 10 ? idx - 11 : 0;
             setMonthValue('#from2', MESES[startIdx]);
             setMonthValue('#to2', lastFull);
+            updateAll();
+          });
+        }
+
+        // Botão Mês Atual
+        const btnMesAtual = el('#btnMesAtual2');
+        if (btnMesAtual) {
+          btnMesAtual.addEventListener('click', () => {
+            const hoje = new Date();
+            const mesStr = String(hoje.getMonth() + 1).padStart(2, '0');
+            const anoStr = String(hoje.getFullYear());
+            const currentMonthVal = `${anoStr}-${mesStr}`;
+            setMonthValue('#from2', currentMonthVal);
+            setMonthValue('#to2', currentMonthVal);
             updateAll();
           });
         }
