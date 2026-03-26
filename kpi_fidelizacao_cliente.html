@@ -3,13 +3,13 @@
 
 <head>
     <meta charset="UTF-8" />
-    <title>CAMIM — KPI Fidelização de Clientes</title>
+    <title>CAMIM — KPI Fidelização & Churn</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <!-- KPI Metadata (Manus Integration) -->
     <meta name="kpi-id" content="fidelizacao" />
     <meta name="kpi-title" content="Fidelização de Clientes" />
-    <meta name="kpi-description" content="Visualize a retenção de clientes por período de admissão, com análise de 1, 3, 6 e 12 meses. Dados agregáveis por posto ou grupo de postos." />
+    <meta name="kpi-description" content="Análise de retenção e churn de clientes por cohort de admissão. Curva de sobrevivência, churn incremental e retenção por posto nos períodos de 1, 3, 6 e 12 meses." />
     <meta name="kpi-category" content="Clientes" />
     <meta name="kpi-keywords" content="fidelizacao, retencao, clientes, admissao, adesao, retenção" />
     <meta name="kpi-api-manifest" content="/api/kpis/manifest" />
@@ -278,7 +278,7 @@
                         <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i class="nav-icon fas fa-shopping-cart"></i><p>KPI Vendas</p></a></li>
                         <li class="nav-item"><a href="clientes.html" class="nav-link"><i class="nav-icon fas fa-users"></i><p>KPI Clientes</p></a></li>
                         <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i class="nav-icon fas fa-prescription-bottle-alt"></i><p>KPI Prescrições</p></a></li>
-                        <li class="nav-item"><a href="kpi_fidelizacao_cliente.html" class="nav-link active"><i class="nav-icon fas fa-handshake"></i><p>KPI Fidelização</p></a></li>
+                        <li class="nav-item"><a href="kpi_fidelizacao_cliente.html" class="nav-link active"><i class="nav-icon fas fa-handshake"></i><p>KPI Fidelização Churn</p></a></li>
                         <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i class="nav-icon fas fa-landmark"></i><p>KPI Índices Oficiais</p></a></li>
                         <li class="nav-item"><a href="kpi_liberty.html" class="nav-link"><i class="nav-icon fas fa-passport"></i><p>KPI CAMIM Liberty</p></a></li>
                         <li class="nav-item"><a href="kpi_receita_despesa.html" class="nav-link"><i class="nav-icon fas fa-balance-scale"></i><p>KPI Receitas x Despesas</p></a></li>
@@ -305,7 +305,7 @@
             <!-- Header da página -->
             <nav class="navbar navbar-expand navbar-white navbar-light">
                 <div class="d-flex w-100 align-items-center">
-                    <span class="ml-2 font-weight-bold">KPI Fidelização de Clientes</span>
+                    <span class="ml-2 font-weight-bold">KPI Fidelização & Churn</span>
                     <div class="ml-auto">
                         <span id="ia-anchor"></span>
                     </div>
@@ -350,9 +350,33 @@
                 <!-- RESUMO ESTATÍSTICO -->
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="card-title mb-0">Resumo de Fidelização</h3>
+                        <h3 class="card-title mb-0">Resumo de Fidelização & Churn</h3>
                     </div>
                     <div class="card-body kpi" id="statsCards"></div>
+                </div>
+
+                <!-- CURVA DE SOBREVIVÊNCIA + CHURN INCREMENTAL -->
+                <div class="row">
+                    <div class="col-lg-7">
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">Curva de Sobrevivência — Retenção Média por Mês (todos cohorts)</h3>
+                            </div>
+                            <div class="card-body" style="height:320px">
+                                <canvas id="chartSurvivor"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3 class="card-title mb-0">Churn Incremental Médio — % perdido a cada mês</h3>
+                            </div>
+                            <div class="card-body" style="height:320px">
+                                <canvas id="chartChurnIncremental"></canvas>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- CHARTS (BAR CHARTS POR PERÍODO) -->
@@ -726,6 +750,8 @@
         function render() {
             updateChartTitles();
             renderStats();
+            renderSurvivorCurve();
+            renderChurnIncremental();
             renderCharts();
             renderTable();
         }
@@ -746,40 +772,69 @@
                 total12m += poData.retencao_por_mes[12]?.qtd || 0;
             }
 
-            const pct1m = totalAdm > 0 ? Math.round((total1m / totalAdm) * 100) : 0;
-            const pct3m = totalAdm > 0 ? Math.round((total3m / totalAdm) * 100) : 0;
-            const pct6m = totalAdm > 0 ? Math.round((total6m / totalAdm) * 100) : 0;
-            const pct12m = totalAdm > 0 ? Math.round((total12m / totalAdm) * 100) : 0;
+            const ret1m = totalAdm > 0 ? Math.round((total1m / totalAdm) * 100) : 0;
+            const ret3m = totalAdm > 0 ? Math.round((total3m / totalAdm) * 100) : 0;
+            const ret6m = totalAdm > 0 ? Math.round((total6m / totalAdm) * 100) : 0;
+            const ret12m = totalAdm > 0 ? Math.round((total12m / totalAdm) * 100) : 0;
+
+            const has12 = postos.some(p => rowData[p]?.retencao_por_mes?.['12'] != null);
+
+            const ret12mDisplay = (totalAdm > 0 && total12m === 0 && !has12) ? '-' : `${ret12m}%`;
+            const churn12mDisplay = (totalAdm > 0 && total12m === 0 && !has12) ? '-' : `${100 - ret12m}%`;
 
             const html = `
                 <div class="card">
                     <div class="card-body">
                         <div style="font-size: 1.5rem; font-weight: 600; color: #17a2b8;">${totalAdm}</div>
-                        <div style="font-size: 0.85rem; color: #666;">Total de Admissões</div>
+                        <div style="font-size: 0.85rem; color: #666;">Total Admissões</div>
                     </div>
                 </div>
                 <div class="card">
                     <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #17a2b8;">${pct1m}%</div>
-                        <div style="font-size: 0.85rem; color: #666;">Retenção (1 mês)</div>
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #28a745;">${ret1m}%</div>
+                        <div style="font-size: 0.85rem; color: #666;">Retenção 1m</div>
                     </div>
                 </div>
                 <div class="card">
                     <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #17a2b8;">${pct3m}%</div>
-                        <div style="font-size: 0.85rem; color: #666;">Retenção (3 meses)</div>
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #dc3545;">${100 - ret1m}%</div>
+                        <div style="font-size: 0.85rem; color: #666;">Churn 1m</div>
                     </div>
                 </div>
                 <div class="card">
                     <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #17a2b8;">${pct6m}%</div>
-                        <div style="font-size: 0.85rem; color: #666;">Retenção (6 meses)</div>
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #28a745;">${ret3m}%</div>
+                        <div style="font-size: 0.85rem; color: #666;">Retenção 3m</div>
                     </div>
                 </div>
                 <div class="card">
                     <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #17a2b8;">${pct12m}%</div>
-                        <div style="font-size: 0.85rem; color: #666;">Retenção (12 meses)</div>
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #dc3545;">${100 - ret3m}%</div>
+                        <div style="font-size: 0.85rem; color: #666;">Churn 3m</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #28a745;">${ret6m}%</div>
+                        <div style="font-size: 0.85rem; color: #666;">Retenção 6m</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #dc3545;">${100 - ret6m}%</div>
+                        <div style="font-size: 0.85rem; color: #666;">Churn 6m</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #28a745;">${ret12mDisplay}</div>
+                        <div style="font-size: 0.85rem; color: #666;">Retenção 12m</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div style="font-size: 1.5rem; font-weight: 600; color: #dc3545;">${churn12mDisplay}</div>
+                        <div style="font-size: 0.85rem; color: #666;">Churn 12m</div>
                     </div>
                 </div>
             `;
@@ -791,8 +846,9 @@
             let html = '<table class="table table-sm mb-0"><thead><tr><th>Mês Admissão</th>';
 
             // Headers para cada período
-            html += '<th colspan="2">1 mês</th><th colspan="2">3 meses</th><th colspan="2">6 meses</th><th colspan="2">12 meses</th></tr>';
-            html += '<tr><th></th><th>QTD</th><th>%</th><th>QTD</th><th>%</th><th>QTD</th><th>%</th><th>QTD</th><th>%</th></tr></thead><tbody>';
+            html += '<th>Admissões</th>';
+            html += '<th colspan="3">1 mês</th><th colspan="3">3 meses</th><th colspan="3">6 meses</th><th colspan="3">12 meses</th></tr>';
+            html += '<tr><th></th><th></th><th>QTD</th><th>Ret%</th><th>Churn%</th><th>QTD</th><th>Ret%</th><th>Churn%</th><th>QTD</th><th>Ret%</th><th>Churn%</th><th>QTD</th><th>Ret%</th><th>Churn%</th></tr></thead><tbody>';
 
             for (const ym of Object.keys(allData).sort()) {
                 const row = allData[ym];
@@ -807,22 +863,31 @@
                     r12_qtd += row[p].retencao_por_mes[12]?.qtd || 0;
                 }
 
-                // Calcular percentuais corretamente
+                const has1 = postos.some(p => row[p]?.retencao_por_mes?.['1'] != null);
+                const has3 = postos.some(p => row[p]?.retencao_por_mes?.['3'] != null);
+                const has6 = postos.some(p => row[p]?.retencao_por_mes?.['6'] != null);
+                const has12 = postos.some(p => row[p]?.retencao_por_mes?.['12'] != null);
+
+                // Calcular percentuais
                 const r1_pct = admTotal > 0 ? Math.round((r1_qtd / admTotal) * 100) : 0;
                 const r3_pct = admTotal > 0 ? Math.round((r3_qtd / admTotal) * 100) : 0;
                 const r6_pct = admTotal > 0 ? Math.round((r6_qtd / admTotal) * 100) : 0;
                 const r12_pct = admTotal > 0 ? Math.round((r12_qtd / admTotal) * 100) : 0;
 
-                const cls1 = r1_pct >= 70 ? 'cell-high' : r1_pct >= 40 ? 'cell-medium' : 'cell-low';
-                const cls3 = r3_pct >= 70 ? 'cell-high' : r3_pct >= 40 ? 'cell-medium' : 'cell-low';
-                const cls6 = r6_pct >= 70 ? 'cell-high' : r6_pct >= 40 ? 'cell-medium' : 'cell-low';
-                const cls12 = r12_pct >= 70 ? 'cell-high' : r12_pct >= 40 ? 'cell-medium' : 'cell-low';
+                const fmt = (qtd, pct, has) => {
+                    if (!has) return `<td>-</td><td>-</td><td>-</td>`;
+                    const churn = 100 - pct;
+                    const retCls = pct >= 70 ? 'cell-high' : pct >= 40 ? 'cell-medium' : 'cell-low';
+                    const churnCls = churn <= 30 ? 'cell-high' : churn <= 60 ? 'cell-medium' : 'cell-low';
+                    return `<td>${qtd}</td><td class="${retCls}">${pct}%</td><td class="${churnCls}">${churn}%</td>`;
+                };
 
-                html += `<tr><td><strong>${ym}</strong></td>`;
-                html += `<td>${r1_qtd}</td><td class="${cls1}">${r1_pct}%</td>`;
-                html += `<td>${r3_qtd}</td><td class="${cls3}">${r3_pct}%</td>`;
-                html += `<td>${r6_qtd}</td><td class="${cls6}">${r6_pct}%</td>`;
-                html += `<td>${r12_qtd}</td><td class="${cls12}">${r12_pct}%</td></tr>`;
+                html += `<tr><td><strong>${ym}</strong></td><td>${admTotal}</td>`;
+                html += fmt(r1_qtd, r1_pct, has1);
+                html += fmt(r3_qtd, r3_pct, has3);
+                html += fmt(r6_qtd, r6_pct, has6);
+                html += fmt(r12_qtd, r12_pct, has12);
+                html += `</tr>`;
             }
 
             html += '</tbody></table>';
@@ -887,6 +952,135 @@
                             max: 100,
                             title: { display: true, text: 'Percentual (%)' }
                         }
+                    }
+                }
+            });
+        }
+
+        function renderSurvivorCurve() {
+            // For each month 1-12, compute average retention % across all cohorts that have data at that month
+            const postos = getSelectedPostos();
+            const months = [1,2,3,4,5,6,7,8,9,10,11,12];
+
+            const retLabels = months.map(m => `${m}m`);
+            const retData = months.map(m => {
+                let totalAdm = 0, totalRet = 0, cohortCount = 0;
+                for (const ym of Object.keys(allData).sort()) {
+                    const row = allData[ym];
+                    let adm = 0, ret = 0;
+                    for (const p of postos) {
+                        if (!row[p]) continue;
+                        const rData = row[p].retencao_por_mes?.[m];
+                        if (rData == null) continue;
+                        adm += row[p].admissoes || 0;
+                        ret += rData.qtd || 0;
+                    }
+                    if (adm > 0) { totalAdm += adm; totalRet += ret; cohortCount++; }
+                }
+                return totalAdm > 0 ? Math.round(totalRet / totalAdm * 1000) / 10 : null;
+            });
+
+            const churnData = retData.map(v => v != null ? Math.round((100 - v) * 10) / 10 : null);
+
+            const ctx = el('chartSurvivor');
+            if (!ctx) return;
+            if (chartInstances['chartSurvivor']) chartInstances['chartSurvivor'].destroy();
+            chartInstances['chartSurvivor'] = new Chart(ctx.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: retLabels,
+                    datasets: [
+                        {
+                            label: 'Retenção %',
+                            data: retData,
+                            borderColor: 'rgba(40,167,69,1)',
+                            backgroundColor: 'rgba(40,167,69,0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 4,
+                            spanGaps: false
+                        },
+                        {
+                            label: 'Churn Acumulado %',
+                            data: churnData,
+                            borderColor: 'rgba(220,53,69,1)',
+                            backgroundColor: 'rgba(220,53,69,0.07)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 4,
+                            spanGaps: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { position: 'top' } },
+                    scales: {
+                        y: { min: 0, max: 100, title: { display: true, text: '%' } }
+                    }
+                }
+            });
+        }
+
+        function renderChurnIncremental() {
+            // Shows average % of ORIGINAL cohort lost in each month interval
+            const postos = getSelectedPostos();
+            const months = [1,2,3,4,5,6,7,8,9,10,11,12];
+
+            // First compute average retention at each month
+            const retAvg = months.map(m => {
+                let totalAdm = 0, totalRet = 0;
+                for (const ym of Object.keys(allData).sort()) {
+                    const row = allData[ym];
+                    let adm = 0, ret = 0;
+                    for (const p of postos) {
+                        if (!row[p]) continue;
+                        const rData = row[p].retencao_por_mes?.[m];
+                        if (rData == null) continue;
+                        adm += row[p].admissoes || 0;
+                        ret += rData.qtd || 0;
+                    }
+                    if (adm > 0) { totalAdm += adm; totalRet += ret; }
+                }
+                return totalAdm > 0 ? totalRet / totalAdm * 100 : null;
+            });
+
+            // Incremental churn = drop from previous period (as % of original cohort)
+            const prev = [100, ...retAvg.slice(0, -1)]; // month 0 = 100%
+            const incremental = months.map((m, i) => {
+                if (retAvg[i] == null || prev[i] == null) return null;
+                return Math.round((prev[i] - retAvg[i]) * 10) / 10;
+            });
+
+            const labels = months.map((m, i) => i === 0 ? `0→1m` : `${months[i-1]}→${m}m`);
+
+            const ctx = el('chartChurnIncremental');
+            if (!ctx) return;
+            if (chartInstances['chartChurnIncremental']) chartInstances['chartChurnIncremental'].destroy();
+            chartInstances['chartChurnIncremental'] = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Churn incremental (% do cohort original)',
+                        data: incremental,
+                        backgroundColor: incremental.map((v, i) => {
+                            if (v == null) return 'rgba(200,200,200,0.5)';
+                            const alpha = Math.min(0.9, 0.3 + v / 20);
+                            return `rgba(220,53,69,${alpha})`;
+                        }),
+                        borderColor: 'rgba(220,53,69,1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: '% do cohort' } }
                     }
                 }
             });
