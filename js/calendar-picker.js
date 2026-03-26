@@ -11,21 +11,12 @@ function initCalendarPicker(inputSelector, buttonSelector, mode = 'month') {
     const input = document.querySelector(inputSelector);
     const button = document.querySelector(buttonSelector);
 
-    console.log(`[Calendar] Inicializando: input=${inputSelector}, button=${buttonSelector}, mode=${mode}`);
-    console.log(`[Calendar] Input encontrado:`, input);
-    console.log(`[Calendar] Button encontrado:`, button);
-
-    if (!input || !button) {
-        console.error(`[Calendar] ERRO: Elementos não encontrados! input=${!input}, button=${!button}`);
-        return;
-    }
+    if (!input || !button) return;
 
     // Adiciona click no botão
     button.addEventListener('click', (e) => {
-        console.log(`[Calendar] Click detectado no botão`);
         e.preventDefault();
         e.stopPropagation();
-        console.log(`[Calendar] Chamando mostrarCalendario com modo: ${mode}`);
         mostrarCalendario(input, mode);
     });
 
@@ -47,8 +38,6 @@ function initCalendarPicker(inputSelector, buttonSelector, mode = 'month') {
  * @param {string} mode - 'month' ou 'day'
  */
 function mostrarCalendario(campo, mode = 'month') {
-    console.log(`[Calendar] mostrarCalendario chamado com modo: ${mode}`);
-
     const existing = document.getElementById('pickerOverlay');
     if (existing) existing.remove();
 

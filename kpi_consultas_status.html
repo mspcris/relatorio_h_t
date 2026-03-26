@@ -245,8 +245,17 @@
               <button id="reset1" class="btn btn-sm btn-outline-secondary">Reset</button>
               <button id="btnMesAtual1" class="btn btn-sm btn-outline-info">Mês Atual</button>
             </div>
-            <div class="flex-grow-1">
+            <div style="flex: 1;">
               <label class="filter-label">Posto</label>
+              <!-- Agrupamentos: Todos, Altamiro, Couto -->
+              <div class="posto-groups" style="margin-bottom: 8px;">
+                <div class="btn-group">
+                  <button id="btnGrupoTodos1" class="btn active" style="min-width: 60px;">Todos</button>
+                  <button id="btnGrupoAltamiro1" class="btn" title="A B G I N R X Y">Altamiro</button>
+                  <button id="btnGrupoCouto1" class="btn" title="C D J M P">Couto</button>
+                </div>
+              </div>
+              <!-- Postos individuais -->
               <ul id="postoTabs1" class="nav nav-pills scroll-tabs"></ul>
             </div>
           </div>
@@ -287,15 +296,18 @@
             <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
             <button id="btnMesAtual2" class="btn btn-sm btn-outline-info">Mês Atual</button>
           </div>
-          <div class="flex-grow-1">
+          <div style="flex: 1;">
             <label class="filter-label">Posto</label>
-            <div class="d-flex align-items-center">
-              <ul id="postoTabs2" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
-              <div class="ml-2 flex-shrink-0">
-                <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
-                <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
+            <!-- Agrupamentos: Todos, Altamiro, Couto -->
+            <div class="posto-groups" style="margin-bottom: 8px;">
+              <div class="btn-group">
+                <button id="btnGrupoTodos" class="btn active" style="min-width: 60px;">Todos</button>
+                <button id="btnGrupoAltamiro" class="btn" title="A B G I N R X Y">Altamiro</button>
+                <button id="btnGrupoCouto" class="btn" title="C D J M P">Couto</button>
               </div>
             </div>
+            <!-- Postos individuais -->
+            <ul id="postoTabs2" class="nav nav-pills scroll-tabs"></ul>
           </div>
         </div>
       </div>
@@ -565,7 +577,7 @@
   };
 
   function _grupoAtivo() {
-    if (!sel2 || sel2 === 'ALL') return null;
+    if (!sel2 || sel2 === 'ALL') return 'todos';
     const selArr = [...sel2].sort().join(',');
     for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
       const intersec = lista.filter(p => POSTOS.includes(p)).sort().join(',');
@@ -576,25 +588,33 @@
 
   function _atualizarBotoesGrupo() {
     const ativo = _grupoAtivo();
+    const btnTodos = el('#btnGrupoTodos');
     const btnA = el('#btnGrupoAltamiro');
     const btnC = el('#btnGrupoCouto');
-    if (btnA) btnA.classList.toggle('btn-secondary',         ativo === 'altamiro');
-    if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
-    if (btnC) btnC.classList.toggle('btn-secondary',         ativo === 'couto');
-    if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+
+    // Atualiza estado "active" dos botões
+    if (btnTodos) btnTodos.classList.toggle('active', ativo === 'todos');
+    if (btnA) btnA.classList.toggle('active', ativo === 'altamiro');
+    if (btnC) btnC.classList.toggle('active', ativo === 'couto');
   }
 
   function selectGrupo(grupo) {
-    const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p));
-    sel2 = new Set(intersec);
+    if (grupo === 'todos') {
+      sel2 = 'ALL';
+    } else {
+      const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p));
+      sel2 = new Set(intersec);
+    }
     buildPostoTabs('#postoTabs2', ()=>sel2, v=>{ sel2=v; window.sel2=sel2; }, ()=>renderSel2());
     _atualizarBotoesGrupo();
     renderSel2();
   }
 
   function wireGrupoButtons() {
+    const btnTodos = el('#btnGrupoTodos');
     const btnA = el('#btnGrupoAltamiro');
     const btnC = el('#btnGrupoCouto');
+    if (btnTodos) btnTodos.onclick = () => selectGrupo('todos');
     if (btnA) btnA.onclick = () => selectGrupo('altamiro');
     if (btnC) btnC.onclick = () => selectGrupo('couto');
   }
