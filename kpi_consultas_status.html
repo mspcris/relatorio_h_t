@@ -1384,7 +1384,15 @@
       wireGrupoButtons();
 
       initCharts();
-      attachHandlers();
+
+      // Aguarda DOM estar pronto antes de anexar handlers de eventos
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+          attachHandlers();
+        });
+      } else {
+        attachHandlers();
+      }
 
       await renderSel1();
       await renderSel2();
