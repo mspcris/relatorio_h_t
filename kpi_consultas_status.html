@@ -35,6 +35,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
+  <!-- Calendar Picker -->
+  <script src="/js/calendar-picker.js?v=20260326"></script>
+
   <!-- Contexto -->
   <script>
     window.IA_API_URL = '/ia/analisar';
@@ -219,17 +222,31 @@
         <div class="card">
           <div class="filter-bar">
             <div>
-              <label class="mb-0 small d-block">Selecione o Período — Comparação</label>
-              <div class="month-inputs">
-                <input id="from1" type="text" placeholder="DD/MM/YYYY" maxlength="10" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
-                <input id="to1" type="text" placeholder="DD/MM/YYYY" maxlength="10" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
-                <button id="btnFiltrar1" class="btn btn-sm btn-outline-primary">Filtrar</button>
-                <button id="reset1" class="btn btn-sm btn-outline-secondary">Reset</button>
-                <button id="btnMesAtual1" class="btn btn-sm btn-outline-secondary">Mês Atual</button>
+              <label class="filter-label">Período — Comparação</label>
+              <div style="display: flex; gap: 6px;">
+                <div class="filter-group" style="flex: 1;">
+                  <label class="filter-label" style="margin-bottom: 4px;">De</label>
+                  <div style="display: flex; gap: 6px;">
+                    <input id="from1" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
+                    <button id="btnCalendarFrom1" class="btn btn-sm" title="Abrir calendário">📅</button>
+                  </div>
+                </div>
+                <div class="filter-group" style="flex: 1;">
+                  <label class="filter-label" style="margin-bottom: 4px;">Até</label>
+                  <div style="display: flex; gap: 6px;">
+                    <input id="to1" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
+                    <button id="btnCalendarTo1" class="btn btn-sm" title="Abrir calendário">📅</button>
+                  </div>
+                </div>
               </div>
             </div>
+            <div class="filter-actions">
+              <button id="btnFiltrar1" class="btn btn-sm btn-primary">🔍 Filtrar</button>
+              <button id="reset1" class="btn btn-sm btn-outline-secondary">Reset</button>
+              <button id="btnMesAtual1" class="btn btn-sm btn-outline-info">Mês Atual</button>
+            </div>
             <div class="flex-grow-1">
-              <label class="mb-0 small d-block">Posto</label>
+              <label class="filter-label">Posto</label>
               <ul id="postoTabs1" class="nav nav-pills scroll-tabs"></ul>
             </div>
           </div>
@@ -247,17 +264,31 @@
       <div class="card">
         <div class="filter-bar">
           <div>
-            <label class="mb-0 small d-block">Selecione o Período — Consultas</label>
-            <div class="month-inputs">
-              <input id="from2" type="text" placeholder="DD/MM/YYYY" maxlength="10" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
-              <input id="to2" type="text" placeholder="DD/MM/YYYY" maxlength="10" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
-              <button id="btnFiltrar2" class="btn btn-sm btn-outline-primary">Filtrar</button>
-              <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
-              <button id="btnMesAtual2" class="btn btn-sm btn-outline-secondary">Mês Atual</button>
+            <label class="filter-label">Período — Consultas</label>
+            <div style="display: flex; gap: 6px;">
+              <div class="filter-group" style="flex: 1;">
+                <label class="filter-label" style="margin-bottom: 4px;">De</label>
+                <div style="display: flex; gap: 6px;">
+                  <input id="from2" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
+                  <button id="btnCalendarFrom2" class="btn btn-sm" title="Abrir calendário">📅</button>
+                </div>
+              </div>
+              <div class="filter-group" style="flex: 1;">
+                <label class="filter-label" style="margin-bottom: 4px;">Até</label>
+                <div style="display: flex; gap: 6px;">
+                  <input id="to2" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
+                  <button id="btnCalendarTo2" class="btn btn-sm" title="Abrir calendário">📅</button>
+                </div>
+              </div>
             </div>
           </div>
+          <div class="filter-actions">
+            <button id="btnFiltrar2" class="btn btn-sm btn-primary">🔍 Filtrar</button>
+            <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
+            <button id="btnMesAtual2" class="btn btn-sm btn-outline-info">Mês Atual</button>
+          </div>
           <div class="flex-grow-1">
-            <label class="mb-0 small d-block">Posto</label>
+            <label class="filter-label">Posto</label>
             <div class="d-flex align-items-center">
               <ul id="postoTabs2" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
               <div class="ml-2 flex-shrink-0">
@@ -430,12 +461,21 @@
   }
   function displayToIso(display){
     if (!display) return null;
-    const match = String(display).trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    const match = String(display).trim().match(/^(\d{2})\/(\d{4})$/);
     if (!match) return null;
-    const iso = `${match[3]}-${match[2]}-${match[1]}`;
+    // MM/YYYY format → YYYY-MM-01 (first day of month)
+    const iso = `${match[2]}-${match[1]}-01`;
     const dt = new Date(`${iso}T00:00:00`);
     if (Number.isNaN(dt.getTime())) return null;
     return iso;
+  }
+
+  function displayToYm(display){
+    if (!display) return null;
+    const match = String(display).trim().match(/^(\d{2})\/(\d{4})$/);
+    if (!match) return null;
+    // MM/YYYY format → YYYY-MM
+    return `${match[2]}-${match[1]}`;
   }
   function ymToDisplayDate(ym, endOfMonth = false){
     if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return '';
@@ -444,14 +484,20 @@
     return `${String(day).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`;
   }
   function setDateRangeInputs(prefix, fromYm, toYm){
-    if (el(`#from${prefix}`)) el(`#from${prefix}`).value = ymToDisplayDate(fromYm, false);
-    if (el(`#to${prefix}`)) el(`#to${prefix}`).value = ymToDisplayDate(toYm, true);
+    // Convert YYYY-MM to MM/YYYY for display
+    const ymToDisplay = ym => {
+      if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return '';
+      const [y, m] = ym.split('-');
+      return `${m}/${y}`;
+    };
+    if (el(`#from${prefix}`)) el(`#from${prefix}`).value = ymToDisplay(fromYm);
+    if (el(`#to${prefix}`)) el(`#to${prefix}`).value = ymToDisplay(toYm);
   }
   function getYmRangeFromInputs(prefix){
-    const fromIso = displayToIso(el(`#from${prefix}`)?.value || '');
-    const toIso = displayToIso(el(`#to${prefix}`)?.value || '');
-    if (!fromIso || !toIso || fromIso > toIso) return null;
-    return { from: fromIso.slice(0,7), to: toIso.slice(0,7) };
+    const fromYm = displayToYm(el(`#from${prefix}`)?.value || '');
+    const toYm = displayToYm(el(`#to${prefix}`)?.value || '');
+    if (!fromYm || !toYm || fromYm > toYm) return null;
+    return { from: fromYm, to: toYm };
   }
   function maskDateInput(e){
     let v = e.target.value.replace(/\D/g, '').slice(0, 8);
@@ -1237,14 +1283,11 @@
   }
 
   function attachHandlers(){
-    if(el('#from1')) el('#from1').addEventListener('input', maskDateInput);
-    if(el('#to1')) el('#to1').addEventListener('input', maskDateInput);
-    if(el('#from2')) el('#from2').addEventListener('input', maskDateInput);
-    if(el('#to2')) el('#to2').addEventListener('input', maskDateInput);
-    if(el('#from1')) el('#from1').addEventListener('focus', ()=>mostrarCalendarioDia(el('#from1')));
-    if(el('#to1')) el('#to1').addEventListener('focus', ()=>mostrarCalendarioDia(el('#to1')));
-    if(el('#from2')) el('#from2').addEventListener('focus', ()=>mostrarCalendarioDia(el('#from2')));
-    if(el('#to2')) el('#to2').addEventListener('focus', ()=>mostrarCalendarioDia(el('#to2')));
+    // Initialize calendar picker for month-only mode (MM/YYYY)
+    initCalendarPicker('#from1', '#btnCalendarFrom1', 'month');
+    initCalendarPicker('#to1', '#btnCalendarTo1', 'month');
+    initCalendarPicker('#from2', '#btnCalendarFrom2', 'month');
+    initCalendarPicker('#to2', '#btnCalendarTo2', 'month');
 
     if(el('#btnFiltrar1')) el('#btnFiltrar1').addEventListener('click', ()=>renderSel1());
     if(el('#btnFiltrar2')) el('#btnFiltrar2').addEventListener('click', ()=>renderSel2());
@@ -1266,18 +1309,16 @@
     });
     if(el('#btnMesAtual1')) el('#btnMesAtual1').addEventListener('click', ()=>{
       const now = new Date();
-      const fromIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-01`;
-      const toIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-      el('#from1').value = isoToDisplay(fromIso);
-      el('#to1').value = isoToDisplay(toIso);
+      const ym = `${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
+      el('#from1').value = ym;
+      el('#to1').value = ym;
       renderSel1();
     });
     if(el('#btnMesAtual2')) el('#btnMesAtual2').addEventListener('click', ()=>{
       const now = new Date();
-      const fromIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-01`;
-      const toIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-      el('#from2').value = isoToDisplay(fromIso);
-      el('#to2').value = isoToDisplay(toIso);
+      const ym = `${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
+      el('#from2').value = ym;
+      el('#to2').value = ym;
       renderSel2();
     });
 
