@@ -1,0 +1,1122 @@
+<!doctype html>
+<html lang="pt-br">
+<!-- Arquivo: indicadores.html — Painel de Indicadores Operacionais CAMIM -->
+
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — Indicadores</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="/css/style2.css?v=20251114">
+  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+  <style>
+    /* ── Normalização base ─────────────────────────────────────── */
+    html { font-size: 16px; }
+    body {
+      font-size: 1rem;
+      -webkit-text-size-adjust: 100%;
+      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    body.text-sm { font-size: 1rem; }
+    .text-sm .btn, .text-sm .form-control, .text-sm .nav-link { font-size: 1rem; }
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.5rem; }
+    h3, .card-title { font-size: 1.25rem; font-weight: 600; }
+    .sidebar .nav-link { font-size: .95rem; }
+    .brand-link .brand-text { font-size: 1rem; }
+
+    /* ── Posto tabs ────────────────────────────────────────────── */
+    .scroll-tabs {
+      display: flex;
+      gap: 6px;
+      overflow: auto;
+      white-space: nowrap;
+      padding: 6px 0;
+    }
+    .scroll-tabs .nav-link {
+      display: inline-block;
+      min-width: 52px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    /* ── Barra de indicador ────────────────────────────────────── */
+    .ind-bar {
+      position: relative;
+      min-height: 52px;
+      border-radius: 14px;
+      /* espectro: vermelho (pior) → verde (melhor), esquerda → direita */
+      background: linear-gradient(90deg,
+        rgba(198,40,40,.22)   0%,
+        rgba(230,81,0,.17)    28%,
+        rgba(249,168,37,.14)  52%,
+        rgba(38,166,154,.11)  74%,
+        rgba(26,127,60,.14)   100%
+      );
+      border: 1px solid rgba(0,0,0,.06);
+      box-shadow: 0 2px 8px rgba(0,0,0,.08), inset 0 1px 2px rgba(255,255,255,.35);
+      overflow: hidden;
+      cursor: default;
+      user-select: none;
+    }
+
+    /* fill translúcido — pastel suave, para na posição do status */
+    .ind-fill {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: var(--ind-fill);
+      background: linear-gradient(90deg,
+        rgba(255,255,255,.38) 0%,
+        var(--ind-color) 40%,
+        var(--ind-color) 80%,
+        rgba(255,255,255,0) 100%
+      );
+      opacity: .28;
+      border-radius: 14px 0 0 14px;
+      transition: width .7s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* marcador vertical na borda direita do fill */
+    .ind-fill::after {
+      content: '';
+      position: absolute;
+      right: 0; top: 14%; bottom: 14%;
+      width: 3px;
+      background: var(--ind-color);
+      opacity: .85;
+      border-radius: 3px;
+      box-shadow: 0 0 6px var(--ind-color);
+    }
+
+    /* container do conteúdo — flexbox, cresce em mobile */
+    .ind-content {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 14px;
+      min-height: 52px;
+      pointer-events: none;
+    }
+
+    .ind-label {
+      font-weight: 600;
+      font-size: .88rem;
+      color: #1a202c;
+      display: flex;
+      align-items: center;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .ind-label-text {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ind-right {
+      font-size: .78rem;
+      font-weight: 600;
+      color: rgba(0,0,0,.5);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* ── Mobile: quebra em duas linhas ──────────────────────────── */
+    @media (max-width: 576px) {
+      .ind-content {
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 3px;
+        padding: 10px 14px;
+        min-height: 64px;
+      }
+      .ind-label-text {
+        white-space: normal;
+        word-break: break-word;
+      }
+      .ind-right {
+        font-size: .74rem;
+      }
+    }
+
+    /* badge de status à direita da barra */
+    .ind-badge {
+      display: inline-block;
+      padding: .1rem .48rem;
+      border-radius: 999px;
+      font-size: .66rem;
+      font-weight: 700;
+      letter-spacing: .03em;
+      color: var(--ind-color);
+      background: rgba(255,255,255,.82);
+      border: 1.5px solid var(--ind-color);
+      margin-left: 8px;
+      vertical-align: middle;
+      box-shadow: 0 1px 5px rgba(0,0,0,.10);
+      backdrop-filter: blur(4px);
+    }
+
+    /* grupo de indicadores */
+    .ind-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .ind-group-title {
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #6b7280;
+      margin-bottom: 2px;
+    }
+
+    /* aviso de erro inline */
+    .ind-err {
+      font-size: .82rem;
+      color: #dc3545;
+      padding: 6px 0;
+    }
+
+    /* skeleton loader */
+    .ind-skeleton {
+      height: 52px;
+      border-radius: 12px;
+      background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* atualização automática */
+    #autoRefreshInfo {
+      font-size: .75rem;
+      color: #6b7280;
+    }
+
+    /* legenda de cores */
+    .leg-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: .78rem;
+      font-weight: 600;
+      color: #374151;
+    }
+    .leg-item::before {
+      content: '';
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      background: var(--c);
+    }
+
+    /* ícone + label do tipo de indicador */
+    .ind-prefix {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.72);
+      border: 1.5px solid var(--ind-color);
+      color: var(--ind-color);
+      font-size: .9rem;
+      margin-right: 10px;
+      flex-shrink: 0;
+      box-shadow: 0 1px 4px rgba(0,0,0,.10);
+      backdrop-filter: blur(4px);
+    }
+
+  /* ══════════════════════════════════════════════════════
+     LOADING OVERLAY — mesmo estilo do login
+  ══════════════════════════════════════════════════════ */
+  #loadingOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    overflow: hidden;
+    transition: opacity .7s ease, visibility .7s ease;
+  }
+  #loadingOverlay.lo-hide {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .lo-bg {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+  }
+  .lo-bg-cell {
+    background-size: cover;
+    background-position: center;
+    animation: lo-kenburns 20s ease-in-out infinite alternate;
+    filter: brightness(.55) saturate(1.1);
+  }
+  @keyframes lo-kenburns {
+    0%   { transform: scale(1) translate(0,0); }
+    100% { transform: scale(1.12) translate(-2%,-2%); }
+  }
+  .lo-overlay {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 60% 80% at 50% 50%, rgba(0,20,10,.45) 0%, rgba(0,10,5,.82) 100%);
+  }
+  .lo-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,180,80,.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,180,80,.06) 1px, transparent 1px);
+    background-size: 48px 48px;
+    animation: lo-gridpulse 6s ease-in-out infinite;
+  }
+  @keyframes lo-gridpulse {
+    0%, 100% { opacity: .6; }
+    50%       { opacity: 1; }
+  }
+  .lo-scanline {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(0,220,100,.4), transparent);
+    animation: lo-scan 8s linear infinite;
+  }
+  @keyframes lo-scan {
+    0%   { top: -2px; opacity: 0; }
+    5%   { opacity: 1; }
+    95%  { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+  }
+  .lo-stage {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .lo-brand {
+    text-align: center;
+    margin-bottom: 32px;
+    animation: lo-fadeDown .8s ease both;
+  }
+  @keyframes lo-fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .lo-logo-wrap {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 16px;
+  }
+  .lo-logo-wrap img {
+    height: 80px;
+    width: auto;
+    animation: lo-logopulse 3s ease-in-out infinite;
+  }
+  @keyframes lo-logopulse {
+    0%, 100% { filter: drop-shadow(0 0 18px rgba(0,220,100,.4)); }
+    50%       { filter: drop-shadow(0 0 36px rgba(0,220,100,.75)); }
+  }
+  .lo-ring {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(0,200,80,.3);
+    animation: lo-ringout 3s ease-out infinite;
+  }
+  .lo-ring:nth-child(2) { animation-delay: 1s; }
+  .lo-ring:nth-child(3) { animation-delay: 2s; }
+  @keyframes lo-ringout {
+    0%   { transform: translate(-50%,-50%) scale(.6); opacity: .8; }
+    100% { transform: translate(-50%,-50%) scale(2.4); opacity: 0; }
+  }
+  .lo-brand-name {
+    font-size: 2.4rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: .06em;
+    text-shadow: 0 0 40px rgba(0,200,80,.4);
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  .lo-brand-slogan {
+    font-size: .95rem;
+    color: rgba(255,255,255,.55);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    margin-top: 4px;
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  .lo-card {
+    width: min(380px, 100%);
+    background: rgba(5,20,10,.72);
+    border: 1px solid rgba(0,200,80,.2);
+    border-radius: 20px;
+    padding: 32px 36px;
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    box-shadow:
+      0 0 0 1px rgba(0,200,80,.08),
+      0 8px 40px rgba(0,0,0,.6),
+      inset 0 1px 0 rgba(255,255,255,.06);
+    animation: lo-fadeUp .9s ease .2s both;
+    text-align: center;
+  }
+  @keyframes lo-fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .lo-card-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 20px;
+    letter-spacing: .02em;
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  .lo-progress-wrap {
+    height: 3px;
+    background: rgba(0,200,80,.15);
+    border-radius: 99px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .lo-progress-bar {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, transparent 0%, rgba(0,220,100,.9) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: lo-sweep 1.6s ease-in-out infinite;
+    border-radius: 99px;
+  }
+  @keyframes lo-sweep {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  .lo-dots {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+  .lo-dots span {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: rgba(0,200,80,.6);
+    animation: lo-dot 1.2s ease-in-out infinite;
+  }
+  .lo-dots span:nth-child(2) { animation-delay: .2s; }
+  .lo-dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes lo-dot {
+    0%, 100% { transform: scale(.7); opacity: .4; }
+    50%       { transform: scale(1.1); opacity: 1; }
+  }
+</style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+
+<!-- ── LOADING OVERLAY ──────────────────────────────────────────── -->
+<div id="loadingOverlay">
+  <div class="lo-bg">
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2021/06/15145129/home.jpg');animation-delay:0s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/04/30163026/Campo-Grande-e1562878167161.jpg');animation-delay:-3s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2022/03/09151823/cg2fachada-scaled.jpg');animation-delay:-6s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/07/11123612/BANGU-1-as-Smart-Object-1-copy.jpg');animation-delay:-9s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2020/10/19144653/del_castilho.jpg');animation-delay:-2s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/04/30162346/jpa-e1562878253339.jpg');animation-delay:-5s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2020/10/19144328/Recepcao-Del-Castilho.jpg');animation-delay:-8s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2024/04/05115830/madureira.jpg');animation-delay:-11s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2022/03/09152145/cpnhofachada.jpg');animation-delay:-4s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2020/02/21140942/nillopolis2102.jpg');animation-delay:-7s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/07/11130213/REALENGO-1-as-Smart-Object-1-copy.jpg');animation-delay:-1s"></div>
+    <div class="lo-bg-cell" style="background-image:url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/04/30162920/NI-e1562878495907.jpg');animation-delay:-10s"></div>
+  </div>
+  <div class="lo-overlay"></div>
+  <div class="lo-grid"></div>
+  <div class="lo-scanline"></div>
+  <div class="lo-stage">
+    <div class="lo-brand">
+      <div class="lo-logo-wrap">
+        <div class="lo-ring"></div>
+        <div class="lo-ring"></div>
+        <div class="lo-ring"></div>
+        <img src="/images/Logo Camim-01_200px.png" alt="CAMIM">
+      </div>
+      <div class="lo-brand-name">CAMIM</div>
+      <div class="lo-brand-slogan">Quem tem saúde é mais feliz</div>
+    </div>
+    <div class="lo-card">
+      <div class="lo-card-title">Carregando indicadores…</div>
+      <div class="lo-progress-wrap">
+        <div class="lo-progress-bar"></div>
+      </div>
+      <div class="lo-dots">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrapper">
+
+  <!-- ── NAVBAR ──────────────────────────────────────────────── -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button">
+          <i class="fas fa-bars"></i>
+        </a>
+      </li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+      <span class="ml-2">Quem tem saúde é mais feliz!</span>
+    </span>
+  </nav>
+
+  <!-- ── SIDEBAR ─────────────────────────────────────────────── -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link">
+      <span class="brand-text font-weight-light">MENU</span>
+    </a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item">
+            <a href="index.html" class="nav-link">
+              <i class="nav-icon fas fa-home"></i>
+              <p>Home Page</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="monitorarrobos.html" class="nav-link active">
+              <i class="nav-icon fas fa-tachometer-alt"></i>
+              <p>Indicadores</p>
+            </a>
+          </li>
+          {% if USER_IS_ADMIN %}
+          <li class="nav-item">
+            <a href="/admin" class="nav-link" style="border-left:3px solid #f39c12">
+              <i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i>
+              <p>Admin</p>
+            </a>
+          </li>
+          {% endif %}
+          <li class="nav-item">
+            <a href="kpi_home.html" class="nav-link">
+              <i class="nav-icon fas fa-book-open"></i>
+              <p>Leia-me</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="alimentacao.html" class="nav-link">
+              <i class="nav-icon fas fa-utensils"></i>
+              <p>KPI Custo Alimentação</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="medicos.html" class="nav-link">
+              <i class="nav-icon fas fa-notes-medical"></i>
+              <p>KPI Custo Médico</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="ctrlq_relatorio.html" class="nav-link">
+              <i class="nav-icon fas fa-user-md"></i>
+              <p>KPI Médicos (Qualidade)</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_v2.html" class="nav-link">
+              <i class="nav-icon fas fa-chart-line"></i>
+              <p>KPI Mensalidades</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_vendas.html" class="nav-link">
+              <i class="nav-icon fas fa-shopping-cart"></i>
+              <p>KPI Vendas</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="clientes.html" class="nav-link">
+              <i class="nav-icon fas fa-users"></i>
+              <p>KPI Clientes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="KPI_prescricao.html" class="nav-link">
+              <i class="nav-icon fas fa-prescription-bottle-alt"></i>
+              <p>KPI Prescrições</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_governo.html" class="nav-link">
+              <i class="nav-icon fas fa-landmark"></i>
+              <p>KPI Índices Oficiais</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_liberty.html" class="nav-link">
+              <i class="nav-icon fas fa-passport"></i>
+              <p>KPI CAMIM Liberty</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_receita_despesa.html" class="nav-link">
+              <i class="nav-icon fas fa-balance-scale"></i>
+              <p>KPI Receitas x Despesas</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_receita_despesa_rateio.html" class="nav-link">
+              <i class="nav-icon fas fa-balance-scale"></i>
+              <p>KPI R x D com Rateio</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_consultas_status.html" class="nav-link">
+              <i class="nav-icon fas fa-stethoscope"></i>
+              <p>KPI Consultas (Status)</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_notas_rps.html" class="nav-link">
+              <i class="nav-icon fas fa-file-invoice"></i>
+              <p>KPI Notas x RPS</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="kpi_metas_vendas_mensalidades.html" class="nav-link">
+              <i class="nav-icon fas fa-bullseye"></i>
+              <p>KPI Metas (Mens/Vendas)</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="mais_servicos.html" class="nav-link">
+              <i class="nav-icon fas fa-th-large"></i>
+              <p>Mais Serviços</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline">
+              <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                <i class="nav-icon fas fa-sign-out-alt"></i>
+                <p>Sair</p>
+              </button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- ── CONTEÚDO ────────────────────────────────────────────── -->
+  <div class="content-wrapper">
+    <nav class="navbar navbar-expand navbar-white navbar-light">
+      <div class="d-flex w-100 align-items-center">
+        <span class="ml-2 font-weight-bold">Indicadores</span>
+        <span class="ml-3" id="autoRefreshInfo"></span>
+      </div>
+    </nav>
+
+    <section class="content p-3">
+
+      <!-- Filtro de posto -->
+      <div class="card mb-3">
+        <div class="card-body py-2 px-3">
+          <div class="d-flex align-items-center flex-wrap" style="gap:12px">
+            <span class="font-weight-bold" style="font-size:.85rem">Posto</span>
+            <ul id="postoTabs" class="nav nav-pills scroll-tabs mb-0 flex-grow-1"></ul>
+            <div class="flex-shrink-0">
+              <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
+              <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Legenda de cores -->
+      <div class="card mb-3">
+        <div class="card-body py-2 px-3">
+          <div class="d-flex align-items-center flex-wrap" style="gap:10px">
+            <span style="font-size:.75rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-right:4px">Status</span>
+            <span class="leg-item" style="--c:#1a7f3c">Ótimo</span>
+            <span class="leg-item" style="--c:#4caf50">Bom</span>
+            <span class="leg-item" style="--c:#26a69a">Ok</span>
+            <span class="leg-item" style="--c:#f9a825">Ruim</span>
+            <span class="leg-item" style="--c:#e65100">Péssimo</span>
+            <span class="leg-item" style="--c:#c62828">Horrível</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aviso de sync desatualizado (preenchido via JS só se necessário) -->
+      <div id="syncAviso" style="font-size:.78rem;color:#e65100;margin-bottom:6px"></div>
+
+      <!-- Painel de indicadores (ordenado do pior ao melhor) -->
+      <div id="painelIndicadores">
+        <!-- preenchido via JS -->
+        <div class="ind-group">
+          <div class="ind-skeleton"></div>
+          <div class="ind-skeleton"></div>
+          <div class="ind-skeleton"></div>
+        </div>
+      </div>
+
+    </section>
+  </div>
+
+  <footer class="main-footer text-sm text-muted">
+    <strong>CAMIM</strong> — Painel de Indicadores Operacionais
+  </footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ── Paleta de status ───────────────────────────────────────── */
+  const STATUS = {
+    otimo:    { label: 'Ótimo',    color: '#1a7f3c', bg: 'rgba(26,127,60,0.10)',   fill: 100, order: 6 },
+    bom:      { label: 'Bom',      color: '#4caf50', bg: 'rgba(76,175,80,0.10)',   fill: 83,  order: 5 },
+    ok:       { label: 'Ok',       color: '#26a69a', bg: 'rgba(38,166,154,0.10)',  fill: 67,  order: 4 },
+    ruim:     { label: 'Ruim',     color: '#f9a825', bg: 'rgba(249,168,37,0.10)',  fill: 50,  order: 3 },
+    pessimo:  { label: 'Péssimo',  color: '#e65100', bg: 'rgba(230,81,0,0.10)',    fill: 33,  order: 2 },
+    horrivel: { label: 'Horrível', color: '#c62828', bg: 'rgba(198,40,40,0.10)',   fill: 17,  order: 1 },
+  };
+
+  function diasParaStatus(dias) {
+    if (dias === null || dias === undefined || dias >= 999) return 'horrivel';
+    if (dias === 0) return 'otimo';
+    if (dias === 1) return 'bom';
+    if (dias === 2) return 'ok';
+    if (dias === 3) return 'ruim';
+    if (dias === 4) return 'pessimo';
+    return 'horrivel';
+  }
+
+  function fmtDias(dias) {
+    if (dias >= 999) return 'nunca enviado';
+    if (dias === 0) return 'hoje';
+    if (dias === 1) return 'ontem';
+    return `há ${dias} dias`;
+  }
+
+  /* ── Render de uma barra ────────────────────────────────────── */
+  const PREFIX_ICON = {
+    WPP:   'fab fa-whatsapp',
+    EMAIL: 'fas fa-envelope',
+    TEF:   'fas fa-credit-card',
+    PUSH:  'fas fa-bell',
+  };
+
+  // prefix: ex "PUSH", nome: ex "Cobrança — Posto X"
+  function barraHTML(prefix, nome, statusKey, textoDir) {
+    const s = STATUS[statusKey] || STATUS.horrivel;
+    const fillPct = Math.max(s.fill, 5); // mínimo visual de 5%
+    const iconCls = PREFIX_ICON[prefix] || 'fas fa-circle';
+    return `
+      <div class="ind-bar"
+           style="--ind-color:${s.color}; --ind-bg:${s.bg}; --ind-fill:${fillPct}%"
+           title="${prefix} — ${nome} — ${s.label}">
+        <div class="ind-fill"></div>
+        <div class="ind-content">
+          <span class="ind-label">
+            <span class="ind-prefix"><i class="${iconCls}"></i></span>
+            <span class="ind-label-text">${nome}</span>
+          </span>
+          <span class="ind-right">
+            ${textoDir}
+            <span class="ind-badge">${s.label}</span>
+          </span>
+        </div>
+      </div>`;
+  }
+
+  /* ── Estado ─────────────────────────────────────────────────── */
+  let POSTOS_USER  = [];       // postos que o usuário tem acesso
+  let postosSel    = new Set(); // vazio = todos
+
+  function postosSelecionados() {
+    if (!postosSel.size) return [...POSTOS_USER];
+    return POSTOS_USER.filter(p => postosSel.has(p));
+  }
+
+  /* ── Posto tabs ─────────────────────────────────────────────── */
+  function buildPostoTabs() {
+    const ul = document.getElementById('postoTabs');
+    ul.innerHTML = '';
+
+    const allActive = !postosSel.size;
+    ul.insertAdjacentHTML('beforeend',
+      `<li class="nav-item"><a href="#" class="nav-link ${allActive ? 'active' : ''}" data-posto="ALL">Todos</a></li>`
+    );
+
+    POSTOS_USER.forEach(p => {
+      const ativo = !allActive && postosSel.has(p);
+      ul.insertAdjacentHTML('beforeend',
+        `<li class="nav-item"><a href="#" class="nav-link ${ativo ? 'active' : ''}" data-posto="${p}">${p}</a></li>`
+      );
+    });
+
+    ul.onclick = e => {
+      const link = e.target.closest('.nav-link');
+      if (!link) return;
+      e.preventDefault();
+      const posto = link.dataset.posto;
+      if (!posto) return;
+
+      if (posto === 'ALL') {
+        postosSel = new Set();
+      } else {
+        if (!postosSel.size) postosSel = new Set([posto]);
+        else {
+          if (postosSel.has(posto)) postosSel.delete(posto);
+          else postosSel.add(posto);
+        }
+      }
+
+      const allNow = !postosSel.size;
+      ul.querySelectorAll('.nav-link').forEach(a => {
+        const p = a.dataset.posto;
+        if (p === 'ALL') a.classList.toggle('active', allNow);
+        else a.classList.toggle('active', !allNow && postosSel.has(p));
+      });
+
+      _atualizarBotoesGrupo();
+      loadAll();
+    };
+    _atualizarBotoesGrupo();
+  }
+
+  /* ── Grupos de Postos ───────────────────────────────────────── */
+  const GRUPOS_POSTO = {
+    altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+    couto:    ['C', 'D', 'J', 'M', 'P'],
+  };
+
+  function _grupoAtivo() {
+    if (!postosSel.size) return null;
+    const selArr = [...postosSel].sort().join(',');
+    for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+      const intersec = lista.filter(p => POSTOS_USER.includes(p)).sort().join(',');
+      if (intersec && selArr === intersec) return nome;
+    }
+    return null;
+  }
+
+  function _atualizarBotoesGrupo() {
+    const ativo = _grupoAtivo();
+    const btnA = document.getElementById('btnGrupoAltamiro');
+    const btnC = document.getElementById('btnGrupoCouto');
+    if (btnA) btnA.classList.toggle('btn-secondary',         ativo === 'altamiro');
+    if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
+    if (btnC) btnC.classList.toggle('btn-secondary',         ativo === 'couto');
+    if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+  }
+
+  function selectGrupo(grupo) {
+    const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS_USER.includes(p));
+    postosSel = new Set(intersec);
+    buildPostoTabs();
+    _atualizarBotoesGrupo();
+    loadAll();
+  }
+
+  function wireGrupoButtons() {
+    const btnA = document.getElementById('btnGrupoAltamiro');
+    const btnC = document.getElementById('btnGrupoCouto');
+    if (btnA) btnA.onclick = () => selectGrupo('altamiro');
+    if (btnC) btnC.onclick = () => selectGrupo('couto');
+  }
+
+  /* ── Indicador: Push de Cobrança ────────────────────────────── */
+  async function loadPush(postos) {
+    const resp = await fetch('/api/indicadores/push', { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error(`Push API: ${resp.status}`);
+    const data = await resp.json();
+    if (data.erro) throw new Error(data.erro);
+
+    // Filtra pelos postos selecionados e monta itens
+    const itens = postos.map(p => {
+      const d = data[p];
+      if (!d) return { posto: p, dias: 999, ultimo: null };
+      return { posto: p, dias: d.dias, ultimo: d.ultimo_envio };
+    });
+
+    // Ordena do pior (menor order) ao melhor
+    itens.sort((a, b) => {
+      const oa = STATUS[diasParaStatus(a.dias)].order;
+      const ob = STATUS[diasParaStatus(b.dias)].order;
+      return oa - ob;
+    });
+
+    const mostrar1Posto = postos.length === 1;
+
+    return itens.map(it => {
+      const sKey = diasParaStatus(it.dias);
+      const s    = STATUS[sKey];
+      const nome = mostrar1Posto ? 'Push Cobrança' : `Push Cobrança — Posto ${it.posto}`;
+      const texto = it.ultimo
+        ? `${fmtDias(it.dias)} · ${it.ultimo.slice(0, 16)}`
+        : fmtDias(it.dias);
+      return { html: barraHTML('PUSH', nome, sKey, texto), order: s.order };
+    });
+  }
+
+  /* ── Indicador: Email de Cobrança ──────────────────────────── */
+  async function loadEmail(postos) {
+    const resp = await fetch('/api/indicadores/email', { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error(`Email API: ${resp.status}`);
+    const json = await resp.json();
+    if (json.erro) throw new Error(json.erro);
+
+    const { dados, sync } = json;
+
+    // Mostra aviso de sync se houver erro ou dado antigo
+    if (sync?.synced_at) {
+      const syncDt = new Date(sync.synced_at.replace(' ', 'T'));
+      const horas  = Math.round((Date.now() - syncDt) / 36e5);
+      if (sync.status === 'erro' || horas > 26) {
+        const aviso = document.getElementById('syncAviso');
+        if (aviso) aviso.textContent =
+          `⚠ Email: último sync ${sync.synced_at} (${horas}h atrás)${sync.status === 'erro' ? ' — ERRO' : ''}`;
+      }
+    }
+
+    const postosSet = new Set(postos);
+    const mostrar1Posto = postos.length === 1;
+
+    // Agrupa por categoria, filtra por postos selecionados
+    const porCategoria = {};
+    for (const item of Object.values(dados)) {
+      if (!postosSet.has(item.posto)) continue;
+      const cat = item.categoria || '(sem categoria)';
+      if (!porCategoria[cat]) porCategoria[cat] = [];
+      porCategoria[cat].push(item);
+    }
+
+    const itens = [];
+    for (const [cat, lista] of Object.entries(porCategoria)) {
+      // Para cada categoria, mostra um item por posto (ou o pior quando "Todos")
+      if (mostrar1Posto) {
+        const it = lista[0];
+        const sKey = diasParaStatus(it.dias);
+        const texto = it.ultimo_envio
+          ? `${fmtDias(it.dias)} · ${it.ultimo_envio.slice(0, 16)} · ${it.total} enviados`
+          : fmtDias(it.dias);
+        itens.push({ html: barraHTML('EMAIL', cat, sKey, texto), order: STATUS[sKey].order });
+      } else {
+        // vários postos: um item por posto dentro da categoria
+        for (const it of lista) {
+          const sKey = diasParaStatus(it.dias);
+          const texto = it.ultimo_envio
+            ? `${fmtDias(it.dias)} · ${it.ultimo_envio.slice(0, 16)}`
+            : fmtDias(it.dias);
+          const nome = `${cat} — Posto ${it.posto}`;
+          itens.push({ html: barraHTML('EMAIL', nome, sKey, texto), order: STATUS[sKey].order });
+        }
+      }
+    }
+
+    return itens;
+  }
+
+  /* ── Indicador: TEF Recorrente ──────────────────────────────── */
+  async function loadTef(postos) {
+    const resp = await fetch('/api/indicadores/tef', { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error(`TEF API: ${resp.status}`);
+    const json = await resp.json();
+    if (json.erro) throw new Error(json.erro);
+
+    const { dados } = json;
+    const mostrar1Posto = postos.length === 1;
+
+    const itens = postos.map(p => {
+      const d = dados[p];
+      if (!d) return { posto: p, dias: 999, ultimo: null };
+      return { posto: p, dias: d.dias, ultimo: d.ultimo_tef };
+    });
+
+    itens.sort((a, b) => STATUS[diasParaStatus(a.dias)].order - STATUS[diasParaStatus(b.dias)].order);
+
+    return itens.map(it => {
+      const sKey = diasParaStatus(it.dias);
+      const nome = mostrar1Posto ? 'TEF Recorrente' : `TEF Recorrente — Posto ${it.posto}`;
+      const texto = it.ultimo
+        ? `${fmtDias(it.dias)} · ${it.ultimo.slice(0, 16)}`
+        : fmtDias(it.dias);
+      return { html: barraHTML('TEF', nome, sKey, texto), order: STATUS[sKey].order };
+    });
+  }
+
+  /* ── Indicador: WhatsApp Cobrança ──────────────────────────── */
+  async function loadWpp(postos) {
+    const resp = await fetch('/wpp/api/indicadores', { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error(`WPP API: ${resp.status}`);
+    const json = await resp.json();
+    if (json.erro) throw new Error(json.erro);
+
+    const { campanhas } = json;
+    const postosSet = new Set(postos);
+    const mostrar1Posto = postos.length === 1;
+
+    // Consolida: para cada posto relevante, pega o melhor (menor dias) entre campanhas
+    // Postos sem nenhum envio em qualquer campanha ficam com dias=999
+    const melhorPorPosto = {}; // posto → {dias, ultimo_envio, campNome}
+    for (const camp of campanhas) {
+      for (const [posto, d] of Object.entries(camp.postos)) {
+        if (!postosSet.has(posto)) continue;
+        const atual = melhorPorPosto[posto];
+        if (!atual || d.dias < atual.dias) {
+          melhorPorPosto[posto] = { dias: d.dias, ultimo_envio: d.ultimo_envio, campNome: camp.nome };
+        }
+      }
+    }
+
+    // Garante que TODOS os postos do usuário apareçam (mesmo sem campanha ou envio)
+    for (const p of postos) {
+      if (!melhorPorPosto[p]) {
+        melhorPorPosto[p] = { dias: 999, ultimo_envio: null, campNome: null };
+      }
+    }
+
+    const itens = [];
+    for (const [posto, d] of Object.entries(melhorPorPosto)) {
+      const sKey = diasParaStatus(d.dias);
+      const labelCamp = d.campNome ? d.campNome : 'WhatsApp Cobrança';
+      const nome = mostrar1Posto ? labelCamp : `${labelCamp} — Posto ${posto}`;
+      const texto = d.ultimo_envio
+        ? `${fmtDias(d.dias)} · ${d.ultimo_envio.slice(0, 16)}`
+        : fmtDias(d.dias);
+      itens.push({ html: barraHTML('WPP', nome, sKey, texto), order: STATUS[sKey].order });
+    }
+
+    return itens;
+  }
+
+  /* ── Render do painel ───────────────────────────────────────── */
+  async function loadAll() {
+    const painel = document.getElementById('painelIndicadores');
+    painel.innerHTML = `
+      <div class="ind-group">
+        <div class="ind-skeleton"></div>
+        <div class="ind-skeleton"></div>
+        <div class="ind-skeleton"></div>
+      </div>`;
+
+    const aviso = document.getElementById('syncAviso');
+    if (aviso) aviso.textContent = '';
+
+    const postos = postosSelecionados();
+    const todos  = [];
+
+    // Carrega todos os indicadores em paralelo
+    const [resPush, resEmail, resTef, resWpp] = await Promise.allSettled([
+      loadPush(postos),
+      loadEmail(postos),
+      loadTef(postos),
+      loadWpp(postos),
+    ]);
+
+    if (resPush.status === 'fulfilled') todos.push(...resPush.value);
+    else todos.push({
+      html: `<div class="ind-err"><i class="fas fa-exclamation-triangle mr-1"></i>Push: ${resPush.reason?.message}</div>`,
+      order: 0
+    });
+
+    if (resEmail.status === 'fulfilled') todos.push(...resEmail.value);
+    else todos.push({
+      html: `<div class="ind-err"><i class="fas fa-exclamation-triangle mr-1"></i>Email: ${resEmail.reason?.message}</div>`,
+      order: 0
+    });
+
+    if (resTef.status === 'fulfilled') todos.push(...resTef.value);
+    else todos.push({
+      html: `<div class="ind-err"><i class="fas fa-exclamation-triangle mr-1"></i>TEF: ${resTef.reason?.message}</div>`,
+      order: 0
+    });
+
+    if (resWpp.status === 'fulfilled') todos.push(...resWpp.value);
+    else todos.push({
+      html: `<div class="ind-err"><i class="fas fa-exclamation-triangle mr-1"></i>WPP: ${resWpp.reason?.message}</div>`,
+      order: 0
+    });
+
+    // Ordenação final: pior (menor order) primeiro
+    todos.sort((a, b) => a.order - b.order);
+
+    if (!todos.length) {
+      painel.innerHTML = '<p class="text-muted">Nenhum indicador disponível para os postos selecionados.</p>';
+      return;
+    }
+
+    painel.innerHTML = `<div class="ind-group">${todos.map(i => i.html).join('')}</div>`;
+  }
+
+  /* ── Init ───────────────────────────────────────────────────── */
+  async function init() {
+    try {
+      const r = await fetch('/session/me', { credentials: 'same-origin' });
+      if (!r.ok) { location.href = '/login.html'; return; }
+      const me = await r.json();
+      POSTOS_USER = Array.isArray(me.postos) ? [...me.postos].sort() : [];
+    } catch {
+      POSTOS_USER = [];
+    }
+
+    buildPostoTabs();
+    wireGrupoButtons();
+    await loadAll();
+
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+      overlay.classList.add('lo-hide');
+      setTimeout(() => overlay.remove(), 750);
+    }
+
+    // Auto-refresh a cada 5 minutos
+    let proxima = 300;
+    const info  = document.getElementById('autoRefreshInfo');
+    setInterval(() => {
+      proxima--;
+      if (proxima <= 0) { proxima = 300; loadAll(); }
+      info.textContent = `Atualiza em ${proxima}s`;
+    }, 1000);
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+
+
+<script src="/js/menu.js" defer></script>
+</body>
+</html>
