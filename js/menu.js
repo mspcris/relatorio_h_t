@@ -20,7 +20,7 @@
     { href: '/kpi_vendas.html',                    icon: 'fa-shopping-cart',           label: 'KPI Vendas' },
     { href: '/kpi_clientes.html',                  icon: 'fa-users',                   label: 'KPI Clientes' },
     { href: '/KPI_prescricao.html',                icon: 'fa-prescription-bottle-alt', label: 'KPI Prescrições' },
-    { href: '/kpi_fidelizacao_cliente.html',       icon: 'fa-handshake',               label: 'KPI Fidelização' },
+    { href: '/kpi_fidelizacao_cliente.html',       icon: 'fa-handshake',               label: 'KPI Fidelização Churn' },
     { href: '/kpi_consultas_status.html',          icon: 'fa-stethoscope',             label: 'KPI Consultas (Status)' },
     { href: '/kpi_notas_rps.html',                 icon: 'fa-file-invoice',            label: 'KPI Notas x RPS' },
     { href: '/kpi_metas_vendas_mensalidades.html', icon: 'fa-bullseye',                label: 'KPI Metas (Mens/Vendas)' },
