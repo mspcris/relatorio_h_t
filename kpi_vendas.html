@@ -66,6 +66,7 @@
     </script>
 
     <!-- Chat / IA -->
+    <script src="/js/calendar-picker.js?v=20260326"></script>
     <script src="/js/chat.js?v=20251114"></script>
 
     <style>
@@ -428,22 +429,40 @@
                 <!-- BLOCO: COMPARAÇÃO -->
                 <div id="compareBlock" style="display:none">
                     <div class="card">
-                        <div class="filter-bar">
-                            <div>
-                                <label class="mb-0 small d-block">Selecione o Período - KPIs Comparação</label>
-                                <div class="month-inputs">
-                                    <input id="from1" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
-                                    <input id="to1" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
-                                    <button id="btnFiltrar1" class="btn btn-sm btn-primary" title="Aplicar filtro">🔍 Filtrar</button>
-                                    <button id="reset1" class="btn btn-sm btn-outline-secondary">Reset</button>
-                                    <button id="btnMesAtual1" class="btn btn-sm btn-outline-info">Mês Atual</button>
-                                </div>
-                            </div>
-                            <div class="flex-grow-1">
-                                <label class="mb-0 small d-block">Posto</label>
-                                <ul id="postoTabs1" class="nav nav-pills scroll-tabs"></ul>
-                            </div>
+                      <div class="kpi-filter-panel">
+                        <div class="kpi-filter-row kpi-filter-postos">
+                          <div class="posto-groups"><div class="btn-group">
+                            <button id="btnGrupoTodos1" class="btn active">Todos</button>
+                            <button id="btnGrupoAltamiro1" class="btn" title="A B G I N R X Y">Altamiro</button>
+                            <button id="btnGrupoCouto1" class="btn" title="C D J M P">Couto</button>
+                          </div></div>
+                          <div class="filter-sep-v"></div>
+                          <ul id="postoTabs1" class="nav nav-pills posto-tabs-inline"></ul>
                         </div>
+                        <div class="kpi-filter-row kpi-filter-actions">
+                          <div class="filter-dates-row">
+                            <div class="filter-date-group">
+                              <label class="filter-label">De</label>
+                              <div class="filter-date-wrap">
+                                <input id="from1" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm filter-date-input" />
+                                <button id="btnCalendarFrom1" class="btn btn-sm btn-cal" title="Abrir calendário">📅</button>
+                              </div>
+                            </div>
+                            <div class="filter-date-group">
+                              <label class="filter-label">Até</label>
+                              <div class="filter-date-wrap">
+                                <input id="to1" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm filter-date-input" />
+                                <button id="btnCalendarTo1" class="btn btn-sm btn-cal" title="Abrir calendário">📅</button>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="filter-btns-row">
+                            <button id="btnFiltrar1" class="btn btn-sm btn-primary">🔍 Filtrar</button>
+                            <button id="reset1" class="btn btn-sm btn-outline-secondary">Reset</button>
+                            <button id="btnMesAtual1" class="btn btn-sm btn-outline-info">Mês Atual</button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <div class="card">
@@ -456,28 +475,40 @@
 
                 <!-- 12 MESES + POSTO(S) -->
                 <div class="card">
-                    <div class="filter-bar">
-                        <div>
-                            <label class="mb-0 small d-block">Selecione o Período - KPIs Vendas</label>
-                            <div class="month-inputs">
-                                <input id="from2" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
-                                <input id="to2" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
-                                <button id="btnFiltrar2" class="btn btn-sm btn-primary" title="Aplicar filtro">🔍 Filtrar</button>
-                                <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
-                                <button id="btnMesAtual2" class="btn btn-sm btn-outline-info">Mês Atual</button>
-                            </div>
-                        </div>
-                        <div class="flex-grow-1">
-                            <label class="mb-0 small d-block">Posto</label>
-                            <div class="d-flex align-items-center">
-                              <ul id="postoTabs2" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
-                              <div class="ml-2 flex-shrink-0">
-                                <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
-                                <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
-                              </div>
-                            </div>
-                        </div>
+                  <div class="kpi-filter-panel">
+                    <div class="kpi-filter-row kpi-filter-postos">
+                      <div class="posto-groups"><div class="btn-group">
+                        <button id="btnGrupoTodos" class="btn active">Todos</button>
+                        <button id="btnGrupoAltamiro" class="btn" title="A B G I N R X Y">Altamiro</button>
+                        <button id="btnGrupoCouto" class="btn" title="C D J M P">Couto</button>
+                      </div></div>
+                      <div class="filter-sep-v"></div>
+                      <ul id="postoTabs2" class="nav nav-pills posto-tabs-inline"></ul>
                     </div>
+                    <div class="kpi-filter-row kpi-filter-actions">
+                      <div class="filter-dates-row">
+                        <div class="filter-date-group">
+                          <label class="filter-label">De</label>
+                          <div class="filter-date-wrap">
+                            <input id="from2" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm filter-date-input" />
+                            <button id="btnCalendarFrom2" class="btn btn-sm btn-cal" title="Abrir calendário">📅</button>
+                          </div>
+                        </div>
+                        <div class="filter-date-group">
+                          <label class="filter-label">Até</label>
+                          <div class="filter-date-wrap">
+                            <input id="to2" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm filter-date-input" />
+                            <button id="btnCalendarTo2" class="btn btn-sm btn-cal" title="Abrir calendário">📅</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="filter-btns-row">
+                        <button id="btnFiltrar2" class="btn btn-sm btn-primary">🔍 Filtrar</button>
+                        <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
+                        <button id="btnMesAtual2" class="btn btn-sm btn-outline-info">Mês Atual</button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="card">
@@ -1395,6 +1426,14 @@
         function wireGrupoButtons() {
           const btnA = el('#btnGrupoAltamiro');
           const btnC = el('#btnGrupoCouto');
+          const btnT = el('#btnGrupoTodos');
+          if (btnT) btnT.onclick = () => selectGrupo('todos');
+          const btnT1 = el('#btnGrupoTodos1');
+          if (btnT1) btnT1.onclick = () => selectGrupo('todos', 1);
+          const btnA1 = el('#btnGrupoAltamiro1');
+          if (btnA1) btnA1.onclick = () => selectGrupo('altamiro', 1);
+          const btnC1 = el('#btnGrupoCouto1');
+          if (btnC1) btnC1.onclick = () => selectGrupo('couto', 1);
           if (btnA) btnA.onclick = () => selectGrupo('altamiro');
           if (btnC) btnC.onclick = () => selectGrupo('couto');
         }
@@ -1683,11 +1722,8 @@
             if (el('#from1')) el('#from1').addEventListener('input', maskInput);
             if (el('#to1')) el('#to1').addEventListener('input', maskInput);
 
-            // Calendar picker ao clicar
-            if (el('#from2')) el('#from2').addEventListener('focus', () => mostrarCalendarioAlimentacao(el('#from2')));
-            if (el('#to2')) el('#to2').addEventListener('focus', () => mostrarCalendarioAlimentacao(el('#to2')));
-            if (el('#from1')) el('#from1').addEventListener('focus', () => mostrarCalendarioAlimentacao(el('#from1')));
-            if (el('#to1')) el('#to1').addEventListener('focus', () => mostrarCalendarioAlimentacao(el('#to1')));
+            // Calendar picker via calendar-picker.js
+            if (window.initCalendarPicker) { initCalendarPicker('#from2','#btnCalendarFrom2','month'); initCalendarPicker('#to2','#btnCalendarTo2','month'); initCalendarPicker('#from1','#btnCalendarFrom1','month'); initCalendarPicker('#to1','#btnCalendarTo1','month'); }
 
             if (el('#from1')) el('#from1').addEventListener('change', () => { renderSel1(); });
             if (el('#to1')) el('#to1').addEventListener('change', () => { renderSel1(); });
