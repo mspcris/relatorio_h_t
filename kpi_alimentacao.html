@@ -452,7 +452,7 @@
                     if (sel.has(p)) sel.delete(p); else sel.add(p);
                     if (sel.size === (window.POSTOS || []).length || sel.size === 0) sel = 'ALL';
                 }
-                setSel(sel); markActiveMulti(ulId, sel); onChange();
+                setSel(sel); _atualizarBotoesGrupo?.(); markActiveMulti(ulId, sel); onChange();
             });
         }
         window.markActiveMulti = markActiveMulti;
@@ -953,8 +953,8 @@
             }
 
             // 4) Abas de posto (multi)
-            buildPostoTabs('#postoTabs2', () => sel2, v => sel2 = v, refreshMain);
-            buildPostoTabs('#postoTabs1', () => sel1, v => sel1 = v, refreshCompare);
+            buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; _atualizarBotoesGrupo?.(); }, () => window.refreshMain?.());
+            buildPostoTabs('#postoTabs1', () => sel1, v => sel1 = v, () => window.refreshCompare?.());
             wireGrupoButtons();
 
             // 5) Helpers “globais” para IA Deep
@@ -1107,9 +1107,9 @@
             if(window.initCalendarPicker){ initCalendarPicker('#from2','#btnCalendarFrom2','month'); initCalendarPicker('#to2','#btnCalendarTo2','month'); initCalendarPicker('#from1','#btnCalendarFrom1','month'); initCalendarPicker('#to1','#btnCalendarTo1','month'); }
 
             // Botão Filtrar 2
-            on('#btnFiltrar2', 'click', () => refreshMain());
+            on('#btnFiltrar2', 'click', () => window.refreshMain());
             // Botão Reset 2
-            on('#reset2', 'click', () => { if (!last12.length) return; setMonth('#from2', last12[0]); setMonth('#to2', last12.at(-1)); refreshMain(); });
+            on('#reset2', 'click', () => { if (!last12.length) return; setMonth('#from2', last12[0]); setMonth('#to2', last12.at(-1)); window.refreshMain(); });
             // Botão Mês Atual 2
             on('#btnMesAtual2', 'click', () => {
               const hoje = new Date();
@@ -1117,13 +1117,13 @@
               const a = String(hoje.getFullYear());
               el('#from2').value = `${m}/${a}`;
               el('#to2').value = `${m}/${a}`;
-              refreshMain();
+              window.refreshMain();
             });
 
             // Botão Filtrar 1
-            on('#btnFiltrar1', 'click', () => refreshCompare());
+            on('#btnFiltrar1', 'click', () => window.refreshCompare());
             // Botão Reset 1
-            on('#reset1', 'click', () => { if (!last12.length) return; setMonth('#from1', last12[0]); setMonth('#to1', last12.at(-1)); refreshCompare(); });
+            on('#reset1', 'click', () => { if (!last12.length) return; setMonth('#from1', last12[0]); setMonth('#to1', last12.at(-1)); window.refreshCompare(); });
             // Botão Mês Atual 1
             on('#btnMesAtual1', 'click', () => {
               const hoje = new Date();
@@ -1131,7 +1131,7 @@
               const a = String(hoje.getFullYear());
               el('#from1').value = `${m}/${a}`;
               el('#to1').value = `${m}/${a}`;
-              refreshCompare();
+              window.refreshCompare();
             });
 
             // 7) Toggle Comparar
@@ -1139,7 +1139,7 @@
                 const b = el('#compareBlock');
                 const show = b.style.display === 'none';
                 b.style.display = show ? 'block' : 'none';
-                refreshCompare();
+                window.refreshCompare();
             });
 
             // 8) Heatmap (definir antes do primeiro refreshMain)
@@ -1167,13 +1167,8 @@
                 box.innerHTML = `<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
             };
 
-            // 9) Charts + primeira renderização (agora seguro)
-            initCharts();
-            refreshMain();
-
             // ===== helpers locais =====
             function mesesSel(fromSel, toSel) {
-                // Converter MM/YYYY para YYYY-MM
                 const convertToYm = (displayVal) => {
                   if (!displayVal) return null;
                   const match = displayVal.match(/^(\d{2})\/(\d{4})$/);
@@ -1202,6 +1197,10 @@
                 const meses = mesesSel('#from1', '#to1');
                 buildKPIs('#kpisSel1', meses, sel1);
             }
+
+            // 9) Charts + primeira renderização (agora seguro)
+            initCharts();
+            window.refreshMain();
 
             // 10) Prompts (go-live)
             try {

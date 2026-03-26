@@ -559,10 +559,10 @@
             const anoStr = thirteenMonthsAgo.getFullYear();
             const mesStr = String(thirteenMonthsAgo.getMonth() + 1).padStart(2, '0');
             selMonth = `${anoStr}-${mesStr}`;
-            el('#monthSelect').value = `${mesStr}/${anoStr}`;
+            el('monthSelect').value = `${mesStr}/${anoStr}`;
 
             // Máscara de entrada
-            el('#monthSelect').addEventListener('input', (e) => {
+            el('monthSelect').addEventListener('input', (e) => {
                 let v = e.target.value.replace(/\D/g, '');
                 if (v.length > 2) {
                     v = v.slice(0, 2) + '/' + v.slice(2, 6);
@@ -574,8 +574,8 @@
             if (typeof initCalendarPicker === 'function') initCalendarPicker('#monthSelect', '#btnCalendarMes', 'month');
 
             // Botão Filtrar
-            if (el('#btnFiltrar')) el('#btnFiltrar').addEventListener('click', () => {
-                const valor = el('#monthSelect').value.trim();
+            if (el('btnFiltrar')) el('btnFiltrar').addEventListener('click', () => {
+                const valor = el('monthSelect').value.trim();
                 const match = valor.match(/^(\d{2})\/(\d{4})$/);
                 if (match) {
                     selMonth = `${match[2]}-${match[1]}`;
@@ -584,11 +584,11 @@
             });
 
             // Botão Mês Atual
-            if (el('#btnMesAtual')) el('#btnMesAtual').addEventListener('click', () => {
+            if (el('btnMesAtual')) el('btnMesAtual').addEventListener('click', () => {
                 const hoje = new Date();
                 const mesStr = String(hoje.getMonth() + 1).padStart(2, '0');
                 const anoStr = String(hoje.getFullYear());
-                el('#monthSelect').value = `${mesStr}/${anoStr}`;
+                el('monthSelect').value = `${mesStr}/${anoStr}`;
                 selMonth = `${anoStr}-${mesStr}`;
                 render();
             });
@@ -597,9 +597,9 @@
             buildPostoTabs('#postoTabs', () => selPostos, v => { selPostos = v; }, () => render());
 
             // Grupos
-            el('#btnGrupoTodos')?.addEventListener('click', () => { selPostos = 'ALL'; buildPostoTabs('#postoTabs', () => selPostos, v => { selPostos = v; }, () => render()); _atualizarBotoesGrupo(); render(); });
-            el('#btnGrupoAltamiro')?.addEventListener('click', () => selectGrupo('altamiro'));
-            el('#btnGrupoCouto')?.addEventListener('click', () => selectGrupo('couto'));
+            el('btnGrupoTodos')?.addEventListener('click', () => { selPostos = 'ALL'; buildPostoTabs('#postoTabs', () => selPostos, v => { selPostos = v; }, () => render()); _atualizarBotoesGrupo(); render(); });
+            el('btnGrupoAltamiro')?.addEventListener('click', () => selectGrupo('altamiro'));
+            el('btnGrupoCouto')?.addEventListener('click', () => selectGrupo('couto'));
         }
 
         function buildPostoTabs(ulId, getSel, setSel, onChange) {
@@ -667,9 +667,9 @@
         function _atualizarBotoesGrupo() {
             const ativo = _grupoAtivo();
             const isTodos = !selPostos || selPostos === 'ALL' || (selPostos instanceof Set && selPostos.size === 0);
-            const btnT = el('#btnGrupoTodos');
-            const btnA = el('#btnGrupoAltamiro');
-            const btnC = el('#btnGrupoCouto');
+            const btnT = el('btnGrupoTodos');
+            const btnA = el('btnGrupoAltamiro');
+            const btnC = el('btnGrupoCouto');
             if (btnT) btnT.classList.toggle('active', isTodos);
             if (btnA) btnA.classList.toggle('active', ativo === 'altamiro');
             if (btnC) btnC.classList.toggle('active', ativo === 'couto');

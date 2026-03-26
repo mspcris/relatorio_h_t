@@ -1986,8 +1986,13 @@
       // ============================================================
 
       function getMesesSelecionados() {
-        const from = el('#from2')?.value || null;
-        const to = el('#to2')?.value || null;
+        const toYm = v => {
+          if (!v) return null;
+          const m = v.match(/^(\d{2})\/(\d{4})$/);
+          return m ? `${m[2]}-${m[1]}` : v;
+        };
+        const from = toYm(el('#from2')?.value || null);
+        const to = toYm(el('#to2')?.value || null);
         return inRange(MESES, from, to);
       }
 

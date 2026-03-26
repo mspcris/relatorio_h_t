@@ -828,8 +828,11 @@
 
         function _atualizarBotoesGrupo() {
             const ativo = _grupoAtivo();
+            const isTodos = !selPostosLiberty || selPostosLiberty === 'ALL';
+            const btnT = el('#btnGrupoTodos');
             const btnA = el('#btnGrupoAltamiro');
             const btnC = el('#btnGrupoCouto');
+            if (btnT) btnT.classList.toggle('active', isTodos);
             if (btnA) btnA.classList.toggle('active', ativo === 'altamiro');
             if (btnC) btnC.classList.toggle('active', ativo === 'couto');
         }
@@ -846,7 +849,7 @@
             const btnA = el('#btnGrupoAltamiro');
             const btnC = el('#btnGrupoCouto');
             const btnT = el('#btnGrupoTodos');
-            if (btnT) btnT.onclick = () => selectGrupo('todos');
+            if (btnT) btnT.onclick = () => { selPostosLiberty = 'ALL'; marcarPostosAtivos(); _atualizarBotoesGrupo(); renderAll(); };
             if (btnA) btnA.onclick = () => selectGrupo('altamiro');
             if (btnC) btnC.onclick = () => selectGrupo('couto');
         }
