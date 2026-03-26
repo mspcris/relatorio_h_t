@@ -1537,22 +1537,16 @@
                     e.target.value = v;
                 });
 
-                // Validação ao sair
+                // Validação ao sair (silenciosa)
                 campo.addEventListener('blur', function() {
                     const valor = this.value.trim();
                     if (!valor) return;
 
                     const match = valor.match(/^(\d{2})\/(\d{4})$/);
-                    if (!match) {
-                        alert('Use o formato MM/YYYY');
-                        return;
-                    }
+                    if (!match) return;
 
                     const mes = Number(match[1]);
-                    if (mes < 1 || mes > 12) {
-                        alert('Mês deve estar entre 01-12');
-                        return;
-                    }
+                    if (mes < 1 || mes > 12) return;
                 });
 
                 // Calendar picker ao clicar
