@@ -1,117 +1,108 @@
-// Injeta link Admin no drawer se o usuário for admin
-fetch("/session/me")
-  .then(r => r.ok ? r.json() : null)
-  .then(data => {
-    if (!data || !data.is_admin) return;
-    // Procura o <li> do Home Page e insere o Admin logo abaixo
-    const links = document.querySelectorAll("#app-drawer a[href]");
-    let homeItem = null;
-    links.forEach(a => {
-      if (a.getAttribute("href") === "/" || a.textContent.trim() === "Home Page") {
-        homeItem = a.closest("li");
-      }
-    });
-    const adminLi = document.createElement("li");
-    adminLi.innerHTML =
-      '<a href="/admin" style="display:flex;align-items:center;gap:10px;padding:10px 16px;' +
-      'color:inherit;text-decoration:none;font-weight:600;border-left:3px solid #f39c12">' +
-      '<i class="fas fa-users-cog" style="color:#f39c12;width:18px;text-align:center"></i>' +
-      '<span>Admin</span></a>';
-    if (homeItem && homeItem.parentNode) {
-      homeItem.parentNode.insertBefore(adminLi, homeItem.nextSibling);
-    }
-  })
-  .catch(() => {});
+/**
+ * menu.js — Menu lateral canônico CAMIM
+ * Substitui o HTML hardcoded de todas as páginas KPI.
+ * Detecta a página ativa pelo pathname. Admin só aparece se is_admin=true.
+ */
+(function () {
 
-// Aguarda o HTML carregar
-document.addEventListener("DOMContentLoaded", () => {
-  // Seletores principais do menu
-  const drawer = document.getElementById("app-drawer");      // O menu lateral
-  const overlay = document.getElementById("drawerOverlay");  // Fundo escuro
-  const toggleBtn = document.getElementById("menuToggle");   // Botão hamburguer
-  const closeBtn = document.getElementById("drawerClose");   // Botão fechar (X)
-  const accordions = document.querySelectorAll(".menu-accordion");
- // Botões que abrem submenus
+  // ── Menu canônico — ordem e itens definitivos ──────────────────────────
+  const MENU = [
+    { href: '/index.html',                         icon: 'fa-home',                      label: 'Home' },
+    { href: '/indicadores.html',                   icon: 'fa-tachometer-alt',            label: 'Indicadores' },
+    { href: '/kpi_home.html',                      icon: 'fa-book-open',                 label: 'Leia-me' },
+    { type: 'divider' },
+    { href: '/kpi_v2.html',                        icon: 'fa-chart-line',                label: 'KPI Mensalidades' },
+    { href: '/kpi_alimentacao.html',               icon: 'fa-utensils',                  label: 'KPI Custo Alimentação' },
+    { href: '/kpi_medicos.html',                   icon: 'fa-notes-medical',             label: 'KPI Custo Médico' },
+    { href: '/ctrlq_relatorio.html',               icon: 'fa-user-md',                   label: 'KPI Médicos (Qualidade)' },
+    { href: '/kpi_vendas.html',                    icon: 'fa-shopping-cart',             label: 'KPI Vendas' },
+    { href: '/kpi_clientes.html',                  icon: 'fa-users',                     label: 'KPI Clientes' },
+    { href: '/KPI_prescricao.html',                icon: 'fa-prescription-bottle-alt',   label: 'KPI Prescrições' },
+    { href: '/kpi_fidelizacao_cliente.html',       icon: 'fa-handshake',                 label: 'KPI Fidelização' },
+    { href: '/kpi_consultas_status.html',          icon: 'fa-stethoscope',               label: 'KPI Consultas (Status)' },
+    { href: '/kpi_notas_rps.html',                 icon: 'fa-file-invoice',              label: 'KPI Notas x RPS' },
+    { href: '/kpi_metas_vendas_mensalidades.html', icon: 'fa-bullseye',                  label: 'KPI Metas (Mens/Vendas)' },
+    { href: '/kpi_governo.html',                   icon: 'fa-landmark',                  label: 'KPI Índices Oficiais' },
+    { href: '/kpi_liberty.html',                   icon: 'fa-passport',                  label: 'KPI CAMIM Liberty' },
+    { href: '/kpi_receita_despesa.html',           icon: 'fa-balance-scale',             label: 'KPI Receitas x Despesas' },
+    { href: '/kpi_receita_despesa_rateio.html',    icon: 'fa-balance-scale',             label: 'KPI R x D com Rateio' },
+    { href: '/mais_servicos.html',                 icon: 'fa-th-large',                  label: 'Mais Serviços' },
+    { type: 'divider' },
+    { href: '/admin', icon: 'fa-users-cog', label: 'Admin', adminOnly: true,
+      style: 'border-left:3px solid #f39c12', iconStyle: 'color:#f39c12' },
+    { type: 'divider' },
+    { type: 'logout' },
+  ];
 
-  /**
-   * Abre o menu lateral (drawer)
-   */
-function openDrawer() {
-  drawer.hidden = false;
-  overlay.hidden = false;
-  drawer.setAttribute("data-open", "true");
-  overlay.setAttribute("aria-hidden", "false");
-  toggleBtn.setAttribute("aria-expanded", "true");
-  document.body.style.overflow = "hidden";
-
-  const splash = drawer.querySelector(".menu-splash");
-  const brand = drawer.querySelector(".menu-brand");
-  const menuItems = drawer.querySelectorAll(".menu-list li");
-
-  // Reset
-  menuItems.forEach(li => li.classList.remove("show"));
-  brand.classList.remove("visible");
-
-  // Reinicia animação do splash
-  splash.style.display = "block";
-  splash.style.animation = "none";        // zera animação
-  splash.offsetHeight;                    // força reflow
-  splash.style.animation = "splashFade 2s ease forwards"; // reaplica animação
-
-  // Depois de 2s, troca pro brand + itens
-  setTimeout(() => {
-    splash.style.display = "none";
-    brand.classList.add("visible");
-
-    menuItems.forEach((li, i) => {
-      setTimeout(() => li.classList.add("show"), i * 0);
-    });
-  }, 60);
-}
-
-  /**
-   * Fecha o menu lateral (drawer)
-   */
-  function closeDrawer() {
-    // Marca como fechado
-    drawer.setAttribute("data-open", "false");
-    overlay.setAttribute("aria-hidden", "true");
-    toggleBtn.setAttribute("aria-expanded", "false");
-    document.body.style.overflow = "";
-
-    // Espera a transição terminar antes de esconder
-    setTimeout(() => {
-      drawer.hidden = true;
-      overlay.hidden = true;
-    }, 300); // tempo deve bater com o CSS transition do drawer
+  // ── Detecta página ativa ───────────────────────────────────────────────
+  function isActive(href) {
+    const path = window.location.pathname;
+    const base = href.replace(/^\//, '').replace(/\.html$/, '');
+    return (
+      path === href ||
+      path.endsWith(href) ||
+      path === '/' + base ||
+      path.endsWith('/' + base + '.html') ||
+      path.endsWith('/' + base)
+    );
   }
 
-  // === Eventos principais ===
-  toggleBtn.addEventListener("click", () => {
-    const isOpen = drawer.getAttribute("data-open") === "true";
-    isOpen ? closeDrawer() : openDrawer();
-  });
+  // ── Renderiza o menu ───────────────────────────────────────────────────
+  function renderMenu(isAdmin) {
+    const nav = document.querySelector('ul.nav-sidebar');
+    if (!nav) return;
 
-  closeBtn.addEventListener("click", closeDrawer);
-  overlay.addEventListener("click", closeDrawer);
+    const html = MENU
+      .filter(item => !item.adminOnly || isAdmin)
+      .map(item => {
+        if (item.type === 'divider') {
+          return `<li style="border-top:1px solid rgba(255,255,255,0.08);margin:6px 12px;padding:0;height:0;list-style:none;pointer-events:none;"></li>`;
+        }
+        if (item.type === 'logout') {
+          return `<li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline;width:100%">
+              <button type="submit" class="nav-link btn btn-link p-0 w-100" style="text-align:left">
+                <i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p>
+              </button>
+            </form>
+          </li>`;
+        }
+        const active    = isActive(item.href) ? ' active' : '';
+        const liStyle   = item.style     ? ` style="${item.style}"`     : '';
+        const iconStyle = item.iconStyle ? ` style="${item.iconStyle}"` : '';
+        return `<li class="nav-item">
+          <a href="${item.href}" class="nav-link${active}"${liStyle}>
+            <i class="nav-icon fas ${item.icon}"${iconStyle}></i>
+            <p>${item.label}</p>
+          </a>
+        </li>`;
+      })
+      .join('');
 
-  // === Submenus (ex.: Cursos) ===
-  accordions.forEach(btn => {
-    const target = document.getElementById(btn.getAttribute("aria-controls"));
+    nav.innerHTML = html;
+  }
 
-    btn.addEventListener("click", () => {
-      const expanded = btn.getAttribute("aria-expanded") === "true";
+  // ── Inicializa ─────────────────────────────────────────────────────────
+  function init() {
+    // Se Jinja2 já injetou window.USER_IS_ADMIN, usa direto
+    if (typeof window.USER_IS_ADMIN !== 'undefined') {
+      renderMenu(!!window.USER_IS_ADMIN);
+      return;
+    }
+    // Senão, busca da sessão (já feito pelo contexto, mas fallback seguro)
+    fetch('/session/me', { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : {})
+      .then(data => {
+        window.USER_IS_ADMIN = !!data.is_admin;
+        renderMenu(window.USER_IS_ADMIN);
+      })
+      .catch(() => renderMenu(false));
+  }
 
-      // Atualiza atributo de acessibilidade
-      btn.setAttribute("aria-expanded", String(!expanded));
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 
-      // Alterna a classe que abre/fecha com animação CSS
-      if (expanded) {
-        target.classList.remove("open"); // fecha
-      } else {
-        target.classList.add("open");    // abre
-      }
-    });
-  });
-});
-
+})();
