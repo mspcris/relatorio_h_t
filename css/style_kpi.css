@@ -1,8 +1,46 @@
 /* ============================================================
+   DESIGN SYSTEM — Apple-like + Green CAMIM
+   ============================================================ */
+:root {
+    --kpi-loaded: 1;
+
+    /* Cores CAMIM */
+    --camim-green-bright: #00dc64;
+    --camim-green-dark: #006633;
+    --camim-green-light: rgba(0, 220, 100, 0.08);
+    --camim-green-border: rgba(0, 220, 100, 0.2);
+
+    /* Cores Neutras Apple-like */
+    --apple-bg-primary: #f8f9fa;
+    --apple-bg-secondary: #ffffff;
+    --apple-border: #e0e0e0;
+    --apple-text-primary: #1d1d1f;
+    --apple-text-secondary: #86868b;
+    --apple-text-tertiary: #a1a1a6;
+
+    /* Espaçamento */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 12px;
+    --spacing-lg: 16px;
+    --spacing-xl: 24px;
+    --spacing-xxl: 32px;
+
+    /* Bordas */
+    --border-radius-sm: 8px;
+    --border-radius-md: 12px;
+    --border-radius-lg: 16px;
+
+    /* Sombras */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================================
    NORMALIZAÇÃO — Base + Ajustes pós AdminLTE
    ============================================================ */
 /* força prioridade do arquivo todo */
-:root { --kpi-loaded: 1; }
 
 html {
     font-size: 16px;
@@ -206,6 +244,284 @@ text-align: left;
 
 .ia-btn:hover{
     background:#2563eb;
+}
+
+/* ============================================================
+   APPLE-LIKE REDESIGN — Cards, Buttons, Filters
+   ============================================================ */
+
+/* Fundo global */
+body {
+    background-color: var(--apple-bg-primary) !important;
+    color: var(--apple-text-primary);
+}
+
+.content-wrapper {
+    background-color: var(--apple-bg-primary);
+}
+
+/* Cards refinados */
+.card {
+    background-color: var(--apple-bg-secondary);
+    border: 1px solid var(--apple-border);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: var(--spacing-lg);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.card-header {
+    background-color: var(--apple-bg-secondary);
+    border-bottom: 1px solid var(--apple-border);
+    padding: var(--spacing-lg);
+    border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+}
+
+.card-body {
+    padding: var(--spacing-lg);
+}
+
+/* Filter Bar — Novo Padrão */
+.filter-bar {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: flex-end;
+    flex-wrap: wrap;
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, rgba(0, 220, 100, 0.02) 0%, rgba(0, 220, 100, 0.01) 100%);
+    border-radius: var(--border-radius-md);
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.filter-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--apple-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Inputs refinados */
+.form-control,
+.form-control-sm,
+.custom-select,
+.custom-select-sm {
+    border: 1px solid var(--apple-border);
+    border-radius: var(--border-radius-sm);
+    background-color: white;
+    color: var(--apple-text-primary);
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.form-control:focus,
+.form-control-sm:focus,
+.custom-select:focus,
+.custom-select-sm:focus {
+    border-color: var(--camim-green-bright);
+    box-shadow: 0 0 0 3px var(--camim-green-light);
+}
+
+/* Botões — Design CAMIM */
+.btn {
+    border-radius: var(--border-radius-sm);
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    border: none;
+    padding: 6px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Botão Primário — Verde CAMIM */
+.btn-primary {
+    background: linear-gradient(135deg, var(--camim-green-bright) 0%, var(--camim-green-dark) 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(0, 220, 100, 0.2);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 220, 100, 0.3);
+    background: linear-gradient(135deg, #00e580 0%, #00764a 100%);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(0, 220, 100, 0.2);
+}
+
+/* Botão Secondary — Neutro */
+.btn-outline-secondary {
+    border: 1px solid var(--apple-border);
+    color: var(--apple-text-primary);
+    background-color: white;
+}
+
+.btn-outline-secondary:hover {
+    background-color: var(--apple-bg-primary);
+    border-color: var(--camim-green-border);
+}
+
+/* Botão Info (removido, usar primary) */
+.btn-outline-info {
+    background: linear-gradient(135deg, var(--camim-green-bright) 0%, var(--camim-green-dark) 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 220, 100, 0.2);
+}
+
+.btn-outline-info:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 220, 100, 0.3);
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+/* Links e Navegação */
+.nav-link {
+    color: var(--apple-text-primary);
+    border-radius: var(--border-radius-sm);
+    transition: all 0.2s ease;
+}
+
+.nav-link:hover {
+    background-color: var(--camim-green-light);
+    color: var(--camim-green-dark);
+}
+
+.nav-link.active {
+    background-color: var(--camim-green-light);
+    color: var(--camim-green-dark);
+    font-weight: 600;
+    box-shadow: inset 0 0 0 2px var(--camim-green-bright);
+}
+
+/* Tabelas */
+.table {
+    background-color: white;
+    border-collapse: collapse;
+}
+
+.table thead th {
+    background-color: var(--apple-bg-primary);
+    border-bottom: 2px solid var(--apple-border);
+    color: var(--apple-text-primary);
+    font-weight: 600;
+    padding: var(--spacing-md);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+}
+
+.table tbody td {
+    border-bottom: 1px solid var(--apple-border);
+    padding: var(--spacing-md);
+    color: var(--apple-text-primary);
+}
+
+.table tbody tr:hover {
+    background-color: var(--camim-green-light);
+}
+
+/* Mobile Responsivo */
+@media (max-width: 768px) {
+    .filter-bar {
+        flex-direction: column;
+    }
+
+    .filter-group {
+        width: 100%;
+    }
+
+    .filter-group input {
+        width: 100%;
+    }
+
+    .filter-actions {
+        width: 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .btn-primary,
+    .btn-outline-secondary,
+    .btn-outline-info {
+        flex: 1;
+        min-width: 100px;
+        justify-content: center;
+    }
+
+    .card {
+        margin-bottom: var(--spacing-md);
+    }
+
+    .card-body {
+        padding: var(--spacing-md);
+    }
+
+    .chart-card .card-body {
+        height: 280px;
+    }
+
+    .kpi {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important;
+        gap: 8px !important;
+    }
+
+    .table {
+        font-size: 0.85rem;
+    }
+
+    .table thead th,
+    .table tbody td {
+        padding: 8px 4px;
+    }
+}
+
+@media (max-width: 480px) {
+    .btn-sm {
+        padding: 6px 8px;
+        font-size: 0.75rem;
+    }
+
+    .filter-actions {
+        width: 100%;
+    }
+
+    .btn-primary,
+    .btn-outline-secondary {
+        width: 48%;
+    }
+
+    .card-header {
+        padding: var(--spacing-md);
+    }
+
+    .chart-card .card-body {
+        height: 240px;
+    }
 }
 
 .ia-btn:active{

@@ -79,6 +79,8 @@
     <!-- Chat / IA -->
     <script src="/js/chat.js?v=20251114"></script>
 
+    <!-- Calendar Picker -->
+    <script src="/js/calendar-picker.js?v=20260326"></script>
 
     <style>
         /* body,
@@ -837,6 +839,21 @@
         const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
         const mFmt = ym => { const [y, m] = ym.split('-').map(Number); return `${MES_ABBR[m - 1].slice(0, 3)}-${String(y).slice(-2)}`; };
         const inRange = (labels, from, to) => labels.filter(m => (!from || m >= from) && (!to || m <= to));
+        const displayToYm = (displayVal) => {
+            if (!displayVal) return null;
+            const match = String(displayVal).trim().match(/^(\d{2})\/(\d{4})$/);
+            return match ? `${match[2]}-${match[1]}` : null;
+        };
+        const ymToDisplay = (ym) => {
+            if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return '';
+            const [y, m] = ym.split('-');
+            return `${m}/${y}`;
+        };
+        const setMonth = (sel, ym) => {
+            const input = el(sel);
+            if (!input) return;
+            input.value = ymToDisplay(ym);
+        };
         function lastCompleteMonth(labels) { const now = new Date(); const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; const L = labels.filter(m => m !== cur); return L.length ? L.at(-1) : labels.at(-1); }
         const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
         const maybe = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
@@ -1494,14 +1511,14 @@
                     return;
                 }
 
-                if (el('#from1')) el('#from1').value = MESES[0];
-                if (el('#to1')) el('#to1').value = lastFull;
+                if (el('#from1')) setMonth('#from1', MESES[0]);
+                if (el('#to1')) setMonth('#to1', lastFull);
 
                 const [y, m] = lastFull.split('-').map(Number);
                 const d = new Date(y, m - 1, 1);
                 d.setMonth(d.getMonth() - 11);
-                if (el('#from2')) el('#from2').value = d.toISOString().slice(0, 7);
-                if (el('#to2')) el('#to2').value = lastFull;
+                if (el('#from2')) setMonth('#from2', d.toISOString().slice(0, 7));
+                if (el('#to2')) setMonth('#to2', lastFull);
 
                 sel1 = 'ALL'; sel2 = 'ALL';
                 buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
@@ -1682,11 +1699,11 @@
         }
 
         function renderSel1() {
-            const meses = inRange(MESES, el('#from1')?.value || null, el('#to1')?.value || null);
+            const meses = inRange(MESES, displayToYm(el('#from1')?.value || '') || null, displayToYm(el('#to1')?.value || '') || null);
             buildKPIs('#kpisSel1', meses, sel1);
         }
         function renderSel2() {
-            const meses = inRange(MESES, el('#from2')?.value || null, el('#to2')?.value || null);
+            const meses = inRange(MESES, displayToYm(el('#from2')?.value || '') || null, displayToYm(el('#to2')?.value || '') || null);
             buildKPIs('#kpisSel2', meses, sel2);
             buildTable(meses, sel2);
             updateCharts(meses, sel2);
@@ -1706,8 +1723,8 @@
 
             // Bloco 1: Reset
             if (el('#reset1')) el('#reset1').addEventListener('click', () => {
-                el('#from1').value = MESES[0];
-                el('#to1').value = lastFull;
+                setMonth('#from1', MESES[0]);
+                setMonth('#to1', lastFull);
                 sel1 = 'ALL';
                 markActiveMulti('#postoTabs1', sel1);
                 renderSel1();
@@ -1731,8 +1748,8 @@
                 const [y, m] = lastFull.split('-').map(Number);
                 const d = new Date(y, m - 1, 1);
                 d.setMonth(d.getMonth() - 11);
-                el('#from2').value = d.toISOString().slice(0, 7);
-                el('#to2').value = lastFull;
+                setMonth('#from2', d.toISOString().slice(0, 7));
+                setMonth('#to2', lastFull);
                 sel2 = 'ALL';
                 window.sel2 = sel2;
                 markActiveMulti('#postoTabs2', sel2);
@@ -2021,13 +2038,17 @@
         }
 
         function snapshotPageState({ userQuery }) {
+            const from1Ym = displayToYm(from1?.value || '');
+            const to1Ym = displayToYm(to1?.value || '');
+            const from2Ym = displayToYm(from2?.value || '');
+            const to2Ym = displayToYm(to2?.value || '');
             const meses1 = MESES.filter(m =>
-                (!from1?.value || m >= from1.value) &&
-                (!to1?.value || m <= to1.value)
+                (!from1Ym || m >= from1Ym) &&
+                (!to1Ym || m <= to1Ym)
             );
             const meses2 = MESES.filter(m =>
-                (!from2?.value || m >= from2.value) &&
-                (!to2?.value || m <= to2.value)
+                (!from2Ym || m >= from2Ym) &&
+                (!to2Ym || m <= to2Ym)
             );
 
             const macro = macroSeriesFor(meses2, ipcaMonthly, igpmMonthly, (window._PTAX_MONTHLY || {}));
@@ -2112,13 +2133,13 @@ No campo "html", produza um RELATÓRIO EXECUTIVO completo em HTML para o períod
 
             const filtros = {
                 compare: {
-                    from: from1?.value || null,
-                    to: to1?.value || null,
+                    from: from1Ym || null,
+                    to: to1Ym || null,
                     posto: labelSelec(sel1)
                 },
                 deep: {
-                    from: from2?.value || null,
-                    to: to2?.value || null,
+                    from: from2Ym || null,
+                    to: to2Ym || null,
                     posto: labelSelec(sel2)
                 }
             };
