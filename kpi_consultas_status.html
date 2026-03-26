@@ -1134,6 +1134,143 @@
     box.insertAdjacentHTML('beforeend', kpiCard('Share Top10 médicos', k.top10Share, 'pct'));
   }
 
+  // =========================================================
+  // CONTEXTO INTELIGENTE PARA IA — dataset completo serializado
+  // =========================================================
+  function buildKpiContextConsultas(fromYm, toYm, selecao) {
+    if (!CONS_MONTHS) return '';
+
+    const fmt2 = n => n == null ? '-' : new Intl.NumberFormat('pt-BR').format(Math.round(n));
+    const fmtP = n => n == null ? '-' : n.toFixed(2).replace('.', ',') + '%';
+    const p = (a, b) => b > 0 ? (a / b * 100) : null;
+
+    const todosOsMeses = Object.keys(CONS_MONTHS).sort();
+    if (!todosOsMeses.length) return '';
+
+    // Helper: agrega totais de um mês para uma seleção de postos
+    const agregaMes = (ym, sel) => getMonthTotalsForSelection(ym, sel);
+
+    // Helper: converte seleção para label legível
+    const labelSel = sel => {
+      if (sel === 'ALL') return 'Todos os postos';
+      const arr = [...sel].sort();
+      const isAlt = arr.sort().join() === GRUPOS_POSTO.altamiro.filter(p => POSTOS.includes(p)).sort().join();
+      const isCou = arr.sort().join() === GRUPOS_POSTO.couto.filter(p => POSTOS.includes(p)).sort().join();
+      if (isAlt) return 'Grupo Altamiro';
+      if (isCou) return 'Grupo Couto';
+      return `Postos: ${arr.join(', ')}`;
+    };
+
+    // Filtro atual: label legível
+    const filtroLabel = `${fromYm} a ${toYm} | ${labelSel(selecao)}`;
+
+    // Série do filtro atual
+    const mesesFiltro = ymRange(fromYm, toYm);
+    const seriesFiltro = monthlySeriesFromConsolidated(selecao, mesesFiltro);
+    const aggFiltro = buildAggMapsForPeriod(selecao, fromYm, toYm);
+    const kFiltro = buildKpisFromSeries(seriesFiltro, aggFiltro.espTotal, aggFiltro.medTotal);
+
+    // Top especialidades (top 20)
+    const topEsp = [...aggFiltro.espTotal.entries()]
+      .sort((a, b) => b[1] - a[1]).slice(0, 20)
+      .map(([n, v]) => {
+        const f = aggFiltro.espFaltas.get(n) || 0;
+        return `  ${n}: ${fmt2(v)} consultas, ${fmt2(f)} faltas (${fmtP(p(f, v))})`;
+      }).join('\n');
+
+    // Top médicos (top 20)
+    const topMed = [...aggFiltro.medTotal.entries()]
+      .sort((a, b) => b[1] - a[1]).slice(0, 20)
+      .map(([n, v]) => {
+        const f = aggFiltro.medFaltas.get(n) || 0;
+        return `  ${n}: ${fmt2(v)} consultas, ${fmt2(f)} faltas paciente (${fmtP(p(f, v))})`;
+      }).join('\n');
+
+    // Histórico completo por grupo (todos os meses disponíveis)
+    const selAlt = new Set(GRUPOS_POSTO.altamiro.filter(x => POSTOS.includes(x)));
+    const selCou = new Set(GRUPOS_POSTO.couto.filter(x => POSTOS.includes(x)));
+
+    const linhaHistorico = (ym, sel) => {
+      const t = agregaMes(ym, sel);
+      if (!t.total) return null;
+      return `  ${ym}: total=${fmt2(t.total)} realiz=${fmt2(t.realizadas)}(${fmtP(p(t.realizadas,t.total))}) faltas=${fmt2(t.faltas)}(${fmtP(p(t.faltas,t.total))}) medFaltou=${fmt2(t.medico_faltou)}(${fmtP(p(t.medico_faltou,t.total))}) pendRec=${fmt2(t.pend_recepcao)}(${fmtP(p(t.pend_recepcao,t.total))})`;
+    };
+
+    const histTodos  = todosOsMeses.map(ym => linhaHistorico(ym, 'ALL')).filter(Boolean).join('\n');
+    const histAlt    = selAlt.size  ? todosOsMeses.map(ym => linhaHistorico(ym, selAlt)).filter(Boolean).join('\n') : '(sem dados)';
+    const histCouto  = selCou.size  ? todosOsMeses.map(ym => linhaHistorico(ym, selCou)).filter(Boolean).join('\n') : '(sem dados)';
+
+    // Série mês a mês do filtro ativo
+    const serieFiltroLinhas = seriesFiltro.map(x => {
+      if (!x.total) return null;
+      return `  ${x.ym}: total=${fmt2(x.total)} realiz=${fmt2(x.realizadas)}(${fmtP(p(x.realizadas,x.total))}) faltas=${fmt2(x.faltas)}(${fmtP(p(x.faltas,x.total))}) medFaltou=${fmt2(x.medico_faltou)}(${fmtP(p(x.medico_faltou,x.total))}) pendRec=${fmt2(x.pend_recepcao)}`;
+    }).filter(Boolean).join('\n');
+
+    return `=== PÁGINA: KPI Consultas por Status — CAMIM ===
+
+OBJETIVO: Monitorar o status das consultas médicas agendadas. Identifica se o atendimento
+foi realizado, se houve falta do paciente, falta do médico ou pendência de registro.
+
+DEFINIÇÃO DOS CAMPOS:
+- total_consultas: Total de consultas agendadas/previstas no período (base de todos os percentuais)
+- realizadas: Consulta efetivamente ocorrida — médico e paciente presentes
+- faltas: Paciente não compareceu à consulta (ausência do paciente)
+- medico_faltou: Médico/prestador não compareceu (ausência do médico)
+- pend_recepcao: Registro com pendência na recepção — situação não finalizada pelo sistema
+- %X: percentual de X sobre o total do período
+- media_mensal: média de consultas por mês no período filtrado
+- mom_total: variação % do total em relação ao mês anterior (Month over Month)
+- especialidades_ativas: número de especialidades distintas com consultas no período
+- medicos_ativos: número de médicos distintos com consultas no período
+- share_top10_medicos: percentual do total que os 10 médicos mais ativos representam
+
+GRUPOS DE POSTOS:
+- Altamiro (postos: ${GRUPOS_POSTO.altamiro.join(', ')}): clínicas da unidade Altamiro Couto Pedroso
+- Couto (postos: ${GRUPOS_POSTO.couto.join(', ')}): clínicas da unidade Couto Magalhães
+- Letras individuais = código do posto (ex: posto A, posto C, etc.)
+
+MESES DISPONÍVEIS NO SISTEMA: ${todosOsMeses.join(', ')}
+
+=== FILTRO ATIVO NA TELA ===
+Período: ${filtroLabel}
+Total consultas: ${fmt2(kFiltro.total)}
+Média mensal: ${fmt2(kFiltro.avgMes)}
+Realizadas: ${fmt2(kFiltro.realizadas)} (${fmtP(kFiltro.p_realizadas)})
+Faltas (paciente): ${fmt2(kFiltro.faltas)} (${fmtP(kFiltro.p_faltas)})
+Médico faltou: ${fmt2(kFiltro.medico_faltou)} (${fmtP(kFiltro.p_medico_faltou)})
+Pendência recepção: ${fmt2(kFiltro.pend_recepcao)} (${fmtP(kFiltro.p_pend_recepcao)})
+Especialidades ativas: ${fmt2(kFiltro.espAtivas)}
+Médicos ativos: ${fmt2(kFiltro.medAtivos)}
+Share Top10 médicos: ${fmtP(kFiltro.top10Share)}
+
+EVOLUÇÃO MÊS A MÊS (período filtrado):
+${serieFiltroLinhas || '(sem dados no período)'}
+
+=== HISTÓRICO COMPLETO — TODOS OS POSTOS ===
+(use estes dados para responder perguntas sobre qualquer mês fora do filtro ativo)
+${histTodos}
+
+=== HISTÓRICO — GRUPO ALTAMIRO (${[...selAlt].join(',')}) ===
+${histAlt}
+
+=== HISTÓRICO — GRUPO COUTO (${[...selCou].join(',')}) ===
+${histCouto}
+
+=== TOP 20 ESPECIALIDADES (período filtrado, ${filtroLabel}) ===
+${topEsp || '(sem dados)'}
+
+=== TOP 20 MÉDICOS — CONSULTAS (período filtrado) ===
+${topMed || '(sem dados)'}
+
+INSTRUÇÕES PARA A IA:
+- Você tem acesso a TODOS os meses disponíveis acima, não apenas ao filtro ativo na tela.
+- Se o usuário perguntar sobre um mês específico (ex: dezembro/2025), use a seção "HISTÓRICO COMPLETO".
+- Se perguntar sobre Altamiro ou Couto especificamente, use as seções de grupo correspondentes.
+- "Faltas" neste contexto significa AUSÊNCIA DO PACIENTE, não ausência do médico.
+- Para calcular médias, use os dados mensais disponíveis nas seções de histórico.
+- Todos os valores já estão calculados — não é necessário buscar dados externos.`;
+  }
+
   async function renderSel2(){
     const range = getYmRangeFromInputs('2');
     if(!range) return;
@@ -1167,6 +1304,9 @@
     buildTable(series);
     updateCharts(series, agg);
     _atualizarBotoesGrupo();
+
+    // Atualiza contexto da IA com o dataset completo
+    window.__kpi_contexto = buildKpiContextConsultas(from, to, sel2);
   }
 
   function setPressed(btn, on, variant='primary'){
