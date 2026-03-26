@@ -1,0 +1,1207 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — KPI Metas (Vendas x Mensalidades)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap">
+  <link rel="stylesheet" href="/css/style2.css?v=20251114">
+  <link rel="stylesheet" href="/css/style_kpi.css?v=20251114">
+  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="/js/calendar-picker.js?v=20251114"></script>
+
+  <style>
+    :root { --kpi-loaded: 1; }
+    html { font-size: 16px; zoom: 1; }
+    body { font-size: 1rem; -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased;
+      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    body.text-sm { font-size: 1rem; }
+    .text-sm .btn, .text-sm .form-control, .text-sm .custom-select, .text-sm .page-link,
+    .text-sm .breadcrumb, .text-sm .nav-link, .text-sm .card-title { font-size: 1rem; }
+    h1,h2,h3 { margin-top:0; margin-bottom:.5rem; font-weight:600; line-height:1.25; }
+    h1 { font-size:2rem; } h2 { font-size:1.5rem; } h3,.card-title { font-size:1.25rem; font-weight:600; }
+    .sidebar .nav-link { font-size:.95rem; }
+    .brand-link .brand-text { font-size:1rem; }
+    .muted{color:#6b7280;} .mini{font-size:.85rem;} .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;}
+    .small-td{white-space:nowrap;} .table thead th{white-space:nowrap;}
+    .year-tag{font-weight:700;} .meta-pill{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+    .pill{display:inline-flex;gap:6px;align-items:center;padding:2px 10px;border-radius:999px;background:#f3f4f6;}
+    .pill b{font-weight:800;} .warn{color:#b45309;}
+  </style>
+
+</head>
+
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <span>KPI Metas — Vendas x Mensalidades</span>
+      <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+    </span>
+  </nav>
+
+  <!-- SIDEBAR -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a></li>
+          <li class="nav-item"><a href="monitorarrobos.html" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Monitorar Robôs</p></a></li>
+          {% if USER_IS_ADMIN %}
+          <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+          {% endif %}
+          <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i class="nav-icon fas fa-book-open"></i><p>Leia-me</p></a></li>
+          <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i class="nav-icon fas fa-utensils"></i><p>KPI Custo Alimentação</p></a></li>
+          <li class="nav-item"><a href="medicos.html" class="nav-link"><i class="nav-icon fas fa-notes-medical"></i><p>KPI Custo Médico</p></a></li>
+          <li class="nav-item"><a href="ctrlq_relatorio.html" class="nav-link"><i class="nav-icon fas fa-user-md"></i><p>KPI Médicos (Qualidade)</p></a></li>
+          <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i class="nav-icon fas fa-chart-line"></i><p>KPI Mensalidades</p></a></li>
+          <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i class="nav-icon fas fa-shopping-cart"></i><p>KPI Vendas</p></a></li>
+          <li class="nav-item"><a href="clientes.html" class="nav-link"><i class="nav-icon fas fa-users"></i><p>KPI Clientes</p></a></li>
+          <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i class="nav-icon fas fa-prescription-bottle-alt"></i><p>KPI Prescrições</p></a></li>
+          <li class="nav-item"><a href="kpi_fidelizacao_cliente.html" class="nav-link"><i class="nav-icon fas fa-handshake"></i><p>KPI Fidelização Churn</p></a></li>
+          <li class="nav-item"><a href="kpi_consultas_status.html" class="nav-link"><i class="nav-icon fas fa-stethoscope"></i><p>KPI Consultas (Status)</p></a></li>
+          <li class="nav-item"><a href="kpi_notas_rps.html" class="nav-link"><i class="nav-icon fas fa-file-invoice"></i><p>KPI Notas x RPS</p></a></li>
+          <li class="nav-item"><a href="kpi_metas.html" class="nav-link active"><i class="nav-icon fas fa-bullseye"></i><p>KPI Metas (Mens/Vendas)</p></a></li>
+          <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i class="nav-icon fas fa-landmark"></i><p>KPI Índices Oficiais</p></a></li>
+          <li class="nav-item"><a href="kpi_liberty.html" class="nav-link"><i class="nav-icon fas fa-passport"></i><p>KPI CAMIM Liberty</p></a></li>
+          <li class="nav-item"><a href="kpi_receita_despesa.html" class="nav-link"><i class="nav-icon fas fa-balance-scale"></i><p>KPI Receitas x Despesas</p></a></li>
+          <li class="nav-item"><a href="kpi_receita_despesa_rateio.html" class="nav-link"><i class="nav-icon fas fa-balance-scale"></i><p>KPI R x D com Rateio</p></a></li>
+          <li class="nav-item"><a href="mais_servicos.html" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+          <li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline">
+              <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left"><i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p></button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="content-wrapper">
+    <nav class="navbar navbar-expand navbar-white navbar-light">
+      <div class="d-flex w-100 align-items-center">
+        <span class="ml-2 font-weight-bold" id="hdrSel"></span>
+        <div class="ml-auto"><span id="ia-anchor"></span></div>
+      </div>
+    </nav>
+
+    <section class="content p-3">
+      <div id="err" class="text-danger mb-2"></div>
+
+      <div class="card">
+        <div class="kpi-filter-panel">
+          <div class="kpi-filter-row kpi-filter-postos">
+            <div class="posto-groups">
+              <div class="btn-group">
+                <button id="btnGrupoTodos" class="btn active">Todos</button>
+                <button id="btnGrupoAltamiro" class="btn" title="A B G I N R X Y">Altamiro</button>
+                <button id="btnGrupoCouto" class="btn" title="C D J M P">Couto</button>
+              </div>
+            </div>
+            <div class="filter-sep-v"></div>
+            <ul id="postoTabs" class="nav nav-pills posto-tabs-inline"></ul>
+          </div>
+          <div class="kpi-filter-row kpi-filter-actions">
+            <div class="filter-dates-row">
+              <div class="filter-date-group">
+                <label class="filter-label">Mês</label>
+                <div class="filter-date-wrap">
+                  <input id="mes" type="text" class="form-control form-control-sm filter-date-input" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" />
+                  <button id="btnCalendarMes" class="btn btn-sm btn-cal" title="Abrir calendário">📅</button>
+                </div>
+                <div class="mini muted">Mostra ano atual, -1 e -2 (>= 2024)</div>
+              </div>
+            </div>
+            <div class="filter-btns-row">
+              <button id="btnFiltrar" class="btn btn-sm btn-primary" title="Aplicar filtro">🔍 Filtrar</button>
+              <button id="btnMesAtual" class="btn btn-sm btn-outline-info">Mês Atual</button>
+              <button id="btnMeta" class="btn btn-sm btn-success"><i class="fas fa-plus-circle"></i> Cadastrar metas</button>
+              <button id="btnReload" class="btn btn-sm btn-outline-secondary">Recarregar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-12 col-xl-4">
+          <div class="card">
+            <div class="card-header"><h3 class="card-title mb-0">Ano (atual)</h3></div>
+            <div class="card-body" id="yearA"></div>
+          </div>
+        </div>
+
+        <div class="col-12 col-xl-4">
+          <div class="card">
+            <div class="card-header"><h3 class="card-title mb-0">Ano (-1)</h3></div>
+            <div class="card-body" id="yearB"></div>
+          </div>
+        </div>
+
+        <div class="col-12 col-xl-4">
+          <div class="card">
+            <div class="card-header"><h3 class="card-title mb-0">Ano (-2)</h3></div>
+            <div class="card-body" id="yearC"></div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </div>
+</div>
+<!-- Modal Metas -->
+<div class="modal fade" id="metaModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-sm" role="document">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title">Cadastrar metas</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Fechar">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div id="metaMsg" class="mini mb-2 muted"></div>
+
+        <div class="form-group mb-2">
+          <label class="mb-0 small">Posto</label>
+          <select id="metaPosto" class="form-control form-control-sm"></select>
+        </div>
+
+        <div class="form-group mb-2">
+          <label class="mb-0 small">Mês</label>
+          <input id="metaYm" type="month" class="form-control form-control-sm" />
+        </div>
+
+        <hr class="my-2"/>
+
+        <div class="form-group mb-2">
+          <label class="mb-0 small">Meta2 Mensalidade</label>
+          <input id="meta2Mens" type="number" min="0" step="1" class="form-control form-control-sm" />
+        </div>
+
+        <div class="form-group mb-2">
+          <label class="mb-0 small">Meta1 Mensalidade (sugestão 90%)</label>
+          <input id="meta1Mens" type="number" min="0" step="1" class="form-control form-control-sm" />
+        </div>
+
+        <div class="form-group mb-2">
+          <label class="mb-0 small">Meta2 Vendas</label>
+          <input id="meta2Vend" type="number" min="0" step="1" class="form-control form-control-sm" />
+        </div>
+
+        <div class="form-group mb-0">
+          <label class="mb-0 small">Meta1 Vendas (sugestão 90%)</label>
+          <input id="meta1Vend" type="number" min="0" step="1" class="form-control form-control-sm" />
+        </div>
+
+        <div id="metaErr" class="text-danger mini mt-2"></div>
+      </div>
+
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" id="btnMetaSalvar" class="btn btn-sm btn-success">Salvar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+  <script>
+    // =========================
+    // Session (opcional)
+    // =========================
+    async function carregarPostosDoUsuario(){
+      try{
+        const r = await fetch("/session/me",{credentials:"same-origin"});
+        if(!r.ok) return [];
+        const d = await r.json();
+        window.USER_NOME   = d.nome   || null;
+        window.USER_POSTOS = d.postos || null;
+        return Array.isArray(d.postos) ? d.postos : [];
+      }catch{ return []; }
+    }
+
+    // =========================
+    // Helpers
+    // =========================
+    const el = s => document.querySelector(s);
+    const fmtInt = new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0});
+    const fmt2 = new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    const sum = arr => arr.reduce((a,b)=>a+(b||0),0);
+    const num = v => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    function ymNow(){
+      const d=new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    }
+
+    function parseYm(ym){
+      const [y,m] = String(ym).split('-').map(Number);
+      return {y, m};
+    }
+
+    function ymOf(y, m){
+      return `${y}-${String(m).padStart(2,'0')}`;
+    }
+
+    function pct(v, meta){
+      if(!meta || meta <= 0) return null;
+      return (100.0 * v / meta);
+    }
+
+    // =========================
+    // Last-Modified (mostrar sempre o MAIS RECENTE)
+    // =========================
+    let LAST_INFO_TS = 0;
+
+    function resetJsonInfo(){
+      LAST_INFO_TS = 0;
+      const info = el('#jsonInfo');
+      if(info){
+        info.textContent = '';
+        info.title = '';
+      }
+    }
+
+    function setJsonInfoIfNewer(lastModified, ym){
+      if(!lastModified) return;
+
+      const ts = Date.parse(lastModified);
+      if(!Number.isFinite(ts)) return;
+
+      // só atualiza se for mais novo que o atual
+      if(ts <= LAST_INFO_TS) return;
+      LAST_INFO_TS = ts;
+
+      const info = el('#jsonInfo');
+      if(!info) return;
+
+      const d = new Date(ts);
+      info.textContent = `• ${ym} atualizado em ${d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short', timeZone:'America/Sao_Paulo'})}`;
+      info.title = lastModified;
+    }
+
+    // =========================
+    // Estado
+    // =========================
+    let POSTOS = [];
+    let selPostos = 'ALL';     // 'ALL' ou Set
+    let ymSel = ymNow();
+
+    // cache: { ym: { posto: payload|null } }
+    const CACHE = {};
+
+    // =========================
+    // Paths JSON
+    // =========================
+    function jsonUrl(posto, ym){
+      return `/json_metas/${posto}_metas_${ym}.json`;
+    }
+
+    async function fetchJsonSafe(url){
+      const r = await fetch(url,{cache:'no-store'});
+      if(!r.ok) throw new Error(`HTTP ${r.status} em ${url}`);
+      return { data: await r.json(), lastModified: r.headers.get('Last-Modified') };
+    }
+
+    async function loadMonth(ym){
+      CACHE[ym] ||= {};
+      const promises = POSTOS.map(async p=>{
+        if(CACHE[ym][p] !== undefined) return; // já tentado (inclusive null)
+        const url = jsonUrl(p, ym);
+        try{
+          const {data,lastModified} = await fetchJsonSafe(url);
+          CACHE[ym][p] = data;
+          setJsonInfoIfNewer(lastModified, ym);
+        }catch{
+          CACHE[ym][p] = null;
+        }
+      });
+      await Promise.allSettled(promises);
+    }
+
+    // =========================
+    // Detecção de postos (fallback local)
+    // =========================
+    const POSTOS_CANDIDATOS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+    async function detectPostosDisponiveis(ym){
+      const found = [];
+      await Promise.allSettled(POSTOS_CANDIDATOS.map(async (p)=>{
+        const url = jsonUrl(p, ym);
+        try{
+          const r = await fetch(url, { method:'HEAD', cache:'no-store' });
+          if (r.ok) found.push(p);
+        }catch{}
+      }));
+      return found.sort();
+    }
+
+    // =========================
+    // Tabs de posto (multi-select)
+    // =========================
+    function markActiveMulti(scopeSel, selection){
+      const isAll = selection === 'ALL';
+      document.querySelectorAll(`${scopeSel} .nav-link`).forEach(a=>{
+        const p = a.dataset.posto;
+        if(p==='ALL') a.classList.toggle('active', isAll);
+        else a.classList.toggle('active', !isAll && selection.has(p));
+      });
+    }
+
+    function buildPostoTabs(ulSel){
+      const ul = el(ulSel);
+      if(!ul) return;
+
+      ul.innerHTML = '';
+      ul.insertAdjacentHTML('beforeend',
+        `<li class="nav-item"><a data-posto="ALL" class="nav-link" href="#">Todos</a></li>`
+      );
+      POSTOS.forEach(p=>{
+        ul.insertAdjacentHTML('beforeend',
+          `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`
+        );
+      });
+
+      markActiveMulti(ulSel, selPostos);
+
+      ul.onclick = (e)=>{
+        const a = e.target.closest('.nav-link');
+        if(!a) return;
+        e.preventDefault();
+
+        const p = a.dataset.posto;
+        let sel = selPostos;
+
+        if(p === 'ALL'){
+          sel = 'ALL';
+        } else {
+          if(sel === 'ALL') sel = new Set();
+          if(sel.has(p)) sel.delete(p); else sel.add(p);
+          if(sel.size === 0 || sel.size === POSTOS.length) sel = 'ALL';
+        }
+
+        selPostos = sel;
+        markActiveMulti(ulSel, selPostos);
+        _atualizarBotoesGrupo();
+        render();
+      };
+      _atualizarBotoesGrupo();
+    }
+
+    function selectedPostosList(){
+      return selPostos==='ALL' ? POSTOS : [...selPostos];
+    }
+
+    // ====== Grupos de Postos ======
+    const GRUPOS_POSTO = {
+      altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+      couto:    ['C', 'D', 'J', 'M', 'P'],
+    };
+
+    function _grupoAtivo() {
+      if (!selPostos || selPostos === 'ALL') return null;
+      const selArr = [...selPostos].sort().join(',');
+      for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+        const intersec = lista.filter(p => POSTOS.includes(p)).sort().join(',');
+        if (intersec && selArr === intersec) return nome;
+      }
+      return null;
+    }
+
+    function _atualizarBotoesGrupo() {
+      const ativo = _grupoAtivo();
+      const btnA = el('#btnGrupoAltamiro');
+      const btnC = el('#btnGrupoCouto');
+      if (btnA) btnA.classList.toggle('active', ativo === 'altamiro');
+      if (btnC) btnC.classList.toggle('active', ativo === 'couto');
+    }
+
+    function selectGrupo(grupo) {
+      const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p));
+      selPostos = new Set(intersec);
+      buildPostoTabs('#postoTabs');
+      render();
+    }
+
+    function wireGrupoButtons() {
+      const btnT = el('#btnGrupoTodos');
+      const btnA = el('#btnGrupoAltamiro');
+      const btnC = el('#btnGrupoCouto');
+      if (btnT) btnT.onclick = () => { selPostos = 'ALL'; buildPostoTabs('#postoTabs'); _atualizarBotoesGrupo(); render(); };
+      if (btnA) btnA.onclick = () => selectGrupo('altamiro');
+      if (btnC) btnC.onclick = () => selectGrupo('couto');
+    }
+
+    // =========================
+    // Metas (AGORA VEM DO JSON)
+    // - Para multi-posto: soma as metas
+    // - Se algum posto não tem meta (0), ele soma 0 e marcamos warning
+    // =========================
+    function metasFromCache(ym){
+      const postos = selectedPostosList();
+      let meta_mens = 0;
+      let meta_venda = 0;
+
+      let postosSemMeta = [];
+
+      for(const p of postos){
+        const payload = CACHE[ym]?.[p];
+        if(!payload) continue;
+
+        const m = payload.meta || null;
+        const mm = num(m?.meta_mens);
+        const mv = num(m?.meta_venda);
+
+        meta_mens += mm;
+        meta_venda += mv;
+
+        // marca "sem meta" quando vier null/0 (você pediu pra respeitar isso)
+        if(!m || (mm <= 0 && mv <= 0)){
+          postosSemMeta.push(p);
+        }
+      }
+
+      return { meta_mens, meta_venda, postosSemMeta };
+    }
+
+    // =========================
+    // Consolidação mens/vendas por dia (por ym + seleção de postos)
+    // =========================
+    function buildDayMapFromPayload(payload){
+      // Map<dia, {dia_sem, mens_dia, vendas_dia}>
+      const map = new Map();
+
+      const mens = payload?.mensalidades_por_dia || [];
+      const vendas = payload?.vendas_por_dia || [];
+
+      for(const r of mens){
+        const dia = num(r.dia);
+        if(!dia) continue;
+        map.set(dia, {
+          dia,
+          dia_sem: r.dia_sem || r.dia_semana_nome || '',
+          mens_dia: num(r.mens_dia),
+          vendas_dia: 0
+        });
+      }
+
+      for(const r of vendas){
+        const dia = num(r.dia);
+        if(!dia) continue;
+        const cur = map.get(dia) || { dia, dia_sem: r.dia_sem || r.dia_semana_nome || '', mens_dia:0, vendas_dia:0 };
+        cur.vendas_dia = num(r.vendas_dia);
+        if(!cur.dia_sem) cur.dia_sem = r.dia_sem || r.dia_semana_nome || '';
+        map.set(dia, cur);
+      }
+
+      return map;
+    }
+
+    function mergePostosForYm(ym){
+      const postos = selectedPostosList();
+      const merged = new Map(); // Map<dia, row>
+
+      for(const p of postos){
+        const payload = CACHE[ym]?.[p];
+        if(!payload) continue;
+
+        const map = buildDayMapFromPayload(payload);
+        for(const [dia, row] of map.entries()){
+          const cur = merged.get(dia) || { dia, dia_sem: row.dia_sem, mens_dia:0, vendas_dia:0 };
+          cur.mens_dia += num(row.mens_dia);
+          cur.vendas_dia += num(row.vendas_dia);
+          if(!cur.dia_sem && row.dia_sem) cur.dia_sem = row.dia_sem;
+          merged.set(dia, cur);
+        }
+      }
+
+      const days = [...merged.values()].sort((a,b)=>a.dia-b.dia);
+
+      // acumulados
+      let mens_acum = 0, vendas_acum = 0;
+      for(const d of days){
+        mens_acum += num(d.mens_dia);
+        vendas_acum += num(d.vendas_dia);
+        d.mens_acum = mens_acum;
+        d.vendas_acum = vendas_acum;
+      }
+
+      return days;
+    }
+
+    function totalsFromDays(days){
+      return {
+        mens_total: sum(days.map(d=>num(d.mens_dia))),
+        vendas_total: sum(days.map(d=>num(d.vendas_dia))),
+        mens_acum: days.length ? num(days[days.length-1].mens_acum) : 0,
+        vendas_acum: days.length ? num(days[days.length-1].vendas_acum) : 0,
+      };
+    }
+
+    // =========================
+    // UI
+    // =========================
+    function kpiCard(title, val, kind){
+      let out='-';
+      if(val!=null){
+        out = (kind==='pct') ? `${fmt2.format(val)}%` : fmtInt.format(val);
+      }
+      return `
+        <div class="card mb-0">
+          <div class="card-body p-2">
+            <div class="small muted">${title}</div>
+            <div class="h5 mb-0">${out}</div>
+          </div>
+        </div>`;
+    }
+
+    
+    function renderYearTable(containerId, ano, ym){
+  const {m} = parseYm(ym);
+  const ymYear = ymOf(ano, m);
+
+  const days = mergePostosForYm(ymYear);
+  const totals = totalsFromDays(days);
+
+  const metas = metasFromCache(ymYear);
+  const metaMens = metas.meta_mens;
+  const metaVenda = metas.meta_venda;
+
+  // Ano atual (do mês selecionado) mantém % vs meta.
+  // Anos anteriores viram evolução vs total do mês (fecha 100% no último dia).
+  const ySel = parseYm(ymSel).y;
+  const isAnoAtual = (ano === ySel);
+
+  // TOP (KPIs): sempre vs meta (inclusive Ano -1 e -2)
+  const pm = pct(totals.mens_total, metaMens);
+  const pv = pct(totals.vendas_total, metaVenda);
+  const lblPm = '% Mens (vs meta)';
+  const lblPv = '% Vendas (vs meta)';
+
+  // LINHAS (tabela): ano atual vs meta; anos anteriores vs total do mês (fecha 100% no último dia)
+  const denomMensRows = isAnoAtual ? metaMens : totals.mens_total;
+  const denomVendRows = isAnoAtual ? metaVenda : totals.vendas_total;
+
+  const box = el(containerId);
+  if(!box) return;
+
+  const warnTxt = metas.postosSemMeta.length
+    ? `<span class="mini warn"><i class="fas fa-exclamation-triangle"></i> Sem meta em: ${metas.postosSemMeta.sort().join(', ')}</span>`
+    : `<span class="mini muted">Metas OK</span>`;
+
+  const title = `
+    <div class="year-card-title">
+      <div>
+        <span class="year-tag">${ano}</span>
+        <span class="muted mini ml-2">(${ymYear})</span>
+        <div class="mt-1">${warnTxt}</div>
+      </div>
+      <div class="meta-pill">
+        <span class="pill"><span class="mini muted">Meta Mens:</span> <b>${fmtInt.format(metaMens)}</b></span>
+        <span class="pill"><span class="mini muted">Meta Vendas:</span> <b>${fmtInt.format(metaVenda)}</b></span>
+      </div>
+    </div>
+  `;
+
+  const kpis = `
+    <div class="kpi-grid mt-2">
+      ${kpiCard('Mens (mês)', totals.mens_total, 'int')}
+      ${kpiCard('Vendas (mês)', totals.vendas_total, 'int')}
+      ${kpiCard(lblPm, pm, 'pct')}
+      ${kpiCard(lblPv, pv, 'pct')}
+    </div>
+  `;
+//teste
+
+  let rows = '';
+  for(const d of days){
+    const pctMens = pct(d.mens_acum, denomMensRows);
+    const pctVendas = pct(d.vendas_acum, denomVendRows);
+
+    rows += `
+      <tr>
+        <td class="small-td">${String(d.dia).padStart(2,'0')}</td>
+        <td class="small-td">${d.dia_sem || ''}</td>
+        <td class="text-right small-td">${fmtInt.format(d.mens_dia)}</td>
+        <td class="text-right small-td">${fmtInt.format(d.mens_acum)}</td>
+        <td class="text-right small-td">${pctMens==null ? '-' : (fmt2.format(pctMens)+'%')}</td>
+        <td class="text-right small-td">${fmtInt.format(d.vendas_dia)}</td>
+        <td class="text-right small-td">${fmtInt.format(d.vendas_acum)}</td>
+        <td class="text-right small-td">${pctVendas==null ? '-' : (fmt2.format(pctVendas)+'%')}</td>
+      </tr>
+    `;
+  }
+
+  const table = `
+    <div class="table-responsive mt-2">
+      <table class="table table-striped table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Dia</th>
+            <th>Dia Sem</th>
+            <th class="text-right">Mens</th>
+            <th class="text-right">Mens Acum</th>
+            <th class="text-right">% Mens</th>
+            <th class="text-right">Vendas</th>
+            <th class="text-right">Vendas Acum</th>
+            <th class="text-right">% Vendas</th>
+          </tr>
+        </thead>
+        <tbody>${rows || `<tr><td colspan="8" class="text-center muted p-3">Sem dados</td></tr>`}</tbody>
+      </table>
+    </div>
+  `;
+
+  box.innerHTML = title + kpis + table;
+}
+
+
+    function render(){
+      const {y,m} = parseYm(ymSel);
+
+      const postoLabel = (selPostos==='ALL') ? 'Todos' : [...selPostos].sort().join('+');
+      el('#hdrSel').textContent = `Mês: ${ymSel} • Postos: ${postoLabel}`;
+
+      // anos (>= 2024)
+      const years = [y, y-1, y-2].filter(v => v >= 2024);
+
+      const slots = ['#yearA', '#yearB', '#yearC'];
+      slots.forEach((sel, i)=>{
+        const card = el(sel);
+        if(!card) return;
+        card.style.display = (i < years.length) ? '' : 'none';
+      });
+
+      if(years[0]) renderYearTable('#yearA', years[0], ymSel);
+      if(years[1]) renderYearTable('#yearB', years[1], ymSel);
+      if(years[2]) renderYearTable('#yearC', years[2], ymSel);
+
+      // Contexto IA — atualiza sempre que o dashboard recarrega
+      try {
+        const dadosPorPosto = {};
+        POSTOS.forEach(p => {
+          const payload = CACHE[ymSel]?.[p];
+          if (payload) {
+            dadosPorPosto[p] = {
+              meta_mensalidade: payload.meta?.meta_mens ?? null,
+              meta_venda: payload.meta?.meta_venda ?? null,
+              mensalidades_por_dia: payload.mensalidades_por_dia ?? [],
+              vendas_por_dia: payload.vendas_por_dia ?? []
+            };
+          }
+        });
+        window.__kpi_contexto = JSON.stringify({
+          produto: 'metas',
+          mes_selecionado: ymSel,
+          postos: POSTOS,
+          dados_por_posto: dadosPorPosto,
+          _instrucoes_ia: [
+            "Use SOMENTE os dados fornecidos neste JSON. NUNCA invente ou estime valores.",
+            "Os dados são de metas de vendas e mensalidades por posto/mês.",
+            "Para posto específico, consulte dados_por_posto[posto].",
+            "meta_mensalidade e meta_venda são os objetivos definidos. Os arrays _por_dia mostram a evolução diária.",
+            "Os valores monetários estão em Reais (R$)."
+          ]
+        });
+      } catch(e) { /* contexto não disponível ainda */ }
+    }
+
+
+    // =========================
+    // Metas API (modal)
+    // =========================
+    function setMetaMsg(txt, isErr=false){
+      const msg = el('#metaMsg');
+      const err = el('#metaErr');
+      if(msg) msg.textContent = isErr ? '' : (txt || '');
+      if(err) err.textContent = isErr ? (txt || '') : '';
+    }
+
+    function fillMetaPostosSelect(){
+      const sel = el('#metaPosto');
+      if(!sel) return;
+      sel.innerHTML = '';
+      POSTOS.forEach(p => {
+        sel.insertAdjacentHTML('beforeend', `<option value="${p}">${p}</option>`);
+      });
+    }
+
+    function sugest90(v){
+      const n = Number(v);
+      if(!Number.isFinite(n) || n < 0) return 0;
+      return Math.round(n * 0.90);
+    }
+
+    async function apiGetMeta(posto, ym){
+      const url = `/api/metas?posto=${encodeURIComponent(posto)}&ym=${encodeURIComponent(ym)}`;
+      const r = await fetch(url, {credentials:"same-origin"});
+      const d = await r.json().catch(()=> ({}));
+      if(!r.ok){
+        const code = d.code || `HTTP_${r.status}`;
+        const msg = d.message || 'Falha ao consultar meta';
+        const err = new Error(msg);
+        err.code = code;
+        err.status = r.status;
+        err.payload = d;
+        throw err;
+      }
+      return d;
+    }
+
+    async function apiSaveMeta(body){
+      const r = await fetch("/api/metas", {
+        method:"POST",
+        credentials:"same-origin",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(body)
+      });
+      const d = await r.json().catch(()=> ({}));
+      if(!r.ok){
+        const code = d.code || `HTTP_${r.status}`;
+        const msg = d.message || 'Falha ao salvar meta';
+        const err = new Error(msg);
+        err.code = code;
+        err.status = r.status;
+        err.payload = d;
+        throw err;
+      }
+      return d;
+    }
+
+    async function refreshJsonAndUIAfterSave(posto, ym){
+      // garante cache limpo do mês e recarrega
+      CACHE[ym] = {};
+      resetJsonInfo();
+      await loadMonth(ym);
+      render();
+    }
+
+    function bindMetaModal(){
+      const btn = el('#btnMeta');
+      const btnSalvar = el('#btnMetaSalvar');
+      const selPosto = el('#metaPosto');
+      const inpYm = el('#metaYm');
+
+      const meta2Mens = el('#meta2Mens');
+      const meta1Mens = el('#meta1Mens');
+      const meta2Vend = el('#meta2Vend');
+      const meta1Vend = el('#meta1Vend');
+
+      if(!btn || !btnSalvar || !selPosto || !inpYm) return;
+
+      btn.addEventListener('click', async ()=>{
+        setMetaMsg('', false);
+        fillMetaPostosSelect();
+
+        // default: primeiro posto selecionado no filtro atual (se multi, pega o primeiro)
+        const defaultPosto = (selPostos === 'ALL') ? (POSTOS[0] || '') : ([...selPostos][0] || POSTOS[0] || '');
+        selPosto.value = defaultPosto;
+
+        inpYm.value = ymSel || ymNow();
+
+        // valores iniciais (limpa)
+        meta2Mens.value = '';
+        meta2Vend.value = '';
+        meta1Mens.value = '';
+        meta1Vend.value = '';
+
+        // tenta pré-carregar existente
+        try{
+          setMetaMsg('Consultando meta existente...', false);
+          const resp = await apiGetMeta(selPosto.value, inpYm.value);
+          if(resp.exists && resp.meta){
+            meta2Mens.value = Math.round(Number(resp.meta.Meta2Mensalidade || 0));
+            meta2Vend.value = Math.round(Number(resp.meta.Meta2Venda || 0));
+            meta1Mens.value = Math.round(Number(resp.meta.Meta1Mensalidade || sugest90(meta2Mens.value)));
+            meta1Vend.value = Math.round(Number(resp.meta.Meta1Venda || sugest90(meta2Vend.value)));
+            setMetaMsg('Meta existente carregada. Ajuste e salve.', false);
+          }else{
+            setMetaMsg('Sem meta cadastrada para este mês. Informe e salve.', false);
+          }
+        }catch(e){
+          if(e.code === 'POSTO_OFFLINE'){
+            setMetaMsg(`Posto offline: não foi possível conectar ao posto ${selPosto.value}`, true);
+          }else{
+            setMetaMsg(e.message || 'Erro ao consultar meta', true);
+          }
+        }
+
+        $('#metaModal').modal('show');
+      });
+
+      // ao trocar posto/mês dentro do modal, recarrega sugestão/valor existente
+      async function reloadMetaInsideModal(){
+        setMetaMsg('Consultando meta existente...', false);
+        meta2Mens.value = '';
+        meta2Vend.value = '';
+        meta1Mens.value = '';
+        meta1Vend.value = '';
+
+        try{
+          const resp = await apiGetMeta(selPosto.value, inpYm.value);
+          if(resp.exists && resp.meta){
+            meta2Mens.value = Math.round(Number(resp.meta.Meta2Mensalidade || 0));
+            meta2Vend.value = Math.round(Number(resp.meta.Meta2Venda || 0));
+            meta1Mens.value = Math.round(Number(resp.meta.Meta1Mensalidade || sugest90(meta2Mens.value)));
+            meta1Vend.value = Math.round(Number(resp.meta.Meta1Venda || sugest90(meta2Vend.value)));
+            setMetaMsg('Meta existente carregada. Ajuste e salve.', false);
+          }else{
+            setMetaMsg('Sem meta cadastrada para este mês. Informe e salve.', false);
+          }
+        }catch(e){
+          if(e.code === 'POSTO_OFFLINE'){
+            setMetaMsg(`Posto offline: não foi possível conectar ao posto ${selPosto.value}`, true);
+          }else{
+            setMetaMsg(e.message || 'Erro ao consultar meta', true);
+          }
+        }
+      }
+
+      selPosto.addEventListener('change', reloadMetaInsideModal);
+      inpYm.addEventListener('change', reloadMetaInsideModal);
+
+      // sugestão automática: quando mexer na meta2 e meta1 estiver vazia, preenche 90%
+      meta2Mens.addEventListener('input', ()=>{
+        if(String(meta1Mens.value || '').trim() === ''){
+          meta1Mens.value = sugest90(meta2Mens.value);
+        }
+      });
+      meta2Vend.addEventListener('input', ()=>{
+        if(String(meta1Vend.value || '').trim() === ''){
+          meta1Vend.value = sugest90(meta2Vend.value);
+        }
+      });
+
+      btnSalvar.addEventListener('click', async ()=>{
+        try{
+          setMetaMsg('Salvando...', false);
+
+          const body = {
+            posto: selPosto.value,
+            ym: inpYm.value,
+            meta2_mens: Number(meta2Mens.value || 0),
+            meta2_venda: Number(meta2Vend.value || 0),
+            meta1_mens: Number(meta1Mens.value || sugest90(meta2Mens.value)),
+            meta1_venda: Number(meta1Vend.value || sugest90(meta2Vend.value)),
+          };
+
+          const resp = await apiSaveMeta(body);
+
+          // se o backend não conseguiu patch do JSON, avisa mas não falha
+          const jp = resp.json_patch || {};
+          if(jp.patched){
+            setMetaMsg('Salvo. Atualizando tela...', false);
+          }else{
+            setMetaMsg(`Salvo no posto, mas o JSON não foi atualizado agora (${jp.reason || 'sem detalhe'}). Recarregue se necessário.`, false);
+          }
+
+          await refreshJsonAndUIAfterSave(body.posto, body.ym);
+
+          $('#metaModal').modal('hide');
+        }catch(e){
+          if(e.code === 'POSTO_OFFLINE'){
+            setMetaMsg(`Posto offline: não foi possível conectar ao posto ${selPosto.value}`, true);
+          }else{
+            setMetaMsg(e.message || 'Erro ao salvar meta', true);
+          }
+        }
+      });
+    }
+
+    // Calendar picker para campos de mês
+    function mostrarCalendarioMesMetas(campo) {
+      const existing = document.getElementById('pickerOverlay');
+      if (existing) existing.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'pickerOverlay';
+      overlay.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0,0,0,0.3);
+          z-index: 9999;
+      `;
+
+      const picker = document.createElement('div');
+      picker.style.cssText = `
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: white;
+          border-radius: 6px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          padding: 16px;
+          z-index: 10000;
+          min-width: 300px;
+      `;
+
+      const valor = campo.value.trim();
+      let ano = new Date().getFullYear();
+      let mes = new Date().getMonth() + 1;
+
+      if (valor) {
+          const match = valor.match(/^(\d{2})\/(\d{4})$/);
+          if (match) {
+              mes = Number(match[1]);
+              ano = Number(match[2]);
+          }
+      }
+
+      const meses_nomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                           'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+      let html = `
+          <div style="text-align: center; margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <button class="btnYear" style="padding: 6px 10px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px;">◀ Ano</button>
+                  <span style="font-weight: bold; font-size: 18px;" id="yearDisplay">${ano}</span>
+                  <button class="btnYear" style="padding: 6px 10px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px;">Ano ▶</button>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+      `;
+
+      for (let m = 1; m <= 12; m++) {
+          const ativo = m === mes ? 'background: #0066cc; color: white; font-weight: bold;' : 'background: #f9f9f9; border: 1px solid #ddd;';
+          html += `
+              <button type="button" class="btnMes" data-mes="${m}" style="padding: 8px; cursor: pointer; ${ativo} border-radius: 4px; border: none;">
+                  ${meses_nomes[m - 1].substring(0, 3)}
+              </button>
+          `;
+      }
+
+      html += `
+              </div>
+          </div>
+          <div style="text-align: right; margin-top: 12px;">
+              <button class="btnCancel" style="padding: 6px 12px; margin-right: 6px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px;">Cancelar</button>
+              <button class="btnOk" style="padding: 6px 12px; cursor: pointer; background: #0066cc; color: white; border: none; border-radius: 4px;">OK</button>
+          </div>
+      `;
+
+      picker.innerHTML = html;
+      overlay.appendChild(picker);
+      document.body.appendChild(overlay);
+
+      let selectedMes = mes;
+      let selectedAno = ano;
+
+      picker.querySelectorAll('.btnMes').forEach(btn => {
+          btn.addEventListener('click', function() {
+              picker.querySelectorAll('.btnMes').forEach(b => {
+                  b.style.background = '#f9f9f9';
+                  b.style.color = '#000';
+                  b.style.fontWeight = 'normal';
+                  b.style.border = '1px solid #ddd';
+              });
+              this.style.background = '#0066cc';
+              this.style.color = 'white';
+              this.style.fontWeight = 'bold';
+              this.style.border = 'none';
+              selectedMes = Number(this.dataset.mes);
+          });
+      });
+
+      picker.querySelectorAll('.btnYear').forEach((btn, idx) => {
+          btn.addEventListener('click', function() {
+              if (idx === 0) selectedAno--;
+              else selectedAno++;
+              picker.querySelector('#yearDisplay').textContent = selectedAno;
+          });
+      });
+
+      picker.querySelector('.btnOk').addEventListener('click', function() {
+          const mesStr = String(selectedMes).padStart(2, '0');
+          campo.value = `${mesStr}/${selectedAno}`;
+          overlay.remove();
+      });
+
+      picker.querySelector('.btnCancel').addEventListener('click', function() {
+          overlay.remove();
+      });
+
+      overlay.addEventListener('click', function(e) {
+          if (e.target === this) overlay.remove();
+      });
+    }
+
+    // =========================
+    // Boot
+    // =========================
+    async function boot(){
+      resetJsonInfo();
+      const postosUsuario = await carregarPostosDoUsuario();
+
+      // Converter ymSel de YYYY-MM para MM/YYYY
+      const [ymAno, ymMes] = ymSel.split('-');
+      el('#mes').value = `${ymMes}/${ymAno}`;
+
+      // Máscara de entrada
+      el('#mes').addEventListener('input', (e) => {
+        let v = e.target.value.replace(/\D/g, '');
+        if (v.length > 2) {
+          v = v.slice(0, 2) + '/' + v.slice(2, 6);
+        }
+        e.target.value = v;
+      });
+
+      // Calendar picker ao clicar
+      if (typeof initCalendarPicker === 'function') initCalendarPicker('#mes', '#btnCalendarMes', 'month');
+
+      // 1) sessão — sem fallback: lista vazia = sem acesso
+      POSTOS = (postosUsuario && postosUsuario.length) ? postosUsuario : [];
+
+      if(!POSTOS.length){
+        el('#err').textContent = 'Sem acesso a postos. Solicite permissão ao administrador.';
+        return;
+      } else {
+        el('#err').textContent = '';
+      }
+
+      buildPostoTabs('#postoTabs');
+      wireGrupoButtons();
+
+      async function loadAllYearsForCurrentMonth(){
+        const {y,m} = parseYm(ymSel);
+        const yms = [ymOf(y,m), ymOf(y-1,m), ymOf(y-2,m)].filter(ym => parseYm(ym).y >= 2024);
+        for(const ym of yms){
+          await loadMonth(ym);
+        }
+      }
+
+      // Botão Filtrar
+      if (el('#btnFiltrar')) el('#btnFiltrar').addEventListener('click', async ()=>{
+        const valor = el('#mes').value.trim();
+        const match = valor.match(/^(\d{2})\/(\d{4})$/);
+        if (match) {
+          ymSel = `${match[2]}-${match[1]}`;
+        resetJsonInfo();
+
+        // se não tem sessão, re-detecta postos para o mês selecionado (ano atual)
+        if(!(postosUsuario && postosUsuario.length)){
+          POSTOS = await detectPostosDisponiveis(ymSel);
+          if(!POSTOS.length){
+            el('#err').textContent = 'Sem JSONs encontrados para o mês selecionado.';
+            el('#postoTabs').innerHTML = '';
+            return;
+          }
+          el('#err').textContent = '';
+          selPostos = 'ALL';
+          buildPostoTabs('#postoTabs');
+        }
+
+        await loadAllYearsForCurrentMonth();
+        render();
+        }  // fecha if(match)
+      });
+
+      // Botão Mês Atual
+      if (el('#btnMesAtual')) el('#btnMesAtual').addEventListener('click', async ()=>{
+        const hoje = new Date();
+        const mesStr = String(hoje.getMonth() + 1).padStart(2, '0');
+        const anoStr = String(hoje.getFullYear());
+        el('#mes').value = `${mesStr}/${anoStr}`;
+        ymSel = `${anoStr}-${mesStr}`;
+        resetJsonInfo();
+
+        if(!(postosUsuario && postosUsuario.length)){
+          POSTOS = await detectPostosDisponiveis(ymSel);
+          if(!POSTOS.length){
+            el('#err').textContent = 'Sem JSONs encontrados para o mês selecionado.';
+            el('#postoTabs').innerHTML = '';
+            return;
+          }
+          el('#err').textContent = '';
+          selPostos = 'ALL';
+          buildPostoTabs('#postoTabs');
+        }
+
+        await loadAllYearsForCurrentMonth();
+        render();
+      });
+
+      el('#btnReload').addEventListener('click', async ()=>{
+        resetJsonInfo();
+        const {y,m} = parseYm(ymSel);
+        const yms = [ymOf(y,m), ymOf(y-1,m), ymOf(y-2,m)].filter(ym => parseYm(ym).y >= 2024);
+        for(const ym of yms){
+          CACHE[ym] = {};
+        }
+        await loadAllYearsForCurrentMonth();
+        render();
+      });
+
+      await loadAllYearsForCurrentMonth();
+      render();
+      bindMetaModal();
+    }
+
+    window.addEventListener('DOMContentLoaded', boot);
+  </script>
+
+<script>
+  function bindStickyShadow(){
+  const card = document.getElementById('filterCard');
+  if(!card) return;
+
+  const mq = window.matchMedia('(min-width: 992px)');
+  const onScroll = ()=>{
+    if(!mq.matches){
+      card.classList.remove('is-stuck');
+      return;
+    }
+    const r = card.getBoundingClientRect();
+    card.classList.toggle('is-stuck', r.top <= 0);
+  };
+
+  window.addEventListener('scroll', onScroll, {passive:true});
+  mq.addEventListener?.('change', onScroll);
+  onScroll();
+}
+</script>
+
+<script src="/js/chat.js?v=20251114"></script>
+<script>
+  window.IA_API_URL = '/api/ia/chat';
+  window.IA_PAGINA  = 'metas';
+  document.addEventListener('DOMContentLoaded', () => {
+    ChatIA.init({
+      apiUrl: window.IA_API_URL || '/api/ia/chat',
+      mountAfterSelector: '#ia-anchor',
+      title: 'IA CAMIM',
+      briefInstruction: 'Responda em até 3 linhas e 300 caracteres. Sem listas.',
+      briefDefault: true,
+      getPayload: async ({ userQuery }) => ({
+        prompt: userQuery,
+        produto: 'metas',
+        contexto: window.__kpi_contexto || '',
+        prefs: { accept_format: 'free_text' }
+      })
+    });
+  });
+</script>
+
+<script src="/js/menu.js"></script>
+</body>
+</html>

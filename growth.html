@@ -1,0 +1,869 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — Growth Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap">
+  <link rel="stylesheet" href="/css/style2.css?v=20251114">
+  <link rel="stylesheet" href="/css/style_kpi.css?v=20251114">
+  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="/js/calendar-picker.js?v=20251114"></script>
+
+  <style>
+    :root { --kpi-loaded: 1; }
+    html { font-size: 16px; zoom: 1; }
+    body { font-size: 1rem; -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased;
+      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    body.text-sm { font-size: 1rem; }
+    .text-sm .btn, .text-sm .form-control, .text-sm .custom-select, .text-sm .page-link,
+    .text-sm .breadcrumb, .text-sm .nav-link, .text-sm .card-title { font-size: 1rem; }
+    h1,h2,h3 { margin-top:0; margin-bottom:.5rem; font-weight:600; line-height:1.25; }
+    h1 { font-size:2rem; } h2 { font-size:1.5rem; } h3,.card-title { font-size:1.25rem; font-weight:600; }
+    .sidebar .nav-link { font-size:.95rem; }
+    .brand-link .brand-text { font-size:1rem; }
+    .muted { color:#6b7280; } .mini { font-size:.85rem; }
+
+    .g-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+    .g-card { border-radius:10px; border-left:4px solid #ddd; transition:box-shadow .2s; }
+    .g-card:hover { box-shadow:0 2px 8px rgba(0,0,0,.12); }
+    .g-card .g-icon { width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.1rem; color:#fff; flex-shrink:0; }
+    .g-val { font-size:1.45rem; font-weight:700; line-height:1.2; }
+    .g-label { font-size:.8rem; color:#6b7280; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
+    .g-sub { font-size:.78rem; color:#999; margin-top:2px; }
+
+    .border-l-blue    { border-left-color:#007bff; }
+    .border-l-green   { border-left-color:#28a745; }
+    .border-l-red     { border-left-color:#dc3545; }
+    .border-l-orange  { border-left-color:#fd7e14; }
+    .border-l-purple  { border-left-color:#6f42c1; }
+    .border-l-teal    { border-left-color:#20c997; }
+    .border-l-indigo  { border-left-color:#6610f2; }
+    .border-l-cyan    { border-left-color:#17a2b8; }
+    .border-l-pink    { border-left-color:#e83e8c; }
+    .border-l-yellow  { border-left-color:#ffc107; }
+
+    .bg-blue   { background:#007bff; }
+    .bg-green  { background:#28a745; }
+    .bg-red    { background:#dc3545; }
+    .bg-orange { background:#fd7e14; }
+    .bg-purple { background:#6f42c1; }
+    .bg-teal   { background:#20c997; }
+    .bg-indigo { background:#6610f2; }
+    .bg-cyan   { background:#17a2b8; }
+    .bg-pink   { background:#e83e8c; }
+    .bg-yellow { background:#ffc107; }
+
+    .manual-section { margin-bottom:18px; }
+    .manual-section h6 { font-weight:700; margin-bottom:4px; color:#333; }
+    .manual-section p { margin-bottom:4px; font-size:.88rem; line-height:1.45; }
+    .manual-section .tag-fonte { display:inline-block; background:#e9ecef; border-radius:4px; padding:1px 7px; font-size:.75rem; color:#555; margin-top:2px; }
+    .manual-section hr { margin:10px 0; border-color:rgba(0,0,0,.06); }
+
+    .g-status { padding:8px 14px; border-radius:8px; font-size:.85rem; font-weight:600; text-align:center; }
+    .g-status.ok { background:#d4edda; color:#155724; }
+    .g-status.warn { background:#fff3cd; color:#856404; }
+    .g-status.bad { background:#f8d7da; color:#721c24; }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <span>Growth Dashboard</span>
+      <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+    </span>
+  </nav>
+
+  <!-- SIDEBAR -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home</p></a></li>
+          {% if USER_IS_ADMIN %}
+          <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+          {% endif %}
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="content-wrapper">
+    <section class="content p-3">
+      <div id="err" class="text-danger mb-2"></div>
+
+      <!-- FILTROS -->
+      <div class="card mb-3">
+        <div class="kpi-filter-panel">
+          <div class="kpi-filter-row kpi-filter-postos">
+            <div class="posto-groups">
+              <div class="btn-group">
+                <button id="btnGrupoTodos" class="btn active">Todos</button>
+                <button id="btnGrupoAltamiro" class="btn" title="A B G I N R X Y">Altamiro</button>
+                <button id="btnGrupoCouto" class="btn" title="C D J M P">Couto</button>
+              </div>
+            </div>
+            <div class="filter-sep-v"></div>
+            <ul id="postoTabs" class="nav nav-pills posto-tabs-inline"></ul>
+          </div>
+          <div class="kpi-filter-row kpi-filter-actions">
+            <div class="filter-dates-row">
+              <div class="filter-date-group">
+                <label class="filter-label">Mes</label>
+                <div class="filter-date-wrap">
+                  <input id="mes" type="text" class="form-control form-control-sm filter-date-input" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" />
+                  <button id="btnCalendarMes" class="btn btn-sm btn-cal" title="Abrir calendario">&#x1F4C5;</button>
+                </div>
+              </div>
+            </div>
+            <div class="filter-btns-row">
+              <button id="btnFiltrar" class="btn btn-sm btn-primary">&#x1F50D; Filtrar</button>
+              <button id="btnMesAtual" class="btn btn-sm btn-outline-info">Mes Atual</button>
+              <button id="btnReload" class="btn btn-sm btn-outline-secondary">Recarregar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONTEUDO: DADOS + MANUAL -->
+      <div class="row">
+        <!-- ESQUERDA: KPIs -->
+        <div class="col-lg-7 mb-3">
+
+          <!-- Status resumo -->
+          <div id="statusBar" class="g-status mb-3" style="display:none"></div>
+
+          <div class="g-grid" id="kpiGrid">
+
+            <!-- MRR -->
+            <div class="card g-card border-l-blue mb-0" id="card-mrr">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="g-label">MRR</div>
+                    <div class="g-val" id="val-mrr">--</div>
+                    <div class="g-sub" id="sub-mrr">Carregando...</div>
+                  </div>
+                  <div class="g-icon bg-blue"><i class="fas fa-dollar-sign"></i></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Receita Total -->
+            <div class="card g-card border-l-green mb-0" id="card-receita">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="g-label">Receita Mensalidades</div>
+                    <div class="g-val" id="val-receita">--</div>
+                    <div class="g-sub" id="sub-receita"></div>
+                  </div>
+                  <div class="g-icon bg-green"><i class="fas fa-hand-holding-usd"></i></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Razao MRR / Receita -->
+            <div class="card g-card border-l-cyan mb-0" id="card-razao">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="g-label">MRR / Receita</div>
+                    <div class="g-val" id="val-razao">--</div>
+                    <div class="g-sub" id="sub-razao"></div>
+                  </div>
+                  <div class="g-icon bg-cyan"><i class="fas fa-percentage"></i></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Gap % -->
+            <div class="card g-card border-l-orange mb-0" id="card-gap">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="g-label">Gap MRR</div>
+                    <div class="g-val" id="val-gap">--</div>
+                    <div class="g-sub" id="sub-gap"></div>
+                  </div>
+                  <div class="g-icon bg-orange"><i class="fas fa-exclamation-triangle"></i></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Churn -->
+            <div class="card g-card border-l-red mb-0" id="card-churn">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="g-label">Churn Mensal</div>
+                    <div class="g-val" id="val-churn">--</div>
+                    <div class="g-sub" id="sub-churn"></div>
+                  </div>
+                  <div class="g-icon bg-red"><i class="fas fa-user-minus"></i></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Retencao -->
+            <div class="card g-card border-l-teal mb-0" id="card-retencao">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="g-label">Retencao</div>
+                    <div class="g-val" id="val-retencao">--</div>
+                    <div class="g-sub" id="sub-retencao"></div>
+                  </div>
+                  <div class="g-icon bg-teal"><i class="fas fa-user-check"></i></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- CAC -->
+            <div class="card g-card border-l-purple mb-0" id="card-cac">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="g-label">CAC</div>
+                    <div class="g-val" id="val-cac">--</div>
+                    <div class="g-sub" id="sub-cac"></div>
+                  </div>
+                  <div class="g-icon bg-purple"><i class="fas fa-funnel-dollar"></i></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- LTV -->
+            <div class="card g-card border-l-indigo mb-0" id="card-ltv">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="g-label">LTV</div>
+                    <div class="g-val" id="val-ltv">--</div>
+                    <div class="g-sub" id="sub-ltv"></div>
+                  </div>
+                  <div class="g-icon bg-indigo"><i class="fas fa-gem"></i></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- LTV Margem -->
+            <div class="card g-card border-l-pink mb-0" id="card-ltv-margem">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="g-label">LTV Margem</div>
+                    <div class="g-val" id="val-ltv-margem">--</div>
+                    <div class="g-sub" id="sub-ltv-margem"></div>
+                  </div>
+                  <div class="g-icon bg-pink"><i class="fas fa-chart-pie"></i></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- LTV / CAC -->
+            <div class="card g-card border-l-yellow mb-0" id="card-ltv-cac">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="g-label">LTV / CAC</div>
+                    <div class="g-val" id="val-ltv-cac">--</div>
+                    <div class="g-sub" id="sub-ltv-cac"></div>
+                  </div>
+                  <div class="g-icon bg-yellow"><i class="fas fa-balance-scale-right"></i></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Conversao -->
+            <div class="card g-card border-l-cyan mb-0" id="card-conversao" style="opacity:.55">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="g-label">Conversao</div>
+                    <div class="g-val" id="val-conversao">Pendente</div>
+                    <div class="g-sub" id="sub-conversao">Aguardando dados de leads</div>
+                  </div>
+                  <div class="g-icon bg-cyan"><i class="fas fa-filter"></i></div>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /g-grid -->
+        </div><!-- /col-lg-7 -->
+
+        <!-- DIREITA: MANUAL -->
+        <div class="col-lg-5">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="fas fa-book mr-2"></i>Manual de Indicadores</h3>
+            </div>
+            <div class="card-body" style="max-height:80vh; overflow-y:auto; font-size:.9rem">
+
+              <div class="manual-section">
+                <h6><i class="fas fa-dollar-sign text-primary mr-1"></i> MRR (Monthly Recurring Revenue)</h6>
+                <p><strong>O que mede:</strong> Receita recorrente esperada. Soma de todos os contratos ativos com vencimento no mes selecionado.</p>
+                <p><strong>Formula:</strong> Soma de "Valor devido" de contratos ativos (excluindo cancelados, pre-cadastro e socios).</p>
+                <p><strong>Interpretacao:</strong> E o valor que <em>deveria</em> entrar no mes. Quanto maior, maior a base recorrente.</p>
+                <span class="tag-fonte">Fonte: vw_fin_receita2 (vencimentos do mes, idcontatipo=5)</span>
+              </div>
+              <hr>
+
+              <div class="manual-section">
+                <h6><i class="fas fa-hand-holding-usd text-success mr-1"></i> Receita Mensalidades</h6>
+                <p><strong>O que mede:</strong> Valor efetivamente recebido de mensalidades no mes.</p>
+                <p><strong>Formula:</strong> Soma de pagamentos realizados classificados como mensalidade.</p>
+                <p><strong>Interpretacao:</strong> E o que <em>de fato</em> entrou. Diferenca entre MRR e Receita indica inadimplencia ou atraso.</p>
+                <span class="tag-fonte">Fonte: consolidado_mensal_por_posto.json &rarr; campo "mensalidade"</span>
+              </div>
+              <hr>
+
+              <div class="manual-section">
+                <h6><i class="fas fa-percentage text-info mr-1"></i> MRR / Receita</h6>
+                <p><strong>O que mede:</strong> Proporcao entre o esperado (MRR) e o recebido (Receita Mensalidades).</p>
+                <p><strong>Formula:</strong> MRR &divide; Receita Mensalidades</p>
+                <p><strong>Interpretacao:</strong> Se &gt; 1, significa que cobrou-se menos do que deveria (inadimplencia). Se &lt; 1, recebeu mais que o previsto (pagamentos antecipados/retroativos). Ideal: proximo de 1.</p>
+                <span class="tag-fonte">Fonte: Calculado (MRR / Receita)</span>
+              </div>
+              <hr>
+
+              <div class="manual-section">
+                <h6><i class="fas fa-exclamation-triangle text-warning mr-1"></i> Gap MRR</h6>
+                <p><strong>O que mede:</strong> Quanto (%) faltou para atingir o valor total esperado (MRR).</p>
+                <p><strong>Formula:</strong> (MRR &minus; Receita) &divide; MRR &times; 100</p>
+                <p><strong>Exemplo:</strong> Se MRR = R$ 100.000 e Receita = R$ 85.000 &rarr; Gap = 15% (faltou 15% para receber tudo que deveria).</p>
+                <p><strong>Interpretacao:</strong> Positivo = faltou receber. Negativo = superou. Quanto menor, melhor a eficiencia de cobranca.</p>
+                <span class="tag-fonte">Fonte: Calculado (MRR vs Receita)</span>
+              </div>
+              <hr>
+
+              <div class="manual-section">
+                <h6><i class="fas fa-user-minus text-danger mr-1"></i> Churn Mensal</h6>
+                <p><strong>O que mede:</strong> Taxa de cancelamento. Dos clientes que entraram no mes anterior, quantos % sairam no mes seguinte.</p>
+                <p><strong>Formula:</strong> 1 &minus; (Clientes retidos apos 1 mes &divide; Total de admissoes do mes anterior)</p>
+                <p><strong>Interpretacao:</strong> Churn &lt; 5% = excelente. 5-10% = atencao. &gt; 10% = critico.</p>
+                <span class="tag-fonte">Fonte: fidelizacao_cliente.json &rarr; retencao 1 mes da coorte anterior</span>
+              </div>
+              <hr>
+
+              <div class="manual-section">
+                <h6><i class="fas fa-user-check mr-1" style="color:#20c997"></i> Retencao</h6>
+                <p><strong>O que mede:</strong> % de clientes que permanecem ativos apos 1 mes.</p>
+                <p><strong>Formula:</strong> 100% &minus; Churn</p>
+                <p><strong>Interpretacao:</strong> &gt; 95% = excelente. 90-95% = bom. &lt; 90% = atencao.</p>
+                <span class="tag-fonte">Fonte: fidelizacao_cliente.json &rarr; retencao 1 mes</span>
+              </div>
+              <hr>
+
+              <div class="manual-section">
+                <h6><i class="fas fa-funnel-dollar mr-1" style="color:#6f42c1"></i> CAC (Customer Acquisition Cost)</h6>
+                <p><strong>O que mede:</strong> Quanto custa adquirir cada novo cliente.</p>
+                <p><strong>Formula:</strong> Despesas de Vendas &divide; Numero de vendas (novos clientes) no mes</p>
+                <p><strong>Interpretacao:</strong> CAC alto = aquisicao cara. CAC baixo = canal eficiente. Compare com LTV para viabilidade.</p>
+                <span class="tag-fonte">Fonte: vw_Fin_Despesa (plano='DESPESAS DE VENDAS') &divide; vendas_por_dia do json_metas</span>
+              </div>
+              <hr>
+
+              <div class="manual-section">
+                <h6><i class="fas fa-gem mr-1" style="color:#6610f2"></i> LTV (Lifetime Value)</h6>
+                <p><strong>O que mede:</strong> Receita total que um cliente gera ao longo de toda sua permanencia.</p>
+                <p><strong>Formula:</strong> Ticket Medio &times; (1 &divide; Churn Mensal)</p>
+                <p><strong>Exemplo:</strong> Ticket R$ 300 e Churn 5% &rarr; Tempo medio = 20 meses &rarr; LTV = R$ 6.000</p>
+                <p><strong>Interpretacao:</strong> Quanto maior o LTV, mais valioso e cada cliente. Melhora com retencao e ticket.</p>
+                <span class="tag-fonte">Fonte: ticket_medio (consolidado_mensal_por_posto) &times; 1/churn (fidelizacao)</span>
+              </div>
+              <hr>
+
+              <div class="manual-section">
+                <h6><i class="fas fa-chart-pie mr-1" style="color:#e83e8c"></i> LTV Margem</h6>
+                <p><strong>O que mede:</strong> LTV considerando a margem operacional. Mostra o <em>lucro</em> real gerado por cliente, nao apenas faturamento.</p>
+                <p><strong>Formula:</strong> LTV &times; Margem, onde Margem = (Receita Total &minus; Despesa Total) &divide; Receita Total</p>
+                <p><strong>Nota:</strong> Despesas de retirada NAO sao consideradas. Usa dados de receita e despesa gerais (nao rateio).</p>
+                <span class="tag-fonte">Fonte: LTV &times; margem de fin_receita_tipo e fin_despesa_tipo (sem retirada)</span>
+              </div>
+              <hr>
+
+              <div class="manual-section">
+                <h6><i class="fas fa-balance-scale-right mr-1" style="color:#ffc107"></i> LTV / CAC</h6>
+                <p><strong>O que mede:</strong> Retorno sobre investimento em aquisicao. Quantas vezes o valor do cliente supera o custo de conquista-lo.</p>
+                <p><strong>Formula:</strong> LTV &divide; CAC</p>
+                <p><strong>Regra de mercado:</strong></p>
+                <ul style="font-size:.85rem; margin-bottom:4px">
+                  <li><strong>&ge; 3x</strong> = operacao saudavel e sustentavel</li>
+                  <li><strong>1x - 3x</strong> = atencao, margem apertada</li>
+                  <li><strong>&lt; 1x</strong> = prejuizo por cliente adquirido</li>
+                </ul>
+                <span class="tag-fonte">Fonte: Calculado (LTV / CAC)</span>
+              </div>
+              <hr>
+
+              <div class="manual-section">
+                <h6><i class="fas fa-filter mr-1 text-info"></i> Conversao (pendente)</h6>
+                <p><strong>O que mede:</strong> Taxa de pessoas que viram clientes (leads &rarr; vendas).</p>
+                <p><strong>Formula:</strong> Vendas realizadas &divide; Total de leads &times; 100</p>
+                <p><strong>Status:</strong> Aguardando acesso aos dados de leads no banco.</p>
+                <span class="tag-fonte">Fonte: A definir</span>
+              </div>
+              <hr>
+
+              <div class="manual-section">
+                <h6><i class="fas fa-lightbulb mr-1 text-warning"></i> Relacao Estrategica</h6>
+                <p>Estes indicadores formam um <strong>painel executivo</strong> para validar se o crescimento e sustentavel:</p>
+                <ul style="font-size:.85rem">
+                  <li><strong>LTV &gt; CAC</strong> &rarr; operacao saudavel</li>
+                  <li>Aumentar <strong>retencao</strong> &rarr; LTV sobe exponencialmente</li>
+                  <li>Melhorar <strong>conversao</strong> &rarr; CAC cai</li>
+                  <li>Reduzir <strong>churn</strong> &rarr; base cresce organicamente</li>
+                  <li>Gap MRR baixo &rarr; cobranca eficiente</li>
+                </ul>
+              </div>
+
+            </div>
+          </div>
+        </div><!-- /col-lg-5 -->
+      </div><!-- /row -->
+
+    </section>
+  </div><!-- /content-wrapper -->
+</div><!-- /wrapper -->
+
+<script>
+(function(){
+  // ============================
+  // Config
+  // ============================
+  var URL_GROWTH  = '/json_consolidado/growth_dashboard.json';
+  var URL_CONSOL  = '/json_consolidado/consolidado_mensal_por_posto.json';
+  var URL_FIDEL   = '/json_consolidado/fidelizacao_cliente.json';
+  var URL_REC     = '/json_consolidado/fin_receita_tipo.json';
+  var URL_DESP    = '/json_consolidado/fin_despesa_tipo.json';
+
+  var DATA = {};
+  var METAS = {};
+  var POSTOS = [];
+  var selPostos = 'ALL';
+
+  var GRUPO_ALTAMIRO = ['A','B','G','I','N','R','X','Y'];
+  var GRUPO_COUTO    = ['C','D','J','M','P'];
+
+  function hoje() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  }
+  var ymSel = hoje();
+
+  // ============================
+  // Helpers
+  // ============================
+  function el(s) { return document.querySelector(s); }
+  function num(v) { return Number(v) || 0; }
+  function fmt(v, dec) { return v.toLocaleString('pt-BR', {minimumFractionDigits:dec||0, maximumFractionDigits:dec||0}); }
+  function fmtR(v) { return 'R$ ' + fmt(v, 2); }
+  function fmtPct(v) { return fmt(v * 100, 1) + '%'; }
+  function prevYm(ym) {
+    var p = ym.split('-'), y = +p[0], m = +p[1];
+    m--; if (m < 1) { m = 12; y--; }
+    return y + '-' + String(m).padStart(2, '0');
+  }
+
+  // ============================
+  // Session / Postos
+  // ============================
+  async function carregarPostos() {
+    try {
+      var r = await fetch('/session/me', {credentials:'same-origin'});
+      var d = await r.json();
+      return d.postos || [];
+    } catch(e) { return []; }
+  }
+
+  function getPostos() {
+    if (selPostos === 'ALL') return POSTOS;
+    if (Array.isArray(selPostos)) return selPostos.filter(function(p){ return POSTOS.indexOf(p) >= 0; });
+    return POSTOS.indexOf(selPostos) >= 0 ? [selPostos] : [];
+  }
+
+  // ============================
+  // Posto Tabs
+  // ============================
+  function buildPostoTabs() {
+    var ul = el('#postoTabs');
+    if (!ul) return;
+    var html = '<li class="nav-item"><a class="nav-link posto-tab active" data-posto="ALL" href="#">Todos</a></li>';
+    POSTOS.forEach(function(p) {
+      html += '<li class="nav-item"><a class="nav-link posto-tab" data-posto="' + p + '" href="#">' + p + '</a></li>';
+    });
+    ul.innerHTML = html;
+    ul.querySelectorAll('.posto-tab').forEach(function(tab) {
+      tab.addEventListener('click', function(e) {
+        e.preventDefault();
+        ul.querySelectorAll('.posto-tab').forEach(function(t){ t.classList.remove('active'); });
+        this.classList.add('active');
+        selPostos = this.dataset.posto === 'ALL' ? 'ALL' : this.dataset.posto;
+        render();
+      });
+    });
+  }
+
+  function wireGrupoButtons() {
+    var btnTodos = el('#btnGrupoTodos');
+    var btnAlt   = el('#btnGrupoAltamiro');
+    var btnCou   = el('#btnGrupoCouto');
+    function setGrupo(postos, btn) {
+      [btnTodos, btnAlt, btnCou].forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      selPostos = postos;
+      // highlight matching tabs
+      el('#postoTabs').querySelectorAll('.posto-tab').forEach(function(t){
+        t.classList.remove('active');
+        if (postos === 'ALL' && t.dataset.posto === 'ALL') t.classList.add('active');
+      });
+      render();
+    }
+    if (btnTodos) btnTodos.addEventListener('click', function(){ setGrupo('ALL', btnTodos); });
+    if (btnAlt)   btnAlt.addEventListener('click', function(){ setGrupo(GRUPO_ALTAMIRO.filter(function(p){ return POSTOS.indexOf(p)>=0; }), btnAlt); });
+    if (btnCou)   btnCou.addEventListener('click', function(){ setGrupo(GRUPO_COUTO.filter(function(p){ return POSTOS.indexOf(p)>=0; }), btnCou); });
+  }
+
+  // ============================
+  // Data Loading
+  // ============================
+  async function loadGlobalData() {
+    var results = await Promise.allSettled([
+      fetch(URL_GROWTH, {cache:'no-store'}).then(function(r){ return r.ok ? r.json() : null; }),
+      fetch(URL_CONSOL, {cache:'no-store'}).then(function(r){ return r.ok ? r.json() : null; }),
+      fetch(URL_FIDEL, {cache:'no-store'}).then(function(r){ return r.ok ? r.json() : null; }),
+      fetch(URL_REC, {cache:'no-store'}).then(function(r){ return r.ok ? r.json() : null; }),
+      fetch(URL_DESP, {cache:'no-store'}).then(function(r){ return r.ok ? r.json() : null; })
+    ]);
+    DATA.growth = results[0].status === 'fulfilled' ? results[0].value : null;
+    DATA.consol = results[1].status === 'fulfilled' ? results[1].value : null;
+    DATA.fidel  = results[2].status === 'fulfilled' ? results[2].value : null;
+    DATA.rec    = results[3].status === 'fulfilled' ? results[3].value : null;
+    DATA.desp   = results[4].status === 'fulfilled' ? results[4].value : null;
+  }
+
+  async function loadMetas(ym) {
+    var postos = POSTOS;
+    var promises = postos.map(function(p) {
+      var key = p + '_' + ym;
+      if (METAS[key]) return Promise.resolve();
+      return fetch('/json_metas/' + p + '_metas_' + ym + '.json', {cache:'no-store'})
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){ if (d) METAS[key] = d; })
+        .catch(function(){});
+    });
+    await Promise.allSettled(promises);
+  }
+
+  // ============================
+  // Calculos
+  // ============================
+  function calcMRR(ym) {
+    var postos = getPostos();
+    if (!DATA.growth || !DATA.growth.dados || !DATA.growth.dados[ym])
+      return {count:0, valor:0, ok:false};
+    var count = 0, valor = 0;
+    postos.forEach(function(p) {
+      var d = DATA.growth.dados[ym] && DATA.growth.dados[ym][p];
+      if (d) { count += num(d.mrr_count); valor += num(d.mrr_valor); }
+    });
+    return {count:count, valor:valor, ok:true};
+  }
+
+  function calcReceitaMens(ym) {
+    var postos = getPostos();
+    if (!DATA.consol || !DATA.consol[ym])
+      return {valor:0, qtd:0, ticket:0, ok:false};
+    var valor = 0, qtd = 0;
+    postos.forEach(function(p) {
+      var d = DATA.consol[ym] && DATA.consol[ym][p];
+      if (d) { valor += num(d.mensalidade); qtd += num(d.mensalidade_qtd); }
+    });
+    return {valor:valor, qtd:qtd, ticket: qtd > 0 ? valor / qtd : 0, ok:true};
+  }
+
+  function calcChurn(ym) {
+    var postos = getPostos();
+    if (!DATA.fidel || !DATA.fidel.dados)
+      return {churn:0, retention:0, admissoes:0, ok:false};
+    var pm = prevYm(ym);
+    var adm = 0, ret = 0;
+    postos.forEach(function(p) {
+      var c = DATA.fidel.dados[pm] && DATA.fidel.dados[pm][p];
+      if (c) {
+        adm += num(c.admissoes);
+        var r1 = c.retencao_por_mes && c.retencao_por_mes['1'];
+        if (r1) ret += num(r1.qtd);
+      }
+    });
+    if (adm === 0) return {churn:0, retention:0, admissoes:0, ok:false};
+    var retention = ret / adm;
+    return {churn: 1 - retention, retention:retention, admissoes:adm, ok:true};
+  }
+
+  function calcVendas(ym) {
+    var postos = getPostos();
+    var total = 0;
+    postos.forEach(function(p) {
+      var m = METAS[p + '_' + ym];
+      if (m && m.vendas_por_dia) {
+        m.vendas_por_dia.forEach(function(d){ total += num(d.venda_dia); });
+      }
+    });
+    return total;
+  }
+
+  function calcCACExpenses(ym) {
+    var postos = getPostos();
+    if (!DATA.growth || !DATA.growth.dados || !DATA.growth.dados[ym])
+      return {valor:0, ok:false};
+    var total = 0;
+    postos.forEach(function(p) {
+      var d = DATA.growth.dados[ym] && DATA.growth.dados[ym][p];
+      if (d) total += num(d.cac_despesas_vendas);
+    });
+    return {valor:total, ok:true};
+  }
+
+  function calcReceitaTotal(ym) {
+    var postos = getPostos();
+    if (!DATA.rec || !DATA.rec.dados || !DATA.rec.dados[ym]) return 0;
+    var total = 0;
+    postos.forEach(function(p) {
+      var b = DATA.rec.dados[ym] && DATA.rec.dados[ym][p];
+      if (b && b.linhas) {
+        b.linhas.forEach(function(r){ total += num(r.valorpago); });
+      }
+    });
+    return total;
+  }
+
+  function calcDespesaTotal(ym) {
+    var postos = getPostos();
+    if (!DATA.desp || !DATA.desp.dados || !DATA.desp.dados[ym]) return 0;
+    var total = 0;
+    postos.forEach(function(p) {
+      var b = DATA.desp.dados[ym] && DATA.desp.dados[ym][p];
+      if (b && b.linhas) {
+        b.linhas.forEach(function(r){
+          if ((r.tipo || r.Tipo || '').toUpperCase() !== 'RETIRADA')
+            total += num(r.valorpago);
+        });
+      }
+    });
+    return total;
+  }
+
+  // ============================
+  // Render
+  // ============================
+  function setCard(id, value, subtitle) {
+    var v = el('#val-' + id);
+    var s = el('#sub-' + id);
+    if (v) v.textContent = value;
+    if (s) s.textContent = subtitle || '';
+  }
+
+  function render() {
+    var ym = ymSel;
+    var postos = getPostos();
+
+    // 1. MRR
+    var mrr = calcMRR(ym);
+    setCard('mrr',
+      mrr.ok ? fmtR(mrr.valor) : 'Sem dados',
+      mrr.ok ? fmt(mrr.count) + ' contratos ativos' : 'Execute export_growth.py');
+
+    // 2. Receita Mensalidades
+    var rec = calcReceitaMens(ym);
+    setCard('receita',
+      rec.ok ? fmtR(rec.valor) : 'Sem dados',
+      rec.ok ? fmt(rec.qtd) + ' mensalidades | Ticket: ' + fmtR(rec.ticket) : '');
+
+    // 3. Razao
+    var razao = (rec.valor > 0 && mrr.ok) ? mrr.valor / rec.valor : 0;
+    setCard('razao',
+      (mrr.ok && rec.ok && rec.valor > 0) ? fmt(razao, 2) + 'x' : '--',
+      razao > 1.05 ? 'Cobranca abaixo do esperado' : razao > 0 ? 'Cobranca saudavel' : 'MRR / Receita Mensalidades');
+
+    // 4. Gap
+    var gap = mrr.valor > 0 ? ((mrr.valor - rec.valor) / mrr.valor * 100) : 0;
+    setCard('gap',
+      mrr.ok ? fmt(gap, 1) + '%' : '--',
+      gap > 0 ? 'Faltou ' + fmt(gap,1) + '% para atingir o MRR' : gap < 0 ? 'Superou o MRR em ' + fmt(Math.abs(gap),1) + '%' : '');
+
+    // 5. Churn
+    var churn = calcChurn(ym);
+    setCard('churn',
+      churn.ok ? fmtPct(churn.churn) : 'Sem dados',
+      churn.ok ? 'Base: ' + fmt(churn.admissoes) + ' admissoes (mes anterior)' : 'Sem dados de fidelizacao');
+
+    // 6. Retencao
+    setCard('retencao',
+      churn.ok ? fmtPct(churn.retention) : 'Sem dados',
+      churn.ok ? 'Clientes retidos apos 1 mes' : '');
+
+    // 7. CAC
+    var vendas = calcVendas(ym);
+    var cacExp = calcCACExpenses(ym);
+    var cac = vendas > 0 ? cacExp.valor / vendas : 0;
+    setCard('cac',
+      (cacExp.ok && vendas > 0) ? fmtR(cac) : (vendas === 0 ? 'Sem vendas' : 'Sem dados'),
+      'Desp: ' + fmtR(cacExp.valor) + ' / ' + fmt(vendas) + ' vendas');
+
+    // 8. LTV
+    var tempoRet = churn.churn > 0 ? (1 / churn.churn) : 0;
+    var ltv = rec.ticket * tempoRet;
+    setCard('ltv',
+      (churn.ok && rec.ok && tempoRet > 0) ? fmtR(ltv) : 'Sem dados',
+      tempoRet > 0 ? 'Ticket ' + fmtR(rec.ticket) + ' x ' + fmt(tempoRet,1) + ' meses' : 'Requer churn > 0');
+
+    // 9. LTV Margem
+    var recTotal = calcReceitaTotal(ym);
+    var despTotal = calcDespesaTotal(ym);
+    var margem = recTotal > 0 ? (recTotal - despTotal) / recTotal : 0;
+    var ltvMargem = ltv * margem;
+    setCard('ltv-margem',
+      (ltv > 0 && recTotal > 0) ? fmtR(ltvMargem) : 'Sem dados',
+      recTotal > 0 ? 'Margem: ' + fmtPct(margem) + ' | LTV x Margem' : '');
+
+    // 10. LTV / CAC
+    var ltvCac = cac > 0 ? ltv / cac : 0;
+    var ltvCacLabel = '--';
+    var ltvCacSub = '';
+    if (ltv > 0 && cac > 0) {
+      ltvCacLabel = fmt(ltvCac, 1) + 'x';
+      if (ltvCac >= 3) ltvCacSub = 'Saudavel (>= 3x)';
+      else if (ltvCac >= 1) ltvCacSub = 'Atencao (< 3x)';
+      else ltvCacSub = 'Critico (< 1x) - prejuizo por cliente';
+    }
+    setCard('ltv-cac', ltvCacLabel, ltvCacSub);
+
+    // Status bar
+    var bar = el('#statusBar');
+    if (bar && mrr.ok && rec.ok && churn.ok) {
+      bar.style.display = '';
+      if (ltvCac >= 3 && churn.churn < 0.05 && gap < 5) {
+        bar.className = 'g-status ok mb-3';
+        bar.textContent = 'Crescimento saudavel: LTV/CAC ' + fmt(ltvCac,1) + 'x | Churn ' + fmtPct(churn.churn) + ' | Gap ' + fmt(gap,1) + '%';
+      } else if (ltvCac >= 1 && churn.churn < 0.1) {
+        bar.className = 'g-status warn mb-3';
+        bar.textContent = 'Atencao: LTV/CAC ' + fmt(ltvCac,1) + 'x | Churn ' + fmtPct(churn.churn) + ' | Gap ' + fmt(gap,1) + '%';
+      } else {
+        bar.className = 'g-status bad mb-3';
+        bar.textContent = 'Critico: LTV/CAC ' + fmt(ltvCac,1) + 'x | Churn ' + fmtPct(churn.churn) + ' | Gap ' + fmt(gap,1) + '%';
+      }
+    } else if (bar) {
+      bar.style.display = 'none';
+    }
+  }
+
+  // ============================
+  // Boot
+  // ============================
+  async function boot() {
+    POSTOS = await carregarPostos();
+    if (!POSTOS.length) {
+      el('#err').textContent = 'Sem acesso a postos. Solicite permissao ao administrador.';
+      return;
+    }
+    el('#err').textContent = '';
+
+    // Set month input
+    var p = ymSel.split('-');
+    el('#mes').value = p[1] + '/' + p[0];
+
+    // Mascara MM/YYYY
+    el('#mes').addEventListener('input', function(e) {
+      var v = e.target.value.replace(/\D/g, '');
+      if (v.length > 2) v = v.slice(0,2) + '/' + v.slice(2,6);
+      e.target.value = v;
+    });
+
+    // Calendar picker
+    if (typeof initCalendarPicker === 'function') initCalendarPicker('#mes', '#btnCalendarMes', 'month');
+
+    buildPostoTabs();
+    wireGrupoButtons();
+
+    await Promise.all([loadGlobalData(), loadMetas(ymSel)]);
+    render();
+
+    // Filtrar
+    el('#btnFiltrar').addEventListener('click', async function() {
+      var v = el('#mes').value.trim();
+      var match = v.match(/^(\d{2})\/(\d{4})$/);
+      if (match) {
+        ymSel = match[2] + '-' + match[1];
+        await loadMetas(ymSel);
+        render();
+      }
+    });
+
+    // Mes Atual
+    el('#btnMesAtual').addEventListener('click', async function() {
+      var d = new Date();
+      var mm = String(d.getMonth()+1).padStart(2,'0');
+      var yy = String(d.getFullYear());
+      el('#mes').value = mm + '/' + yy;
+      ymSel = yy + '-' + mm;
+      await loadMetas(ymSel);
+      render();
+    });
+
+    // Recarregar
+    el('#btnReload').addEventListener('click', async function() {
+      METAS = {};
+      await Promise.all([loadGlobalData(), loadMetas(ymSel)]);
+      render();
+    });
+  }
+
+  window.addEventListener('DOMContentLoaded', boot);
+})();
+</script>
+
+<script src="/js/chat.js?v=20251114"></script>
+<script>
+  window.IA_API_URL = '/api/ia/chat';
+  window.IA_PAGINA  = 'growth';
+  document.addEventListener('DOMContentLoaded', function() {
+    if (typeof ChatIA !== 'undefined') {
+      ChatIA.init({
+        apiUrl: window.IA_API_URL || '/api/ia/chat',
+        mountAfterSelector: '#ia-anchor',
+        title: 'IA CAMIM',
+        briefInstruction: 'Responda em ate 3 linhas e 300 caracteres. Sem listas.',
+        briefDefault: true,
+        getPayload: async function(opts) {
+          return {
+            prompt: opts.userQuery,
+            produto: 'growth',
+            contexto: window.__kpi_contexto || '',
+            prefs: { accept_format: 'free_text' }
+          };
+        }
+      });
+    }
+  });
+</script>
+
+<script src="/js/menu.js"></script>
+</body>
+</html>
