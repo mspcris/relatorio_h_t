@@ -925,6 +925,126 @@
                 };
             };
 
+            // Calendar picker para campos de mês
+            function mostrarCalendarioAlimentacao(campo) {
+              const existing = document.getElementById('pickerOverlay');
+              if (existing) existing.remove();
+
+              const overlay = document.createElement('div');
+              overlay.id = 'pickerOverlay';
+              overlay.style.cssText = `
+                  position: fixed;
+                  top: 0;
+                  left: 0;
+                  width: 100%;
+                  height: 100%;
+                  background: rgba(0,0,0,0.3);
+                  z-index: 9999;
+              `;
+
+              const picker = document.createElement('div');
+              picker.style.cssText = `
+                  position: fixed;
+                  top: 50%;
+                  left: 50%;
+                  transform: translate(-50%, -50%);
+                  background: white;
+                  border-radius: 6px;
+                  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                  padding: 16px;
+                  z-index: 10000;
+                  min-width: 300px;
+              `;
+
+              const valor = campo.value.trim();
+              let ano = new Date().getFullYear();
+              let mes = new Date().getMonth() + 1;
+
+              if (valor) {
+                  const match = valor.match(/^(\d{2})\/(\d{4})$/);
+                  if (match) {
+                      mes = Number(match[1]);
+                      ano = Number(match[2]);
+                  }
+              }
+
+              const meses_nomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                                   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+              let html = `
+                  <div style="text-align: center; margin-bottom: 12px;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                          <button class="btnYear" style="padding: 6px 10px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px;">◀ Ano</button>
+                          <span style="font-weight: bold; font-size: 18px;" id="yearDisplay">${ano}</span>
+                          <button class="btnYear" style="padding: 6px 10px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px;">Ano ▶</button>
+                      </div>
+                      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+              `;
+
+              for (let m = 1; m <= 12; m++) {
+                  const ativo = m === mes ? 'background: #0066cc; color: white; font-weight: bold;' : 'background: #f9f9f9; border: 1px solid #ddd;';
+                  html += `
+                      <button type="button" class="btnMes" data-mes="${m}" style="padding: 8px; cursor: pointer; ${ativo} border-radius: 4px; border: none;">
+                          ${meses_nomes[m - 1].substring(0, 3)}
+                      </button>
+                  `;
+              }
+
+              html += `
+                      </div>
+                  </div>
+                  <div style="text-align: right; margin-top: 12px;">
+                      <button class="btnCancel" style="padding: 6px 12px; margin-right: 6px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px;">Cancelar</button>
+                      <button class="btnOk" style="padding: 6px 12px; cursor: pointer; background: #0066cc; color: white; border: none; border-radius: 4px;">OK</button>
+                  </div>
+              `;
+
+              picker.innerHTML = html;
+              overlay.appendChild(picker);
+              document.body.appendChild(overlay);
+
+              let selectedMes = mes;
+              let selectedAno = ano;
+
+              picker.querySelectorAll('.btnMes').forEach(btn => {
+                  btn.addEventListener('click', function() {
+                      picker.querySelectorAll('.btnMes').forEach(b => {
+                          b.style.background = '#f9f9f9';
+                          b.style.color = '#000';
+                          b.style.fontWeight = 'normal';
+                          b.style.border = '1px solid #ddd';
+                      });
+                      this.style.background = '#0066cc';
+                      this.style.color = 'white';
+                      this.style.fontWeight = 'bold';
+                      this.style.border = 'none';
+                      selectedMes = Number(this.dataset.mes);
+                  });
+              });
+
+              picker.querySelectorAll('.btnYear').forEach((btn, idx) => {
+                  btn.addEventListener('click', function() {
+                      if (idx === 0) selectedAno--;
+                      else selectedAno++;
+                      picker.querySelector('#yearDisplay').textContent = selectedAno;
+                  });
+              });
+
+              picker.querySelector('.btnOk').addEventListener('click', function() {
+                  const mesStr = String(selectedMes).padStart(2, '0');
+                  campo.value = `${mesStr}/${selectedAno}`;
+                  overlay.remove();
+              });
+
+              picker.querySelector('.btnCancel').addEventListener('click', function() {
+                  overlay.remove();
+              });
+
+              overlay.addEventListener('click', function(e) {
+                  if (e.target === this) overlay.remove();
+              });
+            }
+
             // 6) Eventos filtros
             // Máscara de entrada
             const maskInput = (e) => {
@@ -936,6 +1056,12 @@
             on('#to2', 'input', maskInput);
             on('#from1', 'input', maskInput);
             on('#to1', 'input', maskInput);
+
+            // Calendar picker ao clicar
+            on('#from2', 'focus', () => mostrarCalendarioAlimentacao(el('#from2')));
+            on('#to2', 'focus', () => mostrarCalendarioAlimentacao(el('#to2')));
+            on('#from1', 'focus', () => mostrarCalendarioAlimentacao(el('#from1')));
+            on('#to1', 'focus', () => mostrarCalendarioAlimentacao(el('#to1')));
 
             // Botão Filtrar 2
             on('#btnFiltrar2', 'click', () => refreshMain());
@@ -1004,8 +1130,16 @@
 
             // ===== helpers locais =====
             function mesesSel(fromSel, toSel) {
-                const from = el(fromSel)?.value || null;
-                const to = el(toSel)?.value || null;
+                // Converter MM/YYYY para YYYY-MM
+                const convertToYm = (displayVal) => {
+                  if (!displayVal) return null;
+                  const match = displayVal.match(/^(\d{2})\/(\d{4})$/);
+                  return match ? `${match[2]}-${match[1]}` : null;
+                };
+                const fromDisplay = el(fromSel)?.value || null;
+                const toDisplay = el(toSel)?.value || null;
+                const from = convertToYm(fromDisplay);
+                const to = convertToYm(toDisplay);
                 return inRange(MESES, from, to);
             }
 
