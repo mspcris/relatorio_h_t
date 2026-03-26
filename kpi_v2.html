@@ -516,7 +516,9 @@
                                       inputmode="numeric"
                                       autocomplete="off"
                                     />
+                                    <button id="btnFiltrar1" class="btn btn-sm btn-primary" title="Aplicar filtro">🔍 Filtrar</button>
                                     <button id="reset1" class="btn btn-sm btn-outline-secondary">Reset</button>
+                                    <button id="btnMesAtual1" class="btn btn-sm btn-outline-info">Mês Atual</button>
                                 </div>
                             </div>
                             <div class="flex-grow-1">
@@ -558,7 +560,9 @@
                                   inputmode="numeric"
                                   autocomplete="off"
                                 />
+                                <button id="btnFiltrar2" class="btn btn-sm btn-primary" title="Aplicar filtro">🔍 Filtrar</button>
                                 <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
+                                <button id="btnMesAtual2" class="btn btn-sm btn-outline-info">Mês Atual</button>
                             </div>
                         </div>
                         <div class="flex-grow-1">
@@ -1697,8 +1701,10 @@
         }
 
         function attachHandlers(lastFull) {
-            if (el('#from1')) el('#from1').addEventListener('change', () => { renderSel1(); });
-            if (el('#to1')) el('#to1').addEventListener('change', () => { renderSel1(); });
+            // Bloco 1: Filtrar
+            if (el('#btnFiltrar1')) el('#btnFiltrar1').addEventListener('click', () => { renderSel1(); });
+
+            // Bloco 1: Reset
             if (el('#reset1')) el('#reset1').addEventListener('click', () => {
                 el('#from1').value = MESES[0];
                 el('#to1').value = lastFull;
@@ -1707,8 +1713,20 @@
                 renderSel1();
             });
 
-            if (el('#from2')) el('#from2').addEventListener('change', () => { renderSel2(); });
-            if (el('#to2')) el('#to2').addEventListener('change', () => { renderSel2(); });
+            // Bloco 1: Mês Atual
+            if (el('#btnMesAtual1')) el('#btnMesAtual1').addEventListener('click', () => {
+                const hoje = new Date();
+                const mesStr = String(hoje.getMonth() + 1).padStart(2, '0');
+                const anoStr = String(hoje.getFullYear());
+                el('#from1').value = `${mesStr}/${anoStr}`;
+                el('#to1').value = `${mesStr}/${anoStr}`;
+                renderSel1();
+            });
+
+            // Bloco 2: Filtrar
+            if (el('#btnFiltrar2')) el('#btnFiltrar2').addEventListener('click', () => { renderSel2(); });
+
+            // Bloco 2: Reset
             if (el('#reset2')) el('#reset2').addEventListener('click', () => {
                 const [y, m] = lastFull.split('-').map(Number);
                 const d = new Date(y, m - 1, 1);
@@ -1718,6 +1736,16 @@
                 sel2 = 'ALL';
                 window.sel2 = sel2;
                 markActiveMulti('#postoTabs2', sel2);
+                renderSel2();
+            });
+
+            // Bloco 2: Mês Atual
+            if (el('#btnMesAtual2')) el('#btnMesAtual2').addEventListener('click', () => {
+                const hoje = new Date();
+                const mesStr = String(hoje.getMonth() + 1).padStart(2, '0');
+                const anoStr = String(hoje.getFullYear());
+                el('#from2').value = `${mesStr}/${anoStr}`;
+                el('#to2').value = `${mesStr}/${anoStr}`;
                 renderSel2();
             });
 
