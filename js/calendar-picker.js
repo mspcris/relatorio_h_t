@@ -41,32 +41,49 @@ function mostrarCalendario(campo, mode = 'month') {
     const existing = document.getElementById('pickerOverlay');
     if (existing) existing.remove();
 
+    // Overlay transparente (só para capturar click fora)
     const overlay = document.createElement('div');
     overlay.id = 'pickerOverlay';
     overlay.style.cssText = `
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.4);
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: transparent;
         z-index: 9999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
     `;
 
     const picker = document.createElement('div');
     picker.style.cssText = `
-        position: relative;
+        position: fixed;
         background: white;
         border-radius: 16px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-        padding: 24px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+        padding: 20px;
         z-index: 10000;
-        min-width: 320px;
-        max-width: 400px;
+        min-width: 300px;
+        max-width: 360px;
+        border: 1px solid #e0e0e0;
     `;
+
+    // Posicionar próximo ao campo
+    const rect = campo.getBoundingClientRect();
+    const pickerWidth = 320;
+    const pickerHeight = mode === 'day' ? 420 : 280;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let top = rect.bottom + 6;
+    let left = rect.left;
+
+    // Não sair pela direita
+    if (left + pickerWidth > vw - 8) left = vw - pickerWidth - 8;
+    // Não sair pela esquerda
+    if (left < 8) left = 8;
+    // Se não couber abaixo, abre acima
+    if (top + pickerHeight > vh - 8) top = rect.top - pickerHeight - 6;
+
+    picker.style.top  = top  + 'px';
+    picker.style.left = left + 'px';
 
     const valor = campo.value.trim();
     let ano = new Date().getFullYear();

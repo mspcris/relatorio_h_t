@@ -99,10 +99,32 @@
       if (!document.getElementById('iaDeep') && anchor && anchor.parentNode) {
         const btn = document.createElement('button');
         btn.id = 'iaDeep';
-        btn.className = 'btn btn-sm btn-info';
-        btn.style.cssText = 'font-weight:600;letter-spacing:.3px';
-        btn.innerHTML = '🤖 IA';
+        btn.className = 'btn btn-sm';
+        btn.style.cssText = `
+          background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+          color: white;
+          font-weight: 700;
+          letter-spacing: 1px;
+          font-size: 0.78rem;
+          border: 1px solid rgba(100, 180, 255, 0.35);
+          border-radius: 8px;
+          padding: 5px 12px;
+          box-shadow: 0 0 10px rgba(80, 140, 255, 0.25), 0 2px 6px rgba(0,0,0,0.3);
+          transition: all 0.25s ease;
+          text-transform: uppercase;
+        `;
+        btn.innerHTML = '<span style="background: linear-gradient(90deg,#a78bfa,#60a5fa); -webkit-background-clip:text; -webkit-text-fill-color:transparent; font-size:1rem; font-weight:900;">AI</span>';
         btn.title = 'Abrir assistente de IA';
+        btn.onmouseenter = () => {
+          btn.style.boxShadow = '0 0 18px rgba(100,160,255,0.5), 0 4px 12px rgba(0,0,0,0.4)';
+          btn.style.transform = 'translateY(-2px)';
+          btn.style.borderColor = 'rgba(140, 200, 255, 0.6)';
+        };
+        btn.onmouseleave = () => {
+          btn.style.boxShadow = '0 0 10px rgba(80,140,255,0.25), 0 2px 6px rgba(0,0,0,0.3)';
+          btn.style.transform = '';
+          btn.style.borderColor = 'rgba(100, 180, 255, 0.35)';
+        };
 
         anchor.parentNode.insertBefore(btn, anchor.nextSibling);
 

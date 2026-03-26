@@ -231,6 +231,115 @@ text-align: left;
 .lg-neg { background: rgba(220, 53, 69, 1); }
 
 /* ============================================================
+   FILTER INLINE — tudo numa linha: datas + ações + postos
+   ============================================================ */
+.filter-inline {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.filter-date-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.filter-date-input {
+    width: 88px !important;
+    min-width: 88px !important;
+}
+
+.filter-sep {
+    width: 1px;
+    height: 28px;
+    background: var(--apple-border);
+    flex-shrink: 0;
+    align-self: flex-end;
+    margin-bottom: 2px;
+}
+
+/* Postos individuais inline (sem Todos, sem flex-grow) */
+.posto-tabs-inline {
+    display: flex;
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    align-items: center;
+}
+
+.posto-tabs-inline .nav-item {
+    flex-shrink: 0;
+}
+
+.posto-tabs-inline .nav-link {
+    padding: 5px 10px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    border-radius: var(--border-radius-sm);
+    color: var(--apple-text-secondary);
+    border: 1px solid var(--apple-border);
+    background: var(--apple-bg-secondary);
+    transition: all 0.2s ease;
+    line-height: 1;
+}
+
+.posto-tabs-inline .nav-link:hover {
+    background: var(--camim-green-light);
+    border-color: var(--camim-green-bright);
+    color: var(--camim-green-dark);
+    font-weight: 600;
+    transform: translateY(-1px);
+}
+
+.posto-tabs-inline .nav-link.active {
+    background: linear-gradient(135deg, var(--camim-green-bright) 0%, var(--camim-green-dark) 100%);
+    border-color: transparent;
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(0, 220, 100, 0.3);
+}
+
+/* Oculta o "Todos" gerado pelo buildPostoTabs — usamos o grupo acima */
+.posto-tabs-inline .nav-item:first-child {
+    display: none;
+}
+
+/* Botão calendário */
+.btn-cal {
+    background: var(--apple-bg-secondary);
+    border: 1px solid var(--apple-border);
+    color: var(--apple-text-secondary);
+    padding: 5px 8px;
+    border-radius: var(--border-radius-sm);
+    transition: all 0.2s ease;
+    align-self: flex-end;
+}
+
+.btn-cal:hover {
+    border-color: var(--camim-green-bright);
+    background: var(--camim-green-light);
+    transform: translateY(-1px);
+}
+
+/* ============================================================
+   ANIMAÇÃO UNIFORME — todos os botões
+   ============================================================ */
+.btn:not(:disabled) {
+    transition: all 0.2s ease;
+}
+
+.btn-outline-secondary:not(:disabled):hover,
+.btn-outline-info:not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================================
    BOTÕES DE AGRUPAMENTO — Postos (Todos, Altamiro, Couto)
    ============================================================ */
 .posto-groups {
