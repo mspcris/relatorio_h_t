@@ -625,7 +625,16 @@
         const el = s => document.querySelector(s);
         const on = (s, e, f) => { const o = document.querySelector(s); if (o) o.addEventListener(e, f) }
         const inRange = (labels, from, to) => labels.filter(m => (!from || m >= from) && (!to || m <= to));
-        const setMonth = (sel, val) => { const e = document.querySelector(sel); if (e) e.value = (val || '').slice(0, 7); };
+        const setMonth = (sel, val) => {
+          const e = document.querySelector(sel);
+          if (!e) return;
+          if (e.type === 'text' && val) {
+            const [a, m] = val.slice(0, 7).split('-');
+            e.value = `${m}/${a}`;
+          } else {
+            e.value = (val || '').slice(0, 7);
+          }
+        };
 
         // ====== Grupos de Postos ======
         const GRUPOS_POSTO = {
@@ -917,13 +926,44 @@
             };
 
             // 6) Eventos filtros
-            on('#from2', 'change', refreshMain);
-            on('#to2', 'change', refreshMain);
-            on('#reset2', 'click', () => { if (!last12.length) return; setMonth('#from2', last12[0]); setMonth('#to2', last12.at(-1)); refreshMain(); });
+            // Máscara de entrada
+            const maskInput = (e) => {
+              let v = e.target.value.replace(/\D/g, '');
+              if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2, 6);
+              e.target.value = v;
+            };
+            on('#from2', 'input', maskInput);
+            on('#to2', 'input', maskInput);
+            on('#from1', 'input', maskInput);
+            on('#to1', 'input', maskInput);
 
-            on('#from1', 'change', refreshCompare);
-            on('#to1', 'change', refreshCompare);
+            // Botão Filtrar 2
+            on('#btnFiltrar2', 'click', () => refreshMain());
+            // Botão Reset 2
+            on('#reset2', 'click', () => { if (!last12.length) return; setMonth('#from2', last12[0]); setMonth('#to2', last12.at(-1)); refreshMain(); });
+            // Botão Mês Atual 2
+            on('#btnMesAtual2', 'click', () => {
+              const hoje = new Date();
+              const m = String(hoje.getMonth() + 1).padStart(2, '0');
+              const a = String(hoje.getFullYear());
+              el('#from2').value = `${m}/${a}`;
+              el('#to2').value = `${m}/${a}`;
+              refreshMain();
+            });
+
+            // Botão Filtrar 1
+            on('#btnFiltrar1', 'click', () => refreshCompare());
+            // Botão Reset 1
             on('#reset1', 'click', () => { if (!last12.length) return; setMonth('#from1', last12[0]); setMonth('#to1', last12.at(-1)); refreshCompare(); });
+            // Botão Mês Atual 1
+            on('#btnMesAtual1', 'click', () => {
+              const hoje = new Date();
+              const m = String(hoje.getMonth() + 1).padStart(2, '0');
+              const a = String(hoje.getFullYear());
+              el('#from1').value = `${m}/${a}`;
+              el('#to1').value = `${m}/${a}`;
+              refreshCompare();
+            });
 
             // 7) Toggle Comparar
             on('#btnComparar', 'click', () => {
