@@ -10,7 +10,7 @@
   // ── Lista canônica — única fonte de verdade ──────────────────────────
   var MENU = [
     { href: '/index.html',                         icon: 'fa-home',                    label: 'Home' },
-    { href: '/indicadores.html',                   icon: 'fa-tachometer-alt',          label: 'Indicadores' },
+    { href: '/monitorarrobos.html',                 icon: 'fa-tachometer-alt',          label: 'Monitorar Robôs' },
     { href: '/kpi_home.html',                      icon: 'fa-book-open',               label: 'Leia-me' },
     { type: 'sep' },
     { href: '/kpi_v2.html',                        icon: 'fa-chart-line',              label: 'KPI Mensalidades' },
