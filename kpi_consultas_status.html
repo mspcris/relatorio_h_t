@@ -1385,14 +1385,10 @@
 
       initCharts();
 
-      // Aguarda DOM estar pronto antes de anexar handlers de eventos
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-          attachHandlers();
-        });
-      } else {
+      // Aguarda DOM estar completamente pronto
+      setTimeout(() => {
         attachHandlers();
-      }
+      }, 100);
 
       await renderSel1();
       await renderSel2();
