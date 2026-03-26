@@ -41,49 +41,66 @@ function mostrarCalendario(campo, mode = 'month') {
     const existing = document.getElementById('pickerOverlay');
     if (existing) existing.remove();
 
-    // Overlay transparente (só para capturar click fora)
     const overlay = document.createElement('div');
     overlay.id = 'pickerOverlay';
+    const isMobileOverlay = window.innerWidth < 600;
     overlay.style.cssText = `
         position: fixed;
         top: 0; left: 0;
         width: 100%; height: 100%;
-        background: transparent;
+        background: ${isMobileOverlay ? 'rgba(0,0,0,0.35)' : 'transparent'};
         z-index: 9999;
     `;
 
-    const picker = document.createElement('div');
-    picker.style.cssText = `
-        position: fixed;
-        background: white;
-        border-radius: 16px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-        padding: 20px;
-        z-index: 10000;
-        min-width: 300px;
-        max-width: 360px;
-        border: 1px solid #e0e0e0;
-    `;
-
-    // Posicionar próximo ao campo
-    const rect = campo.getBoundingClientRect();
-    const pickerWidth = 320;
-    const pickerHeight = mode === 'day' ? 420 : 280;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+    const isMobile = vw < 600;
 
-    let top = rect.bottom + 6;
-    let left = rect.left;
+    const picker = document.createElement('div');
 
-    // Não sair pela direita
-    if (left + pickerWidth > vw - 8) left = vw - pickerWidth - 8;
-    // Não sair pela esquerda
-    if (left < 8) left = 8;
-    // Se não couber abaixo, abre acima
-    if (top + pickerHeight > vh - 8) top = rect.top - pickerHeight - 6;
+    if (isMobile) {
+        // Mobile: centralizado horizontalmente, fixo na parte inferior da tela
+        const pickerW = Math.min(340, vw - 16);
+        picker.style.cssText = `
+            position: fixed;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.22);
+            padding: 20px;
+            z-index: 10000;
+            width: ${pickerW}px;
+            left: ${(vw - pickerW) / 2}px;
+            bottom: 24px;
+            border: 1px solid #e0e0e0;
+        `;
+    } else {
+        // Desktop: ancorado ao campo
+        picker.style.cssText = `
+            position: fixed;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+            padding: 20px;
+            z-index: 10000;
+            min-width: 300px;
+            max-width: 360px;
+            border: 1px solid #e0e0e0;
+        `;
 
-    picker.style.top  = top  + 'px';
-    picker.style.left = left + 'px';
+        const rect = campo.getBoundingClientRect();
+        const pickerWidth = 320;
+        const pickerHeight = mode === 'day' ? 420 : 280;
+
+        let top = rect.bottom + 6;
+        let left = rect.left;
+
+        if (left + pickerWidth > vw - 8) left = vw - pickerWidth - 8;
+        if (left < 8) left = 8;
+        if (top + pickerHeight > vh - 8) top = rect.top - pickerHeight - 6;
+
+        picker.style.top  = top  + 'px';
+        picker.style.left = left + 'px';
+    }
 
     const valor = campo.value.trim();
     let ano = new Date().getFullYear();
