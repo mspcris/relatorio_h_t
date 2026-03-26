@@ -221,9 +221,11 @@
             <div>
               <label class="mb-0 small d-block">Selecione o Período — Comparação</label>
               <div class="month-inputs">
-                <input id="from1" type="month" class="form-control form-control-sm" />
-                <input id="to1" type="month" class="form-control form-control-sm" />
+                <input id="from1" type="text" placeholder="DD/MM/YYYY" maxlength="10" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
+                <input id="to1" type="text" placeholder="DD/MM/YYYY" maxlength="10" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
+                <button id="btnFiltrar1" class="btn btn-sm btn-outline-primary">Filtrar</button>
                 <button id="reset1" class="btn btn-sm btn-outline-secondary">Reset</button>
+                <button id="btnMesAtual1" class="btn btn-sm btn-outline-secondary">Mês Atual</button>
               </div>
             </div>
             <div class="flex-grow-1">
@@ -247,9 +249,11 @@
           <div>
             <label class="mb-0 small d-block">Selecione o Período — Consultas</label>
             <div class="month-inputs">
-              <input id="from2" type="month" class="form-control form-control-sm" />
-              <input id="to2" type="month" class="form-control form-control-sm" />
+              <input id="from2" type="text" placeholder="DD/MM/YYYY" maxlength="10" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
+              <input id="to2" type="text" placeholder="DD/MM/YYYY" maxlength="10" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
+              <button id="btnFiltrar2" class="btn btn-sm btn-outline-primary">Filtrar</button>
               <button id="reset2" class="btn btn-sm btn-outline-secondary">Reset</button>
+              <button id="btnMesAtual2" class="btn btn-sm btn-outline-secondary">Mês Atual</button>
             </div>
           </div>
           <div class="flex-grow-1">
@@ -418,6 +422,42 @@
     const from = ymAdd(now, -3);
     const to = lastCompleteMonth();
     return { from, to };
+  }
+  function isoToDisplay(iso){
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  }
+  function displayToIso(display){
+    if (!display) return null;
+    const match = String(display).trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!match) return null;
+    const iso = `${match[3]}-${match[2]}-${match[1]}`;
+    const dt = new Date(`${iso}T00:00:00`);
+    if (Number.isNaN(dt.getTime())) return null;
+    return iso;
+  }
+  function ymToDisplayDate(ym, endOfMonth = false){
+    if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return '';
+    const [y, m] = ym.split('-').map(Number);
+    const day = endOfMonth ? new Date(y, m, 0).getDate() : 1;
+    return `${String(day).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`;
+  }
+  function setDateRangeInputs(prefix, fromYm, toYm){
+    if (el(`#from${prefix}`)) el(`#from${prefix}`).value = ymToDisplayDate(fromYm, false);
+    if (el(`#to${prefix}`)) el(`#to${prefix}`).value = ymToDisplayDate(toYm, true);
+  }
+  function getYmRangeFromInputs(prefix){
+    const fromIso = displayToIso(el(`#from${prefix}`)?.value || '');
+    const toIso = displayToIso(el(`#to${prefix}`)?.value || '');
+    if (!fromIso || !toIso || fromIso > toIso) return null;
+    return { from: fromIso.slice(0,7), to: toIso.slice(0,7) };
+  }
+  function maskDateInput(e){
+    let v = e.target.value.replace(/\D/g, '').slice(0, 8);
+    if (v.length > 4) v = `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`;
+    else if (v.length > 2) v = `${v.slice(0, 2)}/${v.slice(2)}`;
+    e.target.value = v;
   }
 
   // =========================================================
@@ -998,9 +1038,9 @@
   // Render (Sel1 / Sel2)
   // =========================================================
   async function renderSel1(){
-    const from = el('#from1')?.value;
-    const to = el('#to1')?.value;
-    if(!from || !to) return;
+    const range = getYmRangeFromInputs('1');
+    if(!range) return;
+    const { from, to } = range;
 
     await loadConsolidated();
 
@@ -1028,9 +1068,9 @@
   }
 
   async function renderSel2(){
-    const from = el('#from2')?.value;
-    const to = el('#to2')?.value;
-    if(!from || !to) return;
+    const range = getYmRangeFromInputs('2');
+    if(!range) return;
+    const { from, to } = range;
 
     await loadConsolidated();
 
@@ -1069,27 +1109,175 @@
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
+  function mostrarCalendarioDia(campo){
+    const existing = document.getElementById('pickerOverlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'pickerOverlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.3);
+      z-index: 9999;
+    `;
+
+    const picker = document.createElement('div');
+    picker.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      padding: 16px;
+      z-index: 10000;
+      min-width: 320px;
+    `;
+    overlay.appendChild(picker);
+    document.body.appendChild(overlay);
+
+    const now = new Date();
+    const currentIso = displayToIso(campo.value) || `${now.getFullYear()}-${pad2(now.getMonth()+1)}-${pad2(now.getDate())}`;
+    const [y0, m0, d0] = currentIso.split('-').map(Number);
+    let selectedAno = Number.isFinite(y0) ? y0 : now.getFullYear();
+    let selectedMes = Number.isFinite(m0) ? m0 : (now.getMonth() + 1);
+    let selectedDia = Number.isFinite(d0) ? d0 : now.getDate();
+    const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+    const renderMeses = () => {
+      let html = `
+        <div style="text-align:center;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <button type="button" class="btnYearPrev" style="padding:6px 10px;cursor:pointer;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;">◀ Ano</button>
+            <span style="font-weight:bold;font-size:18px;">${selectedAno}</span>
+            <button type="button" class="btnYearNext" style="padding:6px 10px;cursor:pointer;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;">Ano ▶</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+      `;
+      for (let m = 1; m <= 12; m++) {
+        const ativo = m === selectedMes ? 'background:#0066cc;color:#fff;font-weight:bold;' : 'background:#f9f9f9;border:1px solid #ddd;';
+        html += `<button type="button" class="btnMes" data-mes="${m}" style="padding:8px;cursor:pointer;${ativo} border-radius:4px;border:none;">${mesesNomes[m - 1]}</button>`;
+      }
+      html += `
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <button type="button" class="btnCancel" style="padding:6px 12px;cursor:pointer;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;">Cancelar</button>
+        </div>
+      `;
+      picker.innerHTML = html;
+      picker.querySelector('.btnYearPrev').addEventListener('click', () => { selectedAno--; renderMeses(); });
+      picker.querySelector('.btnYearNext').addEventListener('click', () => { selectedAno++; renderMeses(); });
+      picker.querySelector('.btnCancel').addEventListener('click', () => overlay.remove());
+      picker.querySelectorAll('.btnMes').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectedMes = Number(btn.dataset.mes);
+          renderDias();
+        });
+      });
+    };
+
+    const renderDias = () => {
+      const maxDias = new Date(selectedAno, selectedMes, 0).getDate();
+      if (selectedDia > maxDias) selectedDia = maxDias;
+      let html = `
+        <div style="text-align:center;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <button type="button" class="btnBack" style="padding:6px 10px;cursor:pointer;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;">◀ Mês</button>
+            <span style="font-weight:bold;font-size:18px;">${pad2(selectedMes)}/${selectedAno}</span>
+            <span style="width:58px;"></span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">
+      `;
+      for (let d = 1; d <= maxDias; d++) {
+        const ativo = d === selectedDia ? 'background:#0066cc;color:#fff;font-weight:bold;' : 'background:#f9f9f9;border:1px solid #ddd;';
+        html += `<button type="button" class="btnDia" data-dia="${d}" style="padding:8px 0;cursor:pointer;${ativo} border-radius:4px;border:none;">${d}</button>`;
+      }
+      html += `
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <button type="button" class="btnCancel" style="padding:6px 12px;margin-right:6px;cursor:pointer;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;">Cancelar</button>
+          <button type="button" class="btnOk" style="padding:6px 12px;cursor:pointer;background:#0066cc;color:#fff;border:none;border-radius:4px;">OK</button>
+        </div>
+      `;
+      picker.innerHTML = html;
+      picker.querySelector('.btnBack').addEventListener('click', renderMeses);
+      picker.querySelector('.btnCancel').addEventListener('click', () => overlay.remove());
+      picker.querySelectorAll('.btnDia').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectedDia = Number(btn.dataset.dia);
+          picker.querySelectorAll('.btnDia').forEach(b => {
+            b.style.background = '#f9f9f9';
+            b.style.color = '#000';
+            b.style.fontWeight = 'normal';
+            b.style.border = '1px solid #ddd';
+          });
+          btn.style.background = '#0066cc';
+          btn.style.color = '#fff';
+          btn.style.fontWeight = 'bold';
+          btn.style.border = 'none';
+        });
+      });
+      picker.querySelector('.btnOk').addEventListener('click', () => {
+        campo.value = `${pad2(selectedDia)}/${pad2(selectedMes)}/${selectedAno}`;
+        overlay.remove();
+      });
+    };
+
+    overlay.addEventListener('click', function(e){
+      if (e.target === this) overlay.remove();
+    });
+    renderMeses();
+  }
+
   function attachHandlers(){
-    if(el('#from1')) el('#from1').addEventListener('change', ()=>renderSel1());
-    if(el('#to1')) el('#to1').addEventListener('change', ()=>renderSel1());
+    if(el('#from1')) el('#from1').addEventListener('input', maskDateInput);
+    if(el('#to1')) el('#to1').addEventListener('input', maskDateInput);
+    if(el('#from2')) el('#from2').addEventListener('input', maskDateInput);
+    if(el('#to2')) el('#to2').addEventListener('input', maskDateInput);
+    if(el('#from1')) el('#from1').addEventListener('focus', ()=>mostrarCalendarioDia(el('#from1')));
+    if(el('#to1')) el('#to1').addEventListener('focus', ()=>mostrarCalendarioDia(el('#to1')));
+    if(el('#from2')) el('#from2').addEventListener('focus', ()=>mostrarCalendarioDia(el('#from2')));
+    if(el('#to2')) el('#to2').addEventListener('focus', ()=>mostrarCalendarioDia(el('#to2')));
+
+    if(el('#btnFiltrar1')) el('#btnFiltrar1').addEventListener('click', ()=>renderSel1());
+    if(el('#btnFiltrar2')) el('#btnFiltrar2').addEventListener('click', ()=>renderSel2());
     if(el('#reset1')) el('#reset1').addEventListener('click', ()=>{
       const d = defaultFromTo();
-      el('#from1').value = d.from;
-      el('#to1').value = d.to;
+      setDateRangeInputs('1', d.from, d.to);
       sel1 = 'ALL';
       markActiveMulti('#postoTabs1', sel1);
       renderSel1();
     });
 
-    if(el('#from2')) el('#from2').addEventListener('change', ()=>renderSel2());
-    if(el('#to2')) el('#to2').addEventListener('change', ()=>renderSel2());
     if(el('#reset2')) el('#reset2').addEventListener('click', ()=>{
       const d = defaultFromTo();
-      el('#from2').value = d.from;
-      el('#to2').value = d.to;
+      setDateRangeInputs('2', d.from, d.to);
       sel2 = 'ALL';
       window.sel2 = sel2;
       markActiveMulti('#postoTabs2', sel2);
+      renderSel2();
+    });
+    if(el('#btnMesAtual1')) el('#btnMesAtual1').addEventListener('click', ()=>{
+      const now = new Date();
+      const fromIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-01`;
+      const toIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+      el('#from1').value = isoToDisplay(fromIso);
+      el('#to1').value = isoToDisplay(toIso);
+      renderSel1();
+    });
+    if(el('#btnMesAtual2')) el('#btnMesAtual2').addEventListener('click', ()=>{
+      const now = new Date();
+      const fromIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-01`;
+      const toIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+      el('#from2').value = isoToDisplay(fromIso);
+      el('#to2').value = isoToDisplay(toIso);
       renderSel2();
     });
 
@@ -1145,10 +1333,8 @@
       POSTOS = postosBase.filter(p => /^[A-Z]$/.test(p)).sort();
 
       const d = defaultFromTo();
-      if(el('#from1')) el('#from1').value = d.from;
-      if(el('#to1')) el('#to1').value = d.to;
-      if(el('#from2')) el('#from2').value = d.from;
-      if(el('#to2')) el('#to2').value = d.to;
+      setDateRangeInputs('1', d.from, d.to);
+      setDateRangeInputs('2', d.from, d.to);
 
       sel1 = 'ALL'; sel2 = 'ALL';
 

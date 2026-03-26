@@ -372,9 +372,11 @@
                         <div>
                             <label class="mb-0 small d-block">Janela de Datas</label>
                             <div class="month-inputs">
-                                <input id="fromD" type="date" class="form-control form-control-sm" />
-                                <input id="toD" type="date" class="form-control form-control-sm" />
+                                <input id="fromD" type="text" placeholder="DD/MM/YYYY" maxlength="10" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
+                                <input id="toD" type="text" placeholder="DD/MM/YYYY" maxlength="10" inputmode="numeric" autocomplete="off" class="form-control form-control-sm" />
+                                <button id="btnFiltrarD" class="btn btn-sm btn-outline-primary">Filtrar</button>
                                 <button id="resetD" class="btn btn-sm btn-outline-secondary">Reset</button>
+                                <button id="btnMesAtualD" class="btn btn-sm btn-outline-secondary">Mês Atual</button>
                             </div>
                         </div>
                         <div class="flex-grow-1">
@@ -502,6 +504,20 @@
                 .format(dateObj); // ex: '2025-11-08'
 
         const todayKey = () => ymdBR(new Date());
+        const isoToDisplay = (iso) => {
+            if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+            const [y, m, d] = iso.split('-');
+            return `${d}/${m}/${y}`;
+        };
+        const displayToIso = (display) => {
+            if (!display) return null;
+            const match = String(display).trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+            if (!match) return null;
+            const iso = `${match[3]}-${match[2]}-${match[1]}`;
+            const dt = new Date(`${iso}T00:00:00`);
+            if (Number.isNaN(dt.getTime())) return null;
+            return iso;
+        };
 
         // shift sobre chave 'YYYY-MM-DD'
         function shiftYMD(ymd, days) {
@@ -594,12 +610,7 @@
             POSTOS = [...new Set(all.map(r => r.posto).filter(x => /^[A-Z]$/.test(x)))].sort();
 
             // datas default: mês atual 1º dia -> hoje (sempre em SP)
-            const tKey = todayKey();
-            const ym = tKey.slice(0, 7);
-            el('#fromD').value = `${ym}-01`;
-            el('#toD').value = tKey;
-            dateFrom = el('#fromD').value;
-            dateTo = el('#toD').value;
+            setRangeMesAtual();
 
             buildPostoTabs();
             wireGrupoButtons();
@@ -615,6 +626,162 @@
                 const t = new Date(lm).toLocaleString('pt-BR', { timeZone: TZ });
                 elInfo.textContent = `• dados (${label}) ${t}`;
             } catch { }
+        }
+
+        function aplicarFiltroDatas() {
+            const fromIso = displayToIso(el('#fromD')?.value || '');
+            const toIso = displayToIso(el('#toD')?.value || '');
+            if (!fromIso || !toIso || fromIso > toIso) return;
+            dateFrom = fromIso;
+            dateTo = toIso;
+            renderAll();
+        }
+
+        function setRangeMesAtual() {
+            const tKey = todayKey();
+            const ym = tKey.slice(0, 7);
+            const fromIso = `${ym}-01`;
+            const toIso = tKey;
+            if (el('#fromD')) el('#fromD').value = isoToDisplay(fromIso);
+            if (el('#toD')) el('#toD').value = isoToDisplay(toIso);
+            dateFrom = fromIso;
+            dateTo = toIso;
+        }
+
+        function maskDateInput(e) {
+            let v = e.target.value.replace(/\D/g, '').slice(0, 8);
+            if (v.length > 4) v = `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`;
+            else if (v.length > 2) v = `${v.slice(0, 2)}/${v.slice(2)}`;
+            e.target.value = v;
+        }
+
+        function mostrarCalendarioDia(campo) {
+            const existing = document.getElementById('pickerOverlay');
+            if (existing) existing.remove();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'pickerOverlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.3);
+                z-index: 9999;
+            `;
+
+            const picker = document.createElement('div');
+            picker.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: white;
+                border-radius: 6px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                padding: 16px;
+                z-index: 10000;
+                min-width: 320px;
+            `;
+            overlay.appendChild(picker);
+            document.body.appendChild(overlay);
+
+            const now = new Date();
+            const currentIso = displayToIso(campo.value) || todayKey();
+            const [y0, m0, d0] = currentIso.split('-').map(Number);
+            let selectedAno = Number.isFinite(y0) ? y0 : now.getFullYear();
+            let selectedMes = Number.isFinite(m0) ? m0 : (now.getMonth() + 1);
+            let selectedDia = Number.isFinite(d0) ? d0 : now.getDate();
+            const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+            const renderMeses = () => {
+                let html = `
+                    <div style="text-align:center;margin-bottom:12px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <button type="button" class="btnYearPrev" style="padding:6px 10px;cursor:pointer;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;">◀ Ano</button>
+                            <span style="font-weight:bold;font-size:18px;" id="yearDisplay">${selectedAno}</span>
+                            <button type="button" class="btnYearNext" style="padding:6px 10px;cursor:pointer;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;">Ano ▶</button>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+                `;
+                for (let m = 1; m <= 12; m++) {
+                    const ativo = m === selectedMes ? 'background:#0066cc;color:#fff;font-weight:bold;' : 'background:#f9f9f9;border:1px solid #ddd;';
+                    html += `<button type="button" class="btnMes" data-mes="${m}" style="padding:8px;cursor:pointer;${ativo} border-radius:4px;border:none;">${mesesNomes[m - 1]}</button>`;
+                }
+                html += `
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <button type="button" class="btnCancel" style="padding:6px 12px;cursor:pointer;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;">Cancelar</button>
+                    </div>
+                `;
+                picker.innerHTML = html;
+                picker.querySelector('.btnYearPrev').addEventListener('click', () => { selectedAno--; renderMeses(); });
+                picker.querySelector('.btnYearNext').addEventListener('click', () => { selectedAno++; renderMeses(); });
+                picker.querySelector('.btnCancel').addEventListener('click', () => overlay.remove());
+                picker.querySelectorAll('.btnMes').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        selectedMes = Number(btn.dataset.mes);
+                        renderDias();
+                    });
+                });
+            };
+
+            const renderDias = () => {
+                const maxDias = new Date(selectedAno, selectedMes, 0).getDate();
+                if (selectedDia > maxDias) selectedDia = maxDias;
+                let html = `
+                    <div style="text-align:center;margin-bottom:12px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <button type="button" class="btnBack" style="padding:6px 10px;cursor:pointer;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;">◀ Mês</button>
+                            <span style="font-weight:bold;font-size:18px;">${String(selectedMes).padStart(2, '0')}/${selectedAno}</span>
+                            <span style="width:58px;"></span>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">
+                `;
+                for (let d = 1; d <= maxDias; d++) {
+                    const ativo = d === selectedDia ? 'background:#0066cc;color:#fff;font-weight:bold;' : 'background:#f9f9f9;border:1px solid #ddd;';
+                    html += `<button type="button" class="btnDia" data-dia="${d}" style="padding:8px 0;cursor:pointer;${ativo} border-radius:4px;border:none;">${d}</button>`;
+                }
+                html += `
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <button type="button" class="btnCancel" style="padding:6px 12px;margin-right:6px;cursor:pointer;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;">Cancelar</button>
+                        <button type="button" class="btnOk" style="padding:6px 12px;cursor:pointer;background:#0066cc;color:#fff;border:none;border-radius:4px;">OK</button>
+                    </div>
+                `;
+                picker.innerHTML = html;
+                picker.querySelector('.btnBack').addEventListener('click', renderMeses);
+                picker.querySelector('.btnCancel').addEventListener('click', () => overlay.remove());
+                picker.querySelectorAll('.btnDia').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        selectedDia = Number(btn.dataset.dia);
+                        picker.querySelectorAll('.btnDia').forEach(b => {
+                            b.style.background = '#f9f9f9';
+                            b.style.color = '#000';
+                            b.style.fontWeight = 'normal';
+                            b.style.border = '1px solid #ddd';
+                        });
+                        btn.style.background = '#0066cc';
+                        btn.style.color = '#fff';
+                        btn.style.fontWeight = 'bold';
+                        btn.style.border = 'none';
+                    });
+                });
+                picker.querySelector('.btnOk').addEventListener('click', () => {
+                    const d = String(selectedDia).padStart(2, '0');
+                    const m = String(selectedMes).padStart(2, '0');
+                    campo.value = `${d}/${m}/${selectedAno}`;
+                    overlay.remove();
+                });
+            };
+
+            overlay.addEventListener('click', function (e) {
+                if (e.target === this) overlay.remove();
+            });
+            renderMeses();
         }
 
         /* =================== UI =================== */
@@ -687,15 +854,19 @@
                 box.style.display = show ? 'block' : 'none';
                 setPressed(el('#btnComparar'), show, 'secondary');
             });
-            el('#fromD')?.addEventListener('change', () => { dateFrom = el('#fromD').value; renderAll(); });
-            el('#toD')?.addEventListener('change', () => { dateTo = el('#toD').value; renderAll(); });
+            el('#fromD')?.addEventListener('input', maskDateInput);
+            el('#toD')?.addEventListener('input', maskDateInput);
+            el('#fromD')?.addEventListener('focus', () => mostrarCalendarioDia(el('#fromD')));
+            el('#toD')?.addEventListener('focus', () => mostrarCalendarioDia(el('#toD')));
+            el('#btnFiltrarD')?.addEventListener('click', aplicarFiltroDatas);
             el('#resetD')?.addEventListener('click', () => {
-                const tKey2 = todayKey();
-                const ym2 = tKey2.slice(0, 7);
-                el('#fromD').value = `${ym2}-01`; el('#toD').value = tKey2;
-                dateFrom = el('#fromD').value; dateTo = el('#toD').value;
+                setRangeMesAtual();
                 selPosto = 'ALL'; postoSet = null;
                 buildPostoTabs();
+                renderAll();
+            });
+            el('#btnMesAtualD')?.addEventListener('click', () => {
+                setRangeMesAtual();
                 renderAll();
             });
         }

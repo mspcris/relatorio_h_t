@@ -329,13 +329,17 @@
                             <div class="form-row">
                                 <div class="col-md-3">
                                     <label>Data inicial</label>
-                                    <input id="dtIni" type="month" class="form-control" />
+                                    <input id="dtIni" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control" />
                                 </div>
                                 <div class="col-md-3">
                                     <label>Data final</label>
-                                    <input id="dtFim" type="month" class="form-control" />
+                                    <input id="dtFim" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control" />
                                 </div>
                                 <div class="col-md-6 d-flex align-items-end">
+                                    <button id="applyRange" class="btn btn-sm btn-outline-primary mr-2">Filtrar</button>
+                                    <button id="resetRange" class="btn btn-sm btn-outline-secondary mr-2">Reset</button>
+                                    <button id="btnMesAtual" class="btn btn-sm btn-outline-secondary mr-2">Mês Atual</button>
+                                    <button id="refreshBtnRange" class="btn btn-sm btn-outline-secondary">Recarregar dados</button>
                                 </div>
                             </div>
                         </div>
@@ -586,6 +590,31 @@
             for (let i = 0; i < arr.length; i++) { s += arr[i]; if (i >= win) s -= arr[i - win]; out.push(i >= win - 1 ? s / win : null); }
             return out;
         }
+        function ymToDisplay(ym) {
+            if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return '';
+            const [y, m] = ym.split('-');
+            return `${m}/${y}`;
+        }
+        function displayToYm(displayVal) {
+            if (!displayVal) return null;
+            const match = String(displayVal).trim().match(/^(\d{2})\/(\d{4})$/);
+            return match ? `${match[2]}-${match[1]}` : null;
+        }
+        function setMonthInput(sel, ym) {
+            const input = document.querySelector(sel);
+            if (!input) return;
+            input.value = ymToDisplay(ym);
+        }
+        function getMonthInput(sel) {
+            const input = document.querySelector(sel);
+            if (!input) return null;
+            return displayToYm(input.value);
+        }
+        function maskMonthInput(e) {
+            let v = e.target.value.replace(/\D/g, '').slice(0, 6);
+            if (v.length > 2) v = `${v.slice(0, 2)}/${v.slice(2)}`;
+            e.target.value = v;
+        }
         // composição correta: recebe série em % (ex.: 0.56) e retorna 12m também em %
         function rolling12Compounded(percentSeries) {
             const out = [];
@@ -774,9 +803,130 @@
             });
         }
 
+        // Calendar picker para campos de mês
+        function mostrarCalendario(campo) {
+            const existing = document.getElementById('pickerOverlay');
+            if (existing) existing.remove();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'pickerOverlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.3);
+                z-index: 9999;
+            `;
+
+            const picker = document.createElement('div');
+            picker.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: white;
+                border-radius: 6px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                padding: 16px;
+                z-index: 10000;
+                min-width: 300px;
+            `;
+
+            const valor = campo.value.trim();
+            let ano = new Date().getFullYear();
+            let mes = new Date().getMonth() + 1;
+
+            if (valor) {
+                const match = valor.match(/^(\d{2})\/(\d{4})$/);
+                if (match) {
+                    mes = Number(match[1]);
+                    ano = Number(match[2]);
+                }
+            }
+
+            const meses_nomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                                 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+            let html = `
+                <div style="text-align: center; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <button class="btnYear" style="padding: 6px 10px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px;">◀ Ano</button>
+                        <span style="font-weight: bold; font-size: 18px;" id="yearDisplay">${ano}</span>
+                        <button class="btnYear" style="padding: 6px 10px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px;">Ano ▶</button>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+            `;
+
+            for (let m = 1; m <= 12; m++) {
+                const ativo = m === mes ? 'background: #0066cc; color: white; font-weight: bold;' : 'background: #f9f9f9; border: 1px solid #ddd;';
+                html += `
+                    <button type="button" class="btnMes" data-mes="${m}" style="padding: 8px; cursor: pointer; ${ativo} border-radius: 4px; border: none;">
+                        ${meses_nomes[m - 1].substring(0, 3)}
+                    </button>
+                `;
+            }
+
+            html += `
+                    </div>
+                </div>
+                <div style="text-align: right; margin-top: 12px;">
+                    <button class="btnCancel" style="padding: 6px 12px; margin-right: 6px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px;">Cancelar</button>
+                    <button class="btnOk" style="padding: 6px 12px; cursor: pointer; background: #0066cc; color: white; border: none; border-radius: 4px;">OK</button>
+                </div>
+            `;
+
+            picker.innerHTML = html;
+            overlay.appendChild(picker);
+            document.body.appendChild(overlay);
+
+            let selectedMes = mes;
+            let selectedAno = ano;
+
+            picker.querySelectorAll('.btnMes').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    picker.querySelectorAll('.btnMes').forEach(b => {
+                        b.style.background = '#f9f9f9';
+                        b.style.color = '#000';
+                        b.style.fontWeight = 'normal';
+                        b.style.border = '1px solid #ddd';
+                    });
+                    this.style.background = '#0066cc';
+                    this.style.color = 'white';
+                    this.style.fontWeight = 'bold';
+                    this.style.border = 'none';
+                    selectedMes = Number(this.dataset.mes);
+                });
+            });
+
+            picker.querySelectorAll('.btnYear').forEach((btn, idx) => {
+                btn.addEventListener('click', function() {
+                    if (idx === 0) selectedAno--;
+                    else selectedAno++;
+                    picker.querySelector('#yearDisplay').textContent = selectedAno;
+                });
+            });
+
+            picker.querySelector('.btnOk').addEventListener('click', function() {
+                const mesStr = String(selectedMes).padStart(2, '0');
+                campo.value = `${mesStr}/${selectedAno}`;
+                overlay.remove();
+            });
+
+            picker.querySelector('.btnCancel').addEventListener('click', function() {
+                overlay.remove();
+            });
+
+            overlay.addEventListener('click', function(e) {
+                if (e.target === this) overlay.remove();
+            });
+        }
+
         /* ====== Filtro e aplicação automática ====== */
         function applyRange() {
-            const ini = $("#dtIni").val(); const fim = $("#dtFim").val();
+            const ini = getMonthInput('#dtIni');
+            const fim = getMonthInput('#dtFim');
             const inRange = ym => (!ini || ym >= ini) && (!fim || ym <= fim);
 
             const ip = IPCA.filter(r => inRange(r.ref_date));
@@ -827,20 +977,46 @@
         }
 
         /* ====== Bootstrap ====== */
-        $(document).on("change", "#dtIni,#dtFim", applyRange);
-        $("#resetRange").on("click", () => { const { ini, fim } = lastCompleteWindow(); $("#dtIni").val(ini); $("#dtFim").val(fim); applyRange(); });
-        $("#refreshBtn").on("click", async (e) => {
-            e.preventDefault();
-            await loadAll(); kpisFromData();
-            const { ini, fim } = lastCompleteWindow(); $("#dtIni").val(ini); $("#dtFim").val(fim); applyRange();
+        const on = (sel, evt, fn) => {
+            const node = document.querySelector(sel);
+            if (node) node.addEventListener(evt, fn);
+        };
+        on('#dtIni', 'input', maskMonthInput);
+        on('#dtFim', 'input', maskMonthInput);
+        on('#dtIni', 'focus', () => mostrarCalendario(document.querySelector('#dtIni')));
+        on('#dtFim', 'focus', () => mostrarCalendario(document.querySelector('#dtFim')));
+        on('#applyRange', 'click', () => applyRange());
+        on('#resetRange', 'click', () => {
+            const { ini, fim } = lastCompleteWindow();
+            setMonthInput('#dtIni', ini);
+            setMonthInput('#dtFim', fim);
+            applyRange();
         });
+        on('#btnMesAtual', 'click', () => {
+            const now = new Date();
+            const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            setMonthInput('#dtIni', ym);
+            setMonthInput('#dtFim', ym);
+            applyRange();
+        });
+        const onRefresh = async (e) => {
+            e.preventDefault();
+            await loadAll();
+            kpisFromData();
+            const { ini, fim } = lastCompleteWindow();
+            setMonthInput('#dtIni', ini);
+            setMonthInput('#dtFim', fim);
+            applyRange();
+        };
+        on('#refreshBtn', 'click', onRefresh);
+        on('#refreshBtnRange', 'click', onRefresh);
 
         (async function init() {
             await loadAll();
             kpisFromData();
             const { ini, fim } = lastCompleteWindow();
-            $("#dtIni").val(ini);
-            $("#dtFim").val(fim);
+            setMonthInput('#dtIni', ini);
+            setMonthInput('#dtFim', fim);
             const inRange = ym => ym >= ini && ym <= fim;
             const pt = PTAX.filter(r => inRange(r.date.slice(0, 7)));
             const ip = IPCA.filter(r => inRange(r.ref_date));

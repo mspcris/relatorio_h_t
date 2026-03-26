@@ -440,7 +440,7 @@ canvas { max-width: 100% !important; }
         
         <div class="input-group input-group-sm month-w">
 
-  <input id="from2" type="text" class="form-control" placeholder="Selecione...">
+  <input id="from2" type="text" class="form-control" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off">
   <div class="input-group-append">
     <span class="input-group-text"><i class="far fa-calendar-alt"></i></span>
   </div>
@@ -448,7 +448,7 @@ canvas { max-width: 100% !important; }
 
 <div class="input-group input-group-sm month-w">
 
-  <input id="to2" type="text" class="form-control" placeholder="Selecione...">
+  <input id="to2" type="text" class="form-control" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off">
   <div class="input-group-append">
     <span class="input-group-text"><i class="far fa-calendar-alt"></i></span>
   </div>
@@ -867,35 +867,32 @@ window.USER_POSTOS = {{ USER_POSTOS | tojson | default('[]') }};
 
 
 
-      function ymFromDate(d) {
+function ymFromDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function ymToDisplay(ym) {
+  if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return '';
+  const [y, m] = ym.split('-');
+  return `${m}/${y}`;
+}
+
+function displayToYm(displayVal) {
+  if (!displayVal) return null;
+  const match = String(displayVal).trim().match(/^(\d{2})\/(\d{4})$/);
+  return match ? `${match[2]}-${match[1]}` : null;
 }
 
 function setPickerYM(sel, ym) {
   const el = document.querySelector(sel);
   if (!el || !ym) return;
-  const [y, m] = ym.split('-').map(Number);
-  const dt = new Date(y, m - 1, 1);
-
-  // atualiza datepicker e o valor canônico
-  $(el).datepicker('update', dt);
-  el.dataset.ym = ym;
+  el.value = ymToDisplay(ym);
 }
 
 function getPickerYM(sel) {
   const el = document.querySelector(sel);
   if (!el) return '';
-  // fonte da verdade: data-ym
-  if (el.dataset.ym && /^\d{4}-\d{2}$/.test(el.dataset.ym)) return el.dataset.ym;
-
-  // fallback: tenta parse do datepicker
-  const dt = $(el).datepicker('getDate');
-  if (dt instanceof Date && !isNaN(dt)) {
-    const out = ymFromDate(dt);
-    el.dataset.ym = out;
-    return out;
-  }
-  return '';
+  return displayToYm(el.value) || '';
 }
 
       // ================== STATE ==================
@@ -991,6 +988,140 @@ function getPickerYM(sel) {
       // ================== DATA ACCESS ==================
       function inRange(labels, from, to) {
         return labels.filter(m => (!from || m >= from) && (!to || m <= to));
+      }
+
+      // Calendar picker para campos de mês
+      function mostrarCalendarioAlimentacao(campo) {
+        const existing = document.getElementById('pickerOverlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'pickerOverlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.3);
+            z-index: 9999;
+        `;
+
+        const picker = document.createElement('div');
+        picker.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 16px;
+            z-index: 10000;
+            min-width: 300px;
+        `;
+
+        const valor = campo.value.trim();
+        let ano = new Date().getFullYear();
+        let mes = new Date().getMonth() + 1;
+
+        if (valor) {
+            const match = valor.match(/^(\d{2})\/(\d{4})$/);
+            if (match) {
+                mes = Number(match[1]);
+                ano = Number(match[2]);
+            }
+        }
+
+        const meses_nomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                             'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+        let html = `
+            <div style="text-align: center; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <button class="btnYear" style="padding: 6px 10px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px;">◀ Ano</button>
+                    <span style="font-weight: bold; font-size: 18px;" id="yearDisplay">${ano}</span>
+                    <button class="btnYear" style="padding: 6px 10px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px;">Ano ▶</button>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+        `;
+
+        for (let m = 1; m <= 12; m++) {
+            const ativo = m === mes ? 'background: #0066cc; color: white; font-weight: bold;' : 'background: #f9f9f9; border: 1px solid #ddd;';
+            html += `
+                <button type="button" class="btnMes" data-mes="${m}" style="padding: 8px; cursor: pointer; ${ativo} border-radius: 4px; border: none;">
+                    ${meses_nomes[m - 1].substring(0, 3)}
+                </button>
+            `;
+        }
+
+        html += `
+                </div>
+            </div>
+            <div style="text-align: right; margin-top: 12px;">
+                <button class="btnCancel" style="padding: 6px 12px; margin-right: 6px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px;">Cancelar</button>
+                <button class="btnOk" style="padding: 6px 12px; cursor: pointer; background: #0066cc; color: white; border: none; border-radius: 4px;">OK</button>
+            </div>
+        `;
+
+        picker.innerHTML = html;
+        overlay.appendChild(picker);
+        document.body.appendChild(overlay);
+
+        let selectedMes = mes;
+        let selectedAno = ano;
+
+        picker.querySelectorAll('.btnMes').forEach(btn => {
+            btn.addEventListener('click', function() {
+                picker.querySelectorAll('.btnMes').forEach(b => {
+                    b.style.background = '#f9f9f9';
+                    b.style.color = '#000';
+                    b.style.fontWeight = 'normal';
+                    b.style.border = '1px solid #ddd';
+                });
+                this.style.background = '#0066cc';
+                this.style.color = 'white';
+                this.style.fontWeight = 'bold';
+                this.style.border = 'none';
+                selectedMes = Number(this.dataset.mes);
+            });
+        });
+
+        picker.querySelectorAll('.btnYear').forEach((btn, idx) => {
+            btn.addEventListener('click', function() {
+                if (idx === 0) selectedAno--;
+                else selectedAno++;
+                picker.querySelector('#yearDisplay').textContent = selectedAno;
+            });
+        });
+
+        picker.querySelector('.btnOk').addEventListener('click', function() {
+            const mesStr = String(selectedMes).padStart(2, '0');
+            campo.value = `${mesStr}/${selectedAno}`;
+            overlay.remove();
+        });
+
+        picker.querySelector('.btnCancel').addEventListener('click', function() {
+            overlay.remove();
+        });
+
+        overlay.addEventListener('click', function(e) {
+            if (e.target === this) overlay.remove();
+        });
+      }
+
+      function mesesSel(fromSel, toSel) {
+        // Converter MM/YYYY para YYYY-MM
+        const convertToYm = (displayVal) => {
+          if (!displayVal) return null;
+          const match = displayVal.match(/^(\d{2})\/(\d{4})$/);
+          return match ? `${match[2]}-${match[1]}` : null;
+        };
+        const fromDisplay = document.querySelector(fromSel)?.value || null;
+        const toDisplay = document.querySelector(toSel)?.value || null;
+        const from = convertToYm(fromDisplay);
+        const to = convertToYm(toDisplay);
+        return inRange(MESES, from, to);
       }
 
       function rowsForMonthAndPostos(ym, selection) {
@@ -1431,27 +1562,6 @@ function uniqueDoctors(rows) {
           const DEF_FROM = ym(startDate);
           const DEF_TO = ym(endDate);
 
-
-// 1) inicializa o datepicker (modo mês) primeiro
-$('#from2, #to2').datepicker({
-  format: 'MM yyyy',
-  minViewMode: 1,
-  maxViewMode: 2,
-  language: 'pt-BR',
-  autoclose: true,
-  todayBtn: true,
-  clearBtn: true,
-  todayHighlight: true
-}).on('changeDate', function () {
-  const dt = $(this).datepicker('getDate');
-  this.dataset.ym = dt ? ymFromDate(dt) : '';
-  renderSel2();
-}).on('clearDate', function () {
-  this.dataset.ym = '';
-  renderSel2();
-});
-
-// 2) agora sim pode setar valores
 setPickerYM('#from2', DEF_FROM);
 setPickerYM('#to2', DEF_TO);
 
@@ -1467,6 +1577,16 @@ setPickerYM('#to2', DEF_TO);
           renderSel2();
 
           const on = (s, e, f) => { const o = document.querySelector(s); if (o) o.addEventListener(e, f); };
+          const maskInput = (e) => {
+            let v = e.target.value.replace(/\D/g, '');
+            if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2, 6);
+            e.target.value = v;
+          };
+
+          on('#from2', 'input', maskInput);
+          on('#to2', 'input', maskInput);
+          on('#from2', 'focus', () => mostrarCalendarioAlimentacao(document.querySelector('#from2')));
+          on('#to2', 'focus', () => mostrarCalendarioAlimentacao(document.querySelector('#to2')));
 
           on('#reset2', 'click', () => {
             setPickerYM('#from2', DEF_FROM);
@@ -1474,6 +1594,14 @@ setPickerYM('#to2', DEF_TO);
 
             sel2 = 'ALL';
             markActiveMulti('#postoTabs2', sel2);
+            renderSel2();
+          });
+          on('#btnFiltrar2', 'click', () => renderSel2());
+          on('#btnMesAtual2', 'click', () => {
+            const hoje = new Date();
+            const ymAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+            setPickerYM('#from2', ymAtual);
+            setPickerYM('#to2', ymAtual);
             renderSel2();
           });
 
@@ -1490,11 +1618,7 @@ setPickerYM('#to2', DEF_TO);
       });
 
       function renderSel2() {
-        const from = getPickerYM('#from2');
-        const to = getPickerYM('#to2');
-
-
-        const months = inRange(MESES, from, to);
+        const months = mesesSel('#from2', '#to2');
         if (!months.length) return;
 
         const aggs = months.map(m => monthAgg(m, sel2));
