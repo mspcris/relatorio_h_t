@@ -20,9 +20,6 @@ function initCalendarPicker(inputSelector, buttonSelector, mode = 'month') {
         return;
     }
 
-    // Remove focus event (se existir)
-    input.removeEventListener('focus', openCalendar);
-
     // Adiciona click no botão
     button.addEventListener('click', (e) => {
         console.log(`[Calendar] Click detectado no botão`);
