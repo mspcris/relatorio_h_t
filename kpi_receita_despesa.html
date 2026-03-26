@@ -1828,12 +1828,13 @@
 
       function _atualizarBotoesGrupo() {
         const ativo = _grupoAtivo();
+        const isTodos = !selectedPostos || selectedPostos.size === 0 || selectedPostos === 'ALL';
+        const btnT = el('#btnGrupoTodos');
         const btnA = el('#btnGrupoAltamiro');
         const btnC = el('#btnGrupoCouto');
-        if (btnA) btnA.classList.toggle('btn-secondary',    ativo === 'altamiro');
-        if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
-        if (btnC) btnC.classList.toggle('btn-secondary',    ativo === 'couto');
-        if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+        if (btnT) btnT.classList.toggle('active', isTodos);
+        if (btnA) btnA.classList.toggle('active', ativo === 'altamiro');
+        if (btnC) btnC.classList.toggle('active', ativo === 'couto');
       }
 
       function selectGrupo(grupo) {
@@ -1847,7 +1848,7 @@
         const btnA = el('#btnGrupoAltamiro');
         const btnC = el('#btnGrupoCouto');
         const btnT = el('#btnGrupoTodos');
-        if (btnT) btnT.onclick = () => selectGrupo('todos');
+        if (btnT) btnT.onclick = () => { selectedPostos = new Set(); buildPostoTabs(); _atualizarBotoesGrupo(); updateAll(); };
         if (btnA) btnA.onclick = () => selectGrupo('altamiro');
         if (btnC) btnC.onclick = () => selectGrupo('couto');
         if (window.initCalendarPicker) { initCalendarPicker('#from2','#btnCalendarFrom2','month'); initCalendarPicker('#to2','#btnCalendarTo2','month'); }

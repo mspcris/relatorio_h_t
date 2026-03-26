@@ -53,6 +53,7 @@
     </script>
 
     <!-- Chat / IA -->
+    <script src="/js/calendar-picker.js?v=20260326"></script>
     <script src="/js/chat.js?v=20251114"></script>
 
     <style>
@@ -316,35 +317,34 @@
 
                 <!-- FILTROS -->
                 <div class="card">
-                    <div class="filter-bar">
-                        <div>
-                            <label class="mb-0 small d-block">Mês de Referência</label>
-                            <div style="display: flex; gap: 6px; align-items: center;">
-                                <input
-                                  id="monthSelect"
-                                  type="text"
-                                  class="form-control form-control-sm"
-                                  placeholder="MM/YYYY"
-                                  maxlength="7"
-                                  inputmode="numeric"
-                                  autocomplete="off"
-                                  style="width: 100px;"
-                                />
-                                <button id="btnFiltrar" class="btn btn-sm btn-primary" title="Aplicar filtro">🔍 Filtrar</button>
-                                <button id="btnMesAtual" class="btn btn-sm btn-outline-info">Mês Atual</button>
-                            </div>
+                  <div class="kpi-filter-panel">
+                    <div class="kpi-filter-row kpi-filter-postos">
+                      <div class="posto-groups">
+                        <div class="btn-group">
+                          <button id="btnGrupoTodos" class="btn active">Todos</button>
+                          <button id="btnGrupoAltamiro" class="btn" title="A B G I N R X Y">Altamiro</button>
+                          <button id="btnGrupoCouto" class="btn" title="C D J M P">Couto</button>
                         </div>
-                        <div class="flex-grow-1">
-                            <label class="mb-0 small d-block">Posto(s) de Admissão</label>
-                            <div class="d-flex align-items-center">
-                                <ul id="postoTabs" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
-                                <div class="ml-2 flex-shrink-0">
-                                    <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
-                                    <button id="btnGrupoCouto" class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
-                                </div>
-                            </div>
-                        </div>
+                      </div>
+                      <div class="filter-sep-v"></div>
+                      <ul id="postoTabs" class="nav nav-pills posto-tabs-inline"></ul>
                     </div>
+                    <div class="kpi-filter-row kpi-filter-actions">
+                      <div class="filter-dates-row">
+                        <div class="filter-date-group">
+                          <label class="filter-label">Mês</label>
+                          <div class="filter-date-wrap">
+                            <input id="monthSelect" type="text" class="form-control form-control-sm filter-date-input" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" />
+                            <button id="btnCalendarMes" class="btn btn-sm btn-cal" title="Abrir calendário">📅</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="filter-btns-row">
+                        <button id="btnFiltrar" class="btn btn-sm btn-primary" title="Aplicar filtro">🔍 Filtrar</button>
+                        <button id="btnMesAtual" class="btn btn-sm btn-outline-info">Mês Atual</button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- RESUMO ESTATÍSTICO -->
@@ -559,10 +559,10 @@
             const anoStr = thirteenMonthsAgo.getFullYear();
             const mesStr = String(thirteenMonthsAgo.getMonth() + 1).padStart(2, '0');
             selMonth = `${anoStr}-${mesStr}`;
-            el('monthSelect').value = `${mesStr}/${anoStr}`;
+            el('#monthSelect').value = `${mesStr}/${anoStr}`;
 
             // Máscara de entrada
-            el('monthSelect').addEventListener('input', (e) => {
+            el('#monthSelect').addEventListener('input', (e) => {
                 let v = e.target.value.replace(/\D/g, '');
                 if (v.length > 2) {
                     v = v.slice(0, 2) + '/' + v.slice(2, 6);
@@ -570,14 +570,12 @@
                 e.target.value = v;
             });
 
-            // Calendar picker ao clicar
-            el('monthSelect').addEventListener('focus', () => {
-                mostrarCalendarioMes(el('monthSelect'));
-            });
+            // Calendar picker
+            if (typeof initCalendarPicker === 'function') initCalendarPicker('#monthSelect', '#btnCalendarMes', 'month');
 
             // Botão Filtrar
             if (el('#btnFiltrar')) el('#btnFiltrar').addEventListener('click', () => {
-                const valor = el('monthSelect').value.trim();
+                const valor = el('#monthSelect').value.trim();
                 const match = valor.match(/^(\d{2})\/(\d{4})$/);
                 if (match) {
                     selMonth = `${match[2]}-${match[1]}`;
@@ -590,7 +588,7 @@
                 const hoje = new Date();
                 const mesStr = String(hoje.getMonth() + 1).padStart(2, '0');
                 const anoStr = String(hoje.getFullYear());
-                el('monthSelect').value = `${mesStr}/${anoStr}`;
+                el('#monthSelect').value = `${mesStr}/${anoStr}`;
                 selMonth = `${anoStr}-${mesStr}`;
                 render();
             });
@@ -599,8 +597,9 @@
             buildPostoTabs('#postoTabs', () => selPostos, v => { selPostos = v; }, () => render());
 
             // Grupos
-            el('btnGrupoAltamiro').addEventListener('click', () => selectGrupo('altamiro'));
-            el('btnGrupoCouto').addEventListener('click', () => selectGrupo('couto'));
+            el('#btnGrupoTodos')?.addEventListener('click', () => { selPostos = 'ALL'; buildPostoTabs('#postoTabs', () => selPostos, v => { selPostos = v; }, () => render()); _atualizarBotoesGrupo(); render(); });
+            el('#btnGrupoAltamiro')?.addEventListener('click', () => selectGrupo('altamiro'));
+            el('#btnGrupoCouto')?.addEventListener('click', () => selectGrupo('couto'));
         }
 
         function buildPostoTabs(ulId, getSel, setSel, onChange) {
@@ -667,16 +666,13 @@
 
         function _atualizarBotoesGrupo() {
             const ativo = _grupoAtivo();
-            const btnA = el('btnGrupoAltamiro');
-            const btnC = el('btnGrupoCouto');
-            if (btnA) {
-                btnA.classList.toggle('btn-secondary', ativo === 'altamiro');
-                btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
-            }
-            if (btnC) {
-                btnC.classList.toggle('btn-secondary', ativo === 'couto');
-                btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
-            }
+            const isTodos = !selPostos || selPostos === 'ALL' || (selPostos instanceof Set && selPostos.size === 0);
+            const btnT = el('#btnGrupoTodos');
+            const btnA = el('#btnGrupoAltamiro');
+            const btnC = el('#btnGrupoCouto');
+            if (btnT) btnT.classList.toggle('active', isTodos);
+            if (btnA) btnA.classList.toggle('active', ativo === 'altamiro');
+            if (btnC) btnC.classList.toggle('active', ativo === 'couto');
         }
 
         async function loadData() {

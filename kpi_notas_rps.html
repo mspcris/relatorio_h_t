@@ -7,21 +7,31 @@
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap">
   <link rel="stylesheet" href="/css/style2.css?v=20260326">
   <link rel="stylesheet" href="/css/style_kpi.css?v=20260326">
+  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
 
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="/js/calendar-picker.js?v=20260326"></script>
 
   <style>
-    .filter-bar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;padding:10px;}
-    .scroll-tabs{display:flex;gap:6px;overflow:auto;white-space:nowrap;padding:6px 0;}
-    .scroll-tabs .nav-link{display:inline-block;min-width:52px;text-align:center;cursor:pointer;}
-    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;}
-    .muted{color:#6b7280;}
-    .mini{font-size:.85rem;}
-    .small-td{white-space:nowrap;}
+    :root { --kpi-loaded: 1; }
+    html { font-size: 16px; zoom: 1; }
+    body { font-size: 1rem; -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased;
+      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    body.text-sm { font-size: 1rem; }
+    .text-sm .btn, .text-sm .form-control, .text-sm .custom-select, .text-sm .page-link,
+    .text-sm .breadcrumb, .text-sm .nav-link, .text-sm .card-title { font-size: 1rem; }
+    h1,h2,h3 { margin-top:0; margin-bottom:.5rem; font-weight:600; line-height:1.25; }
+    h1 { font-size:2rem; } h2 { font-size:1.5rem; } h3,.card-title { font-size:1.25rem; font-weight:600; }
+    .sidebar .nav-link { font-size:.95rem; }
+    .brand-link .brand-text { font-size:1rem; }
+    .muted{color:#6b7280;} .mini{font-size:.85rem;} .small-td{white-space:nowrap;}
   </style>
 
   <script>
@@ -218,12 +228,13 @@
 
     function _atualizarBotoesGrupo() {
       const ativo = _grupoAtivo();
+      const isTodos = !selPostos || selPostos === 'ALL' || (selPostos instanceof Set && selPostos.size === 0);
+      const btnT = el('#btnGrupoTodos');
       const btnA = el('#btnGrupoAltamiro');
       const btnC = el('#btnGrupoCouto');
-      if (btnA) btnA.classList.toggle('btn-secondary',         ativo === 'altamiro');
-      if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
-      if (btnC) btnC.classList.toggle('btn-secondary',         ativo === 'couto');
-      if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+      if (btnT) btnT.classList.toggle('active', isTodos);
+      if (btnA) btnA.classList.toggle('active', ativo === 'altamiro');
+      if (btnC) btnC.classList.toggle('active', ativo === 'couto');
     }
 
     function selectGrupo(grupo) {
@@ -234,11 +245,17 @@
     }
 
     function wireGrupoButtons() {
+      const btnT = el('#btnGrupoTodos');
       const btnA = el('#btnGrupoAltamiro');
       const btnC = el('#btnGrupoCouto');
+      if (btnT) btnT.onclick = () => { selPostos = 'ALL'; buildPostoTabs('#postoTabs'); _atualizarBotoesGrupo(); render(); };
       if (btnA) btnA.onclick = () => selectGrupo('altamiro');
       if (btnC) btnC.onclick = () => selectGrupo('couto');
     }
+
+    // Converters ISO ↔ display
+    const isoToDisplay = iso => { if(!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; };
+    const displayToIso = disp => { if(!disp) return null; const match = String(disp).trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return match ? `${match[3]}-${match[2]}-${match[1]}` : null; };
 
     // =========================
     // Regras Operadora (não confundir SDM clínica)
@@ -556,9 +573,13 @@
     async function boot(){
       const postosUsuario = await carregarPostosDoUsuario();
 
-      // Datas default
-      el('#dataIni').value = dataIni;
-      el('#dataFim').value = dataFim;
+      // Datas default (DD/MM/YYYY)
+      el('#dataIni').value = isoToDisplay(dataIni);
+      el('#dataFim').value = isoToDisplay(dataFim);
+
+      // Calendar pickers
+      initCalendarPicker('#dataIni', '#btnCalendarIni', 'day');
+      initCalendarPicker('#dataFim', '#btnCalendarFim', 'day');
 
       // 1) sessão — sem fallback: lista vazia = sem acesso
       POSTOS = (postosUsuario && postosUsuario.length) ? postosUsuario : [];
@@ -573,40 +594,42 @@
       buildPostoTabs('#postoTabs');
       wireGrupoButtons();
 
-      // listeners
-      el('#dataIni').addEventListener('change', async ()=>{
-        dataIni = el('#dataIni').value;
+      // Botão Filtrar
+      el('#btnFiltrar')?.addEventListener('click', async ()=>{
+        const iniIso = displayToIso(el('#dataIni').value);
+        const fimIso = displayToIso(el('#dataFim').value);
+        if (iniIso) dataIni = iniIso;
+        if (fimIso) dataFim = fimIso;
+        selGrupo = el('#grupo').value;
         const newYm = dataIni.slice(0, 7);
-
         if(newYm !== ymSel){
           ymSel = newYm;
-
           if(!(postosUsuario && postosUsuario.length)){
             POSTOS = await detectPostosDisponiveis(ymSel);
-            if(!POSTOS.length){
-              el('#err').textContent = 'Sem JSONs encontrados para o mês selecionado.';
-              el('#postoTabs').innerHTML = '';
-              return;
-            }
-            el('#err').textContent = '';
-            selPostos = 'ALL';
-            buildPostoTabs('#postoTabs');
+            if(!POSTOS.length){ el('#err').textContent = 'Sem JSONs encontrados para o mês selecionado.'; return; }
+            el('#err').textContent = ''; selPostos = 'ALL'; buildPostoTabs('#postoTabs');
           }
-
           await loadMonth(ymSel);
         }
         render();
       });
 
-      el('#dataFim').addEventListener('change', ()=>{
-        dataFim = el('#dataFim').value;
+      // Botão Mês Atual
+      el('#btnMesAtual')?.addEventListener('click', async ()=>{
+        const hoje = new Date();
+        const ym = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+        dataIni = `${ym}-01`;
+        dataFim = lastDayStr(ym);
+        el('#dataIni').value = isoToDisplay(dataIni);
+        el('#dataFim').value = isoToDisplay(dataFim);
+        if(ym !== ymSel){
+          ymSel = ym;
+          await loadMonth(ymSel);
+        }
         render();
       });
 
-      el('#grupo').addEventListener('change', ()=>{
-        selGrupo = el('#grupo').value;
-        render();
-      });
+      el('#grupo').addEventListener('change', ()=>{ selGrupo = el('#grupo').value; render(); });
 
       el('#btnReload').addEventListener('click', async ()=>{
         const ym = ymSel;
@@ -649,155 +672,9 @@
   <div class="sidebar">
     <nav class="mt-2">
       <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
-
-        <li class="nav-item">
-          <a href="index.html" class="nav-link">
-            <i class="nav-icon fas fa-home"></i>
-            <p>Home Page</p>
-          </a>
-        </li>
-            <li class="nav-item">
-              <a href="indicadores.html" class="nav-link">
-                <i class="nav-icon fas fa-tachometer-alt"></i>
-                <p>Indicadores</p>
-              </a>
-            </li>
-              {% if USER_IS_ADMIN %}
-            <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
-              {% endif %}
-
-        <li class="nav-item">
-          <a href="kpi_home.html" class="nav-link">
-            <i class="nav-icon fas fa-book-open"></i>
-            <p>Leia-me</p>
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a href="alimentacao.html" class="nav-link">
-            <i class="nav-icon fas fa-utensils"></i>
-            <p>KPI Custo Alimentação</p>
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a href="medicos.html" class="nav-link">
-            <i class="nav-icon fas fa-notes-medical"></i>
-            <p>KPI Custo Médico</p>
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a href="ctrlq_relatorio.html" class="nav-link">
-            <i class="nav-icon fas fa-user-md"></i>
-            <p>KPI Médicos (Qualidade)</p>
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a href="kpi_v2.html" class="nav-link">
-            <i class="nav-icon fas fa-chart-line"></i>
-            <p>KPI Mensalidades</p>
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a href="kpi_vendas.html" class="nav-link">
-            <i class="nav-icon fas fa-shopping-cart"></i>
-            <p>KPI Vendas</p>
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a href="clientes.html" class="nav-link">
-            <i class="nav-icon fas fa-users"></i>
-            <p>Clientes</p>
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a href="KPI_prescricao.html" class="nav-link">
-            <i class="nav-icon fas fa-prescription-bottle-alt"></i>
-            <p>KPI Prescrições</p>
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a href="kpi_fidelizacao_cliente.html" class="nav-link">
-            <i class="nav-icon fas fa-handshake"></i>
-            <p>KPI Fidelização</p>
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a href="kpi_governo.html" class="nav-link">
-            <i class="nav-icon fas fa-landmark"></i>
-            <p>KPI Índices Oficiais</p>
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a href="kpi_liberty.html" class="nav-link">
-            <i class="nav-icon fas fa-passport"></i>
-            <p>KPI CAMIM Liberty</p>
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a href="kpi_receita_despesa.html" class="nav-link">
-            <i class="nav-icon fas fa-balance-scale"></i>
-            <p>KPI Receitas x Despesas</p>
-          </a>
-        </li>
-
-        <!-- KPI R x D com Rateio -->
-        <li class="nav-item">
-          <a href="kpi_receita_despesa_rateio.html" class="nav-link">
-            <i class="nav-icon fas fa-balance-scale"></i>
-            <p>KPI R x D com Rateio</p>
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a href="kpi_consultas_status.html" class="nav-link">
-            <i class="nav-icon fas fa-stethoscope"></i>
-            <p>KPI Consultas (Status)</p>
-          </a>
-        </li>
-
-        <!-- ATIVO NESTA PÁGINA -->
-        <li class="nav-item">
-          <a href="kpi_notas_rps.html" class="nav-link active">
-            <i class="nav-icon fas fa-file-invoice"></i>
-            <p>KPI Notas x RPS</p>
-          </a>
-        </li>
-
-
-
-         <li class="nav-item">
-            <a href="kpi_metas_vendas_mensalidades.html" class="nav-link">
-              <i class="nav-icon fas fa-bullseye"></i>
-              <p>KPI Metas (Mens/Vendas)</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="mais_servicos.html" class="nav-link">
-              <i class="nav-icon fas fa-th-large"></i>
-              <p>Mais Serviços</p>
-            </a>
-          </li>
-
-
-        <li class="nav-item">
-          <form method="POST" action="/session/logout" style="display:inline">
-            <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
-              <i class="nav-icon fas fa-sign-out-alt"></i>
-              <p>Sair</p>
-            </button>
-          </form>
-        </li>
-
+                    {% if USER_IS_ADMIN %}
+                    <li class="nav-item" id="__admin_marker" style="display:none"><a href="/admin"></a></li>
+                    {% endif %}
       </ul>
     </nav>
   </div>
@@ -815,54 +692,57 @@
       <div id="err" class="text-danger mb-2"></div>
 
       <div class="card">
-        <div class="filter-bar">
-          <div>
-            <label class="mb-0 small d-block">Data início</label>
-            <input id="dataIni" type="date" class="form-control form-control-sm" />
+        <div class="kpi-filter-panel">
+          <!-- Linha 1: postos -->
+          <div class="kpi-filter-row kpi-filter-postos">
+            <div class="posto-groups">
+              <div class="btn-group">
+                <button id="btnGrupoTodos" class="btn active">Todos</button>
+                <button id="btnGrupoAltamiro" class="btn" title="A B G I N R X Y">Altamiro</button>
+                <button id="btnGrupoCouto" class="btn" title="C D J M P">Couto</button>
+              </div>
+            </div>
+            <div class="filter-sep-v"></div>
+            <ul id="postoTabs" class="nav nav-pills posto-tabs-inline"></ul>
           </div>
-
-          <div>
-            <label class="mb-0 small d-block">Data fim</label>
-            <input id="dataFim" type="date" class="form-control form-control-sm" />
-          </div>
-
-          <div>
-            <label class="mb-0 small d-block">Grupo</label>
-            <select id="grupo" class="form-control form-control-sm">
-            <option value="ALL">Todos</option>
-            <option value="Clinica">Clínicas</option>
-            <option value="Laboratorio">Laboratório</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="mb-0 small d-block">Operadora</label>
-            <div class="d-flex" style="gap:14px;align-items:center">
-              <div class="custom-control custom-switch">
+          <!-- Linha 2: datas + filtros extras -->
+          <div class="kpi-filter-row kpi-filter-actions" style="flex-wrap:wrap;gap:10px;">
+            <div class="filter-dates-row">
+              <div class="filter-date-group">
+                <label class="filter-label">De</label>
+                <div class="filter-date-wrap">
+                  <input id="dataIni" type="text" placeholder="DD/MM/YYYY" maxlength="10" inputmode="numeric" autocomplete="off" class="form-control form-control-sm filter-date-input" />
+                  <button id="btnCalendarIni" class="btn btn-sm btn-cal" title="Abrir calendário">📅</button>
+                </div>
+              </div>
+              <div class="filter-date-group">
+                <label class="filter-label">Até</label>
+                <div class="filter-date-wrap">
+                  <input id="dataFim" type="text" placeholder="DD/MM/YYYY" maxlength="10" inputmode="numeric" autocomplete="off" class="form-control form-control-sm filter-date-input" />
+                  <button id="btnCalendarFim" class="btn btn-sm btn-cal" title="Abrir calendário">📅</button>
+                </div>
+              </div>
+            </div>
+            <div class="d-flex align-items-center" style="gap:8px;">
+              <select id="grupo" class="form-control form-control-sm" style="width:auto;">
+                <option value="ALL">Todos grupos</option>
+                <option value="Clinica">Clínicas</option>
+                <option value="Laboratorio">Laboratório</option>
+              </select>
+              <div class="custom-control custom-switch mb-0">
                 <input type="checkbox" class="custom-control-input" id="swCamim">
                 <label class="custom-control-label" for="swCamim">CAMIM</label>
               </div>
-              <div class="custom-control custom-switch">
+              <div class="custom-control custom-switch mb-0">
                 <input type="checkbox" class="custom-control-input" id="swSdm">
                 <label class="custom-control-label" for="swSdm">SDM</label>
               </div>
             </div>
-            <div class="mini muted mt-1">0 ou 1 marcado</div>
-          </div>
-
-          <div class="flex-grow-1">
-            <label class="mb-0 small d-block">Posto</label>
-            <div class="d-flex align-items-center">
-              <ul id="postoTabs" class="nav nav-pills scroll-tabs flex-grow-1"></ul>
-              <div class="ml-2 flex-shrink-0">
-                <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
-                <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
-              </div>
+            <div class="filter-btns-row">
+              <button id="btnFiltrar" class="btn btn-sm btn-primary">🔍 Filtrar</button>
+              <button id="btnMesAtual" class="btn btn-sm btn-outline-info">Mês Atual</button>
+              <button id="btnReload" class="btn btn-sm btn-outline-secondary">Recarregar</button>
             </div>
-          </div>
-
-          <div class="ml-auto">
-            <button id="btnReload" class="btn btn-sm btn-outline-secondary">Recarregar</button>
           </div>
         </div>
       </div>

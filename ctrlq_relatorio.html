@@ -10,28 +10,21 @@
 
 
 
+  <!-- CSS — ordem idêntica ao padrão do projeto -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-datepicker@1.10.0/dist/css/bootstrap-datepicker3.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap">
+  <link rel="stylesheet" href="/css/style2.css?v=20260326">
+  <link rel="stylesheet" href="/css/style_kpi.css?v=20260326">
+  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
 
-<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- JS Base -->
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap-datepicker@1.10.0/dist/js/bootstrap-datepicker.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap-datepicker@1.10.0/dist/locales/bootstrap-datepicker.pt-BR.min.js"></script>
-
-<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
-
-
-  <!-- CSS do projeto -->
-  <link rel="stylesheet" href="/css/style2.css">
-  <link rel="shortcut icon"
-    href="images/Logo Camim-01_50px.png"
-    type="image/x-icon">
-
-  <!-- Config de IA (mantido) -->
   <script>
     window.IA_API_URL = '/ia/analisar';
     window.PROMPTS_API_BASE = '/prompts';
@@ -39,24 +32,14 @@
   <script src="/js/calendar-picker.js?v=20260326"></script>
   <script src="/js/chat.js"></script>
 
-  <link rel="stylesheet" href="css/style_kpi.css">
-
 
   <style>
-    .stack { display: flex; flex-direction: column; gap: 12px; }
-    .filter-bar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; padding: 12px; }
-    .month-inputs { display: flex; gap: 6px; align-items: center; }
-    .scroll-tabs { overflow-x: auto; white-space: nowrap; flex-wrap: nowrap; }
-    .scroll-tabs .nav-item { display: inline-block; }
     .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 10px; }
     @media (max-width: 1200px) { .kpi-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); } }
-    @media (max-width: 640px) { .kpi-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 640px)  { .kpi-grid { grid-template-columns: 1fr; } }
     .chart-card .card-body { height: 320px; }
-    .mini { font-size: .85rem; }
-    .muted { color: #6c757d; }
     .clickable { cursor: pointer; }
     .badge-soft { background: rgba(0,0,0,.06); }
-    .table td, .table th { vertical-align: middle; }
     .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; background:rgba(0,0,0,.06); }
     /* Normaliza o visual do input month para ficar igual aos demais */
 input[type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off"].form-control {
@@ -956,10 +939,8 @@ function getPickerYM(sel) {
         const ativo = _grupoAtivo();
         const btnA = document.querySelector('#btnGrupoAltamiro');
         const btnC = document.querySelector('#btnGrupoCouto');
-        if (btnA) btnA.classList.toggle('btn-secondary',         ativo === 'altamiro');
-        if (btnA) btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro');
-        if (btnC) btnC.classList.toggle('btn-secondary',         ativo === 'couto');
-        if (btnC) btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto');
+        if (btnA) btnA.classList.toggle('active', ativo === 'altamiro');
+        if (btnC) btnC.classList.toggle('active', ativo === 'couto');
       }
 
       function selectGrupo(grupo) {

@@ -1536,6 +1536,47 @@
       let selectedPostos = new Set();
       let considerarRetirada = false;
 
+      const GRUPOS_POSTO = {
+        altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+        couto:    ['C', 'D', 'J', 'M', 'P'],
+      };
+
+      function _grupoAtivoRateio() {
+        if (!selectedPostos || selectedPostos.size === 0) return null;
+        const selArr = [...selectedPostos].sort().join(',');
+        for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+          const intersec = lista.filter(p => POSTOS.includes(p)).sort().join(',');
+          if (intersec && selArr === intersec) return nome;
+        }
+        return null;
+      }
+
+      function _atualizarBotoesGrupoRateio() {
+        const ativo = _grupoAtivoRateio();
+        const isTodos = !selectedPostos || selectedPostos.size === 0;
+        const btnT = document.querySelector('#btnGrupoTodos');
+        const btnA = document.querySelector('#btnGrupoAltamiro');
+        const btnC = document.querySelector('#btnGrupoCouto');
+        if (btnT) btnT.classList.toggle('active', isTodos);
+        if (btnA) btnA.classList.toggle('active', ativo === 'altamiro');
+        if (btnC) btnC.classList.toggle('active', ativo === 'couto');
+      }
+
+      function wireGrupoButtonsRateio() {
+        const btnT = document.querySelector('#btnGrupoTodos');
+        const btnA = document.querySelector('#btnGrupoAltamiro');
+        const btnC = document.querySelector('#btnGrupoCouto');
+        if (btnT) btnT.onclick = () => { selectedPostos = new Set(); buildPostoTabs(); _atualizarBotoesGrupoRateio(); updateAll(); };
+        if (btnA) btnA.onclick = () => {
+          const intersec = GRUPOS_POSTO.altamiro.filter(p => POSTOS.includes(p));
+          selectedPostos = new Set(intersec); buildPostoTabs(); _atualizarBotoesGrupoRateio(); updateAll();
+        };
+        if (btnC) btnC.onclick = () => {
+          const intersec = GRUPOS_POSTO.couto.filter(p => POSTOS.includes(p));
+          selectedPostos = new Set(intersec); buildPostoTabs(); _atualizarBotoesGrupoRateio(); updateAll();
+        };
+      }
+
       let chartReceitaDespesa = null;
       let chartResultado = null;
       let chartReceitaDim = null;
@@ -1904,6 +1945,7 @@
             else a.classList.toggle('active', !allNow && selectedPostos.has(p));
           });
 
+          _atualizarBotoesGrupoRateio();
           updateAll();
         };
       }
@@ -3446,6 +3488,7 @@ function updateExploradorDespesas(mesesSelec) {
 
           initCharts();
           buildPostoTabs();
+          wireGrupoButtonsRateio();
           wireDimTabs();
           wirePeriodo(lastFull);
           wireRetiradaSwitch();
