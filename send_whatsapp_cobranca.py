@@ -239,6 +239,9 @@ def enviar(telefone: str, nome: str, template: str, params: dict,
     ts       = datetime.now().astimezone().isoformat(timespec="seconds")
     fila_id  = queue_id or CHAT_QUEUE_ID
     remetente = from_user_id or CHAT_FROM
+    # Garante prefixo "chat:" exigido pela API (evita ticket sem usuário/fila)
+    if remetente and not remetente.startswith("chat:"):
+        remetente = "chat:" + remetente
 
     payload = {
         "entry": [{
