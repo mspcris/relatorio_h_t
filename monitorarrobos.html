@@ -527,6 +527,12 @@
               <p>Admin</p>
             </a>
           </li>
+          <li class="nav-item">
+            <a href="/alarmes" class="nav-link" style="border-left:3px solid #e53935">
+              <i class="nav-icon fas fa-bell" style="color:#e53935"></i>
+              <p>Configurar Alertas</p>
+            </a>
+          </li>
           {% endif %}
           <li class="nav-item">
             <a href="kpi_home.html" class="nav-link">
@@ -643,6 +649,11 @@
       <div class="d-flex w-100 align-items-center">
         <span class="ml-2 font-weight-bold">Monitorar Robôs</span>
         <span class="ml-3" id="autoRefreshInfo"></span>
+        {% if USER_IS_ADMIN %}
+        <a href="/alarmes" class="btn btn-sm btn-outline-danger ml-auto">
+          <i class="fas fa-bell mr-1"></i>Configurar Alertas
+        </a>
+        {% endif %}
       </div>
     </nav>
 
@@ -696,6 +707,56 @@
   <footer class="main-footer text-sm text-muted">
     <strong>CAMIM</strong> — Painel de Indicadores Operacionais
   </footer>
+
+<!-- ── MODAL SILENCIAR ALARME ──────────────────────────────────────── -->
+<div class="modal fade" id="modalSilenciar" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#fff3cd;border-bottom:1px solid #ffc107">
+        <h5 class="modal-title" style="font-size:1rem">
+          <i class="fas fa-bell-slash mr-2 text-warning"></i>Silenciar Alarme
+        </h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="font-weight-bold mb-1" id="sil-nome" style="font-size:.95rem"></p>
+        <p class="text-muted mb-3" style="font-size:.82rem" id="sil-info"></p>
+        <div class="form-group mb-2">
+          <label class="font-weight-bold" style="font-size:.85rem">Silenciar por</label>
+          <select class="form-control form-control-sm" id="sil-dias">
+            <option value="1">1 dia</option>
+            <option value="2">2 dias</option>
+            <option value="3" selected>3 dias</option>
+          </select>
+        </div>
+        <div class="form-group mb-0">
+          <label class="font-weight-bold" style="font-size:.85rem">Motivo (opcional)</label>
+          <input type="text" class="form-control form-control-sm" id="sil-motivo"
+                 placeholder="Ex.: Estou ciente, investigando">
+        </div>
+        <input type="hidden" id="sil-alarme-id">
+      </div>
+      <div class="modal-footer py-2">
+        <div id="sil-error" class="text-danger mr-auto" style="font-size:.8rem"></div>
+        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-warning btn-sm" id="btnConfirmarSilencio">
+          <i class="fas fa-bell-slash mr-1"></i>Confirmar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .btn-alarm-bell {
+    background: none; border: none; cursor: pointer; padding: 2px 6px;
+    border-radius: 4px; opacity: .7; transition: opacity .15s, transform .15s;
+    color: #e53935; margin-right: 4px;
+  }
+  .btn-alarm-bell:hover { opacity: 1; transform: scale(1.15); }
+  .btn-alarm-bell.silenciado { color: #9e9e9e; }
+  .btn-alarm-bell.silenciado:hover { color: #616161; }
+</style>
 </div>
 
 <script>
@@ -737,11 +798,69 @@
     PUSH:  'fas fa-bell',
   };
 
+  /* ── Estado alarmes ─────────────────────────────────────────── */
+  let _alarmResumo = {};  // { posto: { servico: [{id, nome, silenciado}] } }
+
+  async function loadAlarmResumo() {
+    try {
+      const r = await fetch('/alarmes/api/resumo', { credentials: 'same-origin' });
+      if (r.ok) {
+        const data = await r.json();
+        _alarmResumo = data.resumo || {};
+      }
+    } catch (_) { /* silencia erros — alarmes são feature secundária */ }
+  }
+
+  function abrirSilenciar(alarmeId, alarmeNome, posto, servico) {
+    document.getElementById('sil-alarme-id').value = alarmeId;
+    document.getElementById('sil-nome').textContent = alarmeNome;
+    document.getElementById('sil-info').textContent = `Posto ${posto} · ${servico}`;
+    document.getElementById('sil-dias').value = '3';
+    document.getElementById('sil-motivo').value = '';
+    document.getElementById('sil-error').textContent = '';
+    $('#modalSilenciar').modal('show');
+  }
+
+  document.getElementById('btnConfirmarSilencio')?.addEventListener('click', async () => {
+    const alarmeId = document.getElementById('sil-alarme-id').value;
+    const dias     = document.getElementById('sil-dias').value;
+    const motivo   = document.getElementById('sil-motivo').value.trim();
+    const errEl    = document.getElementById('sil-error');
+    errEl.textContent = '';
+    try {
+      const r = await fetch('/alarmes/api/silenciar', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alarme_id: parseInt(alarmeId), dias: parseInt(dias), motivo }),
+      });
+      const data = await r.json();
+      if (!data.ok) throw new Error(data.error || 'Erro');
+      $('#modalSilenciar').modal('hide');
+      await loadAlarmResumo();
+      await loadAll();
+    } catch(e) { errEl.textContent = e.message; }
+  });
+
   // prefix: ex "PUSH", nome: ex "Cobrança — Posto X"
-  function barraHTML(prefix, nome, statusKey, textoDir) {
+  function barraHTML(prefix, nome, statusKey, textoDir, posto) {
     const s = STATUS[statusKey] || STATUS.horrivel;
     const fillPct = Math.max(s.fill, 5); // mínimo visual de 5%
     const iconCls = PREFIX_ICON[prefix] || 'fas fa-circle';
+    const servico = prefix.toLowerCase();
+
+    let bellBtn = '';
+    if (posto && _alarmResumo[posto] && _alarmResumo[posto][servico]) {
+      const alarms  = _alarmResumo[posto][servico];
+      const silenc  = alarms.some(a => a.silenciado);
+      const alarme  = alarms[0];
+      const safeName = (alarme.nome || '').replace(/'/g, "\\'");
+      bellBtn = `<button class="btn-alarm-bell${silenc ? ' silenciado' : ''}"
+        onclick="abrirSilenciar(${alarme.id}, '${safeName}', '${posto}', '${servico}')"
+        title="${silenc ? 'Silenciado — clique para renovar' : 'Alarme ativo — silenciar'}">
+        <i class="fas fa-bell${silenc ? '-slash' : ''}"></i>
+      </button>`;
+    }
+
     return `
       <div class="ind-bar"
            style="--ind-color:${s.color}; --ind-bg:${s.bg}; --ind-fill:${fillPct}%"
@@ -753,6 +872,7 @@
             <span class="ind-label-text">${nome}</span>
           </span>
           <span class="ind-right">
+            ${bellBtn}
             ${textoDir}
             <span class="ind-badge">${s.label}</span>
           </span>
@@ -887,7 +1007,7 @@
       const texto = it.ultimo
         ? `${fmtDias(it.dias)} · ${it.ultimo.slice(0, 16)}`
         : fmtDias(it.dias);
-      return { html: barraHTML('PUSH', nome, sKey, texto), order: s.order };
+      return { html: barraHTML('PUSH', nome, sKey, texto, it.posto), order: s.order };
     });
   }
 
@@ -932,7 +1052,7 @@
         const texto = it.ultimo_envio
           ? `${fmtDias(it.dias)} · ${it.ultimo_envio.slice(0, 16)} · ${it.total} enviados`
           : fmtDias(it.dias);
-        itens.push({ html: barraHTML('EMAIL', cat, sKey, texto), order: STATUS[sKey].order });
+        itens.push({ html: barraHTML('EMAIL', cat, sKey, texto, it.posto), order: STATUS[sKey].order });
       } else {
         // vários postos: um item por posto dentro da categoria
         for (const it of lista) {
@@ -941,7 +1061,7 @@
             ? `${fmtDias(it.dias)} · ${it.ultimo_envio.slice(0, 16)}`
             : fmtDias(it.dias);
           const nome = `${cat} — Posto ${it.posto}`;
-          itens.push({ html: barraHTML('EMAIL', nome, sKey, texto), order: STATUS[sKey].order });
+          itens.push({ html: barraHTML('EMAIL', nome, sKey, texto, it.posto), order: STATUS[sKey].order });
         }
       }
     }
@@ -973,7 +1093,7 @@
       const texto = it.ultimo
         ? `${fmtDias(it.dias)} · ${it.ultimo.slice(0, 16)}`
         : fmtDias(it.dias);
-      return { html: barraHTML('TEF', nome, sKey, texto), order: STATUS[sKey].order };
+      return { html: barraHTML('TEF', nome, sKey, texto, it.posto), order: STATUS[sKey].order };
     });
   }
 
@@ -1016,7 +1136,7 @@
       const texto = d.ultimo_envio
         ? `${fmtDias(d.dias)} · ${d.ultimo_envio.slice(0, 16)}`
         : fmtDias(d.dias);
-      itens.push({ html: barraHTML('WPP', nome, sKey, texto), order: STATUS[sKey].order });
+      itens.push({ html: barraHTML('WPP', nome, sKey, texto, posto), order: STATUS[sKey].order });
     }
 
     return itens;
@@ -1094,6 +1214,7 @@
 
     buildPostoTabs();
     wireGrupoButtons();
+    await loadAlarmResumo();
     await loadAll();
 
     const overlay = document.getElementById('loadingOverlay');
@@ -1112,6 +1233,7 @@
     }, 1000);
   }
 
+  window.abrirSilenciar = abrirSilenciar;
   document.addEventListener('DOMContentLoaded', init);
 })();
 </script>

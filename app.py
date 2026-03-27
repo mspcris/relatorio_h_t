@@ -39,6 +39,13 @@ except Exception as _e:
     import logging
     logging.getLogger(__name__).error("wpp_bp não carregado: %s", _e)
 
+try:
+    from alarmes_routes import alarmes_bp
+    app.register_blueprint(alarmes_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("alarmes_bp não carregado: %s", _e)
+
 PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
 _MENU_RESOURCES_CACHE = None
 

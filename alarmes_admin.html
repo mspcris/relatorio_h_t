@@ -1,0 +1,1208 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — Configurar Alertas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="/css/style2.css?v=20251114">
+  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <style>
+    html { font-size: 16px; }
+    body { font-family: "Source Sans Pro", system-ui, sans-serif; font-size: 1rem; }
+    body.text-sm { font-size: 1rem; }
+    .status-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 20px;
+      font-size: .78rem; font-weight: 600; letter-spacing: .02em;
+    }
+    .status-otimo    { background: rgba(26,127,60,.15);  color: #1a7f3c; }
+    .status-bom      { background: rgba(76,175,80,.15);  color: #2e7d32; }
+    .status-ok       { background: rgba(38,166,154,.15); color: #00695c; }
+    .status-ruim     { background: rgba(249,168,37,.15); color: #e65100; }
+    .status-pessimo  { background: rgba(230,81,0,.15);   color: #bf360c; }
+    .status-horrivel { background: rgba(198,40,40,.15);  color: #b71c1c; }
+    .silenciado-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 20px;
+      font-size: .72rem; font-weight: 600;
+      background: rgba(0,0,0,.08); color: #666;
+    }
+    .table th { font-size: .82rem; font-weight: 700; text-transform: uppercase;
+                letter-spacing: .04em; color: #6b7280; }
+    .table td { font-size: .9rem; vertical-align: middle !important; }
+    .nav-tabs .nav-link { font-weight: 600; color: #495057; }
+    .nav-tabs .nav-link.active { color: #1565c0; border-bottom: 3px solid #1565c0; }
+    .form-section-title {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: #9ca3af; margin: 20px 0 8px;
+    }
+    .canal-check label { cursor: pointer; }
+    .toggle-ativo { cursor: pointer; transition: opacity .15s; }
+    .toggle-ativo:hover { opacity: .75; }
+    .extras-list .item { display: flex; align-items: center; gap: 8px;
+                         padding: 6px 0; border-bottom: 1px solid #f0f0f0; }
+    .extras-list .item:last-child { border-bottom: none; }
+    .dias-semana-check label { cursor: pointer; margin-right: 6px; }
+    .badge-canal {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: .72rem; padding: 2px 7px; border-radius: 10px; font-weight: 600;
+    }
+    .badge-wpp   { background: rgba(37,211,102,.12); color: #1b5e20; }
+    .badge-email { background: rgba(21,101,192,.12); color: #0d47a1; }
+    .modal-xl { max-width: 860px; }
+    @media (max-width: 576px) { .modal-xl { max-width: 100%; } }
+    .audit-row td { font-size: .82rem; }
+    .empty-state { text-align:center; padding: 40px 20px; color: #9ca3af; }
+    .empty-state i { font-size: 2.5rem; margin-bottom: 12px; }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+
+  <!-- NAVBAR -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+      </li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+      <span class="ml-2">Quem tem saúde é mais feliz!</span>
+    </span>
+  </nav>
+
+  <!-- SIDEBAR -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link">
+      <span class="brand-text font-weight-light">MENU</span>
+    </a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
+          <li class="nav-item">
+            <a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a>
+          </li>
+          <li class="nav-item">
+            <a href="monitorarrobos.html" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Monitorar Robôs</p></a>
+          </li>
+          <li class="nav-item">
+            <a href="/alarmes" class="nav-link active"><i class="nav-icon fas fa-bell"></i><p>Configurar Alertas</p></a>
+          </li>
+          {% if USER_IS_ADMIN %}
+          <li class="nav-item">
+            <a href="/admin" class="nav-link"><i class="nav-icon fas fa-users-cog"></i><p>Admin</p></a>
+          </li>
+          {% endif %}
+          <li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline">
+              <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                <i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p>
+              </button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- CONTEÚDO -->
+  <div class="content-wrapper">
+    <nav class="navbar navbar-expand navbar-white navbar-light border-bottom">
+      <span class="ml-2 font-weight-bold">
+        <i class="fas fa-bell mr-2 text-warning"></i>Configurar Alertas
+      </span>
+      <div class="ml-auto">
+        <button class="btn btn-primary btn-sm" id="btnNovoAlarme">
+          <i class="fas fa-plus mr-1"></i>Novo Alarme
+        </button>
+      </div>
+    </nav>
+
+    <section class="content p-3">
+
+      <!-- TABS -->
+      <ul class="nav nav-tabs mb-3" id="mainTabs">
+        <li class="nav-item"><a class="nav-link active" data-tab="alarmes" href="#">
+          <i class="fas fa-bell mr-1"></i>Alarmes</a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="gerentes" href="#">
+          <i class="fas fa-user-tie mr-1"></i>Gerentes</a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="auditores" href="#">
+          <i class="fas fa-search mr-1"></i>Auditores</a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="diretores" href="#">
+          <i class="fas fa-user-shield mr-1"></i>Diretores</a></li>
+        <li class="nav-item"><a class="nav-link" data-tab="historico" href="#">
+          <i class="fas fa-history mr-1"></i>Histórico</a></li>
+      </ul>
+
+      <!-- TAB: ALARMES -->
+      <div id="tab-alarmes" class="tab-pane-content">
+        <div class="card">
+          <div class="card-body p-0">
+            <div id="alarmes-loading" class="text-center py-4 text-muted">
+              <i class="fas fa-spinner fa-spin mr-2"></i>Carregando...
+            </div>
+            <div id="alarmes-empty" class="empty-state d-none">
+              <i class="fas fa-bell-slash d-block"></i>
+              Nenhum alarme configurado.<br>
+              <button class="btn btn-primary btn-sm mt-3" onclick="abrirModalAlarme()">Criar primeiro alarme</button>
+            </div>
+            <div class="table-responsive" id="alarmes-table-wrap" style="display:none">
+              <table class="table table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th>Ativo</th><th>Posto</th><th>Serviço</th><th>Gatilho</th>
+                    <th>Nome</th><th>Canais</th><th>Horário</th><th>Dias</th>
+                    <th>Status</th><th></th>
+                  </tr>
+                </thead>
+                <tbody id="alarmes-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: GERENTES -->
+      <div id="tab-gerentes" class="tab-pane-content d-none">
+        <div class="card">
+          <div class="card-header d-flex align-items-center">
+            <h3 class="card-title mb-0">Gerentes por Posto</h3>
+            <small class="ml-3 text-muted">Sincronizado automaticamente às 11:30 de seg a sex</small>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover mb-0">
+                <thead><tr><th>Posto</th><th>Email</th><th>Telefone (WhatsApp)</th><th>Atualizado em</th></tr></thead>
+                <tbody id="gerentes-tbody">
+                  <tr><td colspan="4" class="text-center py-4 text-muted">
+                    <i class="fas fa-spinner fa-spin mr-2"></i>Carregando...
+                  </td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: AUDITORES -->
+      <div id="tab-auditores" class="tab-pane-content d-none">
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <h3 class="card-title mb-0">Auditores</h3>
+            <button class="btn btn-primary btn-sm" onclick="abrirModalPessoa('auditor')">
+              <i class="fas fa-plus mr-1"></i>Novo Auditor
+            </button>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover mb-0">
+                <thead><tr>
+                  <th>Nome</th><th>Email</th><th>Telefone</th>
+                  <th title="Recebe 1° alerta">1° WPP</th><th title="Recebe 1° alerta">1° Email</th>
+                  <th></th>
+                </tr></thead>
+                <tbody id="auditores-tbody">
+                  <tr><td colspan="6" class="text-center py-4 text-muted">
+                    <i class="fas fa-spinner fa-spin mr-2"></i>Carregando...
+                  </td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: DIRETORES -->
+      <div id="tab-diretores" class="tab-pane-content d-none">
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <h3 class="card-title mb-0">Diretores</h3>
+            <button class="btn btn-primary btn-sm" onclick="abrirModalPessoa('diretor')">
+              <i class="fas fa-plus mr-1"></i>Novo Diretor
+            </button>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover mb-0">
+                <thead><tr>
+                  <th>Nome</th><th>Email</th><th>Telefone</th>
+                  <th>1° WPP</th><th>1° Email</th><th></th>
+                </tr></thead>
+                <tbody id="diretores-tbody">
+                  <tr><td colspan="6" class="text-center py-4 text-muted">
+                    <i class="fas fa-spinner fa-spin mr-2"></i>Carregando...
+                  </td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: HISTÓRICO -->
+      <div id="tab-historico" class="tab-pane-content d-none">
+        <ul class="nav nav-pills mb-3" id="histTabs">
+          <li class="nav-item"><a class="nav-link active" data-htab="disparos" href="#">Disparos</a></li>
+          <li class="nav-item"><a class="nav-link" data-htab="silenciamentos" href="#">Silenciamentos</a></li>
+          <li class="nav-item"><a class="nav-link" data-htab="auditoria" href="#">Auditoria</a></li>
+        </ul>
+
+        <div id="htab-disparos">
+          <div class="card"><div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <thead><tr><th>Data/Hora</th><th>Alarme</th><th>Posto</th><th>Serviço</th><th>Status</th><th>Ciclo</th><th>WPP</th><th>Email</th></tr></thead>
+                <tbody id="disparos-tbody"><tr><td colspan="8" class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin mr-2"></i>Carregando...</td></tr></tbody>
+              </table>
+            </div>
+          </div></div>
+        </div>
+
+        <div id="htab-silenciamentos" class="d-none">
+          <div class="card"><div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <thead><tr><th>Alarme</th><th>Posto</th><th>Usuário</th><th>Silenciado em</th><th>Até</th><th>Motivo</th></tr></thead>
+                <tbody id="silenciamentos-tbody"><tr><td colspan="6" class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin mr-2"></i>Carregando...</td></tr></tbody>
+              </table>
+            </div>
+          </div></div>
+        </div>
+
+        <div id="htab-auditoria" class="d-none">
+          <div class="card"><div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <thead><tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Entidade</th><th>ID</th></tr></thead>
+                <tbody id="auditoria-tbody"><tr><td colspan="5" class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin mr-2"></i>Carregando...</td></tr></tbody>
+              </table>
+            </div>
+          </div></div>
+        </div>
+      </div>
+
+    </section>
+  </div>
+
+  <footer class="main-footer text-sm text-muted">
+    <strong>CAMIM</strong> — Sistema de Alertas Operacionais
+  </footer>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     MODAL: CRIAR/EDITAR ALARME
+═══════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalAlarme" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-bell mr-2"></i><span id="modalAlarme-title">Novo Alarme</span></h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="alarme-id" value="">
+
+        <div class="row">
+          <div class="col-md-4">
+            <div class="form-group">
+              <label class="font-weight-bold">Posto <span class="text-danger">*</span></label>
+              <select class="form-control" id="alarme-posto" required>
+                <option value="">— Selecione —</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="form-group">
+              <label class="font-weight-bold">Serviço <span class="text-danger">*</span></label>
+              <select class="form-control" id="alarme-servico" required>
+                <option value="">— Selecione —</option>
+                <option value="push">Push Cobrança</option>
+                <option value="email">Boleto (Email)</option>
+                <option value="tef">TEF Recorrente</option>
+                <option value="wpp">WhatsApp Cobrança</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="form-group">
+              <label class="font-weight-bold">Gatilho de Status <span class="text-danger">*</span></label>
+              <select class="form-control" id="alarme-gatilho" required>
+                <option value="">— Selecione —</option>
+                <option value="otimo">Ótimo ou pior</option>
+                <option value="bom">Bom ou pior</option>
+                <option value="ok">Ok ou pior</option>
+                <option value="ruim">Ruim ou pior</option>
+                <option value="pessimo">Péssimo ou pior</option>
+                <option value="horrivel">Horrível</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="font-weight-bold">Nome do Alarme <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="alarme-nome" placeholder="Ex.: Push Cobrança sem envio há +3 dias">
+        </div>
+
+        <div class="form-group">
+          <label class="font-weight-bold">Mensagem <span class="text-danger">*</span></label>
+          <textarea class="form-control" id="alarme-mensagem" rows="3"
+            placeholder="Texto que será enviado no WhatsApp e Email..."></textarea>
+        </div>
+
+        <div class="row">
+          <div class="col-md-4">
+            <p class="form-section-title">Canais de Envio</p>
+            <div class="canal-check">
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="alarme-wpp" checked>
+                <label class="form-check-label" for="alarme-wpp">
+                  <i class="fab fa-whatsapp text-success mr-1"></i>WhatsApp
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="alarme-email" checked>
+                <label class="form-check-label" for="alarme-email">
+                  <i class="fas fa-envelope text-primary mr-1"></i>Email
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <p class="form-section-title">Horário do Disparo</p>
+            <input type="time" class="form-control" id="alarme-hora" value="08:00">
+          </div>
+          <div class="col-md-4">
+            <p class="form-section-title">Dias da Semana</p>
+            <div class="dias-semana-check" id="dias-check">
+              <!-- preenchido via JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Gerente do posto (somente leitura) -->
+        <div id="gerente-info" class="alert alert-light border mt-3" style="display:none">
+          <p class="form-section-title mb-1">Gerente do Posto (banco de dados)</p>
+          <div class="d-flex align-items-center" style="gap:16px">
+            <div>
+              <i class="fas fa-envelope mr-1 text-primary"></i>
+              <span id="gerente-email-display">—</span>
+            </div>
+            <div>
+              <i class="fab fa-whatsapp mr-1 text-success"></i>
+              <span id="gerente-tel-display">—</span>
+            </div>
+            <div>
+              <small class="text-muted" id="gerente-atualizado-display"></small>
+            </div>
+          </div>
+          <small class="text-muted">Este contato não pode ser removido. Atualizado automaticamente todo dia útil às 11:30.</small>
+        </div>
+
+        <!-- Destinatários extras -->
+        <div class="mt-3">
+          <p class="form-section-title">Destinatários Extras (opcionais, removíveis)</p>
+          <div id="extras-lista" class="extras-list mb-2"></div>
+          <div class="row">
+            <div class="col-sm-3">
+              <input type="text" class="form-control form-control-sm" id="extra-nome" placeholder="Nome">
+            </div>
+            <div class="col-sm-3">
+              <input type="email" class="form-control form-control-sm" id="extra-email" placeholder="Email">
+            </div>
+            <div class="col-sm-3">
+              <input type="text" class="form-control form-control-sm" id="extra-tel" placeholder="Telefone WhatsApp">
+            </div>
+            <div class="col-sm-2 d-flex align-items-center" style="gap:8px">
+              <div class="form-check form-check-inline mb-0">
+                <input class="form-check-input" type="checkbox" id="extra-wpp" checked>
+                <label class="form-check-label" for="extra-wpp" title="WhatsApp"><i class="fab fa-whatsapp text-success"></i></label>
+              </div>
+              <div class="form-check form-check-inline mb-0">
+                <input class="form-check-input" type="checkbox" id="extra-email-check" checked>
+                <label class="form-check-label" for="extra-email-check" title="Email"><i class="fas fa-envelope text-primary"></i></label>
+              </div>
+            </div>
+            <div class="col-sm-1">
+              <button class="btn btn-outline-secondary btn-sm" id="btnAddExtra" title="Adicionar">
+                <i class="fas fa-plus"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Auditores e Diretores -->
+        <div class="row mt-3">
+          <div class="col-md-6">
+            <p class="form-section-title">Auditores (recebem a partir do 1° ou 2° disparo)</p>
+            <div id="auditores-select" style="max-height:140px;overflow-y:auto;border:1px solid #dee2e6;border-radius:4px;padding:8px">
+              <!-- preenchido via JS -->
+            </div>
+          </div>
+          <div class="col-md-6">
+            <p class="form-section-title">Diretores (recebem a partir do 1° ou 2° disparo)</p>
+            <div id="diretores-select" style="max-height:140px;overflow-y:auto;border:1px solid #dee2e6;border-radius:4px;padding:8px">
+              <!-- preenchido via JS -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <div id="modal-alarme-error" class="text-danger mr-auto" style="font-size:.875rem"></div>
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btnSalvarAlarme">
+          <i class="fas fa-save mr-1"></i>Salvar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     MODAL: AUDITOR / DIRETOR
+═══════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalPessoa" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalPessoa-title">Novo Auditor</h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="pessoa-id">
+        <input type="hidden" id="pessoa-tipo">
+        <div class="form-group">
+          <label class="font-weight-bold">Nome <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="pessoa-nome">
+        </div>
+        <div class="form-group">
+          <label class="font-weight-bold">Email</label>
+          <input type="email" class="form-control" id="pessoa-email">
+        </div>
+        <div class="form-group">
+          <label class="font-weight-bold">Telefone (WhatsApp)</label>
+          <input type="text" class="form-control" id="pessoa-tel" placeholder="Ex.: 21999999999">
+        </div>
+        <p class="form-section-title">Recebe o 1° disparo via</p>
+        <small class="text-muted d-block mb-2">O 2° disparo em diante é sempre pelos dois canais.</small>
+        <div class="d-flex" style="gap:20px">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="pessoa-1wpp">
+            <label class="form-check-label" for="pessoa-1wpp">
+              <i class="fab fa-whatsapp text-success mr-1"></i>WhatsApp
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="pessoa-1email">
+            <label class="form-check-label" for="pessoa-1email">
+              <i class="fas fa-envelope text-primary mr-1"></i>Email
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div id="modal-pessoa-error" class="text-danger mr-auto" style="font-size:.875rem"></div>
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btnSalvarPessoa">
+          <i class="fas fa-save mr-1"></i>Salvar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     MODAL: EXTRAS (editar extras de alarme já existente)
+═══════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalExtras" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Destinatários Extras</h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="extras-modal-lista" class="extras-list mb-3"></div>
+        <div class="row">
+          <div class="col-sm-3"><input type="text" class="form-control form-control-sm" id="em-extra-nome" placeholder="Nome"></div>
+          <div class="col-sm-3"><input type="email" class="form-control form-control-sm" id="em-extra-email" placeholder="Email"></div>
+          <div class="col-sm-3"><input type="text" class="form-control form-control-sm" id="em-extra-tel" placeholder="WhatsApp"></div>
+          <div class="col-sm-2 d-flex align-items-center" style="gap:8px">
+            <div class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="checkbox" id="em-extra-wpp" checked>
+              <label class="form-check-label" for="em-extra-wpp"><i class="fab fa-whatsapp text-success"></i></label>
+            </div>
+            <div class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="checkbox" id="em-extra-email-check" checked>
+              <label class="form-check-label" for="em-extra-email-check"><i class="fas fa-envelope text-primary"></i></label>
+            </div>
+          </div>
+          <div class="col-sm-1">
+            <button class="btn btn-outline-secondary btn-sm" id="btnEmAddExtra"><i class="fas fa-plus"></i></button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ── Constantes ────────────────────────────────────────────────── */
+const POSTOS = {
+  A:'Anchieta', N:'Nilópolis', I:'Nova Iguaçu', X:'CGX',
+  G:'Campo Grande', Y:'CGY', B:'Bangu', R:'Realengo',
+  M:'Madureira', C:'Campinho', D:'Del Castilho', J:'JPA', P:'Rio das Pedras'
+};
+const SERVICOS = {
+  push:'Push Cobrança', email:'Boleto (Email)', tef:'TEF Recorrente', wpp:'WhatsApp Cobrança'
+};
+const STATUS_LABEL = {
+  otimo:'Ótimo', bom:'Bom', ok:'Ok', ruim:'Ruim', pessimo:'Péssimo', horrivel:'Horrível'
+};
+const DIAS_NOMES = {0:'Seg',1:'Ter',2:'Qua',3:'Qui',4:'Sex',5:'Sáb',6:'Dom'};
+
+function statusBadge(s) {
+  const l = STATUS_LABEL[s] || s;
+  return `<span class="status-badge status-${s}">${l}</span>`;
+}
+function fmtDt(s) {
+  if (!s) return '—';
+  return s.replace('T',' ').slice(0,16);
+}
+function sim(v) { return v ? '<i class="fas fa-check text-success"></i>' : '<i class="fas fa-times text-muted"></i>'; }
+
+/* ── Estado global ─────────────────────────────────────────────── */
+let _gerentes  = [];
+let _auditores = [];
+let _diretores = [];
+let _alarmes   = [];
+let _extrasAlarmeId = null;
+let _extrasAlarme   = null;
+
+/* ── API helpers ────────────────────────────────────────────────── */
+async function api(method, path, body) {
+  const opts = { method, credentials: 'same-origin',
+                 headers: {'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  const data = await r.json();
+  if (!data.ok) throw new Error(data.error || 'Erro desconhecido');
+  return data;
+}
+const GET    = path        => api('GET',    path);
+const POST   = (path, b)   => api('POST',   path, b);
+const PUT    = (path, b)   => api('PUT',    path, b);
+const DELETE = path        => api('DELETE', path);
+
+/* ── Tab navigation ─────────────────────────────────────────────── */
+document.querySelectorAll('[data-tab]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const tab = a.dataset.tab;
+    document.querySelectorAll('[data-tab]').forEach(x => x.classList.remove('active'));
+    a.classList.add('active');
+    document.querySelectorAll('.tab-pane-content').forEach(p => p.classList.add('d-none'));
+    document.getElementById('tab-' + tab).classList.remove('d-none');
+    if (tab === 'alarmes')    loadAlarmes();
+    if (tab === 'gerentes')   loadGerentes();
+    if (tab === 'auditores')  loadAuditores();
+    if (tab === 'diretores')  loadDiretores();
+    if (tab === 'historico')  loadHistorico('disparos');
+  });
+});
+
+document.querySelectorAll('[data-htab]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const tab = a.dataset.htab;
+    document.querySelectorAll('[data-htab]').forEach(x => x.classList.remove('active'));
+    a.classList.add('active');
+    ['disparos','silenciamentos','auditoria'].forEach(t => {
+      document.getElementById('htab-' + t).classList.toggle('d-none', t !== tab);
+    });
+    loadHistorico(tab);
+  });
+});
+
+/* ── ALARMES ────────────────────────────────────────────────────── */
+async function loadAlarmes() {
+  document.getElementById('alarmes-loading').style.display = '';
+  document.getElementById('alarmes-table-wrap').style.display = 'none';
+  document.getElementById('alarmes-empty').classList.add('d-none');
+  try {
+    const data = await GET('/alarmes/api/alarmes');
+    _alarmes = data.alarmes;
+    renderAlarmes(_alarmes);
+  } catch(e) {
+    document.getElementById('alarmes-loading').innerHTML =
+      `<span class="text-danger"><i class="fas fa-exclamation-triangle mr-1"></i>${e.message}</span>`;
+  }
+}
+
+function renderAlarmes(lista) {
+  const loading = document.getElementById('alarmes-loading');
+  const wrap    = document.getElementById('alarmes-table-wrap');
+  const empty   = document.getElementById('alarmes-empty');
+  loading.style.display = 'none';
+
+  if (!lista.length) { empty.classList.remove('d-none'); wrap.style.display = 'none'; return; }
+  empty.classList.add('d-none');
+  wrap.style.display = '';
+
+  const tbody = document.getElementById('alarmes-tbody');
+  tbody.innerHTML = lista.map(a => {
+    const diasArr = (a.dias_semana || '0,1,2,3,4').split(',').map(d => DIAS_NOMES[d] || d).join(' ');
+    const canais = [
+      a.via_whatsapp ? `<span class="badge-canal badge-wpp"><i class="fab fa-whatsapp"></i>WPP</span>` : '',
+      a.via_email    ? `<span class="badge-canal badge-email"><i class="fas fa-envelope"></i>Email</span>` : '',
+    ].filter(Boolean).join(' ');
+    const silBadge = a.silenciado
+      ? `<span class="silenciado-badge ml-1" title="Silenciado"><i class="fas fa-bell-slash"></i></span>` : '';
+    const ativoToggle = `
+      <span class="toggle-ativo badge badge-${a.ativo ? 'success' : 'secondary'}"
+            data-id="${a.id}" title="Clique para ${a.ativo?'desativar':'ativar'}" onclick="toggleAlarme(${a.id})">
+        ${a.ativo ? 'Ativo' : 'Inativo'}
+      </span>`;
+    const postoNome = POSTOS[a.posto] || a.posto;
+    return `<tr>
+      <td>${ativoToggle}</td>
+      <td><strong>${a.posto}</strong><br><small class="text-muted">${postoNome}</small></td>
+      <td>${SERVICOS[a.servico] || a.servico}</td>
+      <td>${statusBadge(a.status_gatilho)}</td>
+      <td>${a.nome}${silBadge}</td>
+      <td>${canais}</td>
+      <td>${a.hora_disparo}</td>
+      <td style="font-size:.8rem">${diasArr}</td>
+      <td>
+        ${a.gerente_email
+          ? `<small class="text-muted"><i class="fas fa-user-tie mr-1"></i>${a.gerente_email}</small>`
+          : '<small class="text-danger"><i class="fas fa-exclamation-circle mr-1"></i>Sem gerente</small>'}
+      </td>
+      <td class="text-right" style="white-space:nowrap">
+        <button class="btn btn-xs btn-outline-secondary mr-1" onclick="editarAlarme(${a.id})" title="Editar">
+          <i class="fas fa-edit"></i>
+        </button>
+        <button class="btn btn-xs btn-outline-secondary mr-1" onclick="abrirExtras(${a.id})" title="Destinatários extras">
+          <i class="fas fa-users"></i>
+        </button>
+        <button class="btn btn-xs btn-outline-danger" onclick="excluirAlarme(${a.id}, '${a.nome.replace(/'/g,"\\'")}')">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function toggleAlarme(id) {
+  try {
+    const data = await POST(`/alarmes/api/alarmes/${id}/toggle`);
+    loadAlarmes();
+  } catch(e) { alert('Erro: ' + e.message); }
+}
+
+async function excluirAlarme(id, nome) {
+  if (!confirm(`Excluir alarme "${nome}"? Esta ação não pode ser desfeita.`)) return;
+  try {
+    await DELETE(`/alarmes/api/alarmes/${id}`);
+    loadAlarmes();
+  } catch(e) { alert('Erro: ' + e.message); }
+}
+
+/* ── Modal Alarme ───────────────────────────────────────────────── */
+function _buildDiasCheck(selecionados = ['0','1','2','3','4']) {
+  const el = document.getElementById('dias-check');
+  el.innerHTML = [0,1,2,3,4,5,6].map(d => `
+    <div class="form-check form-check-inline mb-1">
+      <input class="form-check-input" type="checkbox" id="dia-${d}" value="${d}"
+             ${selecionados.includes(String(d)) ? 'checked' : ''}>
+      <label class="form-check-label" for="dia-${d}">${DIAS_NOMES[d]}</label>
+    </div>`).join('');
+}
+
+function _buildAuditoresSelect(selecionados = []) {
+  const el = document.getElementById('auditores-select');
+  if (!_auditores.length) {
+    el.innerHTML = '<small class="text-muted">Nenhum auditor cadastrado</small>'; return;
+  }
+  el.innerHTML = _auditores.map(a => `
+    <div class="form-check mb-1">
+      <input class="form-check-input" type="checkbox" id="aud-${a.id}" value="${a.id}"
+             ${selecionados.includes(a.id) ? 'checked' : ''}>
+      <label class="form-check-label" for="aud-${a.id}">
+        ${a.nome}
+        ${a.recebe_1_wpp ? '<i class="fab fa-whatsapp text-success ml-1" title="Recebe 1° WPP"></i>' : ''}
+        ${a.recebe_1_email ? '<i class="fas fa-envelope text-primary ml-1" title="Recebe 1° Email"></i>' : ''}
+      </label>
+    </div>`).join('');
+}
+
+function _buildDiretoresSelect(selecionados = []) {
+  const el = document.getElementById('diretores-select');
+  if (!_diretores.length) {
+    el.innerHTML = '<small class="text-muted">Nenhum diretor cadastrado</small>'; return;
+  }
+  el.innerHTML = _diretores.map(d => `
+    <div class="form-check mb-1">
+      <input class="form-check-input" type="checkbox" id="dir-${d.id}" value="${d.id}"
+             ${selecionados.includes(d.id) ? 'checked' : ''}>
+      <label class="form-check-label" for="dir-${d.id}">
+        ${d.nome}
+        ${d.recebe_1_wpp ? '<i class="fab fa-whatsapp text-success ml-1"></i>' : ''}
+        ${d.recebe_1_email ? '<i class="fas fa-envelope text-primary ml-1"></i>' : ''}
+      </label>
+    </div>`).join('');
+}
+
+function _populatePostoSelect() {
+  const sel = document.getElementById('alarme-posto');
+  sel.innerHTML = '<option value="">— Selecione —</option>';
+  Object.entries(POSTOS).forEach(([k, v]) => {
+    const opt = document.createElement('option');
+    opt.value = k; opt.textContent = `${k} — ${v}`;
+    sel.appendChild(opt);
+  });
+}
+
+function _renderExtras(extras, container) {
+  if (!extras || !extras.length) {
+    container.innerHTML = '<small class="text-muted">Nenhum destinatário extra</small>';
+    return;
+  }
+  container.innerHTML = extras.map(e => `
+    <div class="item">
+      <span style="flex:1">${e.nome || ''} ${e.email ? `<small class="text-muted">&lt;${e.email}&gt;</small>` : ''} ${e.telefone ? `<small class="text-muted">${e.telefone}</small>` : ''}</span>
+      ${e.via_whatsapp ? '<i class="fab fa-whatsapp text-success" title="WPP"></i>' : ''}
+      ${e.via_email ? '<i class="fas fa-envelope text-primary ml-1" title="Email"></i>' : ''}
+      <button class="btn btn-xs btn-outline-danger ml-2" onclick="delExtra(${e.id})">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>`).join('');
+}
+
+async function _loadGerenteInfo(posto) {
+  const info = document.getElementById('gerente-info');
+  if (!posto) { info.style.display = 'none'; return; }
+  try {
+    const g = _gerentes.find(x => x.posto === posto);
+    document.getElementById('gerente-email-display').textContent = g?.email || 'Não cadastrado';
+    document.getElementById('gerente-tel-display').textContent   = g?.telefone || 'Não cadastrado';
+    document.getElementById('gerente-atualizado-display').textContent =
+      g ? `Atualizado: ${fmtDt(g.atualizado_em)}` : '';
+    info.style.display = '';
+    if (!g || (!g.email && !g.telefone)) {
+      info.className = 'alert alert-warning border mt-3';
+    } else {
+      info.className = 'alert alert-light border mt-3';
+    }
+  } catch(e) {}
+}
+
+document.getElementById('alarme-posto').addEventListener('change', function() {
+  _loadGerenteInfo(this.value);
+});
+
+async function abrirModalAlarme(alarme) {
+  document.getElementById('alarme-id').value = '';
+  document.getElementById('alarme-nome').value = '';
+  document.getElementById('alarme-posto').value = '';
+  document.getElementById('alarme-servico').value = '';
+  document.getElementById('alarme-gatilho').value = '';
+  document.getElementById('alarme-mensagem').value = '';
+  document.getElementById('alarme-wpp').checked = true;
+  document.getElementById('alarme-email').checked = true;
+  document.getElementById('alarme-hora').value = '08:00';
+  document.getElementById('extras-lista').innerHTML = '';
+  document.getElementById('gerente-info').style.display = 'none';
+  document.getElementById('modal-alarme-error').textContent = '';
+  document.getElementById('modalAlarme-title').textContent = 'Novo Alarme';
+
+  _buildDiasCheck();
+  _buildAuditoresSelect();
+  _buildDiretoresSelect();
+
+  if (alarme) {
+    document.getElementById('modalAlarme-title').textContent = 'Editar Alarme';
+    document.getElementById('alarme-id').value = alarme.id;
+    document.getElementById('alarme-nome').value = alarme.nome;
+    document.getElementById('alarme-posto').value = alarme.posto;
+    document.getElementById('alarme-servico').value = alarme.servico;
+    document.getElementById('alarme-gatilho').value = alarme.status_gatilho;
+    document.getElementById('alarme-mensagem').value = alarme.mensagem;
+    document.getElementById('alarme-wpp').checked = !!alarme.via_whatsapp;
+    document.getElementById('alarme-email').checked = !!alarme.via_email;
+    document.getElementById('alarme-hora').value = alarme.hora_disparo || '08:00';
+    const dias = (alarme.dias_semana || '0,1,2,3,4').split(',');
+    _buildDiasCheck(dias);
+    _buildAuditoresSelect(alarme.auditores || []);
+    _buildDiretoresSelect(alarme.diretores || []);
+    _renderExtras(alarme.extras || [], document.getElementById('extras-lista'));
+    await _loadGerenteInfo(alarme.posto);
+  }
+
+  $('#modalAlarme').modal('show');
+}
+
+document.getElementById('btnNovoAlarme').addEventListener('click', () => abrirModalAlarme(null));
+
+async function editarAlarme(id) {
+  try {
+    const data = await GET(`/alarmes/api/alarmes/${id}`);
+    abrirModalAlarme(data.alarme);
+  } catch(e) { alert('Erro ao carregar alarme: ' + e.message); }
+}
+
+document.getElementById('btnSalvarAlarme').addEventListener('click', async () => {
+  const id       = document.getElementById('alarme-id').value;
+  const nome     = document.getElementById('alarme-nome').value.trim();
+  const posto    = document.getElementById('alarme-posto').value;
+  const servico  = document.getElementById('alarme-servico').value;
+  const gatilho  = document.getElementById('alarme-gatilho').value;
+  const mensagem = document.getElementById('alarme-mensagem').value.trim();
+  const viaWpp   = document.getElementById('alarme-wpp').checked;
+  const viaEmail = document.getElementById('alarme-email').checked;
+  const hora     = document.getElementById('alarme-hora').value;
+  const errEl    = document.getElementById('modal-alarme-error');
+  errEl.textContent = '';
+
+  if (!nome)     { errEl.textContent = 'Nome é obrigatório.'; return; }
+  if (!posto)    { errEl.textContent = 'Selecione um posto.'; return; }
+  if (!servico)  { errEl.textContent = 'Selecione um serviço.'; return; }
+  if (!gatilho)  { errEl.textContent = 'Selecione o gatilho de status.'; return; }
+  if (!mensagem) { errEl.textContent = 'Mensagem é obrigatória.'; return; }
+  if (!viaWpp && !viaEmail) { errEl.textContent = 'Selecione ao menos um canal.'; return; }
+
+  const diasSel = [...document.querySelectorAll('#dias-check input:checked')].map(i => i.value);
+  if (!diasSel.length) { errEl.textContent = 'Selecione ao menos um dia da semana.'; return; }
+
+  const auditores = [...document.querySelectorAll('#auditores-select input:checked')].map(i => parseInt(i.value));
+  const diretores = [...document.querySelectorAll('#diretores-select input:checked')].map(i => parseInt(i.value));
+
+  const payload = {
+    nome, posto, servico, status_gatilho: gatilho, mensagem,
+    via_whatsapp: viaWpp, via_email: viaEmail,
+    hora_disparo: hora,
+    dias_semana: diasSel.join(','),
+    auditores, diretores,
+  };
+
+  try {
+    if (id) {
+      await PUT(`/alarmes/api/alarmes/${id}`, payload);
+    } else {
+      await POST('/alarmes/api/alarmes', payload);
+    }
+    $('#modalAlarme').modal('hide');
+    loadAlarmes();
+  } catch(e) { errEl.textContent = e.message; }
+});
+
+/* ── Extras no modal principal ──────────────────────────────────── */
+document.getElementById('btnAddExtra').addEventListener('click', async () => {
+  const nome  = document.getElementById('extra-nome').value.trim();
+  const email = document.getElementById('extra-email').value.trim();
+  const tel   = document.getElementById('extra-tel').value.trim();
+  const wpp   = document.getElementById('extra-wpp').checked;
+  const em    = document.getElementById('extra-email-check').checked;
+
+  if (!email && !tel) { alert('Informe email ou telefone para o destinatário extra.'); return; }
+
+  const alarmeId = document.getElementById('alarme-id').value;
+  if (!alarmeId) {
+    // Alarme ainda não foi criado — acumula na lista visual apenas
+    // (será salvo depois via edição)
+    alert('Salve o alarme primeiro, depois adicione destinatários extras pela edição.');
+    return;
+  }
+  try {
+    await POST('/alarmes/api/extras', { alarme_id: parseInt(alarmeId), nome, email, telefone: tel, via_whatsapp: wpp, via_email: em });
+    const data = await GET(`/alarmes/api/alarmes/${alarmeId}`);
+    _renderExtras(data.alarme.extras || [], document.getElementById('extras-lista'));
+    document.getElementById('extra-nome').value = '';
+    document.getElementById('extra-email').value = '';
+    document.getElementById('extra-tel').value = '';
+  } catch(e) { alert('Erro: ' + e.message); }
+});
+
+/* ── Modal Extras standalone ──────────────────────────────────── */
+async function abrirExtras(alarmeId) {
+  _extrasAlarmeId = alarmeId;
+  try {
+    const data = await GET(`/alarmes/api/alarmes/${alarmeId}`);
+    _extrasAlarme = data.alarme;
+    renderExtrasModal(data.alarme.extras || []);
+    $('#modalExtras').modal('show');
+  } catch(e) { alert('Erro: ' + e.message); }
+}
+
+function renderExtrasModal(extras) {
+  _renderExtras(extras, document.getElementById('extras-modal-lista'));
+}
+
+window.delExtra = async function(extraId) {
+  if (!confirm('Remover este destinatário extra?')) return;
+  try {
+    await DELETE(`/alarmes/api/extras/${extraId}`);
+    const data = await GET(`/alarmes/api/alarmes/${_extrasAlarmeId}`);
+    renderExtrasModal(data.alarme.extras || []);
+    loadAlarmes();
+  } catch(e) { alert('Erro: ' + e.message); }
+};
+
+document.getElementById('btnEmAddExtra').addEventListener('click', async () => {
+  const nome  = document.getElementById('em-extra-nome').value.trim();
+  const email = document.getElementById('em-extra-email').value.trim();
+  const tel   = document.getElementById('em-extra-tel').value.trim();
+  const wpp   = document.getElementById('em-extra-wpp').checked;
+  const em    = document.getElementById('em-extra-email-check').checked;
+  if (!email && !tel) { alert('Informe email ou telefone.'); return; }
+  try {
+    await POST('/alarmes/api/extras', { alarme_id: _extrasAlarmeId, nome, email, telefone: tel, via_whatsapp: wpp, via_email: em });
+    const data = await GET(`/alarmes/api/alarmes/${_extrasAlarmeId}`);
+    renderExtrasModal(data.alarme.extras || []);
+    ['em-extra-nome','em-extra-email','em-extra-tel'].forEach(id =>
+      document.getElementById(id).value = '');
+  } catch(e) { alert('Erro: ' + e.message); }
+});
+
+/* ── GERENTES ───────────────────────────────────────────────────── */
+async function loadGerentes() {
+  try {
+    const data = await GET('/alarmes/api/gerentes');
+    _gerentes = data.gerentes;
+    const tbody = document.getElementById('gerentes-tbody');
+    if (!data.gerentes.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Nenhum gerente sincronizado ainda.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.gerentes.map(g => `
+      <tr>
+        <td><strong>${g.posto}</strong> — ${POSTOS[g.posto] || ''}</td>
+        <td>${g.email || '<span class="text-muted">—</span>'}</td>
+        <td>${g.telefone || '<span class="text-muted">—</span>'}</td>
+        <td><small class="text-muted">${fmtDt(g.atualizado_em)}</small></td>
+      </tr>`).join('');
+  } catch(e) {
+    document.getElementById('gerentes-tbody').innerHTML =
+      `<tr><td colspan="4" class="text-danger">Erro: ${e.message}</td></tr>`;
+  }
+}
+
+/* ── AUDITORES / DIRETORES ──────────────────────────────────────── */
+async function loadAuditores() {
+  try {
+    const data = await GET('/alarmes/api/auditores');
+    _auditores = data.auditores;
+    renderPessoasTable(data.auditores, 'auditores-tbody', 'auditor');
+  } catch(e) {
+    document.getElementById('auditores-tbody').innerHTML =
+      `<tr><td colspan="6" class="text-danger">Erro: ${e.message}</td></tr>`;
+  }
+}
+
+async function loadDiretores() {
+  try {
+    const data = await GET('/alarmes/api/diretores');
+    _diretores = data.diretores;
+    renderPessoasTable(data.diretores, 'diretores-tbody', 'diretor');
+  } catch(e) {
+    document.getElementById('diretores-tbody').innerHTML =
+      `<tr><td colspan="6" class="text-danger">Erro: ${e.message}</td></tr>`;
+  }
+}
+
+function renderPessoasTable(lista, tbodyId, tipo) {
+  const tbody = document.getElementById(tbodyId);
+  if (!lista.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted">Nenhum ${tipo} cadastrado.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = lista.map(p => `
+    <tr>
+      <td><strong>${p.nome}</strong></td>
+      <td>${p.email || '—'}</td>
+      <td>${p.telefone || '—'}</td>
+      <td>${sim(p.recebe_1_wpp)}</td>
+      <td>${sim(p.recebe_1_email)}</td>
+      <td class="text-right">
+        <button class="btn btn-xs btn-outline-secondary mr-1"
+                onclick="editarPessoa('${tipo}', ${p.id})">
+          <i class="fas fa-edit"></i>
+        </button>
+        <button class="btn btn-xs btn-outline-danger"
+                onclick="excluirPessoa('${tipo}', ${p.id}, '${p.nome.replace(/'/g,"\\'")}')">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+async function editarPessoa(tipo, id) {
+  try {
+    const data = await GET(`/alarmes/api/${tipo}s/${id}`);
+    const p = data[`${tipo}s`] ?
+      data[`${tipo}s`].find(x => x.id === id) :
+      (tipo === 'auditor' ? data.auditores?.find(x => x.id === id) : data.diretores?.find(x => x.id === id));
+    // Fetch individual
+    const d2 = await GET(`/alarmes/api/${tipo}s`);
+    const pessoa = (d2[`${tipo}s`] || []).find(x => x.id === id);
+    if (!pessoa) { alert('Não encontrado'); return; }
+    abrirModalPessoa(tipo, pessoa);
+  } catch(e) { alert('Erro: ' + e.message); }
+}
+
+function abrirModalPessoa(tipo, pessoa) {
+  document.getElementById('pessoa-tipo').value = tipo;
+  document.getElementById('pessoa-id').value   = pessoa?.id || '';
+  document.getElementById('pessoa-nome').value  = pessoa?.nome || '';
+  document.getElementById('pessoa-email').value = pessoa?.email || '';
+  document.getElementById('pessoa-tel').value   = pessoa?.telefone || '';
+  document.getElementById('pessoa-1wpp').checked   = !!(pessoa?.recebe_1_wpp);
+  document.getElementById('pessoa-1email').checked = !!(pessoa?.recebe_1_email);
+  document.getElementById('modal-pessoa-error').textContent = '';
+  const tit = tipo === 'auditor' ? 'Auditor' : 'Diretor';
+  document.getElementById('modalPessoa-title').textContent = pessoa ? `Editar ${tit}` : `Novo ${tit}`;
+  $('#modalPessoa').modal('show');
+}
+
+document.getElementById('btnSalvarPessoa').addEventListener('click', async () => {
+  const tipo   = document.getElementById('pessoa-tipo').value;
+  const id     = document.getElementById('pessoa-id').value;
+  const nome   = document.getElementById('pessoa-nome').value.trim();
+  const email  = document.getElementById('pessoa-email').value.trim();
+  const tel    = document.getElementById('pessoa-tel').value.trim();
+  const w1     = document.getElementById('pessoa-1wpp').checked;
+  const e1     = document.getElementById('pessoa-1email').checked;
+  const errEl  = document.getElementById('modal-pessoa-error');
+  errEl.textContent = '';
+  if (!nome) { errEl.textContent = 'Nome é obrigatório.'; return; }
+
+  const payload = { nome, email: email||null, telefone: tel||null,
+                    recebe_1_wpp: w1, recebe_1_email: e1 };
+  try {
+    if (id) {
+      await PUT(`/alarmes/api/${tipo}s/${id}`, payload);
+    } else {
+      await POST(`/alarmes/api/${tipo}s`, payload);
+    }
+    $('#modalPessoa').modal('hide');
+    if (tipo === 'auditor') loadAuditores();
+    else loadDiretores();
+  } catch(e) { errEl.textContent = e.message; }
+});
+
+async function excluirPessoa(tipo, id, nome) {
+  if (!confirm(`Desativar ${tipo} "${nome}"?`)) return;
+  try {
+    await DELETE(`/alarmes/api/${tipo}s/${id}`);
+    if (tipo === 'auditor') loadAuditores();
+    else loadDiretores();
+  } catch(e) { alert('Erro: ' + e.message); }
+}
+
+/* ── HISTÓRICO ──────────────────────────────────────────────────── */
+async function loadHistorico(tab) {
+  if (tab === 'disparos') {
+    try {
+      const data = await GET('/alarmes/api/disparos?limit=200');
+      const tbody = document.getElementById('disparos-tbody');
+      if (!data.disparos.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Nenhum disparo registrado.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.disparos.map(d => `
+        <tr class="audit-row">
+          <td>${fmtDt(d.disparado_em)}</td>
+          <td>${d.alarme_nome}</td>
+          <td>${d.posto}</td>
+          <td>${SERVICOS[d.servico] || d.servico}</td>
+          <td>${statusBadge(d.status_registrado)}</td>
+          <td>${d.numero_ciclo}</td>
+          <td>${sim(d.enviado_wpp_gerente)}</td>
+          <td>${sim(d.enviado_email_gerente)}</td>
+        </tr>`).join('');
+    } catch(e) {
+      document.getElementById('disparos-tbody').innerHTML =
+        `<tr><td colspan="8" class="text-danger">Erro: ${e.message}</td></tr>`;
+    }
+  } else if (tab === 'silenciamentos') {
+    try {
+      const data = await GET('/alarmes/api/silenciamentos');
+      const tbody = document.getElementById('silenciamentos-tbody');
+      if (!data.silenciamentos.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">Nenhum silenciamento ativo.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.silenciamentos.map(s => `
+        <tr class="audit-row">
+          <td>${s.alarme_nome}</td>
+          <td>${s.posto}</td>
+          <td>${s.usuario_email}</td>
+          <td>${fmtDt(s.silenciado_em)}</td>
+          <td>${fmtDt(s.silenciado_ate)}</td>
+          <td>${s.motivo || '—'}</td>
+        </tr>`).join('');
+    } catch(e) {
+      document.getElementById('silenciamentos-tbody').innerHTML =
+        `<tr><td colspan="6" class="text-danger">Erro: ${e.message}</td></tr>`;
+    }
+  } else if (tab === 'auditoria') {
+    try {
+      const data = await GET('/alarmes/api/auditoria');
+      const tbody = document.getElementById('auditoria-tbody');
+      if (!data.registros.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Nenhum registro.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.registros.map(r => `
+        <tr class="audit-row">
+          <td>${fmtDt(r.criado_em)}</td>
+          <td>${r.usuario_email || '—'}</td>
+          <td><code style="font-size:.75rem">${r.acao}</code></td>
+          <td>${r.entidade || '—'}</td>
+          <td>${r.entidade_id || '—'}</td>
+        </tr>`).join('');
+    } catch(e) {
+      document.getElementById('auditoria-tbody').innerHTML =
+        `<tr><td colspan="5" class="text-danger">Erro: ${e.message}</td></tr>`;
+    }
+  }
+}
+
+/* ── Expose globals ─────────────────────────────────────────────── */
+window.editarAlarme    = editarAlarme;
+window.excluirAlarme   = excluirAlarme;
+window.toggleAlarme    = toggleAlarme;
+window.abrirExtras     = abrirExtras;
+window.abrirModalPessoa = abrirModalPessoa;
+window.editarPessoa    = editarPessoa;
+window.excluirPessoa   = excluirPessoa;
+
+/* ── Init ────────────────────────────────────────────────────────── */
+async function init() {
+  _populatePostoSelect();
+  await Promise.allSettled([
+    loadAuditores(),
+    loadDiretores(),
+    loadGerentes(),
+  ]);
+  loadAlarmes();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+<script src="/js/menu.js" defer></script>
+</body>
+</html>
