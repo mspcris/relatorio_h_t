@@ -669,11 +669,20 @@ def any_html(filename):
     if not email:
         return ('', 401)
 
+    from auth_db import SessionLocal, get_user_by_email as _gue
+    db = SessionLocal()
+    try:
+        u = _gue(db, email)
+        is_admin = u.is_admin if u else False
+    finally:
+        db.close()
+
     try:
         return render_template(
             filename,
             USER_EMAIL=email,
-            USER_POSTOS=json.dumps(postos)
+            USER_POSTOS=json.dumps(postos),
+            USER_IS_ADMIN=is_admin,
         )
     except:
         return ('', 404)
