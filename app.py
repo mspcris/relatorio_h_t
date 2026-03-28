@@ -404,6 +404,23 @@ def _patch_json_meta(posto: str, ym: str, meta_obj: dict):
 # RENDERIZAÇÃO PROTEGIDA PADRÃO
 # ============================================
 
+def _sidebar_filter_script(paginas: list) -> str:
+    """JS injetado no </body> para ocultar itens do menu que o usuário não tem acesso."""
+    href_map = json.dumps(_TEMPLATE_TO_PAGINA)
+    plist    = json.dumps(paginas)
+    return (
+        f'<script>(function(){{'
+        f'var p={plist},m={href_map};'
+        f'function hide(){{'
+        f'document.querySelectorAll(".nav-sidebar .nav-item a.nav-link").forEach(function(a){{'
+        f'var h=(a.getAttribute("href")||"").replace(/^\//,"");'
+        f'var k=m[h];if(k&&p.indexOf(k)===-1){{var li=a.closest(".nav-item");if(li)li.style.display="none";}}'
+        f'}});}}'
+        f'if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",hide);else hide();'
+        f'}})();</script></body>'
+    )
+
+
 def render_protected_page(page_name):
     from auth_db import SessionLocal, get_user_by_email as _gue
     email, postos = decode_user()
@@ -413,27 +430,31 @@ def render_protected_page(page_name):
     db = SessionLocal()
     try:
         u = _gue(db, email)
-        is_admin = u.is_admin if u else False
+        is_admin   = u.is_admin if u else False
+        all_pages  = bool(u.all_pages) if u and hasattr(u, 'all_pages') else True
+        paginas    = u.lista_paginas() if u and not all_pages else []
         # Check page-level access
         page_key = _TEMPLATE_TO_PAGINA.get(page_name)
-        if page_key and u and not u.all_pages:
-            if page_key not in u.lista_paginas():
-                return render_template(
-                    "acesso_negado.html",
-                    USER_EMAIL=email,
-                    USER_IS_ADMIN=is_admin,
-                    USER_POSTOS=json.dumps(postos),
-                    PAGINA_BLOQUEADA=page_name,
-                ), 403
+        if page_key and not all_pages and page_key not in paginas:
+            return render_template(
+                "acesso_negado.html",
+                USER_EMAIL=email,
+                USER_IS_ADMIN=is_admin,
+                USER_POSTOS=json.dumps(postos),
+                PAGINA_BLOQUEADA=page_name,
+            ), 403
     finally:
         db.close()
 
-    return render_template(
+    html = render_template(
         page_name,
         USER_EMAIL=email,
         USER_POSTOS=json.dumps(postos),
         USER_IS_ADMIN=is_admin,
     )
+    if not all_pages:
+        html = html.replace('</body>', _sidebar_filter_script(paginas))
+    return html
 
 
 # ===============================
@@ -717,32 +738,36 @@ def any_html(filename):
     db = SessionLocal()
     try:
         u = _gue(db, email)
-        is_admin = u.is_admin if u else False
+        is_admin  = u.is_admin if u else False
+        all_pages = bool(u.all_pages) if u and hasattr(u, 'all_pages') else True
+        paginas   = u.lista_paginas() if u and not all_pages else []
     finally:
         db.close()
 
     # Check page-level access
     page_key = _TEMPLATE_TO_PAGINA.get(filename)
-    if page_key and u and not u.all_pages:
-        if page_key not in u.lista_paginas():
-            try:
-                return render_template(
-                    "acesso_negado.html",
-                    USER_EMAIL=email,
-                    USER_IS_ADMIN=is_admin,
-                    USER_POSTOS=json.dumps(postos),
-                    PAGINA_BLOQUEADA=filename,
-                ), 403
-            except Exception:
-                return ('Acesso negado', 403)
+    if page_key and not all_pages and page_key not in paginas:
+        try:
+            return render_template(
+                "acesso_negado.html",
+                USER_EMAIL=email,
+                USER_IS_ADMIN=is_admin,
+                USER_POSTOS=json.dumps(postos),
+                PAGINA_BLOQUEADA=filename,
+            ), 403
+        except Exception:
+            return ('Acesso negado', 403)
 
     try:
-        return render_template(
+        html = render_template(
             filename,
             USER_EMAIL=email,
             USER_POSTOS=json.dumps(postos),
             USER_IS_ADMIN=is_admin,
         )
+        if not all_pages:
+            html = html.replace('</body>', _sidebar_filter_script(paginas))
+        return html
     except:
         return ('', 404)
 
