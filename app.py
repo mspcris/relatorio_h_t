@@ -51,11 +51,14 @@ PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
 # Mapeamento page_key → template para controle de acesso por página
 _TEMPLATE_TO_PAGINA = {
     "alimentacao.html":                 "alimentacao",
+    "kpi_alimentacao.html":             "alimentacao",
     "medicos.html":                     "medicos",
+    "kpi_medicos.html":                 "medicos",
     "ctrlq_relatorio.html":             "ctrlq_relatorio",
     "kpi_v2.html":                      "kpi_v2",
     "kpi_vendas.html":                  "kpi_vendas",
     "clientes.html":                    "clientes",
+    "kpi_clientes.html":                "clientes",
     "KPI_prescricao.html":              "kpi_prescricao",
     "kpi_prescricao.html":              "kpi_prescricao",
     "kpi_fidelizacao_cliente.html":     "kpi_fidelizacao",
