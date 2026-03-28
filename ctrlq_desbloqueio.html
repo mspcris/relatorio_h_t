@@ -246,6 +246,13 @@
     return d.toLocaleDateString('pt-BR');
   };
 
+  const fmtDateTime = iso => {
+    if (!iso) return '—';
+    const d = new Date(iso.replace(' ', 'T'));
+    return d.toLocaleDateString('pt-BR') + ' ' +
+           d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
   const fmtValor = v => {
     if (v === null || v === undefined) return '—';
     const n = Number(v);
@@ -277,27 +284,77 @@
   // ── Custos ────────────────────────────────────────────────────────────────
 
   const DIAS_SEMANA = ['Segunda','Terca','Quarta','Quinta','Sexta','Sabado','Domingo'];
+  const DIA_LABEL   = d => d.replace('Terca','Terça').replace('Sabado','Sábado');
 
   function tabelaCustos(rec) {
-    const temCusto = DIAS_SEMANA.some(d =>
-      rec[`ValorCusto${d}`] !== null && rec[`ValorCusto${d}`] !== undefined
-    );
+    const temCusto = DIAS_SEMANA.some(d => rec[`ValorCusto${d}`] != null);
     if (!temCusto) return '';
 
-    const ths = DIAS_SEMANA.map(d => `<th>${d.replace('Terca','Terça').replace('Sabado','Sábado')}</th>`).join('');
-    const valRow = DIAS_SEMANA.map(d => `<td>R$ ${fmtValor(rec[`ValorCusto${d}`])}</td>`).join('');
-    const qtdRow = DIAS_SEMANA.map(d => `<td>${rec[`QuantidadeCusto${d}`] ?? '—'}</td>`).join('');
+    const temHist = DIAS_SEMANA.some(d => rec[`hist_ValorCusto${d}`] != null);
+
+    const ths = DIAS_SEMANA.map(d => `<th>${DIA_LABEL(d)}</th>`).join('');
+
+    // Detecta se há diferença em valor ou qtd para algum dia
+    const valDiff = d => {
+      if (!temHist) return false;
+      const h = rec[`hist_ValorCusto${d}`], a = rec[`ValorCusto${d}`];
+      return h != null && Number(h) !== Number(a);
+    };
+    const qtdDiff = d => {
+      if (!temHist) return false;
+      const h = rec[`hist_QuantidadeCusto${d}`], a = rec[`QuantidadeCusto${d}`];
+      return h != null && String(h) !== String(a);
+    };
+
+    let rows = '';
+
+    if (temHist) {
+      const antVal = DIAS_SEMANA.map(d => {
+        const bg = valDiff(d) ? 'background:#fdecea' : '';
+        return `<td style="${bg}">R$ ${fmtValor(rec[`hist_ValorCusto${d}`])}</td>`;
+      }).join('');
+      const antQtd = DIAS_SEMANA.map(d => {
+        const bg = qtdDiff(d) ? 'background:#fdecea' : '';
+        return `<td style="${bg}">${rec[`hist_QuantidadeCusto${d}`] ?? '—'}</td>`;
+      }).join('');
+      rows += `<tr>
+        <td class="text-left font-weight-bold" style="background:#fdecea;white-space:nowrap;font-size:.75rem">Antes</td>
+        ${antVal}
+      </tr>
+      <tr>
+        <td class="text-left" style="background:#fdecea;white-space:nowrap;font-size:.72rem;color:#888">Qtd antes</td>
+        ${antQtd}
+      </tr>`;
+    }
+
+    const atualVal = DIAS_SEMANA.map(d => {
+      const bg = valDiff(d) ? 'background:#d4edda' : '';
+      return `<td style="${bg}">R$ ${fmtValor(rec[`ValorCusto${d}`])}</td>`;
+    }).join('');
+    const atualQtd = DIAS_SEMANA.map(d => {
+      const bg = qtdDiff(d) ? 'background:#d4edda' : '';
+      return `<td style="${bg}">${rec[`QuantidadeCusto${d}`] ?? '—'}</td>`;
+    }).join('');
+    rows += `<tr>
+      <td class="text-left font-weight-bold" style="background:#e8f5e9;white-space:nowrap;font-size:.75rem">Atual</td>
+      ${atualVal}
+    </tr>
+    <tr>
+      <td class="text-left" style="background:#e8f5e9;white-space:nowrap;font-size:.72rem;color:#888">Qtd atual</td>
+      ${atualQtd}
+    </tr>`;
+
+    const title = temHist
+      ? 'Custos por dia da semana — antes / depois'
+      : 'Custos por dia da semana (atual)';
 
     return `
       <div class="custos-wrap">
-        <div class="custos-title">Custos por dia da semana (atual)</div>
+        <div class="custos-title">${title}</div>
         <div class="table-responsive">
           <table class="custos-table">
             <thead><tr><th></th>${ths}</tr></thead>
-            <tbody>
-              <tr><td class="text-left font-weight-bold" style="background:#f8f9fa">Valor</td>${valRow}</tr>
-              <tr><td class="text-left font-weight-bold" style="background:#f8f9fa">Qtd</td>${qtdRow}</tr>
-            </tbody>
+            <tbody>${rows}</tbody>
           </table>
         </div>
       </div>`;
@@ -321,17 +378,21 @@
   // ── Render de um card ─────────────────────────────────────────────────────
 
   function renderCard(rec) {
-    const dias  = diasParaExpirar(rec.DataFimExibicao);
-    const cls   = cardClass(dias);
-    const obs   = (rec.ObservacaoDesbloqueio || '').trim();
+    const dias   = diasParaExpirar(rec.DataFimExibicao);
+    const cls    = cardClass(dias);
+    const obs    = (rec.ObservacaoDesbloqueio || '').trim();
     const custos = tabelaCustos(rec);
     const diff   = diffFlag(
       'Permitir agendamento sem consulta anterior',
       rec.atual_PermitirSemConsulta,
       rec.hist_PermitirSemConsulta
     );
-    const histData = rec.hist_DataHoraInclusao
-      ? `<small class="text-muted" style="font-size:.75rem"> · snapshot histórico de ${fmtDate(rec.hist_DataHoraInclusao)}</small>`
+
+    const audInfo = rec.aud_usuario
+      ? `<div style="font-size:.78rem;color:#777;margin-top:3px">
+           <i class="fas fa-user-edit mr-1"></i>Solicitado por
+           <strong>${esc(rec.aud_usuario)}</strong> em ${fmtDateTime(rec.aud_data)}
+         </div>`
       : '';
 
     return `
@@ -345,7 +406,7 @@
           </div>
           <div class="desb-periodo">
             <div>${fmtDate(rec.DataInicioExibicao)} → ${fmtDate(rec.DataFimExibicao)}${badgeDias(dias)}</div>
-            ${histData}
+            ${audInfo}
           </div>
         </div>
 
