@@ -1108,35 +1108,20 @@
     const postosSet = new Set(postos);
     const mostrar1Posto = postos.length === 1;
 
-    // Consolida: para cada posto relevante, pega o melhor (menor dias) entre campanhas
-    // Postos sem nenhum envio em qualquer campanha ficam com dias=999
-    const melhorPorPosto = {}; // posto → {dias, ultimo_envio, campNome}
-    for (const camp of campanhas) {
+    // Uma entrada por (campanha × posto): cada campanha ativa gera sua própria linha
+    const itens = [];
+    for (const camp of (campanhas || [])) {
       for (const [posto, d] of Object.entries(camp.postos)) {
         if (!postosSet.has(posto)) continue;
-        const atual = melhorPorPosto[posto];
-        if (!atual || d.dias < atual.dias) {
-          melhorPorPosto[posto] = { dias: d.dias, ultimo_envio: d.ultimo_envio, campNome: camp.nome };
-        }
+        const sKey = diasParaStatus(d.dias);
+        const nome = mostrar1Posto
+          ? (camp.nome || 'WhatsApp Cobrança')
+          : `${camp.nome || 'WhatsApp Cobrança'} — Posto ${posto}`;
+        const texto = d.ultimo_envio
+          ? `${fmtDias(d.dias)} · ${d.ultimo_envio.slice(0, 16)}`
+          : fmtDias(d.dias);
+        itens.push({ html: barraHTML('WPP', nome, sKey, texto, posto), order: STATUS[sKey].order });
       }
-    }
-
-    // Garante que TODOS os postos do usuário apareçam (mesmo sem campanha ou envio)
-    for (const p of postos) {
-      if (!melhorPorPosto[p]) {
-        melhorPorPosto[p] = { dias: 999, ultimo_envio: null, campNome: null };
-      }
-    }
-
-    const itens = [];
-    for (const [posto, d] of Object.entries(melhorPorPosto)) {
-      const sKey = diasParaStatus(d.dias);
-      const labelCamp = d.campNome ? d.campNome : 'WhatsApp Cobrança';
-      const nome = mostrar1Posto ? labelCamp : `${labelCamp} — Posto ${posto}`;
-      const texto = d.ultimo_envio
-        ? `${fmtDias(d.dias)} · ${d.ultimo_envio.slice(0, 16)}`
-        : fmtDias(d.dias);
-      itens.push({ html: barraHTML('WPP', nome, sKey, texto, posto), order: STATUS[sKey].order });
     }
 
     return itens;
