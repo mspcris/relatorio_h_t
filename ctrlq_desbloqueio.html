@@ -292,68 +292,63 @@
 
     const temHist = DIAS_SEMANA.some(d => rec[`hist_ValorCusto${d}`] != null);
 
-    const ths = DIAS_SEMANA.map(d => `<th>${DIA_LABEL(d)}</th>`).join('');
-
-    // Detecta se há diferença em valor ou qtd para algum dia
-    const valDiff = d => {
+    const vDiff = d => {
       if (!temHist) return false;
       const h = rec[`hist_ValorCusto${d}`], a = rec[`ValorCusto${d}`];
       return h != null && Number(h) !== Number(a);
     };
-    const qtdDiff = d => {
+    const qDiff = d => {
       if (!temHist) return false;
       const h = rec[`hist_QuantidadeCusto${d}`], a = rec[`QuantidadeCusto${d}`];
-      return h != null && String(h) !== String(a);
+      return h != null && String(h ?? '') !== String(a ?? '');
     };
 
-    let rows = '';
+    let thead, rows;
 
     if (temHist) {
-      const antVal = DIAS_SEMANA.map(d => {
-        const bg = valDiff(d) ? 'background:#fdecea' : '';
-        return `<td style="${bg}">R$ ${fmtValor(rec[`hist_ValorCusto${d}`])}</td>`;
-      }).join('');
-      const antQtd = DIAS_SEMANA.map(d => {
-        const bg = qtdDiff(d) ? 'background:#fdecea' : '';
-        return `<td style="${bg}">${rec[`hist_QuantidadeCusto${d}`] ?? '—'}</td>`;
-      }).join('');
-      rows += `<tr>
-        <td class="text-left font-weight-bold" style="background:#fdecea;white-space:nowrap;font-size:.75rem">Antes</td>
-        ${antVal}
-      </tr>
-      <tr>
-        <td class="text-left" style="background:#fdecea;white-space:nowrap;font-size:.72rem;color:#888">Qtd antes</td>
-        ${antQtd}
+      thead = `<tr>
+        <th style="min-width:72px">Dia</th>
+        <th style="background:#e8f5e9;color:#155724">Valor atual</th>
+        <th style="background:#fdecea;color:#721c24">Valor antes</th>
+        <th style="background:#e8f5e9;color:#155724;font-size:.72rem">Qtd atual</th>
+        <th style="background:#fdecea;color:#721c24;font-size:.72rem">Qtd antes</th>
       </tr>`;
+      rows = DIAS_SEMANA.map(d => {
+        const vA = rec[`ValorCusto${d}`], vH = rec[`hist_ValorCusto${d}`];
+        const qA = rec[`QuantidadeCusto${d}`], qH = rec[`hist_QuantidadeCusto${d}`];
+        const bgVA = vDiff(d) ? 'background:#d4edda' : '';
+        const bgVH = vDiff(d) ? 'background:#fdecea' : '';
+        const bgQA = qDiff(d) ? 'background:#d4edda' : '';
+        const bgQH = qDiff(d) ? 'background:#fdecea' : '';
+        return `<tr>
+          <td class="font-weight-bold text-left" style="white-space:nowrap">${DIA_LABEL(d)}</td>
+          <td style="${bgVA}">R$ ${fmtValor(vA)}</td>
+          <td style="${bgVH}">R$ ${fmtValor(vH)}</td>
+          <td style="${bgQA}">${qA ?? '—'}</td>
+          <td style="${bgQH}">${qH ?? '—'}</td>
+        </tr>`;
+      }).join('');
+    } else {
+      thead = `<tr>
+        <th>Dia</th>
+        <th>Valor</th>
+        <th>Qtd</th>
+      </tr>`;
+      rows = DIAS_SEMANA.map(d => `<tr>
+        <td class="font-weight-bold text-left" style="white-space:nowrap">${DIA_LABEL(d)}</td>
+        <td>R$ ${fmtValor(rec[`ValorCusto${d}`])}</td>
+        <td>${rec[`QuantidadeCusto${d}`] ?? '—'}</td>
+      </tr>`).join('');
     }
 
-    const atualVal = DIAS_SEMANA.map(d => {
-      const bg = valDiff(d) ? 'background:#d4edda' : '';
-      return `<td style="${bg}">R$ ${fmtValor(rec[`ValorCusto${d}`])}</td>`;
-    }).join('');
-    const atualQtd = DIAS_SEMANA.map(d => {
-      const bg = qtdDiff(d) ? 'background:#d4edda' : '';
-      return `<td style="${bg}">${rec[`QuantidadeCusto${d}`] ?? '—'}</td>`;
-    }).join('');
-    rows += `<tr>
-      <td class="text-left font-weight-bold" style="background:#e8f5e9;white-space:nowrap;font-size:.75rem">Atual</td>
-      ${atualVal}
-    </tr>
-    <tr>
-      <td class="text-left" style="background:#e8f5e9;white-space:nowrap;font-size:.72rem;color:#888">Qtd atual</td>
-      ${atualQtd}
-    </tr>`;
-
-    const title = temHist
-      ? 'Custos por dia da semana — antes / depois'
-      : 'Custos por dia da semana (atual)';
+    const title = temHist ? 'Custos — atual vs antes' : 'Custos por dia da semana';
 
     return `
       <div class="custos-wrap">
         <div class="custos-title">${title}</div>
         <div class="table-responsive">
           <table class="custos-table">
-            <thead><tr><th></th>${ths}</tr></thead>
+            <thead>${thead}</thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
