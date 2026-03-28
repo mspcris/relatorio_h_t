@@ -78,6 +78,10 @@ _TEMPLATE_TO_PAGINA = {
     "email_clientes_dashboard.html":    "email_clientes",
     "email_clientes_logs.html":         "email_clientes",
     "chat_avaliacoes.html":             "chat_avaliacoes",
+    # rotas Flask sem .html (usadas como href no sidebar e em cards)
+    "chat_avaliacoes":                  "chat_avaliacoes",
+    "email_clientes":                   "email_clientes",
+    "tef":                              "tef",
     # Itens de mais_servicos.html (internos)
     "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
     "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",

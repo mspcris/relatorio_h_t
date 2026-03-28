@@ -43,6 +43,12 @@
   .posto-check label.restrito { color: #c62828; font-weight: 600; }
   .paginas-check { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
   .paginas-check label { font-weight: normal; font-size: .85rem; cursor: pointer; min-width: 180px; }
+  .paginas-separador {
+    width: 100%; margin-top: 8px; margin-bottom: 2px; padding-top: 6px;
+    border-top: 1px solid #dee2e6;
+    font-size: .72rem; font-weight: 700; text-transform: uppercase;
+    color: #888; letter-spacing: .05em;
+  }
   .table td, .table th { vertical-align: middle; }
   #toast-wrap {
     position: fixed;
@@ -351,10 +357,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   fetch('/admin/api/paginas').then(r => r.json()).then(lista => {
     _todasPaginas = lista;
-    const wrap = document.getElementById('paginas-check');
-    wrap.innerHTML = lista.map(p =>
-      `<label><input type="checkbox" class="pagina-cb" value="${p.key}"> ${p.label}</label>`
-    ).join('');
   });
 
   document.getElementById('f-all-pages').addEventListener('change', function() {
@@ -410,6 +412,29 @@ function renderTabela() {
     </tr>`).join('');
 }
 
+// ── Renderiza checkboxes de páginas agrupados e ordenados ─────────────────────
+function renderPaginasCheck(userPaginas) {
+  const wrap = document.getElementById('paginas-check');
+  const kpi  = _todasPaginas.filter(p => p.group === 'kpi');
+  const mais = _todasPaginas.filter(p => p.group === 'mais');
+
+  function sortGroup(pages) {
+    const on  = pages.filter(p =>  userPaginas.includes(p.key));
+    const off = pages.filter(p => !userPaginas.includes(p.key));
+    return [...on, ...off];
+  }
+
+  function mkItem(p) {
+    const ck = userPaginas.includes(p.key) ? ' checked' : '';
+    return `<label><input type="checkbox" class="pagina-cb" value="${p.key}"${ck}> ${p.label}</label>`;
+  }
+
+  wrap.innerHTML =
+    sortGroup(kpi).map(mkItem).join('') +
+    '<div class="paginas-separador w-100">Mais Serviços</div>' +
+    sortGroup(mais).map(mkItem).join('');
+}
+
 // ── Modal novo ────────────────────────────────────────────────────────────────
 function abrirModalNovo() {
   document.getElementById('modalTitulo').textContent = 'Novo usuário';
@@ -424,7 +449,7 @@ function abrirModalNovo() {
   document.querySelectorAll('.posto-cb').forEach(cb => cb.checked = false);
   document.getElementById('f-all-pages').checked = false;
   document.getElementById('paginas-check').style.display = 'flex';
-  document.querySelectorAll('.pagina-cb').forEach(cb => cb.checked = false);
+  renderPaginasCheck([]);
   $('#modal').modal('show');
 }
 
@@ -447,9 +472,7 @@ function editar(id) {
   const allPages = u.all_pages !== undefined ? u.all_pages : true;
   document.getElementById('f-all-pages').checked = allPages;
   document.getElementById('paginas-check').style.display = allPages ? 'none' : 'flex';
-  document.querySelectorAll('.pagina-cb').forEach(cb => {
-    cb.checked = (u.paginas || []).includes(cb.value);
-  });
+  renderPaginasCheck(u.paginas || []);
   $('#modal').modal('show');
 }
 
