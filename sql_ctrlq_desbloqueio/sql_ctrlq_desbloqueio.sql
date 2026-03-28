@@ -1,8 +1,8 @@
 -- SQL_CTRLQ_DESBLOQUEIO.SQL
 -- Solicitações de desbloqueio de agenda: registros de cad_especialidade com
 -- DataFimExibicao definida (Temporario=0, Desativado=0).
--- Traz auditoria (vw_Sis_Historico) para saber quando/quem solicitou
--- e snapshot histórico anterior (Cad_EspecialidadeHistorico) para comparação.
+-- Dados de auditoria (aud_*) são enriquecidos pelo Python via consulta
+-- separada a vw_Sis_Historico (que pode não estar disponível em todos os postos).
 
 SELECT
     -- Identificação
@@ -26,13 +26,7 @@ SELECT
     ce.QuantidadeCustoSegunda, ce.QuantidadeCustoTerca, ce.QuantidadeCustoQuarta,
     ce.QuantidadeCustoQuinta,  ce.QuantidadeCustoSexta, ce.QuantidadeCustoSabado, ce.QuantidadeCustoDomingo,
 
-    -- Auditoria: quando e por quem o DataFimExibicao foi definido
-    aud.idHistorico                                AS aud_idHistorico,
-    aud.[Data]                                     AS aud_data,
-    aud.[Usuário]                                  AS aud_usuario,
-    aud.Detalhe                                    AS aud_detalhe,
-
-    -- Snapshot histórico imediatamente anterior à solicitação de desbloqueio
+    -- Snapshot histórico imediatamente anterior ao início do desbloqueio
     h.DataHoraInclusao                             AS hist_DataHoraInclusao,
     h.PermitirAgendamentoquenuncaconsultou         AS hist_PermitirSemConsulta,
     h.ValorCustoSegunda                            AS hist_ValorCustoSegunda,
@@ -52,23 +46,6 @@ SELECT
 
 FROM cad_especialidade ce
 INNER JOIN cad_medico m ON m.idmedico = ce.idMedico
-
--- Última alteração que definiu (ou redefiniu) o DataFimExibicao
-OUTER APPLY (
-    SELECT TOP 1
-        idHistorico,
-        [Data],
-        [Usuário],
-        Detalhe
-    FROM vw_Sis_Historico
-    WHERE id        = ce.idEspecialidade
-      AND Tabela    = 'Cad_Especialidade'
-      AND Comando   = 'Edição'
-      AND Detalhe  LIKE '%DataFimExibicao%'
-    ORDER BY idHistorico DESC
-) aud
-
--- Estado anterior: snapshot imediatamente antes da solicitação
 OUTER APPLY (
     SELECT TOP 1
         DataHoraInclusao,
@@ -80,10 +57,9 @@ OUTER APPLY (
     FROM Cad_EspecialidadeHistorico
     WHERE idmedico      = ce.idMedico
       AND Especialidade = ce.Especialidade
-      AND DataHoraInclusao < ISNULL(aud.[Data], ISNULL(ce.DataInicioExibicao, ce.DataFimExibicao))
+      AND DataHoraInclusao < ISNULL(ce.DataInicioExibicao, ce.DataFimExibicao)
     ORDER BY DataHoraInclusao DESC
 ) h
-
 WHERE ce.Desativado = 0
   AND ce.DataFimExibicao IS NOT NULL
   AND ce.Temporario = 0

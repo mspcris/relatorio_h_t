@@ -16,9 +16,10 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
-BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-SQL_PATH   = os.path.join(BASE_DIR, "sql_ctrlq_desbloqueio", "sql_ctrlq_desbloqueio.sql")
-JSON_DIR   = os.path.join(BASE_DIR, "json_ctrlq_desbloqueio")
+BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
+SQL_PATH    = os.path.join(BASE_DIR, "sql_ctrlq_desbloqueio", "sql_ctrlq_desbloqueio.sql")
+SQL_AUD_PATH = os.path.join(BASE_DIR, "sql_ctrlq_desbloqueio", "sql_ctrlq_desbloqueio_aud.sql")
+JSON_DIR    = os.path.join(BASE_DIR, "json_ctrlq_desbloqueio")
 
 ODBC_DRIVER     = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 POSTOS_FALLBACK = list("ANXYBRPCDGIMJ")
@@ -102,6 +103,38 @@ def build_conns_from_env(postos=None):
     return conns
 
 
+# ── auditoria (vw_Sis_Historico) ─────────────────────────────────────────────
+
+def fetch_audit(engine, aud_sql):
+    """Retorna dict {idEspecialidade(int): {aud_*}} ou {} se indisponível."""
+    try:
+        with engine.connect() as con:
+            df = pd.read_sql_query(text(aud_sql), con)
+        result = {}
+        for r in df.to_dict(orient="records"):
+            ide = r.get("idEspecialidade")
+            if ide is not None:
+                result[int(ide)] = {
+                    "aud_idHistorico": normalize(r.get("aud_idHistorico")),
+                    "aud_data":        normalize(r.get("aud_data")),
+                    "aud_usuario":     normalize(r.get("aud_usuario")),
+                    "aud_detalhe":     normalize(r.get("aud_detalhe")),
+                }
+        return result
+    except Exception as e:
+        print(f"(auditoria indisponível: {type(e).__name__})", end=" ")
+        return {}
+
+def merge_audit(rows, audit_map):
+    empty = {"aud_idHistorico": None, "aud_data": None,
+             "aud_usuario": None, "aud_detalhe": None}
+    for r in rows:
+        ide = r.get("idEspecialidade")
+        aud = audit_map.get(int(ide)) if ide is not None else None
+        r.update(aud if aud else empty)
+    return rows
+
+
 # ── exportação ────────────────────────────────────────────────────────────────
 
 def main():
@@ -114,6 +147,10 @@ def main():
     sql = open(SQL_PATH, encoding="utf-8").read().strip()
     if not sql:
         print("ERRO: SQL vazio"); return
+
+    aud_sql = ""
+    if os.path.isfile(SQL_AUD_PATH):
+        aud_sql = open(SQL_AUD_PATH, encoding="utf-8").read().strip()
 
     conns = build_conns_from_env()
     if not conns:
@@ -131,6 +168,9 @@ def main():
             with engine.connect() as con:
                 df = pd.read_sql_query(text(sql), con)
             rows = [normalize_row(r) for r in df.to_dict(orient="records")]
+            if aud_sql:
+                audit_map = fetch_audit(engine, aud_sql)
+                rows = merge_audit(rows, audit_map)
             por_posto[posto] = rows
             out = os.path.join(JSON_DIR, f"CTRLQ_DESBLOQUEIO_{posto}.json")
             atomic_write(out, rows)
