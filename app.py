@@ -47,6 +47,36 @@ except Exception as _e:
     logging.getLogger(__name__).error("alarmes_bp não carregado: %s", _e)
 
 PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
+
+# Mapeamento page_key → template para controle de acesso por página
+_TEMPLATE_TO_PAGINA = {
+    "alimentacao.html":                 "alimentacao",
+    "medicos.html":                     "medicos",
+    "ctrlq_relatorio.html":             "ctrlq_relatorio",
+    "kpi_v2.html":                      "kpi_v2",
+    "kpi_vendas.html":                  "kpi_vendas",
+    "clientes.html":                    "clientes",
+    "KPI_prescricao.html":              "kpi_prescricao",
+    "kpi_prescricao.html":              "kpi_prescricao",
+    "kpi_fidelizacao_cliente.html":     "kpi_fidelizacao",
+    "kpi_governo.html":                 "kpi_governo",
+    "kpi_liberty.html":                 "kpi_liberty",
+    "kpi_receita_despesa.html":         "kpi_receita_despesa",
+    "kpi_receita_despesa_rateio.html":  "kpi_receita_despesa_rateio",
+    "kpi_consultas_status.html":        "kpi_consultas",
+    "kpi_notas_rps.html":               "kpi_notas_rps",
+    "kpi_metas_vendas_mensalidades.html": "kpi_metas",
+    "kpi_metas.html":                   "kpi_metas",
+    "growth.html":                      "growth",
+    "mais_servicos.html":               "mais_servicos",
+    "trello_harvest.html":              "trello_harvest",
+    "tef_dashboard.html":               "tef",
+    "tef_logs.html":                    "tef",
+    "email_clientes_dashboard.html":    "email_clientes",
+    "email_clientes_logs.html":         "email_clientes",
+    "chat_avaliacoes.html":             "chat_avaliacoes",
+}
+
 _MENU_RESOURCES_CACHE = None
 
 
@@ -381,6 +411,17 @@ def render_protected_page(page_name):
     try:
         u = _gue(db, email)
         is_admin = u.is_admin if u else False
+        # Check page-level access
+        page_key = _TEMPLATE_TO_PAGINA.get(page_name)
+        if page_key and u and not u.all_pages:
+            if page_key not in u.lista_paginas():
+                return render_template(
+                    "acesso_negado.html",
+                    USER_EMAIL=email,
+                    USER_IS_ADMIN=is_admin,
+                    USER_POSTOS=json.dumps(postos),
+                    PAGINA_BLOQUEADA=page_name,
+                ), 403
     finally:
         db.close()
 
@@ -676,6 +717,21 @@ def any_html(filename):
         is_admin = u.is_admin if u else False
     finally:
         db.close()
+
+    # Check page-level access
+    page_key = _TEMPLATE_TO_PAGINA.get(filename)
+    if page_key and u and not u.all_pages:
+        if page_key not in u.lista_paginas():
+            try:
+                return render_template(
+                    "acesso_negado.html",
+                    USER_EMAIL=email,
+                    USER_IS_ADMIN=is_admin,
+                    USER_POSTOS=json.dumps(postos),
+                    PAGINA_BLOQUEADA=filename,
+                ), 403
+            except Exception:
+                return ('Acesso negado', 403)
 
     try:
         return render_template(

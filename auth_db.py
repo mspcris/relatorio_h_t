@@ -7,7 +7,7 @@ import secrets
 from datetime import datetime, timedelta
 
 from sqlalchemy import (
-    create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text
+    create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, text
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -30,11 +30,16 @@ class User(Base):
     senha_hash   = Column(String(256), nullable=False)
     is_admin     = Column(Boolean, default=False, nullable=False)
     ativo        = Column(Boolean, default=True,  nullable=False)
+    all_pages    = Column(Boolean, default=True,  nullable=False)
     reset_token  = Column(String(100), nullable=True)
     reset_expires = Column(DateTime, nullable=True)
 
     postos = relationship(
         "UserPosto", back_populates="user",
+        cascade="all, delete-orphan", lazy="select"
+    )
+    page_permissions = relationship(
+        "UserPagePermission", back_populates="user",
         cascade="all, delete-orphan", lazy="select"
     )
     login_history = relationship(
@@ -68,6 +73,9 @@ class User(Base):
     def lista_postos(self) -> list:
         return sorted(p.posto for p in self.postos)
 
+    def lista_paginas(self) -> list:
+        return sorted(p.page_key for p in self.page_permissions)
+
 
 class UserPosto(Base):
     __tablename__ = "user_postos"
@@ -76,6 +84,15 @@ class UserPosto(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     posto   = Column(String(10), nullable=False)
     user    = relationship("User", back_populates="postos")
+
+
+class UserPagePermission(Base):
+    __tablename__ = "user_page_permissions"
+
+    id       = Column(Integer, primary_key=True)
+    user_id  = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    page_key = Column(String(100), nullable=False)
+    user     = relationship("User", back_populates="page_permissions")
 
 
 class LoginHistory(Base):
@@ -160,6 +177,13 @@ _KPI_DEFAULTS = [
 
 def init_db():
     Base.metadata.create_all(engine)
+    # Migration: add all_pages column to existing users (safe if already exists)
+    with engine.connect() as _conn:
+        try:
+            _conn.execute(text("ALTER TABLE users ADD COLUMN all_pages INTEGER NOT NULL DEFAULT 1"))
+            _conn.commit()
+        except Exception:
+            pass  # column already exists
     db = SessionLocal()
     try:
         # KPIs conhecidos

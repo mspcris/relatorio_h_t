@@ -89,6 +89,30 @@ IA_GROQ_URL = os.environ.get("IA_GROQ_URL", "http://127.0.0.1:8030/ia/analisar")
 
 auth_bp = Blueprint("auth_bp", __name__)
 
+PAGINAS_DISPONIVEIS = [
+    {"key": "alimentacao",               "label": "KPI Custo Alimentação"},
+    {"key": "medicos",                   "label": "KPI Custo Médico"},
+    {"key": "ctrlq_relatorio",           "label": "KPI Médicos (Qualidade)"},
+    {"key": "kpi_v2",                    "label": "KPI Mensalidades"},
+    {"key": "kpi_vendas",                "label": "KPI Vendas"},
+    {"key": "clientes",                  "label": "KPI Clientes"},
+    {"key": "kpi_prescricao",            "label": "KPI Prescrições"},
+    {"key": "kpi_fidelizacao",           "label": "KPI Fidelização Churn"},
+    {"key": "kpi_consultas",             "label": "KPI Consultas (Status)"},
+    {"key": "kpi_notas_rps",             "label": "KPI Notas x RPS"},
+    {"key": "kpi_metas",                 "label": "KPI Metas (Mens/Vendas)"},
+    {"key": "kpi_governo",               "label": "KPI Índices Oficiais"},
+    {"key": "kpi_liberty",               "label": "KPI CAMIM Liberty"},
+    {"key": "kpi_receita_despesa",       "label": "KPI Receitas x Despesas"},
+    {"key": "kpi_receita_despesa_rateio","label": "KPI R x D com Rateio"},
+    {"key": "growth",                    "label": "Growth Dashboard"},
+    {"key": "mais_servicos",             "label": "Mais Serviços"},
+    {"key": "trello_harvest",            "label": "Trello Harvest"},
+    {"key": "tef",                       "label": "TEF Dashboard"},
+    {"key": "email_clientes",            "label": "E-mail Clientes"},
+    {"key": "chat_avaliacoes",           "label": "Chat Avaliações"},
+]
+
 # ── Estado inicializado por init_auth() ───────────────────────────────────────
 _SESS_NAME   = "appsess"
 _TTL_SECONDS = 3600 * 8
@@ -471,6 +495,13 @@ def admin_page():
 
 # ── Admin — API JSON ───────────────────────────────────────────────────────────
 
+@auth_bp.get("/admin/api/paginas")
+def admin_paginas():
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    return jsonify(PAGINAS_DISPONIVEIS)
+
+
 @auth_bp.get("/admin/api/usuarios")
 def admin_lista():
     if not _require_admin():
@@ -493,6 +524,8 @@ def admin_lista():
                 "is_admin":      u.is_admin,
                 "ativo":         u.ativo,
                 "postos":        u.lista_postos(),
+                "all_pages":     u.all_pages if hasattr(u, 'all_pages') else True,
+                "paginas":       u.lista_paginas() if hasattr(u, 'lista_paginas') else [],
                 "ultimo_login":  last.created_at.isoformat() if last else None,
                 "ultimo_login_ip": last.ip if last else None,
             })
@@ -522,6 +555,10 @@ def admin_criar():
         db.flush()
         for posto in d.get("postos", []):
             db.add(UserPosto(user_id=user.id, posto=posto.upper()))
+        user.all_pages = bool(d.get("all_pages", False))  # new users start restricted by default
+        from auth_db import UserPagePermission
+        for key in d.get("paginas", []):
+            db.add(UserPagePermission(user_id=user.id, page_key=key))
         db.commit()
         return jsonify({"id": user.id}), 201
     finally:
@@ -551,6 +588,14 @@ def admin_editar(uid: int):
             db.flush()
             for posto in d["postos"]:
                 db.add(UserPosto(user_id=user.id, posto=posto.upper()))
+        if "all_pages" in d:
+            user.all_pages = bool(d["all_pages"])
+        if "paginas" in d:
+            from auth_db import UserPagePermission
+            db.query(UserPagePermission).filter_by(user_id=user.id).delete(synchronize_session="fetch")
+            db.flush()
+            for key in d["paginas"]:
+                db.add(UserPagePermission(user_id=user.id, page_key=key))
         db.commit()
         return jsonify({"ok": True})
     finally:
