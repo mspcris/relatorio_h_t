@@ -193,7 +193,7 @@ def auth_callback():
         ), 502
 
     if not _is_allowed(sub):
-        return render_template_string(TMPL_NEGADO, email=email, nome=nome), 403
+        return render_template_string(TMPL_NEGADO, email=email, nome=nome, sub=sub), 403
 
     session.permanent = True
     session['sub']   = sub
@@ -314,14 +314,20 @@ TMPL_NEGADO = '''<!doctype html><html lang="pt-br"><head><meta charset="UTF-8">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
 </head><body class="d-flex align-items-center justify-content-center" style="min-height:100vh;background:#f4f6f9">
-<div class="card shadow" style="max-width:480px;width:100%">
+<div class="card shadow" style="max-width:520px;width:100%">
   <div class="card-body text-center p-5">
     <i class="fas fa-ban fa-3x text-danger mb-3"></i>
     <h4 class="mb-2">Acesso não autorizado</h4>
     <p class="text-muted mb-1">Você se autenticou com IDCAMIM mas não possui acesso à plataforma WPP Campanhas.</p>
-    {% if email %}<p class="text-muted small">Conta: {{ email }}</p>{% endif %}
-    <p class="text-muted">Solicite acesso ao administrador do sistema.</p>
-    <a href="/auth/logout" class="btn btn-outline-secondary mt-3">Sair</a>
+    {% if email %}<p class="text-muted small mb-1"><strong>Email:</strong> {{ email }}</p>{% endif %}
+    {% if sub %}
+    <div class="alert alert-light border mt-3 text-left" style="word-break:break-all">
+      <small class="text-muted d-block mb-1">Envie este código ao administrador para solicitar acesso:</small>
+      <code class="small">{{ sub }}</code>
+    </div>
+    {% endif %}
+    <p class="text-muted mt-3 small">Solicite acesso ao administrador do sistema.</p>
+    <a href="/auth/logout" class="btn btn-outline-secondary mt-2">Sair</a>
   </div>
 </div></body></html>'''
 
