@@ -78,6 +78,20 @@ _TEMPLATE_TO_PAGINA = {
     "email_clientes_dashboard.html":    "email_clientes",
     "email_clientes_logs.html":         "email_clientes",
     "chat_avaliacoes.html":             "chat_avaliacoes",
+    # Itens de mais_servicos.html (internos)
+    "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
+    "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",
+    "k_whatsapp_como_funciona.html":   "k_whatsapp_explicado",
+    # Itens de mais_servicos.html (externos — usados no filtro do sidebar)
+    "https://cobranca.camim.com.br/":                   "cobranca",
+    "https://chat.camim.com.br/":                       "chat_externo",
+    "https://broker.camim.com.br/":                     "broker",
+    "https://corretores.camim.com.br/":                 "corretores",
+    "https://tarefas.camim.com.br/":                    "tarefas",
+    "https://camila5.ia.camim.com.br/login?next=/":     "push_cobranca",
+    "https://camila1.ia.camim.com.br/":                 "wpp_campanhas",
+    "https://atendimento.camilaia.camim.com.br/crm":    "camila_crm",
+    "https://crm.camim.com.br/":                        "crm",
 }
 
 _MENU_RESOURCES_CACHE = None

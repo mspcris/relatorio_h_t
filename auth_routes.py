@@ -111,6 +111,19 @@ PAGINAS_DISPONIVEIS = [
     {"key": "tef",                       "label": "TEF Dashboard"},
     {"key": "email_clientes",            "label": "E-mail Clientes"},
     {"key": "chat_avaliacoes",           "label": "Chat Avaliações"},
+    # Itens de mais_servicos.html
+    {"key": "k_nbs_ibs_cbs",            "label": "Notas Fiscais NBS/IBS/CBS"},
+    {"key": "k_relatorio_pcs",          "label": "Planejamento PC's"},
+    {"key": "k_whatsapp_explicado",     "label": "Explicando Cobrança WPP"},
+    {"key": "cobranca",                 "label": "Cobrança (externo)"},
+    {"key": "chat_externo",             "label": "Chat (externo)"},
+    {"key": "broker",                   "label": "Vendas Efetivar (externo)"},
+    {"key": "corretores",               "label": "Vendas Leads Corretores (externo)"},
+    {"key": "tarefas",                  "label": "Tarefas (externo)"},
+    {"key": "push_cobranca",            "label": "Push de Cobrança IA (externo)"},
+    {"key": "wpp_campanhas",            "label": "WhatsApp Campanhas (externo)"},
+    {"key": "camila_crm",               "label": "Camila.ai CRM (externo)"},
+    {"key": "crm",                      "label": "CRM (externo)"},
 ]
 
 # ── Estado inicializado por init_auth() ───────────────────────────────────────

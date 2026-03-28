@@ -137,3 +137,46 @@ GROQ_API_KEY, OPENAI_API_KEY
 - Atualmente `login.html` é estático (sem Jinja2) — ok servir via /var/www
 - `nova_senha.html` e `reset_senha.html` usam `{% if erro %}` — servidos pelo Flask
 - `.gitignore` deve excluir `.env`, `*.db`, `__pycache__`, `.venv`
+
+---
+
+## Controle de acesso por página
+
+Usuários com `all_pages=True` (padrão para usuários existentes) acessam tudo.
+Usuários com `all_pages=False` (padrão para novos usuários) só acessam páginas liberadas pelo admin.
+
+### Como adicionar uma nova página ao controle de acesso
+
+Ao criar uma nova página HTML, siga estes 3 passos obrigatórios:
+
+**1. `app.py` — registrar em `_TEMPLATE_TO_PAGINA`**
+
+```python
+# Para template interno (arquivo .html servido pelo Flask):
+"nome_do_template.html": "page_key",
+
+# Para link externo (aparece no sidebar de mais_servicos.html):
+"https://exemplo.camim.com.br/": "page_key",
+```
+
+**2. `auth_routes.py` — adicionar em `PAGINAS_DISPONIVEIS`**
+
+```python
+{"key": "page_key", "label": "Nome Legível para o Admin"},
+```
+
+**3. Comportamento automático**
+
+- Usuários com `all_pages=True`: acessam normalmente (sem mudança)
+- Usuários com `all_pages=False`: **não veem** a nova página no sidebar e recebem 403 se tentarem acessá-la diretamente — até o admin liberar explicitamente
+- O admin libera via modal de edição do usuário em `/admin`
+
+### Como funciona o filtro de sidebar
+
+`render_protected_page()` e `any_html()` em `app.py` injetam um `<script>` antes de `</body>` que:
+1. Lê a lista de `page_key` liberados para o usuário
+2. Para cada `<a class="nav-link">` no sidebar, extrai o `href`
+3. Consulta `_TEMPLATE_TO_PAGINA[href]` para obter a `page_key`
+4. Se a `page_key` não está na lista do usuário → esconde o `<li>` pai
+
+Isso funciona sem modificar cada template individualmente.
