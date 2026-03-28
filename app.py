@@ -426,10 +426,17 @@ def _sidebar_filter_script(paginas: list) -> str:
         f'<script>(function(){{'
         f'var p={plist},m={href_map};'
         f'function hide(){{'
+        # sidebar nav items
         f'document.querySelectorAll(".nav-sidebar .nav-item a.nav-link").forEach(function(a){{'
         f'var h=(a.getAttribute("href")||"").replace(/^\//,"");'
         f'var k=m[h];if(k&&p.indexOf(k)===-1){{var li=a.closest(".nav-item");if(li)li.style.display="none";}}'
-        f'}});}}'
+        f'}});'
+        # cards (btn-acessar) — hide the parent col-* container
+        f'document.querySelectorAll("a.btn-acessar").forEach(function(a){{'
+        f'var h=(a.getAttribute("href")||"").replace(/^\//,"");'
+        f'var k=m[h];if(k&&p.indexOf(k)===-1){{var col=a.closest("[class*=\'col-\']");if(col)col.style.display="none";}}'
+        f'}});'
+        f'}}'
         f'if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",hide);else hide();'
         f'}})();</script></body>'
     )
