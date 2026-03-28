@@ -68,7 +68,7 @@ def _db():
             nome       TEXT DEFAULT "",
             is_admin   INTEGER NOT NULL DEFAULT 0,
             ativo      INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL DEFAULT (datetime("now"))
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     return conn

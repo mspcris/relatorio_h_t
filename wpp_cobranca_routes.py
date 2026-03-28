@@ -207,6 +207,8 @@ def nova_form():
     email, is_admin = _check_auth()
     if not email:
         return ('', 401)
+    if not is_admin:
+        return ('Acesso restrito a administradores.', 403)
     postos = _postos_disponiveis()
     templates = _fetch_templates()
     return render_template(
@@ -221,9 +223,11 @@ def nova_form():
 
 @wpp_bp.post("/nova")
 def nova_salvar():
-    email, _ = _check_auth()
+    email, is_admin = _check_auth()
     if not email:
         return ('', 401)
+    if not is_admin:
+        return ('Acesso restrito a administradores.', 403)
     dados = _form_to_dict(request.form)
     novo_id = db.criar_campanha(dados)
     db.registrar_auditoria(email, "CRIAR", novo_id, dados["nome"], dados)
@@ -239,6 +243,8 @@ def editar_form(cid):
     email, is_admin = _check_auth()
     if not email:
         return ('', 401)
+    if not is_admin:
+        return ('Acesso restrito a administradores.', 403)
     campanha = db.get_campanha(cid)
     if not campanha:
         return ("Campanha não encontrada", 404)
@@ -256,9 +262,11 @@ def editar_form(cid):
 
 @wpp_bp.post("/<int:cid>/editar")
 def editar_salvar(cid):
-    email, _ = _check_auth()
+    email, is_admin = _check_auth()
     if not email:
         return ('', 401)
+    if not is_admin:
+        return ('Acesso restrito a administradores.', 403)
     antes = db.get_campanha(cid)
     dados = _form_to_dict(request.form)
     db.atualizar_campanha(cid, dados)
@@ -273,9 +281,11 @@ def editar_salvar(cid):
 
 @wpp_bp.post("/<int:cid>/toggle")
 def toggle(cid):
-    email, _ = _check_auth()
+    email, is_admin = _check_auth()
     if not email:
         return ('', 401)
+    if not is_admin:
+        return jsonify({"error": "Acesso restrito a administradores."}), 403
     campanha = db.get_campanha(cid)
     novo_estado = db.toggle_campanha(cid)
     acao = "ATIVAR" if novo_estado else "DESATIVAR"
@@ -286,9 +296,11 @@ def toggle(cid):
 
 @wpp_bp.post("/<int:cid>/excluir")
 def excluir(cid):
-    email, _ = _check_auth()
+    email, is_admin = _check_auth()
     if not email:
         return ('', 401)
+    if not is_admin:
+        return ('Acesso restrito a administradores.', 403)
     campanha = db.get_campanha(cid)
     db.registrar_auditoria(email, "EXCLUIR", cid,
                             campanha["nome"] if campanha else None, campanha)
