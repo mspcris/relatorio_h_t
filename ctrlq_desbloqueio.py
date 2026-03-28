@@ -9,7 +9,7 @@
 import os
 import json
 import decimal
-from datetime import datetime, date, timezone
+from datetime import datetime, date, time as time_type, timezone
 from urllib.parse import quote_plus
 
 import pandas as pd
@@ -51,6 +51,8 @@ def cleanup_json_dir(d):
     print(f"[CLEANUP] removidos {n} .json em {d}")
 
 def normalize(v):
+    if isinstance(v, time_type):
+        return v.strftime('%H:%M:%S')
     if isinstance(v, (pd.Timestamp, datetime, date)):
         return v.isoformat()
     if isinstance(v, decimal.Decimal):
