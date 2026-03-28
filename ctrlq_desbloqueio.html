@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>CAMIM — Solicitação de Desbloqueio de Agenda</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style2.css">
+  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+<style>
+  html { font-size: 16px; }
+  body { font-size: 1rem; font-family: "Source Sans Pro", system-ui, sans-serif; }
+
+  /* ── Cartão de desbloqueio ── */
+  .desb-card {
+    border-left: 4px solid #f39c12;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    margin-bottom: 14px;
+    padding: 14px 16px;
+  }
+  .desb-card.expirado { border-left-color: #6c757d; opacity: .75; }
+  .desb-card.vencendo { border-left-color: #dc3545; }
+
+  .desb-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .desb-medico   { font-weight: 700; font-size: 1rem; }
+  .desb-esp      { color: #555; font-size: .88rem; margin-top: 1px; }
+  .desb-crm      { color: #888; font-size: .8rem; }
+
+  .desb-periodo {
+    font-size: .82rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .desb-periodo .badge-dias {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: .78rem;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+  .badge-ativo   { background: #d4edda; color: #155724; }
+  .badge-vencend { background: #f8d7da; color: #721c24; }
+  .badge-expirado{ background: #e2e3e5; color: #383d41; }
+
+  .desb-obs {
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-radius: 4px;
+    padding: 7px 10px;
+    font-size: .88rem;
+    margin: 8px 0;
+    color: #5d4037;
+    word-break: break-word;
+  }
+  .desb-obs .obs-label {
+    font-weight: 700;
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #f57f17;
+    margin-bottom: 3px;
+  }
+
+  /* ── Tabela de custos ── */
+  .custos-wrap { margin-top: 8px; }
+  .custos-title {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #888;
+    margin-bottom: 4px;
+  }
+  .custos-table { font-size: .82rem; border-collapse: collapse; }
+  .custos-table th {
+    background: #f8f9fa;
+    padding: 3px 10px;
+    text-align: center;
+    font-weight: 600;
+    border: 1px solid #dee2e6;
+    font-size: .78rem;
+  }
+  .custos-table td {
+    padding: 3px 10px;
+    text-align: center;
+    border: 1px solid #dee2e6;
+  }
+  .custos-table tr:nth-child(even) td { background: #f8f9fa; }
+
+  /* ── Diff de flag ── */
+  .diff-flag {
+    display: inline-block;
+    font-size: .78rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-left: 4px;
+  }
+  .diff-antes  { background: #fdecea; color: #b71c1c; }
+  .diff-depois { background: #e8f5e9; color: #1b5e20; }
+
+  /* ── Filtros ── */
+  .posto-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
+  .posto-tabs .nav-link { min-width: 48px; text-align: center; cursor: pointer; }
+
+  /* ── Contadores ── */
+  .badge-posto-count {
+    background: #e9ecef;
+    color: #333;
+    border-radius: 20px;
+    padding: 1px 7px;
+    font-size: .75rem;
+    margin-left: 4px;
+  }
+
+  #listArea { min-height: 80px; }
+  .vazio-msg { color: #888; font-size: .9rem; padding: 20px 0; }
+</style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+
+  <!-- NAVBAR -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+      </li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" height="30" alt="">
+      <span class="ml-2">Quem tem saúde é mais feliz!</span>
+    </span>
+  </nav>
+
+  <!-- SIDEBAR -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="kpi_home.html" class="brand-link">
+      <img src="/images/Logo Camim-01_200px.png" alt="CAMIM" class="brand-image img-circle elevation-3">
+      <span class="brand-text font-weight-light">CAMIM</span>
+    </a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
+          <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home</p></a></li>
+          {% if USER_IS_ADMIN %}
+          <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+          {% endif %}
+          <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+          <li class="nav-item"><a href="/ctrlq_desbloqueio" class="nav-link active"><i class="nav-icon fas fa-unlock-alt"></i><p>Desbloqueio de Agenda</p></a></li>
+          <li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline">
+              <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                <i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p>
+              </button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- CONTEÚDO -->
+  <div class="content-wrapper">
+    <section class="content p-3">
+
+      <!-- Cabeçalho -->
+      <div class="card mb-3">
+        <div class="card-body py-2">
+          <div class="d-flex align-items-center justify-content-between flex-wrap" style="gap:8px">
+            <div>
+              <h2 class="mb-0" style="font-size:1.25rem">
+                <i class="fas fa-unlock-alt mr-2 text-warning"></i>Solicitação de Desbloqueio de Agenda — CTRL-Q
+              </h2>
+              <small class="text-muted" id="metaInfo">carregando…</small>
+            </div>
+            <div>
+              <span id="totalBadge" class="badge badge-warning" style="font-size:.85rem"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filtro de posto -->
+      <div class="card mb-3">
+        <div class="card-body py-2 px-3">
+          <div class="d-flex align-items-center flex-wrap" style="gap:10px">
+            <span class="font-weight-bold" style="font-size:.85rem">Posto</span>
+            <ul id="postoTabs" class="nav nav-pills posto-tabs mb-0 flex-grow-1"></ul>
+            <div class="form-check form-check-inline ml-2 mb-0">
+              <input class="form-check-input" type="checkbox" id="chkExpirados">
+              <label class="form-check-label small" for="chkExpirados">Mostrar expirados</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lista de registros -->
+      <div id="listArea">
+        <p class="text-muted">Carregando…</p>
+      </div>
+
+    </section>
+  </div>
+
+  <footer class="main-footer text-sm text-muted">
+    <strong>CAMIM</strong> — Solicitação de Desbloqueio de Agenda
+  </footer>
+
+</div><!-- /wrapper -->
+
+<script>
+(() => {
+  'use strict';
+
+  const JSON_URL = '/json_ctrlq_desbloqueio/CTRLQ_DESBLOQUEIO_CONSOLIDADO.json';
+  const DIAS_VENCENDO = 7; // considera "vencendo" se expira em até N dias
+
+  let _dados  = {};   // { posto: [ ...registros ] }
+  let _postos = [];
+  let _postoSel = 'TODOS';
+  let _mostrarExpirados = false;
+
+  // ── Formatadores ──────────────────────────────────────────────────────────
+
+  const fmtDate = iso => {
+    if (!iso) return '—';
+    const d = new Date(iso.replace(' ', 'T'));
+    return d.toLocaleDateString('pt-BR');
+  };
+
+  const fmtValor = v => {
+    if (v === null || v === undefined) return '—';
+    const n = Number(v);
+    if (isNaN(n)) return '—';
+    return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  function diasParaExpirar(dataFim) {
+    if (!dataFim) return null;
+    const fim  = new Date(dataFim.replace(' ', 'T'));
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    return Math.ceil((fim - hoje) / 864e5);
+  }
+
+  function badgeDias(dias) {
+    if (dias === null) return '';
+    if (dias < 0)  return `<span class="badge-dias badge-expirado">expirado há ${Math.abs(dias)} dia(s)</span>`;
+    if (dias === 0) return `<span class="badge-dias badge-vencend">expira hoje</span>`;
+    if (dias <= DIAS_VENCENDO) return `<span class="badge-dias badge-vencend">expira em ${dias} dia(s)</span>`;
+    return `<span class="badge-dias badge-ativo">expira em ${dias} dia(s)</span>`;
+  }
+
+  function cardClass(dias) {
+    if (dias === null || dias < 0) return 'desb-card expirado';
+    if (dias <= DIAS_VENCENDO) return 'desb-card vencendo';
+    return 'desb-card';
+  }
+
+  // ── Custos ────────────────────────────────────────────────────────────────
+
+  const DIAS_SEMANA = ['Segunda','Terca','Quarta','Quinta','Sexta','Sabado','Domingo'];
+
+  function tabelaCustos(rec) {
+    const temCusto = DIAS_SEMANA.some(d =>
+      rec[`ValorCusto${d}`] !== null && rec[`ValorCusto${d}`] !== undefined
+    );
+    if (!temCusto) return '';
+
+    const ths = DIAS_SEMANA.map(d => `<th>${d.replace('Terca','Terça').replace('Sabado','Sábado')}</th>`).join('');
+    const valRow = DIAS_SEMANA.map(d => `<td>R$ ${fmtValor(rec[`ValorCusto${d}`])}</td>`).join('');
+    const qtdRow = DIAS_SEMANA.map(d => `<td>${rec[`QuantidadeCusto${d}`] ?? '—'}</td>`).join('');
+
+    return `
+      <div class="custos-wrap">
+        <div class="custos-title">Custos por dia da semana (atual)</div>
+        <div class="table-responsive">
+          <table class="custos-table">
+            <thead><tr><th></th>${ths}</tr></thead>
+            <tbody>
+              <tr><td class="text-left font-weight-bold" style="background:#f8f9fa">Valor</td>${valRow}</tr>
+              <tr><td class="text-left font-weight-bold" style="background:#f8f9fa">Qtd</td>${qtdRow}</tr>
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  // ── Diff de flags ─────────────────────────────────────────────────────────
+
+  function diffFlag(label, atual, hist) {
+    if (hist === null || hist === undefined) return '';
+    if (atual == hist) return '';
+    const antes  = hist  ? 'Sim' : 'Não';
+    const depois = atual ? 'Sim' : 'Não';
+    return `
+      <div style="font-size:.82rem;margin-top:4px">
+        <span class="font-weight-bold">${label}:</span>
+        <span class="diff-flag diff-antes">antes: ${antes}</span>
+        <span class="diff-flag diff-depois">agora: ${depois}</span>
+      </div>`;
+  }
+
+  // ── Render de um card ─────────────────────────────────────────────────────
+
+  function renderCard(rec) {
+    const dias  = diasParaExpirar(rec.DataFimExibicao);
+    const cls   = cardClass(dias);
+    const obs   = (rec.ObservacaoDesbloqueio || '').trim();
+    const custos = tabelaCustos(rec);
+    const diff   = diffFlag(
+      'Permitir agendamento sem consulta anterior',
+      rec.atual_PermitirSemConsulta,
+      rec.hist_PermitirSemConsulta
+    );
+    const histData = rec.hist_DataHoraInclusao
+      ? `<small class="text-muted" style="font-size:.75rem"> · snapshot histórico de ${fmtDate(rec.hist_DataHoraInclusao)}</small>`
+      : '';
+
+    return `
+      <div class="${cls}">
+        <div class="desb-header">
+          <div>
+            <div class="desb-medico">${esc(rec.medico || '(sem nome)')}</div>
+            <div class="desb-esp">${esc(rec.Especialidade || '')}
+              <span class="desb-crm">CRM ${esc(rec.crm || '—')}</span>
+            </div>
+          </div>
+          <div class="desb-periodo">
+            <div>${fmtDate(rec.DataInicioExibicao)} → ${fmtDate(rec.DataFimExibicao)}${badgeDias(dias)}</div>
+            ${histData}
+          </div>
+        </div>
+
+        ${obs ? `
+        <div class="desb-obs">
+          <div class="obs-label"><i class="fas fa-comment-alt mr-1"></i>Observação de Desbloqueio</div>
+          ${esc(obs)}
+        </div>` : ''}
+
+        ${diff}
+        ${custos}
+      </div>`;
+  }
+
+  // ── Render da lista ───────────────────────────────────────────────────────
+
+  function getRegistros() {
+    const postos = _postoSel === 'TODOS' ? _postos : [_postoSel];
+    let all = [];
+    for (const p of postos) {
+      for (const r of (_dados[p] || [])) {
+        all.push({ ...r, _posto: p });
+      }
+    }
+    if (!_mostrarExpirados) {
+      all = all.filter(r => diasParaExpirar(r.DataFimExibicao) >= 0);
+    }
+    // Ordena: vencendo primeiro, depois por DataFimExibicao ASC
+    all.sort((a, b) => {
+      const da = diasParaExpirar(a.DataFimExibicao) ?? 9999;
+      const db = diasParaExpirar(b.DataFimExibicao) ?? 9999;
+      return da - db;
+    });
+    return all;
+  }
+
+  function renderLista() {
+    const area = document.getElementById('listArea');
+    const regs = getRegistros();
+
+    document.getElementById('totalBadge').textContent =
+      `${regs.length} registro${regs.length !== 1 ? 's' : ''}`;
+
+    if (!regs.length) {
+      area.innerHTML = '<p class="vazio-msg"><i class="fas fa-check-circle text-success mr-1"></i>Nenhum registro de desbloqueio ativo encontrado.</p>';
+      return;
+    }
+
+    // Agrupa por posto para mostrar separadores quando "Todos"
+    if (_postoSel === 'TODOS' && _postos.length > 1) {
+      const grupos = {};
+      for (const r of regs) {
+        if (!grupos[r._posto]) grupos[r._posto] = [];
+        grupos[r._posto].push(r);
+      }
+      let html = '';
+      for (const [posto, lista] of Object.entries(grupos).sort()) {
+        html += `<h6 class="text-uppercase text-muted mt-3 mb-2" style="font-size:.75rem;letter-spacing:.07em">
+                   <i class="fas fa-map-marker-alt mr-1"></i>Posto ${posto} — ${lista.length} registro(s)
+                 </h6>`;
+        html += lista.map(renderCard).join('');
+      }
+      area.innerHTML = html;
+    } else {
+      area.innerHTML = regs.map(renderCard).join('');
+    }
+  }
+
+  // ── Tabs de posto ─────────────────────────────────────────────────────────
+
+  function buildPostoTabs() {
+    const ul = document.getElementById('postoTabs');
+    ul.innerHTML = '';
+
+    const mkTab = (label, posto, count) => {
+      const li = document.createElement('li'); li.className = 'nav-item';
+      const a  = document.createElement('a');
+      a.href = '#';
+      a.className = 'nav-link' + (posto === _postoSel ? ' active' : '');
+      a.dataset.posto = posto;
+      a.innerHTML = label + (count != null ? `<span class="badge-posto-count">${count}</span>` : '');
+      a.onclick = e => { e.preventDefault(); _postoSel = posto; buildPostoTabs(); renderLista(); };
+      li.appendChild(a); ul.appendChild(li);
+    };
+
+    const totalAtivos = Object.values(_dados)
+      .flat().filter(r => diasParaExpirar(r.DataFimExibicao) >= 0).length;
+    mkTab('Todos', 'TODOS', totalAtivos);
+
+    for (const p of _postos) {
+      const regs = (_dados[p] || []).filter(r => _mostrarExpirados || diasParaExpirar(r.DataFimExibicao) >= 0);
+      mkTab(p, p, regs.length);
+    }
+  }
+
+  // ── Escape HTML ───────────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  // ── Carregamento ──────────────────────────────────────────────────────────
+
+  async function load() {
+    try {
+      const r = await fetch(JSON_URL, { cache: 'no-store' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const json = await r.json();
+
+      _dados  = json.postos || {};
+      _postos = (json.meta?.postos || Object.keys(_dados)).sort();
+
+      document.getElementById('metaInfo').textContent =
+        json.meta?.gerado_em_br ? `dados gerados em ${json.meta.gerado_em_br}` : '';
+
+      buildPostoTabs();
+      renderLista();
+    } catch (e) {
+      document.getElementById('listArea').innerHTML =
+        `<div class="alert alert-danger">Erro ao carregar dados: ${esc(e.message)}</div>`;
+    }
+  }
+
+  // ── Checkbox expirados ────────────────────────────────────────────────────
+  document.getElementById('chkExpirados').addEventListener('change', function() {
+    _mostrarExpirados = this.checked;
+    buildPostoTabs();
+    renderLista();
+  });
+
+  load();
+})();
+</script>
+
+</body>
+</html>

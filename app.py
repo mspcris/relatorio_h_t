@@ -82,6 +82,8 @@ _TEMPLATE_TO_PAGINA = {
     "chat_avaliacoes":                  "chat_avaliacoes",
     "email_clientes":                   "email_clientes",
     "tef":                              "tef",
+    "ctrlq_desbloqueio.html":           "ctrlq_desbloqueio",
+    "ctrlq_desbloqueio":               "ctrlq_desbloqueio",
     # Itens de mais_servicos.html (internos)
     "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
     "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",
@@ -509,6 +511,10 @@ def r_tef_logs():
 @app.get('/chat_avaliacoes')
 def r_chat_avaliacoes():
     return render_protected_page("chat_avaliacoes.html")
+
+@app.get('/ctrlq_desbloqueio')
+def r_ctrlq_desbloqueio():
+    return render_protected_page("ctrlq_desbloqueio.html")
 
 @app.get('/kpi_receita_despesa_rateio')
 def r_rateio():
