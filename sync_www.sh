@@ -83,6 +83,7 @@ install -d -m 2775 -g "$WEB_GRP" \
   "$TPL/export_trello" "$TPL/export_harvest" \
   "$TPL/json_consolidado" "$TPL/json_rateio" "$TPL/json_fin_full" \
   "$DST/json_ctrlq_relatorio" "$TPL/json_ctrlq_relatorio" \
+  "$DST/json_ctrlq_desbloqueio" "$TPL/json_ctrlq_desbloqueio" \
   "$DST/json_consultas_mensal" "$TPL/json_consultas_mensal" \
   "$DST/json_notas_rps" "$TPL/json_notas_rps" \
   "$DST/json_metas" "$TPL/json_metas"
@@ -191,6 +192,14 @@ copy_dir_tree "$SRC/json_cadastro" "$TPL/json_cadastro"
 echo "sync json_ctrlq_relatorio -> $DST/json_ctrlq_relatorio e $TPL/json_ctrlq_relatorio"
 copy_dir_tree "$SRC/json_ctrlq_relatorio" "$DST/json_ctrlq_relatorio"
 copy_dir_tree "$SRC/json_ctrlq_relatorio" "$TPL/json_ctrlq_relatorio"
+
+# -----------------------------------------------------------
+# CTRLQ DESBLOQUEIO
+# -----------------------------------------------------------
+
+echo "sync json_ctrlq_desbloqueio -> $DST/json_ctrlq_desbloqueio e $TPL/json_ctrlq_desbloqueio"
+copy_dir_tree "$SRC/json_ctrlq_desbloqueio" "$DST/json_ctrlq_desbloqueio"
+copy_dir_tree "$SRC/json_ctrlq_desbloqueio" "$TPL/json_ctrlq_desbloqueio"
 
 # -----------------------------------------------------------
 # JSON CONSULTAS MENSAL
