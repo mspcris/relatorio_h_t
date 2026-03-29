@@ -175,9 +175,13 @@
         .posto-tab:hover:not(.active) { background: #e8edf3; }
 
         /* ── Heat map ── */
-        .hm-wrap { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 280px); }
-        .hm-table { border-collapse: collapse; font-size: 0.82rem; min-width: 100%; }
-        .hm-table th { background: #1a2940; color: #b8d9f7; font-weight: 600; padding: 8px 10px; text-align: center; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
+        .hm-wrap { position: relative; }
+        .hm-table { border-collapse: separate; border-spacing: 0; font-size: 0.82rem; width: 100%; }
+        .hm-table th { background: #1a2940; color: #b8d9f7; font-weight: 600; padding: 8px 10px; text-align: center; white-space: nowrap; }
+        /* Floating sticky header clone */
+        .hm-sticky-header { position: fixed; top: 0; z-index: 300; background: #1a2940; overflow: hidden; display: none; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+        .hm-sticky-header table { border-collapse: separate; border-spacing: 0; font-size: 0.82rem; }
+        .hm-sticky-header th { background: #1a2940; color: #b8d9f7; font-weight: 600; padding: 8px 10px; text-align: center; white-space: nowrap; }
         .hm-table td { border: 1px solid #e8ecf0; vertical-align: middle; }
         .hm-table tr:hover td { filter: brightness(0.96); }
         .hm-esp { background: #f0f4f8; font-weight: 600; font-size: 0.8rem; padding: 7px 10px; white-space: nowrap; min-width: 160px; color: #2d3748; }
@@ -928,6 +932,52 @@ function renderHeatmap(data) {
     });
     html += '</tbody></table>';
     container.innerHTML = html;
+    setupStickyHeatmapHeader();
+}
+
+// ── Sticky header clone for heatmap table ──
+let _stickyEl = null;
+function setupStickyHeatmapHeader() {
+    // Remove previous clone
+    if (_stickyEl) { _stickyEl.remove(); _stickyEl = null; }
+    const table = document.querySelector('#heatmapContainer .hm-table');
+    if (!table) return;
+    const thead = table.querySelector('thead');
+    if (!thead) return;
+
+    // Create floating clone
+    const wrap = document.createElement('div');
+    wrap.className = 'hm-sticky-header';
+    const cloneTable = document.createElement('table');
+    cloneTable.appendChild(thead.cloneNode(true));
+    wrap.appendChild(cloneTable);
+    document.body.appendChild(wrap);
+    _stickyEl = wrap;
+
+    function syncWidths() {
+        const origCells = thead.querySelectorAll('th');
+        const cloneCells = cloneTable.querySelectorAll('th');
+        origCells.forEach((cell, i) => {
+            if (cloneCells[i]) cloneCells[i].style.width = cell.offsetWidth + 'px';
+        });
+        cloneTable.style.width = table.offsetWidth + 'px';
+    }
+
+    function onScroll() {
+        const rect = table.getBoundingClientRect();
+        const theadH = thead.offsetHeight;
+        // Show clone when original header is above viewport but table bottom is still below
+        if (rect.top < 0 && rect.bottom > theadH) {
+            syncWidths();
+            wrap.style.left = rect.left + 'px';
+            wrap.style.width = table.parentElement.offsetWidth + 'px';
+            wrap.style.display = 'block';
+        } else {
+            wrap.style.display = 'none';
+        }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', () => { if (wrap.style.display === 'block') syncWidths(); }, { passive: true });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
