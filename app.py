@@ -717,28 +717,27 @@ def api_ctrlq_historico_acoes():
             with engine.connect() as conn:
                 rows = conn.execute(sa_text("""
                     SELECT TOP 100
-                        h.id AS idEspecialidade,
-                        h.Tabela,
+                        h.id            AS idEspecialidade,
                         h.Comando,
-                        h.Usuario,
-                        h.Data,
-                        h.Descricao,
+                        h.[Usuário]     AS Usuario,
+                        h.[Data],
+                        h.[Descrição]   AS Descricao,
                         h.Detalhe,
                         h.Computador
                     FROM vw_Sis_Historico h
                     WHERE h.Computador = 'teste-ia.camim.com.br'
-                      AND h.Tabela = 'Quadro de especialidade'
-                    ORDER BY h.Data DESC
+                      AND h.Tabela = 'Cad_Especialidade'
+                    ORDER BY h.[Data] DESC
                 """)).fetchall()
                 for r in rows:
                     resultados.append({
                         "posto": posto,
                         "idEspecialidade": r[0],
-                        "comando": r[2],
-                        "usuario": r[3],
-                        "data": r[4].isoformat() if r[4] else None,
-                        "descricao": r[5],
-                        "detalhe": r[6],
+                        "comando": r[1],
+                        "usuario": r[2],
+                        "data": r[3].isoformat() if r[3] else None,
+                        "descricao": r[4],
+                        "detalhe": r[5],
                     })
         except Exception as e:
             import logging
