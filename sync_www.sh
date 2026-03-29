@@ -133,11 +133,12 @@ fi
 
 # -----------------------------------------------------------
 # KPI Notas x RPS (HTML)
+# Gerenciado pelo Actions: deploy vai para $TPL; sync apenas copia $TPL -> $DST
+# NÃO copiar de $SRC (versão antiga lá sobrescreveria o deploy correto)
 # -----------------------------------------------------------
 
-if [ -f "$SRC/kpi_notas_rps.html" ]; then
-  copy_file "$SRC/kpi_notas_rps.html" "$DST"
-  copy_file "$SRC/kpi_notas_rps.html" "$TPL"
+if [ -f "$TPL/kpi_notas_rps.html" ]; then
+  copy_file "$TPL/kpi_notas_rps.html" "$DST"
 fi
 
 # -----------------------------------------------------------
