@@ -559,6 +559,20 @@ def _get_sqlserver_engine(posto):
     return make_engine(conn_str)
 
 
+# IDs fixos das tabelas de lookup do SQL Server
+_ID_TABELA_CAD_ESPECIALIDADE = 53
+_ID_COMANDO_EDICAO = 2
+
+
+def _resolve_idusuario(conn, email):
+    """Busca idUsuario em Sis_Usuario pelo email. Retorna None se não encontrar."""
+    from sqlalchemy import text as sa_text
+    row = conn.execute(sa_text(
+        "SELECT TOP 1 idUsuario FROM Sis_Usuario WHERE Email = :email"
+    ), {"email": email.upper()}).fetchone()
+    return row[0] if row else None
+
+
 @app.post('/api/ctrlq/retirar_data_fim')
 def api_retirar_data_fim():
     auth = _require_pode_desbloquear()
@@ -595,26 +609,24 @@ def api_retirar_data_fim():
                 "UPDATE cad_especialidade SET DataFimExibicao = NULL WHERE idEspecialidade = :id"
             ), {"id": id_esp})
 
-            # INSERT auditoria em Sis_Historico (mesmo padrão do ERP)
+            # INSERT auditoria em Sis_Historico (tabela base com IDs de FK)
+            id_usuario = _resolve_idusuario(conn, email)
             nome_usuario = user.nome or email
-            descricao = (
-                f"https://teste-ia.camim.com.br/ctrlq_desbloqueio - "
+            detalhe = (
                 f"Alteração da Especialidade {especialidade} - "
                 f"Limpou data fim de exibição - Usuário {nome_usuario}"
             )
             conn.execute(sa_text("""
                 INSERT INTO Sis_Historico
-                    (Tabela, id, Comando, Formulário, [Descrição], Detalhe,
-                     Computador, [Data], [Usuário], CFUsuario)
+                    (id, idTabela, idComando, idUsuario, DataHora, Detalhe, Computador)
                 VALUES
-                    ('Cad_Especialidade', :id_esp, 'Edição', 'Quadro de especialidade',
-                     :descricao, :detalhe, 'teste-ia.camim.com.br', GETDATE(), :usuario, :cf)
+                    (:id_esp, :id_tabela, :id_comando, :id_usuario, GETDATE(), :detalhe, 'teste-ia.camim.com.br')
             """), {
                 "id_esp": id_esp,
-                "descricao": descricao,
-                "detalhe": f"DataFimExibicao: {valor_antigo} → NULL",
-                "usuario": nome_usuario,
-                "cf": posto,
+                "id_tabela": _ID_TABELA_CAD_ESPECIALIDADE,
+                "id_comando": _ID_COMANDO_EDICAO,
+                "id_usuario": id_usuario,
+                "detalhe": detalhe,
             })
 
         return jsonify({"ok": True})
@@ -669,26 +681,24 @@ def api_prorrogar_agenda():
                 "UPDATE cad_especialidade SET DataFimExibicao = :nova WHERE idEspecialidade = :id"
             ), {"nova": nova_data, "id": id_esp})
 
-            # INSERT auditoria em Sis_Historico (mesmo padrão do ERP)
+            # INSERT auditoria em Sis_Historico (tabela base com IDs de FK)
+            id_usuario = _resolve_idusuario(conn, email)
             nome_usuario = user.nome or email
-            descricao = (
-                f"https://teste-ia.camim.com.br/ctrlq_desbloqueio - "
+            detalhe = (
                 f"Alteração da Especialidade {especialidade} - "
                 f"Prorrogou data fim de exibição para {nova_data} - Usuário {nome_usuario}"
             )
             conn.execute(sa_text("""
                 INSERT INTO Sis_Historico
-                    (Tabela, id, Comando, Formulário, [Descrição], Detalhe,
-                     Computador, [Data], [Usuário], CFUsuario)
+                    (id, idTabela, idComando, idUsuario, DataHora, Detalhe, Computador)
                 VALUES
-                    ('Cad_Especialidade', :id_esp, 'Edição', 'Quadro de especialidade',
-                     :descricao, :detalhe, 'teste-ia.camim.com.br', GETDATE(), :usuario, :cf)
+                    (:id_esp, :id_tabela, :id_comando, :id_usuario, GETDATE(), :detalhe, 'teste-ia.camim.com.br')
             """), {
                 "id_esp": id_esp,
-                "descricao": descricao,
-                "detalhe": f"DataFimExibicao: {valor_antigo} → {nova_data}",
-                "usuario": nome_usuario,
-                "cf": posto,
+                "id_tabela": _ID_TABELA_CAD_ESPECIALIDADE,
+                "id_comando": _ID_COMANDO_EDICAO,
+                "id_usuario": id_usuario,
+                "detalhe": detalhe,
             })
 
         return jsonify({"ok": True})
