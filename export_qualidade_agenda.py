@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 # export_qualidade_agenda.py
 # Exporta dados de Qualidade da Agenda Médica (vagas por especialidade por posto)
-# Salva em json_consolidado/qualidade_agenda.json para consumo pelo frontend
+# Fonte única: Anchieta (posto A) — view retorna todos os postos.
+# Mapeia idEndereco → letra via cad_endereco.
+# Gera: json_consolidado/qualidade_agenda.json
+# Cron recomendado: 0 5,12 * * *
 
 import os, sys, json, argparse, time
 from datetime import date, datetime, timezone
@@ -15,31 +18,43 @@ from dotenv import load_dotenv
 # Constantes
 # =========================
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-JSON_DIR = os.path.join(BASE_DIR, "json_consolidado")
-LOG_DIR  = os.path.join(BASE_DIR, "logs")
-LOG_FILE = os.path.join(LOG_DIR, f"export_qualidade_agenda_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+BASE_DIR         = os.path.dirname(os.path.abspath(__file__))
+JSON_DIR         = os.path.join(BASE_DIR, "json_consolidado")
+LOG_DIR          = os.path.join(BASE_DIR, "logs")
+LOG_FILE         = os.path.join(LOG_DIR, f"export_qualidade_agenda_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
 
-POSTOS = list("ANXYBRPCDGIMJ")
-POSTO_MASTER_CBOS = "A"  # Anchieta — fonte canônica do cad_cbos
+POSTO_MASTER     = "A"   # Anchieta — fonte canônica de todos os dados
+ODBC_DRIVER      = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 
-ODBC_DRIVER = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
-
-POSTO_NOMES = {
-    "A": "Anchieta",
-    "N": "Nova Iguaçu",
-    "X": "Xerém",
-    "Y": "Nilópolis",
-    "B": "Belford Roxo",
-    "R": "Realengo",
-    "P": "Pavuna",
-    "C": "Campo Grande",
-    "D": "Duque de Caxias",
-    "G": "Guadalupe",
-    "I": "Ilha do Governador",
-    "M": "Méier",
-    "J": "Jacarepaguá",
+# Mapeamento idEndereco → letra (obtido de cad_endereco, mantido como fallback)
+ID_ENDERECO_TO_LETRA = {
+    1: "R",   # Realengo
+    2: "C",   # Campinho
+    3: "A",   # Anchieta
+    4: "J",   # Jacarepaguá
+    5: "G",   # Campo Grande
+    6: "I",   # Nova Iguaçu
+    7: "B",   # Bangu
+    12: "N",  # Nilópolis
+    20: "D",  # Del Castilho
+    21: "X",  # X Campo Grande
+    25: "M",  # Madureira
+    26: "P",  # Rio das Pedras
+    51: "Y",  # Y Campo Grande
 }
+
+# =========================
+# SQLs
+# =========================
+
+SQL_CAD_ENDERECO = """
+SELECT
+    idEndereco,
+    Codigo   AS letra,
+    Descricao AS nome
+FROM cad_endereco
+WHERE AtendimentoAtivoPosto = 1
+"""
 
 SQL_CAD_CBOS = """
 SELECT
@@ -68,6 +83,7 @@ SELECT
     QuantidadeVagasTotalMedicosAtendemIncluindoReserva
 FROM vw_rel_especialidadeProximaVaga
 WHERE ISNULL(Desativado, 0) = 0
+ORDER BY idEndereco, Especialidade
 """
 
 # =========================
@@ -75,15 +91,13 @@ WHERE ISNULL(Desativado, 0) = 0
 # =========================
 
 class Logger:
-    """Escreve simultaneamente em console e arquivo."""
     def __init__(self, log_file):
-        self.log_file = log_file
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
         self.file_handle = open(log_file, 'w', encoding='utf-8')
 
     def write(self, msg: str):
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        line = f"[{timestamp}] {msg}"
+        ts   = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        line = f"[{ts}] {msg}"
         print(msg)
         self.file_handle.write(line + '\n')
         self.file_handle.flush()
@@ -92,35 +106,31 @@ class Logger:
         if self.file_handle:
             self.file_handle.close()
 
+
 logger = Logger(LOG_FILE)
 
 
 class Timer:
     def __init__(self, name: str):
-        self.name = name
-        self.start = None
+        self.name    = name
         self.elapsed = 0
 
     def __enter__(self):
-        self.start = time.time()
+        self._t0 = time.time()
         return self
 
     def __exit__(self, *args):
-        self.elapsed = time.time() - self.start
+        self.elapsed = time.time() - self._t0
 
     def format(self):
-        if self.elapsed < 1:
-            return f"{self.elapsed*1000:.0f}ms"
-        elif self.elapsed < 60:
-            return f"{self.elapsed:.1f}s"
-        else:
-            mins = self.elapsed // 60
-            secs = self.elapsed % 60
-            return f"{int(mins)}m {secs:.0f}s"
+        e = self.elapsed
+        if e < 1:    return f"{e*1000:.0f}ms"
+        if e < 60:   return f"{e:.1f}s"
+        return f"{int(e//60)}m {e%60:.0f}s"
 
 
 # =========================
-# Helpers de ambiente
+# Helpers
 # =========================
 
 def _env(key, default=""):
@@ -128,32 +138,23 @@ def _env(key, default=""):
     return v.strip() if isinstance(v, str) else v
 
 
-def _set_mtime(path: str) -> None:
+def _set_mtime(path: str):
     ts = datetime.now(timezone.utc).astimezone().timestamp()
     os.utime(path, (ts, ts))
 
 
 def sanitize(obj):
-    """Converte NaN/NaT/inf/date/datetime em tipos JSON-safe de forma recursiva."""
-    if isinstance(obj, dict):
-        return {k: sanitize(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [sanitize(v) for v in obj]
-    if isinstance(obj, (datetime,)):
-        return obj.isoformat()
-    if isinstance(obj, date):
-        return obj.isoformat()
+    if isinstance(obj, dict):  return {k: sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, list):  return [sanitize(v) for v in obj]
+    if isinstance(obj, datetime): return obj.isoformat()
+    if isinstance(obj, date):     return obj.isoformat()
     try:
-        if pd.isna(obj):
-            return None
+        if pd.isna(obj): return None
     except Exception:
         pass
-    # numpy scalar → python native
     if hasattr(obj, 'item'):
-        try:
-            return obj.item()
-        except Exception:
-            pass
+        try: return obj.item()
+        except Exception: pass
     return obj
 
 
@@ -162,31 +163,29 @@ def ensure_dir(path):
 
 
 # =========================
-# Conexão com SQL Server
+# Conexão
 # =========================
 
 def build_conn_str(posto: str):
-    p = (posto or "").strip().upper()
+    p    = (posto or "").strip().upper()
     host = _env(f"DB_HOST_{p}")
     base = _env(f"DB_BASE_{p}")
     if not host or not base:
         return None
-    user = _env(f"DB_USER_{p}")
-    pwd  = _env(f"DB_PASSWORD_{p}")
-    port = _env(f"DB_PORT_{p}", "1433") or "1433"
-    encrypt    = _env("DB_ENCRYPT", "yes")
+    user       = _env(f"DB_USER_{p}")
+    pwd        = _env(f"DB_PASSWORD_{p}")
+    port       = _env(f"DB_PORT_{p}", "1433") or "1433"
+    encrypt    = _env("DB_ENCRYPT",    "yes")
     trust_cert = _env("DB_TRUST_CERT", "yes")
-    timeout    = _env("DB_TIMEOUT", "20")
-    server = f"tcp:{host},{port}"
-    common = (
+    timeout    = _env("DB_TIMEOUT",    "20")
+    server     = f"tcp:{host},{port}"
+    common     = (
         f"DRIVER={{{ODBC_DRIVER}}};"
         f"SERVER={server};DATABASE={base};"
         f"Encrypt={encrypt};TrustServerCertificate={trust_cert};"
         f"Connection Timeout={timeout};"
     )
-    if user:
-        return common + f"UID={user};PWD={pwd}"
-    return common + "Trusted_Connection=yes"
+    return common + (f"UID={user};PWD={pwd}" if user else "Trusted_Connection=yes")
 
 
 def make_engine(odbc_str: str):
@@ -198,16 +197,15 @@ def make_engine(odbc_str: str):
 
 
 # =========================
-# Cálculo de status
+# Status
 # =========================
 
-def calc_status(dias: int | None, prazo_ans: int, prazo_camim: int) -> str:
+def calc_status(dias, prazo_ans: int, prazo_camim: int) -> str:
     """
-    Regra de negócio:
-      - SEM_VAGA   → dias is None (sem data de próxima vaga)
-      - OK         → dias <= prazo_ans (e prazo_ans > 0)
-      - ALERTA     → dias <= prazo_camim (e prazo_camim > 0), mas fora do ANS
-      - CRITICO    → todos os demais casos
+    SEM_VAGA  → sem data de próxima vaga
+    OK        → dias <= prazo_ans  (dentro do prazo ANS)
+    ALERTA    → dias <= prazo_camim (além do ANS mas dentro do prazo CAMIM)
+    CRITICO   → além de ambos os prazos
     """
     if dias is None:
         return "SEM_VAGA"
@@ -222,169 +220,173 @@ def calc_status(dias: int | None, prazo_ans: int, prazo_camim: int) -> str:
 # Execução principal
 # =========================
 
-def run(postos_filtro=None):
+def run():
     load_dotenv(os.path.join(BASE_DIR, ".env"))
     ensure_dir(JSON_DIR)
 
-    postos_alvo = postos_filtro or POSTOS
     total_start = time.time()
+    hoje        = date.today()
 
     logger.write("\n" + "="*70)
     logger.write("EXPORT QUALIDADE DA AGENDA MEDICA")
+    logger.write(f"  Fonte: posto master '{POSTO_MASTER}' (Anchieta)")
+    logger.write(f"  Data referencia: {hoje.isoformat()}")
     logger.write("="*70)
-    logger.write(f"  Postos: {', '.join(postos_alvo)}")
-    logger.write(f"  Data referencia: {date.today().isoformat()}")
-    logger.write("="*70)
 
-    # ── 1. Carregar cad_cbos do posto master (A = Anchieta) ──────────────────
-    logger.write(f"\n[ETAPA 1/3] Carregando cad_cbos do posto master '{POSTO_MASTER_CBOS}'...")
-
-    cbos_map = {}  # {especialidade: {prazoconsultaans, prazoconsultacamim, ValorPMinimoVagaDisponivel}}
-
-    conn_str_master = build_conn_str(POSTO_MASTER_CBOS)
-    if not conn_str_master:
-        logger.write(f"  ERRO: sem configuracao de conexao para posto {POSTO_MASTER_CBOS}")
+    conn_str = build_conn_str(POSTO_MASTER)
+    if not conn_str:
+        logger.write(f"ERRO FATAL: sem configuracao de conexao para '{POSTO_MASTER}'")
         sys.exit(1)
+
+    eng = make_engine(conn_str)
+
+    # ── 1. cad_endereco → mapa idEndereco → {letra, nome} ────────────────────
+    logger.write(f"\n[ETAPA 1/4] Carregando cad_endereco...")
+    endereco_map = {}   # {idEndereco: {letra, nome}}
+    letra_map    = {}   # {letra: {idEndereco, nome}}  (para postos_info)
 
     try:
-        with Timer("cad_cbos") as t_cbos:
-            eng = make_engine(conn_str_master)
+        with Timer("cad_endereco") as t:
+            with eng.connect() as con:
+                rows = con.execute(text(SQL_CAD_ENDERECO)).fetchall()
+
+        for row in rows:
+            id_end = int(row[0])
+            letra  = str(row[1] or "").strip().upper()
+            nome   = str(row[2] or "").strip()
+            if letra:
+                endereco_map[id_end] = {"letra": letra, "nome": nome}
+                letra_map[letra]     = {"letra": letra, "idEndereco": id_end, "nome": nome}
+
+        # Complementar com fallback hardcoded para ids que possam não estar
+        for id_end, letra in ID_ENDERECO_TO_LETRA.items():
+            if id_end not in endereco_map:
+                endereco_map[id_end] = {"letra": letra, "nome": letra}
+
+        logger.write(f"  OK: {len(endereco_map)} postos mapeados ({t.format()})")
+    except Exception as e:
+        logger.write(f"  ERRO cad_endereco: {e} — usando mapeamento hardcoded")
+        for id_end, letra in ID_ENDERECO_TO_LETRA.items():
+            endereco_map[id_end] = {"letra": letra, "nome": letra}
+
+    # ── 2. cad_cbos → prazos e thresholds ────────────────────────────────────
+    logger.write(f"\n[ETAPA 2/4] Carregando cad_cbos...")
+    cbos_map = {}
+
+    try:
+        with Timer("cad_cbos") as t:
             with eng.connect() as con:
                 rows = con.execute(text(SQL_CAD_CBOS)).fetchall()
-                cols = con.execute(text(SQL_CAD_CBOS)).keys() if False else None
 
-        df_cbos = pd.DataFrame(rows, columns=["Especialidade", "prazoconsultaans",
-                                               "prazoconsultacamim", "ValorPMinimoVagaDisponivel"])
-        for _, row in df_cbos.iterrows():
-            esp = str(row["Especialidade"]).strip().upper()
+        for row in rows:
+            esp = str(row[0] or "").strip().upper()
             cbos_map[esp] = {
-                "prazoconsultaans":           int(row["prazoconsultaans"] or 0),
-                "prazoconsultacamim":         int(row["prazoconsultacamim"] or 0),
-                "ValorPMinimoVagaDisponivel": float(row["ValorPMinimoVagaDisponivel"] or 0.0),
+                "prazoconsultaans":           int(row[1] or 0),
+                "prazoconsultacamim":         int(row[2] or 0),
+                "ValorPMinimoVagaDisponivel": float(row[3] or 0.0),
             }
-        logger.write(f"  OK: {len(cbos_map)} especialidades carregadas ({t_cbos.format()})")
+        logger.write(f"  OK: {len(cbos_map)} especialidades ({t.format()})")
     except Exception as e:
-        logger.write(f"  ERRO ao carregar cad_cbos: {e}")
+        logger.write(f"  ERRO cad_cbos: {e}")
         sys.exit(1)
 
-    # ── 2. Consultar vw_rel_especialidadeProximaVaga por posto ───────────────
-    logger.write(f"\n[ETAPA 2/3] Consultando vagas por posto...")
-    logger.write("-" * 70)
+    # ── 3. vw_rel_especialidadeProximaVaga → todos os postos de uma vez ───────
+    logger.write(f"\n[ETAPA 3/4] Consultando vw_rel_especialidadeProximaVaga...")
 
-    all_dados = []
-    postos_info = {}
-    postos_com_dados = []
-    hoje = date.today()
+    all_dados    = []
+    postos_vistos = set()
 
-    for posto in postos_alvo:
-        conn_str = build_conn_str(posto)
-        if not conn_str:
-            logger.write(f"  [{posto}] SKIP: sem configuracao de conexao")
-            continue
+    try:
+        with Timer("vagas") as t:
+            with eng.connect() as con:
+                result    = con.execute(text(SQL_VAGAS))
+                col_names = list(result.keys())
+                rows      = result.fetchall()
 
-        try:
-            with Timer(f"vagas_{posto}") as t_posto:
-                eng = make_engine(conn_str)
-                with eng.connect() as con:
-                    rows = con.execute(text(SQL_VAGAS)).fetchall()
-                    if rows:
-                        keys = rows[0]._fields if hasattr(rows[0], '_fields') else [
-                            "idEndereco", "Endereco", "Especialidade", "DataProximaVaga",
-                            "QuantidadeVagasDisponivelNaData", "QuantidadeVagasTotalMedicosAtendem",
-                            "Desativado", "ValorPMinimoVagaDisponivel", "ValorPercentualVagasLivres",
-                            "QuantidadeVagasReservadas", "QuantidadeReservaDias",
-                            "CapacidadeConsiderada", "QuantidadeVagasTotalMedicosAtendemIncluindoReserva"
-                        ]
-                        df = pd.DataFrame([dict(zip(keys, r)) for r in rows])
+        logger.write(f"  OK: {len(rows)} linhas brutas ({t.format()})")
+
+        def _safe_float(v):
+            try:
+                f = float(v)
+                return None if pd.isna(f) else round(f, 2)
+            except Exception:
+                return None
+
+        def _safe_int(v):
+            try:   return int(v)
+            except Exception: return None
+
+        for row in rows:
+            d = dict(zip(col_names, row))
+
+            id_end = _safe_int(d.get("idEndereco"))
+            info   = endereco_map.get(id_end, {})
+            letra  = info.get("letra", f"?{id_end}")
+            nome   = info.get("nome",  str(id_end))
+
+            # Normalizar data
+            data_prox = d.get("DataProximaVaga")
+            dias      = None
+            data_str  = None
+            if data_prox is not None:
+                try:
+                    if isinstance(data_prox, datetime):
+                        dp = data_prox.date()
+                    elif isinstance(data_prox, date):
+                        dp = data_prox
                     else:
-                        df = pd.DataFrame()
+                        dp = pd.to_datetime(data_prox).date()
+                    dias     = (dp - hoje).days
+                    data_str = dp.isoformat()
+                except Exception:
+                    pass
 
-            if df.empty:
-                logger.write(f"  [{posto}] OK (vazio) — {t_posto.format()}")
-                continue
+            esp        = str(d.get("Especialidade") or "").strip().upper()
+            cbos_info  = cbos_map.get(esp, {"prazoconsultaans": 0, "prazoconsultacamim": 0, "ValorPMinimoVagaDisponivel": 0.0})
+            prazo_ans  = cbos_info["prazoconsultaans"]
+            prazo_cam  = cbos_info["prazoconsultacamim"]
+            status     = calc_status(dias, prazo_ans, prazo_cam)
 
-            # Registrar info do posto (usa primeiro idEndereco encontrado)
-            id_end = int(df["idEndereco"].iloc[0]) if "idEndereco" in df.columns else 0
-            nome_end = str(df["Endereco"].iloc[0]) if "Endereco" in df.columns else POSTO_NOMES.get(posto, posto)
-            postos_info[posto] = {
-                "letra":     posto,
-                "idEndereco": id_end,
-                "nome":      POSTO_NOMES.get(posto, nome_end),
-            }
-            postos_com_dados.append(posto)
+            postos_vistos.add(letra)
 
-            # Calcular DiasAteProximaVaga e Status por linha
-            for _, row in df.iterrows():
-                data_prox = row.get("DataProximaVaga")
-                dias = None
-                data_str = None
+            all_dados.append({
+                "posto":            letra,
+                "idEndereco":       id_end,
+                "Endereco":         nome,
+                "Especialidade":    esp,
+                "DataProximaVaga":  data_str,
+                "DiasAteProximaVaga": dias,
+                "QuantidadeVagasDisponivelNaData":                    _safe_int(d.get("QuantidadeVagasDisponivelNaData")),
+                "QuantidadeVagasTotalMedicosAtendem":                 _safe_int(d.get("QuantidadeVagasTotalMedicosAtendem")),
+                "ValorPMinimoVagaDisponivel":                         _safe_float(d.get("ValorPMinimoVagaDisponivel")),
+                "ValorPercentualVagasLivres":                         _safe_float(d.get("ValorPercentualVagasLivres")),
+                "QuantidadeVagasReservadas":                          _safe_int(d.get("QuantidadeVagasReservadas")),
+                "QuantidadeReservaDias":                              _safe_int(d.get("QuantidadeReservaDias")),
+                "CapacidadeConsiderada":                              _safe_int(d.get("CapacidadeConsiderada")),
+                "QuantidadeVagasTotalMedicosAtendemIncluindoReserva": _safe_int(d.get("QuantidadeVagasTotalMedicosAtendemIncluindoReserva")),
+                "prazoconsultaans":  prazo_ans,
+                "prazoconsultacamim": prazo_cam,
+                "Status":            status,
+            })
 
-                if data_prox is not None and not (isinstance(data_prox, float) and pd.isna(data_prox)):
-                    try:
-                        if isinstance(data_prox, (datetime,)):
-                            data_prox_date = data_prox.date()
-                        elif isinstance(data_prox, date):
-                            data_prox_date = data_prox
-                        else:
-                            data_prox_date = pd.to_datetime(data_prox).date()
-                        dias = (data_prox_date - hoje).days
-                        data_str = data_prox_date.isoformat()
-                    except Exception:
-                        pass
+        # Resumo por posto
+        from collections import Counter
+        por_posto = Counter(d["posto"] for d in all_dados)
+        for letra_p, cnt in sorted(por_posto.items()):
+            info_p = letra_map.get(letra_p, endereco_map.get(None, {}))
+            nome_p = letra_map.get(letra_p, {}).get("nome", letra_p)
+            logger.write(f"  [{letra_p}] {nome_p}: {cnt} especialidades")
 
-                esp = str(row.get("Especialidade", "") or "").strip().upper()
-                cbos_info = cbos_map.get(esp, {
-                    "prazoconsultaans": 0,
-                    "prazoconsultacamim": 0,
-                    "ValorPMinimoVagaDisponivel": 0.0,
-                })
-                prazo_ans   = cbos_info["prazoconsultaans"]
-                prazo_camim = cbos_info["prazoconsultacamim"]
-                status = calc_status(dias, prazo_ans, prazo_camim)
+    except Exception as e:
+        logger.write(f"  ERRO consulta vagas: {e}")
+        sys.exit(1)
 
-                def _safe_float(v):
-                    try:
-                        f = float(v)
-                        return None if pd.isna(f) else round(f, 2)
-                    except Exception:
-                        return None
+    # ── 4. Salvar JSON ────────────────────────────────────────────────────────
+    logger.write(f"\n[ETAPA 4/4] Gerando JSON...")
 
-                def _safe_int(v):
-                    try:
-                        return int(v)
-                    except Exception:
-                        return None
-
-                all_dados.append({
-                    "posto":                  posto,
-                    "idEndereco":             _safe_int(row.get("idEndereco")),
-                    "Endereco":               str(row.get("Endereco", "") or ""),
-                    "Especialidade":          esp,
-                    "DataProximaVaga":        data_str,
-                    "DiasAteProximaVaga":     dias,
-                    "QuantidadeVagasDisponivelNaData":                    _safe_int(row.get("QuantidadeVagasDisponivelNaData")),
-                    "QuantidadeVagasTotalMedicosAtendem":                 _safe_int(row.get("QuantidadeVagasTotalMedicosAtendem")),
-                    "ValorPMinimoVagaDisponivel":                         _safe_float(row.get("ValorPMinimoVagaDisponivel")),
-                    "ValorPercentualVagasLivres":                         _safe_float(row.get("ValorPercentualVagasLivres")),
-                    "QuantidadeVagasReservadas":                          _safe_int(row.get("QuantidadeVagasReservadas")),
-                    "QuantidadeReservaDias":                              _safe_int(row.get("QuantidadeReservaDias")),
-                    "CapacidadeConsiderada":                              _safe_int(row.get("CapacidadeConsiderada")),
-                    "QuantidadeVagasTotalMedicosAtendemIncluindoReserva": _safe_int(row.get("QuantidadeVagasTotalMedicosAtendemIncluindoReserva")),
-                    "prazoconsultaans":        prazo_ans,
-                    "prazoconsultacamim":      prazo_camim,
-                    "Status":                  status,
-                })
-
-            logger.write(f"  [{posto}] OK: {len(df)} linhas — {t_posto.format()}")
-
-        except Exception as e:
-            logger.write(f"  [{posto}] ERRO: {str(e)[:80]}")
-            continue
-
-    # ── 3. Montar e salvar JSON ──────────────────────────────────────────────
-    logger.write(f"\n[ETAPA 3/3] Gerando JSON...")
-
-    especialidades_set = sorted(set(d["Especialidade"] for d in all_dados if d["Especialidade"]))
+    postos_info       = {l: letra_map[l] for l in sorted(postos_vistos) if l in letra_map}
+    especialidades    = sorted(set(d["Especialidade"] for d in all_dados if d["Especialidade"]))
+    postos_ordenados  = sorted(postos_vistos)
 
     payload = sanitize({
         "meta": {
@@ -393,48 +395,30 @@ def run(postos_filtro=None):
             "origem":          "export_qualidade_agenda.py",
             "total_registros": len(all_dados),
         },
-        "cbos":          cbos_map,
-        "especialidades": especialidades_set,
-        "postos":         postos_com_dados,
+        "cbos":           cbos_map,
+        "especialidades": especialidades,
+        "postos":         postos_ordenados,
         "postos_info":    postos_info,
         "dados":          all_dados,
     })
 
     out_path = os.path.join(JSON_DIR, "qualidade_agenda.json")
     tmp_path = out_path + ".tmp"
-
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     os.replace(tmp_path, out_path)
     _set_mtime(out_path)
 
-    elapsed_total = time.time() - total_start
+    elapsed = time.time() - total_start
     logger.write(f"  JSON salvo: {out_path}")
     logger.write(f"  Total registros: {len(all_dados)}")
-    logger.write(f"  Postos com dados: {len(postos_com_dados)} — {', '.join(postos_com_dados)}")
-    logger.write(f"  Especialidades: {len(especialidades_set)}")
-    logger.write(f"  Tempo total: {elapsed_total:.1f}s")
+    logger.write(f"  Postos: {len(postos_ordenados)} — {', '.join(postos_ordenados)}")
+    logger.write(f"  Especialidades: {len(especialidades)}")
+    logger.write(f"  Tempo total: {elapsed:.1f}s")
     logger.write(f"\nFinalizado export_qualidade_agenda.")
     logger.write(f"Log salvo em: {LOG_FILE}\n")
     logger.close()
 
 
-def parse_args():
-    p = argparse.ArgumentParser(
-        description="Qualidade da Agenda Médica: exporta vagas por especialidade por posto.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    p.add_argument("--postos", default="".join(POSTOS),
-                   help="Subset de postos. Ex: ANX ou Y.")
-    p.add_argument("--dry-run", action="store_true",
-                   help="Executa sem gravar JSON.")
-    return p.parse_args()
-
-
 if __name__ == "__main__":
-    args = parse_args()
-    postos_filtro = [c.upper() for c in args.postos if c.isalpha()] or POSTOS
-    if not args.dry_run:
-        run(postos_filtro)
-    else:
-        print("[DRY-RUN] Nenhuma alteracao realizada.")
+    run()
