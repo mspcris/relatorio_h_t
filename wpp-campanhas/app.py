@@ -205,9 +205,31 @@ def auth_callback():
 
 
 @app.route('/auth/logout', methods=['GET', 'POST'])
+@app.route('/session/logout', methods=['GET', 'POST'])
 def auth_logout():
     session.clear()
-    return redirect('/auth/login')
+    # Redireciona para o endpoint de logout do IDCAMIM para encerrar a sessão SSO
+    try:
+        cfg = _oidc_config()
+        end_session = cfg.get('end_session_endpoint', '')
+        if end_session:
+            return redirect(end_session)
+    except Exception:
+        pass
+    return render_template_string(TMPL_LOGOUT)
+
+
+TMPL_LOGOUT = '''<!doctype html><html lang="pt-br"><head><meta charset="UTF-8">
+<title>Desconectado — WPP Campanhas</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+</head><body class="d-flex align-items-center justify-content-center" style="min-height:100vh;background:#f4f6f9">
+<div class="card shadow" style="max-width:420px;width:100%">
+  <div class="card-body text-center p-5">
+    <h4 class="mb-3">Você saiu</h4>
+    <p class="text-muted">Sessão encerrada com sucesso.</p>
+    <a href="/auth/login" class="btn btn-primary mt-3">Entrar novamente</a>
+  </div>
+</div></body></html>'''
 
 
 # ── Patch auth no wpp_cobranca_routes ─────────────────────────────────────────

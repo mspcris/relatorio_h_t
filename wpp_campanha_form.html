@@ -60,15 +60,15 @@
         <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
         <li class="nav-item"><a href="/wpp" class="nav-link active"><i class="nav-icon fab fa-whatsapp"></i><p>Campanhas</p></a></li>
         <li class="nav-item"><a href="/wpp/auditoria" class="nav-link"><i class="nav-icon fas fa-history"></i><p>Auditoria</p></a></li>
-        <li class="nav-item">
-          <form method="POST" action="/session/logout" style="display:inline">
-            <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
-              <i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p>
-            </button>
-          </form>
-        </li>
       </ul>
-    </nav></div>
+    </nav>
+    <div style="padding:10px 16px;margin-top:auto">
+      <button type="button" onclick="window.location.assign('/session/logout')"
+              style="color:rgba(255,255,255,.8);background:rgba(255,255,255,.08);border:none;display:block;width:100%;padding:8px 12px;border-radius:4px;cursor:pointer;text-align:left;font-size:inherit">
+        <i class="fas fa-sign-out-alt mr-2"></i>Sair
+      </button>
+    </div>
+    </div>
   </aside>
 
   <div class="content-wrapper">
@@ -151,45 +151,12 @@
                 <!-- hidden: valor real enviado ao servidor -->
                 <input type="hidden" name="queue_id" id="queue_id_val"
                        value="{{ campanha.queue_id if campanha and campanha.queue_id else '' }}">
-                <!-- select com filas conhecidas -->
+                <!-- select com filas do MySQL (carregadas via API) -->
                 <select id="queue_id_sel" class="form-control">
                   <option value="">— Padrão do .env —</option>
-                  <optgroup label="Atendimento">
-                    <option value="cme7lb9ae00016ss6bf5i0tem">Atendimento Geral</option>
-                    <option value="cme7niv70000njbjrc9oycd31">Suporte ao APP</option>
-                    <option value="cme7o638z003ijbjrc2ojgwhq">Orçamentos de exames e procedimentos</option>
-                    <option value="cmeiy6l7e007wjbs4ahmpicas">ADESÃO - Quero informações sobre o plano</option>
-                    <option value="cmekcydw502vdjbzmx48eib4i">TeleVendas Campinho</option>
-                    <option value="cmkzx4g2902e93fjb906z0a6x">Convênio CMD</option>
-                    <option value="cme8lppmp001ijbjsik9mb8fp">CENTRAL DE ATENDIMENTOS C</option>
-                    <option value="cme8gw7y100hhjbyt6lurb8sn">CENTRAL DE ATENDIMENTOS G</option>
-                  </optgroup>
-                  <optgroup label="Financeiro">
-                    <option value="cme8gx4id00hijbyt6s5j3ycl">FINANCEIRO G/X/Y</option>
-                    <option value="cme8gxfzi00hjjbyt9h50x3y0">FINANCEIRO E ATENDIMENTO C/D/M/J/P</option>
-                    <option value="cme8gxvv900hkjbyt19jah1uo">FINANCEIRO E ATENDIMENTO A</option>
-                    <option value="cme8gy8o800hnjbyt74n7vkcx">FINANCEIRO E ATENDIMENTO N</option>
-                    <option value="cme8gyfcj00hojbytukmi9gw8">FINANCEIRO E ATENDIMENTO R</option>
-                    <option value="cme8gylfd00hpjbyto9yyix9u">FINANCEIRO E ATENDIMENTO B</option>
-                    <option value="cme8l2a91010rjbytymaaop2d">FINANCEIRO E ATENDIMENTO I</option>
-                  </optgroup>
-                  <optgroup label="Ouvidoria">
-                    <option value="cme7o6ywm003jjbjro1vis2xe">Ouvidoria Campo Grande</option>
-                    <option value="cme7o740m003kjbjrbnkm1z30">Ouvidoria Campo Grande X</option>
-                    <option value="cme7o7am8003ljbjrwhvy3h32">Ouvidoria Campo Grande Y</option>
-                    <option value="cme7o7o40003mjbjrzxfms8us">Ouvidoria Bangu</option>
-                    <option value="cme7o7w2o003njbjrjot5p8gr">Ouvidoria Realengo</option>
-                    <option value="cme7o8139003ojbjrqmkoji47">Ouvidoria Anchieta</option>
-                    <option value="cme7o866i003pjbjr2xym47gm">Ouvidoria Nilópolis</option>
-                    <option value="cme7o8jg1003qjbjrvoirnxwg">Ouvidoria Nova Iguaçu</option>
-                    <option value="cme7o9edx003xjbjra22xqdd1">Ouvidoria Postos Campinho, Madureira, Del Castilho, Jacarepaguá e Rio das Pedras</option>
-                  </optgroup>
-                  <optgroup label="Cobrança / MKT">
-                    <option value="cmmzcumqu00a4zejb323r63ac">Template Enviado ao Cliente</option>
-                    <option value="cmn54op7f06dov9jbqwvhfb8s">Mensagens MKT</option>
-                  </optgroup>
                   <option value="_outro">— Outro (digitar ID) —</option>
                 </select>
+                <small id="queue_id_loading" class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i> Carregando filas...</small>
                 <!-- campo visível apenas quando "_outro" -->
                 <input type="text" id="queue_id_custom" class="form-control mt-1"
                        style="display:none" placeholder="Cole ou digite o ID da fila">
@@ -702,77 +669,9 @@
               <div class="form-group mb-0">
                 <label>Enviar como</label>
                 <select name="from_user_id" id="from_user_id" class="form-control">
-                  {% set _fuid = campanha.from_user_id if campanha and campanha.from_user_id else 'cmg8cum8g0519jbbm6r9l93f7' %}
-                  {% set _fuid = _fuid | replace('chat:', '') %}
-                  <option value="cmg8cum8g0519jbbm6r9l93f7" {{ 'selected' if _fuid == 'cmg8cum8g0519jbbm6r9l93f7' }}>Camila.ai</option>
-                  <option value="cme8jjauk00u2jbytjdw1sb9d" {{ 'selected' if _fuid == 'cme8jjauk00u2jbytjdw1sb9d' }}>Adriana Nina</option>
-                  <option value="cme8ta3o400rujbjsyfqlzbax" {{ 'selected' if _fuid == 'cme8ta3o400rujbjsyfqlzbax' }}>Agatha Saldanha</option>
-                  <option value="cme8tdool00sqjbjstgub76ll" {{ 'selected' if _fuid == 'cme8tdool00sqjbjstgub76ll' }}>Ana Marcele</option>
-                  <option value="cmea6qesn01m2jbutcfgkrh7s" {{ 'selected' if _fuid == 'cmea6qesn01m2jbutcfgkrh7s' }}>Beatriz Abreu</option>
-                  <option value="cmdrmkb47005qjbbvok31rx99" {{ 'selected' if _fuid == 'cmdrmkb47005qjbbvok31rx99' }}>Beatriz Lacerda</option>
-                  <option value="cme8jcc4i00s9jbytdlwapbb0" {{ 'selected' if _fuid == 'cme8jcc4i00s9jbytdlwapbb0' }}>Cassiano Faria</option>
-                  <option value="cmdt0lfya00oijb0xwtf67ezz" {{ 'selected' if _fuid == 'cmdt0lfya00oijb0xwtf67ezz' }}>Cauã Sant'Anna</option>
-                  <option value="cmfy73ze303h4jbn2mcevv544" {{ 'selected' if _fuid == 'cmfy73ze303h4jbn2mcevv544' }}>Cleidilane Vieira</option>
-                  <option value="cmk5q2st00432jbzvk7c51poy" {{ 'selected' if _fuid == 'cmk5q2st00432jbzvk7c51poy' }}>Cleidilane</option>
-                  <option value="cmea8b28u01sljbutw8bjx3t9" {{ 'selected' if _fuid == 'cmea8b28u01sljbutw8bjx3t9' }}>Daniela Souza</option>
-                  <option value="cmeautea9007ijbyjmu5w83qf" {{ 'selected' if _fuid == 'cmeautea9007ijbyjmu5w83qf' }}>Davi Macedo</option>
-                  <option value="cmevnrztp021ujb4vwci3klob" {{ 'selected' if _fuid == 'cmevnrztp021ujb4vwci3klob' }}>Dayene Fernandes</option>
-                  <option value="cme8tawl000s3jbjssrgerxaz" {{ 'selected' if _fuid == 'cme8tawl000s3jbjssrgerxaz' }}>Fabiana Nicário</option>
-                  <option value="cmkh92e6j02f91yjbxgkvofqr" {{ 'selected' if _fuid == 'cmkh92e6j02f91yjbxgkvofqr' }}>Fabiana Viter</option>
-                  <option value="cmf1ahlw6021mjb18gun5ijx5" {{ 'selected' if _fuid == 'cmf1ahlw6021mjb18gun5ijx5' }}>Fabricio da Costa</option>
-                  <option value="cmm238and024czbjbdjnzn9yk" {{ 'selected' if _fuid == 'cmm238and024czbjbdjnzn9yk' }}>Fernanda Catarcione</option>
-                  <option value="cmd7f2vu40005jb2y0w5atibz" {{ 'selected' if _fuid == 'cmd7f2vu40005jb2y0w5atibz' }}>Gabriel Gonçalves</option>
-                  <option value="cmea8abzj01rsjbutky6qc0u8" {{ 'selected' if _fuid == 'cmea8abzj01rsjbutky6qc0u8' }}>Isabelle Felix</option>
-                  <option value="cmdsqe9jj00cnjbz29ek1aycf" {{ 'selected' if _fuid == 'cmdsqe9jj00cnjbz29ek1aycf' }}>Jonatas Costa</option>
-                  <option value="cmkibsaa700df02jb09qfmp5d" {{ 'selected' if _fuid == 'cmkibsaa700df02jb09qfmp5d' }}>Julia de Moraes Marques</option>
-                  <option value="cmdsq89sm00c3jbz27uimu4u1" {{ 'selected' if _fuid == 'cmdsq89sm00c3jbz27uimu4u1' }}>Kevin Costa</option>
-                  <option value="cmdpya8t50005jb0riuh8hx0f" {{ 'selected' if _fuid == 'cmdpya8t50005jb0riuh8hx0f' }}>Leonardo Carneiro</option>
-                  <option value="cme8l4ecm0111jbyth5farf0j" {{ 'selected' if _fuid == 'cme8l4ecm0111jbyth5farf0j' }}>Lincoln Menezes</option>
-                  <option value="cmddbwec2000djbt3mgtesyw1" {{ 'selected' if _fuid == 'cmddbwec2000djbt3mgtesyw1' }}>Lucas Paes</option>
-                  <option value="cmdrmaiwv0052jbbvj8hhkfb4" {{ 'selected' if _fuid == 'cmdrmaiwv0052jbbvj8hhkfb4' }}>Lucas Motta</option>
-                  <option value="cmd7f3yl10008jb2y6ga522ll" {{ 'selected' if _fuid == 'cmd7f3yl10008jb2y6ga522ll' }}>Luis Garritano</option>
-                  <option value="cmi34wirj012ejb39m1d59j18" {{ 'selected' if _fuid == 'cmi34wirj012ejb39m1d59j18' }}>Lumara Vitória</option>
-                  <option value="cme8jlrwi00upjbythch084uy" {{ 'selected' if _fuid == 'cme8jlrwi00upjbythch084uy' }}>Maria Caroline</option>
-                  <option value="cmhdsc5nl04lwjb05zrerm5xm" {{ 'selected' if _fuid == 'cmhdsc5nl04lwjb05zrerm5xm' }}>Mariana Abreu</option>
-                  <option value="cmdt0moiv00omjb0xyhwfiq1t" {{ 'selected' if _fuid == 'cmdt0moiv00omjb0xyhwfiq1t' }}>Marta Assis</option>
-                  <option value="cme8jd3tp00sojbyt2mfowoex" {{ 'selected' if _fuid == 'cme8jd3tp00sojbyt2mfowoex' }}>Matheus Avelar</option>
-                  <option value="cme8te2ri00sujbjs3ho8bz0i" {{ 'selected' if _fuid == 'cme8te2ri00sujbjs3ho8bz0i' }}>Marcia Regina</option>
-                  <option value="cmd7f15e90002jb2yiy0roa96" {{ 'selected' if _fuid == 'cmd7f15e90002jb2yiy0roa96' }}>Marcelle Santos</option>
-                  <option value="cmfl8yaww02rkjba6ax1521zs" {{ 'selected' if _fuid == 'cmfl8yaww02rkjba6ax1521zs' }}>Marcelo Melo</option>
-                  <option value="cme8ipefi00otjbyt71tfb7b3" {{ 'selected' if _fuid == 'cme8ipefi00otjbyt71tfb7b3' }}>Michelle Ferreira</option>
-                  <option value="cmd4pt2680000o127h8sp1m6l" {{ 'selected' if _fuid == 'cmd4pt2680000o127h8sp1m6l' }}>Milena Carvalho</option>
-                  <option value="cmen8641z02bojb562mtxrdqx" {{ 'selected' if _fuid == 'cmen8641z02bojb562mtxrdqx' }}>Mylena Maia</option>
-                  <option value="cmdsq9owr00ccjbz2yei11hva" {{ 'selected' if _fuid == 'cmdsq9owr00ccjbz2yei11hva' }}>Nathan Consoli</option>
-                  <option value="cmdrmhcl6005ijbbvk7v00wxj" {{ 'selected' if _fuid == 'cmdrmhcl6005ijbbvk7v00wxj' }}>Nathalia Correa</option>
-                  <option value="cmj901eej04ohjbzu0b7zs9wg" {{ 'selected' if _fuid == 'cmj901eej04ohjbzu0b7zs9wg' }}>Paulo Felipe</option>
-                  <option value="cme8tby4600sfjbjs4ggmnxtx" {{ 'selected' if _fuid == 'cme8tby4600sfjbjs4ggmnxtx' }}>Pedro Paulo</option>
-                  <option value="cmi67jh2n02w3jb0q9rezr7m8" {{ 'selected' if _fuid == 'cmi67jh2n02w3jb0q9rezr7m8' }}>Raquel De Moura</option>
-                  <option value="cme8tcg4p00sijbjs60x0q54i" {{ 'selected' if _fuid == 'cme8tcg4p00sijbjs60x0q54i' }}>Rayane Bandeira</option>
-                  <option value="cmmcek5nh04l02tjbjc42fvqd" {{ 'selected' if _fuid == 'cmmcek5nh04l02tjbjc42fvqd' }}>Renato de Souza</option>
-                  <option value="cmit08m8q01sejb24zk3k0pbo" {{ 'selected' if _fuid == 'cmit08m8q01sejb24zk3k0pbo' }}>Ricardo Welbert</option>
-                  <option value="cmekcxj0302vajbzmxcg8g7e8" {{ 'selected' if _fuid == 'cmekcxj0302vajbzmxcg8g7e8' }}>Roberta Braga</option>
-                  <option value="cmdrm07rv004tjbbv1phvsdai" {{ 'selected' if _fuid == 'cmdrm07rv004tjbbv1phvsdai' }}>Roberta Soares</option>
-                  <option value="cmmcffj8q04s72tjbwrl3egby" {{ 'selected' if _fuid == 'cmmcffj8q04s72tjbwrl3egby' }}>Robson Fernandes</option>
-                  <option value="cmfh0eave021njb3w6abp39z9" {{ 'selected' if _fuid == 'cmfh0eave021njb3w6abp39z9' }}>Ronald Fernandes</option>
-                  <option value="cme8jfav600tajbyt7iwyero6" {{ 'selected' if _fuid == 'cme8jfav600tajbyt7iwyero6' }}>Romulo Azevedo</option>
-                  <option value="cmeizqak300e2jbs4pha73ao8" {{ 'selected' if _fuid == 'cmeizqak300e2jbs4pha73ao8' }}>Ruthe Barros</option>
-                  <option value="cmmxfq89001232ajb6vqe6ai6" {{ 'selected' if _fuid == 'cmmxfq89001232ajb6vqe6ai6' }}>Sara Jaqueline</option>
-                  <option value="cme8jbe4800rujbytige3xdyw" {{ 'selected' if _fuid == 'cme8jbe4800rujbytige3xdyw' }}>Sergio Velloso</option>
-                  <option value="cme8jicjc00trjbytcljestvd" {{ 'selected' if _fuid == 'cme8jicjc00trjbytcljestvd' }}>Stefany Alexandra</option>
-                  <option value="cme8td73000snjbjs6gsu312t" {{ 'selected' if _fuid == 'cme8td73000snjbjs6gsu312t' }}>Taiane Candido</option>
-                  <option value="cme8jl2y800ufjbytma09biai" {{ 'selected' if _fuid == 'cme8jl2y800ufjbytma09biai' }}>Thais Lima</option>
-                  <option value="cmkeblmh602f2yljb1n46ighw" {{ 'selected' if _fuid == 'cmkeblmh602f2yljb1n46ighw' }}>Thais Rodrigues</option>
-                  <option value="cme8inig300oljbytm18j3rv6" {{ 'selected' if _fuid == 'cme8inig300oljbytm18j3rv6' }}>Thiago Silva</option>
-                  <option value="cmmjao0al03flzcjbnvcc8g55" {{ 'selected' if _fuid == 'cmmjao0al03flzcjbnvcc8g55' }}>Thiago de Menezes</option>
-                  <option value="cmd4r4a8z0000o1k8tvgch28p" {{ 'selected' if _fuid == 'cmd4r4a8z0000o1k8tvgch28p' }}>Usuária</option>
-                  <option value="cmdrlyu9f004ojbbvbp6ahx5k" {{ 'selected' if _fuid == 'cmdrlyu9f004ojbbvbp6ahx5k' }}>Vanessa Farias</option>
-                  <option value="cme8l57pi011gjbytkiaqx4co" {{ 'selected' if _fuid == 'cme8l57pi011gjbytkiaqx4co' }}>Vinícius Pereira</option>
-                  <option value="cmeausp09007djbyje29ml8nf" {{ 'selected' if _fuid == 'cmeausp09007djbyje29ml8nf' }}>Vinícius Ribeiro</option>
-                  <option value="cmd7fbx3i000jjb2yy66owwqs" {{ 'selected' if _fuid == 'cmd7fbx3i000jjb2yy66owwqs' }}>Victoria</option>
-                  <option value="cmfr0ir4302wtjbkg59h5it5v" {{ 'selected' if _fuid == 'cmfr0ir4302wtjbkg59h5it5v' }}>Victoria Utrini</option>
-                  <option value="cme8tbhpv00s9jbjs6crvsi29" {{ 'selected' if _fuid == 'cme8tbhpv00s9jbjs6crvsi29' }}>Ygor Vieira</option>
-                  <option value="cmd7f9uqg000gjb2y24b7u1od" {{ 'selected' if _fuid == 'cmd7f9uqg000gjb2y24b7u1od' }}>Cristiano Souza</option>
+                  <option value="">— Carregando usuários... —</option>
                 </select>
+                <small id="from_user_loading" class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i> Carregando usuários...</small>
                 <small class="form-text text-muted">Agente que aparece como remetente no WhatsApp</small>
               </div>
             </div>
@@ -804,6 +703,73 @@ const MODO_ENVIO_ATUAL = "{{ campanha.modo_envio if campanha and campanha.modo_e
 const QUEUE_ID_ATUAL   = "{{ campanha.queue_id if campanha and campanha.queue_id else '' }}";
 const QUEUE_PADRAO_COBRANCA = "cmmzcumqu00a4zejb323r63ac";  // Template Enviado ao Cliente
 const QUEUE_PADRAO_CLIENTES = "cmn54op7f06dov9jbqwvhfb8s";  // Mensagens MKT
+const FROM_USER_ATUAL = "{{ (campanha.from_user_id if campanha and campanha.from_user_id else 'cmg8cum8g0519jbbm6r9l93f7') | replace('chat:', '') }}";
+
+// ── Carregar filas do MySQL ─────────────────────────────────────────────────
+function carregarFilasMySQL() {
+  fetch('/wpp/api/chat-queues')
+    .then(r => r.json())
+    .then(data => {
+      const sel = document.getElementById('queue_id_sel');
+      const loading = document.getElementById('queue_id_loading');
+      if (loading) loading.style.display = 'none';
+      if (!sel) return;
+      // Remove opções existentes exceto padrão e _outro
+      while (sel.options.length > 1) {
+        if (sel.options[1].value === '_outro') break;
+        sel.remove(1);
+      }
+      const outroOpt = sel.querySelector('option[value="_outro"]');
+      const queues = data.queues || [];
+      queues.forEach(q => {
+        const opt = document.createElement('option');
+        opt.value = q.id;
+        opt.textContent = q.name + (q.tag ? ' [' + q.tag + ']' : '');
+        sel.insertBefore(opt, outroOpt);
+      });
+      // Após popular, inicializa a seleção
+      initQueueSel();
+      if (!QUEUE_ID_ATUAL) aplicarQueuePadrao(MODO_ENVIO_ATUAL);
+    })
+    .catch(() => {
+      const loading = document.getElementById('queue_id_loading');
+      if (loading) { loading.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-triangle mr-1"></i> Erro ao carregar filas</span>'; }
+    });
+}
+
+// ── Carregar usuários do MySQL ──────────────────────────────────────────────
+function carregarUsersMySQL() {
+  fetch('/wpp/api/chat-users')
+    .then(r => r.json())
+    .then(data => {
+      const sel = document.getElementById('from_user_id');
+      const loading = document.getElementById('from_user_loading');
+      if (loading) loading.style.display = 'none';
+      if (!sel) return;
+      sel.innerHTML = '';
+      const users = data.users || [];
+      let found = false;
+      users.forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = u.name + (u.email ? ' (' + u.email + ')' : '');
+        if (u.id === FROM_USER_ATUAL) { opt.selected = true; found = true; }
+        sel.appendChild(opt);
+      });
+      // Se nenhum ficou selected e temos valor, pode ser user inativo — adiciona como opção
+      if (FROM_USER_ATUAL && !found) {
+        const opt = document.createElement('option');
+        opt.value = FROM_USER_ATUAL;
+        opt.textContent = FROM_USER_ATUAL + ' (não encontrado)';
+        opt.selected = true;
+        sel.insertBefore(opt, sel.firstChild);
+      }
+    })
+    .catch(() => {
+      const loading = document.getElementById('from_user_loading');
+      if (loading) { loading.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-triangle mr-1"></i> Erro ao carregar usuários</span>'; }
+    });
+}
 
 // Inicializa o select de fila: restaura valor salvo ou aplica padrão por modo
 function initQueueSel() {
@@ -1225,18 +1191,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   atualizarModoEnvio();
 
-  // Fila WhatsApp
-  initQueueSel();
+  // Fila WhatsApp — carrega do MySQL
+  carregarFilasMySQL();
   const queueSel    = document.getElementById('queue_id_sel');
   const queueCustom = document.getElementById('queue_id_custom');
   if (queueSel) {
     queueSel.addEventListener('change', syncQueueId);
-    // aplica padrão só em nova campanha (QUEUE_ID_ATUAL vazio)
-    if (!QUEUE_ID_ATUAL) aplicarQueuePadrao(MODO_ENVIO_ATUAL);
   }
   if (queueCustom) {
     queueCustom.addEventListener('input', syncQueueId);
   }
+
+  // Usuários remetentes — carrega do MySQL
+  carregarUsersMySQL();
 
   // Se já há postos marcados (modo edição), carrega opções imediatamente
   if (postosChecados().length > 0) {

@@ -16,11 +16,26 @@ Domínio público: **teste-ia.camim.com.br**
 
 ## Serviços na VM
 
-| Serviço systemd | Diretório | Função |
-|---|---|---|
-| `camim-auth.service` | `/opt/camim-auth/` | Flask: autenticação, admin de usuários, proxy de IA OpenAI |
-| `ia-groq.service` | `/opt/ia-groq/` | Flask: análise IA com Groq |
-| nginx | `/var/www/` | Serve arquivos estáticos + proxy reverso para os dois Flask |
+| Serviço systemd | Diretório | Porta | Domínio | Função |
+|---|---|---|---|---|
+| `camim-auth.service` | `/opt/camim-auth/` | 8020 | `teste-ia.camim.com.br` | Flask: autenticação, admin de usuários, KPIs, proxy de IA OpenAI |
+| `wpp-campanhas.service` | `/opt/relatorio_h_t/wpp-campanhas/` | 8023 | `camila1.ia.camim.com.br` | Flask: plataforma WhatsApp Campanhas (auth via IDCAMIM OIDC) |
+| `ia-groq.service` | `/opt/ia-groq/` | — | — | Flask: análise IA com Groq |
+| nginx | `/var/www/` | 80/443 | — | Serve arquivos estáticos + proxy reverso para os Flask apps |
+
+### Relação entre camim-auth e wpp-campanhas
+
+Ambos usam os mesmos módulos Python (`wpp_cobranca_routes.py`, `wpp_cobranca_db.py`), mas de caminhos diferentes:
+
+- **camim-auth** (porta 8020): importa de `/opt/camim-auth/`, templates em `/opt/camim-auth/templates/`
+- **wpp-campanhas** (porta 8023): importa de `/opt/relatorio_h_t/` (via `sys.path`), templates em `/opt/wpp-campanhas/templates/` (prioridade) e `/opt/camim-auth/templates/` (fallback via `ChoiceLoader`)
+
+> **Deploy de arquivos WPP:** ao atualizar `wpp_cobranca_routes.py` ou templates HTML do WPP, copiar para **ambos** os locais e reiniciar **ambos** os serviços:
+> ```bash
+> scp arquivo root@VM:/opt/camim-auth/ && scp arquivo root@VM:/opt/relatorio_h_t/
+> scp template root@VM:/opt/camim-auth/templates/ && scp template root@VM:/opt/wpp-campanhas/templates/
+> ssh root@VM 'systemctl restart camim-auth wpp-campanhas'
+> ```
 
 ---
 

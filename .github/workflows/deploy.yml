@@ -108,6 +108,28 @@ jobs:
             ./ "$SSH_USER@$SSH_HOST:$DEST/"
 
       # ================================================================
+      # 2A) Templates WPP -> /opt/wpp-campanhas/templates
+      # ================================================================
+      - name: WPP templates -> /opt/wpp-campanhas/templates
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          DEST=/opt/wpp-campanhas/templates
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
+          for f in wpp_campanhas.html wpp_campanha_form.html wpp_campanha_envios.html wpp_auditoria.html wpp_envio_detalhe.html wpp_teste_envio.html; do
+            if [ -f "$f" ]; then
+              echo "Copiando $f → $DEST"
+              rsync -lvz \
+                --omit-dir-times --no-perms --no-owner --no-group \
+                -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+                "$f" "$SSH_USER@$SSH_HOST:$DEST/"
+            fi
+          done
+
+      # ================================================================
       # 2B) login.html -> /var/www  (nginx serve direto; sync_www também faz isso,
       #     mas o deploy garante atualização imediata sem depender do cron)
       # ================================================================
@@ -294,6 +316,44 @@ jobs:
           "
 
       # ================================================================
+      # 5C) wpp-campanhas app + deps -> /opt/wpp-campanhas
+      # ================================================================
+      - name: wpp-campanhas app -> /opt/wpp-campanhas
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          DEST=/opt/wpp-campanhas
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
+          for f in wpp-campanhas/app.py wpp-campanhas/requirements.txt; do
+            if [ -f "$f" ]; then
+              echo "Copiando $f → $DEST"
+              rsync -lvz \
+                --omit-dir-times --no-perms --no-owner --no-group \
+                -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+                "$f" "$SSH_USER@$SSH_HOST:$DEST/"
+            fi
+          done
+
+      - name: pip install deps no venv wpp-campanhas
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+            VENV=/opt/wpp-campanhas/venv
+            if [ -d \"\$VENV\" ]; then
+              cd /opt/wpp-campanhas
+              \$VENV/bin/pip install --quiet -r requirements.txt 2>/dev/null || true
+            else
+              echo 'WARN: venv em /opt/wpp-campanhas/venv nao encontrado'
+            fi
+          "
+
+      # ================================================================
       # 6) Sync SQL (todas as pastas que começam com sql*)
       # ================================================================
       - name: Sync sql* -> /opt/relatorio_h_t
@@ -399,19 +459,21 @@ jobs:
           "
 
       # ================================================================
-      # 9) Restart FINAL (camim-auth + nginx)
+      # 9) Restart FINAL (camim-auth + wpp-campanhas + nginx)
       # ================================================================
-      - name: Restart camim-auth + nginx
+      - name: Restart camim-auth + wpp-campanhas + nginx
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
-            echo 'Reiniciando camim-auth.service e nginx...'
+            echo 'Reiniciando camim-auth, wpp-campanhas e nginx...'
             sudo systemctl restart camim-auth.service
+            sudo systemctl restart wpp-campanhas.service
             sudo systemctl restart nginx
             sudo systemctl status camim-auth.service --no-pager || true
+            sudo systemctl status wpp-campanhas.service --no-pager || true
           "
 
       # ================================================================

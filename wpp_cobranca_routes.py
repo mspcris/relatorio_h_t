@@ -272,6 +272,67 @@ def api_indicadores():
         return jsonify({"erro": str(e)[:200]}), 500
 
 
+# ---------------------------------------------------------------------------
+# MySQL chat helpers (Queue / User do camim_chat_production)
+# ---------------------------------------------------------------------------
+
+def _chat_mysql_conn():
+    """Abre conexão com o MySQL camim_chat_production (mesmas env vars de auth_routes)."""
+    import pymysql
+    return pymysql.connect(
+        host=os.environ.get("CHAT_MYSQL_HOST", ""),
+        port=int(os.environ.get("CHAT_MYSQL_PORT", 3306)),
+        user=os.environ.get("CHAT_MYSQL_USER", ""),
+        password=os.environ.get("CHAT_MYSQL_PASSWORD", ""),
+        database=os.environ.get("CHAT_MYSQL_DATABASE", "camim_chat_production"),
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+        connect_timeout=10,
+    )
+
+
+@wpp_bp.get("/api/chat-queues")
+def api_chat_queues():
+    """Retorna filas ativas do camim_chat_production.Queue."""
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        conn = _chat_mysql_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, name, color, tag "
+            "FROM `Queue` WHERE isActive = 1 AND deletedAt IS NULL "
+            "ORDER BY name"
+        )
+        rows = cur.fetchall()
+        conn.close()
+        return jsonify({"queues": rows})
+    except Exception as e:
+        return jsonify({"error": str(e)[:200], "queues": []}), 500
+
+
+@wpp_bp.get("/api/chat-users")
+def api_chat_users():
+    """Retorna usuários ativos do camim_chat_production.User."""
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        conn = _chat_mysql_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, name, email "
+            "FROM `User` WHERE isActive = 1 AND deletedAt IS NULL "
+            "ORDER BY name"
+        )
+        rows = cur.fetchall()
+        conn.close()
+        return jsonify({"users": rows})
+    except Exception as e:
+        return jsonify({"error": str(e)[:200], "users": []}), 500
+
+
 @wpp_bp.get("/api/postos")
 def api_postos():
     email, _ = _check_auth()
@@ -697,8 +758,8 @@ def _form_to_dict(form) -> dict:
         "origem":             form.get("origem") or None,
         "pagador_atrasado":   form.get("pagador_atrasado") == "1",
         "from_user_id":       form.get("from_user_id") or "cmg8cum8g0519jbbm6r9l93f7",
-        "enviar_chat":        form.get("enviar_chat") == "1",
-        "enviar_meta":        form.get("enviar_meta") == "1",
+        "enviar_chat":        "1" in form.getlist("enviar_chat"),
+        "enviar_meta":        "1" in form.getlist("enviar_meta"),
     }
 
 
