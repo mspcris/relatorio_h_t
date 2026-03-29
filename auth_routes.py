@@ -542,6 +542,8 @@ def admin_lista():
                 "postos":        u.lista_postos(),
                 "all_pages":     u.all_pages if hasattr(u, 'all_pages') else True,
                 "pode_desbloquear": getattr(u, 'pode_desbloquear', False),
+                "id_usuario_sqlserver": getattr(u, 'id_usuario_sqlserver', None),
+                "login_campinho": getattr(u, 'login_campinho', None) or "",
                 "paginas":       u.lista_paginas() if hasattr(u, 'lista_paginas') else [],
                 "ultimo_login":  last.created_at.isoformat() if last else None,
                 "ultimo_login_ip": last.ip if last else None,
@@ -574,6 +576,10 @@ def admin_criar():
             db.add(UserPosto(user_id=user.id, posto=posto.upper()))
         user.all_pages = bool(d.get("all_pages", False))  # new users start restricted by default
         user.pode_desbloquear = bool(d.get("pode_desbloquear", False))
+        if d.get("id_usuario_sqlserver"):
+            user.id_usuario_sqlserver = int(d["id_usuario_sqlserver"])
+        if d.get("login_campinho"):
+            user.login_campinho = d["login_campinho"].strip()
         from auth_db import UserPagePermission
         for key in d.get("paginas", []):
             db.add(UserPagePermission(user_id=user.id, page_key=key))
@@ -609,7 +615,14 @@ def admin_editar(uid: int):
         if "all_pages" in d:
             user.all_pages = bool(d["all_pages"])
         if "pode_desbloquear" in d:
+            # Só permite ativar se o usuário estiver mapeado ao SQL Server
+            if d["pode_desbloquear"] and not (d.get("id_usuario_sqlserver") or getattr(user, 'id_usuario_sqlserver', None)):
+                return jsonify({"erro": "É necessário vincular ao usuário SQL Server antes de ativar Desbloquear Agenda."}), 400
             user.pode_desbloquear = bool(d["pode_desbloquear"])
+        if "id_usuario_sqlserver" in d:
+            user.id_usuario_sqlserver = int(d["id_usuario_sqlserver"]) if d["id_usuario_sqlserver"] else None
+        if "login_campinho" in d:
+            user.login_campinho = (d["login_campinho"] or "").strip() or None
         if "paginas" in d:
             from auth_db import UserPagePermission
             db.query(UserPagePermission).filter_by(user_id=user.id).delete(synchronize_session="fetch")
@@ -639,6 +652,36 @@ def admin_deletar(uid: int):
         return jsonify({"ok": True})
     finally:
         db.close()
+
+
+@auth_bp.get("/admin/api/validar_usuario_sqlserver")
+def admin_validar_usuario_sqlserver():
+    """Valida login Campinho contra Sis_Usuario no SQL Server."""
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    login = (request.args.get("login") or "").strip()
+    if not login:
+        return jsonify({"erro": "Login obrigatório"}), 400
+    try:
+        from ctrlq_desbloqueio import build_conns_from_env, make_engine
+        from sqlalchemy import text as sa_text
+        conns = build_conns_from_env()
+        if not conns:
+            return jsonify({"erro": "Nenhuma conexão SQL Server configurada"}), 500
+        # Usa a primeira conexão disponível (Sis_Usuario é compartilhada)
+        conn_str = next(iter(conns.values()))
+        engine = make_engine(conn_str)
+        with engine.connect() as conn:
+            row = conn.execute(sa_text(
+                "SELECT TOP 1 idUsuario, Nome, Usuario FROM Sis_Usuario WHERE Usuario = :login"
+            ), {"login": login}).fetchone()
+        if not row:
+            return jsonify({"erro": f"Usuário '{login}' não encontrado no Campinho"}), 404
+        return jsonify({"ok": True, "idusuario": row[0], "nome": row[1], "usuario": row[2]})
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("Erro ao validar usuario SQL Server: %s", e)
+        return jsonify({"erro": str(e)}), 500
 
 
 @auth_bp.get("/admin/api/usuarios/<int:uid>/logins")

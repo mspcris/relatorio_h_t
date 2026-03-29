@@ -534,7 +534,7 @@ def r_ctrlq_desbloqueio():
 # ── API: ações de desbloqueio de agenda ──────────────────────────────────────
 
 def _require_pode_desbloquear():
-    """Retorna (user, email) se o usuário autenticado pode desbloquear, senão None."""
+    """Retorna (user, email, id_usuario_sqlserver) se o usuário autenticado pode desbloquear, senão None."""
     from auth_db import SessionLocal, get_user_by_email as _gue
     email, _ = decode_user()
     if not email:
@@ -542,8 +542,8 @@ def _require_pode_desbloquear():
     db = SessionLocal()
     try:
         u = _gue(db, email)
-        if u and getattr(u, 'pode_desbloquear', False):
-            return u, email
+        if u and getattr(u, 'pode_desbloquear', False) and getattr(u, 'id_usuario_sqlserver', None):
+            return u, email, u.id_usuario_sqlserver
     finally:
         db.close()
     return None
@@ -564,21 +564,13 @@ _ID_TABELA_CAD_ESPECIALIDADE = 53
 _ID_COMANDO_EDICAO = 2
 
 
-def _resolve_idusuario(conn, email):
-    """Busca idUsuario em Sis_Usuario pelo email. Retorna None se não encontrar."""
-    from sqlalchemy import text as sa_text
-    row = conn.execute(sa_text(
-        "SELECT TOP 1 idUsuario FROM Sis_Usuario WHERE Email = :email"
-    ), {"email": email.upper()}).fetchone()
-    return row[0] if row else None
-
 
 @app.post('/api/ctrlq/retirar_data_fim')
 def api_retirar_data_fim():
     auth = _require_pode_desbloquear()
     if not auth:
         return jsonify({"erro": "Não autorizado"}), 403
-    user, email = auth
+    user, email, id_usuario_sql = auth
 
     data = request.get_json(silent=True) or {}
     id_esp = data.get("idEspecialidade")
@@ -610,7 +602,6 @@ def api_retirar_data_fim():
             ), {"id": id_esp})
 
             # INSERT auditoria em Sis_Historico (tabela base com IDs de FK)
-            id_usuario = _resolve_idusuario(conn, email)
             nome_usuario = user.nome or email
             detalhe = (
                 f"Alteração da Especialidade {especialidade} - "
@@ -625,7 +616,7 @@ def api_retirar_data_fim():
                 "id_esp": id_esp,
                 "id_tabela": _ID_TABELA_CAD_ESPECIALIDADE,
                 "id_comando": _ID_COMANDO_EDICAO,
-                "id_usuario": id_usuario,
+                "id_usuario": id_usuario_sql,
                 "detalhe": detalhe,
             })
 
@@ -639,7 +630,7 @@ def api_prorrogar_agenda():
     auth = _require_pode_desbloquear()
     if not auth:
         return jsonify({"erro": "Não autorizado"}), 403
-    user, email = auth
+    user, email, id_usuario_sql = auth
 
     data = request.get_json(silent=True) or {}
     id_esp = data.get("idEspecialidade")
@@ -682,7 +673,6 @@ def api_prorrogar_agenda():
             ), {"nova": nova_data, "id": id_esp})
 
             # INSERT auditoria em Sis_Historico (tabela base com IDs de FK)
-            id_usuario = _resolve_idusuario(conn, email)
             nome_usuario = user.nome or email
             detalhe = (
                 f"Alteração da Especialidade {especialidade} - "
@@ -697,7 +687,7 @@ def api_prorrogar_agenda():
                 "id_esp": id_esp,
                 "id_tabela": _ID_TABELA_CAD_ESPECIALIDADE,
                 "id_comando": _ID_COMANDO_EDICAO,
-                "id_usuario": id_usuario,
+                "id_usuario": id_usuario_sql,
                 "detalhe": detalhe,
             })
 

@@ -32,6 +32,8 @@ class User(Base):
     ativo        = Column(Boolean, default=True,  nullable=False)
     all_pages    = Column(Boolean, default=True,  nullable=False)
     pode_desbloquear = Column(Boolean, default=False, nullable=False)
+    id_usuario_sqlserver = Column(Integer, nullable=True)
+    login_campinho = Column(String(100), nullable=True)
     reset_token  = Column(String(100), nullable=True)
     reset_expires = Column(DateTime, nullable=True)
 
@@ -190,6 +192,16 @@ def init_db():
             _conn.commit()
         except Exception:
             pass  # column already exists
+        try:
+            _conn.execute(text("ALTER TABLE users ADD COLUMN id_usuario_sqlserver INTEGER"))
+            _conn.commit()
+        except Exception:
+            pass
+        try:
+            _conn.execute(text("ALTER TABLE users ADD COLUMN login_campinho VARCHAR(100)"))
+            _conn.commit()
+        except Exception:
+            pass
     db = SessionLocal()
     try:
         # KPIs conhecidos

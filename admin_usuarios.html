@@ -270,10 +270,30 @@
               <label class="custom-control-label" for="f-ativo">Ativo</label>
             </div>
           </div>
-          <div class="form-group col-md-3 d-flex align-items-end">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-md-5">
+            <label>Login Campinho (SQL Server)</label>
+            <div class="input-group">
+              <input type="text" class="form-control" id="f-login-campinho"
+                     placeholder="Ex: cristiano2.a" autocomplete="off"
+                     oninput="resetValidacaoSqlServer()">
+              <div class="input-group-append">
+                <button type="button" class="btn btn-outline-secondary" onclick="validarUsuarioSqlServer()">
+                  <i class="fas fa-search mr-1"></i>Validar
+                </button>
+              </div>
+            </div>
+            <div id="validacao-sqlserver-result" class="mt-1" style="min-height:20px"></div>
+            <small class="text-muted">Login no sistema Campinho. Obrigatório para Desbloquear Agenda.</small>
+          </div>
+          <input type="hidden" id="f-id-usuario-sqlserver" value="">
+          <div class="form-group col-md-4 d-flex align-items-end">
             <div class="custom-control custom-switch mb-2">
-              <input type="checkbox" class="custom-control-input" id="f-pode-desbloquear">
-              <label class="custom-control-label" for="f-pode-desbloquear">Pode Desbloquear</label>
+              <input type="checkbox" class="custom-control-input" id="f-pode-desbloquear" disabled>
+              <label class="custom-control-label" for="f-pode-desbloquear">Desbloquear Agenda</label>
+              <small class="d-block text-muted" id="desbloquear-hint" style="font-size:.75rem">Vincule ao SQL Server primeiro</small>
             </div>
           </div>
         </div>
@@ -451,6 +471,11 @@ function abrirModalNovo() {
   document.getElementById('f-admin').checked = false;
   document.getElementById('f-ativo').checked = true;
   document.getElementById('f-pode-desbloquear').checked = false;
+  document.getElementById('f-pode-desbloquear').disabled = true;
+  document.getElementById('desbloquear-hint').textContent = 'Vincule ao SQL Server primeiro';
+  document.getElementById('f-login-campinho').value = '';
+  document.getElementById('f-id-usuario-sqlserver').value = '';
+  document.getElementById('validacao-sqlserver-result').innerHTML = '';
   document.getElementById('f-email').disabled = false;
   document.getElementById('modal-erro').textContent = '';
   document.querySelectorAll('.posto-cb').forEach(cb => cb.checked = false);
@@ -471,7 +496,18 @@ function editar(id) {
   document.getElementById('f-senha').value   = '';
   document.getElementById('f-admin').checked = u.is_admin;
   document.getElementById('f-ativo').checked = u.ativo;
+  document.getElementById('f-login-campinho').value = u.login_campinho || '';
+  document.getElementById('f-id-usuario-sqlserver').value = u.id_usuario_sqlserver || '';
+  const temVinculo = !!u.id_usuario_sqlserver;
+  document.getElementById('f-pode-desbloquear').disabled = !temVinculo;
   document.getElementById('f-pode-desbloquear').checked = !!u.pode_desbloquear;
+  document.getElementById('desbloquear-hint').textContent = temVinculo ? '' : 'Vincule ao SQL Server primeiro';
+  if (temVinculo) {
+    document.getElementById('validacao-sqlserver-result').innerHTML =
+      `<span class="text-success small"><i class="fas fa-check-circle mr-1"></i>Vinculado (ID: ${u.id_usuario_sqlserver})</span>`;
+  } else {
+    document.getElementById('validacao-sqlserver-result').innerHTML = '';
+  }
   document.getElementById('f-email').disabled = true;
   document.getElementById('modal-erro').textContent = '';
   document.querySelectorAll('.posto-cb').forEach(cb => {
@@ -509,8 +545,10 @@ async function salvar() {
 
   const allPages = document.getElementById('f-all-pages').checked;
   const podeDesbloquear = document.getElementById('f-pode-desbloquear').checked;
+  const idUsuarioSqlServer = document.getElementById('f-id-usuario-sqlserver').value || null;
+  const loginCampinho = document.getElementById('f-login-campinho').value.trim() || null;
   const paginas = allPages ? [] : [...document.querySelectorAll('.pagina-cb:checked')].map(cb => cb.value);
-  const payload = { nome, is_admin: admin, ativo, postos, all_pages: allPages, pode_desbloquear: podeDesbloquear, paginas };
+  const payload = { nome, is_admin: admin, ativo, postos, all_pages: allPages, pode_desbloquear: podeDesbloquear, id_usuario_sqlserver: idUsuarioSqlServer, login_campinho: loginCampinho, paginas };
   if (!uid) payload.email = email;
   if (senha) payload.senha = senha;
 
@@ -616,6 +654,40 @@ function toast(msg, erro = false) {
   el.innerHTML = `<i class="fas fa-${erro ? 'exclamation-circle' : 'check-circle'} mr-2"></i>${msg}`;
   wrap.appendChild(el);
   setTimeout(() => el.remove(), 3500);
+}
+
+// ── Validação SQL Server (Login Campinho) ──────────────────────────────────────
+function resetValidacaoSqlServer() {
+  document.getElementById('f-id-usuario-sqlserver').value = '';
+  document.getElementById('validacao-sqlserver-result').innerHTML = '';
+  document.getElementById('f-pode-desbloquear').disabled = true;
+  document.getElementById('f-pode-desbloquear').checked = false;
+  document.getElementById('desbloquear-hint').textContent = 'Vincule ao SQL Server primeiro';
+}
+
+async function validarUsuarioSqlServer() {
+  const login = (document.getElementById('f-login-campinho').value || '').trim();
+  if (!login) { toast('Digite o login Campinho', true); return; }
+  const div = document.getElementById('validacao-sqlserver-result');
+  div.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin mr-1"></i>Validando...</span>';
+  try {
+    const r = await fetch('/admin/api/validar_usuario_sqlserver?login=' + encodeURIComponent(login));
+    const d = await r.json();
+    if (!r.ok || !d.ok) {
+      div.innerHTML = `<span class="text-danger small"><i class="fas fa-times-circle mr-1"></i>${d.erro || 'Não encontrado'}</span>`;
+      document.getElementById('f-id-usuario-sqlserver').value = '';
+      document.getElementById('f-pode-desbloquear').disabled = true;
+      document.getElementById('f-pode-desbloquear').checked = false;
+      document.getElementById('desbloquear-hint').textContent = 'Vincule ao SQL Server primeiro';
+    } else {
+      div.innerHTML = `<span class="text-success small"><i class="fas fa-check-circle mr-1"></i><strong>${d.nome}</strong> <span class="text-muted">(ID: ${d.idusuario})</span></span>`;
+      document.getElementById('f-id-usuario-sqlserver').value = d.idusuario;
+      document.getElementById('f-pode-desbloquear').disabled = false;
+      document.getElementById('desbloquear-hint').textContent = '';
+    }
+  } catch(err) {
+    div.innerHTML = '<span class="text-danger small"><i class="fas fa-exclamation-circle mr-1"></i>Erro ao contatar o servidor</span>';
+  }
 }
 
 // ── Contexto KPI ──────────────────────────────────────────────────────────────
