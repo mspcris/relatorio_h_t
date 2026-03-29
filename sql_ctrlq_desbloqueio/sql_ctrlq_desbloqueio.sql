@@ -145,7 +145,7 @@ OUTER APPLY (
     FROM Cad_EspecialidadeHistorico
     WHERE idmedico      = ce.idMedico
       AND Especialidade = ce.Especialidade
-      AND DataHoraInclusao < ISNULL(ce.DataInicioExibicao, ce.DataFimExibicao)
+      AND DataHoraInclusao < ce.DataFimExibicao
     ORDER BY DataHoraInclusao DESC
 ) h
 
