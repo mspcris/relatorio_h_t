@@ -1371,10 +1371,7 @@
             const ul = el(ulId);
             if (!ul) return;
             ul.innerHTML = '';
-            ul.insertAdjacentHTML('beforeend',
-                `<li class="nav-item">
-                    <a data-posto="ALL" class="nav-link" href="#">Todos</a>
-                 </li>`);
+            // Postos individuais apenas — "Todos" fica no btn-group separado
             POSTOS.forEach(p => ul.insertAdjacentHTML('beforeend',
                 `<li class="nav-item">
                     <a data-posto="${p}" class="nav-link" href="#">${p}</a>
@@ -1385,13 +1382,9 @@
                 e.preventDefault();
                 const p = e.target.dataset.posto;
                 let sel = getSel();
-                if (p === 'ALL') {
-                    sel = 'ALL';
-                } else {
-                    if (sel === 'ALL') sel = new Set();
-                    if (sel.has(p)) sel.delete(p); else sel.add(p);
-                    if (sel.size === POSTOS.length || sel.size === 0) sel = 'ALL';
-                }
+                if (sel === 'ALL') sel = new Set();
+                if (sel.has(p)) sel.delete(p); else sel.add(p);
+                if (sel.size === POSTOS.length || sel.size === 0) sel = 'ALL';
                 setSel(sel);
                 markActiveMulti(ulId, sel);
                 onChange();
@@ -1404,9 +1397,9 @@
           couto:    ['C', 'D', 'J', 'M', 'P'],
         };
 
-        function _grupoAtivo() {
-          if (!sel2 || sel2 === 'ALL') return null;
-          const selArr = [...sel2].sort().join(',');
+        function _grupoAtivoFor(sel) {
+          if (!sel || sel === 'ALL') return null;
+          const selArr = [...sel].sort().join(',');
           for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
             const intersec = lista.filter(p => POSTOS.includes(p)).sort().join(',');
             if (intersec && selArr === intersec) return nome;
@@ -1415,7 +1408,7 @@
         }
 
         function _atualizarBotoesGrupo() {
-          const ativo = _grupoAtivo();
+          const ativo  = _grupoAtivoFor(sel2);
           const isTodos = !sel2 || sel2 === 'ALL';
           const btnT = el('#btnGrupoTodos');
           const btnA = el('#btnGrupoAltamiro');
@@ -1425,36 +1418,47 @@
           if (btnC) btnC.classList.toggle('active', ativo === 'couto');
         }
 
+        function _atualizarBotoesGrupo1() {
+          const ativo  = _grupoAtivoFor(sel1);
+          const isTodos = !sel1 || sel1 === 'ALL';
+          const btnT = el('#btnGrupoTodos1');
+          const btnA = el('#btnGrupoAltamiro1');
+          const btnC = el('#btnGrupoCouto1');
+          if (btnT) btnT.classList.toggle('active', isTodos);
+          if (btnA) btnA.classList.toggle('active', ativo === 'altamiro');
+          if (btnC) btnC.classList.toggle('active', ativo === 'couto');
+        }
+
         function selectGrupo(grupo, filtro) {
+          const newSel = (grupo === 'todos')
+            ? 'ALL'
+            : new Set(GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p)));
           if (filtro === 1) {
-            // bloco de comparação — sem grupo state
-            return;
-          }
-          if (grupo === 'todos') {
-            sel2 = 'ALL'; window.sel2 = sel2;
+            sel1 = newSel;
+            markActiveMulti('#postoTabs1', sel1);
+            _atualizarBotoesGrupo1();
+            renderSel1();
           } else {
-            const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS.includes(p));
-            sel2 = new Set(intersec);
-            window.sel2 = sel2;
+            sel2 = newSel; window.sel2 = sel2;
+            markActiveMulti('#postoTabs2', sel2);
+            _atualizarBotoesGrupo();
+            renderSel2();
           }
-          buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; window.sel2 = sel2; _atualizarBotoesGrupo(); }, () => renderSel2());
-          _atualizarBotoesGrupo();
-          renderSel2();
         }
 
         function wireGrupoButtons() {
-          const btnA = el('#btnGrupoAltamiro');
-          const btnC = el('#btnGrupoCouto');
-          const btnT = el('#btnGrupoTodos');
-          if (btnT) btnT.onclick = () => selectGrupo('todos');
+          const btnT  = el('#btnGrupoTodos');
+          const btnA  = el('#btnGrupoAltamiro');
+          const btnC  = el('#btnGrupoCouto');
           const btnT1 = el('#btnGrupoTodos1');
-          if (btnT1) btnT1.onclick = () => selectGrupo('todos', 1);
           const btnA1 = el('#btnGrupoAltamiro1');
-          if (btnA1) btnA1.onclick = () => selectGrupo('altamiro', 1);
           const btnC1 = el('#btnGrupoCouto1');
+          if (btnT)  btnT.onclick  = () => selectGrupo('todos');
+          if (btnA)  btnA.onclick  = () => selectGrupo('altamiro');
+          if (btnC)  btnC.onclick  = () => selectGrupo('couto');
+          if (btnT1) btnT1.onclick = () => selectGrupo('todos', 1);
+          if (btnA1) btnA1.onclick = () => selectGrupo('altamiro', 1);
           if (btnC1) btnC1.onclick = () => selectGrupo('couto', 1);
-          if (btnA) btnA.onclick = () => selectGrupo('altamiro');
-          if (btnC) btnC.onclick = () => selectGrupo('couto');
         }
 
         // ====== Prompts ======
@@ -1536,9 +1540,11 @@
                 if (el('#to2')) setMonth('#to2', lastFull);
 
                 sel1 = 'ALL'; sel2 = 'ALL';
-                buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; }, () => renderSel1());
+                buildPostoTabs('#postoTabs1', () => sel1, v => { sel1 = v; _atualizarBotoesGrupo1(); }, () => renderSel1());
                 buildPostoTabs('#postoTabs2', () => sel2, v => { sel2 = v; window.sel2 = sel2; _atualizarBotoesGrupo(); }, () => renderSel2());
                 wireGrupoButtons();
+                _atualizarBotoesGrupo();
+                _atualizarBotoesGrupo1();
 
                 window.MESES = MESES;
                 window.sel2 = sel2;
