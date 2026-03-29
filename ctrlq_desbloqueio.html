@@ -164,6 +164,57 @@
 
   #listArea { min-height: 80px; }
   .vazio-msg { color: #888; font-size: .9rem; padding: 20px 0; }
+
+  /* ── Histórico de auditoria (vw_Sis_Historico) ── */
+  .aud-historico {
+    margin-top: 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: .78rem;
+  }
+  .aud-historico-header {
+    background: #f1f3f5;
+    padding: 5px 10px;
+    font-weight: 700;
+    font-size: .72rem;
+    letter-spacing: .05em;
+    color: #495057;
+    text-transform: uppercase;
+    border-bottom: 1px solid #dee2e6;
+  }
+  .aud-linha {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    align-items: baseline;
+    padding: 5px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    line-height: 1.4;
+  }
+  .aud-linha:last-child { border-bottom: none; }
+  .aud-linha.aud-principal {
+    background: #fff8e1;
+    border-left: 3px solid #f9a825;
+  }
+  .aud-hora  { font-weight: 700; color: #333; white-space: nowrap; }
+  .aud-user  { color: #1565c0; font-weight: 600; white-space: nowrap; }
+  .aud-cmd   { color: #6c757d; font-size: .72rem; white-space: nowrap; }
+  .aud-desc  { color: #333; flex: 1 1 200px; }
+  .aud-detalhe {
+    width: 100%;
+    color: #555;
+    font-size: .72rem;
+    padding-left: 4px;
+    border-left: 2px solid #e9a825;
+    margin-top: 2px;
+    word-break: break-word;
+  }
+  .aud-indisponivel {
+    padding: 8px 10px;
+    color: #aaa;
+    font-size: .75rem;
+  }
 </style>
 </head>
 
@@ -518,6 +569,44 @@
       </div>`;
   }
 
+  // ── Histórico de auditoria linha a linha ─────────────────────────────────
+
+  function fmtHora2(isoStr) {
+    if (!isoStr) return '';
+    const m = String(isoStr).match(/T?(\d{2}:\d{2})/);
+    return m ? m[1] : '';
+  }
+
+  function renderAudHistorico(rec) {
+    const lista = Array.isArray(rec.aud_historico) ? rec.aud_historico : [];
+    if (!lista.length) {
+      const msg = rec.aud_idHistorico === undefined
+        ? 'auditoria indisponível para este posto'
+        : 'nenhum registro encontrado em vw_Sis_Historico';
+      return `<div class="aud-historico">
+        <div class="aud-historico-header"><i class="fas fa-history mr-1"></i>Histórico do dia — vw_Sis_Historico</div>
+        <div class="aud-indisponivel"><i class="fas fa-info-circle mr-1"></i>${msg}</div>
+      </div>`;
+    }
+    const linhas = lista.map(e => {
+      const isPrincipal = e.aud_detalhe && e.aud_detalhe.includes('DataFimExibicao');
+      const detalheHtml = e.aud_detalhe
+        ? `<div class="aud-detalhe">${esc(e.aud_detalhe)}</div>`
+        : '';
+      return `<div class="aud-linha${isPrincipal ? ' aud-principal' : ''}">
+        <span class="aud-hora">${fmtHora2(e.aud_data)}</span>
+        <span class="aud-user">${esc(e.aud_usuario || '—')}</span>
+        <span class="aud-cmd">[${esc(e.aud_comando || '')}]</span>
+        <span class="aud-desc">${esc(e.aud_descricao || '')}</span>
+        ${detalheHtml}
+      </div>`;
+    }).join('');
+    return `<div class="aud-historico">
+      <div class="aud-historico-header"><i class="fas fa-history mr-1"></i>Histórico do dia — vw_Sis_Historico</div>
+      ${linhas}
+    </div>`;
+  }
+
   // ── Render de um card ─────────────────────────────────────────────────────
 
   function renderCard(rec) {
@@ -560,6 +649,8 @@
           <div class="obs-label"><i class="fas fa-comment-alt mr-1"></i>Observação de Desbloqueio</div>
           ${esc(obs)}
         </div>` : ''}
+
+        ${renderAudHistorico(rec)}
 
         ${diff}
         ${custos}

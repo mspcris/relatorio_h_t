@@ -108,7 +108,7 @@ def build_conns_from_env(postos=None):
 # ── auditoria (vw_Sis_Historico) ─────────────────────────────────────────────
 
 def fetch_audit(engine, aud_sql):
-    """Retorna dict {idEspecialidade(int): {aud_*}} ou {} se indisponível."""
+    """Retorna dict {idEspecialidade(int): [lista de registros]} ou {} se indisponível."""
     try:
         with engine.connect() as con:
             df = pd.read_sql_query(text(aud_sql), con)
@@ -116,24 +116,41 @@ def fetch_audit(engine, aud_sql):
         for r in df.to_dict(orient="records"):
             ide = r.get("idEspecialidade")
             if ide is not None:
-                result[int(ide)] = {
+                entry = {
                     "aud_idHistorico": normalize(r.get("aud_idHistorico")),
                     "aud_data":        normalize(r.get("aud_data")),
                     "aud_usuario":     normalize(r.get("aud_usuario")),
                     "aud_detalhe":     normalize(r.get("aud_detalhe")),
+                    "aud_comando":     normalize(r.get("aud_comando")),
+                    "aud_descricao":   normalize(r.get("aud_descricao")),
+                    "aud_computador":  normalize(r.get("aud_computador")),
                 }
+                result.setdefault(int(ide), []).append(entry)
         return result
     except Exception as e:
         print(f"(auditoria indisponível: {type(e).__name__})", end=" ")
         return {}
 
 def merge_audit(rows, audit_map):
-    empty = {"aud_idHistorico": None, "aud_data": None,
-             "aud_usuario": None, "aud_detalhe": None}
+    empty_scalar = {"aud_idHistorico": None, "aud_data": None,
+                    "aud_usuario": None, "aud_detalhe": None}
     for r in rows:
         ide = r.get("idEspecialidade")
-        aud = audit_map.get(int(ide)) if ide is not None else None
-        r.update(aud if aud else empty)
+        aud_list = audit_map.get(int(ide)) if ide is not None else None
+        r["aud_historico"] = aud_list if aud_list else []
+        # Campos escalares: entrada que alterou DataFimExibicao, ou a mais recente
+        if aud_list:
+            principal = next(
+                (e for e in reversed(aud_list)
+                 if e.get("aud_detalhe") and "DataFimExibicao" in str(e["aud_detalhe"])),
+                aud_list[-1]
+            )
+            r["aud_idHistorico"] = principal["aud_idHistorico"]
+            r["aud_data"]        = principal["aud_data"]
+            r["aud_usuario"]     = principal["aud_usuario"]
+            r["aud_detalhe"]     = principal["aud_detalhe"]
+        else:
+            r.update(empty_scalar)
     return rows
 
 
