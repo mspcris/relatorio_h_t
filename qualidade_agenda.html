@@ -327,22 +327,18 @@
             <div class="qa-banner" id="summaryBanner">
                 <div class="qa-banner-title"><i class="fas fa-satellite-dish mr-2"></i>Painel de Saúde da Agenda</div>
                 <div class="qa-banner-sub" id="bannerSub">Carregando dados em tempo real...</div>
-                <div class="qa-banner-grid" id="summaryCards">
-                    <div class="qa-stat-card qa-stat-total">
-                        <div class="qa-stat-num" id="statTotal">—</div>
-                        <div class="qa-stat-label">Situações Monitoradas</div>
-                    </div>
+                <div class="qa-banner-grid" id="summaryCards" style="grid-template-columns: repeat(3,1fr);">
                     <div class="qa-stat-card qa-stat-ok">
-                        <div class="qa-stat-num" id="statOk">—</div>
-                        <div class="qa-stat-label">Dentro do Prazo ANS</div>
+                        <div class="qa-stat-num" id="statPctOk">—</div>
+                        <div class="qa-stat-label">% Dentro do Prazo ANS</div>
                     </div>
                     <div class="qa-stat-card qa-stat-alerta">
-                        <div class="qa-stat-num" id="statAlerta">—</div>
-                        <div class="qa-stat-label">Em Atenção</div>
+                        <div class="qa-stat-num" id="statPctOkAlerta">—</div>
+                        <div class="qa-stat-label">% Dentro do Prazo CAMIM</div>
                     </div>
                     <div class="qa-stat-card qa-stat-critico">
-                        <div class="qa-stat-num" id="statCritico">—</div>
-                        <div class="qa-stat-label">Status Crítico</div>
+                        <div class="qa-stat-num" id="statPctCritico">—</div>
+                        <div class="qa-stat-label">% Crítico / Sem Vaga</div>
                     </div>
                 </div>
             </div>
@@ -769,14 +765,33 @@ function renderAll() {
 // ─────────────────────────────────────────────────────────────────────────────
 function renderSummary(data) {
     const total   = data.length;
+    if (!total) return;
     const ok      = data.filter(d => d.Status === 'OK').length;
     const alerta  = data.filter(d => d.Status === 'ALERTA').length;
     const critico = data.filter(d => d.Status === 'CRITICO' || d.Status === 'SEM_VAGA').length;
 
-    animateCount('statTotal',   total);
-    animateCount('statOk',      ok);
-    animateCount('statAlerta',  alerta);
-    animateCount('statCritico', critico);
+    const pctOk       = (ok / total * 100).toFixed(1);
+    const pctOkAlerta = ((ok + alerta) / total * 100).toFixed(1);
+    const pctCritico  = (critico / total * 100).toFixed(1);
+
+    animatePct('statPctOk',       parseFloat(pctOk));
+    animatePct('statPctOkAlerta', parseFloat(pctOkAlerta));
+    animatePct('statPctCritico',  parseFloat(pctCritico));
+}
+
+function animatePct(elId, target) {
+    const e = el(elId);
+    if (!e) return;
+    const start = parseFloat(e.textContent) || 0;
+    const diff = target - start;
+    const steps = 20;
+    let step = 0;
+    const timer = setInterval(() => {
+        step++;
+        const val = start + diff * (step / steps);
+        e.textContent = val.toFixed(1) + '%';
+        if (step >= steps) { clearInterval(timer); e.textContent = target.toFixed(1) + '%'; }
+    }, 30);
 }
 
 function animateCount(elId, target) {
