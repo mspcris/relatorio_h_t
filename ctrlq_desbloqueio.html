@@ -997,13 +997,19 @@ async function carregarHistoricoAcoes() {
       return;
     }
 
+    const acaoLabel = a => a === 'retirar_data_fim' ? 'Retirar Data Fim' : a === 'prorrogar_agenda' ? 'Prorrogar Agenda' : a;
+    const acaoBadge = a => a === 'retirar_data_fim'
+      ? '<span class="badge badge-danger">Retirar Data Fim</span>'
+      : '<span class="badge badge-warning">Prorrogar Agenda</span>';
+
     const rows = dados.map(d => `
       <tr>
         <td class="text-nowrap">${_fmtDtHist(d.data)}</td>
         <td><span class="hist-badge-posto">${_escHtml(d.posto)}</span></td>
         <td>${_escHtml(d.usuario || '—')}</td>
-        <td>${_escHtml(d.descricao || '—')}</td>
-        <td class="hist-detalhe">${_escHtml(d.detalhe || '')}</td>
+        <td>${acaoBadge(d.acao)}</td>
+        <td>${_escHtml(d.especialidade || '—')}</td>
+        <td class="hist-detalhe">${_escHtml(d.valor_antigo || '')} → ${_escHtml(d.valor_novo || '')}</td>
       </tr>`).join('');
 
     area.innerHTML = `
@@ -1014,8 +1020,9 @@ async function carregarHistoricoAcoes() {
               <th>Data/Hora</th>
               <th>Posto</th>
               <th>Usuário</th>
-              <th>Descrição</th>
-              <th>Detalhe</th>
+              <th>Ação</th>
+              <th>Especialidade</th>
+              <th>Alteração</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>

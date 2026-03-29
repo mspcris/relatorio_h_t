@@ -620,6 +620,20 @@ def api_retirar_data_fim():
                 "detalhe": detalhe,
             })
 
+        # Log local no SQLite
+        try:
+            from auth_db import SessionLocal as _SL, HistoricoDesbloqueio
+            _db = _SL()
+            _db.add(HistoricoDesbloqueio(
+                user_id=user.id, user_email=email, user_nome=user.nome or "",
+                posto=posto, id_especialidade=id_esp, especialidade=especialidade,
+                acao="retirar_data_fim", valor_antigo=valor_antigo, valor_novo="NULL",
+            ))
+            _db.commit()
+            _db.close()
+        except Exception:
+            pass  # log local é best-effort
+
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
@@ -691,6 +705,20 @@ def api_prorrogar_agenda():
                 "detalhe": detalhe,
             })
 
+        # Log local no SQLite
+        try:
+            from auth_db import SessionLocal as _SL, HistoricoDesbloqueio
+            _db = _SL()
+            _db.add(HistoricoDesbloqueio(
+                user_id=user.id, user_email=email, user_nome=user.nome or "",
+                posto=posto, id_especialidade=id_esp, especialidade=especialidade,
+                acao="prorrogar_agenda", valor_antigo=valor_antigo, valor_novo=nova_data,
+            ))
+            _db.commit()
+            _db.close()
+        except Exception:
+            pass
+
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
@@ -698,54 +726,32 @@ def api_prorrogar_agenda():
 
 @app.get('/api/ctrlq/historico_acoes')
 def api_ctrlq_historico_acoes():
-    """Retorna histórico de ações de desbloqueio feitas pelo app (todas os postos)."""
+    """Retorna histórico de ações de desbloqueio feitas pelo app (SQLite local)."""
     email, _ = decode_user()
     if not email:
         return jsonify({"erro": "Não autorizado"}), 401
 
-    from ctrlq_desbloqueio import build_conns_from_env, make_engine
-    from sqlalchemy import text as sa_text
-
-    conns = build_conns_from_env()
-    if not conns:
-        return jsonify({"erro": "Nenhuma conexão SQL Server configurada"}), 500
-
-    resultados = []
-    for posto, conn_str in conns.items():
-        try:
-            engine = make_engine(conn_str)
-            with engine.connect() as conn:
-                rows = conn.execute(sa_text("""
-                    SELECT TOP 100
-                        h.id            AS idEspecialidade,
-                        h.Comando,
-                        h.[Usuário]     AS Usuario,
-                        h.[Data],
-                        h.[Descrição]   AS Descricao,
-                        h.Detalhe,
-                        h.Computador
-                    FROM vw_Sis_Historico h
-                    WHERE h.Computador = 'teste-ia.camim.com.br'
-                      AND h.Tabela = 'Cad_Especialidade'
-                    ORDER BY h.[Data] DESC
-                """)).fetchall()
-                for r in rows:
-                    resultados.append({
-                        "posto": posto,
-                        "idEspecialidade": r[0],
-                        "comando": r[1],
-                        "usuario": r[2],
-                        "data": r[3].isoformat() if r[3] else None,
-                        "descricao": r[4],
-                        "detalhe": r[5],
-                    })
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning("Erro ao buscar histórico posto %s: %s", posto, e)
-
-    # Ordena global por data DESC
-    resultados.sort(key=lambda x: x.get("data") or "", reverse=True)
-    return jsonify(resultados[:200])
+    from auth_db import SessionLocal as _SL, HistoricoDesbloqueio
+    db = _SL()
+    try:
+        rows = (
+            db.query(HistoricoDesbloqueio)
+            .order_by(HistoricoDesbloqueio.created_at.desc())
+            .limit(200)
+            .all()
+        )
+        return jsonify([{
+            "posto": r.posto,
+            "idEspecialidade": r.id_especialidade,
+            "especialidade": r.especialidade,
+            "acao": r.acao,
+            "usuario": r.user_nome or r.user_email,
+            "data": r.created_at.isoformat() if r.created_at else None,
+            "valor_antigo": r.valor_antigo,
+            "valor_novo": r.valor_novo,
+        } for r in rows])
+    finally:
+        db.close()
 
 
 @app.get('/qualidade_agenda')

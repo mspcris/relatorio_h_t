@@ -120,6 +120,25 @@ class IAConversa(Base):
     user       = relationship("User", back_populates="ia_conversas")
 
 
+class HistoricoDesbloqueio(Base):
+    """Log local de ações de desbloqueio de agenda feitas pelo app."""
+    __tablename__ = "historico_desbloqueio"
+
+    id              = Column(Integer, primary_key=True)
+    user_id         = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    user_email      = Column(String(200), nullable=False)
+    user_nome       = Column(String(200), default="")
+    posto           = Column(String(10), nullable=False)
+    id_especialidade = Column(Integer, nullable=False)
+    especialidade   = Column(String(200), default="")
+    acao            = Column(String(50), nullable=False)   # 'retirar_data_fim' | 'prorrogar_agenda'
+    valor_antigo    = Column(String(100), nullable=True)
+    valor_novo      = Column(String(100), nullable=True)
+    created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", backref="historico_desbloqueios")
+
+
 class KPIContexto(Base):
     """Contexto de negócio por KPI — editável pelo admin, injetado no system prompt."""
     __tablename__ = "kpi_contexto"
