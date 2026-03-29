@@ -4,7 +4,9 @@ Banco: SQLite em AUTH_DB_PATH (default /var/lib/camim-auth/camim_auth.db)
 """
 import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+_BRT = timezone(timedelta(hours=-3))
 
 from sqlalchemy import (
     create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, text
@@ -134,7 +136,7 @@ class HistoricoDesbloqueio(Base):
     acao            = Column(String(50), nullable=False)   # 'retirar_data_fim' | 'prorrogar_agenda'
     valor_antigo    = Column(String(100), nullable=True)
     valor_novo      = Column(String(100), nullable=True)
-    created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at      = Column(DateTime, default=lambda: datetime.now(_BRT).replace(tzinfo=None), nullable=False)
 
     user = relationship("User", backref="historico_desbloqueios")
 
