@@ -691,7 +691,7 @@
          </div>`;
 
     return `
-      <div class="${cls}">
+      <div class="${cls}" data-id-esp="${rec.idEspecialidade}" data-posto="${rec._posto}">
         <div class="desb-header">
           <div>
             <div class="desb-medico">${esc(rec.medico || '(sem nome)')}</div>
@@ -923,8 +923,8 @@ window.__retirarDataFim = async function(idEsp, posto, esp) {
     const data = await r.json();
     if (r.ok) {
       // Remove o card da tela imediatamente (o JSON será atualizado no próximo cron)
-      const btn = event.target.closest('.desb-card');
-      if (btn) btn.remove();
+      const card = document.querySelector(`.desb-card[data-id-esp="${idEsp}"][data-posto="${posto}"]`);
+      if (card) card.remove();
       alert('Data fim removida com sucesso!');
     } else {
       alert('Erro: ' + (data.erro || 'Falha desconhecida'));
