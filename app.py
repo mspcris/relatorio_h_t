@@ -84,6 +84,8 @@ _TEMPLATE_TO_PAGINA = {
     "tef":                              "tef",
     "ctrlq_desbloqueio.html":           "ctrlq_desbloqueio",
     "ctrlq_desbloqueio":               "ctrlq_desbloqueio",
+    "qualidade_agenda.html":            "qualidade_agenda",
+    "qualidade_agenda":                 "qualidade_agenda",
     # Itens de mais_servicos.html (internos)
     "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
     "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",
@@ -516,6 +518,14 @@ def r_chat_avaliacoes():
 def r_ctrlq_desbloqueio():
     return render_protected_page("ctrlq_desbloqueio.html")
 
+@app.get('/qualidade_agenda')
+def r_qualidade_agenda():
+    return render_protected_page("qualidade_agenda.html")
+
+@app.get('/qualidade_agenda.html')
+def h_qualidade_agenda():
+    return render_protected_page("qualidade_agenda.html")
+
 @app.get('/kpi_receita_despesa_rateio')
 def r_rateio():
     return render_protected_page("kpi_receita_despesa_rateio.html")
@@ -801,6 +811,51 @@ def any_html(filename):
         return html
     except:
         return ('', 404)
+
+# ===============================
+# API Qualidade da Agenda
+# ===============================
+
+@app.post("/api/qualidade_agenda/update_cbos")
+def api_update_cbos():
+    email, _ = decode_user()
+    if not email:
+        return ("", 401)
+    from auth_db import SessionLocal, get_user_by_email as _gue
+    db = SessionLocal()
+    try:
+        u = _gue(db, email)
+        if not u or not u.is_admin:
+            return jsonify({"ok": False, "error": "Apenas administradores podem alterar thresholds"}), 403
+    finally:
+        db.close()
+
+    data = request.get_json(force=True, silent=True) or {}
+    especialidade = (data.get("especialidade") or "").strip()
+    valor = data.get("valor")
+
+    if not especialidade or valor is None:
+        return jsonify({"ok": False, "error": "especialidade e valor são obrigatórios"}), 400
+
+    try:
+        valor_f = float(valor)
+        if not (0 <= valor_f <= 100):
+            return jsonify({"ok": False, "error": "valor deve ser entre 0 e 100"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "valor inválido"}), 400
+
+    try:
+        conn_str = _build_conn_str_for_posto("A")
+        eng = _make_engine(conn_str)
+        with eng.begin() as con:
+            result = con.execute(
+                text("UPDATE cad_cbos SET ValorPMinimoVagaDisponivel = :v WHERE Especialidade = :e AND Desativado = 0"),
+                {"v": valor_f, "e": especialidade}
+            )
+        return jsonify({"ok": True, "especialidade": especialidade, "valor": valor_f, "rows_affected": result.rowcount})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 # ===============================
 # API Metas

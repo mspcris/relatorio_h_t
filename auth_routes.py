@@ -113,6 +113,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "email_clientes",            "label": "Email de Cobrança",           "group": "kpi"},
     {"key": "chat_avaliacoes",           "label": "CHAT Avaliações",             "group": "kpi"},
     {"key": "ctrlq_desbloqueio",         "label": "Desbloqueio de Agenda CTRL-Q","group": "kpi"},
+    {"key": "qualidade_agenda",          "label": "Qualidade da Agenda Médica",  "group": "kpi"},
     # ── Mais Serviços ──
     {"key": "k_nbs_ibs_cbs",            "label": "Notas Fiscais NBS/IBS/CBS",   "group": "mais"},
     {"key": "k_relatorio_pcs",          "label": "Planejamento PC's",           "group": "mais"},

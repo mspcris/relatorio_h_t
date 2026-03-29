@@ -1,0 +1,1212 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>CAMIM — Qualidade da Agenda Médica</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- KPI Metadata -->
+    <meta name="kpi-id" content="qualidade_agenda" />
+    <meta name="kpi-title" content="Qualidade da Agenda Médica" />
+    <meta name="kpi-description" content="Monitoramento de disponibilidade de vagas por especialidade e posto. Identifica especialidades críticas em relação aos prazos ANS e CAMIM." />
+    <meta name="kpi-category" content="Agenda" />
+
+    <!-- CORE CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&family=Inter:wght@400;600;700&display=swap">
+    <link rel="stylesheet" href="/css/style2.css?v=20260328">
+    <link rel="stylesheet" href="/css/style_kpi.css?v=20260328">
+    <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+
+    <!-- JS BASE -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- CONTEXTO IA + SESSÃO -->
+    <script>
+        window.IA_API_URL = '/ia/analisar';
+        window.PROMPTS_API_BASE = '/prompts';
+        fetch("/session/me", { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(data => { window.USER_EMAIL = data.email; window.USER_POSTOS = data.postos; })
+            .catch(() => { window.USER_EMAIL = null; window.USER_POSTOS = []; });
+    </script>
+    <script src="/js/chat.js?v=20260328"></script>
+
+    <style>
+        :root {
+            --ok:      #28a745;
+            --alerta:  #fd7e14;
+            --critico: #dc3545;
+            --neutro:  #6c757d;
+            --ok-bg:      #d4edda;
+            --alerta-bg:  #fff3cd;
+            --critico-bg: #f8d7da;
+        }
+
+        html { font-size: 16px; zoom: 1; }
+        body {
+            font-size: 1rem;
+            -webkit-text-size-adjust: 100%;
+            -webkit-font-smoothing: antialiased;
+            font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        body.text-sm { font-size: 1rem; }
+        .text-sm .btn, .text-sm .form-control, .text-sm .nav-link, .text-sm .card-title { font-size: 1rem; }
+        h1, h2, h3 { margin-top: 0; margin-bottom: .5rem; font-weight: 600; line-height: 1.25; }
+        h1 { font-size: 2rem; }
+        h2 { font-size: 1.5rem; }
+        h3, .card-title { font-size: 1.15rem; font-weight: 600; }
+
+        /* ── Status cores ── */
+        .status-ok     { color: var(--ok); }
+        .status-alerta { color: var(--alerta); }
+        .status-critico { color: var(--critico); }
+        .status-sem-vaga { color: var(--neutro); }
+
+        .badge-ok      { background: var(--ok);      color: #fff; display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 0.78rem; font-weight: 700; }
+        .badge-alerta  { background: var(--alerta);  color: #fff; display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 0.78rem; font-weight: 700; }
+        .badge-critico { background: var(--critico); color: #fff; display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 0.78rem; font-weight: 700; animation: pulse-badge 1.5s infinite; }
+        .badge-sem-vaga{ background: var(--neutro);  color: #fff; display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 0.78rem; font-weight: 700; }
+
+        @keyframes pulse-badge {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.6; }
+        }
+
+        /* ── Banner header futurista ── */
+        .qa-banner {
+            background: linear-gradient(135deg, #0f1923 0%, #1a2940 50%, #0f2333 100%);
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 0;
+            color: #e0f0ff;
+            position: relative;
+            overflow: hidden;
+        }
+        .qa-banner::before {
+            content: '';
+            position: absolute;
+            top: -40px; right: -40px;
+            width: 200px; height: 200px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0,180,255,0.08) 0%, transparent 70%);
+        }
+        .qa-banner-title {
+            font-size: 1.45rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            color: #b8d9f7;
+            margin-bottom: 2px;
+        }
+        .qa-banner-sub {
+            font-size: 0.85rem;
+            color: #7aacce;
+            margin-bottom: 16px;
+        }
+        .qa-banner-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+        @media (max-width: 768px) {
+            .qa-banner-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        .qa-stat-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            text-align: center;
+            padding: 14px 10px;
+            backdrop-filter: blur(4px);
+            transition: transform 0.2s;
+        }
+        .qa-stat-card:hover { transform: translateY(-2px); }
+        .qa-stat-num {
+            font-size: 2.4rem;
+            font-weight: 700;
+            line-height: 1;
+            font-family: "Inter", monospace;
+        }
+        .qa-stat-label {
+            font-size: 0.78rem;
+            margin-top: 5px;
+            color: rgba(255,255,255,0.55);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .qa-stat-total  .qa-stat-num { color: #90cdf4; }
+        .qa-stat-ok     .qa-stat-num { color: #68d391; }
+        .qa-stat-alerta .qa-stat-num { color: #f6ad55; }
+        .qa-stat-critico .qa-stat-num { color: #fc8181; }
+
+        /* ── Posto filter ── */
+        .posto-filter-card { background: #fff; border: 1px solid #e3e8ef; border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; }
+        .posto-groups .btn { font-size: 0.82rem; padding: 4px 12px; border-radius: 20px; border: 1px solid #c8d0dc; color: #444; background: #f7f9fc; }
+        .posto-groups .btn.active { background: #2c5f8a; color: #fff; border-color: #2c5f8a; }
+        .posto-tabs-inline { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+        .posto-tabs-inline .nav-link {
+            padding: 3px 11px; font-size: 0.82rem; font-weight: 600; border-radius: 18px;
+            border: 1px solid #d0d7e2; color: #555; background: #f4f6f9;
+            cursor: pointer; transition: all 0.15s;
+        }
+        .posto-tabs-inline .nav-link.active { background: #2c5f8a; color: #fff; border-color: #2c5f8a; }
+        .posto-tabs-inline .nav-link:hover:not(.active) { background: #e8edf3; }
+
+        /* ── Heat map ── */
+        .hm-wrap { overflow-x: auto; }
+        .hm-table { border-collapse: collapse; font-size: 0.82rem; min-width: 100%; }
+        .hm-table th { background: #1a2940; color: #b8d9f7; font-weight: 600; padding: 8px 10px; text-align: center; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+        .hm-table td { border: 1px solid #e8ecf0; vertical-align: middle; }
+        .hm-table tr:hover td { filter: brightness(0.96); }
+        .hm-esp { background: #f0f4f8; font-weight: 600; font-size: 0.8rem; padding: 7px 10px; white-space: nowrap; min-width: 160px; color: #2d3748; }
+        .hm-cell { min-width: 88px; padding: 6px 8px; text-align: center; cursor: default; }
+        .hm-cell-ok      { background: var(--ok-bg);      border-left: 3px solid var(--ok); }
+        .hm-cell-alerta  { background: var(--alerta-bg);  border-left: 3px solid var(--alerta); }
+        .hm-cell-critico { background: var(--critico-bg); border-left: 3px solid var(--critico); }
+        .hm-cell-none    { background: #f8f9fa; color: #adb5bd; }
+        .hm-dias  { font-size: 1.3rem; font-weight: 700; line-height: 1.1; }
+        .hm-date  { font-size: 0.68rem; color: #666; margin-top: 1px; }
+        .hm-vagas { font-size: 0.7rem; font-weight: 600; margin-top: 2px; }
+
+        /* ── Ranking ── */
+        .rank-table { font-size: 0.88rem; }
+        .rank-table th { background: #f0f4f8; font-weight: 600; border-bottom: 2px solid #dee2e6; }
+        .rank-table td, .rank-table th { padding: 8px 10px; vertical-align: middle; }
+        .dias-bar { height: 5px; border-radius: 3px; background: #e9ecef; margin-top: 4px; }
+        .dias-bar-fill { height: 100%; border-radius: 3px; }
+
+        /* ── Por Especialidade ── */
+        .esp-card { border: 1px solid #e3e8ef; border-radius: 10px; padding: 16px 18px; margin-bottom: 12px; background: #fff; }
+        .esp-card-title { font-size: 0.95rem; font-weight: 700; color: #1a2940; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+        .esp-prazo-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+        .esp-prazo-tag { font-size: 0.72rem; padding: 2px 9px; border-radius: 10px; font-weight: 600; }
+        .esp-prazo-ans   { background: #d4edda; color: #155724; }
+        .esp-prazo-camim { background: #fff3cd; color: #856404; }
+        .esp-prazo-min   { background: #d1ecf1; color: #0c5460; }
+        .esp-posto-bar { display: flex; align-items: center; margin-bottom: 7px; gap: 8px; }
+        .esp-posto-name { width: 86px; font-size: 0.78rem; font-weight: 600; flex-shrink: 0; color: #444; }
+        .esp-bar-container { flex: 1; height: 24px; background: #e9ecef; border-radius: 5px; overflow: hidden; position: relative; }
+        .esp-bar-fill { height: 100%; border-radius: 5px; display: flex; align-items: center; padding-left: 8px; font-size: 0.73rem; color: white; font-weight: 700; min-width: 28px; transition: width 0.6s ease; }
+        .esp-bar-days { width: 52px; text-align: right; font-size: 0.82rem; font-weight: 700; flex-shrink: 0; }
+        .esp-bar-ok      .esp-bar-fill { background: var(--ok); }
+        .esp-bar-alerta  .esp-bar-fill { background: var(--alerta); }
+        .esp-bar-critico .esp-bar-fill { background: var(--critico); }
+        .esp-bar-sem-vaga .esp-bar-fill { background: var(--neutro); }
+        .esp-no-data { color: #adb5bd; font-size: 0.82rem; font-style: italic; }
+
+        /* ── Config tab ── */
+        .cfg-table { font-size: 0.88rem; }
+        .cfg-table th { background: #f0f4f8; font-weight: 600; }
+        .cfg-table td, .cfg-table th { padding: 8px 12px; vertical-align: middle; }
+        .btn-edit-cbos { font-size: 0.75rem; padding: 3px 10px; }
+
+        /* ── Tab nav ── */
+        .qa-tabs .nav-link { border-radius: 8px 8px 0 0; font-size: 0.88rem; font-weight: 600; color: #555; }
+        .qa-tabs .nav-link.active { background: #2c5f8a; color: #fff; border-color: #2c5f8a #2c5f8a #fff; }
+
+        /* ── Misc ── */
+        .stack > * + * { margin-top: 16px; }
+        #err { min-height: 0; }
+        .freshness-badge { font-size: 0.78rem; color: #6b7280; background: #f0f4f8; border-radius: 12px; padding: 3px 10px; }
+
+        /* ── Futuristic accent lines ── */
+        .section-header-accent {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 1rem; font-weight: 700; color: #1a2940; margin-bottom: 12px;
+        }
+        .section-header-accent::before {
+            content: '';
+            display: block; width: 4px; height: 20px;
+            background: linear-gradient(180deg, #2c5f8a, #00b4d8);
+            border-radius: 2px;
+        }
+
+        /* ── Tooltip (title fallback) ── */
+        [data-toggle="tooltip"] { cursor: help; }
+
+        /* ── Empty state ── */
+        .empty-state { text-align: center; color: #adb5bd; padding: 40px 20px; }
+        .empty-state i { font-size: 3rem; margin-bottom: 12px; display: block; }
+
+        /* Radar mini chart wrapper */
+        .radar-mini { height: 200px; }
+    </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+
+    <!-- NAVBAR -->
+    <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+        <ul class="navbar-nav">
+            <li class="nav-item">
+                <a class="nav-link" data-widget="pushmenu" href="#" role="button">
+                    <i class="fas fa-bars"></i>
+                </a>
+            </li>
+        </ul>
+        <span class="ml-2 font-weight-bold d-flex align-items-center">
+            <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+            <span class="ml-2">Quem tem saúde é mais feliz!</span>
+            <span id="jsonInfo" class="ml-3 freshness-badge"></span>
+        </span>
+    </nav>
+
+    <!-- SIDEBAR -->
+    <aside class="main-sidebar sidebar-dark-primary elevation-4">
+        <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+        <div class="sidebar">
+            <nav class="mt-2">
+                <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+                    <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a></li>
+                    <li class="nav-item"><a href="monitorarrobos.html" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Monitorar Robôs</p></a></li>
+                    {% if USER_IS_ADMIN %}
+                    <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+                    {% endif %}
+                    <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i class="nav-icon fas fa-book-open"></i><p>Leia-me</p></a></li>
+                    <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i class="nav-icon fas fa-utensils"></i><p>KPI Custo Alimentação</p></a></li>
+                    <li class="nav-item"><a href="medicos.html" class="nav-link"><i class="nav-icon fas fa-notes-medical"></i><p>KPI Custo Médico</p></a></li>
+                    <li class="nav-item"><a href="ctrlq_relatorio.html" class="nav-link"><i class="nav-icon fas fa-user-md"></i><p>KPI Médicos (Qualidade)</p></a></li>
+                    <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i class="nav-icon fas fa-chart-line"></i><p>KPI Mensalidades</p></a></li>
+                    <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i class="nav-icon fas fa-shopping-cart"></i><p>KPI Vendas</p></a></li>
+                    <li class="nav-item"><a href="clientes.html" class="nav-link"><i class="nav-icon fas fa-users"></i><p>KPI Clientes</p></a></li>
+                    <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i class="nav-icon fas fa-prescription-bottle-alt"></i><p>KPI Prescrições</p></a></li>
+                    <li class="nav-item"><a href="kpi_fidelizacao_cliente.html" class="nav-link"><i class="nav-icon fas fa-handshake"></i><p>KPI Fidelização Churn</p></a></li>
+                    <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i class="nav-icon fas fa-landmark"></i><p>KPI Índices Oficiais</p></a></li>
+                    <li class="nav-item"><a href="kpi_liberty.html" class="nav-link"><i class="nav-icon fas fa-passport"></i><p>KPI CAMIM Liberty</p></a></li>
+                    <li class="nav-item"><a href="kpi_receita_despesa.html" class="nav-link"><i class="nav-icon fas fa-balance-scale"></i><p>KPI Receitas x Despesas</p></a></li>
+                    <li class="nav-item"><a href="kpi_receita_despesa_rateio.html" class="nav-link"><i class="nav-icon fas fa-balance-scale"></i><p>KPI R x D com Rateio</p></a></li>
+                    <li class="nav-item"><a href="kpi_consultas_status.html" class="nav-link"><i class="nav-icon fas fa-stethoscope"></i><p>KPI Consultas (Status)</p></a></li>
+                    <li class="nav-item"><a href="kpi_notas_rps.html" class="nav-link"><i class="nav-icon fas fa-file-invoice"></i><p>KPI Notas x RPS</p></a></li>
+                    <li class="nav-item"><a href="kpi_metas_vendas_mensalidades.html" class="nav-link"><i class="nav-icon fas fa-bullseye"></i><p>KPI Metas (Mens/Vendas)</p></a></li>
+                    <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+                    <li class="nav-item"><a href="/qualidade_agenda" class="nav-link active"><i class="nav-icon fas fa-calendar-check"></i><p>Qualidade da Agenda</p></a></li>
+                    <li class="nav-item">
+                        <form method="POST" action="/session/logout" style="display:inline">
+                            <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                                <i class="nav-icon fas fa-sign-out-alt"></i>
+                                <p>Sair</p>
+                            </button>
+                        </form>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </aside>
+
+    <!-- CONTEÚDO -->
+    <div class="content-wrapper">
+
+        <!-- Header da página -->
+        <nav class="navbar navbar-expand navbar-white navbar-light" style="border-bottom: 1px solid #e3e8ef;">
+            <div class="d-flex w-100 align-items-center">
+                <div>
+                    <span class="font-weight-bold" style="font-size: 1.05rem; color: #1a2940;">
+                        <i class="fas fa-calendar-check mr-2" style="color: #2c5f8a;"></i>
+                        Qualidade da Agenda Médica — Vagas por Especialidade
+                    </span>
+                </div>
+                <div class="ml-auto">
+                    <span id="ia-anchor"></span>
+                </div>
+            </div>
+        </nav>
+
+        <section class="content p-3 stack">
+
+            <!-- Mensagem de erro -->
+            <div id="err" class="text-danger mb-1" style="font-size:0.9rem;"></div>
+
+            <!-- BANNER com resumo estatístico -->
+            <div class="qa-banner" id="summaryBanner">
+                <div class="qa-banner-title"><i class="fas fa-satellite-dish mr-2"></i>Painel de Saúde da Agenda</div>
+                <div class="qa-banner-sub" id="bannerSub">Carregando dados em tempo real...</div>
+                <div class="qa-banner-grid" id="summaryCards">
+                    <div class="qa-stat-card qa-stat-total">
+                        <div class="qa-stat-num" id="statTotal">—</div>
+                        <div class="qa-stat-label">Situações Monitoradas</div>
+                    </div>
+                    <div class="qa-stat-card qa-stat-ok">
+                        <div class="qa-stat-num" id="statOk">—</div>
+                        <div class="qa-stat-label">Dentro do Prazo ANS</div>
+                    </div>
+                    <div class="qa-stat-card qa-stat-alerta">
+                        <div class="qa-stat-num" id="statAlerta">—</div>
+                        <div class="qa-stat-label">Em Atenção</div>
+                    </div>
+                    <div class="qa-stat-card qa-stat-critico">
+                        <div class="qa-stat-num" id="statCritico">—</div>
+                        <div class="qa-stat-label">Status Crítico</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FILTRO DE POSTOS -->
+            <div class="posto-filter-card">
+                <div class="d-flex align-items-center gap-12" style="gap: 12px; flex-wrap: wrap;">
+                    <div class="posto-groups">
+                        <div class="btn-group">
+                            <button id="btnGrupoTodos"    class="btn active" onclick="setGrupo('todos')">Todos</button>
+                            <button id="btnGrupoAltamiro" class="btn"        onclick="setGrupo('altamiro')" title="A B G I N R X Y">Altamiro</button>
+                            <button id="btnGrupoCouto"    class="btn"        onclick="setGrupo('couto')"   title="C D J M P">Couto</button>
+                        </div>
+                    </div>
+                    <ul id="postoTabs" class="posto-tabs-inline mb-0"></ul>
+                </div>
+            </div>
+
+            <!-- TABS PRINCIPAIS -->
+            <div class="card">
+                <div class="card-header p-0 pt-1 px-3">
+                    <ul class="nav nav-tabs qa-tabs" id="mainTabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" id="tab-hm"   data-toggle="tab" href="#pane-hm"   role="tab">
+                                <i class="fas fa-th mr-1"></i>Mapa de Calor
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="tab-rank" data-toggle="tab" href="#pane-rank" role="tab">
+                                <i class="fas fa-exclamation-triangle mr-1"></i>Ranking Crítico
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="tab-esp"  data-toggle="tab" href="#pane-esp"  role="tab">
+                                <i class="fas fa-chart-bar mr-1"></i>Por Especialidade
+                            </a>
+                        </li>
+                        {% if USER_IS_ADMIN %}
+                        <li class="nav-item">
+                            <a class="nav-link" id="tab-cfg"  data-toggle="tab" href="#pane-cfg"  role="tab">
+                                <i class="fas fa-sliders-h mr-1"></i>Configurar Prazos
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+                <div class="card-body p-3">
+                    <div class="tab-content" id="mainTabContent">
+
+                        <!-- TAB 1: MAPA DE CALOR -->
+                        <div class="tab-pane fade show active" id="pane-hm" role="tabpanel">
+                            <div class="section-header-accent">Mapa de Calor — Dias até a Próxima Vaga por Especialidade × Posto</div>
+                            <p class="text-muted" style="font-size:0.82rem; margin-bottom: 12px;">
+                                Células coloridas: <span class="badge-ok">OK</span> dentro do prazo ANS &nbsp;
+                                <span class="badge-alerta">ALERTA</span> dentro do prazo CAMIM &nbsp;
+                                <span class="badge-critico">CRITICO</span> acima do prazo &nbsp;
+                                <span class="badge-sem-vaga">SEM VAGA</span> sem disponibilidade.
+                                Passe o mouse para ver detalhes.
+                            </p>
+                            <div class="hm-wrap" id="heatmapContainer">
+                                <div class="empty-state"><i class="fas fa-sync fa-spin"></i>Carregando...</div>
+                            </div>
+                        </div>
+
+                        <!-- TAB 2: RANKING CRÍTICO -->
+                        <div class="tab-pane fade" id="pane-rank" role="tabpanel">
+                            <div class="section-header-accent">Ranking por Criticidade — Pior para Melhor</div>
+                            <p class="text-muted" style="font-size:0.82rem; margin-bottom: 12px;">
+                                Ordenado por dias até a próxima vaga (mais distante primeiro). A barra mostra o percentual de prazo CAMIM consumido.
+                            </p>
+                            <div class="table-responsive">
+                                <table class="table rank-table" id="rankTable">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:90px;">Status</th>
+                                            <th>Posto</th>
+                                            <th>Especialidade</th>
+                                            <th>Próxima Vaga</th>
+                                            <th style="width:70px;">Dias</th>
+                                            <th>Além do Prazo ANS</th>
+                                            <th>Vagas Disp.</th>
+                                            <th>Capacidade</th>
+                                            <th style="width:140px;">Prazo Consumido</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="rankBody">
+                                        <tr><td colspan="9" class="text-center text-muted">Carregando...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- TAB 3: POR ESPECIALIDADE -->
+                        <div class="tab-pane fade" id="pane-esp" role="tabpanel">
+                            <div class="section-header-accent">Disponibilidade por Especialidade em Todos os Postos</div>
+                            <p class="text-muted" style="font-size:0.82rem; margin-bottom: 14px;">
+                                Cada barra representa o número de dias até a próxima vaga em um posto. Barras mais longas = pior situação. A linha pontilhada indica o prazo CAMIM configurado.
+                            </p>
+                            <div id="espContainer">
+                                <div class="empty-state"><i class="fas fa-sync fa-spin"></i>Carregando...</div>
+                            </div>
+                        </div>
+
+                        {% if USER_IS_ADMIN %}
+                        <!-- TAB 4: CONFIGURAR PRAZOS (ADMIN) -->
+                        <div class="tab-pane fade" id="pane-cfg" role="tabpanel">
+                            <div class="section-header-accent">Configurar Thresholds de Prazos — <span style="color:#dc3545;font-size:0.85rem;">Apenas Administradores</span></div>
+                            <p class="text-muted" style="font-size:0.82rem; margin-bottom: 14px;">
+                                Dados de prazos configurados no banco <code>cad_cbos</code> do posto Anchieta (master).
+                                O campo <strong>% Mín. Vagas</strong> pode ser editado diretamente aqui.
+                            </p>
+                            <div class="table-responsive">
+                                <table class="table cfg-table" id="cfgTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Especialidade</th>
+                                            <th>Prazo ANS (dias)</th>
+                                            <th>Prazo CAMIM (dias)</th>
+                                            <th>% Mín. Vagas</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="cfgBody">
+                                        <tr><td colspan="5" class="text-center text-muted">Carregando...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- CARD: Visão de Concentração de Críticos por Posto -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title mb-0"><i class="fas fa-map-marker-alt mr-2 text-danger"></i>Concentração de Situações Críticas por Posto</h3>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartCriticoPorPosto" style="max-height: 260px;"></canvas>
+                </div>
+            </div>
+
+            <!-- CARD: Distribuição por Status -->
+            <div class="row">
+                <div class="col-md-5">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title mb-0"><i class="fas fa-chart-pie mr-2 text-primary"></i>Distribuição por Status</h3>
+                        </div>
+                        <div class="card-body" style="height: 260px;">
+                            <canvas id="chartDistStatus"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title mb-0"><i class="fas fa-list-ol mr-2 text-warning"></i>Top 10 Especialidades Mais Críticas</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="top10Container"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </div>
+</div>
+
+<!-- MODAL: Editar ValorPMinimoVagaDisponivel (admin) -->
+{% if USER_IS_ADMIN %}
+<div class="modal fade" id="modalEditCbos" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-edit mr-1"></i>Editar Threshold de Vagas</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Especialidade</label>
+                    <input type="text" class="form-control form-control-sm" id="editEsp" readonly>
+                </div>
+                <div class="form-group">
+                    <label>% Mínimo de Vagas Disponíveis</label>
+                    <input type="number" class="form-control form-control-sm" id="editValor"
+                           min="0" max="100" step="0.1" placeholder="0 a 100">
+                    <small class="text-muted">Define o percentual mínimo esperado de vagas livres.</small>
+                </div>
+                <div id="editMsg" class="mt-2" style="font-size:0.85rem;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnSaveCbos" onclick="saveCbos()">
+                    <i class="fas fa-save mr-1"></i>Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- TOAST -->
+<div id="toastContainer" style="position:fixed;bottom:24px;right:24px;z-index:9999;"></div>
+
+<!-- SCRIPT PRINCIPAL -->
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTES
+// ─────────────────────────────────────────────────────────────────────────────
+const POSTOS_ORDEM = ['A','N','X','Y','B','R','P','C','D','G','I','M','J'];
+const POSTO_NOMES  = {
+    A:'Anchieta', N:'Nova Iguaçu', X:'Xerém', Y:'Nilópolis', B:'Belford Roxo',
+    R:'Realengo', P:'Pavuna', C:'Campo Grande', D:'Duque de Caxias',
+    G:'Guadalupe', I:'Ilha Gov.', M:'Méier', J:'Jacarepaguá'
+};
+const GROUP_ALTAMIRO = ['A','B','G','I','N','R','X','Y'];
+const GROUP_COUTO    = ['C','D','J','M','P'];
+
+// Injeção de USER_POSTOS do Flask (pode ser lista ou null)
+const USER_POSTOS_FROM_SERVER = {{ USER_POSTOS }};
+const IS_ADMIN = {{ 'true' if USER_IS_ADMIN else 'false' }};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ESTADO GLOBAL
+// ─────────────────────────────────────────────────────────────────────────────
+let allData         = [];
+let cbosData        = {};
+let postosInfo      = {};
+let allEspecialidades = [];
+let allPostos       = [];
+let selectedPostos  = [];   // [] = todos permitidos
+let chartCritico    = null;
+let chartDist       = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function el(id) { return document.getElementById(id); }
+
+function getPermittedPostos() {
+    const allowed = Array.isArray(USER_POSTOS_FROM_SERVER) && USER_POSTOS_FROM_SERVER.length
+        ? USER_POSTOS_FROM_SERVER : null;
+    if (!allowed) return POSTOS_ORDEM.filter(p => allPostos.includes(p));
+    return POSTOS_ORDEM.filter(p => allowed.includes(p) && allPostos.includes(p));
+}
+
+function getSelectedPostos() {
+    const permitted = getPermittedPostos();
+    if (selectedPostos.length === 0) return permitted;
+    return selectedPostos.filter(p => permitted.includes(p));
+}
+
+function getFilteredData() {
+    const sp = getSelectedPostos();
+    return allData.filter(d => sp.includes(d.posto));
+}
+
+function statusBadgeHtml(status) {
+    const cls = status === 'OK' ? 'badge-ok'
+              : status === 'ALERTA' ? 'badge-alerta'
+              : status === 'CRITICO' ? 'badge-critico'
+              : 'badge-sem-vaga';
+    const label = status === 'SEM_VAGA' ? 'SEM VAGA' : status;
+    return `<span class="${cls}">${label}</span>`;
+}
+
+function statusHmClass(status) {
+    return status === 'OK'     ? 'hm-cell-ok'
+         : status === 'ALERTA' ? 'hm-cell-alerta'
+         : status === 'CRITICO'? 'hm-cell-critico'
+         : 'hm-cell-none';
+}
+
+function statusColor(status) {
+    return status === 'OK'     ? '#28a745'
+         : status === 'ALERTA' ? '#fd7e14'
+         : status === 'CRITICO'? '#dc3545'
+         : '#6c757d';
+}
+
+function fmtDate(iso) {
+    if (!iso) return '—';
+    try {
+        const [y,m,d] = iso.split('-');
+        return `${d}/${m}/${y}`;
+    } catch(_) { return iso; }
+}
+
+function fmtDias(n) {
+    if (n === null || n === undefined) return '—';
+    if (n < 0) return `<span style="color:#888">${n}d</span>`;
+    return `${n}d`;
+}
+
+function showToast(msg, type='success') {
+    const id = 'toast_' + Date.now();
+    const bg = type === 'success' ? '#28a745' : '#dc3545';
+    const html = `<div id="${id}" style="background:${bg};color:#fff;padding:10px 18px;border-radius:8px;margin-top:6px;box-shadow:0 4px 14px rgba(0,0,0,0.2);font-size:0.9rem;min-width:220px;animation:fadeIn .3s;">${msg}</div>`;
+    el('toastContainer').insertAdjacentHTML('beforeend', html);
+    setTimeout(() => { const t = el(id); if(t) t.remove(); }, 3500);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CARREGAMENTO DE DADOS
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadData() {
+    try {
+        const r = await fetch('/json_consolidado/qualidade_agenda.json');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const json = await r.json();
+        allData           = json.dados           || [];
+        cbosData          = json.cbos            || {};
+        postosInfo        = json.postos_info     || {};
+        allEspecialidades = json.especialidades  || [];
+        allPostos         = json.postos          || [];
+
+        // Freshness
+        const gm = json.meta && json.meta.gerado_em;
+        if (gm) {
+            const dt = new Date(gm);
+            const now = new Date();
+            const diffMin = Math.round((now - dt) / 60000);
+            const diffStr = diffMin < 60
+                ? `${diffMin}min atrás`
+                : `${Math.round(diffMin/60)}h atrás`;
+            el('jsonInfo').textContent = `Dados de ${dt.toLocaleString('pt-BR')} (${diffStr})`;
+            el('bannerSub').textContent = `Referência: ${dt.toLocaleDateString('pt-BR')} — ${allPostos.length} postos, ${allEspecialidades.length} especialidades monitoradas`;
+        }
+
+        initPostoFilter();
+        renderAll();
+    } catch(e) {
+        el('err').textContent = 'Erro ao carregar dados: ' + e.message;
+        el('bannerSub').textContent = 'Falha ao carregar dados do servidor.';
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FILTRO DE POSTOS
+// ─────────────────────────────────────────────────────────────────────────────
+function initPostoFilter() {
+    const permitted = getPermittedPostos();
+    const ul = el('postoTabs');
+    ul.innerHTML = '';
+    permitted.forEach(p => {
+        const li = document.createElement('li');
+        li.className = 'nav-item';
+        li.innerHTML = `<a class="nav-link" data-posto="${p}" onclick="togglePosto('${p}',this)"
+            title="${POSTO_NOMES[p] || p}">${p}</a>`;
+        ul.appendChild(li);
+    });
+}
+
+function togglePosto(posto, el_a) {
+    const idx = selectedPostos.indexOf(posto);
+    if (idx === -1) {
+        selectedPostos.push(posto);
+    } else {
+        selectedPostos.splice(idx, 1);
+    }
+    updatePostoButtons();
+    renderAll();
+}
+
+function setGrupo(grupo) {
+    const permitted = getPermittedPostos();
+    if (grupo === 'todos') {
+        selectedPostos = [];
+    } else if (grupo === 'altamiro') {
+        selectedPostos = GROUP_ALTAMIRO.filter(p => permitted.includes(p));
+    } else if (grupo === 'couto') {
+        selectedPostos = GROUP_COUTO.filter(p => permitted.includes(p));
+    }
+    updatePostoButtons();
+    renderAll();
+}
+
+function updatePostoButtons() {
+    // Group buttons
+    const sp = selectedPostos;
+    const permitted = getPermittedPostos();
+    const altOk = GROUP_ALTAMIRO.filter(p => permitted.includes(p));
+    const coutoOk = GROUP_COUTO.filter(p => permitted.includes(p));
+
+    el('btnGrupoTodos').classList.toggle('active', sp.length === 0);
+    el('btnGrupoAltamiro').classList.toggle('active',
+        sp.length === altOk.length && altOk.every(p => sp.includes(p)));
+    el('btnGrupoCouto').classList.toggle('active',
+        sp.length === coutoOk.length && coutoOk.every(p => sp.includes(p)));
+
+    // Individual tabs
+    document.querySelectorAll('#postoTabs .nav-link[data-posto]').forEach(a => {
+        const p = a.getAttribute('data-posto');
+        a.classList.toggle('active', sp.includes(p));
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER ALL
+// ─────────────────────────────────────────────────────────────────────────────
+function renderAll() {
+    const data = getFilteredData();
+    renderSummary(data);
+    renderHeatmap(data);
+    renderRanking(data);
+    renderByEspecialidade(data);
+    renderConfig();
+    renderChartCritico(data);
+    renderChartDistStatus(data);
+    renderTop10(data);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUMMARY
+// ─────────────────────────────────────────────────────────────────────────────
+function renderSummary(data) {
+    const total   = data.length;
+    const ok      = data.filter(d => d.Status === 'OK').length;
+    const alerta  = data.filter(d => d.Status === 'ALERTA').length;
+    const critico = data.filter(d => d.Status === 'CRITICO' || d.Status === 'SEM_VAGA').length;
+
+    animateCount('statTotal',   total);
+    animateCount('statOk',      ok);
+    animateCount('statAlerta',  alerta);
+    animateCount('statCritico', critico);
+}
+
+function animateCount(elId, target) {
+    const e = el(elId);
+    if (!e) return;
+    const start = parseInt(e.textContent) || 0;
+    const diff = target - start;
+    const steps = 20;
+    let step = 0;
+    const timer = setInterval(() => {
+        step++;
+        e.textContent = Math.round(start + diff * (step / steps));
+        if (step >= steps) { clearInterval(timer); e.textContent = target; }
+    }, 18);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HEATMAP
+// ─────────────────────────────────────────────────────────────────────────────
+function renderHeatmap(data) {
+    const container = el('heatmapContainer');
+    const postosVisiveis = getSelectedPostos();
+
+    // Build lookup: esp → posto → row
+    const lookup = {};
+    data.forEach(d => {
+        if (!lookup[d.Especialidade]) lookup[d.Especialidade] = {};
+        lookup[d.Especialidade][d.posto] = d;
+    });
+
+    const esps = allEspecialidades.filter(e => lookup[e]);
+    if (!esps.length) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-database"></i>Nenhum dado disponível para os filtros selecionados.</div>';
+        return;
+    }
+
+    let html = '<table class="hm-table"><thead><tr>';
+    html += '<th style="min-width:160px;">Especialidade</th>';
+    postosVisiveis.forEach(p => {
+        const info = postosInfo[p];
+        const nome = info ? info.nome : (POSTO_NOMES[p] || p);
+        html += `<th title="${nome}">${p}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    esps.forEach(esp => {
+        const cbos = cbosData[esp] || {};
+        html += `<tr><td class="hm-esp" title="Prazo ANS: ${cbos.prazoconsultaans||'—'}d | Prazo CAMIM: ${cbos.prazoconsultacamim||'—'}d">${esp}</td>`;
+        postosVisiveis.forEach(p => {
+            const d = lookup[esp] ? lookup[esp][p] : null;
+            if (!d) {
+                html += '<td class="hm-cell hm-cell-none"><span style="color:#ccc;font-size:1.1rem;">·</span></td>';
+                return;
+            }
+            const cls = statusHmClass(d.Status);
+            const diasStr = d.DiasAteProximaVaga !== null && d.DiasAteProximaVaga !== undefined
+                ? d.DiasAteProximaVaga : '—';
+            const dateStr = d.DataProximaVaga ? fmtDate(d.DataProximaVaga) : 'S/D';
+            const vagasStr = d.QuantidadeVagasDisponivelNaData !== null
+                ? `${d.QuantidadeVagasDisponivelNaData}v` : '';
+            const tooltip = [
+                `${esp} — ${POSTO_NOMES[p]||p}`,
+                `Status: ${d.Status}`,
+                `Próxima vaga: ${d.DataProximaVaga||'sem data'}`,
+                `Dias: ${d.DiasAteProximaVaga ?? '—'}`,
+                `Vagas disponíveis: ${d.QuantidadeVagasDisponivelNaData ?? '—'}`,
+                `Capacidade: ${d.CapacidadeConsiderada ?? '—'}`,
+                `% Livres: ${d.ValorPercentualVagasLivres ?? '—'}%`,
+                `Prazo ANS: ${cbos.prazoconsultaans||'—'}d`,
+                `Prazo CAMIM: ${cbos.prazoconsultacamim||'—'}d`,
+            ].join('\n');
+            html += `<td class="hm-cell ${cls}" title="${tooltip.replace(/"/g,'&quot;')}">
+                <div class="hm-dias">${diasStr !== '—' ? diasStr+'d' : '—'}</div>
+                <div class="hm-date">${dateStr}</div>
+                <div class="hm-vagas">${vagasStr}</div>
+            </td>`;
+        });
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RANKING
+// ─────────────────────────────────────────────────────────────────────────────
+function renderRanking(data) {
+    const tbody = el('rankBody');
+
+    // Sort: SEM_VAGA first, then CRITICO by dias DESC, then ALERTA, then OK
+    const statusOrder = { 'SEM_VAGA': 0, 'CRITICO': 1, 'ALERTA': 2, 'OK': 3 };
+    const sorted = [...data].sort((a, b) => {
+        const so = (statusOrder[a.Status]||9) - (statusOrder[b.Status]||9);
+        if (so !== 0) return so;
+        const da = a.DiasAteProximaVaga ?? 9999;
+        const db = b.DiasAteProximaVaga ?? 9999;
+        return db - da;
+    });
+
+    if (!sorted.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Nenhum dado para os filtros selecionados.</td></tr>';
+        return;
+    }
+
+    let html = '';
+    sorted.forEach(d => {
+        const dias = d.DiasAteProximaVaga;
+        const prazo_camim = d.prazoconsultacamim || 0;
+        const prazo_ans   = d.prazoconsultaans   || 0;
+        const nomePosto   = postosInfo[d.posto] ? postosInfo[d.posto].nome : (POSTO_NOMES[d.posto]||d.posto);
+        const alem_ans    = (prazo_ans > 0 && dias !== null) ? (dias - prazo_ans) : null;
+        const alem_str    = alem_ans !== null && alem_ans > 0
+            ? `<span class="text-danger font-weight-bold">+${alem_ans}d</span>`
+            : alem_ans !== null && alem_ans <= 0
+                ? '<span class="text-success">dentro</span>'
+                : '—';
+
+        // Progress bar: dias vs prazo_camim
+        let barPct = 0;
+        let barColor = '#6c757d';
+        if (prazo_camim > 0 && dias !== null) {
+            barPct = Math.min(100, Math.round((dias / prazo_camim) * 100));
+            barColor = statusColor(d.Status);
+        }
+        const barHtml = `<div class="dias-bar"><div class="dias-bar-fill" style="width:${barPct}%;background:${barColor};"></div></div>
+            <div style="font-size:0.7rem;color:#888;margin-top:1px;">${barPct}% do prazo CAMIM</div>`;
+
+        html += `<tr>
+            <td>${statusBadgeHtml(d.Status)}</td>
+            <td><strong>${d.posto}</strong><br><span style="font-size:0.75rem;color:#888;">${nomePosto}</span></td>
+            <td>${d.Especialidade}</td>
+            <td style="white-space:nowrap;">${fmtDate(d.DataProximaVaga)}</td>
+            <td class="text-center font-weight-bold">${dias !== null ? dias : '—'}</td>
+            <td>${alem_str}</td>
+            <td class="text-center">${d.QuantidadeVagasDisponivelNaData ?? '—'}</td>
+            <td class="text-center">${d.CapacidadeConsiderada ?? '—'}</td>
+            <td>${barHtml}</td>
+        </tr>`;
+    });
+    tbody.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POR ESPECIALIDADE
+// ─────────────────────────────────────────────────────────────────────────────
+function renderByEspecialidade(data) {
+    const container = el('espContainer');
+    const postosVisiveis = getSelectedPostos();
+
+    // Group data by especialidade
+    const byEsp = {};
+    data.forEach(d => {
+        if (!byEsp[d.Especialidade]) byEsp[d.Especialidade] = {};
+        byEsp[d.Especialidade][d.posto] = d;
+    });
+
+    const esps = allEspecialidades.filter(e => byEsp[e]);
+    if (!esps.length) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-database"></i>Nenhum dado disponível.</div>';
+        return;
+    }
+
+    let html = '';
+    esps.forEach(esp => {
+        const cbos = cbosData[esp] || {};
+        const prazo_camim = cbos.prazoconsultacamim || 0;
+        const prazo_ans   = cbos.prazoconsultaans   || 0;
+        const min_vagas   = cbos.ValorPMinimoVagaDisponivel || 0;
+        const postosEsp   = byEsp[esp];
+
+        // Determine worst status for this esp
+        const statuses = postosVisiveis.map(p => postosEsp[p] ? postosEsp[p].Status : null).filter(Boolean);
+        const worstStatus = statuses.includes('CRITICO') || statuses.includes('SEM_VAGA') ? 'CRITICO'
+            : statuses.includes('ALERTA') ? 'ALERTA'
+            : statuses.includes('OK') ? 'OK' : null;
+
+        const iconColor = worstStatus === 'CRITICO' ? '#dc3545'
+            : worstStatus === 'ALERTA' ? '#fd7e14'
+            : worstStatus === 'OK' ? '#28a745' : '#adb5bd';
+
+        html += `<div class="esp-card">
+            <div class="esp-card-title">
+                <i class="fas fa-circle" style="color:${iconColor};font-size:0.7rem;"></i>
+                ${esp}
+            </div>
+            <div class="esp-prazo-badges">
+                <span class="esp-prazo-tag esp-prazo-ans" title="Prazo máximo ANS">ANS: ${prazo_ans > 0 ? prazo_ans+'d' : 'N/A'}</span>
+                <span class="esp-prazo-tag esp-prazo-camim" title="Prazo interno CAMIM">CAMIM: ${prazo_camim > 0 ? prazo_camim+'d' : 'N/A'}</span>
+                <span class="esp-prazo-tag esp-prazo-min" title="% mínimo de vagas livre">Min.Vagas: ${min_vagas}%</span>
+            </div>`;
+
+        // Build bars
+        const maxDias = prazo_camim > 0 ? prazo_camim * 1.5 : 60;
+        let barsHtml = '';
+        let hasAnyData = false;
+
+        postosVisiveis.forEach(p => {
+            const d = postosEsp[p];
+            if (!d) return;
+            hasAnyData = true;
+            const nomePosto = postosInfo[p] ? postosInfo[p].nome : (POSTO_NOMES[p]||p);
+            const dias = d.DiasAteProximaVaga;
+            const status = d.Status;
+            const barCls = `esp-bar-${status.toLowerCase().replace('_','-').replace('sem-vaga','sem-vaga')}`;
+            let barWidth = '0%';
+            let barLabel = '';
+
+            if (status === 'SEM_VAGA') {
+                barWidth = '8%';
+                barLabel = 'SEM VAGA';
+            } else if (dias !== null) {
+                barWidth = Math.min(100, Math.round((dias / maxDias) * 100)) + '%';
+                barLabel = dias + 'd';
+            }
+
+            const pct_livres = d.ValorPercentualVagasLivres !== null ? d.ValorPercentualVagasLivres + '%' : '—';
+            const vagas = d.QuantidadeVagasDisponivelNaData !== null ? d.QuantidadeVagasDisponivelNaData : '—';
+
+            barsHtml += `<div class="esp-posto-bar ${barCls}" title="${nomePosto}: ${dias !== null ? dias+'d' : 'sem vaga'} | Vagas: ${vagas} | Livres: ${pct_livres}">
+                <div class="esp-posto-name">${p} <span style="font-weight:400;color:#888;font-size:0.7rem;">${nomePosto.substring(0,8)}</span></div>
+                <div class="esp-bar-container">
+                    <div class="esp-bar-fill" style="width:${barWidth};">${barLabel}</div>
+                </div>
+                <div class="esp-bar-days" style="color:${statusColor(status)}">${dias !== null ? dias+'d' : '—'}</div>
+            </div>`;
+        });
+
+        if (!hasAnyData) {
+            barsHtml = '<div class="esp-no-data">Nenhum dado disponível para os postos selecionados.</div>';
+        }
+
+        html += barsHtml + '</div>';
+    });
+
+    container.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIG (ADMIN ONLY)
+// ─────────────────────────────────────────────────────────────────────────────
+function renderConfig() {
+    if (!IS_ADMIN) return;
+    const tbody = el('cfgBody');
+    if (!tbody) return;
+
+    const esps = Object.keys(cbosData).sort();
+    if (!esps.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhuma especialidade configurada.</td></tr>';
+        return;
+    }
+
+    let html = '';
+    esps.forEach(esp => {
+        const c = cbosData[esp];
+        html += `<tr>
+            <td>${esp}</td>
+            <td class="text-center">${c.prazoconsultaans > 0 ? c.prazoconsultaans : '<span class="text-muted">N/A</span>'}</td>
+            <td class="text-center">${c.prazoconsultacamim > 0 ? c.prazoconsultacamim : '<span class="text-muted">N/A</span>'}</td>
+            <td class="text-center">${c.ValorPMinimoVagaDisponivel}</td>
+            <td class="text-right">
+                <button class="btn btn-sm btn-outline-primary btn-edit-cbos"
+                    onclick="openEditCbos('${esp.replace(/'/g,"\\'")}', ${c.ValorPMinimoVagaDisponivel})">
+                    <i class="fas fa-edit mr-1"></i>Editar
+                </button>
+            </td>
+        </tr>`;
+    });
+    tbody.innerHTML = html;
+}
+
+function openEditCbos(esp, val) {
+    el('editEsp').value = esp;
+    el('editValor').value = val;
+    el('editMsg').textContent = '';
+    $('#modalEditCbos').modal('show');
+}
+
+async function saveCbos() {
+    const esp   = el('editEsp').value.trim();
+    const valor = parseFloat(el('editValor').value);
+    if (!esp || isNaN(valor) || valor < 0 || valor > 100) {
+        el('editMsg').innerHTML = '<span class="text-danger">Valor deve ser entre 0 e 100.</span>';
+        return;
+    }
+    el('btnSaveCbos').disabled = true;
+    el('editMsg').innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Salvando...</span>';
+    try {
+        const r = await fetch('/api/qualidade_agenda/update_cbos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ especialidade: esp, valor: valor }),
+            credentials: 'same-origin',
+        });
+        const data = await r.json();
+        if (data.ok) {
+            // Update local cbosData
+            if (cbosData[esp]) cbosData[esp].ValorPMinimoVagaDisponivel = valor;
+            $('#modalEditCbos').modal('hide');
+            showToast(`Threshold de "${esp}" atualizado para ${valor}%`, 'success');
+            renderConfig();
+        } else {
+            el('editMsg').innerHTML = `<span class="text-danger">${data.error || 'Erro ao salvar.'}</span>`;
+        }
+    } catch(e) {
+        el('editMsg').innerHTML = `<span class="text-danger">Erro de rede: ${e.message}</span>`;
+    } finally {
+        el('btnSaveCbos').disabled = false;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GRÁFICO: CRÍTICOS POR POSTO
+// ─────────────────────────────────────────────────────────────────────────────
+function renderChartCritico(data) {
+    const postosVisiveis = getSelectedPostos();
+    const countByPosto = {};
+    postosVisiveis.forEach(p => { countByPosto[p] = {ok:0, alerta:0, critico:0, sem_vaga:0}; });
+    data.forEach(d => {
+        if (!countByPosto[d.posto]) return;
+        const s = d.Status;
+        if (s === 'OK') countByPosto[d.posto].ok++;
+        else if (s === 'ALERTA') countByPosto[d.posto].alerta++;
+        else if (s === 'CRITICO') countByPosto[d.posto].critico++;
+        else countByPosto[d.posto].sem_vaga++;
+    });
+
+    const labels = postosVisiveis.map(p => postosInfo[p] ? postosInfo[p].nome.substring(0,10) : p);
+    const ctx = document.getElementById('chartCriticoPorPosto').getContext('2d');
+    if (chartCritico) chartCritico.destroy();
+    chartCritico = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                { label: 'OK',       data: postosVisiveis.map(p => countByPosto[p]?.ok       || 0), backgroundColor: '#28a745' },
+                { label: 'Alerta',   data: postosVisiveis.map(p => countByPosto[p]?.alerta   || 0), backgroundColor: '#fd7e14' },
+                { label: 'Crítico',  data: postosVisiveis.map(p => countByPosto[p]?.critico  || 0), backgroundColor: '#dc3545' },
+                { label: 'Sem Vaga', data: postosVisiveis.map(p => countByPosto[p]?.sem_vaga || 0), backgroundColor: '#6c757d' },
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: true,
+            plugins: { legend: { position: 'top' } },
+            scales: {
+                x: { stacked: true },
+                y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+        }
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GRÁFICO: DISTRIBUIÇÃO STATUS (DONUT)
+// ─────────────────────────────────────────────────────────────────────────────
+function renderChartDistStatus(data) {
+    const counts = { OK: 0, ALERTA: 0, CRITICO: 0, SEM_VAGA: 0 };
+    data.forEach(d => { if (counts[d.Status] !== undefined) counts[d.Status]++; });
+    const ctx = document.getElementById('chartDistStatus').getContext('2d');
+    if (chartDist) chartDist.destroy();
+    chartDist = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['OK', 'Alerta', 'Crítico', 'Sem Vaga'],
+            datasets: [{
+                data: [counts.OK, counts.ALERTA, counts.CRITICO, counts.SEM_VAGA],
+                backgroundColor: ['#28a745','#fd7e14','#dc3545','#6c757d'],
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 12 } } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+                            const pct = total ? ((ctx.raw/total)*100).toFixed(1) : 0;
+                            return ` ${ctx.label}: ${ctx.raw} (${pct}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOP 10 ESPECIALIDADES MAIS CRÍTICAS
+// ─────────────────────────────────────────────────────────────────────────────
+function renderTop10(data) {
+    const container = el('top10Container');
+    // Count críticos per especialidade
+    const criticos = {};
+    data.forEach(d => {
+        if (d.Status === 'CRITICO' || d.Status === 'SEM_VAGA') {
+            criticos[d.Especialidade] = (criticos[d.Especialidade] || 0) + 1;
+        }
+    });
+    const sorted = Object.entries(criticos).sort((a,b) => b[1]-a[1]).slice(0,10);
+    if (!sorted.length) {
+        container.innerHTML = '<div class="text-success p-2"><i class="fas fa-check-circle mr-2"></i>Nenhuma especialidade em estado crítico nos postos selecionados!</div>';
+        return;
+    }
+    const maxVal = sorted[0][1];
+    let html = '';
+    sorted.forEach(([esp, cnt], i) => {
+        const pct = Math.round((cnt / maxVal) * 100);
+        const color = i === 0 ? '#dc3545' : i < 3 ? '#e05050' : '#e07070';
+        html += `<div class="d-flex align-items-center mb-2" style="gap:10px;">
+            <div style="width:140px;font-size:0.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esp}">${i+1}. ${esp}</div>
+            <div style="flex:1;height:18px;background:#f0f0f0;border-radius:4px;overflow:hidden;">
+                <div style="height:100%;width:${pct}%;background:${color};border-radius:4px;"></div>
+            </div>
+            <div style="width:40px;text-align:right;font-weight:700;color:${color};font-size:0.85rem;">${cnt}</div>
+        </div>`;
+    });
+    container.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    loadData();
+
+    // Re-render when tab shown (for lazy rendering)
+    document.querySelectorAll('#mainTabs a[data-toggle="tab"]').forEach(a => {
+        a.addEventListener('shown.bs.tab', () => {
+            const data = getFilteredData();
+            renderAll();
+        });
+    });
+});
+</script>
+
+</body>
+</html>
