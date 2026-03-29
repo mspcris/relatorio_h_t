@@ -989,8 +989,9 @@ function renderByEspecialidade(data) {
 
             const pct_livres = d.ValorPercentualVagasLivres !== null ? d.ValorPercentualVagasLivres + '%' : '—';
             const vagas = d.QuantidadeVagasDisponivelNaData !== null ? d.QuantidadeVagasDisponivelNaData : '—';
+            const dataFmt = d.DataProximaVaga ? fmtDate(d.DataProximaVaga) : '—';
 
-            barsHtml += `<div class="esp-posto-bar ${barCls}" title="${nomePosto}: ${dias !== null ? dias+'d' : 'sem vaga'} | Vagas: ${vagas} | Livres: ${pct_livres}">
+            barsHtml += `<div class="esp-posto-bar ${barCls}" title="${nomePosto}: ${dias !== null ? dias+'d' : 'sem vaga'} | Data: ${dataFmt} | Vagas: ${vagas} | Livres: ${pct_livres}">
                 <div class="esp-posto-name">${p} <span style="font-weight:400;color:#888;font-size:0.7rem;">${nomePosto.substring(0,8)}</span></div>
                 <div class="esp-bar-container">
                     <div class="esp-bar-fill" style="width:${barWidth};">${barLabel}</div>
