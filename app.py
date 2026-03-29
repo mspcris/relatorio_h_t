@@ -628,6 +628,7 @@ def api_retirar_data_fim():
                 user_id=user.id, user_email=email, user_nome=user.nome or "",
                 posto=posto, id_especialidade=id_esp, especialidade=especialidade,
                 acao="retirar_data_fim", valor_antigo=valor_antigo, valor_novo="NULL",
+                snapshot=data.get("snapshot"),
             ))
             _db.commit()
             _db.close()
@@ -713,6 +714,7 @@ def api_prorrogar_agenda():
                 user_id=user.id, user_email=email, user_nome=user.nome or "",
                 posto=posto, id_especialidade=id_esp, especialidade=especialidade,
                 acao="prorrogar_agenda", valor_antigo=valor_antigo, valor_novo=nova_data,
+                snapshot=data.get("snapshot"),
             ))
             _db.commit()
             _db.close()
@@ -741,6 +743,7 @@ def api_ctrlq_historico_acoes():
             .all()
         )
         return jsonify([{
+            "id": r.id,
             "posto": r.posto,
             "idEspecialidade": r.id_especialidade,
             "especialidade": r.especialidade,
@@ -749,6 +752,7 @@ def api_ctrlq_historico_acoes():
             "data": r.created_at.isoformat() if r.created_at else None,
             "valor_antigo": r.valor_antigo,
             "valor_novo": r.valor_novo,
+            "snapshot": r.snapshot,
         } for r in rows])
     finally:
         db.close()

@@ -136,6 +136,7 @@ class HistoricoDesbloqueio(Base):
     acao            = Column(String(50), nullable=False)   # 'retirar_data_fim' | 'prorrogar_agenda'
     valor_antigo    = Column(String(100), nullable=True)
     valor_novo      = Column(String(100), nullable=True)
+    snapshot        = Column(Text, nullable=True)          # JSON do card completo no momento da ação
     created_at      = Column(DateTime, default=lambda: datetime.now(_BRT).replace(tzinfo=None), nullable=False)
 
     user = relationship("User", backref="historico_desbloqueios")

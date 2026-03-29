@@ -668,9 +668,15 @@
     </div>`;
   }
 
+  // ── Mapa de dados dos cards (para snapshot no histórico) ────────────────
+  if (!window.__cardData) window.__cardData = {};
+
   // ── Render de um card ─────────────────────────────────────────────────────
 
   function renderCard(rec) {
+    // Guarda snapshot para envio posterior
+    const key = `${rec.idEspecialidade}_${rec._posto}`;
+    window.__cardData[key] = rec;
     const dias   = diasParaExpirar(rec.DataFimExibicao);
     const cls    = cardClass(dias);
     const obs    = (rec.ObservacaoDesbloqueio || '').trim();
@@ -731,11 +737,20 @@
 
   // ── Render da lista ───────────────────────────────────────────────────────
 
+  // ── Registros já processados (escondidos da Agenda) ─────────────────────
+  function _getProcessados() {
+    try { return JSON.parse(sessionStorage.getItem('ctrlq_processados') || '{}'); }
+    catch { return {}; }
+  }
+
   function getRegistros() {
     const postos = _selectedPostos();
+    const processados = _getProcessados();
     let all = [];
     for (const p of postos) {
       for (const r of (_dados[p] || [])) {
+        const key = `${r.idEspecialidade}_${p}`;
+        if (processados[key]) continue;  // já processado, não mostra na Agenda
         all.push({ ...r, _posto: p });
       }
     }
@@ -830,8 +845,12 @@
       return _postoSel === p;
     };
 
+    const processados = _getProcessados();
     for (const p of _postos) {
-      const regs = (_dados[p] || []).filter(r => _mostrarExpirados || diasParaExpirar(r.DataFimExibicao) >= 0);
+      const regs = (_dados[p] || []).filter(r => {
+        if (processados[`${r.idEspecialidade}_${p}`]) return false;
+        return _mostrarExpirados || diasParaExpirar(r.DataFimExibicao) >= 0;
+      });
       const li = document.createElement('li'); li.className = 'nav-item';
       const a  = document.createElement('a');
       a.href = '#';
@@ -903,6 +922,10 @@
     renderLista();
   });
 
+  // Expõe renderCard para uso no histórico
+  window.__renderCard = renderCard;
+  window.__getDados = () => _dados;
+
   load();
 })();
 
@@ -912,20 +935,31 @@ function _escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function _marcarProcessado(idEsp, posto, acao) {
+  const proc = JSON.parse(sessionStorage.getItem('ctrlq_processados') || '{}');
+  proc[`${idEsp}_${posto}`] = { acao, ts: new Date().toISOString() };
+  sessionStorage.setItem('ctrlq_processados', JSON.stringify(proc));
+}
+
 window.__retirarDataFim = async function(idEsp, posto, esp) {
   if (!confirm(`Confirma RETIRAR DATA FIM da especialidade ${esp} (posto ${posto})?`)) return;
+  const snapshot = JSON.stringify(window.__cardData[`${idEsp}_${posto}`] || null);
   try {
     const r = await fetch('/api/ctrlq/retirar_data_fim', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idEspecialidade: idEsp, posto: posto }),
+      body: JSON.stringify({ idEspecialidade: idEsp, posto: posto, snapshot: snapshot }),
     });
     const data = await r.json();
     if (r.ok) {
-      // Remove o card da tela imediatamente (o JSON será atualizado no próximo cron)
-      const card = document.querySelector(`.desb-card[data-id-esp="${idEsp}"][data-posto="${posto}"]`);
-      if (card) card.remove();
+      _marcarProcessado(idEsp, posto, 'retirar_data_fim');
+      // Força re-render da lista (filtra o processado) e atualiza contadores
+      document.querySelector(`.desb-card[data-id-esp="${idEsp}"][data-posto="${posto}"]`)?.remove();
+      // Dispara rebuild dos contadores
+      document.getElementById('btnGrupoTodos')?.click();
       alert('Data fim removida com sucesso!');
+      // Reseta cache do histórico para recarregar na próxima vez
+      window.__historicoCarregado = false;
     } else {
       alert('Erro: ' + (data.erro || 'Falha desconhecida'));
     }
@@ -952,16 +986,20 @@ window.__prorrogarAgenda = async function(idEsp, posto, esp, dataAtual) {
     return;
   }
 
+  const snapshot = JSON.stringify(window.__cardData[`${idEsp}_${posto}`] || null);
   try {
     const r = await fetch('/api/ctrlq/prorrogar_agenda', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idEspecialidade: idEsp, posto: posto, nova_data: nova }),
+      body: JSON.stringify({ idEspecialidade: idEsp, posto: posto, nova_data: nova, snapshot: snapshot }),
     });
     const data = await r.json();
     if (r.ok) {
-      alert('Agenda prorrogada com sucesso! A página será recarregada.');
-      location.reload();
+      _marcarProcessado(idEsp, posto, 'prorrogar_agenda');
+      document.querySelector(`.desb-card[data-id-esp="${idEsp}"][data-posto="${posto}"]`)?.remove();
+      document.getElementById('btnGrupoTodos')?.click();
+      alert('Agenda prorrogada com sucesso!');
+      window.__historicoCarregado = false;
     } else {
       alert('Erro: ' + (data.erro || 'Falha desconhecida'));
     }
@@ -972,7 +1010,7 @@ window.__prorrogarAgenda = async function(idEsp, posto, esp, dataAtual) {
 
 // ── Histórico de ações ──────────────────────────────────────────────────────
 
-let _historicoCarregado = false;
+window.__historicoCarregado = false;
 
 function _fmtDtHist(iso) {
   if (!iso) return '—';
@@ -982,7 +1020,7 @@ function _fmtDtHist(iso) {
 }
 
 async function carregarHistoricoAcoes() {
-  if (_historicoCarregado) return;
+  if (window.__historicoCarregado) return;
   const area = document.getElementById('historicoArea');
   area.innerHTML = '<p class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Carregando histórico…</p>';
 
@@ -990,19 +1028,23 @@ async function carregarHistoricoAcoes() {
     const r = await fetch('/api/ctrlq/historico_acoes');
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const dados = await r.json();
-    _historicoCarregado = true;
+    window.__historicoCarregado = true;
 
     if (!dados.length) {
       area.innerHTML = '<p class="text-muted"><i class="fas fa-info-circle mr-1"></i>Nenhuma ação registrada via app.</p>';
       return;
     }
 
-    const acaoLabel = a => a === 'retirar_data_fim' ? 'Retirar Data Fim' : a === 'prorrogar_agenda' ? 'Prorrogar Agenda' : a;
     const acaoBadge = a => a === 'retirar_data_fim'
       ? '<span class="badge badge-danger">Retirar Data Fim</span>'
       : '<span class="badge badge-warning">Prorrogar Agenda</span>';
 
-    const rows = dados.map(d => `
+    const rows = dados.map((d, i) => {
+      const hasSnap = !!d.snapshot;
+      const toggleBtn = hasSnap
+        ? `<button class="btn btn-xs btn-outline-info" onclick="toggleHistCard(${i})" title="Ver card"><i class="fas fa-eye"></i></button>`
+        : '';
+      return `
       <tr>
         <td class="text-nowrap">${_fmtDtHist(d.data)}</td>
         <td><span class="hist-badge-posto">${_escHtml(d.posto)}</span></td>
@@ -1010,7 +1052,15 @@ async function carregarHistoricoAcoes() {
         <td>${acaoBadge(d.acao)}</td>
         <td>${_escHtml(d.especialidade || '—')}</td>
         <td class="hist-detalhe">${_escHtml(d.valor_antigo || '')} → ${_escHtml(d.valor_novo || '')}</td>
-      </tr>`).join('');
+        <td>${toggleBtn}</td>
+      </tr>
+      <tr id="hist-card-${i}" style="display:none">
+        <td colspan="7" class="p-0"></td>
+      </tr>`;
+    }).join('');
+
+    // Guarda snapshots para renderização sob demanda
+    window.__histDados = dados;
 
     area.innerHTML = `
       <div class="table-responsive">
@@ -1023,6 +1073,7 @@ async function carregarHistoricoAcoes() {
               <th>Ação</th>
               <th>Especialidade</th>
               <th>Alteração</th>
+              <th style="width:40px"></th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -1030,6 +1081,30 @@ async function carregarHistoricoAcoes() {
       </div>`;
   } catch (e) {
     area.innerHTML = `<div class="alert alert-danger">Erro ao carregar histórico: ${_escHtml(e.message)}</div>`;
+  }
+}
+
+function toggleHistCard(idx) {
+  const row = document.getElementById(`hist-card-${idx}`);
+  if (!row) return;
+  const cell = row.querySelector('td');
+  if (row.style.display === 'none') {
+    // Renderiza o card a partir do snapshot
+    const d = (window.__histDados || [])[idx];
+    if (d && d.snapshot && !cell.innerHTML) {
+      try {
+        const rec = JSON.parse(d.snapshot);
+        rec._posto = d.posto;
+        cell.innerHTML = `<div style="padding:10px;background:#f9f9f9">${window.__renderCard(rec)}</div>`;
+        // Remove botões de ação do card no histórico (já foi processado)
+        cell.querySelectorAll('.desb-acoes').forEach(el => el.remove());
+      } catch(e) {
+        cell.innerHTML = `<div class="p-3 text-danger">Erro ao renderizar snapshot</div>`;
+      }
+    }
+    row.style.display = '';
+  } else {
+    row.style.display = 'none';
   }
 }
 </script>
