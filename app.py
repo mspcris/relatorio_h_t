@@ -520,11 +520,17 @@ def r_ctrlq_desbloqueio():
 
 @app.get('/qualidade_agenda')
 def r_qualidade_agenda():
-    return render_protected_page("qualidade_agenda.html")
+    resp = make_response(render_protected_page("qualidade_agenda.html"))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 @app.get('/qualidade_agenda.html')
 def h_qualidade_agenda():
-    return render_protected_page("qualidade_agenda.html")
+    resp = make_response(render_protected_page("qualidade_agenda.html"))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 @app.get('/kpi_receita_despesa_rateio')
 def r_rateio():
