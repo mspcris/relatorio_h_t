@@ -696,6 +696,59 @@ def api_prorrogar_agenda():
         return jsonify({"erro": str(e)}), 500
 
 
+@app.get('/api/ctrlq/historico_acoes')
+def api_ctrlq_historico_acoes():
+    """Retorna histórico de ações de desbloqueio feitas pelo app (todas os postos)."""
+    email, _ = decode_user()
+    if not email:
+        return jsonify({"erro": "Não autorizado"}), 401
+
+    from ctrlq_desbloqueio import build_conns_from_env, make_engine
+    from sqlalchemy import text as sa_text
+
+    conns = build_conns_from_env()
+    if not conns:
+        return jsonify({"erro": "Nenhuma conexão SQL Server configurada"}), 500
+
+    resultados = []
+    for posto, conn_str in conns.items():
+        try:
+            engine = make_engine(conn_str)
+            with engine.connect() as conn:
+                rows = conn.execute(sa_text("""
+                    SELECT TOP 100
+                        h.id AS idEspecialidade,
+                        h.Tabela,
+                        h.Comando,
+                        h.Usuario,
+                        h.Data,
+                        h.Descricao,
+                        h.Detalhe,
+                        h.Computador
+                    FROM vw_Sis_Historico h
+                    WHERE h.Computador = 'teste-ia.camim.com.br'
+                      AND h.Tabela = 'Quadro de especialidade'
+                    ORDER BY h.Data DESC
+                """)).fetchall()
+                for r in rows:
+                    resultados.append({
+                        "posto": posto,
+                        "idEspecialidade": r[0],
+                        "comando": r[2],
+                        "usuario": r[3],
+                        "data": r[4].isoformat() if r[4] else None,
+                        "descricao": r[5],
+                        "detalhe": r[6],
+                    })
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("Erro ao buscar histórico posto %s: %s", posto, e)
+
+    # Ordena global por data DESC
+    resultados.sort(key=lambda x: x.get("data") or "", reverse=True)
+    return jsonify(resultados[:200])
+
+
 @app.get('/qualidade_agenda')
 def r_qualidade_agenda():
     resp = make_response(render_protected_page("qualidade_agenda.html"))

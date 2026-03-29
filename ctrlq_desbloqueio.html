@@ -215,6 +215,18 @@
     color: #aaa;
     font-size: .75rem;
   }
+
+  /* ── Tabela de histórico de ações ── */
+  .hist-table { font-size: .82rem; }
+  .hist-table th { font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+  .hist-table td { vertical-align: middle; }
+  .hist-badge-posto {
+    display: inline-block;
+    background: #e8f5e9; color: #2e7d32;
+    border: 1px solid #a5d6a7; border-radius: 4px;
+    padding: 1px 7px; font-size: .75rem; font-weight: 600;
+  }
+  .hist-detalhe { font-size: .75rem; color: #555; word-break: break-word; }
 </style>
 </head>
 
@@ -301,9 +313,44 @@
         </div>
       </div>
 
-      <!-- Lista de registros -->
-      <div id="listArea">
-        <p class="text-muted">Carregando…</p>
+      <!-- Tabs -->
+      <ul class="nav nav-tabs mb-3" id="mainTabs">
+        <li class="nav-item">
+          <a class="nav-link active" data-toggle="tab" href="#tab-agenda" id="tab-agenda-lnk">
+            <i class="fas fa-unlock-alt mr-1"></i>Agenda
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-toggle="tab" href="#tab-historico" id="tab-historico-lnk" onclick="carregarHistoricoAcoes()">
+            <i class="fas fa-history mr-1"></i>Histórico de Ações
+          </a>
+        </li>
+      </ul>
+
+      <div class="tab-content">
+        <!-- Tab Agenda (conteúdo existente) -->
+        <div class="tab-pane fade show active" id="tab-agenda">
+          <div id="listArea">
+            <p class="text-muted">Carregando…</p>
+          </div>
+        </div>
+
+        <!-- Tab Histórico de Ações -->
+        <div class="tab-pane fade" id="tab-historico">
+          <div class="card">
+            <div class="card-header py-2">
+              <h5 class="mb-0" style="font-size:1rem">
+                <i class="fas fa-history mr-1 text-info"></i>Ações realizadas via app
+              </h5>
+              <small class="text-muted">Registros de retirar data fim e prorrogar agenda feitos por este sistema.</small>
+            </div>
+            <div class="card-body p-0">
+              <div id="historicoArea" class="p-3">
+                <p class="text-muted">Clique na aba para carregar…</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
     </section>
@@ -861,6 +908,10 @@
 
 // ── Ações de desbloqueio (fora da IIFE para ser acessível via window) ────
 
+function _escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 window.__retirarDataFim = async function(idEsp, posto, esp) {
   if (!confirm(`Confirma RETIRAR DATA FIM da especialidade ${esp} (posto ${posto})?`)) return;
   try {
@@ -871,8 +922,10 @@ window.__retirarDataFim = async function(idEsp, posto, esp) {
     });
     const data = await r.json();
     if (r.ok) {
-      alert('Data fim removida com sucesso! A página será recarregada.');
-      location.reload();
+      // Remove o card da tela imediatamente (o JSON será atualizado no próximo cron)
+      const btn = event.target.closest('.desb-card');
+      if (btn) btn.remove();
+      alert('Data fim removida com sucesso!');
     } else {
       alert('Erro: ' + (data.erro || 'Falha desconhecida'));
     }
@@ -916,6 +969,62 @@ window.__prorrogarAgenda = async function(idEsp, posto, esp, dataAtual) {
     alert('Erro de conexão: ' + e.message);
   }
 };
+
+// ── Histórico de ações ──────────────────────────────────────────────────────
+
+let _historicoCarregado = false;
+
+function _fmtDtHist(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('pt-BR') + ' ' +
+         d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+async function carregarHistoricoAcoes() {
+  if (_historicoCarregado) return;
+  const area = document.getElementById('historicoArea');
+  area.innerHTML = '<p class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Carregando histórico…</p>';
+
+  try {
+    const r = await fetch('/api/ctrlq/historico_acoes');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const dados = await r.json();
+    _historicoCarregado = true;
+
+    if (!dados.length) {
+      area.innerHTML = '<p class="text-muted"><i class="fas fa-info-circle mr-1"></i>Nenhuma ação registrada via app.</p>';
+      return;
+    }
+
+    const rows = dados.map(d => `
+      <tr>
+        <td class="text-nowrap">${_fmtDtHist(d.data)}</td>
+        <td><span class="hist-badge-posto">${_escHtml(d.posto)}</span></td>
+        <td>${_escHtml(d.usuario || '—')}</td>
+        <td>${_escHtml(d.descricao || '—')}</td>
+        <td class="hist-detalhe">${_escHtml(d.detalhe || '')}</td>
+      </tr>`).join('');
+
+    area.innerHTML = `
+      <div class="table-responsive">
+        <table class="table table-sm table-hover hist-table mb-0">
+          <thead class="thead-light">
+            <tr>
+              <th>Data/Hora</th>
+              <th>Posto</th>
+              <th>Usuário</th>
+              <th>Descrição</th>
+              <th>Detalhe</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch (e) {
+    area.innerHTML = `<div class="alert alert-danger">Erro ao carregar histórico: ${_escHtml(e.message)}</div>`;
+  }
+}
 </script>
 
 </body>
