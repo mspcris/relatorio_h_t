@@ -31,6 +31,7 @@ class User(Base):
     is_admin     = Column(Boolean, default=False, nullable=False)
     ativo        = Column(Boolean, default=True,  nullable=False)
     all_pages    = Column(Boolean, default=True,  nullable=False)
+    pode_desbloquear = Column(Boolean, default=False, nullable=False)
     reset_token  = Column(String(100), nullable=True)
     reset_expires = Column(DateTime, nullable=True)
 
@@ -181,6 +182,11 @@ def init_db():
     with engine.connect() as _conn:
         try:
             _conn.execute(text("ALTER TABLE users ADD COLUMN all_pages INTEGER NOT NULL DEFAULT 1"))
+            _conn.commit()
+        except Exception:
+            pass  # column already exists
+        try:
+            _conn.execute(text("ALTER TABLE users ADD COLUMN pode_desbloquear INTEGER NOT NULL DEFAULT 0"))
             _conn.commit()
         except Exception:
             pass  # column already exists

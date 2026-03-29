@@ -287,6 +287,11 @@
         <div class="card-body py-2 px-3">
           <div class="d-flex align-items-center flex-wrap" style="gap:10px">
             <span class="font-weight-bold" style="font-size:.85rem">Posto</span>
+            <div class="btn-group btn-group-sm mr-2" id="grupoButtons">
+              <button class="btn btn-outline-secondary active" id="btnGrupoTodos" type="button">Todos</button>
+              <button class="btn btn-outline-secondary" id="btnGrupoAltamiro" type="button">Altamiro</button>
+              <button class="btn btn-outline-secondary" id="btnGrupoCouto" type="button">Couto</button>
+            </div>
             <ul id="postoTabs" class="nav nav-pills posto-tabs mb-0 flex-grow-1"></ul>
             <div class="form-check form-check-inline ml-2 mb-0">
               <input class="form-check-input" type="checkbox" id="chkExpirados">
@@ -311,15 +316,24 @@
 </div><!-- /wrapper -->
 
 <script>
+  window.__PODE_DESBLOQUEAR = {{ USER_PODE_DESBLOQUEAR|default(false)|tojson }};
+</script>
+
+<script>
 (() => {
   'use strict';
 
   const JSON_URL = '/json_ctrlq_desbloqueio/CTRLQ_DESBLOQUEIO_CONSOLIDADO.json';
   const DIAS_VENCENDO = 7; // considera "vencendo" se expira em até N dias
 
+  const GRUPOS_POSTO = {
+    altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+    couto:    ['C', 'D', 'J', 'M', 'P'],
+  };
+
   let _dados  = {};   // { posto: [ ...registros ] }
   let _postos = [];
-  let _postoSel = 'TODOS';
+  let _postoSel = 'TODOS';  // 'TODOS' ou Set de postos selecionados
   let _mostrarExpirados = false;
 
   // ── Formatadores ──────────────────────────────────────────────────────────
@@ -641,6 +655,17 @@
           <div class="desb-periodo">
             <div>${fmtDate(rec.DataInicioExibicao)} → ${fmtDate(rec.DataFimExibicao)}${badgeDias(dias)}</div>
             ${audInfo}
+            ${window.__PODE_DESBLOQUEAR && dias !== null && dias >= 0 ? `
+            <div class="desb-acoes mt-2" style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-xs btn-outline-danger"
+                      onclick="window.__retirarDataFim(${rec.idEspecialidade}, '${esc(rec._posto)}', '${esc(rec.Especialidade || '')}')">
+                <i class="fas fa-times mr-1"></i>Retirar Data Fim
+              </button>
+              <button class="btn btn-xs btn-outline-warning"
+                      onclick="window.__prorrogarAgenda(${rec.idEspecialidade}, '${esc(rec._posto)}', '${esc(rec.Especialidade || '')}', '${rec.DataFimExibicao || ''}')">
+                <i class="fas fa-calendar-plus mr-1"></i>Prorrogar Agenda
+              </button>
+            </div>` : ''}
           </div>
         </div>
 
@@ -660,7 +685,7 @@
   // ── Render da lista ───────────────────────────────────────────────────────
 
   function getRegistros() {
-    const postos = _postoSel === 'TODOS' ? _postos : [_postoSel];
+    const postos = _selectedPostos();
     let all = [];
     for (const p of postos) {
       for (const r of (_dados[p] || [])) {
@@ -691,8 +716,9 @@
       return;
     }
 
-    // Agrupa por posto para mostrar separadores quando "Todos"
-    if (_postoSel === 'TODOS' && _postos.length > 1) {
+    // Agrupa por posto para mostrar separadores quando mais de 1 posto
+    const postosAtivos = _selectedPostos();
+    if (postosAtivos.length > 1) {
       const grupos = {};
       for (const r of regs) {
         if (!grupos[r._posto]) grupos[r._posto] = [];
@@ -713,28 +739,79 @@
 
   // ── Tabs de posto ─────────────────────────────────────────────────────────
 
+  function _selectedPostos() {
+    if (_postoSel === 'TODOS') return _postos;
+    if (_postoSel instanceof Set) return [..._postoSel];
+    return [_postoSel];
+  }
+
+  function _grupoAtivo() {
+    if (_postoSel === 'TODOS') return 'todos';
+    if (!(_postoSel instanceof Set)) return null;
+    const selArr = [..._postoSel].sort().join(',');
+    for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+      const intersec = lista.filter(p => _postos.includes(p)).sort().join(',');
+      if (intersec && selArr === intersec) return nome;
+    }
+    return null;
+  }
+
+  function selectGrupo(grupo) {
+    if (grupo === 'todos') {
+      _postoSel = 'TODOS';
+    } else {
+      const intersec = GRUPOS_POSTO[grupo].filter(p => _postos.includes(p));
+      _postoSel = new Set(intersec);
+    }
+    buildPostoTabs();
+    renderLista();
+  }
+
   function buildPostoTabs() {
     const ul = document.getElementById('postoTabs');
     ul.innerHTML = '';
 
-    const mkTab = (label, posto, count) => {
-      const li = document.createElement('li'); li.className = 'nav-item';
-      const a  = document.createElement('a');
-      a.href = '#';
-      a.className = 'nav-link' + (posto === _postoSel ? ' active' : '');
-      a.dataset.posto = posto;
-      a.innerHTML = label + (count != null ? `<span class="badge-posto-count">${count}</span>` : '');
-      a.onclick = e => { e.preventDefault(); _postoSel = posto; buildPostoTabs(); renderLista(); };
-      li.appendChild(a); ul.appendChild(li);
-    };
+    // Atualiza botões de grupo
+    const ativo = _grupoAtivo();
+    document.getElementById('btnGrupoTodos').classList.toggle('active', ativo === 'todos');
+    document.getElementById('btnGrupoAltamiro').classList.toggle('active', ativo === 'altamiro');
+    document.getElementById('btnGrupoCouto').classList.toggle('active', ativo === 'couto');
 
-    const totalAtivos = Object.values(_dados)
-      .flat().filter(r => diasParaExpirar(r.DataFimExibicao) >= 0).length;
-    mkTab('Todos', 'TODOS', totalAtivos);
+    const isSelected = p => {
+      if (_postoSel === 'TODOS') return true;
+      if (_postoSel instanceof Set) return _postoSel.has(p);
+      return _postoSel === p;
+    };
 
     for (const p of _postos) {
       const regs = (_dados[p] || []).filter(r => _mostrarExpirados || diasParaExpirar(r.DataFimExibicao) >= 0);
-      mkTab(p, p, regs.length);
+      const li = document.createElement('li'); li.className = 'nav-item';
+      const a  = document.createElement('a');
+      a.href = '#';
+      a.className = 'nav-link' + (isSelected(p) ? ' active' : '');
+      a.dataset.posto = p;
+      a.innerHTML = p + `<span class="badge-posto-count">${regs.length}</span>`;
+      a.onclick = e => {
+        e.preventDefault();
+        if (_postoSel === 'TODOS') {
+          // De "todos" para individual
+          _postoSel = new Set([p]);
+        } else if (_postoSel instanceof Set) {
+          if (_postoSel.has(p)) {
+            _postoSel.delete(p);
+            if (_postoSel.size === 0) _postoSel = 'TODOS';
+          } else {
+            _postoSel.add(p);
+          }
+          // Se todos selecionados, volta para TODOS
+          if (_postoSel instanceof Set && _postoSel.size === _postos.length) _postoSel = 'TODOS';
+        } else {
+          _postoSel = new Set([p]);
+        }
+        buildPostoTabs();
+        renderLista();
+      };
+      li.appendChild(a); ul.appendChild(li);
     }
   }
 
@@ -767,6 +844,11 @@
     }
   }
 
+  // ── Botões de grupo ────────────────────────────────────────────────────
+  document.getElementById('btnGrupoTodos').onclick = () => selectGrupo('todos');
+  document.getElementById('btnGrupoAltamiro').onclick = () => selectGrupo('altamiro');
+  document.getElementById('btnGrupoCouto').onclick = () => selectGrupo('couto');
+
   // ── Checkbox expirados ────────────────────────────────────────────────────
   document.getElementById('chkExpirados').addEventListener('change', function() {
     _mostrarExpirados = this.checked;
@@ -776,6 +858,64 @@
 
   load();
 })();
+
+// ── Ações de desbloqueio (fora da IIFE para ser acessível via window) ────
+
+window.__retirarDataFim = async function(idEsp, posto, esp) {
+  if (!confirm(`Confirma RETIRAR DATA FIM da especialidade ${esp} (posto ${posto})?`)) return;
+  try {
+    const r = await fetch('/api/ctrlq/retirar_data_fim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idEspecialidade: idEsp, posto: posto }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      alert('Data fim removida com sucesso! A página será recarregada.');
+      location.reload();
+    } else {
+      alert('Erro: ' + (data.erro || 'Falha desconhecida'));
+    }
+  } catch (e) {
+    alert('Erro de conexão: ' + e.message);
+  }
+};
+
+window.__prorrogarAgenda = async function(idEsp, posto, esp, dataAtual) {
+  const amanha = new Date();
+  amanha.setDate(amanha.getDate() + 1);
+  const minDate = amanha.toISOString().split('T')[0];
+
+  const nova = prompt(
+    `Prorrogar agenda da especialidade ${esp} (posto ${posto}).\n` +
+    `Data atual: ${dataAtual ? new Date(dataAtual).toLocaleDateString('pt-BR') : '—'}\n\n` +
+    `Nova data (formato AAAA-MM-DD, mínimo ${minDate}):`,
+    minDate
+  );
+  if (!nova) return;
+
+  if (nova < minDate) {
+    alert(`A data deve ser igual ou posterior a ${minDate}.`);
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/ctrlq/prorrogar_agenda', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idEspecialidade: idEsp, posto: posto, nova_data: nova }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      alert('Agenda prorrogada com sucesso! A página será recarregada.');
+      location.reload();
+    } else {
+      alert('Erro: ' + (data.erro || 'Falha desconhecida'));
+    }
+  } catch (e) {
+    alert('Erro de conexão: ' + e.message);
+  }
+};
 </script>
 
 </body>

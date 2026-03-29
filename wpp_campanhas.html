@@ -119,6 +119,7 @@
                 <th>Regra (dias)</th>
                 <th>Template</th>
                 <th>Intervalo</th>
+                <th>Dias</th>
                 <th>Enviados</th>
                 <th>Não enviados</th>
                 <th>Status</th>
@@ -144,6 +145,10 @@
               </td>
               <td><small>{{ c.template }}</small></td>
               <td>{{ c.intervalo_dias }}d</td>
+              <td>
+                {% set dm = {'0':'S','1':'T','2':'Q','3':'Q','4':'S','5':'Sá','6':'D'} %}
+                <small>{%- for d in (c.dias_semana or '0,1,2,3,4').split(',') %}{{ dm.get(d|trim, '?') }}{% if not loop.last %} {% endif %}{% endfor -%}</small>
+              </td>
               <td><span class="badge badge-success">{{ c.resumo.enviados }}</span></td>
               <td><span class="badge badge-warning text-dark">{{ c.resumo.nao_enviados }}</span></td>
               <td>

@@ -450,7 +450,7 @@ def _sidebar_filter_script(paginas: list) -> str:
     )
 
 
-def render_protected_page(page_name):
+def render_protected_page(page_name, **extra_vars):
     from auth_db import SessionLocal, get_user_by_email as _gue
     email, postos = decode_user()
     if not email:
@@ -480,6 +480,7 @@ def render_protected_page(page_name):
         USER_EMAIL=email,
         USER_POSTOS=json.dumps(postos),
         USER_IS_ADMIN=is_admin,
+        **extra_vars,
     )
     if not all_pages:
         html = html.replace('</body>', _sidebar_filter_script(paginas))
@@ -516,7 +517,184 @@ def r_chat_avaliacoes():
 
 @app.get('/ctrlq_desbloqueio')
 def r_ctrlq_desbloqueio():
-    return render_protected_page("ctrlq_desbloqueio.html")
+    from auth_db import SessionLocal, get_user_by_email as _gue
+    email, _ = decode_user()
+    pode = False
+    if email:
+        db = SessionLocal()
+        try:
+            u = _gue(db, email)
+            pode = bool(getattr(u, 'pode_desbloquear', False)) if u else False
+        finally:
+            db.close()
+    return render_protected_page("ctrlq_desbloqueio.html",
+                                 USER_PODE_DESBLOQUEAR=pode)
+
+
+# ── API: ações de desbloqueio de agenda ──────────────────────────────────────
+
+def _require_pode_desbloquear():
+    """Retorna (user, email) se o usuário autenticado pode desbloquear, senão None."""
+    from auth_db import SessionLocal, get_user_by_email as _gue
+    email, _ = decode_user()
+    if not email:
+        return None
+    db = SessionLocal()
+    try:
+        u = _gue(db, email)
+        if u and getattr(u, 'pode_desbloquear', False):
+            return u, email
+    finally:
+        db.close()
+    return None
+
+
+def _get_sqlserver_engine(posto):
+    """Retorna SQLAlchemy engine para o SQL Server do posto."""
+    from ctrlq_desbloqueio import build_conns_from_env, make_engine
+    conns = build_conns_from_env([posto])
+    conn_str = conns.get(posto)
+    if not conn_str:
+        return None
+    return make_engine(conn_str)
+
+
+@app.post('/api/ctrlq/retirar_data_fim')
+def api_retirar_data_fim():
+    auth = _require_pode_desbloquear()
+    if not auth:
+        return jsonify({"erro": "Não autorizado"}), 403
+    user, email = auth
+
+    data = request.get_json(silent=True) or {}
+    id_esp = data.get("idEspecialidade")
+    posto = data.get("posto", "").upper()
+    if not id_esp or not posto:
+        return jsonify({"erro": "Parâmetros obrigatórios: idEspecialidade, posto"}), 400
+
+    engine = _get_sqlserver_engine(posto)
+    if not engine:
+        return jsonify({"erro": f"Conexão do posto {posto} não configurada"}), 500
+
+    from sqlalchemy import text as sa_text
+    try:
+        with engine.begin() as conn:
+            # Busca valor atual + especialidade para auditoria
+            row = conn.execute(sa_text(
+                "SELECT ce.DataFimExibicao, ce.Especialidade "
+                "FROM cad_especialidade ce WHERE ce.idEspecialidade = :id"
+            ), {"id": id_esp}).fetchone()
+            if not row:
+                return jsonify({"erro": "Registro não encontrado"}), 404
+
+            valor_antigo = str(row[0]) if row[0] else "NULL"
+            especialidade = row[1] or ""
+
+            # UPDATE: remove data fim
+            conn.execute(sa_text(
+                "UPDATE cad_especialidade SET DataFimExibicao = NULL WHERE idEspecialidade = :id"
+            ), {"id": id_esp})
+
+            # INSERT auditoria em Sis_Historico (mesmo padrão do ERP)
+            nome_usuario = user.nome or email
+            descricao = (
+                f"https://teste-ia.camim.com.br/ctrlq_desbloqueio - "
+                f"Alteração da Especialidade {especialidade} - "
+                f"Limpou data fim de exibição - Usuário {nome_usuario}"
+            )
+            conn.execute(sa_text("""
+                INSERT INTO Sis_Historico
+                    (Tabela, id, Comando, Formulário, [Descrição], Detalhe,
+                     Computador, [Data], [Usuário], CFUsuario)
+                VALUES
+                    ('Cad_Especialidade', :id_esp, 'Edição', 'Quadro de especialidade',
+                     :descricao, :detalhe, 'teste-ia.camim.com.br', GETDATE(), :usuario, :cf)
+            """), {
+                "id_esp": id_esp,
+                "descricao": descricao,
+                "detalhe": f"DataFimExibicao: {valor_antigo} → NULL",
+                "usuario": nome_usuario,
+                "cf": posto,
+            })
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+
+@app.post('/api/ctrlq/prorrogar_agenda')
+def api_prorrogar_agenda():
+    auth = _require_pode_desbloquear()
+    if not auth:
+        return jsonify({"erro": "Não autorizado"}), 403
+    user, email = auth
+
+    data = request.get_json(silent=True) or {}
+    id_esp = data.get("idEspecialidade")
+    posto = data.get("posto", "").upper()
+    nova_data = data.get("nova_data", "")
+    if not id_esp or not posto or not nova_data:
+        return jsonify({"erro": "Parâmetros obrigatórios: idEspecialidade, posto, nova_data"}), 400
+
+    from datetime import datetime, timedelta
+    try:
+        dt = datetime.strptime(nova_data, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"erro": "Formato de data inválido (esperado YYYY-MM-DD)"}), 400
+
+    amanha = (datetime.now().date() + timedelta(days=1))
+    if dt < amanha:
+        return jsonify({"erro": f"A data deve ser igual ou posterior a {amanha.isoformat()}"}), 400
+
+    engine = _get_sqlserver_engine(posto)
+    if not engine:
+        return jsonify({"erro": f"Conexão do posto {posto} não configurada"}), 500
+
+    from sqlalchemy import text as sa_text
+    try:
+        with engine.begin() as conn:
+            # Busca valor atual + especialidade para auditoria
+            row = conn.execute(sa_text(
+                "SELECT ce.DataFimExibicao, ce.Especialidade "
+                "FROM cad_especialidade ce WHERE ce.idEspecialidade = :id"
+            ), {"id": id_esp}).fetchone()
+            if not row:
+                return jsonify({"erro": "Registro não encontrado"}), 404
+
+            valor_antigo = str(row[0]) if row[0] else "NULL"
+            especialidade = row[1] or ""
+
+            # UPDATE: prorrogar data fim
+            conn.execute(sa_text(
+                "UPDATE cad_especialidade SET DataFimExibicao = :nova WHERE idEspecialidade = :id"
+            ), {"nova": nova_data, "id": id_esp})
+
+            # INSERT auditoria em Sis_Historico (mesmo padrão do ERP)
+            nome_usuario = user.nome or email
+            descricao = (
+                f"https://teste-ia.camim.com.br/ctrlq_desbloqueio - "
+                f"Alteração da Especialidade {especialidade} - "
+                f"Prorrogou data fim de exibição para {nova_data} - Usuário {nome_usuario}"
+            )
+            conn.execute(sa_text("""
+                INSERT INTO Sis_Historico
+                    (Tabela, id, Comando, Formulário, [Descrição], Detalhe,
+                     Computador, [Data], [Usuário], CFUsuario)
+                VALUES
+                    ('Cad_Especialidade', :id_esp, 'Edição', 'Quadro de especialidade',
+                     :descricao, :detalhe, 'teste-ia.camim.com.br', GETDATE(), :usuario, :cf)
+            """), {
+                "id_esp": id_esp,
+                "descricao": descricao,
+                "detalhe": f"DataFimExibicao: {valor_antigo} → {nova_data}",
+                "usuario": nome_usuario,
+                "cf": posto,
+            })
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
 
 @app.get('/qualidade_agenda')
 def r_qualidade_agenda():

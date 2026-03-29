@@ -541,6 +541,7 @@ def admin_lista():
                 "ativo":         u.ativo,
                 "postos":        u.lista_postos(),
                 "all_pages":     u.all_pages if hasattr(u, 'all_pages') else True,
+                "pode_desbloquear": getattr(u, 'pode_desbloquear', False),
                 "paginas":       u.lista_paginas() if hasattr(u, 'lista_paginas') else [],
                 "ultimo_login":  last.created_at.isoformat() if last else None,
                 "ultimo_login_ip": last.ip if last else None,
@@ -572,6 +573,7 @@ def admin_criar():
         for posto in d.get("postos", []):
             db.add(UserPosto(user_id=user.id, posto=posto.upper()))
         user.all_pages = bool(d.get("all_pages", False))  # new users start restricted by default
+        user.pode_desbloquear = bool(d.get("pode_desbloquear", False))
         from auth_db import UserPagePermission
         for key in d.get("paginas", []):
             db.add(UserPagePermission(user_id=user.id, page_key=key))
@@ -606,6 +608,8 @@ def admin_editar(uid: int):
                 db.add(UserPosto(user_id=user.id, posto=posto.upper()))
         if "all_pages" in d:
             user.all_pages = bool(d["all_pages"])
+        if "pode_desbloquear" in d:
+            user.pode_desbloquear = bool(d["pode_desbloquear"])
         if "paginas" in d:
             from auth_db import UserPagePermission
             db.query(UserPagePermission).filter_by(user_id=user.id).delete(synchronize_session="fetch")

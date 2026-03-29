@@ -124,7 +124,7 @@
                 <input type="hidden" name="enviar_chat" value="0">
                 <input type="checkbox" class="custom-control-input" id="enviar_chat"
                        name="enviar_chat" value="1"
-                       {{ 'checked' if not campanha or campanha.enviar_chat }}>
+                       {% if not campanha or campanha.get('enviar_chat', 1) %}checked{% endif %}>
                 <label class="custom-control-label" for="enviar_chat">
                   <i class="fas fa-comments mr-1 text-info"></i> Enviar via Chat
                 </label>
@@ -133,7 +133,7 @@
                 <input type="hidden" name="enviar_meta" value="0">
                 <input type="checkbox" class="custom-control-input" id="enviar_meta"
                        name="enviar_meta" value="1"
-                       {{ 'checked' if campanha and campanha.enviar_meta }}>
+                       {% if campanha and campanha.get('enviar_meta', 0) %}checked{% endif %}>
                 <label class="custom-control-label" for="enviar_meta">
                   <i class="fab fa-whatsapp mr-1 text-success"></i> Enviar via Meta API
                 </label>

@@ -270,6 +270,12 @@
               <label class="custom-control-label" for="f-ativo">Ativo</label>
             </div>
           </div>
+          <div class="form-group col-md-3 d-flex align-items-end">
+            <div class="custom-control custom-switch mb-2">
+              <input type="checkbox" class="custom-control-input" id="f-pode-desbloquear">
+              <label class="custom-control-label" for="f-pode-desbloquear">Pode Desbloquear</label>
+            </div>
+          </div>
         </div>
 
         <div class="form-group">
@@ -444,6 +450,7 @@ function abrirModalNovo() {
   document.getElementById('f-senha').value  = '';
   document.getElementById('f-admin').checked = false;
   document.getElementById('f-ativo').checked = true;
+  document.getElementById('f-pode-desbloquear').checked = false;
   document.getElementById('f-email').disabled = false;
   document.getElementById('modal-erro').textContent = '';
   document.querySelectorAll('.posto-cb').forEach(cb => cb.checked = false);
@@ -464,6 +471,7 @@ function editar(id) {
   document.getElementById('f-senha').value   = '';
   document.getElementById('f-admin').checked = u.is_admin;
   document.getElementById('f-ativo').checked = u.ativo;
+  document.getElementById('f-pode-desbloquear').checked = !!u.pode_desbloquear;
   document.getElementById('f-email').disabled = true;
   document.getElementById('modal-erro').textContent = '';
   document.querySelectorAll('.posto-cb').forEach(cb => {
@@ -500,8 +508,9 @@ async function salvar() {
   if (!uid && senha.length < 8) { erroEl.textContent = 'Senha mínima de 8 caracteres para novos usuários.'; return; }
 
   const allPages = document.getElementById('f-all-pages').checked;
+  const podeDesbloquear = document.getElementById('f-pode-desbloquear').checked;
   const paginas = allPages ? [] : [...document.querySelectorAll('.pagina-cb:checked')].map(cb => cb.value);
-  const payload = { nome, is_admin: admin, ativo, postos, all_pages: allPages, paginas };
+  const payload = { nome, is_admin: admin, ativo, postos, all_pages: allPages, pode_desbloquear: podeDesbloquear, paginas };
   if (!uid) payload.email = email;
   if (senha) payload.senha = senha;
 
