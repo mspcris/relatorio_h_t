@@ -222,6 +222,7 @@ jobs:
             -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
             --include='*/' \
             --include='*.py' \
+            --include='*.sh' \
             --include='requirements*.txt' \
             --exclude='analyze_groq.py' \
             --exclude='/css/***' \
@@ -380,6 +381,21 @@ jobs:
             . /opt/relatorio_h_t/.venv/bin/activate
             python -V
             pip -V
+          "
+
+      # ================================================================
+      # 8B) Limpar HTMLs que não devem existir em /opt/relatorio_h_t
+      # (sync_www.sh usava esses arquivos para sobrescrever /opt/camim-auth/templates)
+      # ================================================================
+      - name: Limpar HTMLs antigos de /opt/relatorio_h_t
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+            rm -f /opt/relatorio_h_t/kpi_notas_rps.html
+            echo 'HTMLs antigos removidos de /opt/relatorio_h_t'
           "
 
       # ================================================================
