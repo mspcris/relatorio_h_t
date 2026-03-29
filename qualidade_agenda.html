@@ -159,9 +159,9 @@
         .posto-tabs-inline .nav-link:hover:not(.active) { background: #e8edf3; }
 
         /* ── Heat map ── */
-        .hm-wrap { overflow-x: auto; }
+        .hm-wrap { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 280px); }
         .hm-table { border-collapse: collapse; font-size: 0.82rem; min-width: 100%; }
-        .hm-table th { background: #1a2940; color: #b8d9f7; font-weight: 600; padding: 8px 10px; text-align: center; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+        .hm-table th { background: #1a2940; color: #b8d9f7; font-weight: 600; padding: 8px 10px; text-align: center; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
         .hm-table td { border: 1px solid #e8ecf0; vertical-align: middle; }
         .hm-table tr:hover td { filter: brightness(0.96); }
         .hm-esp { background: #f0f4f8; font-weight: 600; font-size: 0.8rem; padding: 7px 10px; white-space: nowrap; min-width: 160px; color: #2d3748; }
@@ -587,16 +587,21 @@ let chartDist       = null;
 function el(id) { return document.getElementById(id); }
 
 function getPermittedPostos() {
+    // Tabs: todos os postos com dados no JSON, na ordem definida
+    return POSTOS_ORDEM.filter(p => allPostos.includes(p));
+}
+
+function getAllowedPostos() {
+    // Permissão real do usuário (filtra dados)
     const allowed = Array.isArray(USER_POSTOS_FROM_SERVER) && USER_POSTOS_FROM_SERVER.length
         ? USER_POSTOS_FROM_SERVER : null;
-    if (!allowed) return POSTOS_ORDEM.filter(p => allPostos.includes(p));
-    return POSTOS_ORDEM.filter(p => allowed.includes(p) && allPostos.includes(p));
+    return allowed ? POSTOS_ORDEM.filter(p => allowed.includes(p)) : getPermittedPostos();
 }
 
 function getSelectedPostos() {
-    const permitted = getPermittedPostos();
-    if (selectedPostos.length === 0) return permitted;
-    return selectedPostos.filter(p => permitted.includes(p));
+    const allowed = getAllowedPostos();
+    if (selectedPostos.length === 0) return allowed;
+    return selectedPostos.filter(p => allowed.includes(p));
 }
 
 function getFilteredData() {
@@ -712,13 +717,13 @@ function togglePosto(posto, el_a) {
 }
 
 function setGrupo(grupo) {
-    const permitted = getPermittedPostos();
+    const allowed = getAllowedPostos();
     if (grupo === 'todos') {
         selectedPostos = [];
     } else if (grupo === 'altamiro') {
-        selectedPostos = GROUP_ALTAMIRO.filter(p => permitted.includes(p));
+        selectedPostos = GROUP_ALTAMIRO.filter(p => allowed.includes(p));
     } else if (grupo === 'couto') {
-        selectedPostos = GROUP_COUTO.filter(p => permitted.includes(p));
+        selectedPostos = GROUP_COUTO.filter(p => allowed.includes(p));
     }
     updatePostoButtons();
     renderAll();
@@ -727,9 +732,9 @@ function setGrupo(grupo) {
 function updatePostoButtons() {
     // Group buttons
     const sp = selectedPostos;
-    const permitted = getPermittedPostos();
-    const altOk = GROUP_ALTAMIRO.filter(p => permitted.includes(p));
-    const coutoOk = GROUP_COUTO.filter(p => permitted.includes(p));
+    const allowed = getAllowedPostos();
+    const altOk = GROUP_ALTAMIRO.filter(p => allowed.includes(p));
+    const coutoOk = GROUP_COUTO.filter(p => allowed.includes(p));
 
     el('btnGrupoTodos').classList.toggle('active', sp.length === 0);
     el('btnGrupoAltamiro').classList.toggle('active',
