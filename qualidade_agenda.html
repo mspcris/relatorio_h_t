@@ -179,7 +179,7 @@
         .hm-table { border-collapse: separate; border-spacing: 0; font-size: 0.82rem; width: 100%; }
         .hm-table th { background: #1a2940; color: #b8d9f7; font-weight: 600; padding: 8px 10px; text-align: center; white-space: nowrap; }
         /* Floating sticky header clone */
-        .hm-sticky-header { position: fixed; top: 0; z-index: 300; background: #1a2940; overflow: hidden; display: none; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+        .hm-sticky-header { position: fixed; z-index: 190; background: #1a2940; overflow: hidden; display: none; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
         .hm-sticky-header table { border-collapse: separate; border-spacing: 0; font-size: 0.82rem; }
         .hm-sticky-header th { background: #1a2940; color: #b8d9f7; font-weight: 600; padding: 8px 10px; text-align: center; white-space: nowrap; }
         .hm-table td { border: 1px solid #e8ecf0; vertical-align: middle; }
@@ -964,11 +964,15 @@ function setupStickyHeatmapHeader() {
     }
 
     function onScroll() {
+        const filterBar = document.querySelector('.posto-filter-card');
+        const filterBottom = filterBar ? filterBar.getBoundingClientRect().bottom : 0;
+        const topOffset = Math.max(filterBottom, 0);
         const rect = table.getBoundingClientRect();
         const theadH = thead.offsetHeight;
-        // Show clone when original header is above viewport but table bottom is still below
-        if (rect.top < 0 && rect.bottom > theadH) {
+        // Show clone when original header scrolls above the filter bar
+        if (rect.top < topOffset && rect.bottom > topOffset + theadH) {
             syncWidths();
+            wrap.style.top = topOffset + 'px';
             wrap.style.left = rect.left + 'px';
             wrap.style.width = table.parentElement.offsetWidth + 'px';
             wrap.style.display = 'block';
