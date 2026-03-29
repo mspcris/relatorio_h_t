@@ -224,6 +224,11 @@ def init_db():
             _conn.commit()
         except Exception:
             pass
+        try:
+            _conn.execute(text("ALTER TABLE historico_desbloqueio ADD COLUMN snapshot TEXT"))
+            _conn.commit()
+        except Exception:
+            pass
     db = SessionLocal()
     try:
         # KPIs conhecidos
