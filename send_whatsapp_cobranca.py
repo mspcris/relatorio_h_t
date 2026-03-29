@@ -228,18 +228,15 @@ def fmt_venc(v) -> str:
 # Envio via API
 # ---------------------------------------------------------------------------
 
-def enviar(telefone: str, nome: str, template: str, params: dict,
-           dry_run: bool, queue_id: str | None = None,
-           from_user_id: str | None = None) -> tuple[str, str | None]:
-    if dry_run:
-        return "dry_run", None
-
+def enviar_via_chat(telefone: str, nome: str, template: str, params: dict,
+                    queue_id: str | None = None,
+                    from_user_id: str | None = None) -> tuple[str, str | None]:
+    """Envia webhook simulado para a plataforma de chat (cria ticket + conversa)."""
     hash_id  = uuid.uuid4().hex[:24]
     texto    = _expandir_template(template, params)
     ts       = datetime.now().astimezone().isoformat(timespec="seconds")
     fila_id  = queue_id or CHAT_QUEUE_ID
     remetente = from_user_id or CHAT_FROM
-    # Garante prefixo "chat:" exigido pela API (evita ticket sem usuário/fila)
     if remetente and not remetente.startswith("chat:"):
         remetente = "chat:" + remetente
 
@@ -273,11 +270,79 @@ def enviar(telefone: str, nome: str, template: str, params: dict,
             timeout=15,
         )
         r.raise_for_status()
-        return "accepted", hash_id
+        return "accepted_chat", hash_id
     except requests.HTTPError as e:
-        return f"erro:HTTP {e.response.status_code}", None
+        return f"erro_chat:HTTP {e.response.status_code}", None
     except Exception as e:
-        return f"erro:{str(e)[:100]}", None
+        return f"erro_chat:{str(e)[:100]}", None
+
+
+def enviar_via_meta(telefone: str, template: str, params: dict) -> tuple[str, str | None]:
+    """Envia template diretamente pela API Meta/WhatsApp Business."""
+    # Monta o body no formato esperado pela API: {BODY: {param1: val1, ...}}
+    payload = {
+        "template": template,
+        "people": [{
+            "phone": telefone,
+            "data": {
+                "BODY": params,
+            },
+        }],
+    }
+    try:
+        r = requests.post(
+            f"{WPP_API_URL}/templates/send",
+            headers={"Authorization": f"Bearer {WPP_TOKEN}"},
+            json=payload,
+            timeout=15,
+        )
+        r.raise_for_status()
+        data = r.json()
+        wamid = data.get("id") or data.get("wamid")
+        return "accepted_meta", wamid
+    except requests.HTTPError as e:
+        body = ""
+        try:
+            body = e.response.text[:150]
+        except Exception:
+            pass
+        return f"erro_meta:HTTP {e.response.status_code} {body}", None
+    except Exception as e:
+        return f"erro_meta:{str(e)[:100]}", None
+
+
+def enviar(telefone: str, nome: str, template: str, params: dict,
+           dry_run: bool, queue_id: str | None = None,
+           from_user_id: str | None = None,
+           usar_chat: bool = True,
+           usar_meta: bool = False) -> tuple[str, str | None]:
+    if dry_run:
+        return "dry_run", None
+
+    status_final = None
+    wamid_final = None
+
+    if usar_chat:
+        s, w = enviar_via_chat(telefone, nome, template, params,
+                               queue_id=queue_id, from_user_id=from_user_id)
+        status_final = s
+        wamid_final = w
+        if "erro" in s:
+            log.warning("  enviar_via_chat falhou: %s", s)
+
+    if usar_meta:
+        s, w = enviar_via_meta(telefone, template, params)
+        if wamid_final is None:
+            wamid_final = w
+        # Meta tem prioridade no status final
+        if "erro" not in s:
+            status_final = s if not status_final or "erro" in status_final else "accepted"
+        else:
+            log.warning("  enviar_via_meta falhou: %s", s)
+            if status_final is None:
+                status_final = s
+
+    return status_final or "erro:nenhum_canal", wamid_final
 
 
 def montar_params_template(template_name: str, fatura: dict) -> dict:
@@ -331,6 +396,8 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
     postos       = campanha.get("postos") or []
     queue_id     = campanha.get("queue_id") or None
     from_user_id = campanha.get("from_user_id") or None
+    usar_chat    = bool(campanha.get("enviar_chat", 1))
+    usar_meta    = bool(campanha.get("enviar_meta", 0))
 
     if not postos:
         log.warning(f"  [{campanha['nome']}] Nenhum posto configurado.")
@@ -401,7 +468,8 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
             params = montar_params_template(template, fatura)
             nome_cliente = str(fatura.get("nome") or "")
             status, wamid = enviar(telefone, nome_cliente, template, params, dry_run,
-                                   queue_id=queue_id, from_user_id=from_user_id)
+                                   queue_id=queue_id, from_user_id=from_user_id,
+                                   usar_chat=usar_chat, usar_meta=usar_meta)
             telefones_rodada.add(telefone)
 
             nivel = logging.INFO if "erro" not in status else logging.WARNING

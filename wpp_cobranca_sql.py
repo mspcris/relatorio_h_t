@@ -372,6 +372,69 @@ def _contar_preview_clientes_sqlite(campanha: dict) -> dict:
     }
 
 
+def listar_preview(campanha: dict, page: int = 1, per_page: int = 10) -> dict:
+    """Retorna registros paginados do cache SQLite conforme filtros da campanha."""
+    postos = campanha.get("postos") or []
+    m = modo_envio(campanha)
+
+    if m == MODO_CLIENTES:
+        where, params = _build_where_clientes_sqlite(campanha)
+    else:
+        where, params = build_where(campanha)
+
+    conn = _get_sqlite_conn()
+    try:
+        # Monta filtro de postos
+        ph_postos = ",".join("?" * len(postos))
+        full_where = f"posto IN ({ph_postos}) AND {where}"
+        full_params = postos + params
+
+        # Total
+        count_sql = f"SELECT COUNT(*) FROM cache_clientes WHERE {full_where}"
+        total = conn.execute(count_sql, full_params).fetchone()[0]
+
+        # Registros paginados
+        offset = (page - 1) * per_page
+        data_sql = (
+            "SELECT matricula, nomecadastro, telefone_efetivo, posto, "
+            "       dataadmissao, situacao_efetiva, tipo_cliente, "
+            "       titular_dependente, plano, idade, bairro, cobradornome "
+            f"FROM cache_clientes WHERE {full_where} "
+            "ORDER BY nomecadastro "
+            f"LIMIT ? OFFSET ?"
+        )
+        rows = conn.execute(data_sql, full_params + [per_page, offset]).fetchall()
+
+        registros = []
+        for r in rows:
+            registros.append({
+                "matricula":           r[0],
+                "nome":                r[1],
+                "telefone":            r[2],
+                "posto":               r[3],
+                "data_admissao":       r[4],
+                "situacao":            r[5],
+                "tipo_cliente":        r[6],
+                "titular_dependente":  r[7],
+                "plano":              r[8],
+                "idade":              r[9],
+                "bairro":             r[10],
+                "cobrador":           r[11],
+            })
+
+        import math
+        total_pages = math.ceil(total / per_page) if per_page else 1
+        return {
+            "registros":    registros,
+            "total":        total,
+            "page":         page,
+            "per_page":     per_page,
+            "total_pages":  total_pages,
+        }
+    finally:
+        conn.close()
+
+
 def _env(key, default=""):
     v = os.getenv(key, default)
     return v.strip() if isinstance(v, str) else v

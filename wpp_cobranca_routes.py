@@ -19,8 +19,11 @@ Rotas:
 import os
 import sys
 import json
+import subprocess
+import threading
+import time
 import requests
-from flask import Blueprint, request, jsonify, render_template, redirect, url_for
+from flask import Blueprint, request, jsonify, render_template, redirect, url_for, Response
 
 # Importa db do diretório de ETL
 sys.path.insert(0, '/opt/relatorio_h_t')
@@ -125,6 +128,135 @@ def api_preview():
         return jsonify(resultado)
     except Exception as e:
         return jsonify({"error": str(e)[:200]}), 500
+
+
+@wpp_bp.post("/api/preview/registros")
+def api_preview_registros():
+    """Retorna registros paginados que se enquadram nos filtros da campanha."""
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    campanha = _form_to_dict(request.form)
+    if not campanha.get("postos"):
+        return jsonify({"error": "nenhum posto selecionado"}), 400
+    page = int(request.form.get("page", 1))
+    per_page = int(request.form.get("per_page", 10))
+    try:
+        resultado = sql_helper.listar_preview(campanha, page, per_page)
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"error": str(e)[:200]}), 500
+
+
+# ---------------------------------------------------------------------------
+# Cache refresh (SSE com progresso)
+# ---------------------------------------------------------------------------
+_cache_refresh_lock = threading.Lock()
+_cache_refresh_status = {
+    "running": False,
+    "pct": 0,
+    "msg": "",
+    "done": False,
+    "error": None,
+}
+
+
+def _run_cache_refresh():
+    """Executa wpp_cache_clientes.py --full em subprocess e parseia progresso."""
+    global _cache_refresh_status
+    _cache_refresh_status = {"running": True, "pct": 0, "msg": "Iniciando...", "done": False, "error": None}
+    try:
+        etl_dir = "/opt/relatorio_h_t"
+        script = os.path.join(etl_dir, "wpp_cache_clientes.py")
+        venv_python = os.path.join(etl_dir, ".venv", "bin", "python3")
+        python_bin = venv_python if os.path.isfile(venv_python) else sys.executable
+        proc = subprocess.Popen(
+            [python_bin, script, "--full"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            cwd="/opt/relatorio_h_t",
+        )
+        import re
+        pct_re = re.compile(r"Posto (\w+):.*\|\s*([\d.]+)%")
+        posto_re = re.compile(r"Posto (\w+): iniciando carga")
+        done_re = re.compile(r"Posto (\w+): CONCLUÍDO.*inseridos=(\d+)")
+        total_re = re.compile(r"tempo total")
+        postos_done = []
+
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+
+            m = pct_re.search(line)
+            if m:
+                _cache_refresh_status["pct"] = min(int(float(m.group(2))), 99)
+                _cache_refresh_status["msg"] = f"Posto {m.group(1)}: {m.group(2)}%"
+                continue
+
+            m = posto_re.search(line)
+            if m:
+                _cache_refresh_status["msg"] = f"Carregando posto {m.group(1)}..."
+                continue
+
+            m = done_re.search(line)
+            if m:
+                postos_done.append(m.group(1))
+                _cache_refresh_status["msg"] = f"Posto {m.group(1)} concluído ({m.group(2)} registros)"
+                continue
+
+            if total_re.search(line):
+                _cache_refresh_status["pct"] = 100
+                _cache_refresh_status["msg"] = f"Concluído! Postos: {', '.join(postos_done)}"
+
+        proc.wait()
+        if proc.returncode != 0:
+            _cache_refresh_status["error"] = f"Processo finalizou com código {proc.returncode}"
+        _cache_refresh_status["pct"] = 100
+        _cache_refresh_status["done"] = True
+        if not _cache_refresh_status.get("error"):
+            _cache_refresh_status["msg"] = _cache_refresh_status["msg"] or "Concluído!"
+    except Exception as e:
+        _cache_refresh_status["error"] = str(e)[:200]
+        _cache_refresh_status["done"] = True
+    finally:
+        _cache_refresh_status["running"] = False
+
+
+@wpp_bp.post("/api/cache-refresh")
+def api_cache_refresh_start():
+    """Inicia atualização do cache de clientes (SQL Server → SQLite)."""
+    email, is_admin = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+
+    if _cache_refresh_status["running"]:
+        return jsonify({"error": "Atualização já em andamento"}), 409
+
+    t = threading.Thread(target=_run_cache_refresh, daemon=True)
+    t.start()
+    return jsonify({"ok": True, "msg": "Atualização iniciada"})
+
+
+@wpp_bp.get("/api/cache-refresh/status")
+def api_cache_refresh_status():
+    """SSE stream com progresso da atualização do cache."""
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+
+    def generate():
+        while True:
+            data = json.dumps(_cache_refresh_status)
+            yield f"data: {data}\n\n"
+            if _cache_refresh_status.get("done") or not _cache_refresh_status.get("running"):
+                break
+            time.sleep(1)
+
+    return Response(generate(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @wpp_bp.get("/api/indicadores")
@@ -565,6 +697,8 @@ def _form_to_dict(form) -> dict:
         "origem":             form.get("origem") or None,
         "pagador_atrasado":   form.get("pagador_atrasado") == "1",
         "from_user_id":       form.get("from_user_id") or "cmg8cum8g0519jbbm6r9l93f7",
+        "enviar_chat":        form.get("enviar_chat") == "1",
+        "enviar_meta":        form.get("enviar_meta") == "1",
     }
 
 

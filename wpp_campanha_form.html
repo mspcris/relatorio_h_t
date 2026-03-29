@@ -117,6 +117,30 @@
             </div>
           </div>
 
+          <!-- Canal de envio -->
+          <div class="row mt-2">
+            <div class="col-md-6 d-flex align-items-center" style="gap:1.5rem">
+              <div class="custom-control custom-switch">
+                <input type="hidden" name="enviar_chat" value="0">
+                <input type="checkbox" class="custom-control-input" id="enviar_chat"
+                       name="enviar_chat" value="1"
+                       {{ 'checked' if not campanha or campanha.enviar_chat }}>
+                <label class="custom-control-label" for="enviar_chat">
+                  <i class="fas fa-comments mr-1 text-info"></i> Enviar via Chat
+                </label>
+              </div>
+              <div class="custom-control custom-switch">
+                <input type="hidden" name="enviar_meta" value="0">
+                <input type="checkbox" class="custom-control-input" id="enviar_meta"
+                       name="enviar_meta" value="1"
+                       {{ 'checked' if campanha and campanha.enviar_meta }}>
+                <label class="custom-control-label" for="enviar_meta">
+                  <i class="fab fa-whatsapp mr-1 text-success"></i> Enviar via Meta API
+                </label>
+              </div>
+            </div>
+          </div>
+
           <!-- ID da Fila WhatsApp -->
           <div class="row mt-2">
             <div class="col-md-6">
@@ -433,17 +457,69 @@
       </div>
 
       <!-- ── PRÉ-VISUALIZAÇÃO ─────────────────────────────────────── -->
-      <div class="mb-3">
+      <div class="mb-3 d-flex align-items-center flex-wrap" style="gap:.5rem">
+        <button type="button" id="btn-cache-refresh" class="btn btn-outline-warning"
+                onclick="atualizarCache()" title="Atualiza o cache local com dados do SQL Server">
+          <i class="fas fa-sync-alt mr-1"></i> Atualizar base
+        </button>
         <button type="button" id="btn-preview" class="btn btn-outline-info"
                 onclick="preVisualizarRegistros()">
           <i class="fas fa-search mr-1"></i> Pré-visualizar registros
         </button>
-        <small class="text-muted ml-2">Quantos clientes se enquadram nos filtros definidos?</small>
+        <small class="text-muted">Quantos clientes se enquadram nos filtros definidos?</small>
+      </div>
+      <!-- Barra de progresso do cache -->
+      <div id="cache-progress-box" class="mb-3" style="display:none">
+        <div class="d-flex align-items-center mb-1">
+          <small id="cache-progress-msg" class="text-muted flex-grow-1">Iniciando...</small>
+          <small id="cache-progress-pct" class="text-muted font-weight-bold">0%</small>
+        </div>
+        <div class="progress" style="height:20px">
+          <div id="cache-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-warning"
+               role="progressbar" style="width:0%"></div>
+        </div>
       </div>
       <div id="preview-result" class="preview-card card mb-3" style="display:none">
         <div class="card-body">
           <h6 class="text-info mb-2"><i class="fas fa-chart-bar mr-1"></i> Estimativa de Alcance</h6>
           <div id="preview-body"></div>
+        </div>
+      </div>
+
+      <!-- ── TABELA DE REGISTROS PAGINADA ──────────────────────── -->
+      <div id="preview-registros" class="card mb-3" style="display:none">
+        <div class="card-header d-flex justify-content-between align-items-center py-2">
+          <strong><i class="fas fa-list mr-1"></i> Registros encontrados</strong>
+          <small id="preview-reg-info" class="text-muted"></small>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm table-striped table-hover mb-0" style="font-size:.85rem">
+              <thead class="thead-light">
+                <tr>
+                  <th>Matrícula</th>
+                  <th>Nome</th>
+                  <th>Telefone</th>
+                  <th>Posto</th>
+                  <th>Admissão</th>
+                  <th>Situação</th>
+                  <th>Tipo</th>
+                  <th>Tit/Dep</th>
+                  <th>Idade</th>
+                </tr>
+              </thead>
+              <tbody id="preview-reg-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card-footer py-2 d-flex justify-content-between align-items-center">
+          <button type="button" id="btn-reg-prev" class="btn btn-sm btn-outline-secondary" onclick="regPaginar(-1)">
+            <i class="fas fa-chevron-left mr-1"></i> Anterior
+          </button>
+          <small id="preview-reg-pages" class="text-muted"></small>
+          <button type="button" id="btn-reg-next" class="btn btn-sm btn-outline-secondary" onclick="regPaginar(1)">
+            Próxima <i class="fas fa-chevron-right ml-1"></i>
+          </button>
         </div>
       </div>
 
@@ -856,6 +932,84 @@ function carregarTodasOpcoes() {
   }
 }
 
+// ── Atualizar cache ──────────────────────────────────────────────────────────
+async function atualizarCache() {
+  const btn = document.getElementById('btn-cache-refresh');
+  const box = document.getElementById('cache-progress-box');
+  const bar = document.getElementById('cache-progress-bar');
+  const msg = document.getElementById('cache-progress-msg');
+  const pct = document.getElementById('cache-progress-pct');
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Atualizando...';
+  box.style.display = 'block';
+  bar.style.width = '0%';
+  msg.textContent = 'Iniciando...';
+  pct.textContent = '0%';
+
+  try {
+    const r = await fetch('/wpp/api/cache-refresh', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) {
+      alert(d.error || 'Erro ao iniciar');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i> Atualizar base';
+      box.style.display = 'none';
+      return;
+    }
+
+    // SSE para acompanhar progresso
+    const es = new EventSource('/wpp/api/cache-refresh/status');
+    es.onmessage = (ev) => {
+      const s = JSON.parse(ev.data);
+      const p = s.pct || 0;
+      bar.style.width = p + '%';
+      pct.textContent = p + '%';
+      msg.textContent = s.msg || '';
+
+      if (s.error) {
+        bar.classList.remove('bg-warning');
+        bar.classList.add('bg-danger');
+        msg.textContent = 'Erro: ' + s.error;
+        es.close();
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i> Atualizar base';
+        return;
+      }
+
+      if (s.done || p >= 100) {
+        bar.classList.remove('bg-warning', 'progress-bar-animated');
+        bar.classList.add('bg-success');
+        bar.style.width = '100%';
+        pct.textContent = '100%';
+        es.close();
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i> Atualizar base';
+        setTimeout(() => {
+          box.style.display = 'none';
+          bar.classList.remove('bg-success');
+          bar.classList.add('bg-warning', 'progress-bar-animated');
+        }, 5000);
+      }
+    };
+    es.onerror = () => {
+      es.close();
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i> Atualizar base';
+      if (bar.style.width !== '100%') {
+        msg.textContent = 'Conexão perdida — verifique o status manualmente.';
+        bar.classList.remove('bg-warning');
+        bar.classList.add('bg-danger');
+      }
+    };
+  } catch (e) {
+    alert('Erro: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i> Atualizar base';
+    box.style.display = 'none';
+  }
+}
+
 // ── Preview ───────────────────────────────────────────────────────────────────
 async function preVisualizarRegistros() {
   const postos = postosChecados();
@@ -915,12 +1069,83 @@ async function preVisualizarRegistros() {
       bodyDiv.innerHTML = html;
     }
     resultDiv.style.display = 'block';
+
+    // Carrega registros paginados
+    _regCurrentPage = 1;
+    carregarRegistros(1);
   } catch (e) {
     bodyDiv.innerHTML = `<span class="text-danger"><i class="fas fa-times mr-1"></i>Erro ao consultar: ${e.message}</span>`;
     resultDiv.style.display = 'block';
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-search mr-1"></i> Pré-visualizar registros';
+  }
+}
+
+// ── Registros paginados ──────────────────────────────────────────────────────
+let _regCurrentPage = 1;
+let _regTotalPages  = 1;
+
+async function carregarRegistros(page) {
+  const box   = document.getElementById('preview-registros');
+  const tbody = document.getElementById('preview-reg-tbody');
+  const info  = document.getElementById('preview-reg-info');
+  const pages = document.getElementById('preview-reg-pages');
+
+  tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin mr-1"></i> Carregando...</td></tr>';
+  box.style.display = 'block';
+
+  try {
+    const formData = new FormData(document.getElementById('formCampanha'));
+    formData.set('page', page);
+    formData.set('per_page', 10);
+
+    const r = await fetch('/wpp/api/preview/registros', { method: 'POST', body: formData });
+    const d = await r.json();
+    if (d.error) {
+      tbody.innerHTML = `<tr><td colspan="9" class="text-danger">${d.error}</td></tr>`;
+      return;
+    }
+
+    _regCurrentPage = d.page;
+    _regTotalPages  = d.total_pages;
+
+    info.textContent = `${d.total.toLocaleString('pt-BR')} registros`;
+    pages.textContent = `Página ${d.page} de ${d.total_pages}`;
+
+    document.getElementById('btn-reg-prev').disabled = (d.page <= 1);
+    document.getElementById('btn-reg-next').disabled = (d.page >= d.total_pages);
+
+    if (!d.registros.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Nenhum registro encontrado.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = d.registros.map(r => {
+      const tel = r.telefone || '';
+      const telMask = tel ? tel.replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3') : '<span class="text-danger">—</span>';
+      const adm = r.data_admissao ? r.data_admissao.split('-').reverse().join('/') : '';
+      return `<tr>
+        <td>${r.matricula || ''}</td>
+        <td>${r.nome || ''}</td>
+        <td>${telMask}</td>
+        <td><span class="badge badge-secondary">${r.posto}</span></td>
+        <td>${adm}</td>
+        <td>${r.situacao || ''}</td>
+        <td>${r.tipo_cliente || ''}</td>
+        <td>${r.titular_dependente || ''}</td>
+        <td>${r.idade ?? ''}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-danger">Erro: ${e.message}</td></tr>`;
+  }
+}
+
+function regPaginar(delta) {
+  const newPage = _regCurrentPage + delta;
+  if (newPage >= 1 && newPage <= _regTotalPages) {
+    carregarRegistros(newPage);
   }
 }
 
