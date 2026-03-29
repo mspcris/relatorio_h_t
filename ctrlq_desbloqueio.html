@@ -645,10 +645,14 @@
         ? 'auditoria indisponível para este posto'
         : 'nenhum registro encontrado em vw_Sis_Historico';
       return `<div class="aud-historico">
-        <div class="aud-historico-header"><i class="fas fa-history mr-1"></i>Histórico do dia — vw_Sis_Historico</div>
+        <div class="aud-historico-header"><i class="fas fa-history mr-1"></i>Histórico — vw_Sis_Historico</div>
         <div class="aud-indisponivel"><i class="fas fa-info-circle mr-1"></i>${msg}</div>
       </div>`;
     }
+    const isFallback = lista.some(e => e.aud_fallback);
+    const headerText = isFallback
+      ? 'Últimos 5 registros — vw_Sis_Historico <small class="text-warning ml-2">(sem registros nos 10 dias antes da data fim)</small>'
+      : 'Histórico (10 dias antes da data fim) — vw_Sis_Historico';
     const linhas = lista.map(e => {
       const isPrincipal = e.aud_detalhe && e.aud_detalhe.includes('DataFimExibicao');
       const detalheHtml = e.aud_detalhe
@@ -663,7 +667,7 @@
       </div>`;
     }).join('');
     return `<div class="aud-historico">
-      <div class="aud-historico-header"><i class="fas fa-history mr-1"></i>Histórico do dia — vw_Sis_Historico</div>
+      <div class="aud-historico-header"><i class="fas fa-history mr-1"></i>${headerText}</div>
       ${linhas}
     </div>`;
   }

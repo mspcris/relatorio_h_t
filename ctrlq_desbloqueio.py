@@ -124,6 +124,7 @@ def fetch_audit(engine, aud_sql):
                     "aud_comando":     normalize(r.get("aud_comando")),
                     "aud_descricao":   normalize(r.get("aud_descricao")),
                     "aud_computador":  normalize(r.get("aud_computador")),
+                    "aud_fallback":    bool(r.get("aud_fallback", 0)),
                 }
                 result.setdefault(int(ide), []).append(entry)
         return result
