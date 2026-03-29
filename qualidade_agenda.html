@@ -743,19 +743,7 @@ async function loadData() {
 // FILTRO DE POSTOS
 // ─────────────────────────────────────────────────────────────────────────────
 function initPostoFilter() {
-    const permitted = getPermittedPostos();
-    console.log('[DEBUG] allPostos:', allPostos);
-    console.log('[DEBUG] USER_POSTOS_FROM_SERVER:', USER_POSTOS_FROM_SERVER);
-    console.log('[DEBUG] permitted tabs:', permitted);
-    const ul = el('postoTabs');
-    ul.innerHTML = '';
-    permitted.forEach(p => {
-        const li = document.createElement('li');
-        li.className = 'nav-item';
-        li.innerHTML = `<a class="nav-link" data-posto="${p}" onclick="togglePosto('${p}',this)"
-            title="${POSTO_NOMES[p] || p}">${p}</a>`;
-        ul.appendChild(li);
-    });
+    // Tabs são estáticos no HTML — não regenerar
 }
 
 function togglePosto(posto, el_a) {
