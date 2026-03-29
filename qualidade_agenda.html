@@ -166,13 +166,13 @@
         .posto-groups .btn { font-size: 0.82rem; padding: 4px 12px; border-radius: 20px; border: 1px solid #c8d0dc; color: #444; background: #f7f9fc; }
         .posto-groups .btn.active { background: #2c5f8a; color: #fff; border-color: #2c5f8a; }
         .posto-tabs-inline { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-        .posto-tabs-inline .nav-link {
+        .posto-tab {
             padding: 3px 11px; font-size: 0.82rem; font-weight: 600; border-radius: 18px;
             border: 1px solid #d0d7e2; color: #555; background: #f4f6f9;
-            cursor: pointer; transition: all 0.15s;
+            cursor: pointer; transition: all 0.15s; display: inline-block; user-select: none;
         }
-        .posto-tabs-inline .nav-link.active { background: #2c5f8a; color: #fff; border-color: #2c5f8a; }
-        .posto-tabs-inline .nav-link:hover:not(.active) { background: #e8edf3; }
+        .posto-tab.active { background: #2c5f8a; color: #fff; border-color: #2c5f8a; }
+        .posto-tab:hover:not(.active) { background: #e8edf3; }
 
         /* ── Heat map ── */
         .hm-wrap { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 280px); }
@@ -392,21 +392,21 @@
                             <button id="btnGrupoCouto"    class="btn"        onclick="setGrupo('couto')"   title="C D J M P">Couto</button>
                         </div>
                     </div>
-                    <ul id="postoTabs" class="posto-tabs-inline mb-0">
-                        <li class="nav-item"><a class="nav-link" data-posto="A" onclick="togglePosto('A',this)" title="Anchieta">A</a></li>
-                        <li class="nav-item"><a class="nav-link" data-posto="N" onclick="togglePosto('N',this)" title="Nilópolis">N</a></li>
-                        <li class="nav-item"><a class="nav-link" data-posto="X" onclick="togglePosto('X',this)" title="X Campo Grande">X</a></li>
-                        <li class="nav-item"><a class="nav-link" data-posto="Y" onclick="togglePosto('Y',this)" title="Y Campo Grande">Y</a></li>
-                        <li class="nav-item"><a class="nav-link" data-posto="B" onclick="togglePosto('B',this)" title="Bangu">B</a></li>
-                        <li class="nav-item"><a class="nav-link" data-posto="R" onclick="togglePosto('R',this)" title="Realengo">R</a></li>
-                        <li class="nav-item"><a class="nav-link" data-posto="P" onclick="togglePosto('P',this)" title="Rio das Pedras">P</a></li>
-                        <li class="nav-item"><a class="nav-link" data-posto="C" onclick="togglePosto('C',this)" title="Campinho">C</a></li>
-                        <li class="nav-item"><a class="nav-link" data-posto="D" onclick="togglePosto('D',this)" title="Del Castilho">D</a></li>
-                        <li class="nav-item"><a class="nav-link" data-posto="G" onclick="togglePosto('G',this)" title="Campo Grande">G</a></li>
-                        <li class="nav-item"><a class="nav-link" data-posto="I" onclick="togglePosto('I',this)" title="Nova Iguaçu">I</a></li>
-                        <li class="nav-item"><a class="nav-link" data-posto="M" onclick="togglePosto('M',this)" title="Madureira">M</a></li>
-                        <li class="nav-item"><a class="nav-link" data-posto="J" onclick="togglePosto('J',this)" title="Jacarepaguá">J</a></li>
-                    </ul>
+                    <div id="postoTabs" class="posto-tabs-inline mb-0">
+                        <span class="posto-tab" data-posto="A" onclick="togglePosto('A',this)" title="Anchieta">A</span>
+                        <span class="posto-tab" data-posto="N" onclick="togglePosto('N',this)" title="Nilópolis">N</span>
+                        <span class="posto-tab" data-posto="X" onclick="togglePosto('X',this)" title="X Campo Grande">X</span>
+                        <span class="posto-tab" data-posto="Y" onclick="togglePosto('Y',this)" title="Y Campo Grande">Y</span>
+                        <span class="posto-tab" data-posto="B" onclick="togglePosto('B',this)" title="Bangu">B</span>
+                        <span class="posto-tab" data-posto="R" onclick="togglePosto('R',this)" title="Realengo">R</span>
+                        <span class="posto-tab" data-posto="P" onclick="togglePosto('P',this)" title="Rio das Pedras">P</span>
+                        <span class="posto-tab" data-posto="C" onclick="togglePosto('C',this)" title="Campinho">C</span>
+                        <span class="posto-tab" data-posto="D" onclick="togglePosto('D',this)" title="Del Castilho">D</span>
+                        <span class="posto-tab" data-posto="G" onclick="togglePosto('G',this)" title="Campo Grande">G</span>
+                        <span class="posto-tab" data-posto="I" onclick="togglePosto('I',this)" title="Nova Iguaçu">I</span>
+                        <span class="posto-tab" data-posto="M" onclick="togglePosto('M',this)" title="Madureira">M</span>
+                        <span class="posto-tab" data-posto="J" onclick="togglePosto('J',this)" title="Jacarepaguá">J</span>
+                    </div>
                 </div>
             </div>
 
@@ -784,7 +784,7 @@ function updatePostoButtons() {
         sp.length === coutoOk.length && coutoOk.every(p => sp.includes(p)));
 
     // Individual tabs
-    document.querySelectorAll('#postoTabs .nav-link[data-posto]').forEach(a => {
+    document.querySelectorAll('#postoTabs .posto-tab[data-posto]').forEach(a => {
         const p = a.getAttribute('data-posto');
         a.classList.toggle('active', sp.includes(p));
     });
