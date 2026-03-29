@@ -112,10 +112,23 @@
         .qa-banner-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
+            gap: 10px;
+        }
+        .qa-banner-grid-pct {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .qa-stat-sub {
+            font-size: 0.72rem;
+            color: rgba(255,255,255,0.4);
+            margin-top: 4px;
+            font-family: monospace;
         }
         @media (max-width: 768px) {
-            .qa-banner-grid { grid-template-columns: repeat(2, 1fr); }
+            .qa-banner-grid     { grid-template-columns: repeat(2, 1fr); }
+            .qa-banner-grid-pct { grid-template-columns: repeat(2, 1fr); }
         }
         .qa-stat-card {
             background: rgba(255,255,255,0.05);
@@ -327,18 +340,41 @@
             <div class="qa-banner" id="summaryBanner">
                 <div class="qa-banner-title"><i class="fas fa-satellite-dish mr-2"></i>Painel de Saúde da Agenda</div>
                 <div class="qa-banner-sub" id="bannerSub">Carregando dados em tempo real...</div>
-                <div class="qa-banner-grid" id="summaryCards" style="grid-template-columns: repeat(3,1fr);">
+                <!-- Linha 1: contadores absolutos -->
+                <div class="qa-banner-grid" id="summaryCards">
+                    <div class="qa-stat-card qa-stat-total">
+                        <div class="qa-stat-num" id="statTotal">—</div>
+                        <div class="qa-stat-label">Situações Monitoradas</div>
+                    </div>
+                    <div class="qa-stat-card qa-stat-ok">
+                        <div class="qa-stat-num" id="statOk">—</div>
+                        <div class="qa-stat-label">Dentro do Prazo ANS</div>
+                    </div>
+                    <div class="qa-stat-card qa-stat-alerta">
+                        <div class="qa-stat-num" id="statAlerta">—</div>
+                        <div class="qa-stat-label">Em Atenção</div>
+                    </div>
+                    <div class="qa-stat-card qa-stat-critico">
+                        <div class="qa-stat-num" id="statCritico">—</div>
+                        <div class="qa-stat-label">Status Crítico</div>
+                    </div>
+                </div>
+                <!-- Linha 2: percentuais -->
+                <div class="qa-banner-grid-pct">
                     <div class="qa-stat-card qa-stat-ok">
                         <div class="qa-stat-num" id="statPctOk">—</div>
                         <div class="qa-stat-label">% Dentro do Prazo ANS</div>
+                        <div class="qa-stat-sub" id="statPctOkSub"></div>
                     </div>
                     <div class="qa-stat-card qa-stat-alerta">
                         <div class="qa-stat-num" id="statPctOkAlerta">—</div>
                         <div class="qa-stat-label">% Dentro do Prazo CAMIM</div>
+                        <div class="qa-stat-sub" id="statPctOkAlertaSub"></div>
                     </div>
                     <div class="qa-stat-card qa-stat-critico">
                         <div class="qa-stat-num" id="statPctCritico">—</div>
                         <div class="qa-stat-label">% Crítico / Sem Vaga</div>
+                        <div class="qa-stat-sub" id="statPctCriticoSub"></div>
                     </div>
                 </div>
             </div>
@@ -662,7 +698,8 @@ async function loadData() {
         cbosData          = json.cbos            || {};
         postosInfo        = json.postos_info     || {};
         allEspecialidades = json.especialidades  || [];
-        allPostos         = json.postos          || [];
+        // Derivar postos diretamente dos dados: se há dado de A, A aparece no filtro
+        allPostos         = [...new Set(allData.map(d => d.posto))].filter(Boolean);
 
         // Freshness
         const gm = json.meta && json.meta.gerado_em;
@@ -774,9 +811,19 @@ function renderSummary(data) {
     const pctOkAlerta = ((ok + alerta) / total * 100).toFixed(1);
     const pctCritico  = (critico / total * 100).toFixed(1);
 
+    // Linha 1: contadores absolutos
+    animateCount('statTotal',   total);
+    animateCount('statOk',      ok);
+    animateCount('statAlerta',  alerta);
+    animateCount('statCritico', critico);
+
+    // Linha 2: percentuais + sub
     animatePct('statPctOk',       parseFloat(pctOk));
     animatePct('statPctOkAlerta', parseFloat(pctOkAlerta));
     animatePct('statPctCritico',  parseFloat(pctCritico));
+    const s = el('statPctOkSub');       if(s) s.textContent = ok + ' situações OK';
+    const s2 = el('statPctOkAlertaSub'); if(s2) s2.textContent = (ok+alerta) + ' situações (OK + Atenção)';
+    const s3 = el('statPctCriticoSub'); if(s3) s3.textContent = critico + ' situações';
 }
 
 function animatePct(elId, target) {
