@@ -27,7 +27,10 @@ import os, sys, json, time, fcntl, hashlib
 from datetime import date, datetime, timedelta, timezone
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-JSON_DIR = os.path.join(BASE_DIR, "json_consolidado")
+# Sempre usar /opt/relatorio_h_t/json_consolidado/ como diretorio canonico
+# para que o script funcione tanto de /opt/camim-auth/ quanto /opt/relatorio_h_t/
+_CANONICAL_JSON = "/opt/relatorio_h_t/json_consolidado"
+JSON_DIR = _CANONICAL_JSON if os.path.isdir(os.path.dirname(_CANONICAL_JSON)) else os.path.join(BASE_DIR, "json_consolidado")
 META_FILE = os.path.join(JSON_DIR, "leads_analytics_cache_meta.json")
 LOCK_FILE = "/tmp/leads_analytics_cache.lock"
 DAILY_RUN_PREFIX = os.path.join(JSON_DIR, ".leads_cache_runs_")
