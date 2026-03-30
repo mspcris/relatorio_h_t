@@ -564,6 +564,26 @@ def detalhe_envio(eid):
 
 
 # ---------------------------------------------------------------------------
+# Busca global de envios por telefone / nome
+# ---------------------------------------------------------------------------
+
+@wpp_bp.get("/buscar")
+def buscar_envios_page():
+    email, is_admin = _check_auth()
+    if not email:
+        return ('', 401)
+    q = request.args.get("q", "").strip()
+    resultados = []
+    if q:
+        resultados = db.buscar_envios_global(q, limit=500)
+    return render_template(
+        "wpp_buscar_envios.html",
+        USER_EMAIL=email, USER_IS_ADMIN=is_admin,
+        q=q, resultados=resultados,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Auditoria
 # ---------------------------------------------------------------------------
 

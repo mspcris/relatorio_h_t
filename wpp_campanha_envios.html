@@ -53,6 +53,7 @@
         <li class="nav-item"><a href="https://teste-ia.camim.com.br/kpi_home.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home</p></a></li>
         <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
         <li class="nav-item"><a href="/wpp" class="nav-link active"><i class="nav-icon fab fa-whatsapp"></i><p>Campanhas</p></a></li>
+        <li class="nav-item"><a href="/wpp/buscar" class="nav-link"><i class="nav-icon fas fa-search"></i><p>Buscar Envios</p></a></li>
         <li class="nav-item"><a href="/wpp/auditoria" class="nav-link"><i class="nav-icon fas fa-history"></i><p>Auditoria</p></a></li>
       </ul>
     </nav>
@@ -115,6 +116,17 @@
           {% if not envios %}
           <div class="callout callout-info">Nenhuma mensagem enviada ainda.</div>
           {% else %}
+          <!-- Busca -->
+          <div class="mb-3">
+            <div class="input-group input-group-sm" style="max-width:400px">
+              <div class="input-group-prepend">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+              </div>
+              <input type="text" id="filtroEnvios" class="form-control"
+                     placeholder="Buscar por telefone ou nome..."
+                     autofocus>
+            </div>
+          </div>
           <div class="card">
             <div class="card-body p-0">
               <div class="table-responsive">
@@ -283,6 +295,28 @@
 <script>
 // Collapse sidebar on mobile
 if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
+
+// Filtro de envios por telefone/nome (client-side na página atual)
+(function() {
+  const input = document.getElementById('filtroEnvios');
+  if (!input) return;
+  const tbody = document.querySelector('#tab-enviados table tbody');
+  if (!tbody) return;
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  input.addEventListener('input', function() {
+    const q = this.value.replace(/\D/g, '') || this.value.toLowerCase();
+    const isDigits = /^\d+$/.test(this.value.replace(/[\s\-\(\)]/g, ''));
+    rows.forEach(tr => {
+      const telefone = (tr.children[2] && tr.children[2].textContent) || '';
+      const nome     = (tr.children[3] && tr.children[3].textContent) || '';
+      if (isDigits) {
+        tr.style.display = telefone.replace(/\D/g, '').includes(q) ? '' : 'none';
+      } else {
+        tr.style.display = nome.toLowerCase().includes(q) ? '' : 'none';
+      }
+    });
+  });
+})();
 </script>
 
 <script src="/js/menu_enforce.js" defer></script>

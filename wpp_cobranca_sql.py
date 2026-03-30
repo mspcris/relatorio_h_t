@@ -235,6 +235,47 @@ def _get_sqlite_conn() -> sqlite3.Connection:
     return conn
 
 
+def _build_where_atraso_sqlite(campanha: dict) -> tuple:
+    """WHERE para modos atraso/pré-vencimento sobre cache_clientes (SQLite).
+
+    O cache não possui colunas de fatura (diasdebito, datareferencia),
+    então filtramos apenas pelo que existe: telefone, cancelado, sexo, idade,
+    cobrador, corretor, bairro.
+    """
+    filtros = [
+        "telefone_efetivo IS NOT NULL",
+        "TRIM(telefone_efetivo) != ''",
+    ]
+    params: list = []
+
+    if not campanha.get("incluir_cancelados"):
+        filtros.append("canceladoans = 0")
+
+    if campanha.get("sexo"):
+        filtros.append("sexo = ?")
+        params.append(campanha["sexo"])
+
+    if campanha.get("idade_min") is not None:
+        filtros.append(f"idade >= {int(campanha['idade_min'])}")
+
+    if campanha.get("idade_max") is not None:
+        filtros.append(f"idade <= {int(campanha['idade_max'])}")
+
+    if campanha.get("cobrador"):
+        filtros.append("cobradornome LIKE ?")
+        params.append(f"%{campanha['cobrador']}%")
+
+    if campanha.get("corretor"):
+        filtros.append("corretor LIKE ?")
+        params.append(f"%{campanha['corretor']}%")
+
+    if campanha.get("bairro"):
+        filtros.append("bairro LIKE ?")
+        params.append(f"%{campanha['bairro']}%")
+
+    return " AND ".join(filtros), params
+
+
 def _build_where_clientes_sqlite(campanha: dict) -> tuple:
     """WHERE para modo clientes sobre cache_clientes (SQLite, datas YYYY-MM-DD)."""
     filtros = [
@@ -373,27 +414,34 @@ def _contar_preview_clientes_sqlite(campanha: dict) -> dict:
 
 
 def listar_preview(campanha: dict, page: int = 1, per_page: int = 10) -> dict:
-    """Retorna registros paginados do cache SQLite conforme filtros da campanha."""
+    """Retorna registros paginados conforme filtros da campanha.
+
+    Modo clientes / cliente_novo → cache SQLite (cache_clientes).
+    Modo atraso / pré-vencimento → SQL Server direto (view WEB_COB / PRE_VENC).
+    """
     postos = campanha.get("postos") or []
     m = modo_envio(campanha)
 
-    if m == MODO_CLIENTES:
-        where, params = _build_where_clientes_sqlite(campanha)
-    else:
-        where, params = build_where(campanha)
+    if m in (MODO_CLIENTES, MODO_CLIENTE_NOVO):
+        return _listar_preview_sqlite(campanha, postos, page, per_page)
+    return _listar_preview_sqlserver(campanha, postos, page, per_page)
 
+
+def _listar_preview_sqlite(campanha: dict, postos: list,
+                           page: int, per_page: int) -> dict:
+    """Preview paginado via cache SQLite (modos clientes/cliente_novo)."""
+    where, params = _build_where_clientes_sqlite(campanha)
     conn = _get_sqlite_conn()
     try:
-        # Monta filtro de postos
         ph_postos = ",".join("?" * len(postos))
         full_where = f"posto IN ({ph_postos}) AND {where}"
         full_params = postos + params
 
-        # Total
-        count_sql = f"SELECT COUNT(*) FROM cache_clientes WHERE {full_where}"
-        total = conn.execute(count_sql, full_params).fetchone()[0]
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM cache_clientes WHERE {full_where}",
+            full_params,
+        ).fetchone()[0]
 
-        # Registros paginados
         offset = (page - 1) * per_page
         data_sql = (
             "SELECT matricula, nomecadastro, telefone_efetivo, posto, "
@@ -433,6 +481,71 @@ def listar_preview(campanha: dict, page: int = 1, per_page: int = 10) -> dict:
         }
     finally:
         conn.close()
+
+
+def _listar_preview_sqlserver(campanha: dict, postos: list,
+                              page: int, per_page: int) -> dict:
+    """Preview paginado via SQL Server (modos atraso/pré-vencimento)."""
+    where, params = build_where(campanha)
+    src = source_sql(campanha)
+    extra = where_extras(campanha)
+
+    all_rows: list[dict] = []
+    for posto in postos:
+        conn = get_conn_posto(posto)
+        if not conn:
+            continue
+        try:
+            cur = conn.cursor()
+            sql = (
+                f"SELECT matricula, nomecadastro, telefonewhatsapp, "
+                f"       codigoendereco AS posto, dataadmissao, situacao, "
+                f"       planotipo, diasdebito, idade, bairro, cobradornome "
+                f"FROM {src} WHERE {where}{extra} "
+                f"ORDER BY nomecadastro"
+            )
+            cur.execute(sql, params)
+            cols = [c[0] for c in cur.description]
+            for row in cur.fetchall():
+                all_rows.append(dict(zip(cols, row)))
+        except Exception as e:
+            log.error("listar_preview_sqlserver posto=%s: %s", posto, e)
+        finally:
+            conn.close()
+
+    total = len(all_rows)
+    offset = (page - 1) * per_page
+    page_rows = all_rows[offset:offset + per_page]
+
+    registros = []
+    for r in page_rows:
+        adm = r.get("dataadmissao")
+        if adm and hasattr(adm, "strftime"):
+            adm = adm.strftime("%d/%m/%Y")
+        registros.append({
+            "matricula":           r.get("matricula"),
+            "nome":                r.get("nomecadastro"),
+            "telefone":            r.get("telefonewhatsapp"),
+            "posto":               r.get("posto"),
+            "data_admissao":       adm,
+            "situacao":            r.get("situacao"),
+            "tipo_cliente":        r.get("planotipo"),
+            "titular_dependente":  None,
+            "plano":              r.get("planotipo"),
+            "idade":              r.get("idade"),
+            "bairro":             r.get("bairro"),
+            "cobrador":           r.get("cobradornome"),
+        })
+
+    import math
+    total_pages = math.ceil(total / per_page) if per_page else 1
+    return {
+        "registros":    registros,
+        "total":        total,
+        "page":         page,
+        "per_page":     per_page,
+        "total_pages":  total_pages,
+    }
 
 
 def _env(key, default=""):

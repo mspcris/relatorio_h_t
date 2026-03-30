@@ -465,52 +465,66 @@
     return Number(a) !== Number(h);
   }
 
+  function painelDiaRow(src, d, diffRec) {
+    const ativo  = src[d];
+    const inicio = fmtHora(src[d + 'HoraInicio']);
+    const fim    = fmtHora(src[d + 'HoraFim']);
+    const almFlag = src[d + 'Almoco'];
+    const almIni  = fmtHora(src[d + 'Almocoinicio']);
+    const almFim2 = fmtHora(src[d + 'AlmocoFim']);
+    const custo   = src['ValorCusto' + d];
+    const qtd     = src['QuantidadeCusto' + d];
+    const horas   = calcHoras(src[d + 'HoraInicio'], src[d + 'HoraFim'],
+                              almFlag, src[d + 'Almocoinicio'], src[d + 'AlmocoFim']);
+    const rPorC   = (custo != null && qtd > 0)   ? custo / qtd   : null;
+    const rPorH   = (custo != null && horas > 0) ? custo / horas : null;
+
+    // Diff highlights contra histórico do registro principal
+    const cHora = diffRec && (isDiff(diffRec, d + 'HoraInicio') || isDiff(diffRec, d + 'HoraFim') ||
+                   isDiff(diffRec, d + 'Almocoinicio') || isDiff(diffRec, d + 'AlmocoFim')) ? 'cel-changed' : '';
+    const cCust = diffRec && isDiff(diffRec, 'ValorCusto' + d) ? 'cel-changed' : '';
+    const cQtd  = diffRec && isDiff(diffRec, 'QuantidadeCusto' + d) ? 'cel-changed' : '';
+
+    if (!ativo) {
+      return `<tr class="dia-inativo"><td class="dia-label">${DIA_LABEL(d)}</td>
+        <td colspan="5" class="text-muted" style="font-size:.72rem">inativo</td></tr>`;
+    }
+
+    const horStr = (inicio && fim) ? inicio + '–' + fim : '—';
+    const almStr = (almFlag && almIni && almFim2) ? `<br><small style="color:#999">${almIni}–${almFim2}</small>` : '';
+
+    return `<tr>
+      <td class="dia-label">${DIA_LABEL(d)}</td>
+      <td class="${cHora}">${horStr}${almStr}</td>
+      <td class="${cCust}">R$ ${fmtValor(custo)}</td>
+      <td class="${cQtd}">${qtd ?? '—'}</td>
+      <td>${rPorC !== null ? 'R$ ' + fmtValor(rPorC) : '—'}</td>
+      <td>${rPorH !== null ? 'R$ ' + fmtValor(rPorH) + '/h' : '—'}</td>
+    </tr>`;
+  }
+
   function painelTabela(rec, isHist) {
-    const p    = isHist ? 'hist_' : '';  // prefixo para campos de dia/hora
-    const pv   = isHist ? 'hist_' : '';  // prefixo para ValorCusto/QuantidadeCusto
+    const p  = isHist ? 'hist_' : '';
+
+    // Para histórico, usar prefixo hist_; para produção, usar campo direto
+    const src = {};
+    DIAS_SEMANA.forEach(d => {
+      src[d]                    = rec[p + d];
+      src[d + 'HoraInicio']    = rec[p + d + 'HoraInicio'];
+      src[d + 'HoraFim']       = rec[p + d + 'HoraFim'];
+      src[d + 'Almoco']        = rec[p + d + 'Almoco'];
+      src[d + 'Almocoinicio']  = rec[p + d + 'Almocoinicio'];
+      src[d + 'AlmocoFim']     = rec[p + d + 'AlmocoFim'];
+      src['ValorCusto' + d]    = rec[p + 'ValorCusto' + d];
+      src['QuantidadeCusto' + d] = rec[p + 'QuantidadeCusto' + d];
+    });
 
     const diasVisiveis = DIAS_SEMANA.filter(d =>
-      rec[d] || rec['hist_' + d]   // mostra se ativo em qualquer um dos dois
+      rec[d] || rec['hist_' + d]
     );
     if (!diasVisiveis.length) return '<p class="text-muted p-2" style="font-size:.78rem">Sem dias ativos.</p>';
 
-    const rows = diasVisiveis.map(d => {
-      const ativo    = rec[p + d];
-      const inicio   = fmtHora(rec[p + d + 'HoraInicio']);
-      const fim      = fmtHora(rec[p + d + 'HoraFim']);
-      const almFlag  = rec[p + d + 'Almoco'];
-      const almIni   = fmtHora(rec[p + d + 'Almocoinicio']);
-      const almFim2  = fmtHora(rec[p + d + 'AlmocoFim']);
-      const custo    = rec[pv + 'ValorCusto' + d];
-      const qtd      = rec[pv + 'QuantidadeCusto' + d];
-      const horas    = calcHoras(rec[p + d + 'HoraInicio'], rec[p + d + 'HoraFim'],
-                                  almFlag, rec[p + d + 'Almocoinicio'], rec[p + d + 'AlmocoFim']);
-      const rPorC    = (custo != null && qtd > 0)    ? custo / qtd     : null;
-      const rPorH    = (custo != null && horas > 0)  ? custo / horas   : null;
-
-      // Diff highlights (mesmo para produção e histórico)
-      const cHora = (isDiff(rec, d + 'HoraInicio') || isDiff(rec, d + 'HoraFim') ||
-                     isDiff(rec, d + 'Almocoinicio') || isDiff(rec, d + 'AlmocoFim')) ? 'cel-changed' : '';
-      const cCust = isDiff(rec, 'ValorCusto' + d)          ? 'cel-changed' : '';
-      const cQtd  = isDiff(rec, 'QuantidadeCusto' + d)     ? 'cel-changed' : '';
-
-      if (!ativo) {
-        return `<tr class="dia-inativo"><td class="dia-label">${DIA_LABEL(d)}</td>
-          <td colspan="5" class="text-muted" style="font-size:.72rem">inativo</td></tr>`;
-      }
-
-      const horStr = (inicio && fim) ? inicio + '–' + fim : '—';
-      const almStr = (almFlag && almIni && almFim2) ? `<br><small style="color:#999">${almIni}–${almFim2}</small>` : '';
-
-      return `<tr>
-        <td class="dia-label">${DIA_LABEL(d)}</td>
-        <td class="${cHora}">${horStr}${almStr}</td>
-        <td class="${cCust}">R$ ${fmtValor(custo)}</td>
-        <td class="${cQtd}">${qtd ?? '—'}</td>
-        <td>${rPorC !== null ? 'R$ ' + fmtValor(rPorC) : '—'}</td>
-        <td>${rPorH !== null ? 'R$ ' + fmtValor(rPorH) + '/h' : '—'}</td>
-      </tr>`;
-    }).join('');
+    const rows = diasVisiveis.map(d => painelDiaRow(src, d, isHist ? null : rec)).join('');
 
     return `<div class="table-responsive">
       <table class="h-table">
@@ -519,6 +533,58 @@
         </tr></thead>
         <tbody>${rows}</tbody>
       </table></div>`;
+  }
+
+  // ── Painel de produção com irmãos ─────────────────────────────────────────
+
+  function painelProducaoComIrmaos(rec) {
+    const irmaos = Array.isArray(rec.irmaos) ? rec.irmaos : [];
+
+    // Montar lista unificada: registro principal + irmãos
+    // Cada um contribui com seus dias ativos
+    const fontes = [{ src: rec, label: null }];
+    irmaos.forEach(irm => fontes.push({ src: irm, label: `ID ${irm.idEspecialidade}` }));
+
+    // Se não há irmãos, renderizar tabela simples como antes
+    if (!irmaos.length) return painelTabela(rec, false);
+
+    // Com irmãos: mostrar cada registro separado com separador
+    let html = '';
+
+    // Registro sendo expirado (o principal)
+    const diasPrincipal = DIAS_SEMANA.filter(d => rec[d]);
+    if (diasPrincipal.length) {
+      html += `<div style="font-size:.7rem;padding:4px 10px;background:#fff3cd;color:#856404;font-weight:600">
+        <i class="fas fa-clock mr-1"></i>Este registro (ID ${rec.idEspecialidade}) — com Data Fim
+      </div>`;
+      html += painelTabela(rec, false);
+    }
+
+    // Irmãos ativos
+    irmaos.forEach(irm => {
+      const diasIrm = DIAS_SEMANA.filter(d => irm[d]);
+      if (!diasIrm.length) return;
+
+      const dataFim = irm.DataFimExibicao
+        ? ` — Data Fim: ${fmtDate(irm.DataFimExibicao)}`
+        : ' — sem Data Fim';
+
+      html += `<div style="font-size:.7rem;padding:4px 10px;background:#d1ecf1;color:#0c5460;font-weight:600;margin-top:2px">
+        <i class="fas fa-plus-circle mr-1"></i>Registro ativo (ID ${irm.idEspecialidade})${dataFim}
+      </div>`;
+
+      // Renderizar tabela do irmão
+      const rows = diasIrm.map(d => painelDiaRow(irm, d, null)).join('');
+      html += `<div class="table-responsive">
+        <table class="h-table">
+          <thead><tr>
+            <th>Dia</th><th>Horário</th><th>Custo</th><th>Qtd</th><th>R$/c</th><th>R$/h</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>`;
+    });
+
+    return html;
   }
 
   function renderPaineis(rec) {
@@ -536,7 +602,7 @@
     return `<div class="paineis-wrap">
       <div class="painel-box painel-producao">
         <div class="painel-header">Produção — como está agora</div>
-        ${painelTabela(rec, false)}
+        ${painelProducaoComIrmaos(rec)}
       </div>
       <div class="painel-box painel-historico">
         <div class="painel-header">Histórico — como era antes</div>

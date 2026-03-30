@@ -71,6 +71,7 @@ _TEMPLATE_TO_PAGINA = {
     "kpi_metas_vendas_mensalidades.html": "kpi_metas",
     "kpi_metas.html":                   "kpi_metas",
     "growth.html":                      "growth",
+    "leads_analytics.html":             "leads_analytics",
     "mais_servicos.html":               "mais_servicos",
     "trello_harvest.html":              "trello_harvest",
     "tef_dashboard.html":               "tef",

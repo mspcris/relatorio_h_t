@@ -17,9 +17,10 @@ from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-SQL_PATH    = os.path.join(BASE_DIR, "sql_ctrlq_desbloqueio", "sql_ctrlq_desbloqueio.sql")
+SQL_PATH     = os.path.join(BASE_DIR, "sql_ctrlq_desbloqueio", "sql_ctrlq_desbloqueio.sql")
 SQL_AUD_PATH = os.path.join(BASE_DIR, "sql_ctrlq_desbloqueio", "sql_ctrlq_desbloqueio_aud.sql")
-JSON_DIR    = os.path.join(BASE_DIR, "json_ctrlq_desbloqueio")
+SQL_IRM_PATH = os.path.join(BASE_DIR, "sql_ctrlq_desbloqueio", "sql_ctrlq_desbloqueio_irmaos.sql")
+JSON_DIR     = os.path.join(BASE_DIR, "json_ctrlq_desbloqueio")
 
 ODBC_DRIVER     = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 POSTOS_FALLBACK = list("ANXYBRPCDGIMJ")
@@ -155,6 +156,30 @@ def merge_audit(rows, audit_map):
     return rows
 
 
+# ── irmãos (outros registros ativos do mesmo médico+especialidade) ──────────
+
+def fetch_irmaos(engine, irm_sql):
+    """Retorna dict {parent_idEspecialidade(int): [lista de registros irmãos]}."""
+    try:
+        with engine.connect() as con:
+            df = pd.read_sql_query(text(irm_sql), con)
+        result = {}
+        for r in df.to_dict(orient="records"):
+            parent = r.pop("parent_idEspecialidade", None)
+            if parent is not None:
+                result.setdefault(int(parent), []).append(normalize_row(r))
+        return result
+    except Exception as e:
+        print(f"(irmãos indisponível: {type(e).__name__})", end=" ")
+        return {}
+
+def merge_irmaos(rows, irmaos_map):
+    for r in rows:
+        ide = r.get("idEspecialidade")
+        r["irmaos"] = irmaos_map.get(int(ide), []) if ide is not None else []
+    return rows
+
+
 # ── exportação ────────────────────────────────────────────────────────────────
 
 def main():
@@ -171,6 +196,10 @@ def main():
     aud_sql = ""
     if os.path.isfile(SQL_AUD_PATH):
         aud_sql = open(SQL_AUD_PATH, encoding="utf-8").read().strip()
+
+    irm_sql = ""
+    if os.path.isfile(SQL_IRM_PATH):
+        irm_sql = open(SQL_IRM_PATH, encoding="utf-8").read().strip()
 
     conns = build_conns_from_env()
     if not conns:
@@ -191,6 +220,9 @@ def main():
             if aud_sql:
                 audit_map = fetch_audit(engine, aud_sql)
                 rows = merge_audit(rows, audit_map)
+            if irm_sql:
+                irmaos_map = fetch_irmaos(engine, irm_sql)
+                rows = merge_irmaos(rows, irmaos_map)
             por_posto[posto] = rows
             out = os.path.join(JSON_DIR, f"CTRLQ_DESBLOQUEIO_{posto}.json")
             atomic_write(out, rows)

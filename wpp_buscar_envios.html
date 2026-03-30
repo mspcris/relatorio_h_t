@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8"/>
+  <title>CAMIM — Buscar Envios WhatsApp</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style2.css">
+  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <style>
+    html { font-size: 16px; }
+    body { font-family: "Source Sans Pro", system-ui, sans-serif; font-size: 1rem; }
+    tr.clickable { cursor: pointer; }
+    tr.clickable:hover td { background: #f0f8ff; }
+    .msg-preview {
+      background: #dcf8c6; border-radius: 8px; padding: 8px 12px;
+      font-size: .85rem; max-width: 500px; white-space: pre-wrap;
+      border-left: 3px solid #25d366; margin: 2px 0;
+    }
+    .tel-highlight { font-size: 1.3rem; font-weight: 700; color: #155724; }
+    .campanha-badge { font-size: .72rem; }
+    @media (max-width: 767px) {
+      .content-wrapper { margin-left: 0 !important; }
+      .main-sidebar { z-index: 1050; }
+      .table td, .table th { font-size: .75rem; padding: .3rem .4rem; }
+    }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a></li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" style="height:28px">
+      <span class="ml-2">Buscar Envios</span>
+    </span>
+  </nav>
+
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="/" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar"><nav class="mt-2">
+      <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+        <li class="nav-item"><a href="https://teste-ia.camim.com.br/kpi_home.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home</p></a></li>
+        {% if USER_IS_ADMIN %}
+        <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+        {% endif %}
+        <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+        <div class="sidebar-section-header" style="padding:8px 16px 4px;font-size:.72rem;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,.4);margin-top:8px">WhatsApp</div>
+        <li class="nav-item"><a href="/wpp" class="nav-link"><i class="nav-icon fab fa-whatsapp"></i><p>Campanhas</p></a></li>
+        <li class="nav-item"><a href="/wpp/buscar" class="nav-link active"><i class="nav-icon fas fa-search"></i><p>Buscar Envios</p></a></li>
+        <li class="nav-item"><a href="/wpp/auditoria" class="nav-link"><i class="nav-icon fas fa-history"></i><p>Auditoria</p></a></li>
+      </ul>
+    </nav>
+    <div style="padding:10px 16px;margin-top:auto">
+      <button type="button" onclick="window.location.assign('/session/logout')"
+              style="color:rgba(255,255,255,.8);background:rgba(255,255,255,.08);border:none;display:block;width:100%;padding:8px 12px;border-radius:4px;cursor:pointer;text-align:left;font-size:inherit">
+        <i class="fas fa-sign-out-alt mr-2"></i>Sair
+      </button>
+    </div>
+    </div>
+  </aside>
+
+  <div class="content-wrapper">
+    <section class="content-header px-3 pt-3 pb-1">
+      <h1><i class="fas fa-search text-info mr-2"></i>Buscar Envios WhatsApp</h1>
+      <p class="text-muted mb-0">Pesquise por telefone ou nome do cliente em todas as campanhas</p>
+    </section>
+    <section class="content px-3 pb-3">
+
+      <!-- Barra de busca -->
+      <form method="GET" action="/wpp/buscar" class="mb-4">
+        <div class="input-group" style="max-width:600px">
+          <input type="text" name="q" class="form-control form-control-lg"
+                 placeholder="Telefone (ex: 21988568671) ou nome do cliente..."
+                 value="{{ q }}" autofocus>
+          <div class="input-group-append">
+            <button class="btn btn-info" type="submit">
+              <i class="fas fa-search mr-1"></i> Buscar
+            </button>
+          </div>
+        </div>
+        <small class="text-muted">Digite pelo menos 4 digitos do telefone ou parte do nome</small>
+      </form>
+
+      {% if q and not resultados %}
+      <div class="callout callout-warning">
+        <h5>Nenhum envio encontrado para "{{ q }}"</h5>
+        <p>Verifique o numero ou nome e tente novamente.</p>
+      </div>
+      {% endif %}
+
+      {% if resultados %}
+      <!-- Resumo agrupado por telefone -->
+      {% set telefones = {} %}
+      {% for r in resultados %}
+        {% if r.telefone not in telefones %}
+          {% if telefones.update({r.telefone: {'nome': r.nome, 'envios': []}}) %}{% endif %}
+        {% endif %}
+        {% if telefones[r.telefone].envios.append(r) %}{% endif %}
+      {% endfor %}
+
+      <div class="mb-3">
+        <span class="badge badge-info" style="font-size:.9rem">
+          {{ resultados|length }} envio{{ 's' if resultados|length != 1 else '' }}
+          para {{ telefones|length }} telefone{{ 's' if telefones|length != 1 else '' }}
+        </span>
+      </div>
+
+      {% for telefone, dados in telefones.items() %}
+      <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <span class="tel-highlight">
+              <i class="fab fa-whatsapp text-success mr-1"></i>
+              {{ telefone[:2] }} ({{ telefone[2:4] }}) {{ telefone[4:9] }}-{{ telefone[9:] }}
+            </span>
+            <span class="ml-3 text-muted">{{ dados.nome }}</span>
+          </div>
+          <span class="badge badge-success" style="font-size:.85rem">
+            {{ dados.envios|length }} envio{{ 's' if dados.envios|length != 1 else '' }}
+          </span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="thead-light">
+              <tr>
+                <th style="width:40px">ID</th>
+                <th>Data/Hora</th>
+                <th>Campanha</th>
+                <th>Posto</th>
+                <th>Template</th>
+                <th>Mensagem</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for e in dados.envios %}
+            <tr class="clickable" onclick="window.location='/wpp/envio/{{ e.id }}'">
+              <td><small class="text-muted">{{ e.id }}</small></td>
+              <td><small>{{ e.enviado_em[:19].replace('T',' ') }}</small></td>
+              <td>
+                <a href="/wpp/{{ e.campanha_id }}/envios" class="campanha-badge badge badge-outline-primary"
+                   onclick="event.stopPropagation()">
+                  #{{ e.campanha_id }} {{ e.campanha_nome[:40] }}
+                </a>
+              </td>
+              <td><span class="badge badge-secondary">{{ e.posto or '' }}</span></td>
+              <td><small><code>{{ e.template }}</code></small></td>
+              <td>
+                <div class="msg-preview">
+                  {% if 'fatura_vencida' in e.template %}Sua fatura esta vencida. Ref.: {{ e.ref }}. Valor: R$ {{ e.valor }}. Venc.: {{ e.venc }}. Mensagem automatica.
+                  {% elif 'fatura' in e.template and 'vencida' not in e.template %}Sua fatura esta disponivel. Ref.: {{ e.ref }}. Valor: R$ {{ e.valor }}. Venc.: {{ e.venc }}. Mensagem automatica.
+                  {% elif 'indique' in e.template %}Indique para o plano! Mensagem automatica.
+                  {% elif 'lembrete' in e.template %}Lembrete de consulta. Mensagem automatica.
+                  {% elif 'confirmar' in e.template %}Confirme sua presenca para a consulta. Mensagem automatica.
+                  {% else %}Template: {{ e.template }} | Ref: {{ e.ref }} | Valor: R$ {{ e.valor }} | Venc: {{ e.venc }}
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                {% if e.status in ('accepted', 'accepted_chat') %}
+                  <span class="badge badge-success">{{ e.status }}</span>
+                {% elif e.status == 'dry_run' %}
+                  <span class="badge badge-secondary">dry_run</span>
+                {% else %}
+                  <span class="badge badge-danger">{{ e.status }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      {% endif %}
+
+    </section>
+  </div>
+
+</div>
+<script>
+if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
+</script>
+<script src="/js/menu_enforce.js" defer></script>
+</body>
+</html>

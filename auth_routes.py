@@ -122,6 +122,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "chat_externo",             "label": "Chat",                        "group": "mais"},
     {"key": "broker",                   "label": "Vendas Efetivar",             "group": "mais"},
     {"key": "corretores",               "label": "Vendas Leads Corretores",     "group": "mais"},
+    {"key": "leads_analytics",           "label": "Leads Analytics",             "group": "mais"},
     {"key": "tarefas",                  "label": "Tarefas",                     "group": "mais"},
     {"key": "push_cobranca",            "label": "Push de Cobrança IA",         "group": "mais"},
     {"key": "wpp_campanhas",            "label": "WhatsApp Campanhas",          "group": "mais"},

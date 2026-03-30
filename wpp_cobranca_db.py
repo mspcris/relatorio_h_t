@@ -511,6 +511,29 @@ def listar_nao_enviados(campanha_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def buscar_envios_global(q: str, limit: int = 200) -> list[dict]:
+    """Busca envios por telefone ou nome em todas as campanhas."""
+    digits = "".join(c for c in q if c.isdigit())
+    with get_conn() as conn:
+        if digits and len(digits) >= 4:
+            rows = conn.execute(
+                """SELECT e.*, c.nome as campanha_nome
+                   FROM envios e JOIN campanhas c ON c.id = e.campanha_id
+                   WHERE e.telefone LIKE ?
+                   ORDER BY e.enviado_em DESC LIMIT ?""",
+                (f"%{digits}%", limit)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT e.*, c.nome as campanha_nome
+                   FROM envios e JOIN campanhas c ON c.id = e.campanha_id
+                   WHERE e.nome LIKE ?
+                   ORDER BY e.enviado_em DESC LIMIT ?""",
+                (f"%{q.upper()}%", limit)
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # ENVIOS — escrita (usada pelo engine)
 # ---------------------------------------------------------------------------

@@ -624,6 +624,14 @@ _BUILDERS = {
 }
 
 
+def _normalizar_periodo(v: str) -> str:
+    """Converte MM/YYYY → YYYY-MM; aceita YYYY-MM sem mudança."""
+    v = (v or "").strip()
+    if re.match(r"^\d{2}/\d{4}$", v):
+        return v[3:] + "-" + v[:2]
+    return v
+
+
 def build_context(
     kpi: str,
     postos: List[str],
@@ -642,8 +650,8 @@ def build_context(
     try:
         return fn(
             postos or [],
-            periodo_ini or "",
-            periodo_fim or "",
+            _normalizar_periodo(periodo_ini),
+            _normalizar_periodo(periodo_fim),
             pergunta or "",
             bool(incluir_retirada),
         )

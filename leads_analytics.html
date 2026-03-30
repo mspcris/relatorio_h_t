@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8"/>
+  <title>CAMIM — Leads Analytics</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style2.css">
+  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    html { font-size: 16px; }
+    body { font-family: "Source Sans Pro", system-ui, sans-serif; font-size: 1rem; background: #f4f6f9; }
+    h1 { font-size: 1.6rem; font-weight: 700; }
+    h2 { font-size: 1.15rem; font-weight: 700; color: #343a40; margin-bottom: .5rem; }
+
+    /* KPI cards */
+    .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .kpi-card { background: #fff; border-radius: 10px; padding: 16px; border-left: 4px solid #007bff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .kpi-card .kpi-val { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+    .kpi-card .kpi-label { font-size: .78rem; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; }
+    .kpi-card .kpi-sub { font-size: .75rem; color: #999; margin-top: 2px; }
+    .kpi-card.green { border-left-color: #28a745; }
+    .kpi-card.red { border-left-color: #dc3545; }
+    .kpi-card.orange { border-left-color: #fd7e14; }
+    .kpi-card.purple { border-left-color: #6f42c1; }
+    .kpi-card.teal { border-left-color: #20c997; }
+    .kpi-card.cyan { border-left-color: #17a2b8; }
+
+    /* Insight cards */
+    .insight-card { border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; }
+    .insight-card.destaque { background: #d4edda; border-left: 4px solid #28a745; }
+    .insight-card.alerta   { background: #fff3cd; border-left: 4px solid #ffc107; }
+    .insight-card.info     { background: #d1ecf1; border-left: 4px solid #17a2b8; }
+    .insight-title { font-weight: 700; font-size: .9rem; margin-bottom: 2px; }
+    .insight-text  { font-size: .82rem; color: #555; }
+
+    /* Chart containers */
+    .chart-box { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 16px; }
+    .chart-box canvas { max-height: 320px; }
+
+    /* Table styling */
+    .tbl-analytics { font-size: .82rem; }
+    .tbl-analytics th { font-size: .75rem; text-transform: uppercase; letter-spacing: .3px; color: #6b7280; }
+    .tbl-analytics .bar-cell { position: relative; }
+    .tbl-analytics .bar-bg { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(0,123,255,.1); border-radius: 3px; }
+
+    /* Funnel */
+    .funnel-step { display: flex; align-items: center; margin-bottom: 6px; }
+    .funnel-bar { height: 28px; background: linear-gradient(90deg, #007bff, #6f42c1); border-radius: 4px; min-width: 4px; display: flex; align-items: center; padding: 0 8px; color: #fff; font-size: .78rem; font-weight: 600; transition: width .5s; }
+    .funnel-label { font-size: .8rem; color: #555; margin-left: 10px; white-space: nowrap; }
+
+    /* Loading */
+    #loading { text-align: center; padding: 80px 20px; }
+    #loading .spinner-border { width: 3rem; height: 3rem; }
+
+    @media (max-width: 767px) {
+      .content-wrapper { margin-left: 0 !important; }
+      .main-sidebar { z-index: 1050; }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .kpi-card .kpi-val { font-size: 1.2rem; }
+    }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a></li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" style="height:28px">
+      <span class="ml-2">Corretores.camim - Leads Analytics</span>
+    </span>
+    <span id="jsonInfo" class="ml-3 text-muted" style="font-size:.78rem"></span>
+  </nav>
+
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="/" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar"><nav class="mt-2">
+      <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+        <li class="nav-item"><a href="https://teste-ia.camim.com.br/kpi_home.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home</p></a></li>
+        {% if USER_IS_ADMIN %}
+        <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+        {% endif %}
+        <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Servicos</p></a></li>
+      </ul>
+    </nav></div>
+  </aside>
+
+  <div class="content-wrapper">
+    <section class="content-header px-3 pt-3 pb-1">
+      <h1><i class="fas fa-chart-line text-primary mr-2"></i>Leads Analytics</h1>
+      <p class="text-muted mb-0">O que faz um lead fechar? Onde estao os gargalos?</p>
+    </section>
+
+    <section class="content px-3 pb-3">
+
+      <div id="loading">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-3 text-muted">Carregando dados de leads...</p>
+      </div>
+
+      <div id="dashboard" style="display:none">
+
+        <!-- KPI CARDS -->
+        <div class="kpi-row" id="kpiRow"></div>
+
+        <!-- INSIGHTS -->
+        <div class="card mb-3">
+          <div class="card-header"><h2 class="card-title mb-0"><i class="fas fa-lightbulb text-warning mr-2"></i>Insights Automaticos</h2></div>
+          <div class="card-body" id="insightsBox"></div>
+        </div>
+
+        <!-- ROW 1: Funil + Gargalos -->
+        <div class="row">
+          <div class="col-lg-6">
+            <div class="chart-box">
+              <h2><i class="fas fa-filter text-info mr-1"></i>Funil de Conversao</h2>
+              <div id="funnelBox"></div>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="chart-box">
+              <h2><i class="fas fa-exclamation-triangle text-warning mr-1"></i>Gargalos — Onde Leads Param</h2>
+              <canvas id="chartGargalos"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 2: Evolucao mensal -->
+        <div class="row">
+          <div class="col-12">
+            <div class="chart-box">
+              <h2><i class="fas fa-chart-area text-success mr-1"></i>Evolucao Mensal</h2>
+              <canvas id="chartEvolucao"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 3: Tempo resposta + Contatos -->
+        <div class="row">
+          <div class="col-lg-6">
+            <div class="chart-box">
+              <h2><i class="fas fa-clock text-danger mr-1"></i>Tempo de Primeiro Contato vs Conversao</h2>
+              <canvas id="chartTempo"></canvas>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="chart-box">
+              <h2><i class="fas fa-phone text-purple mr-1"></i>Qtd Contatos vs Conversao</h2>
+              <canvas id="chartContatos"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 4: Corretor performance -->
+        <div class="row">
+          <div class="col-12">
+            <div class="chart-box">
+              <h2><i class="fas fa-user-tie text-primary mr-1"></i>Performance dos Corretores</h2>
+              <div class="table-responsive">
+                <table class="table table-sm table-hover tbl-analytics mb-0" id="tblCorretores">
+                  <thead class="thead-light">
+                    <tr>
+                      <th>#</th>
+                      <th>Corretor</th>
+                      <th>Leads</th>
+                      <th>Convertidos</th>
+                      <th>Taxa</th>
+                      <th>Media Contatos</th>
+                      <th>Tempo 1o Contato</th>
+                      <th style="width:200px">Conversao</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 5: Posto + Fonte -->
+        <div class="row">
+          <div class="col-lg-6">
+            <div class="chart-box">
+              <h2><i class="fas fa-building text-teal mr-1"></i>Conversao por Posto</h2>
+              <canvas id="chartPosto"></canvas>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="chart-box">
+              <h2><i class="fas fa-bullseye text-info mr-1"></i>Conversao por Fonte</h2>
+              <canvas id="chartFonte"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 6: Dia semana + Hora -->
+        <div class="row">
+          <div class="col-lg-6">
+            <div class="chart-box">
+              <h2><i class="fas fa-calendar-alt text-orange mr-1"></i>Conversao por Dia da Semana</h2>
+              <canvas id="chartDia"></canvas>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="chart-box">
+              <h2><i class="fas fa-clock text-purple mr-1"></i>Conversao por Hora do Dia</h2>
+              <canvas id="chartHora"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 7: Ciclo conversao + Motivos perda -->
+        <div class="row">
+          <div class="col-lg-6">
+            <div class="chart-box">
+              <h2><i class="fas fa-hourglass-half text-success mr-1"></i>Tempo ate Conversao</h2>
+              <canvas id="chartCiclo"></canvas>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="chart-box">
+              <h2><i class="fas fa-times-circle text-danger mr-1"></i>Motivos de Perda</h2>
+              <canvas id="chartMotivos"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 8: Idade -->
+        <div class="row">
+          <div class="col-lg-6">
+            <div class="chart-box">
+              <h2><i class="fas fa-users text-info mr-1"></i>Conversao por Faixa Etaria</h2>
+              <canvas id="chartIdade"></canvas>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /dashboard -->
+
+    </section>
+  </div>
+
+</div>
+
+<script>
+if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
+
+var DATA = null;
+var CHARTS = {};
+
+// Colors
+var C = {
+  blue: '#007bff', green: '#28a745', red: '#dc3545', orange: '#fd7e14',
+  purple: '#6f42c1', teal: '#20c997', cyan: '#17a2b8', pink: '#e83e8c',
+  yellow: '#ffc107', indigo: '#6610f2',
+  blueA: 'rgba(0,123,255,.15)', greenA: 'rgba(40,167,69,.15)', redA: 'rgba(220,53,69,.15)'
+};
+var PALETTE = [C.blue, C.green, C.orange, C.purple, C.teal, C.cyan, C.pink, C.red, C.indigo, C.yellow];
+
+function fmt(n) {
+  if (n == null) return '-';
+  return Number(n).toLocaleString('pt-BR');
+}
+function pct(n) {
+  if (n == null) return '-';
+  return Number(n).toFixed(1) + '%';
+}
+
+// ========================= Load =========================
+
+fetch('/json_consolidado/leads_analytics.json', {cache: 'no-store'})
+  .then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  })
+  .then(function(d) {
+    DATA = d;
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('dashboard').style.display = '';
+    var meta = d.meta || {};
+    document.getElementById('jsonInfo').textContent =
+      'Periodo: ' + (meta.periodo_ini || '') + ' a ' + (meta.periodo_fim || '') +
+      ' | Gerado: ' + (meta.gerado_em || '').replace('T', ' ').substr(0, 19);
+    render();
+  })
+  .catch(function(e) {
+    document.getElementById('loading').innerHTML =
+      '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i>' +
+      '<p class="mt-2">Erro ao carregar dados: ' + e.message + '</p>' +
+      '<p class="text-muted">Execute <code>python3 export_leads_analytics.py</code> na VM para gerar o JSON.</p></div>';
+  });
+
+// ========================= Render =========================
+
+function render() {
+  renderKPIs();
+  renderInsights();
+  renderFunnel();
+  renderGargalos();
+  renderEvolucao();
+  renderTempo();
+  renderContatos();
+  renderCorretores();
+  renderPosto();
+  renderFonte();
+  renderDia();
+  renderHora();
+  renderCiclo();
+  renderMotivos();
+  renderIdade();
+}
+
+function renderKPIs() {
+  var r = DATA.resumo_geral || {};
+  var html = '';
+  html += kpiCard('Total Leads', fmt(r.total_leads), '', '');
+  html += kpiCard('Convertidos', fmt(r.convertidos), 'green', '');
+  html += kpiCard('Nao Convertidos', fmt(r.nao_convertidos), 'red', '');
+  html += kpiCard('Taxa Conversao', pct(r.taxa_conversao), 'purple', '');
+  html += kpiCard('Postos Ativos', fmt(r.postos_ativos), 'cyan', '');
+  document.getElementById('kpiRow').innerHTML = html;
+}
+
+function kpiCard(label, value, color, sub) {
+  return '<div class="kpi-card ' + color + '">' +
+    '<div class="kpi-val">' + value + '</div>' +
+    '<div class="kpi-label">' + label + '</div>' +
+    (sub ? '<div class="kpi-sub">' + sub + '</div>' : '') +
+    '</div>';
+}
+
+function renderInsights() {
+  var ins = DATA.insights || [];
+  var html = '';
+  for (var i = 0; i < ins.length; i++) {
+    var it = ins[i];
+    html += '<div class="insight-card ' + it.tipo + '">' +
+      '<div class="insight-title"><i class="fas fa-' + it.icone + ' mr-1"></i>' + it.titulo + '</div>' +
+      '<div class="insight-text">' + it.texto + '</div></div>';
+  }
+  document.getElementById('insightsBox').innerHTML = html || '<p class="text-muted">Nenhum insight gerado.</p>';
+}
+
+function renderFunnel() {
+  var rows = DATA.funil_conversao || [];
+  if (!rows.length) return;
+  // Top 10 etapas
+  var top = rows.slice(0, 10);
+  var maxVal = top[0].leads_passaram;
+  var html = '';
+  for (var i = 0; i < top.length; i++) {
+    var r = top[i];
+    var w = Math.max(4, (r.leads_passaram / maxVal) * 100);
+    html += '<div class="funnel-step">' +
+      '<div class="funnel-bar" style="width:' + w + '%">' + fmt(r.leads_passaram) + '</div>' +
+      '<span class="funnel-label">' + r.etapa + '</span></div>';
+  }
+  document.getElementById('funnelBox').innerHTML = html;
+}
+
+function renderGargalos() {
+  var rows = DATA.gargalos_funil || [];
+  var top = rows.slice(0, 10);
+  makeChart('chartGargalos', 'bar', {
+    labels: top.map(function(r) { return r.status_parado; }),
+    datasets: [{
+      label: 'Leads parados',
+      data: top.map(function(r) { return r.total; }),
+      backgroundColor: C.orange,
+      borderRadius: 4
+    }]
+  }, { indexAxis: 'y', plugins: { legend: { display: false } } });
+}
+
+function renderEvolucao() {
+  var rows = DATA.evolucao_mensal || [];
+  makeChart('chartEvolucao', 'line', {
+    labels: rows.map(function(r) { return r.mes; }),
+    datasets: [
+      { label: 'Total Leads', data: rows.map(function(r) { return r.total; }), borderColor: C.blue, backgroundColor: C.blueA, fill: true, tension: .3 },
+      { label: 'Convertidos', data: rows.map(function(r) { return r.convertidos; }), borderColor: C.green, backgroundColor: C.greenA, fill: true, tension: .3 },
+      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), borderColor: C.purple, borderDash: [5,3], fill: false, tension: .3, yAxisID: 'y1' }
+    ]
+  }, {
+    scales: {
+      y: { beginAtZero: true, title: { display: true, text: 'Leads' } },
+      y1: { position: 'right', beginAtZero: true, max: 100, title: { display: true, text: 'Taxa %' }, grid: { drawOnChartArea: false } }
+    }
+  });
+}
+
+function renderTempo() {
+  var rows = DATA.tempo_primeiro_contato || [];
+  makeChart('chartTempo', 'bar', {
+    labels: rows.map(function(r) { return r.faixa; }),
+    datasets: [
+      { label: 'Total Leads', data: rows.map(function(r) { return r.total; }), backgroundColor: C.blue, borderRadius: 4, yAxisID: 'y' },
+      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), type: 'line', borderColor: C.red, backgroundColor: 'transparent', tension: .3, yAxisID: 'y1' }
+    ]
+  }, {
+    scales: {
+      y: { beginAtZero: true, title: { display: true, text: 'Leads' } },
+      y1: { position: 'right', beginAtZero: true, title: { display: true, text: 'Taxa %' }, grid: { drawOnChartArea: false } }
+    }
+  });
+}
+
+function renderContatos() {
+  var rows = DATA.contatos_vs_conversao || [];
+  makeChart('chartContatos', 'bar', {
+    labels: rows.map(function(r) { return r.faixa_contatos + ' contatos'; }),
+    datasets: [
+      { label: 'Total Leads', data: rows.map(function(r) { return r.total; }), backgroundColor: C.purple, borderRadius: 4, yAxisID: 'y' },
+      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), type: 'line', borderColor: C.green, backgroundColor: 'transparent', tension: .3, yAxisID: 'y1' }
+    ]
+  }, {
+    scales: {
+      y: { beginAtZero: true, title: { display: true, text: 'Leads' } },
+      y1: { position: 'right', beginAtZero: true, title: { display: true, text: 'Taxa %' }, grid: { drawOnChartArea: false } }
+    }
+  });
+}
+
+function renderCorretores() {
+  var rows = DATA.corretor_performance || [];
+  var tbody = document.querySelector('#tblCorretores tbody');
+  var maxTaxa = Math.max.apply(null, rows.map(function(r) { return r.taxa_conversao || 0; }));
+  var html = '';
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var barW = maxTaxa > 0 ? (r.taxa_conversao / maxTaxa * 100) : 0;
+    var barColor = r.taxa_conversao >= 20 ? C.green : r.taxa_conversao >= 10 ? C.orange : C.red;
+    html += '<tr>' +
+      '<td>' + (i + 1) + '</td>' +
+      '<td><strong>' + r.corretor + '</strong></td>' +
+      '<td>' + fmt(r.total_leads) + '</td>' +
+      '<td>' + fmt(r.convertidos) + '</td>' +
+      '<td><strong>' + pct(r.taxa_conversao) + '</strong></td>' +
+      '<td>' + (r.media_contatos != null ? r.media_contatos : '-') + '</td>' +
+      '<td>' + (r.media_h_primeiro_contato != null ? r.media_h_primeiro_contato + 'h' : '-') + '</td>' +
+      '<td class="bar-cell"><div class="bar-bg" style="width:' + barW + '%;background:' + barColor + '20"></div>' +
+      '<div style="position:relative;height:20px;line-height:20px"><div style="background:' + barColor + ';width:' + barW + '%;height:100%;border-radius:3px;position:absolute;opacity:.7"></div>' +
+      '<span style="position:relative;padding-left:4px;font-size:.75rem;font-weight:600">' + pct(r.taxa_conversao) + '</span></div></td>' +
+      '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+function renderPosto() {
+  var rows = DATA.conversao_por_posto || [];
+  makeChart('chartPosto', 'bar', {
+    labels: rows.map(function(r) { return 'Posto ' + r.posto; }),
+    datasets: [
+      { label: 'Total', data: rows.map(function(r) { return r.total; }), backgroundColor: C.blue, borderRadius: 4 },
+      { label: 'Convertidos', data: rows.map(function(r) { return r.convertidos; }), backgroundColor: C.green, borderRadius: 4 }
+    ]
+  }, { plugins: { legend: { display: true } } });
+}
+
+function renderFonte() {
+  var rows = (DATA.conversao_por_fonte || []).slice(0, 12);
+  makeChart('chartFonte', 'bar', {
+    labels: rows.map(function(r) { return r.fonte; }),
+    datasets: [
+      { label: 'Total', data: rows.map(function(r) { return r.total; }), backgroundColor: C.cyan, borderRadius: 4, yAxisID: 'y' },
+      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), type: 'line', borderColor: C.red, backgroundColor: 'transparent', tension: .3, yAxisID: 'y1' }
+    ]
+  }, {
+    indexAxis: 'y',
+    scales: {
+      y: {},
+      y1: { position: 'top', beginAtZero: true, title: { display: true, text: 'Taxa %' }, grid: { drawOnChartArea: false } }
+    }
+  });
+}
+
+function renderDia() {
+  var rows = DATA.dia_semana || [];
+  makeChart('chartDia', 'bar', {
+    labels: rows.map(function(r) { return r.dia; }),
+    datasets: [
+      { label: 'Total', data: rows.map(function(r) { return r.total; }), backgroundColor: C.orange, borderRadius: 4, yAxisID: 'y' },
+      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), type: 'line', borderColor: C.purple, backgroundColor: 'transparent', tension: .3, yAxisID: 'y1' }
+    ]
+  }, {
+    scales: {
+      y: { beginAtZero: true },
+      y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } }
+    }
+  });
+}
+
+function renderHora() {
+  var rows = DATA.hora_dia || [];
+  makeChart('chartHora', 'bar', {
+    labels: rows.map(function(r) { return r.hora + 'h'; }),
+    datasets: [
+      { label: 'Total', data: rows.map(function(r) { return r.total; }), backgroundColor: C.teal, borderRadius: 4, yAxisID: 'y' },
+      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), type: 'line', borderColor: C.red, backgroundColor: 'transparent', tension: .3, yAxisID: 'y1' }
+    ]
+  }, {
+    scales: {
+      y: { beginAtZero: true },
+      y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } }
+    }
+  });
+}
+
+function renderCiclo() {
+  var rows = DATA.tempo_ciclo_conversao || [];
+  makeChart('chartCiclo', 'doughnut', {
+    labels: rows.map(function(r) { return r.faixa + ' (' + r.total + ')'; }),
+    datasets: [{
+      data: rows.map(function(r) { return r.total; }),
+      backgroundColor: PALETTE.slice(0, rows.length)
+    }]
+  }, { plugins: { legend: { position: 'right' } } });
+}
+
+function renderMotivos() {
+  var rows = (DATA.motivos_perda || []).slice(0, 8);
+  makeChart('chartMotivos', 'doughnut', {
+    labels: rows.map(function(r) { return r.motivo + ' (' + r.total + ')'; }),
+    datasets: [{
+      data: rows.map(function(r) { return r.total; }),
+      backgroundColor: PALETTE.slice(0, rows.length)
+    }]
+  }, { plugins: { legend: { position: 'right' } } });
+}
+
+function renderIdade() {
+  var rows = DATA.idade_leads || [];
+  makeChart('chartIdade', 'bar', {
+    labels: rows.map(function(r) { return r.faixa; }),
+    datasets: [
+      { label: 'Total', data: rows.map(function(r) { return r.total; }), backgroundColor: C.indigo, borderRadius: 4, yAxisID: 'y' },
+      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), type: 'line', borderColor: C.green, backgroundColor: 'transparent', tension: .3, yAxisID: 'y1' }
+    ]
+  }, {
+    scales: {
+      y: { beginAtZero: true },
+      y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } }
+    }
+  });
+}
+
+// ========================= Chart helper =========================
+
+function makeChart(canvasId, type, chartData, extraOpts) {
+  if (CHARTS[canvasId]) CHARTS[canvasId].destroy();
+  var ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  var opts = Object.assign({
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: { legend: { labels: { font: { size: 11 } } } }
+  }, extraOpts || {});
+  CHARTS[canvasId] = new Chart(ctx, { type: type, data: chartData, options: opts });
+}
+</script>
+<script src="/js/menu_enforce.js" defer></script>
+</body>
+</html>

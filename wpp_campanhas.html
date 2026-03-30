@@ -56,6 +56,9 @@
         <a href="/wpp/auditoria" class="btn btn-outline-secondary btn-sm mr-2">
           <i class="fas fa-history"></i> Auditoria
         </a>
+        <a href="/wpp/buscar" class="btn btn-outline-info btn-sm mr-2">
+          <i class="fas fa-search"></i> Buscar Envios
+        </a>
         <a href="/wpp/teste" class="btn btn-outline-success btn-sm mr-2">
           <i class="fas fa-vial"></i> Teste de Envio
         </a>
@@ -77,6 +80,7 @@
         <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
         <div class="sidebar-section-header" style="padding:8px 16px 4px;font-size:.72rem;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,.4);margin-top:8px">WhatsApp</div>
         <li class="nav-item"><a href="/wpp" class="nav-link active"><i class="nav-icon fab fa-whatsapp"></i><p>Campanhas</p></a></li>
+        <li class="nav-item"><a href="/wpp/buscar" class="nav-link"><i class="nav-icon fas fa-search"></i><p>Buscar Envios</p></a></li>
         <li class="nav-item"><a href="/wpp/auditoria" class="nav-link"><i class="nav-icon fas fa-history"></i><p>Auditoria</p></a></li>
       </ul>
     </nav>
@@ -114,6 +118,7 @@
           <table class="table table-hover table-sm mb-0">
             <thead class="thead-light">
               <tr>
+                <th style="width:40px">ID</th>
                 <th>Campanha</th>
                 <th>Postos</th>
                 <th>Regra (dias)</th>
@@ -129,6 +134,7 @@
             <tbody>
             {% for c in campanhas %}
             <tr id="row-{{ c.id }}" class="{{ 'suspensa' if not c.ativa else '' }}">
+              <td class="text-muted"><small>{{ c.id }}</small></td>
               <td>
                 <a href="/wpp/{{ c.id }}/envios" class="font-weight-bold">{{ c.nome }}</a>
                 <br><small class="text-muted">criada {{ c.created_at[:10] }}</small>
@@ -139,6 +145,10 @@
               <td>
                 {% if c.modo_envio == 'pre_vencimento' %}
                   ref+{{ c.dias_ref_min if c.dias_ref_min is not none else 4 }}{% if c.dias_ref_max %}–{{ c.dias_ref_max }}{% else %}+{% endif %}
+                {% elif c.modo_envio == 'clientes_admissao' %}
+                  <small>adm {{ (c.adm_data_ini or '')[:10] }}</small>
+                {% elif c.modo_envio == 'cliente_novo' %}
+                  <small>novos</small>
                 {% else %}
                   atraso {{ c.dias_atraso_min }}{% if c.dias_atraso_max %}–{{ c.dias_atraso_max }}{% else %}+{% endif %}
                 {% endif %}
