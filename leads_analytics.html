@@ -419,10 +419,8 @@ var URL_GERAL = new URL('json_consolidado/leads_analytics_geral.json', BASE).hre
 var URL_POSTOS = new URL('json_consolidado/leads_analytics_postos.json', BASE).href;
 var URL_CORRETORES = new URL('json_consolidado/leads_analytics_corretores.json', BASE).href;
 
-// Fonte de dados: 'cache' (JSON estatico) ou 'api' (MySQL ao vivo)
-var DATA_SOURCE = 'cache';
-// Periodo do cache (preenchido ao carregar meta)
-var CACHE_INI = null, CACHE_FIM = null;
+// Sempre usa API com datas exatas para garantir dados corretos no periodo
+var DATA_SOURCE = 'api';
 
 function getIni() { return document.getElementById('filtroIni').value; }
 function getFim() { return document.getElementById('filtroFim').value; }
@@ -469,16 +467,10 @@ function updateRangeButtons(activeMeses) {
 }
 
 function onDateChange() {
-  // Decide fonte: se periodo cabe no cache, usa cache; senao, API
+  // Sempre busca da API com datas exatas
   CACHE = { geral: null, postos: null, corretores: null };
   DATA_GERAL = null; DATA_POSTOS = null; DATA_CORRETORES = null;
-
-  var ini = getIni(), fim = getFim();
-  if (CACHE_INI && CACHE_FIM && ini >= CACHE_INI && fim <= CACHE_FIM) {
-    DATA_SOURCE = 'cache';
-  } else {
-    DATA_SOURCE = 'api';
-  }
+  DATA_SOURCE = 'api';
 
   // Desmarcar botoes de range customizado
   var btns = ['btnUlt12','btnUlt6','btnUlt3'];
@@ -509,10 +501,6 @@ function checkCacheStatus() {
   fetch('/api/leads_analytics_cache_status', {cache:'no-store'})
     .then(function(r) { return r.json(); })
     .then(function(d) {
-      // Guardar periodo do cache para decidir fonte
-      if (d.periodo_ini) CACHE_INI = d.periodo_ini;
-      if (d.periodo_fim) CACHE_FIM = d.periodo_fim;
-
       var info = document.getElementById('cacheInfo');
       if (d.gerado_em) {
         info.innerHTML = '<i class="fas fa-database mr-1"></i>Dados atualizados em <strong>' + formatIso(d.gerado_em) + '</strong>' +
@@ -601,14 +589,8 @@ function loadGeral() {
   document.getElementById('loading-geral').style.display = '';
   document.getElementById('dash-geral').style.display = 'none';
 
-  var url;
-  if (DATA_SOURCE === 'cache') {
-    url = URL_GERAL;
-    document.getElementById('filtroInfo').textContent = 'Carregando do cache...';
-  } else {
-    url = '/api/leads_analytics?ini=' + encodeURIComponent(getIni()) + '&fim=' + encodeURIComponent(getFim());
-    document.getElementById('filtroInfo').textContent = 'Consultando MySQL...';
-  }
+  document.getElementById('filtroInfo').textContent = 'Consultando...';
+  var url = '/api/leads_analytics?ini=' + encodeURIComponent(getIni()) + '&fim=' + encodeURIComponent(getFim());
 
   fetch(url, {cache:'no-store'})
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -616,14 +598,11 @@ function loadGeral() {
       DATA_GERAL = d; CACHE.geral = d;
       document.getElementById('loading-geral').style.display = 'none';
       document.getElementById('dash-geral').style.display = '';
-      var src = DATA_SOURCE === 'cache' ? 'Cache' : 'MySQL (tempo real)';
-      document.getElementById('filtroInfo').textContent = fmt(d.resumo_geral ? d.resumo_geral.total_leads : 0) + ' leads | Fonte: ' + src;
-      document.getElementById('jsonInfo').textContent = d.meta ? 'Dados de ' + formatIso(d.meta.gerado_em) : '';
+      document.getElementById('filtroInfo').textContent = fmt(d.resumo_geral ? d.resumo_geral.total_leads : 0) + ' leads no periodo';
       renderGeral();
     })
     .catch(function(e) {
-      document.getElementById('loading-geral').innerHTML = '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i><p class="mt-2">Erro ao carregar. ' +
-        (DATA_SOURCE === 'cache' ? 'Clique em "Atualizar Agora" para gerar o cache.' : 'Tente novamente.') + '</p><p class="small">' + e.message + '</p></div>';
+      document.getElementById('loading-geral').innerHTML = '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i><p class="mt-2">Erro ao carregar. Tente novamente.</p><p class="small">' + e.message + '</p></div>';
       document.getElementById('filtroInfo').textContent = '';
     });
 }
@@ -765,9 +744,7 @@ function loadPostos() {
   document.getElementById('loading-postos').style.display = '';
   document.getElementById('dash-postos').style.display = 'none';
 
-  var urlPostos = DATA_SOURCE === 'cache' ? URL_POSTOS :
-    '/api/leads_analytics_postos?ini=' + encodeURIComponent(getIni()) + '&fim=' + encodeURIComponent(getFim());
-  fetch(urlPostos, {cache:'no-store'})
+  fetch('/api/leads_analytics_postos?ini=' + encodeURIComponent(getIni()) + '&fim=' + encodeURIComponent(getFim()), {cache:'no-store'})
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d) {
       DATA_POSTOS = d; CACHE.postos = d;
@@ -908,9 +885,7 @@ function loadCorretores() {
   document.getElementById('loading-corretores').style.display = '';
   document.getElementById('dash-corretores').style.display = 'none';
 
-  var urlCorr = DATA_SOURCE === 'cache' ? URL_CORRETORES :
-    '/api/leads_analytics_corretores?ini=' + encodeURIComponent(getIni()) + '&fim=' + encodeURIComponent(getFim());
-  fetch(urlCorr, {cache:'no-store'})
+  fetch('/api/leads_analytics_corretores?ini=' + encodeURIComponent(getIni()) + '&fim=' + encodeURIComponent(getFim()), {cache:'no-store'})
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d) {
       DATA_CORRETORES = d; CACHE.corretores = d;
