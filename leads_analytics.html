@@ -195,11 +195,15 @@
 
             <div class="row">
               <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-calendar-alt text-orange mr-1"></i>Conversao por Dia da Semana</h2><canvas id="chartDia"></canvas></div></div>
-              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-clock text-purple mr-1"></i>Conversao por Hora do Dia</h2><canvas id="chartHora"></canvas></div></div>
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-clock text-purple mr-1"></i>Hora que o Lead Chegou vs Conversao</h2><canvas id="chartHora"></canvas></div></div>
             </div>
 
             <div class="row">
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-user-check text-success mr-1"></i>Hora que o Corretor Fechou a Matricula</h2><canvas id="chartHoraFechamento"></canvas></div></div>
               <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-hourglass-half text-success mr-1"></i>Tempo ate Conversao</h2><canvas id="chartCiclo"></canvas></div></div>
+            </div>
+
+            <div class="row">
               <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-times-circle text-danger mr-1"></i>Motivos de Perda</h2><canvas id="chartMotivos"></canvas></div></div>
             </div>
 
@@ -322,10 +326,11 @@
 
               <div class="row">
                 <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-calendar-alt text-orange mr-1"></i>Conversao por Dia da Semana</h2><canvas id="chartCorretorDia"></canvas></div></div>
-                <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-clock text-purple mr-1"></i>Conversao por Hora do Dia</h2><canvas id="chartCorretorHora"></canvas></div></div>
+                <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-clock text-purple mr-1"></i>Hora que o Lead Chegou vs Conversao</h2><canvas id="chartCorretorHora"></canvas></div></div>
               </div>
 
               <div class="row">
+                <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-user-check text-success mr-1"></i>Hora que Fechou a Matricula</h2><canvas id="chartCorretorHoraFech"></canvas></div></div>
                 <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-bullseye text-info mr-1"></i>Conversao por Fonte</h2><canvas id="chartCorretorFonte"></canvas></div></div>
                 <div class="col-lg-6">
                   <div class="chart-box">
@@ -571,6 +576,12 @@ function renderGeral() {
     {label:'Total', data:rows.map(function(r){return r.total}), backgroundColor:C.indigo, borderRadius:4, yAxisID:'y'},
     {label:'Taxa %', data:rows.map(function(r){return r.taxa}), type:'line', borderColor:C.green, backgroundColor:'transparent', tension:.3, yAxisID:'y1'}
   ]}, { scales:{y:{beginAtZero:true},y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false}}} });
+
+  // Hora de fechamento (matricula)
+  rows = d.hora_fechamento || [];
+  makeChart('chartHoraFechamento', 'bar', { labels: rows.map(function(r){return r.hora+'h'}), datasets: [
+    {label:'Matriculas', data:rows.map(function(r){return r.total}), backgroundColor:C.green, borderRadius:4}
+  ]}, { scales:{y:{beginAtZero:true, title:{display:true,text:'Matriculas Registradas'}}}, plugins:{legend:{display:false}} });
 
   // Piores dias
   rows = d.piores_dias || [];
@@ -849,6 +860,12 @@ function renderCorretorDeepDive(uid) {
     {label:'Convertidos', data:horas.map(function(r){return r.convertidos}), backgroundColor:C.green, borderRadius:4, yAxisID:'y'},
     {label:'Taxa %', data:horas.map(function(r){return r.taxa}), type:'line', borderColor:C.red, backgroundColor:'transparent', tension:.3, yAxisID:'y1'}
   ]}, { scales:{y:{beginAtZero:true}, y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false}}} });
+
+  // Hora de fechamento (matricula) por corretor
+  var horasFech = (d.corretor_hora_fechamento || []).filter(function(r) { return r.user_id === uid; });
+  makeChart('chartCorretorHoraFech', 'bar', { labels: horasFech.map(function(r){return r.hora+'h'}), datasets: [
+    {label:'Matriculas', data:horasFech.map(function(r){return r.total}), backgroundColor:C.green, borderRadius:4}
+  ]}, { scales:{y:{beginAtZero:true, title:{display:true,text:'Matriculas Registradas'}}}, plugins:{legend:{display:false}} });
 
   // Fonte
   var fontes = (d.corretor_fonte || []).filter(function(r) { return r.user_id === uid; }).slice(0, 10);

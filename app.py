@@ -1325,7 +1325,8 @@ def api_leads_analytics():
             fetch_conversao_por_fonte, fetch_corretor_performance,
             fetch_tempo_primeiro_contato_impacto, fetch_contatos_vs_conversao,
             fetch_motivos_perda, fetch_evolucao_mensal, fetch_dia_semana,
-            fetch_hora_dia, fetch_tempo_ciclo_conversao, fetch_idade_leads,
+            fetch_hora_dia, fetch_hora_fechamento,
+            fetch_tempo_ciclo_conversao, fetch_idade_leads,
             fetch_gargalos_funil, fetch_piores_dias, generate_insights,
             _serialize,
         )
@@ -1348,6 +1349,7 @@ def api_leads_analytics():
             ("idade_leads",            fetch_idade_leads),
             ("gargalos_funil",         fetch_gargalos_funil),
             ("piores_dias",            fetch_piores_dias),
+            ("hora_fechamento",        fetch_hora_fechamento),
         ]
         for name, fn in queries:
             try:
@@ -1420,7 +1422,8 @@ def api_leads_analytics_corretores():
             get_conn, fetch_corretor_performance, fetch_corretor_mensal,
             fetch_corretor_hora, fetch_corretor_dia_semana,
             fetch_corretor_fonte, fetch_corretor_desperdicio,
-            fetch_corretor_ciclo, _serialize,
+            fetch_corretor_ciclo, fetch_corretor_hora_fechamento,
+            _serialize,
         )
         conn = get_conn()
         data = {}
@@ -1432,6 +1435,7 @@ def api_leads_analytics_corretores():
             ("corretor_fonte",       fetch_corretor_fonte),
             ("corretor_desperdicio", fetch_corretor_desperdicio),
             ("corretor_ciclo",       fetch_corretor_ciclo),
+            ("corretor_hora_fechamento", fetch_corretor_hora_fechamento),
         ]
         for name, fn in queries:
             try:

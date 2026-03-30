@@ -331,6 +331,41 @@ def fetch_hora_dia(conn, ini, fim):
     """, (str(ini), str(fim)))
 
 
+def fetch_hora_fechamento(conn, ini, fim):
+    """Hora em que o corretor registrou a matricula (finish_lead_date)."""
+    return q(conn, """
+        SELECT
+            HOUR(l.finish_lead_date) as hora,
+            COUNT(*) as total
+        FROM leads l
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+          AND l.finish_lead_signup = 1
+          AND l.finish_lead_date IS NOT NULL
+        GROUP BY hora
+        ORDER BY hora
+    """, (str(ini), str(fim)))
+
+
+def fetch_corretor_hora_fechamento(conn, ini, fim):
+    """Hora de fechamento (matricula) por corretor."""
+    return q(conn, """
+        SELECT
+            u.id as user_id,
+            HOUR(l.finish_lead_date) as hora,
+            COUNT(*) as total
+        FROM leads l
+        JOIN users u ON u.id = l.user_id
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+          AND u.deleted_at IS NULL
+          AND l.finish_lead_signup = 1
+          AND l.finish_lead_date IS NOT NULL
+        GROUP BY u.id, hora
+        ORDER BY u.id, hora
+    """, (str(ini), str(fim)))
+
+
 def fetch_tempo_ciclo_conversao(conn, ini, fim):
     """Distribuicao do tempo entre criacao do lead e conversao (finish_lead_date)."""
     return q(conn, """
