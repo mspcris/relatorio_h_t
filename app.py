@@ -1451,6 +1451,67 @@ def api_leads_analytics_corretores():
         return jsonify({"erro": str(exc)}), 500
 
 
+@app.post("/api/leads_analytics_refresh")
+def api_leads_analytics_refresh():
+    email, _ = decode_user()
+    if not email:
+        return ("", 401)
+
+    from export_leads_analytics_cache import (
+        is_running, get_daily_run_count, run_cache,
+    )
+
+    # Verificar se ja esta rodando
+    if is_running():
+        return jsonify({
+            "ok": False,
+            "erro": "Ja existe uma atualizacao em andamento. Aguarde.",
+        })
+
+    # Limite de 3 execucoes por dia
+    runs_today = get_daily_run_count()
+    if runs_today >= 3:
+        return jsonify({
+            "ok": False,
+            "erro": f"Limite de 3 atualizacoes por dia atingido ({runs_today}/3). Tente novamente amanha.",
+        })
+
+    # Executar em thread separada para nao bloquear
+    import threading
+    def _run():
+        try:
+            run_cache(force_full=False)
+        except Exception:
+            pass
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+    return jsonify({
+        "ok": True,
+        "msg": f"Atualizacao iniciada ({runs_today + 1}/3 hoje). Pode levar 1-2 minutos.",
+    })
+
+
+@app.get("/api/leads_analytics_cache_status")
+def api_leads_analytics_cache_status():
+    """Retorna status do cache: ultima atualizacao, se esta rodando, runs hoje."""
+    email, _ = decode_user()
+    if not email:
+        return ("", 401)
+
+    from export_leads_analytics_cache import is_running, get_daily_run_count, load_meta
+    meta = load_meta()
+    return jsonify({
+        "rodando": is_running(),
+        "runs_hoje": get_daily_run_count(),
+        "gerado_em": meta.get("gerado_em"),
+        "validacao_ok": meta.get("validacao_ok"),
+        "mysql_count": meta.get("mysql_count"),
+        "modo": meta.get("modo"),
+    })
+
+
 # ===============================
 # Execução manual
 # ===============================

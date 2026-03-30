@@ -120,19 +120,18 @@
 
     <section class="content px-3 pb-3">
 
-      <!-- FILTROS DE DATA -->
+      <!-- INFO + ATUALIZAR -->
       <div class="card mb-3">
         <div class="card-body py-2 d-flex align-items-center flex-wrap" style="gap:12px">
-          <label class="mb-0 font-weight-bold" style="font-size:.85rem">Periodo:</label>
-          <input id="filtroIni" type="date" class="form-control form-control-sm" style="width:160px">
-          <span class="text-muted">ate</span>
-          <input id="filtroFim" type="date" class="form-control form-control-sm" style="width:160px">
-          <button id="btnFiltrar" class="btn btn-sm btn-primary"><i class="fas fa-filter mr-1"></i>Filtrar</button>
-          <button id="btnUlt12" class="btn btn-sm btn-outline-secondary">Ultimos 12m</button>
-          <button id="btnUlt6" class="btn btn-sm btn-outline-secondary">Ultimos 6m</button>
-          <button id="btnUlt3" class="btn btn-sm btn-outline-secondary">Ultimos 3m</button>
-          <span id="filtroInfo" class="text-muted ml-2" style="font-size:.78rem"></span>
+          <span id="cacheInfo" class="text-muted" style="font-size:.82rem"><i class="fas fa-database mr-1"></i>Carregando info...</span>
+          <button id="btnRefresh" class="btn btn-sm btn-warning ml-auto" onclick="doRefresh()" title="Atualizar dados do MySQL (maximo 3x por dia)">
+            <i class="fas fa-sync-alt mr-1"></i>Atualizar Agora
+          </button>
+          <span id="refreshMsg" class="text-muted ml-2" style="font-size:.78rem"></span>
         </div>
+      </div>
+      <div id="refreshWarning" class="alert alert-info py-2 mb-3" style="display:none;font-size:.82rem">
+        <i class="fas fa-hourglass-half mr-1"></i><strong>Atualizacao em andamento.</strong> Consulta o MySQL com ~25 queries — pode levar 1-2 minutos. A pagina sera recarregada automaticamente ao concluir.
       </div>
 
       <!-- TABS -->
@@ -388,8 +387,6 @@ var postoFiltro = 'ALL'; // 'ALL' or single letter
 function fmt(n) { return n == null ? '-' : Number(n).toLocaleString('pt-BR'); }
 function pct(n) { return n == null ? '-' : Number(n).toFixed(1) + '%'; }
 function isoDate(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
-function getIni() { return document.getElementById('filtroIni').value; }
-function getFim() { return document.getElementById('filtroFim').value; }
 
 function kpiCard(label, value, color, sub) {
   return '<div class="kpi-card ' + color + '"><div class="kpi-val">' + value + '</div><div class="kpi-label">' + label + '</div>' +
@@ -404,37 +401,20 @@ function makeChart(canvasId, type, chartData, extraOpts) {
   CHARTS[canvasId] = new Chart(ctx, { type: type, data: chartData, options: opts });
 }
 
-/* ========================= Date Filters ========================= */
+/* ========================= Init ========================= */
 
-function initFiltros() {
-  var hoje = new Date();
-  var fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
-  var ini = new Date(hoje.getFullYear() - 1, hoje.getMonth(), 1);
-  document.getElementById('filtroIni').value = isoDate(ini);
-  document.getElementById('filtroFim').value = isoDate(fim);
+var BASE = new URL('.', window.location.href).href;
+var URL_GERAL = new URL('json_consolidado/leads_analytics_geral.json', BASE).href;
+var URL_POSTOS = new URL('json_consolidado/leads_analytics_postos.json', BASE).href;
+var URL_CORRETORES = new URL('json_consolidado/leads_analytics_corretores.json', BASE).href;
 
-  document.getElementById('btnFiltrar').onclick = function() { invalidateCache(); loadActiveTab(); };
-  document.getElementById('btnUlt12').onclick = function() { setRange(12); };
-  document.getElementById('btnUlt6').onclick = function() { setRange(6); };
-  document.getElementById('btnUlt3').onclick = function() { setRange(3); };
-
+function initPage() {
   // Tab switch = lazy load
   $('#mainTabs a[data-toggle="tab"]').on('shown.bs.tab', function(e) { loadActiveTab(); });
-
+  // Load cache status + first tab
+  checkCacheStatus();
   loadActiveTab();
 }
-
-function setRange(meses) {
-  var hoje = new Date();
-  var fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
-  var ini = new Date(hoje.getFullYear(), hoje.getMonth() - meses + 1, 1);
-  document.getElementById('filtroIni').value = isoDate(ini);
-  document.getElementById('filtroFim').value = isoDate(fim);
-  invalidateCache();
-  loadActiveTab();
-}
-
-function invalidateCache() { CACHE = { geral: null, postos: null, corretores: null }; }
 
 function loadActiveTab() {
   var active = document.querySelector('#mainTabs .nav-link.active');
@@ -445,26 +425,112 @@ function loadActiveTab() {
   else if (tab === '#tab-corretores') loadCorretores();
 }
 
+/* ========================= Cache Status + Refresh ========================= */
+
+function checkCacheStatus() {
+  fetch('/api/leads_analytics_cache_status', {cache:'no-store'})
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var info = document.getElementById('cacheInfo');
+      if (d.gerado_em) {
+        info.innerHTML = '<i class="fas fa-database mr-1"></i>Dados atualizados em <strong>' + formatIso(d.gerado_em) + '</strong>' +
+          (d.validacao_ok === false ? ' <span class="text-danger">(validacao inconsistente)</span>' : ' <span class="text-success">(validacao OK)</span>') +
+          ' | ' + fmt(d.mysql_count) + ' leads';
+      } else {
+        info.innerHTML = '<i class="fas fa-exclamation-circle text-warning mr-1"></i>Cache ainda nao gerado. Clique em "Atualizar Agora".';
+      }
+      var btn = document.getElementById('btnRefresh');
+      if (d.rodando) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Atualizando...';
+        document.getElementById('refreshWarning').style.display = '';
+        // Poll a cada 5s
+        setTimeout(function() { pollRefresh(); }, 5000);
+      } else if (d.runs_hoje >= 3) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-ban mr-1"></i>Limite atingido (3/3)';
+        document.getElementById('refreshMsg').textContent = 'Maximo de 3 atualizacoes por dia. Dados atualizam automaticamente a noite.';
+      } else {
+        document.getElementById('refreshMsg').textContent = '(' + d.runs_hoje + '/3 atualizacoes hoje)';
+      }
+    })
+    .catch(function() {
+      document.getElementById('cacheInfo').innerHTML = '<i class="fas fa-exclamation-circle text-danger mr-1"></i>Erro ao verificar status do cache.';
+    });
+}
+
+function doRefresh() {
+  var btn = document.getElementById('btnRefresh');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Iniciando...';
+  document.getElementById('refreshWarning').style.display = '';
+  document.getElementById('refreshMsg').textContent = '';
+
+  fetch('/api/leads_analytics_refresh', {method:'POST', cache:'no-store'})
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.ok) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i>Atualizar Agora';
+        document.getElementById('refreshWarning').style.display = 'none';
+        document.getElementById('refreshMsg').innerHTML = '<span class="text-danger">' + d.erro + '</span>';
+        return;
+      }
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Atualizando...';
+      document.getElementById('refreshMsg').textContent = d.msg;
+      // Poll ate terminar
+      setTimeout(function() { pollRefresh(); }, 5000);
+    })
+    .catch(function(e) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i>Atualizar Agora';
+      document.getElementById('refreshMsg').innerHTML = '<span class="text-danger">Erro: ' + e.message + '</span>';
+    });
+}
+
+function pollRefresh() {
+  fetch('/api/leads_analytics_cache_status', {cache:'no-store'})
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.rodando) {
+        setTimeout(function() { pollRefresh(); }, 5000);
+      } else {
+        // Concluido — recarregar pagina
+        window.location.reload();
+      }
+    })
+    .catch(function() {
+      setTimeout(function() { pollRefresh(); }, 8000);
+    });
+}
+
+function formatIso(iso) {
+  if (!iso) return '-';
+  try {
+    var d = new Date(iso);
+    return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear() +
+      ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  } catch(e) { return iso; }
+}
+
 /* ========================= ABA 1: VISAO GERAL ========================= */
 
 function loadGeral() {
   if (CACHE.geral) { renderGeral(); return; }
   document.getElementById('loading-geral').style.display = '';
   document.getElementById('dash-geral').style.display = 'none';
-  document.getElementById('filtroInfo').textContent = 'Carregando...';
 
-  fetch('/api/leads_analytics?ini=' + encodeURIComponent(getIni()) + '&fim=' + encodeURIComponent(getFim()), {cache:'no-store'})
+  fetch(URL_GERAL, {cache:'no-store'})
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d) {
       DATA_GERAL = d; CACHE.geral = d;
       document.getElementById('loading-geral').style.display = 'none';
       document.getElementById('dash-geral').style.display = '';
-      document.getElementById('filtroInfo').textContent = fmt(d.resumo_geral ? d.resumo_geral.total_leads : 0) + ' leads no periodo';
-      document.getElementById('jsonInfo').textContent = 'Dados em tempo real do MySQL';
+      document.getElementById('jsonInfo').textContent = d.meta ? 'Dados de ' + formatIso(d.meta.gerado_em) : '';
       renderGeral();
     })
     .catch(function(e) {
-      document.getElementById('loading-geral').innerHTML = '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i><p class="mt-2">Erro: ' + e.message + '</p></div>';
+      document.getElementById('loading-geral').innerHTML = '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i><p class="mt-2">Erro ao carregar dados. Clique em "Atualizar Agora" para gerar o cache.</p><p class="small">' + e.message + '</p></div>';
     });
 }
 
@@ -605,7 +671,7 @@ function loadPostos() {
   document.getElementById('loading-postos').style.display = '';
   document.getElementById('dash-postos').style.display = 'none';
 
-  fetch('/api/leads_analytics_postos?ini=' + encodeURIComponent(getIni()) + '&fim=' + encodeURIComponent(getFim()), {cache:'no-store'})
+  fetch(URL_POSTOS, {cache:'no-store'})
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d) {
       DATA_POSTOS = d; CACHE.postos = d;
@@ -615,7 +681,7 @@ function loadPostos() {
       renderPostos();
     })
     .catch(function(e) {
-      document.getElementById('loading-postos').innerHTML = '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i><p class="mt-2">Erro: ' + e.message + '</p></div>';
+      document.getElementById('loading-postos').innerHTML = '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i><p class="mt-2">Erro ao carregar. Clique em "Atualizar Agora".</p><p class="small">' + e.message + '</p></div>';
     });
 }
 
@@ -746,7 +812,7 @@ function loadCorretores() {
   document.getElementById('loading-corretores').style.display = '';
   document.getElementById('dash-corretores').style.display = 'none';
 
-  fetch('/api/leads_analytics_corretores?ini=' + encodeURIComponent(getIni()) + '&fim=' + encodeURIComponent(getFim()), {cache:'no-store'})
+  fetch(URL_CORRETORES, {cache:'no-store'})
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d) {
       DATA_CORRETORES = d; CACHE.corretores = d;
@@ -755,7 +821,7 @@ function loadCorretores() {
       renderCorretoresTab();
     })
     .catch(function(e) {
-      document.getElementById('loading-corretores').innerHTML = '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i><p class="mt-2">Erro: ' + e.message + '</p></div>';
+      document.getElementById('loading-corretores').innerHTML = '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i><p class="mt-2">Erro ao carregar. Clique em "Atualizar Agora".</p><p class="small">' + e.message + '</p></div>';
     });
 }
 
@@ -949,7 +1015,7 @@ function renderCorretorDeepDive(uid) {
 }
 
 /* ========================= Init ========================= */
-initFiltros();
+initPage();
 </script>
 <script src="/js/menu_enforce.js" defer></script>
 </body>
