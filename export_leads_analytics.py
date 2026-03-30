@@ -412,6 +412,237 @@ def fetch_gargalos_funil(conn, ini, fim):
     """, (str(ini), str(fim)))
 
 
+def fetch_piores_dias(conn, ini, fim):
+    """Top 20 datas com pior taxa de conversao (minimo 5 leads no dia)."""
+    return q(conn, """
+        SELECT
+            DATE(l.created_at) as dia,
+            DAYNAME(l.created_at) as dia_semana,
+            COUNT(*) as total,
+            SUM(l.finish_lead_signup = 1) as convertidos,
+            ROUND(AVG(CASE WHEN l.finish_lead_signup = 1 THEN 1 ELSE 0 END) * 100, 2) as taxa
+        FROM leads l
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+        GROUP BY dia, dia_semana
+        HAVING total >= 5
+        ORDER BY taxa ASC, total DESC
+        LIMIT 20
+    """, (str(ini), str(fim)))
+
+
+def fetch_corretor_mensal(conn, ini, fim):
+    """Dados mensais por corretor: total, convertidos, taxa."""
+    return q(conn, """
+        SELECT
+            u.id as user_id,
+            u.name as corretor,
+            DATE_FORMAT(l.created_at, '%%Y-%%m') as mes,
+            COUNT(*) as total,
+            SUM(l.finish_lead_signup = 1) as convertidos,
+            ROUND(AVG(CASE WHEN l.finish_lead_signup = 1 THEN 1 ELSE 0 END) * 100, 2) as taxa
+        FROM leads l
+        JOIN users u ON u.id = l.user_id
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+          AND u.deleted_at IS NULL
+        GROUP BY u.id, u.name, mes
+        ORDER BY u.name, mes
+    """, (str(ini), str(fim)))
+
+
+def fetch_corretor_hora(conn, ini, fim):
+    """Conversao por hora do dia por corretor."""
+    return q(conn, """
+        SELECT
+            u.id as user_id,
+            HOUR(l.created_at) as hora,
+            COUNT(*) as total,
+            SUM(l.finish_lead_signup = 1) as convertidos,
+            ROUND(AVG(CASE WHEN l.finish_lead_signup = 1 THEN 1 ELSE 0 END) * 100, 2) as taxa
+        FROM leads l
+        JOIN users u ON u.id = l.user_id
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+          AND u.deleted_at IS NULL
+        GROUP BY u.id, hora
+        ORDER BY u.id, hora
+    """, (str(ini), str(fim)))
+
+
+def fetch_corretor_dia_semana(conn, ini, fim):
+    """Conversao por dia da semana por corretor."""
+    return q(conn, """
+        SELECT
+            u.id as user_id,
+            DAYOFWEEK(l.created_at) as dow,
+            CASE DAYOFWEEK(l.created_at)
+                WHEN 1 THEN 'Domingo'
+                WHEN 2 THEN 'Segunda'
+                WHEN 3 THEN 'Terca'
+                WHEN 4 THEN 'Quarta'
+                WHEN 5 THEN 'Quinta'
+                WHEN 6 THEN 'Sexta'
+                WHEN 7 THEN 'Sabado'
+            END as dia,
+            COUNT(*) as total,
+            SUM(l.finish_lead_signup = 1) as convertidos,
+            ROUND(AVG(CASE WHEN l.finish_lead_signup = 1 THEN 1 ELSE 0 END) * 100, 2) as taxa
+        FROM leads l
+        JOIN users u ON u.id = l.user_id
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+          AND u.deleted_at IS NULL
+        GROUP BY u.id, dow, dia
+        ORDER BY u.id, dow
+    """, (str(ini), str(fim)))
+
+
+def fetch_corretor_fonte(conn, ini, fim):
+    """Conversao por fonte de lead por corretor."""
+    return q(conn, """
+        SELECT
+            u.id as user_id,
+            COALESCE(ls.title, 'Sem fonte') as fonte,
+            COUNT(*) as total,
+            SUM(l.finish_lead_signup = 1) as convertidos,
+            ROUND(AVG(CASE WHEN l.finish_lead_signup = 1 THEN 1 ELSE 0 END) * 100, 2) as taxa
+        FROM leads l
+        JOIN users u ON u.id = l.user_id
+        LEFT JOIN leadsources ls ON ls.id = l.leadsource_id
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+          AND u.deleted_at IS NULL
+        GROUP BY u.id, ls.id, ls.title
+        ORDER BY u.id, total DESC
+    """, (str(ini), str(fim)))
+
+
+def fetch_corretor_desperdicio(conn, ini, fim):
+    """Corretores que mais desperdicam leads (nao convertidos com poucos contatos)."""
+    return q(conn, """
+        SELECT
+            u.id as user_id,
+            u.name as corretor,
+            COUNT(*) as total,
+            SUM(l.finish_lead_signup = 1) as convertidos,
+            SUM(l.finish_lead_signup = 0 OR l.finish_lead_signup IS NULL) as desperdicados,
+            ROUND(AVG(CASE WHEN l.finish_lead_signup = 0 OR l.finish_lead_signup IS NULL THEN 1 ELSE 0 END) * 100, 2) as taxa_desperdicio,
+            ROUND(AVG(tc.contatos), 1) as media_contatos
+        FROM leads l
+        JOIN users u ON u.id = l.user_id
+        LEFT JOIN (
+            SELECT lead_id, COUNT(*) as contatos
+            FROM timelines
+            GROUP BY lead_id
+        ) tc ON tc.lead_id = l.id
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+          AND u.deleted_at IS NULL
+        GROUP BY u.id, u.name
+        HAVING total >= 5
+        ORDER BY taxa_desperdicio DESC
+    """, (str(ini), str(fim)))
+
+
+def fetch_corretor_ciclo(conn, ini, fim):
+    """Ciclo medio de conversao por corretor (dias entre criacao e finish_lead_date)."""
+    return q(conn, """
+        SELECT
+            u.id as user_id,
+            u.name as corretor,
+            ROUND(AVG(DATEDIFF(l.finish_lead_date, l.created_at)), 1) as media_dias,
+            COUNT(*) as total_convertidos
+        FROM leads l
+        JOIN users u ON u.id = l.user_id
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+          AND u.deleted_at IS NULL
+          AND l.finish_lead_signup = 1
+          AND l.finish_lead_date IS NOT NULL
+        GROUP BY u.id, u.name
+        HAVING total_convertidos >= 2
+        ORDER BY media_dias ASC
+    """, (str(ini), str(fim)))
+
+
+def fetch_posto_mensal_agg(conn, ini, fim):
+    """Evolucao mensal de leads convertidos por posto."""
+    return q(conn, """
+        SELECT
+            l.filialCode as posto,
+            DATE_FORMAT(l.created_at, '%%Y-%%m') as mes,
+            COUNT(*) as convertidos
+        FROM leads l
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+          AND l.finish_lead_signup = 1
+          AND l.filialCode IS NOT NULL
+          AND LENGTH(l.filialCode) = 1
+        GROUP BY l.filialCode, mes
+        ORDER BY l.filialCode, mes
+    """, (str(ini), str(fim)))
+
+
+def fetch_posto_corretor(conn, ini, fim):
+    """Corretores que fecharam leads por posto."""
+    return q(conn, """
+        SELECT
+            l.filialCode as posto,
+            u.id as user_id,
+            u.name as corretor,
+            COUNT(*) as convertidos
+        FROM leads l
+        JOIN users u ON u.id = l.user_id
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+          AND u.deleted_at IS NULL
+          AND l.finish_lead_signup = 1
+          AND l.filialCode IS NOT NULL
+          AND LENGTH(l.filialCode) = 1
+        GROUP BY l.filialCode, u.id, u.name
+        ORDER BY l.filialCode, convertidos DESC
+    """, (str(ini), str(fim)))
+
+
+def fetch_posto_fonte(conn, ini, fim):
+    """Fontes dos leads fechados por posto."""
+    return q(conn, """
+        SELECT
+            l.filialCode as posto,
+            COALESCE(ls.title, 'Sem fonte') as fonte,
+            COUNT(*) as convertidos
+        FROM leads l
+        LEFT JOIN leadsources ls ON ls.id = l.leadsource_id
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+          AND l.finish_lead_signup = 1
+          AND l.filialCode IS NOT NULL
+          AND LENGTH(l.filialCode) = 1
+        GROUP BY l.filialCode, ls.id, ls.title
+        ORDER BY l.filialCode, convertidos DESC
+    """, (str(ini), str(fim)))
+
+
+def fetch_posto_ciclo(conn, ini, fim):
+    """Ciclo medio de conversao por posto."""
+    return q(conn, """
+        SELECT
+            l.filialCode as posto,
+            ROUND(AVG(DATEDIFF(l.finish_lead_date, l.created_at)), 1) as media_dias,
+            COUNT(*) as total
+        FROM leads l
+        WHERE l.created_at >= %s AND l.created_at < %s
+          AND l.deleted_at IS NULL
+          AND l.finish_lead_signup = 1
+          AND l.finish_lead_date IS NOT NULL
+          AND l.filialCode IS NOT NULL
+          AND LENGTH(l.filialCode) = 1
+        GROUP BY l.filialCode
+        ORDER BY media_dias ASC
+    """, (str(ini), str(fim)))
+
+
 def generate_insights(data):
     """Gera insights automaticos baseados nos dados."""
     insights = []

@@ -1326,7 +1326,8 @@ def api_leads_analytics():
             fetch_tempo_primeiro_contato_impacto, fetch_contatos_vs_conversao,
             fetch_motivos_perda, fetch_evolucao_mensal, fetch_dia_semana,
             fetch_hora_dia, fetch_tempo_ciclo_conversao, fetch_idade_leads,
-            fetch_gargalos_funil, generate_insights, _serialize,
+            fetch_gargalos_funil, fetch_piores_dias, generate_insights,
+            _serialize,
         )
         conn = get_conn()
         data = {}
@@ -1346,6 +1347,7 @@ def api_leads_analytics():
             ("tempo_ciclo_conversao",  fetch_tempo_ciclo_conversao),
             ("idade_leads",            fetch_idade_leads),
             ("gargalos_funil",         fetch_gargalos_funil),
+            ("piores_dias",            fetch_piores_dias),
         ]
         for name, fn in queries:
             try:
@@ -1359,6 +1361,87 @@ def api_leads_analytics():
                 data[name] = []
         conn.close()
         data["insights"] = generate_insights(data)
+        return jsonify(data)
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
+
+
+@app.get("/api/leads_analytics_postos")
+def api_leads_analytics_postos():
+    email, _ = decode_user()
+    if not email:
+        return ("", 401)
+
+    ini = (request.args.get("ini") or "").strip()[:10]
+    fim = (request.args.get("fim") or "").strip()[:10]
+    if not ini or not fim:
+        return jsonify({"erro": "parametros ini e fim obrigatorios"}), 400
+
+    try:
+        from export_leads_analytics import (
+            get_conn, fetch_posto_mensal_agg, fetch_posto_corretor,
+            fetch_posto_fonte, fetch_posto_ciclo, _serialize,
+        )
+        conn = get_conn()
+        data = {}
+        queries = [
+            ("posto_mensal",    fetch_posto_mensal_agg),
+            ("posto_corretor",  fetch_posto_corretor),
+            ("posto_fonte",     fetch_posto_fonte),
+            ("posto_ciclo",     fetch_posto_ciclo),
+        ]
+        for name, fn in queries:
+            try:
+                result = fn(conn, ini, fim)
+                if isinstance(result, list):
+                    result = [{k: _serialize(v) for k, v in row.items()} if isinstance(row, dict) else row for row in result]
+                data[name] = result
+            except Exception:
+                data[name] = []
+        conn.close()
+        return jsonify(data)
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
+
+
+@app.get("/api/leads_analytics_corretores")
+def api_leads_analytics_corretores():
+    email, _ = decode_user()
+    if not email:
+        return ("", 401)
+
+    ini = (request.args.get("ini") or "").strip()[:10]
+    fim = (request.args.get("fim") or "").strip()[:10]
+    if not ini or not fim:
+        return jsonify({"erro": "parametros ini e fim obrigatorios"}), 400
+
+    try:
+        from export_leads_analytics import (
+            get_conn, fetch_corretor_performance, fetch_corretor_mensal,
+            fetch_corretor_hora, fetch_corretor_dia_semana,
+            fetch_corretor_fonte, fetch_corretor_desperdicio,
+            fetch_corretor_ciclo, _serialize,
+        )
+        conn = get_conn()
+        data = {}
+        queries = [
+            ("corretor_ranking",     fetch_corretor_performance),
+            ("corretor_mensal",      fetch_corretor_mensal),
+            ("corretor_hora",        fetch_corretor_hora),
+            ("corretor_dia_semana",  fetch_corretor_dia_semana),
+            ("corretor_fonte",       fetch_corretor_fonte),
+            ("corretor_desperdicio", fetch_corretor_desperdicio),
+            ("corretor_ciclo",       fetch_corretor_ciclo),
+        ]
+        for name, fn in queries:
+            try:
+                result = fn(conn, ini, fim)
+                if isinstance(result, list):
+                    result = [{k: _serialize(v) for k, v in row.items()} if isinstance(row, dict) else row for row in result]
+                data[name] = result
+            except Exception:
+                data[name] = []
+        conn.close()
         return jsonify(data)
     except Exception as exc:
         return jsonify({"erro": str(exc)}), 500

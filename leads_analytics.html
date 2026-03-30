@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style2.css">
+  <link rel="stylesheet" href="/css/style_kpi.css">
   <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -19,7 +20,6 @@
     h1 { font-size: 1.6rem; font-weight: 700; }
     h2 { font-size: 1.15rem; font-weight: 700; color: #343a40; margin-bottom: .5rem; }
 
-    /* KPI cards */
     .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
     .kpi-card { background: #fff; border-radius: 10px; padding: 16px; border-left: 4px solid #007bff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
     .kpi-card .kpi-val { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
@@ -32,7 +32,6 @@
     .kpi-card.teal { border-left-color: #20c997; }
     .kpi-card.cyan { border-left-color: #17a2b8; }
 
-    /* Insight cards */
     .insight-card { border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; }
     .insight-card.destaque { background: #d4edda; border-left: 4px solid #28a745; }
     .insight-card.alerta   { background: #fff3cd; border-left: 4px solid #ffc107; }
@@ -40,30 +39,49 @@
     .insight-title { font-weight: 700; font-size: .9rem; margin-bottom: 2px; }
     .insight-text  { font-size: .82rem; color: #555; }
 
-    /* Chart containers */
     .chart-box { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 16px; }
     .chart-box canvas { max-height: 320px; }
 
-    /* Table styling */
     .tbl-analytics { font-size: .82rem; }
     .tbl-analytics th { font-size: .75rem; text-transform: uppercase; letter-spacing: .3px; color: #6b7280; }
-    .tbl-analytics .bar-cell { position: relative; }
-    .tbl-analytics .bar-bg { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(0,123,255,.1); border-radius: 3px; }
 
-    /* Funnel */
     .funnel-step { display: flex; align-items: center; margin-bottom: 6px; }
     .funnel-bar { height: 28px; background: linear-gradient(90deg, #007bff, #6f42c1); border-radius: 4px; min-width: 4px; display: flex; align-items: center; padding: 0 8px; color: #fff; font-size: .78rem; font-weight: 600; transition: width .5s; }
     .funnel-label { font-size: .8rem; color: #555; margin-left: 10px; white-space: nowrap; }
 
-    /* Loading */
     #loading { text-align: center; padding: 80px 20px; }
     #loading .spinner-border { width: 3rem; height: 3rem; }
+    .tab-loading { text-align: center; padding: 60px 20px; }
+
+    /* Tab nav */
+    .nav-tabs-custom { border-bottom: 2px solid #dee2e6; }
+    .nav-tabs-custom .nav-link { font-weight: 600; color: #6b7280; border: none; padding: .7rem 1.2rem; }
+    .nav-tabs-custom .nav-link.active { color: #007bff; border-bottom: 3px solid #007bff; background: transparent; }
+    .nav-tabs-custom .nav-link:hover:not(.active) { color: #343a40; }
+
+    /* Posto filter for tab2 */
+    .posto-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .posto-filter .btn { min-width: 42px; font-weight: 600; font-size: .85rem; }
+    .posto-filter .btn.active { background: #007bff; color: #fff; }
+    .posto-filter .btn-group-label { font-weight: 700; font-size: .8rem; color: #6b7280; align-self: center; margin-right: 4px; }
+
+    /* Corretor selector */
+    .corretor-select { font-size: .9rem; max-width: 350px; }
+
+    /* Desperdicio alert */
+    .desp-alert { background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
+    .desp-alert .desp-name { font-weight: 700; }
+    .desp-alert .desp-pct { color: #dc3545; font-weight: 700; }
+
+    /* Banner */
+    .info-banner { background: #e8f5e9; border-left: 4px solid #28a745; border-radius: 8px; padding: 10px 16px; margin-bottom: 16px; font-size: .85rem; color: #2e7d32; }
 
     @media (max-width: 767px) {
       .content-wrapper { margin-left: 0 !important; }
       .main-sidebar { z-index: 1050; }
       .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
       .kpi-card .kpi-val { font-size: 1.2rem; }
+      .nav-tabs-custom .nav-link { padding: .5rem .7rem; font-size: .85rem; }
     }
   </style>
 </head>
@@ -117,150 +135,226 @@
         </div>
       </div>
 
-      <div id="loading">
-        <div class="spinner-border text-primary" role="status"></div>
-        <p class="mt-3 text-muted">Carregando dados de leads...</p>
-      </div>
+      <!-- TABS -->
+      <ul class="nav nav-tabs nav-tabs-custom mb-3" id="mainTabs" role="tablist">
+        <li class="nav-item"><a class="nav-link active" id="tab-geral-link" data-toggle="tab" href="#tab-geral" role="tab"><i class="fas fa-tachometer-alt mr-1"></i>Visao Geral</a></li>
+        <li class="nav-item"><a class="nav-link" id="tab-postos-link" data-toggle="tab" href="#tab-postos" role="tab"><i class="fas fa-building mr-1"></i>Por Posto</a></li>
+        <li class="nav-item"><a class="nav-link" id="tab-corretores-link" data-toggle="tab" href="#tab-corretores" role="tab"><i class="fas fa-user-tie mr-1"></i>Corretores</a></li>
+      </ul>
 
-      <div id="dashboard" style="display:none">
+      <div class="tab-content">
 
-        <!-- KPI CARDS -->
-        <div class="kpi-row" id="kpiRow"></div>
+        <!-- ==================== ABA 1: VISAO GERAL ==================== -->
+        <div class="tab-pane fade show active" id="tab-geral" role="tabpanel">
+          <div id="loading-geral">
+            <div class="tab-loading">
+              <div class="spinner-border text-primary" role="status"></div>
+              <p class="mt-3 text-muted">Carregando dados gerais...</p>
+            </div>
+          </div>
+          <div id="dash-geral" style="display:none">
+            <div class="kpi-row" id="kpiRow"></div>
 
-        <!-- INSIGHTS -->
-        <div class="card mb-3">
-          <div class="card-header"><h2 class="card-title mb-0"><i class="fas fa-lightbulb text-warning mr-2"></i>Insights Automaticos</h2></div>
-          <div class="card-body" id="insightsBox"></div>
+            <div class="card mb-3">
+              <div class="card-header"><h2 class="card-title mb-0"><i class="fas fa-lightbulb text-warning mr-2"></i>Insights Automaticos</h2></div>
+              <div class="card-body" id="insightsBox"></div>
+            </div>
+
+            <div class="row">
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-filter text-info mr-1"></i>Funil de Conversao</h2><div id="funnelBox"></div></div></div>
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-exclamation-triangle text-warning mr-1"></i>Gargalos — Onde Leads Param</h2><canvas id="chartGargalos"></canvas></div></div>
+            </div>
+
+            <div class="row">
+              <div class="col-12"><div class="chart-box"><h2><i class="fas fa-chart-area text-success mr-1"></i>Evolucao Mensal</h2><canvas id="chartEvolucao"></canvas></div></div>
+            </div>
+
+            <div class="row">
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-clock text-danger mr-1"></i>Tempo de Primeiro Contato vs Conversao</h2><canvas id="chartTempo"></canvas></div></div>
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-phone text-purple mr-1"></i>Qtd Contatos vs Conversao</h2><canvas id="chartContatos"></canvas></div></div>
+            </div>
+
+            <div class="row">
+              <div class="col-12">
+                <div class="chart-box">
+                  <h2><i class="fas fa-user-tie text-primary mr-1"></i>Performance dos Corretores</h2>
+                  <div class="table-responsive">
+                    <table class="table table-sm table-hover tbl-analytics mb-0" id="tblCorretores">
+                      <thead class="thead-light"><tr><th>#</th><th>Corretor</th><th>Leads</th><th>Convertidos</th><th>Taxa</th><th>Media Contatos</th><th>Tempo 1o Contato</th><th style="width:200px">Conversao</th></tr></thead>
+                      <tbody></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-building text-teal mr-1"></i>Conversao por Posto</h2><canvas id="chartPosto"></canvas></div></div>
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-bullseye text-info mr-1"></i>Conversao por Fonte</h2><canvas id="chartFonte"></canvas></div></div>
+            </div>
+
+            <div class="row">
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-calendar-alt text-orange mr-1"></i>Conversao por Dia da Semana</h2><canvas id="chartDia"></canvas></div></div>
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-clock text-purple mr-1"></i>Conversao por Hora do Dia</h2><canvas id="chartHora"></canvas></div></div>
+            </div>
+
+            <div class="row">
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-hourglass-half text-success mr-1"></i>Tempo ate Conversao</h2><canvas id="chartCiclo"></canvas></div></div>
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-times-circle text-danger mr-1"></i>Motivos de Perda</h2><canvas id="chartMotivos"></canvas></div></div>
+            </div>
+
+            <div class="row">
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-users text-info mr-1"></i>Conversao por Faixa Etaria</h2><canvas id="chartIdade"></canvas></div></div>
+              <div class="col-lg-6">
+                <div class="chart-box">
+                  <h2><i class="fas fa-calendar-times text-danger mr-1"></i>Piores Dias (menor conversao)</h2>
+                  <div class="table-responsive">
+                    <table class="table table-sm table-hover tbl-analytics mb-0" id="tblPioresDias">
+                      <thead class="thead-light"><tr><th>Data</th><th>Dia</th><th>Leads</th><th>Convertidos</th><th>Taxa</th></tr></thead>
+                      <tbody></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
 
-        <!-- ROW 1: Funil + Gargalos -->
-        <div class="row">
-          <div class="col-lg-6">
-            <div class="chart-box">
-              <h2><i class="fas fa-filter text-info mr-1"></i>Funil de Conversao</h2>
-              <div id="funnelBox"></div>
+        <!-- ==================== ABA 2: POR POSTO ==================== -->
+        <div class="tab-pane fade" id="tab-postos" role="tabpanel">
+          <div id="loading-postos">
+            <div class="tab-loading">
+              <div class="spinner-border text-primary" role="status"></div>
+              <p class="mt-3 text-muted">Carregando dados por posto...</p>
             </div>
           </div>
-          <div class="col-lg-6">
-            <div class="chart-box">
-              <h2><i class="fas fa-exclamation-triangle text-warning mr-1"></i>Gargalos — Onde Leads Param</h2>
-              <canvas id="chartGargalos"></canvas>
+          <div id="dash-postos" style="display:none">
+            <div class="info-banner"><i class="fas fa-check-circle mr-1"></i>Exibindo apenas <strong>leads convertidos</strong> (matriculados). Dados filtrados por posto de fechamento.</div>
+
+            <!-- Posto filter -->
+            <div class="posto-filter" id="postoFilterBar">
+              <span class="btn-group-label">Grupo:</span>
+              <button class="btn btn-outline-secondary btn-sm active" data-grupo="todos">Todos</button>
+              <button class="btn btn-outline-secondary btn-sm" data-grupo="altamiro" title="A B G I N R X Y">Altamiro</button>
+              <button class="btn btn-outline-secondary btn-sm" data-grupo="couto" title="C D J M P">Couto</button>
+              <span class="btn-group-label ml-2">Posto:</span>
+              <div id="postoLetterBtns"></div>
+            </div>
+
+            <div class="kpi-row" id="kpiPostos"></div>
+
+            <div class="row">
+              <div class="col-12"><div class="chart-box"><h2><i class="fas fa-chart-bar text-success mr-1"></i>Evolucao Mensal de Convertidos por Posto</h2><canvas id="chartPostoMensal"></canvas></div></div>
+            </div>
+
+            <div class="row">
+              <div class="col-lg-6">
+                <div class="chart-box">
+                  <h2><i class="fas fa-user-tie text-primary mr-1"></i>Corretores que Fecharam no Posto</h2>
+                  <div class="table-responsive">
+                    <table class="table table-sm table-hover tbl-analytics mb-0" id="tblPostoCorretores">
+                      <thead class="thead-light"><tr><th>#</th><th>Corretor</th><th>Convertidos</th></tr></thead>
+                      <tbody></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-bullseye text-info mr-1"></i>Fontes dos Leads Fechados</h2><canvas id="chartPostoFonte"></canvas></div></div>
+            </div>
+
+            <div class="row">
+              <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-hourglass-half text-purple mr-1"></i>Ciclo Medio de Conversao por Posto</h2><canvas id="chartPostoCiclo"></canvas></div></div>
             </div>
           </div>
         </div>
 
-        <!-- ROW 2: Evolucao mensal -->
-        <div class="row">
-          <div class="col-12">
-            <div class="chart-box">
-              <h2><i class="fas fa-chart-area text-success mr-1"></i>Evolucao Mensal</h2>
-              <canvas id="chartEvolucao"></canvas>
+        <!-- ==================== ABA 3: CORRETORES ==================== -->
+        <div class="tab-pane fade" id="tab-corretores" role="tabpanel">
+          <div id="loading-corretores">
+            <div class="tab-loading">
+              <div class="spinner-border text-primary" role="status"></div>
+              <p class="mt-3 text-muted">Carregando dados dos corretores...</p>
             </div>
           </div>
-        </div>
+          <div id="dash-corretores" style="display:none">
 
-        <!-- ROW 3: Tempo resposta + Contatos -->
-        <div class="row">
-          <div class="col-lg-6">
-            <div class="chart-box">
-              <h2><i class="fas fa-clock text-danger mr-1"></i>Tempo de Primeiro Contato vs Conversao</h2>
-              <canvas id="chartTempo"></canvas>
+            <!-- Alerta desperdicio -->
+            <div class="card mb-3">
+              <div class="card-header"><h2 class="card-title mb-0"><i class="fas fa-exclamation-triangle text-danger mr-2"></i>Alerta de Desperdicio — Top 5</h2></div>
+              <div class="card-body" id="despAlertBox"></div>
             </div>
-          </div>
-          <div class="col-lg-6">
-            <div class="chart-box">
-              <h2><i class="fas fa-phone text-purple mr-1"></i>Qtd Contatos vs Conversao</h2>
-              <canvas id="chartContatos"></canvas>
-            </div>
-          </div>
-        </div>
 
-        <!-- ROW 4: Corretor performance -->
-        <div class="row">
-          <div class="col-12">
+            <!-- Ranking geral -->
             <div class="chart-box">
-              <h2><i class="fas fa-user-tie text-primary mr-1"></i>Performance dos Corretores</h2>
+              <h2><i class="fas fa-trophy text-warning mr-1"></i>Ranking Geral dos Corretores</h2>
               <div class="table-responsive">
-                <table class="table table-sm table-hover tbl-analytics mb-0" id="tblCorretores">
-                  <thead class="thead-light">
-                    <tr>
-                      <th>#</th>
-                      <th>Corretor</th>
-                      <th>Leads</th>
-                      <th>Convertidos</th>
-                      <th>Taxa</th>
-                      <th>Media Contatos</th>
-                      <th>Tempo 1o Contato</th>
-                      <th style="width:200px">Conversao</th>
-                    </tr>
-                  </thead>
+                <table class="table table-sm table-hover tbl-analytics mb-0" id="tblRanking">
+                  <thead class="thead-light"><tr><th>#</th><th>Corretor</th><th>Leads</th><th>Convertidos</th><th>Desperdicados</th><th>Taxa Conv.</th><th>Taxa Desp.</th><th>Media Contatos</th><th>Ciclo (dias)</th><th style="width:150px">Conversao</th></tr></thead>
                   <tbody></tbody>
                 </table>
               </div>
             </div>
+
+            <!-- Seletor de corretor -->
+            <div class="card mt-3 mb-3">
+              <div class="card-body py-2 d-flex align-items-center flex-wrap" style="gap:12px">
+                <label class="mb-0 font-weight-bold" style="font-size:.85rem"><i class="fas fa-user mr-1"></i>Detalhar Corretor:</label>
+                <select id="selCorretor" class="form-control form-control-sm corretor-select">
+                  <option value="">— Selecione um corretor —</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Deep-dive panel (hidden until selection) -->
+            <div id="corretorDeepDive" style="display:none">
+              <div class="kpi-row" id="kpiCorretor"></div>
+
+              <!-- Insights do corretor -->
+              <div class="card mb-3">
+                <div class="card-header"><h2 class="card-title mb-0"><i class="fas fa-lightbulb text-warning mr-2"></i>Insights do Corretor</h2></div>
+                <div class="card-body" id="corretorInsightsBox"></div>
+              </div>
+
+              <div class="row">
+                <div class="col-12"><div class="chart-box"><h2><i class="fas fa-chart-area text-success mr-1"></i>Evolucao Mensal do Corretor</h2><canvas id="chartCorretorMensal"></canvas></div></div>
+              </div>
+
+              <div class="row">
+                <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-calendar-alt text-orange mr-1"></i>Conversao por Dia da Semana</h2><canvas id="chartCorretorDia"></canvas></div></div>
+                <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-clock text-purple mr-1"></i>Conversao por Hora do Dia</h2><canvas id="chartCorretorHora"></canvas></div></div>
+              </div>
+
+              <div class="row">
+                <div class="col-lg-6"><div class="chart-box"><h2><i class="fas fa-bullseye text-info mr-1"></i>Conversao por Fonte</h2><canvas id="chartCorretorFonte"></canvas></div></div>
+                <div class="col-lg-6">
+                  <div class="chart-box">
+                    <h2><i class="fas fa-calendar-alt text-success mr-1"></i>Melhor e Pior Dia da Semana</h2>
+                    <div id="corretorMelhorPiorDia"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="col-lg-6">
+                  <div class="chart-box">
+                    <h2><i class="fas fa-clock text-info mr-1"></i>Melhor e Pior Horario</h2>
+                    <div id="corretorMelhorPiorHora"></div>
+                  </div>
+                </div>
+                <div class="col-lg-6">
+                  <div class="chart-box">
+                    <h2><i class="fas fa-chart-bar text-primary mr-1"></i>Leads Recebidos vs Convertidos por Mes</h2>
+                    <div id="corretorResumoMensal"></div>
+                  </div>
+                </div>
+              </div>
+
+            </div><!-- /corretorDeepDive -->
           </div>
         </div>
 
-        <!-- ROW 5: Posto + Fonte -->
-        <div class="row">
-          <div class="col-lg-6">
-            <div class="chart-box">
-              <h2><i class="fas fa-building text-teal mr-1"></i>Conversao por Posto</h2>
-              <canvas id="chartPosto"></canvas>
-            </div>
-          </div>
-          <div class="col-lg-6">
-            <div class="chart-box">
-              <h2><i class="fas fa-bullseye text-info mr-1"></i>Conversao por Fonte</h2>
-              <canvas id="chartFonte"></canvas>
-            </div>
-          </div>
-        </div>
-
-        <!-- ROW 6: Dia semana + Hora -->
-        <div class="row">
-          <div class="col-lg-6">
-            <div class="chart-box">
-              <h2><i class="fas fa-calendar-alt text-orange mr-1"></i>Conversao por Dia da Semana</h2>
-              <canvas id="chartDia"></canvas>
-            </div>
-          </div>
-          <div class="col-lg-6">
-            <div class="chart-box">
-              <h2><i class="fas fa-clock text-purple mr-1"></i>Conversao por Hora do Dia</h2>
-              <canvas id="chartHora"></canvas>
-            </div>
-          </div>
-        </div>
-
-        <!-- ROW 7: Ciclo conversao + Motivos perda -->
-        <div class="row">
-          <div class="col-lg-6">
-            <div class="chart-box">
-              <h2><i class="fas fa-hourglass-half text-success mr-1"></i>Tempo ate Conversao</h2>
-              <canvas id="chartCiclo"></canvas>
-            </div>
-          </div>
-          <div class="col-lg-6">
-            <div class="chart-box">
-              <h2><i class="fas fa-times-circle text-danger mr-1"></i>Motivos de Perda</h2>
-              <canvas id="chartMotivos"></canvas>
-            </div>
-          </div>
-        </div>
-
-        <!-- ROW 8: Idade -->
-        <div class="row">
-          <div class="col-lg-6">
-            <div class="chart-box">
-              <h2><i class="fas fa-users text-info mr-1"></i>Conversao por Faixa Etaria</h2>
-              <canvas id="chartIdade"></canvas>
-            </div>
-          </div>
-        </div>
-
-      </div><!-- /dashboard -->
-
+      </div><!-- /tab-content -->
     </section>
   </div>
 
@@ -269,8 +363,10 @@
 <script>
 if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
 
-var DATA = null;
+/* ========================= Globals ========================= */
+var DATA_GERAL = null, DATA_POSTOS = null, DATA_CORRETORES = null;
 var CHARTS = {};
+var CACHE = { geral: null, postos: null, corretores: null };
 
 var C = {
   blue: '#007bff', green: '#28a745', red: '#dc3545', orange: '#fd7e14',
@@ -278,26 +374,49 @@ var C = {
   yellow: '#ffc107', indigo: '#6610f2',
   blueA: 'rgba(0,123,255,.15)', greenA: 'rgba(40,167,69,.15)', redA: 'rgba(220,53,69,.15)'
 };
-var PALETTE = [C.blue, C.green, C.orange, C.purple, C.teal, C.cyan, C.pink, C.red, C.indigo, C.yellow];
+var PALETTE = [C.blue, C.green, C.orange, C.purple, C.teal, C.cyan, C.pink, C.red, C.indigo, C.yellow,
+               '#8b5cf6','#ec4899','#14b8a6','#f97316','#06b6d4','#84cc16'];
+
+var GRUPOS_POSTO = { todos: 'ANXYBRPCDGIMJ'.split(''), altamiro: 'ABGINRXY'.split(''), couto: 'CDJMP'.split('') };
+var postoFiltro = 'ALL'; // 'ALL' or single letter
 
 function fmt(n) { return n == null ? '-' : Number(n).toLocaleString('pt-BR'); }
 function pct(n) { return n == null ? '-' : Number(n).toFixed(1) + '%'; }
+function isoDate(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function getIni() { return document.getElementById('filtroIni').value; }
+function getFim() { return document.getElementById('filtroFim').value; }
 
-// ========================= Filtros de data =========================
+function kpiCard(label, value, color, sub) {
+  return '<div class="kpi-card ' + color + '"><div class="kpi-val">' + value + '</div><div class="kpi-label">' + label + '</div>' +
+    (sub ? '<div class="kpi-sub">' + sub + '</div>' : '') + '</div>';
+}
+
+function makeChart(canvasId, type, chartData, extraOpts) {
+  if (CHARTS[canvasId]) CHARTS[canvasId].destroy();
+  var ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  var opts = Object.assign({ responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { font: { size: 11 } } } } }, extraOpts || {});
+  CHARTS[canvasId] = new Chart(ctx, { type: type, data: chartData, options: opts });
+}
+
+/* ========================= Date Filters ========================= */
 
 function initFiltros() {
   var hoje = new Date();
-  var fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1); // 1o do proximo mes
-  var ini = new Date(hoje.getFullYear() - 1, hoje.getMonth(), 1); // 12 meses atras
+  var fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
+  var ini = new Date(hoje.getFullYear() - 1, hoje.getMonth(), 1);
   document.getElementById('filtroIni').value = isoDate(ini);
   document.getElementById('filtroFim').value = isoDate(fim);
 
-  document.getElementById('btnFiltrar').onclick = function() { loadData(); };
+  document.getElementById('btnFiltrar').onclick = function() { invalidateCache(); loadActiveTab(); };
   document.getElementById('btnUlt12').onclick = function() { setRange(12); };
   document.getElementById('btnUlt6').onclick = function() { setRange(6); };
   document.getElementById('btnUlt3').onclick = function() { setRange(3); };
 
-  loadData();
+  // Tab switch = lazy load
+  $('#mainTabs a[data-toggle="tab"]').on('shown.bs.tab', function(e) { loadActiveTab(); });
+
+  loadActiveTab();
 }
 
 function setRange(meses) {
@@ -306,308 +425,514 @@ function setRange(meses) {
   var ini = new Date(hoje.getFullYear(), hoje.getMonth() - meses + 1, 1);
   document.getElementById('filtroIni').value = isoDate(ini);
   document.getElementById('filtroFim').value = isoDate(fim);
-  loadData();
+  invalidateCache();
+  loadActiveTab();
 }
 
-function isoDate(d) {
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+function invalidateCache() { CACHE = { geral: null, postos: null, corretores: null }; }
+
+function loadActiveTab() {
+  var active = document.querySelector('#mainTabs .nav-link.active');
+  if (!active) return;
+  var tab = active.getAttribute('href');
+  if (tab === '#tab-geral') loadGeral();
+  else if (tab === '#tab-postos') loadPostos();
+  else if (tab === '#tab-corretores') loadCorretores();
 }
 
-// ========================= Load =========================
+/* ========================= ABA 1: VISAO GERAL ========================= */
 
-function loadData() {
-  var ini = document.getElementById('filtroIni').value;
-  var fim = document.getElementById('filtroFim').value;
-  document.getElementById('loading').style.display = '';
-  document.getElementById('dashboard').style.display = 'none';
+function loadGeral() {
+  if (CACHE.geral) { renderGeral(); return; }
+  document.getElementById('loading-geral').style.display = '';
+  document.getElementById('dash-geral').style.display = 'none';
   document.getElementById('filtroInfo').textContent = 'Carregando...';
 
-  fetch('/api/leads_analytics?ini=' + encodeURIComponent(ini) + '&fim=' + encodeURIComponent(fim), {cache: 'no-store'})
-    .then(function(r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
+  fetch('/api/leads_analytics?ini=' + encodeURIComponent(getIni()) + '&fim=' + encodeURIComponent(getFim()), {cache:'no-store'})
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d) {
-      DATA = d;
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('dashboard').style.display = '';
+      DATA_GERAL = d; CACHE.geral = d;
+      document.getElementById('loading-geral').style.display = 'none';
+      document.getElementById('dash-geral').style.display = '';
       document.getElementById('filtroInfo').textContent = fmt(d.resumo_geral ? d.resumo_geral.total_leads : 0) + ' leads no periodo';
       document.getElementById('jsonInfo').textContent = 'Dados em tempo real do MySQL';
-      render();
+      renderGeral();
     })
     .catch(function(e) {
-      document.getElementById('loading').innerHTML =
-        '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i>' +
-        '<p class="mt-2">Erro ao carregar dados: ' + e.message + '</p></div>';
+      document.getElementById('loading-geral').innerHTML = '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i><p class="mt-2">Erro: ' + e.message + '</p></div>';
     });
 }
 
-initFiltros();
+function renderGeral() {
+  var d = DATA_GERAL; if (!d) return;
+  // KPIs
+  var r = d.resumo_geral || {};
+  document.getElementById('kpiRow').innerHTML =
+    kpiCard('Total Leads', fmt(r.total_leads), '', '') +
+    kpiCard('Convertidos', fmt(r.convertidos), 'green', '') +
+    kpiCard('Nao Convertidos', fmt(r.nao_convertidos), 'red', '') +
+    kpiCard('Taxa Conversao', pct(r.taxa_conversao), 'purple', '') +
+    kpiCard('Postos Ativos', fmt(r.postos_ativos), 'cyan', '');
 
-// ========================= Render =========================
-
-function render() {
-  renderKPIs();
-  renderInsights();
-  renderFunnel();
-  renderGargalos();
-  renderEvolucao();
-  renderTempo();
-  renderContatos();
-  renderCorretores();
-  renderPosto();
-  renderFonte();
-  renderDia();
-  renderHora();
-  renderCiclo();
-  renderMotivos();
-  renderIdade();
-}
-
-function renderKPIs() {
-  var r = DATA.resumo_geral || {};
-  var html = '';
-  html += kpiCard('Total Leads', fmt(r.total_leads), '', '');
-  html += kpiCard('Convertidos', fmt(r.convertidos), 'green', '');
-  html += kpiCard('Nao Convertidos', fmt(r.nao_convertidos), 'red', '');
-  html += kpiCard('Taxa Conversao', pct(r.taxa_conversao), 'purple', '');
-  html += kpiCard('Postos Ativos', fmt(r.postos_ativos), 'cyan', '');
-  document.getElementById('kpiRow').innerHTML = html;
-}
-
-function kpiCard(label, value, color, sub) {
-  return '<div class="kpi-card ' + color + '">' +
-    '<div class="kpi-val">' + value + '</div>' +
-    '<div class="kpi-label">' + label + '</div>' +
-    (sub ? '<div class="kpi-sub">' + sub + '</div>' : '') +
-    '</div>';
-}
-
-function renderInsights() {
-  var ins = DATA.insights || [];
-  var html = '';
+  // Insights
+  var ins = d.insights || [], html = '';
   for (var i = 0; i < ins.length; i++) {
-    var it = ins[i];
-    html += '<div class="insight-card ' + it.tipo + '">' +
-      '<div class="insight-title"><i class="fas fa-' + it.icone + ' mr-1"></i>' + it.titulo + '</div>' +
-      '<div class="insight-text">' + it.texto + '</div></div>';
+    html += '<div class="insight-card ' + ins[i].tipo + '"><div class="insight-title"><i class="fas fa-' + ins[i].icone + ' mr-1"></i>' + ins[i].titulo + '</div><div class="insight-text">' + ins[i].texto + '</div></div>';
   }
-  document.getElementById('insightsBox').innerHTML = html || '<p class="text-muted">Nenhum insight gerado.</p>';
+  document.getElementById('insightsBox').innerHTML = html || '<p class="text-muted">Nenhum insight.</p>';
+
+  // Funnel
+  var rows = d.funil_conversao || [];
+  if (rows.length) {
+    var top = rows.slice(0, 10), maxVal = top[0].leads_passaram || 1, fh = '';
+    for (var i = 0; i < top.length; i++) {
+      var w = Math.max(4, (top[i].leads_passaram / maxVal) * 100);
+      fh += '<div class="funnel-step"><div class="funnel-bar" style="width:' + w + '%">' + fmt(top[i].leads_passaram) + '</div><span class="funnel-label">' + top[i].etapa + '</span></div>';
+    }
+    document.getElementById('funnelBox').innerHTML = fh;
+  } else { document.getElementById('funnelBox').innerHTML = '<p class="text-muted">Sem dados</p>'; }
+
+  // Gargalos
+  rows = (d.gargalos_funil || []).slice(0, 10);
+  makeChart('chartGargalos', 'bar', { labels: rows.map(function(r){return r.status_parado}), datasets: [{ label:'Leads parados', data: rows.map(function(r){return r.total}), backgroundColor:C.orange, borderRadius:4 }] },
+    { indexAxis:'y', scales:{x:{beginAtZero:true},y:{}}, plugins:{legend:{display:false}} });
+
+  // Evolucao
+  rows = d.evolucao_mensal || [];
+  makeChart('chartEvolucao', 'line', { labels: rows.map(function(r){return r.mes}), datasets: [
+    {label:'Total', data:rows.map(function(r){return r.total}), borderColor:C.blue, backgroundColor:C.blueA, fill:true, tension:.3},
+    {label:'Convertidos', data:rows.map(function(r){return r.convertidos}), borderColor:C.green, backgroundColor:C.greenA, fill:true, tension:.3},
+    {label:'Taxa %', data:rows.map(function(r){return r.taxa}), borderColor:C.purple, borderDash:[5,3], fill:false, tension:.3, yAxisID:'y1'}
+  ]}, { scales:{y:{beginAtZero:true,title:{display:true,text:'Leads'}},y1:{position:'right',beginAtZero:true,max:100,title:{display:true,text:'Taxa %'},grid:{drawOnChartArea:false}}} });
+
+  // Tempo resposta
+  rows = d.tempo_primeiro_contato || [];
+  makeChart('chartTempo', 'bar', { labels: rows.map(function(r){return r.faixa}), datasets: [
+    {label:'Total', data:rows.map(function(r){return r.total}), backgroundColor:C.blue, borderRadius:4, yAxisID:'y'},
+    {label:'Taxa %', data:rows.map(function(r){return r.taxa}), type:'line', borderColor:C.red, backgroundColor:'transparent', tension:.3, yAxisID:'y1'}
+  ]}, { scales:{y:{beginAtZero:true,title:{display:true,text:'Leads'}},y1:{position:'right',beginAtZero:true,title:{display:true,text:'Taxa %'},grid:{drawOnChartArea:false}}} });
+
+  // Contatos
+  rows = d.contatos_vs_conversao || [];
+  makeChart('chartContatos', 'bar', { labels: rows.map(function(r){return r.faixa_contatos+' contatos'}), datasets: [
+    {label:'Total', data:rows.map(function(r){return r.total}), backgroundColor:C.purple, borderRadius:4, yAxisID:'y'},
+    {label:'Taxa %', data:rows.map(function(r){return r.taxa}), type:'line', borderColor:C.green, backgroundColor:'transparent', tension:.3, yAxisID:'y1'}
+  ]}, { scales:{y:{beginAtZero:true},y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false}}} });
+
+  // Corretores table
+  rows = d.corretor_performance || [];
+  var maxTaxa = Math.max.apply(null, rows.map(function(r){return r.taxa_conversao||0})); if (maxTaxa<=0) maxTaxa=1;
+  html = '';
+  for (var i=0;i<rows.length;i++) {
+    var rr=rows[i], bw=(rr.taxa_conversao/maxTaxa*100), bc=rr.taxa_conversao>=20?C.green:rr.taxa_conversao>=10?C.orange:C.red;
+    html += '<tr><td>'+(i+1)+'</td><td><strong>'+rr.corretor+'</strong></td><td>'+fmt(rr.total_leads)+'</td><td>'+fmt(rr.convertidos)+'</td><td><strong>'+pct(rr.taxa_conversao)+'</strong></td><td>'+(rr.media_contatos!=null?rr.media_contatos:'-')+'</td><td>'+(rr.media_h_primeiro_contato!=null?rr.media_h_primeiro_contato+'h':'-')+'</td><td><div style="position:relative;height:20px;line-height:20px"><div style="background:'+bc+';width:'+bw+'%;height:100%;border-radius:3px;position:absolute;opacity:.7"></div><span style="position:relative;padding-left:4px;font-size:.75rem;font-weight:600">'+pct(rr.taxa_conversao)+'</span></div></td></tr>';
+  }
+  document.querySelector('#tblCorretores tbody').innerHTML = html;
+
+  // Posto
+  rows = d.conversao_por_posto || [];
+  makeChart('chartPosto', 'bar', { labels: rows.map(function(r){return 'Posto '+r.posto}), datasets: [
+    {label:'Total', data:rows.map(function(r){return r.total}), backgroundColor:C.blue, borderRadius:4},
+    {label:'Convertidos', data:rows.map(function(r){return r.convertidos}), backgroundColor:C.green, borderRadius:4}
+  ]}, { scales:{y:{beginAtZero:true}}, plugins:{legend:{display:true}} });
+
+  // Fonte
+  rows = (d.conversao_por_fonte||[]).slice(0,12);
+  makeChart('chartFonte', 'bar', { labels: rows.map(function(r){return r.fonte}), datasets: [
+    {label:'Total', data:rows.map(function(r){return r.total}), backgroundColor:C.cyan, borderRadius:4},
+    {label:'Taxa %', data:rows.map(function(r){return r.taxa}), backgroundColor:C.red, borderRadius:4}
+  ]}, { indexAxis:'y', scales:{x:{beginAtZero:true},y:{}}, plugins:{legend:{display:true}} });
+
+  // Dia semana
+  rows = d.dia_semana || [];
+  makeChart('chartDia', 'bar', { labels: rows.map(function(r){return r.dia}), datasets: [
+    {label:'Total', data:rows.map(function(r){return r.total}), backgroundColor:C.orange, borderRadius:4, yAxisID:'y'},
+    {label:'Taxa %', data:rows.map(function(r){return r.taxa}), type:'line', borderColor:C.purple, backgroundColor:'transparent', tension:.3, yAxisID:'y1'}
+  ]}, { scales:{y:{beginAtZero:true},y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false}}} });
+
+  // Hora
+  rows = d.hora_dia || [];
+  makeChart('chartHora', 'bar', { labels: rows.map(function(r){return r.hora+'h'}), datasets: [
+    {label:'Total', data:rows.map(function(r){return r.total}), backgroundColor:C.teal, borderRadius:4, yAxisID:'y'},
+    {label:'Taxa %', data:rows.map(function(r){return r.taxa}), type:'line', borderColor:C.red, backgroundColor:'transparent', tension:.3, yAxisID:'y1'}
+  ]}, { scales:{y:{beginAtZero:true},y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false}}} });
+
+  // Ciclo
+  rows = d.tempo_ciclo_conversao || [];
+  makeChart('chartCiclo', 'doughnut', { labels: rows.map(function(r){return r.faixa+' ('+r.total+')'}), datasets: [{data:rows.map(function(r){return r.total}), backgroundColor:PALETTE.slice(0,rows.length)}] }, { plugins:{legend:{position:'right'}} });
+
+  // Motivos
+  rows = (d.motivos_perda||[]).slice(0,8);
+  makeChart('chartMotivos', 'doughnut', { labels: rows.map(function(r){return r.motivo+' ('+r.total+')'}), datasets: [{data:rows.map(function(r){return r.total}), backgroundColor:PALETTE.slice(0,rows.length)}] }, { plugins:{legend:{position:'right'}} });
+
+  // Idade
+  rows = d.idade_leads || [];
+  makeChart('chartIdade', 'bar', { labels: rows.map(function(r){return r.faixa}), datasets: [
+    {label:'Total', data:rows.map(function(r){return r.total}), backgroundColor:C.indigo, borderRadius:4, yAxisID:'y'},
+    {label:'Taxa %', data:rows.map(function(r){return r.taxa}), type:'line', borderColor:C.green, backgroundColor:'transparent', tension:.3, yAxisID:'y1'}
+  ]}, { scales:{y:{beginAtZero:true},y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false}}} });
+
+  // Piores dias
+  rows = d.piores_dias || [];
+  html = '';
+  for (var i=0;i<rows.length;i++) {
+    var rr=rows[i];
+    html += '<tr><td>'+rr.dia+'</td><td>'+traduzDia(rr.dia_semana)+'</td><td>'+fmt(rr.total)+'</td><td>'+fmt(rr.convertidos)+'</td><td><span class="text-danger font-weight-bold">'+pct(rr.taxa)+'</span></td></tr>';
+  }
+  document.querySelector('#tblPioresDias tbody').innerHTML = html || '<tr><td colspan="5" class="text-muted">Sem dados</td></tr>';
 }
 
-function renderFunnel() {
-  var rows = DATA.funil_conversao || [];
-  if (!rows.length) { document.getElementById('funnelBox').innerHTML = '<p class="text-muted">Sem dados</p>'; return; }
-  var top = rows.slice(0, 10);
-  var maxVal = top[0].leads_passaram || 1;
+function traduzDia(en) {
+  var m = {Sunday:'Domingo',Monday:'Segunda',Tuesday:'Terca',Wednesday:'Quarta',Thursday:'Quinta',Friday:'Sexta',Saturday:'Sabado'};
+  return m[en] || en || '-';
+}
+
+/* ========================= ABA 2: POR POSTO ========================= */
+
+function loadPostos() {
+  if (CACHE.postos) { renderPostos(); return; }
+  document.getElementById('loading-postos').style.display = '';
+  document.getElementById('dash-postos').style.display = 'none';
+
+  fetch('/api/leads_analytics_postos?ini=' + encodeURIComponent(getIni()) + '&fim=' + encodeURIComponent(getFim()), {cache:'no-store'})
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(d) {
+      DATA_POSTOS = d; CACHE.postos = d;
+      document.getElementById('loading-postos').style.display = 'none';
+      document.getElementById('dash-postos').style.display = '';
+      initPostoFilter();
+      renderPostos();
+    })
+    .catch(function(e) {
+      document.getElementById('loading-postos').innerHTML = '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i><p class="mt-2">Erro: ' + e.message + '</p></div>';
+    });
+}
+
+function initPostoFilter() {
+  // Build letter buttons
+  var allPostos = GRUPOS_POSTO.todos;
+  var container = document.getElementById('postoLetterBtns');
+  container.innerHTML = '';
+  for (var i = 0; i < allPostos.length; i++) {
+    var btn = document.createElement('button');
+    btn.className = 'btn btn-outline-primary btn-sm';
+    btn.textContent = allPostos[i];
+    btn.setAttribute('data-posto', allPostos[i]);
+    btn.onclick = function() {
+      postoFiltro = this.getAttribute('data-posto');
+      updatePostoFilterUI();
+      renderPostos();
+    };
+    container.appendChild(btn);
+  }
+
+  // Group buttons
+  document.querySelectorAll('#postoFilterBar [data-grupo]').forEach(function(btn) {
+    btn.onclick = function() {
+      postoFiltro = this.getAttribute('data-grupo') === 'todos' ? 'ALL' : this.getAttribute('data-grupo');
+      updatePostoFilterUI();
+      renderPostos();
+    };
+  });
+
+  updatePostoFilterUI();
+}
+
+function updatePostoFilterUI() {
+  // Group buttons
+  document.querySelectorAll('#postoFilterBar [data-grupo]').forEach(function(btn) {
+    var g = btn.getAttribute('data-grupo');
+    btn.classList.toggle('active', (postoFiltro === 'ALL' && g === 'todos') || postoFiltro === g);
+  });
+  // Letter buttons
+  document.querySelectorAll('#postoLetterBtns [data-posto]').forEach(function(btn) {
+    var p = btn.getAttribute('data-posto');
+    if (postoFiltro === 'ALL') { btn.classList.remove('active'); btn.style.display = ''; }
+    else if (postoFiltro === 'altamiro' || postoFiltro === 'couto') {
+      var gp = GRUPOS_POSTO[postoFiltro];
+      btn.style.display = gp.indexOf(p) >= 0 ? '' : 'none';
+      btn.classList.remove('active');
+    } else {
+      btn.style.display = '';
+      btn.classList.toggle('active', p === postoFiltro);
+    }
+  });
+}
+
+function filterByPosto(rows, field) {
+  if (postoFiltro === 'ALL') return rows;
+  var allowed;
+  if (postoFiltro === 'altamiro') allowed = GRUPOS_POSTO.altamiro;
+  else if (postoFiltro === 'couto') allowed = GRUPOS_POSTO.couto;
+  else allowed = [postoFiltro];
+  return rows.filter(function(r) { return allowed.indexOf(r[field]) >= 0; });
+}
+
+function renderPostos() {
+  var d = DATA_POSTOS; if (!d) return;
+
+  // KPIs
+  var ciclo = filterByPosto(d.posto_ciclo || [], 'posto');
+  var totalConv = 0, totalDias = 0;
+  ciclo.forEach(function(r) { totalConv += r.total; totalDias += (r.media_dias || 0) * r.total; });
+  var mediaCiclo = totalConv > 0 ? (totalDias / totalConv).toFixed(1) : '-';
+  document.getElementById('kpiPostos').innerHTML =
+    kpiCard('Total Convertidos', fmt(totalConv), 'green', '') +
+    kpiCard('Postos', fmt(ciclo.length), 'cyan', '') +
+    kpiCard('Media Dias Conversao', mediaCiclo, 'purple', '');
+
+  // Evolucao mensal
+  var mensal = filterByPosto(d.posto_mensal || [], 'posto');
+  var mesesSet = {}, postoSet = {};
+  mensal.forEach(function(r) { mesesSet[r.mes] = true; postoSet[r.posto] = true; });
+  var meses = Object.keys(mesesSet).sort();
+  var postos = Object.keys(postoSet).sort();
+  var datasets = [];
+  for (var pi = 0; pi < postos.length; pi++) {
+    var p = postos[pi];
+    var pData = mensal.filter(function(r) { return r.posto === p; });
+    var lookup = {}; pData.forEach(function(r) { lookup[r.mes] = r.convertidos; });
+    datasets.push({ label: 'Posto ' + p, data: meses.map(function(m) { return lookup[m] || 0; }), backgroundColor: PALETTE[pi % PALETTE.length], borderRadius: 4 });
+  }
+  makeChart('chartPostoMensal', 'bar', { labels: meses, datasets: datasets }, { scales: { y: { beginAtZero: true, stacked: false } }, plugins: { legend: { display: true } } });
+
+  // Corretores table
+  var corr = filterByPosto(d.posto_corretor || [], 'posto');
+  // Aggregate by corretor
+  var corrMap = {};
+  corr.forEach(function(r) { corrMap[r.corretor] = (corrMap[r.corretor] || 0) + r.convertidos; });
+  var corrArr = Object.keys(corrMap).map(function(k) { return { corretor: k, convertidos: corrMap[k] }; }).sort(function(a, b) { return b.convertidos - a.convertidos; });
   var html = '';
-  for (var i = 0; i < top.length; i++) {
-    var r = top[i];
-    var w = Math.max(4, (r.leads_passaram / maxVal) * 100);
-    html += '<div class="funnel-step">' +
-      '<div class="funnel-bar" style="width:' + w + '%">' + fmt(r.leads_passaram) + '</div>' +
-      '<span class="funnel-label">' + r.etapa + '</span></div>';
+  for (var i = 0; i < corrArr.length; i++) {
+    html += '<tr><td>' + (i + 1) + '</td><td><strong>' + corrArr[i].corretor + '</strong></td><td>' + fmt(corrArr[i].convertidos) + '</td></tr>';
   }
-  document.getElementById('funnelBox').innerHTML = html;
-}
+  document.querySelector('#tblPostoCorretores tbody').innerHTML = html || '<tr><td colspan="3" class="text-muted">Sem dados</td></tr>';
 
-function renderGargalos() {
-  var rows = (DATA.gargalos_funil || []).slice(0, 10);
-  makeChart('chartGargalos', 'bar', {
-    labels: rows.map(function(r) { return r.status_parado; }),
-    datasets: [{
-      label: 'Leads parados',
-      data: rows.map(function(r) { return r.total; }),
-      backgroundColor: C.orange, borderRadius: 4
-    }]
-  }, {
-    indexAxis: 'y',
-    scales: { x: { beginAtZero: true }, y: {} },
-    plugins: { legend: { display: false } }
-  });
-}
+  // Fontes
+  var fontes = filterByPosto(d.posto_fonte || [], 'posto');
+  var fMap = {};
+  fontes.forEach(function(r) { fMap[r.fonte] = (fMap[r.fonte] || 0) + r.convertidos; });
+  var fArr = Object.keys(fMap).map(function(k) { return { fonte: k, convertidos: fMap[k] }; }).sort(function(a, b) { return b.convertidos - a.convertidos; }).slice(0, 10);
+  makeChart('chartPostoFonte', 'bar', {
+    labels: fArr.map(function(r) { return r.fonte; }),
+    datasets: [{ label: 'Convertidos', data: fArr.map(function(r) { return r.convertidos; }), backgroundColor: C.teal, borderRadius: 4 }]
+  }, { indexAxis: 'y', scales: { x: { beginAtZero: true }, y: {} }, plugins: { legend: { display: false } } });
 
-function renderEvolucao() {
-  var rows = DATA.evolucao_mensal || [];
-  makeChart('chartEvolucao', 'line', {
-    labels: rows.map(function(r) { return r.mes; }),
+  // Ciclo por posto
+  makeChart('chartPostoCiclo', 'bar', {
+    labels: ciclo.map(function(r) { return 'Posto ' + r.posto; }),
     datasets: [
-      { label: 'Total Leads', data: rows.map(function(r) { return r.total; }), borderColor: C.blue, backgroundColor: C.blueA, fill: true, tension: .3 },
-      { label: 'Convertidos', data: rows.map(function(r) { return r.convertidos; }), borderColor: C.green, backgroundColor: C.greenA, fill: true, tension: .3 },
-      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), borderColor: C.purple, borderDash: [5,3], fill: false, tension: .3, yAxisID: 'y1' }
+      { label: 'Media Dias', data: ciclo.map(function(r) { return r.media_dias; }), backgroundColor: C.purple, borderRadius: 4, yAxisID: 'y' },
+      { label: 'Convertidos', data: ciclo.map(function(r) { return r.total; }), backgroundColor: C.green, borderRadius: 4, yAxisID: 'y1' }
     ]
-  }, {
-    scales: {
-      y: { beginAtZero: true, title: { display: true, text: 'Leads' } },
-      y1: { position: 'right', beginAtZero: true, max: 100, title: { display: true, text: 'Taxa %' }, grid: { drawOnChartArea: false } }
-    }
-  });
+  }, { scales: { y: { beginAtZero: true, title: { display: true, text: 'Dias' } }, y1: { position: 'right', beginAtZero: true, title: { display: true, text: 'Convertidos' }, grid: { drawOnChartArea: false } } } });
 }
 
-function renderTempo() {
-  var rows = DATA.tempo_primeiro_contato || [];
-  makeChart('chartTempo', 'bar', {
-    labels: rows.map(function(r) { return r.faixa; }),
-    datasets: [
-      { label: 'Total Leads', data: rows.map(function(r) { return r.total; }), backgroundColor: C.blue, borderRadius: 4, yAxisID: 'y' },
-      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), type: 'line', borderColor: C.red, backgroundColor: 'transparent', tension: .3, yAxisID: 'y1' }
-    ]
-  }, {
-    scales: {
-      y: { beginAtZero: true, title: { display: true, text: 'Leads' } },
-      y1: { position: 'right', beginAtZero: true, title: { display: true, text: 'Taxa %' }, grid: { drawOnChartArea: false } }
-    }
-  });
+/* ========================= ABA 3: CORRETORES ========================= */
+
+function loadCorretores() {
+  if (CACHE.corretores) { renderCorretoresTab(); return; }
+  document.getElementById('loading-corretores').style.display = '';
+  document.getElementById('dash-corretores').style.display = 'none';
+
+  fetch('/api/leads_analytics_corretores?ini=' + encodeURIComponent(getIni()) + '&fim=' + encodeURIComponent(getFim()), {cache:'no-store'})
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(d) {
+      DATA_CORRETORES = d; CACHE.corretores = d;
+      document.getElementById('loading-corretores').style.display = 'none';
+      document.getElementById('dash-corretores').style.display = '';
+      renderCorretoresTab();
+    })
+    .catch(function(e) {
+      document.getElementById('loading-corretores').innerHTML = '<div class="text-danger"><i class="fas fa-exclamation-circle fa-2x"></i><p class="mt-2">Erro: ' + e.message + '</p></div>';
+    });
 }
 
-function renderContatos() {
-  var rows = DATA.contatos_vs_conversao || [];
-  makeChart('chartContatos', 'bar', {
-    labels: rows.map(function(r) { return r.faixa_contatos + ' contatos'; }),
-    datasets: [
-      { label: 'Total Leads', data: rows.map(function(r) { return r.total; }), backgroundColor: C.purple, borderRadius: 4, yAxisID: 'y' },
-      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), type: 'line', borderColor: C.green, backgroundColor: 'transparent', tension: .3, yAxisID: 'y1' }
-    ]
-  }, {
-    scales: {
-      y: { beginAtZero: true, title: { display: true, text: 'Leads' } },
-      y1: { position: 'right', beginAtZero: true, title: { display: true, text: 'Taxa %' }, grid: { drawOnChartArea: false } }
-    }
-  });
-}
+function renderCorretoresTab() {
+  var d = DATA_CORRETORES; if (!d) return;
 
-function renderCorretores() {
-  var rows = DATA.corretor_performance || [];
-  var tbody = document.querySelector('#tblCorretores tbody');
-  var maxTaxa = Math.max.apply(null, rows.map(function(r) { return r.taxa_conversao || 0; }));
-  if (maxTaxa <= 0) maxTaxa = 1;
+  // Desperdicio alert — top 5
+  var desp = (d.corretor_desperdicio || []).slice(0, 5);
   var html = '';
-  for (var i = 0; i < rows.length; i++) {
-    var r = rows[i];
-    var barW = (r.taxa_conversao / maxTaxa * 100);
-    var barColor = r.taxa_conversao >= 20 ? C.green : r.taxa_conversao >= 10 ? C.orange : C.red;
-    html += '<tr>' +
-      '<td>' + (i + 1) + '</td>' +
-      '<td><strong>' + r.corretor + '</strong></td>' +
-      '<td>' + fmt(r.total_leads) + '</td>' +
-      '<td>' + fmt(r.convertidos) + '</td>' +
-      '<td><strong>' + pct(r.taxa_conversao) + '</strong></td>' +
-      '<td>' + (r.media_contatos != null ? r.media_contatos : '-') + '</td>' +
-      '<td>' + (r.media_h_primeiro_contato != null ? r.media_h_primeiro_contato + 'h' : '-') + '</td>' +
-      '<td><div style="position:relative;height:20px;line-height:20px"><div style="background:' + barColor + ';width:' + barW + '%;height:100%;border-radius:3px;position:absolute;opacity:.7"></div>' +
-      '<span style="position:relative;padding-left:4px;font-size:.75rem;font-weight:600">' + pct(r.taxa_conversao) + '</span></div></td>' +
-      '</tr>';
+  for (var i = 0; i < desp.length; i++) {
+    var dd = desp[i];
+    html += '<div class="desp-alert"><span class="desp-name">' + (i + 1) + '. ' + dd.corretor + '</span> — ' +
+      '<span class="desp-pct">' + pct(dd.taxa_desperdicio) + ' desperdicado</span> (' + fmt(dd.desperdicados) + '/' + fmt(dd.total) + ' leads, media ' + (dd.media_contatos || '-') + ' contatos)</div>';
   }
-  tbody.innerHTML = html;
+  document.getElementById('despAlertBox').innerHTML = html || '<p class="text-muted">Sem dados.</p>';
+
+  // Ranking table
+  var ranking = d.corretor_ranking || [];
+  var despMap = {}, cicloMap = {};
+  (d.corretor_desperdicio || []).forEach(function(r) { despMap[r.user_id] = r; });
+  (d.corretor_ciclo || []).forEach(function(r) { cicloMap[r.user_id] = r; });
+
+  var maxTaxa = Math.max.apply(null, ranking.map(function(r) { return r.taxa_conversao || 0; })); if (maxTaxa <= 0) maxTaxa = 1;
+  html = '';
+  for (var i = 0; i < ranking.length; i++) {
+    var rr = ranking[i];
+    var dd = despMap[rr.user_id] || {};
+    var cc = cicloMap[rr.user_id] || {};
+    var bw = (rr.taxa_conversao / maxTaxa * 100), bc = rr.taxa_conversao >= 20 ? C.green : rr.taxa_conversao >= 10 ? C.orange : C.red;
+    html += '<tr style="cursor:pointer" data-uid="' + rr.user_id + '" onclick="selectCorretor(' + rr.user_id + ')">' +
+      '<td>' + (i + 1) + '</td><td><strong>' + rr.corretor + '</strong></td><td>' + fmt(rr.total_leads) + '</td><td>' + fmt(rr.convertidos) + '</td>' +
+      '<td>' + fmt(dd.desperdicados || 0) + '</td><td><strong>' + pct(rr.taxa_conversao) + '</strong></td>' +
+      '<td>' + pct(dd.taxa_desperdicio) + '</td><td>' + (rr.media_contatos != null ? rr.media_contatos : '-') + '</td>' +
+      '<td>' + (cc.media_dias != null ? cc.media_dias + 'd' : '-') + '</td>' +
+      '<td><div style="position:relative;height:20px;line-height:20px"><div style="background:' + bc + ';width:' + bw + '%;height:100%;border-radius:3px;position:absolute;opacity:.7"></div><span style="position:relative;padding-left:4px;font-size:.75rem;font-weight:600">' + pct(rr.taxa_conversao) + '</span></div></td></tr>';
+  }
+  document.querySelector('#tblRanking tbody').innerHTML = html;
+
+  // Populate dropdown
+  var sel = document.getElementById('selCorretor');
+  var current = sel.value;
+  sel.innerHTML = '<option value="">— Selecione um corretor —</option>';
+  for (var i = 0; i < ranking.length; i++) {
+    sel.innerHTML += '<option value="' + ranking[i].user_id + '">' + ranking[i].corretor + ' (' + fmt(ranking[i].total_leads) + ' leads, ' + pct(ranking[i].taxa_conversao) + ')</option>';
+  }
+  sel.value = current;
+  sel.onchange = function() {
+    var uid = parseInt(this.value);
+    if (uid) renderCorretorDeepDive(uid);
+    else document.getElementById('corretorDeepDive').style.display = 'none';
+  };
+
+  // If a corretor was already selected, re-render
+  if (sel.value) renderCorretorDeepDive(parseInt(sel.value));
 }
 
-function renderPosto() {
-  var rows = DATA.conversao_por_posto || [];
-  makeChart('chartPosto', 'bar', {
-    labels: rows.map(function(r) { return 'Posto ' + r.posto; }),
-    datasets: [
-      { label: 'Total', data: rows.map(function(r) { return r.total; }), backgroundColor: C.blue, borderRadius: 4 },
-      { label: 'Convertidos', data: rows.map(function(r) { return r.convertidos; }), backgroundColor: C.green, borderRadius: 4 }
-    ]
-  }, { scales: { y: { beginAtZero: true } }, plugins: { legend: { display: true } } });
+function selectCorretor(uid) {
+  document.getElementById('selCorretor').value = uid;
+  renderCorretorDeepDive(uid);
+  // Scroll to deep dive
+  document.getElementById('corretorDeepDive').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function renderFonte() {
-  var rows = (DATA.conversao_por_fonte || []).slice(0, 12);
-  makeChart('chartFonte', 'bar', {
-    labels: rows.map(function(r) { return r.fonte; }),
-    datasets: [
-      { label: 'Total', data: rows.map(function(r) { return r.total; }), backgroundColor: C.cyan, borderRadius: 4 },
-      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), backgroundColor: C.red, borderRadius: 4 }
-    ]
-  }, {
-    indexAxis: 'y',
-    scales: { x: { beginAtZero: true }, y: {} },
-    plugins: { legend: { display: true } }
-  });
-}
+function renderCorretorDeepDive(uid) {
+  var d = DATA_CORRETORES; if (!d) return;
+  document.getElementById('corretorDeepDive').style.display = '';
 
-function renderDia() {
-  var rows = DATA.dia_semana || [];
-  makeChart('chartDia', 'bar', {
-    labels: rows.map(function(r) { return r.dia; }),
+  // Find corretor info from ranking
+  var info = (d.corretor_ranking || []).find(function(r) { return r.user_id === uid; }) || {};
+  var despInfo = (d.corretor_desperdicio || []).find(function(r) { return r.user_id === uid; }) || {};
+  var cicloInfo = (d.corretor_ciclo || []).find(function(r) { return r.user_id === uid; }) || {};
+
+  // KPIs
+  document.getElementById('kpiCorretor').innerHTML =
+    kpiCard('Total Leads', fmt(info.total_leads), '', info.corretor || '') +
+    kpiCard('Convertidos', fmt(info.convertidos), 'green', '') +
+    kpiCard('Taxa Conversao', pct(info.taxa_conversao), 'purple', '') +
+    kpiCard('Desperdicados', fmt(despInfo.desperdicados || 0), 'red', pct(despInfo.taxa_desperdicio) + ' desp.') +
+    kpiCard('Media Contatos', (info.media_contatos != null ? info.media_contatos : '-'), 'cyan', '') +
+    kpiCard('Ciclo Medio', (cicloInfo.media_dias != null ? cicloInfo.media_dias + ' dias' : '-'), 'teal', cicloInfo.total_convertidos ? fmt(cicloInfo.total_convertidos) + ' conv.' : '');
+
+  // Mensal
+  var mensal = (d.corretor_mensal || []).filter(function(r) { return r.user_id === uid; });
+  makeChart('chartCorretorMensal', 'bar', { labels: mensal.map(function(r){return r.mes}), datasets: [
+    {label:'Total Leads', data:mensal.map(function(r){return r.total}), backgroundColor:C.blue, borderRadius:4, yAxisID:'y'},
+    {label:'Convertidos', data:mensal.map(function(r){return r.convertidos}), backgroundColor:C.green, borderRadius:4, yAxisID:'y'},
+    {label:'Taxa %', data:mensal.map(function(r){return r.taxa}), type:'line', borderColor:C.purple, backgroundColor:'transparent', tension:.3, yAxisID:'y1'}
+  ]}, { scales:{y:{beginAtZero:true, title:{display:true,text:'Leads'}}, y1:{position:'right',beginAtZero:true,max:100,title:{display:true,text:'Taxa %'},grid:{drawOnChartArea:false}}} });
+
+  // Dia da semana
+  var dias = (d.corretor_dia_semana || []).filter(function(r) { return r.user_id === uid; });
+  makeChart('chartCorretorDia', 'bar', { labels: dias.map(function(r){return r.dia}), datasets: [
+    {label:'Total', data:dias.map(function(r){return r.total}), backgroundColor:C.orange, borderRadius:4, yAxisID:'y'},
+    {label:'Convertidos', data:dias.map(function(r){return r.convertidos}), backgroundColor:C.green, borderRadius:4, yAxisID:'y'},
+    {label:'Taxa %', data:dias.map(function(r){return r.taxa}), type:'line', borderColor:C.purple, backgroundColor:'transparent', tension:.3, yAxisID:'y1'}
+  ]}, { scales:{y:{beginAtZero:true}, y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false}}} });
+
+  // Hora
+  var horas = (d.corretor_hora || []).filter(function(r) { return r.user_id === uid; });
+  makeChart('chartCorretorHora', 'bar', { labels: horas.map(function(r){return r.hora+'h'}), datasets: [
+    {label:'Total', data:horas.map(function(r){return r.total}), backgroundColor:C.teal, borderRadius:4, yAxisID:'y'},
+    {label:'Convertidos', data:horas.map(function(r){return r.convertidos}), backgroundColor:C.green, borderRadius:4, yAxisID:'y'},
+    {label:'Taxa %', data:horas.map(function(r){return r.taxa}), type:'line', borderColor:C.red, backgroundColor:'transparent', tension:.3, yAxisID:'y1'}
+  ]}, { scales:{y:{beginAtZero:true}, y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false}}} });
+
+  // Fonte
+  var fontes = (d.corretor_fonte || []).filter(function(r) { return r.user_id === uid; }).slice(0, 10);
+  makeChart('chartCorretorFonte', 'bar', {
+    labels: fontes.map(function(r){return r.fonte}),
     datasets: [
-      { label: 'Total', data: rows.map(function(r) { return r.total; }), backgroundColor: C.orange, borderRadius: 4, yAxisID: 'y' },
-      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), type: 'line', borderColor: C.purple, backgroundColor: 'transparent', tension: .3, yAxisID: 'y1' }
+      {label:'Total', data:fontes.map(function(r){return r.total}), backgroundColor:C.cyan, borderRadius:4},
+      {label:'Convertidos', data:fontes.map(function(r){return r.convertidos}), backgroundColor:C.green, borderRadius:4}
     ]
-  }, {
-    scales: {
-      y: { beginAtZero: true },
-      y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } }
+  }, { indexAxis:'y', scales:{x:{beginAtZero:true},y:{}}, plugins:{legend:{display:true}} });
+
+  // Melhor e Pior Dia
+  var diasComDados = dias.filter(function(r) { return r.total >= 2; });
+  if (diasComDados.length >= 2) {
+    var melhorDia = diasComDados.reduce(function(a, b) { return a.taxa > b.taxa ? a : b; });
+    var piorDia = diasComDados.reduce(function(a, b) { return a.taxa < b.taxa ? a : b; });
+    var maisLeads = dias.reduce(function(a, b) { return a.total > b.total ? a : b; });
+    var menosLeads = dias.filter(function(r) { return r.total > 0; }).reduce(function(a, b) { return a.total < b.total ? a : b; }, dias[0]);
+    document.getElementById('corretorMelhorPiorDia').innerHTML =
+      '<div class="insight-card destaque"><div class="insight-title"><i class="fas fa-arrow-up mr-1"></i>Melhor dia: ' + melhorDia.dia + '</div><div class="insight-text">Taxa de ' + pct(melhorDia.taxa) + ' (' + fmt(melhorDia.convertidos) + '/' + fmt(melhorDia.total) + ')</div></div>' +
+      '<div class="insight-card alerta"><div class="insight-title"><i class="fas fa-arrow-down mr-1"></i>Pior dia: ' + piorDia.dia + '</div><div class="insight-text">Taxa de ' + pct(piorDia.taxa) + ' (' + fmt(piorDia.convertidos) + '/' + fmt(piorDia.total) + ')</div></div>' +
+      '<div class="insight-card info"><div class="insight-title"><i class="fas fa-chart-bar mr-1"></i>Mais leads: ' + maisLeads.dia + '</div><div class="insight-text">' + fmt(maisLeads.total) + ' leads recebidos</div></div>' +
+      '<div class="insight-card info"><div class="insight-title"><i class="fas fa-chart-bar mr-1"></i>Menos leads: ' + menosLeads.dia + '</div><div class="insight-text">' + fmt(menosLeads.total) + ' leads recebidos</div></div>';
+  } else { document.getElementById('corretorMelhorPiorDia').innerHTML = '<p class="text-muted">Dados insuficientes.</p>'; }
+
+  // Melhor e Pior Hora
+  var horasComDados = horas.filter(function(r) { return r.total >= 2; });
+  if (horasComDados.length >= 2) {
+    var melhorH = horasComDados.reduce(function(a, b) { return a.taxa > b.taxa ? a : b; });
+    var piorH = horasComDados.reduce(function(a, b) { return a.taxa < b.taxa ? a : b; });
+    var maisLeadsH = horas.reduce(function(a, b) { return a.total > b.total ? a : b; });
+    document.getElementById('corretorMelhorPiorHora').innerHTML =
+      '<div class="insight-card destaque"><div class="insight-title"><i class="fas fa-arrow-up mr-1"></i>Melhor horario: ' + melhorH.hora + 'h</div><div class="insight-text">Taxa de ' + pct(melhorH.taxa) + ' (' + fmt(melhorH.convertidos) + '/' + fmt(melhorH.total) + ')</div></div>' +
+      '<div class="insight-card alerta"><div class="insight-title"><i class="fas fa-arrow-down mr-1"></i>Pior horario: ' + piorH.hora + 'h</div><div class="insight-text">Taxa de ' + pct(piorH.taxa) + ' (' + fmt(piorH.convertidos) + '/' + fmt(piorH.total) + ')</div></div>' +
+      '<div class="insight-card info"><div class="insight-title"><i class="fas fa-chart-bar mr-1"></i>Mais leads recebidos: ' + maisLeadsH.hora + 'h</div><div class="insight-text">' + fmt(maisLeadsH.total) + ' leads</div></div>';
+  } else { document.getElementById('corretorMelhorPiorHora').innerHTML = '<p class="text-muted">Dados insuficientes.</p>'; }
+
+  // Resumo mensal tabela
+  if (mensal.length) {
+    var melhorMes = mensal.reduce(function(a, b) { return a.taxa > b.taxa ? a : b; });
+    var piorMes = mensal.filter(function(r) { return r.total >= 3; }).reduce(function(a, b) { return a.taxa < b.taxa ? a : b; }, mensal[0]);
+    var totalGeralCorr = mensal.reduce(function(s, r) { return s + r.total; }, 0);
+    var convGeralCorr = mensal.reduce(function(s, r) { return s + r.convertidos; }, 0);
+    document.getElementById('corretorResumoMensal').innerHTML =
+      '<div class="insight-card destaque"><div class="insight-title"><i class="fas fa-trophy mr-1"></i>Melhor mes: ' + melhorMes.mes + '</div><div class="insight-text">Taxa ' + pct(melhorMes.taxa) + ' (' + fmt(melhorMes.convertidos) + '/' + fmt(melhorMes.total) + ')</div></div>' +
+      '<div class="insight-card alerta"><div class="insight-title"><i class="fas fa-exclamation-triangle mr-1"></i>Pior mes: ' + piorMes.mes + '</div><div class="insight-text">Taxa ' + pct(piorMes.taxa) + ' (' + fmt(piorMes.convertidos) + '/' + fmt(piorMes.total) + ')</div></div>' +
+      '<div class="insight-card info"><div class="insight-title"><i class="fas fa-calculator mr-1"></i>Totais no periodo</div><div class="insight-text">' + fmt(totalGeralCorr) + ' leads recebidos, ' + fmt(convGeralCorr) + ' convertidos (' + pct(totalGeralCorr > 0 ? convGeralCorr / totalGeralCorr * 100 : 0) + ')</div></div>';
+  } else { document.getElementById('corretorResumoMensal').innerHTML = '<p class="text-muted">Sem dados mensais.</p>'; }
+
+  // Insights do corretor
+  var insightsHtml = '';
+  // Taxa geral
+  if (info.taxa_conversao != null) {
+    var nivel = info.taxa_conversao >= 20 ? 'destaque' : info.taxa_conversao >= 10 ? 'info' : 'alerta';
+    var nivelTxt = info.taxa_conversao >= 20 ? 'Excelente' : info.taxa_conversao >= 10 ? 'Moderada' : 'Baixa';
+    insightsHtml += '<div class="insight-card ' + nivel + '"><div class="insight-title"><i class="fas fa-chart-pie mr-1"></i>Taxa de conversao: ' + nivelTxt + '</div><div class="insight-text">' + pct(info.taxa_conversao) + ' de conversao com ' + fmt(info.total_leads) + ' leads no periodo.</div></div>';
+  }
+  // Desperdicio
+  if (despInfo.taxa_desperdicio > 70) {
+    insightsHtml += '<div class="insight-card alerta"><div class="insight-title"><i class="fas fa-trash mr-1"></i>Alto desperdicio</div><div class="insight-text">' + pct(despInfo.taxa_desperdicio) + ' dos leads nao foram convertidos. Media de apenas ' + (despInfo.media_contatos || '-') + ' contatos por lead.</div></div>';
+  }
+  // Tendencia mensal
+  if (mensal.length >= 3) {
+    var ult3 = mensal.slice(-3);
+    var taxas3 = ult3.map(function(r) { return r.taxa; });
+    if (taxas3[2] > taxas3[0] + 2) {
+      insightsHtml += '<div class="insight-card destaque"><div class="insight-title"><i class="fas fa-arrow-up mr-1"></i>Tendencia de melhora</div><div class="insight-text">Taxa subiu de ' + pct(taxas3[0]) + ' para ' + pct(taxas3[2]) + ' nos ultimos 3 meses.</div></div>';
+    } else if (taxas3[2] < taxas3[0] - 2) {
+      insightsHtml += '<div class="insight-card alerta"><div class="insight-title"><i class="fas fa-arrow-down mr-1"></i>Tendencia de queda</div><div class="insight-text">Taxa caiu de ' + pct(taxas3[0]) + ' para ' + pct(taxas3[2]) + ' nos ultimos 3 meses.</div></div>';
     }
-  });
-}
-
-function renderHora() {
-  var rows = DATA.hora_dia || [];
-  makeChart('chartHora', 'bar', {
-    labels: rows.map(function(r) { return r.hora + 'h'; }),
-    datasets: [
-      { label: 'Total', data: rows.map(function(r) { return r.total; }), backgroundColor: C.teal, borderRadius: 4, yAxisID: 'y' },
-      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), type: 'line', borderColor: C.red, backgroundColor: 'transparent', tension: .3, yAxisID: 'y1' }
-    ]
-  }, {
-    scales: {
-      y: { beginAtZero: true },
-      y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } }
+  }
+  // Contatos
+  if (info.media_contatos != null) {
+    if (info.media_contatos < 3) {
+      insightsHtml += '<div class="insight-card alerta"><div class="insight-title"><i class="fas fa-phone mr-1"></i>Poucos contatos</div><div class="insight-text">Media de ' + info.media_contatos + ' contatos por lead. Considere aumentar o follow-up.</div></div>';
+    } else if (info.media_contatos >= 5) {
+      insightsHtml += '<div class="insight-card destaque"><div class="insight-title"><i class="fas fa-phone mr-1"></i>Bom volume de contatos</div><div class="insight-text">Media de ' + info.media_contatos + ' contatos por lead — bom acompanhamento.</div></div>';
     }
-  });
+  }
+  document.getElementById('corretorInsightsBox').innerHTML = insightsHtml || '<p class="text-muted">Sem insights disponiveis.</p>';
 }
 
-function renderCiclo() {
-  var rows = DATA.tempo_ciclo_conversao || [];
-  makeChart('chartCiclo', 'doughnut', {
-    labels: rows.map(function(r) { return r.faixa + ' (' + r.total + ')'; }),
-    datasets: [{
-      data: rows.map(function(r) { return r.total; }),
-      backgroundColor: PALETTE.slice(0, rows.length)
-    }]
-  }, { plugins: { legend: { position: 'right' } } });
-}
-
-function renderMotivos() {
-  var rows = (DATA.motivos_perda || []).slice(0, 8);
-  makeChart('chartMotivos', 'doughnut', {
-    labels: rows.map(function(r) { return r.motivo + ' (' + r.total + ')'; }),
-    datasets: [{
-      data: rows.map(function(r) { return r.total; }),
-      backgroundColor: PALETTE.slice(0, rows.length)
-    }]
-  }, { plugins: { legend: { position: 'right' } } });
-}
-
-function renderIdade() {
-  var rows = DATA.idade_leads || [];
-  makeChart('chartIdade', 'bar', {
-    labels: rows.map(function(r) { return r.faixa; }),
-    datasets: [
-      { label: 'Total', data: rows.map(function(r) { return r.total; }), backgroundColor: C.indigo, borderRadius: 4, yAxisID: 'y' },
-      { label: 'Taxa %', data: rows.map(function(r) { return r.taxa; }), type: 'line', borderColor: C.green, backgroundColor: 'transparent', tension: .3, yAxisID: 'y1' }
-    ]
-  }, {
-    scales: {
-      y: { beginAtZero: true },
-      y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } }
-    }
-  });
-}
-
-function makeChart(canvasId, type, chartData, extraOpts) {
-  if (CHARTS[canvasId]) CHARTS[canvasId].destroy();
-  var ctx = document.getElementById(canvasId);
-  if (!ctx) return;
-  var opts = Object.assign({
-    responsive: true,
-    maintainAspectRatio: true,
-    plugins: { legend: { labels: { font: { size: 11 } } } }
-  }, extraOpts || {});
-  CHARTS[canvasId] = new Chart(ctx, { type: type, data: chartData, options: opts });
-}
+/* ========================= Init ========================= */
+initFiltros();
 </script>
 <script src="/js/menu_enforce.js" defer></script>
 </body>
