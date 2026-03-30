@@ -90,16 +90,16 @@ def fetch_funil_por_status(conn, ini, fim):
     """Contagem de leads por ultimo status no timeline (funil)."""
     return q(conn, """
         SELECT
-            ts.name as status_name,
+            ts.title as status_name,
             ts.id as status_id,
-            ts.is_finish,
+            ts.is_finish_status,
             COUNT(DISTINCT t.lead_id) as total
         FROM timelines t
         JOIN timelinestatuses ts ON ts.id = t.timelinestatus_id
         JOIN leads l ON l.id = t.lead_id
         WHERE l.created_at >= %s AND l.created_at < %s
           AND l.deleted_at IS NULL
-        GROUP BY ts.id, ts.name, ts.is_finish
+        GROUP BY ts.id, ts.title, ts.is_finish_status
         ORDER BY total DESC
     """, (str(ini), str(fim)))
 
@@ -108,7 +108,7 @@ def fetch_funil_conversao(conn, ini, fim):
     """Funil de conversao: quantos leads passaram por cada etapa."""
     return q(conn, """
         SELECT
-            ts.name as etapa,
+            ts.title as etapa,
             ts.id as status_id,
             COUNT(DISTINCT t.lead_id) as leads_passaram
         FROM timelines t
@@ -116,7 +116,7 @@ def fetch_funil_conversao(conn, ini, fim):
         JOIN leads l ON l.id = t.lead_id
         WHERE l.created_at >= %s AND l.created_at < %s
           AND l.deleted_at IS NULL
-        GROUP BY ts.id, ts.name
+        GROUP BY ts.id, ts.title
         ORDER BY leads_passaram DESC
     """, (str(ini), str(fim)))
 
@@ -143,7 +143,7 @@ def fetch_conversao_por_fonte(conn, ini, fim):
     """Conversao por fonte de lead (leadsource)."""
     return q(conn, """
         SELECT
-            COALESCE(ls.name, 'Sem fonte') as fonte,
+            COALESCE(ls.title, 'Sem fonte') as fonte,
             COUNT(*) as total,
             SUM(l.finish_lead_signup = 1) as convertidos,
             ROUND(AVG(CASE WHEN l.finish_lead_signup = 1 THEN 1 ELSE 0 END) * 100, 2) as taxa
@@ -151,7 +151,7 @@ def fetch_conversao_por_fonte(conn, ini, fim):
         LEFT JOIN leadsources ls ON ls.id = l.leadsource_id
         WHERE l.created_at >= %s AND l.created_at < %s
           AND l.deleted_at IS NULL
-        GROUP BY ls.id, ls.name
+        GROUP BY ls.id, ls.title
         HAVING total >= 5
         ORDER BY taxa DESC
     """, (str(ini), str(fim)))
@@ -256,7 +256,7 @@ def fetch_motivos_perda(conn, ini, fim):
     """Motivos de perda (leadreasons) para leads nao convertidos."""
     return q(conn, """
         SELECT
-            COALESCE(lr.name, 'Sem motivo registrado') as motivo,
+            COALESCE(lr.title, 'Sem motivo registrado') as motivo,
             COUNT(*) as total,
             ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as pct
         FROM leads l
@@ -265,7 +265,7 @@ def fetch_motivos_perda(conn, ini, fim):
           AND l.deleted_at IS NULL
           AND (l.finish_lead_signup = 0 OR l.finish_lead_signup IS NULL)
           AND l.leadreason_id IS NOT NULL
-        GROUP BY lr.id, lr.name
+        GROUP BY lr.id, lr.title
         ORDER BY total DESC
     """, (str(ini), str(fim)))
 
@@ -385,7 +385,7 @@ def fetch_gargalos_funil(conn, ini, fim):
     """Identifica gargalos: status onde leads ficam parados (ultimo status de leads nao convertidos)."""
     return q(conn, """
         SELECT
-            ts.name as status_parado,
+            ts.title as status_parado,
             COUNT(*) as total,
             ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as pct
         FROM (
@@ -402,7 +402,7 @@ def fetch_gargalos_funil(conn, ini, fim):
               AND (l.finish_lead_signup = 0 OR l.finish_lead_signup IS NULL)
         ) sub
         JOIN timelinestatuses ts ON ts.id = sub.timelinestatus_id
-        GROUP BY ts.id, ts.name
+        GROUP BY ts.id, ts.title
         ORDER BY total DESC
         LIMIT 15
     """, (str(ini), str(fim)))
