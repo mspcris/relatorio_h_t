@@ -1509,6 +1509,8 @@ def api_leads_analytics_cache_status():
         "validacao_ok": meta.get("validacao_ok"),
         "mysql_count": meta.get("mysql_count"),
         "modo": meta.get("modo"),
+        "periodo_ini": meta.get("periodo_ini"),
+        "periodo_fim": meta.get("periodo_fim"),
     })
 
 
