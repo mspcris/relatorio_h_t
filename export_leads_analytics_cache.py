@@ -343,6 +343,17 @@ def run_cache(force_full=False):
         save_meta(new_meta)
         increment_daily_run()
 
+        # --- Copiar para /var/www/ (se existir) ---
+        www_json = "/var/www/json_consolidado"
+        if os.path.isdir(www_json):
+            import shutil
+            for fname in ["leads_analytics_geral.json", "leads_analytics_postos.json",
+                          "leads_analytics_corretores.json", "leads_analytics_cache_meta.json"]:
+                src = os.path.join(JSON_DIR, fname)
+                if os.path.exists(src):
+                    shutil.copy2(src, os.path.join(www_json, fname))
+            log("  Copiado para /var/www/json_consolidado/")
+
         elapsed = time.time() - t_total
         log(f"=== CONCLUIDO em {elapsed:.1f}s | validacao={'OK' if new_meta['validacao_ok'] else 'INCONSISTENTE'} ===")
 
