@@ -191,7 +191,9 @@ def fetch_corretor_performance(conn, ini, fim):
 
 
 def fetch_tempo_primeiro_contato_impacto(conn, ini, fim):
-    """Impacto do tempo de primeiro contato na conversao."""
+    """Impacto do tempo de primeiro contato na conversao.
+    Exclui status automaticos (VISUALIZADO=6, CONTATO INICIAL=1) para pegar
+    o primeiro contato real do corretor."""
     return q(conn, """
         SELECT
             CASE
@@ -208,14 +210,16 @@ def fetch_tempo_primeiro_contato_impacto(conn, ini, fim):
         FROM (
             SELECT
                 l.id,
-                TIMESTAMPDIFF(HOUR, l.created_at, MIN(t.created_at)) as h_primeiro,
+                TIMESTAMPDIFF(MINUTE, l.created_at, MIN(t.created_at)) / 60.0 as h_primeiro,
                 (l.finish_lead_signup = 1) as convertido
             FROM leads l
             JOIN timelines t ON t.lead_id = l.id
+              AND t.timelinestatus_id NOT IN (1, 6)
             WHERE l.created_at >= %s AND l.created_at < %s
               AND l.deleted_at IS NULL
             GROUP BY l.id, l.created_at, l.finish_lead_signup
         ) sub
+        WHERE h_primeiro IS NOT NULL
         GROUP BY faixa
         ORDER BY FIELD(faixa, '0-1h', '1-4h', '4-12h', '12-24h', '24-48h', '48h+')
     """, (str(ini), str(fim)))

@@ -1303,6 +1303,68 @@ def api_upsert_metas():
 
 
 # ===============================
+# API Leads Analytics
+# ===============================
+
+@app.get("/api/leads_analytics")
+def api_leads_analytics():
+    email, _ = decode_user()
+    if not email:
+        return ("", 401)
+
+    ini = (request.args.get("ini") or "").strip()[:10]
+    fim = (request.args.get("fim") or "").strip()[:10]
+
+    if not ini or not fim:
+        return jsonify({"erro": "parametros ini e fim obrigatorios"}), 400
+
+    try:
+        from export_leads_analytics import (
+            get_conn, fetch_resumo_geral, fetch_funil_por_status,
+            fetch_funil_conversao, fetch_conversao_por_posto,
+            fetch_conversao_por_fonte, fetch_corretor_performance,
+            fetch_tempo_primeiro_contato_impacto, fetch_contatos_vs_conversao,
+            fetch_motivos_perda, fetch_evolucao_mensal, fetch_dia_semana,
+            fetch_hora_dia, fetch_tempo_ciclo_conversao, fetch_idade_leads,
+            fetch_gargalos_funil, generate_insights, _serialize,
+        )
+        conn = get_conn()
+        data = {}
+        queries = [
+            ("resumo_geral",           fetch_resumo_geral),
+            ("funil_por_status",       fetch_funil_por_status),
+            ("funil_conversao",        fetch_funil_conversao),
+            ("conversao_por_posto",    fetch_conversao_por_posto),
+            ("conversao_por_fonte",    fetch_conversao_por_fonte),
+            ("corretor_performance",   fetch_corretor_performance),
+            ("tempo_primeiro_contato", fetch_tempo_primeiro_contato_impacto),
+            ("contatos_vs_conversao",  fetch_contatos_vs_conversao),
+            ("motivos_perda",          fetch_motivos_perda),
+            ("evolucao_mensal",        fetch_evolucao_mensal),
+            ("dia_semana",             fetch_dia_semana),
+            ("hora_dia",               fetch_hora_dia),
+            ("tempo_ciclo_conversao",  fetch_tempo_ciclo_conversao),
+            ("idade_leads",            fetch_idade_leads),
+            ("gargalos_funil",         fetch_gargalos_funil),
+        ]
+        for name, fn in queries:
+            try:
+                result = fn(conn, ini, fim)
+                if isinstance(result, dict):
+                    result = {k: _serialize(v) for k, v in result.items()}
+                elif isinstance(result, list):
+                    result = [{k: _serialize(v) for k, v in row.items()} if isinstance(row, dict) else row for row in result]
+                data[name] = result
+            except Exception:
+                data[name] = []
+        conn.close()
+        data["insights"] = generate_insights(data)
+        return jsonify(data)
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
+
+
+# ===============================
 # Execução manual
 # ===============================
 
