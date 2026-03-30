@@ -467,16 +467,15 @@ function updateRangeButtons(activeMeses) {
 }
 
 function onDateChange() {
-  // Sempre busca da API com datas exatas
+  // Sempre limpa tudo e busca da API com datas exatas
   CACHE = { geral: null, postos: null, corretores: null };
   DATA_GERAL = null; DATA_POSTOS = null; DATA_CORRETORES = null;
-  DATA_SOURCE = 'api';
 
-  // Desmarcar botoes de range customizado
-  var btns = ['btnUlt12','btnUlt6','btnUlt3'];
+  // Atualizar botoes de range
+  var ini = getIni(), fim = getFim();
   var hoje = new Date();
   var matched = false;
-  [12,6,3].forEach(function(m,i) {
+  [12,6,3].forEach(function(m) {
     var expIni = isoDate(new Date(hoje.getFullYear(), hoje.getMonth() - m + 1, 1));
     var expFim = isoDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1));
     if (ini === expIni && fim === expFim) { updateRangeButtons(m); matched = true; }
