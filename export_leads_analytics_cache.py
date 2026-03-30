@@ -35,23 +35,17 @@ META_FILE = os.path.join(JSON_DIR, "leads_analytics_cache_meta.json")
 LOCK_FILE = "/tmp/leads_analytics_cache.lock"
 DAILY_RUN_PREFIX = os.path.join(JSON_DIR, ".leads_cache_runs_")
 
-# Importar funcoes do modulo principal
+# Import lazy — so carrega pymysql/queries quando realmente for gerar cache
 sys.path.insert(0, BASE_DIR)
-from export_leads_analytics import (
-    get_conn, _serialize,
-    fetch_resumo_geral, fetch_funil_por_status, fetch_funil_conversao,
-    fetch_conversao_por_posto, fetch_conversao_por_fonte,
-    fetch_corretor_performance, fetch_tempo_primeiro_contato_impacto,
-    fetch_contatos_vs_conversao, fetch_motivos_perda, fetch_evolucao_mensal,
-    fetch_dia_semana, fetch_hora_dia, fetch_hora_fechamento,
-    fetch_tempo_ciclo_conversao, fetch_idade_leads,
-    fetch_gargalos_funil, fetch_piores_dias, generate_insights,
-    fetch_posto_mensal_agg, fetch_posto_corretor, fetch_posto_fonte,
-    fetch_posto_ciclo,
-    fetch_corretor_mensal, fetch_corretor_hora, fetch_corretor_dia_semana,
-    fetch_corretor_fonte, fetch_corretor_desperdicio, fetch_corretor_ciclo,
-    fetch_corretor_hora_fechamento,
-)
+_etl = None
+
+def _get_etl():
+    """Import lazy do modulo de queries MySQL."""
+    global _etl
+    if _etl is None:
+        import export_leads_analytics as m
+        _etl = m
+    return _etl
 
 
 def log(msg):
@@ -149,11 +143,12 @@ def mysql_count(conn, ini, fim):
 
 def serialize_result(result):
     """Converte tipos para JSON."""
+    s = _get_etl()._serialize
     if isinstance(result, dict):
-        return {k: _serialize(v) for k, v in result.items()}
+        return {k: s(v) for k, v in result.items()}
     elif isinstance(result, list):
         return [
-            {k: _serialize(v) for k, v in row.items()} if isinstance(row, dict) else row
+            {k: s(v) for k, v in row.items()} if isinstance(row, dict) else row
             for row in result
         ]
     return result
@@ -172,25 +167,26 @@ def calc_periodo():
 
 def generate_geral(conn, ini, fim):
     """Gera dados da aba Visao Geral."""
+    m = _get_etl()
     data = {}
     queries = [
-        ("resumo_geral",           fetch_resumo_geral),
-        ("funil_por_status",       fetch_funil_por_status),
-        ("funil_conversao",        fetch_funil_conversao),
-        ("conversao_por_posto",    fetch_conversao_por_posto),
-        ("conversao_por_fonte",    fetch_conversao_por_fonte),
-        ("corretor_performance",   fetch_corretor_performance),
-        ("tempo_primeiro_contato", fetch_tempo_primeiro_contato_impacto),
-        ("contatos_vs_conversao",  fetch_contatos_vs_conversao),
-        ("motivos_perda",          fetch_motivos_perda),
-        ("evolucao_mensal",        fetch_evolucao_mensal),
-        ("dia_semana",             fetch_dia_semana),
-        ("hora_dia",               fetch_hora_dia),
-        ("hora_fechamento",        fetch_hora_fechamento),
-        ("tempo_ciclo_conversao",  fetch_tempo_ciclo_conversao),
-        ("idade_leads",            fetch_idade_leads),
-        ("gargalos_funil",         fetch_gargalos_funil),
-        ("piores_dias",            fetch_piores_dias),
+        ("resumo_geral",           m.fetch_resumo_geral),
+        ("funil_por_status",       m.fetch_funil_por_status),
+        ("funil_conversao",        m.fetch_funil_conversao),
+        ("conversao_por_posto",    m.fetch_conversao_por_posto),
+        ("conversao_por_fonte",    m.fetch_conversao_por_fonte),
+        ("corretor_performance",   m.fetch_corretor_performance),
+        ("tempo_primeiro_contato", m.fetch_tempo_primeiro_contato_impacto),
+        ("contatos_vs_conversao",  m.fetch_contatos_vs_conversao),
+        ("motivos_perda",          m.fetch_motivos_perda),
+        ("evolucao_mensal",        m.fetch_evolucao_mensal),
+        ("dia_semana",             m.fetch_dia_semana),
+        ("hora_dia",               m.fetch_hora_dia),
+        ("hora_fechamento",        m.fetch_hora_fechamento),
+        ("tempo_ciclo_conversao",  m.fetch_tempo_ciclo_conversao),
+        ("idade_leads",            m.fetch_idade_leads),
+        ("gargalos_funil",         m.fetch_gargalos_funil),
+        ("piores_dias",            m.fetch_piores_dias),
     ]
     for name, fn in queries:
         t0 = time.time()
@@ -202,18 +198,19 @@ def generate_geral(conn, ini, fim):
             log(f"  geral.{name} -> ERRO: {e}")
             data[name] = []
 
-    data["insights"] = generate_insights(data)
+    data["insights"] = m.generate_insights(data)
     return data
 
 
 def generate_postos(conn, ini, fim):
     """Gera dados da aba Por Posto."""
+    m = _get_etl()
     data = {}
     queries = [
-        ("posto_mensal",   fetch_posto_mensal_agg),
-        ("posto_corretor", fetch_posto_corretor),
-        ("posto_fonte",    fetch_posto_fonte),
-        ("posto_ciclo",    fetch_posto_ciclo),
+        ("posto_mensal",   m.fetch_posto_mensal_agg),
+        ("posto_corretor", m.fetch_posto_corretor),
+        ("posto_fonte",    m.fetch_posto_fonte),
+        ("posto_ciclo",    m.fetch_posto_ciclo),
     ]
     for name, fn in queries:
         t0 = time.time()
@@ -229,16 +226,17 @@ def generate_postos(conn, ini, fim):
 
 def generate_corretores(conn, ini, fim):
     """Gera dados da aba Corretores."""
+    m = _get_etl()
     data = {}
     queries = [
-        ("corretor_ranking",          fetch_corretor_performance),
-        ("corretor_mensal",           fetch_corretor_mensal),
-        ("corretor_hora",             fetch_corretor_hora),
-        ("corretor_dia_semana",       fetch_corretor_dia_semana),
-        ("corretor_fonte",            fetch_corretor_fonte),
-        ("corretor_desperdicio",      fetch_corretor_desperdicio),
-        ("corretor_ciclo",            fetch_corretor_ciclo),
-        ("corretor_hora_fechamento",  fetch_corretor_hora_fechamento),
+        ("corretor_ranking",          m.fetch_corretor_performance),
+        ("corretor_mensal",           m.fetch_corretor_mensal),
+        ("corretor_hora",             m.fetch_corretor_hora),
+        ("corretor_dia_semana",       m.fetch_corretor_dia_semana),
+        ("corretor_fonte",            m.fetch_corretor_fonte),
+        ("corretor_desperdicio",      m.fetch_corretor_desperdicio),
+        ("corretor_ciclo",            m.fetch_corretor_ciclo),
+        ("corretor_hora_fechamento",  m.fetch_corretor_hora_fechamento),
     ]
     for name, fn in queries:
         t0 = time.time()
@@ -265,7 +263,7 @@ def run_cache(force_full=False):
         ini, fim = calc_periodo()
         log(f"=== LEADS ANALYTICS CACHE === periodo: {ini} a {fim}")
 
-        conn = get_conn()
+        conn = _get_etl().get_conn()
         meta = load_meta()
 
         # --- Verificacao incremental ---
