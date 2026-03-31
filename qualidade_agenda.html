@@ -1492,16 +1492,23 @@ function renderTop10(data) {
         return;
     }
     const maxVal = sorted[0][1];
+    const totalPostos = getSelectedPostos().length;
+    // Gradiente de cores bem distintas: vermelho escuro → laranja → amarelo
+    const colorScale = [
+        '#8b0000', '#b91c1c', '#dc2626', '#e53e3e', '#ed6434',
+        '#f07838', '#f59e0b', '#f6ad55', '#fbbf24', '#fcd34d'
+    ];
     let html = '';
     sorted.forEach(([esp, cnt], i) => {
         const pct = Math.round((cnt / maxVal) * 100);
-        const color = i === 0 ? '#dc3545' : i < 3 ? '#e05050' : '#e07070';
+        const color = colorScale[Math.min(i, colorScale.length - 1)];
+        const postoLabel = cnt === 1 ? '1 posto' : `${cnt} postos`;
         html += `<div class="d-flex align-items-center mb-2" style="gap:10px;">
             <div style="width:140px;font-size:0.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esp}">${i+1}. ${esp}</div>
             <div style="flex:1;height:18px;background:#f0f0f0;border-radius:4px;overflow:hidden;">
                 <div style="height:100%;width:${pct}%;background:${color};border-radius:4px;"></div>
             </div>
-            <div style="width:40px;text-align:right;font-weight:700;color:${color};font-size:0.85rem;">${cnt}</div>
+            <div style="width:70px;text-align:right;font-weight:700;color:${color};font-size:0.8rem;">${postoLabel}</div>
         </div>`;
     });
     container.innerHTML = html;
