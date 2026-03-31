@@ -534,8 +534,9 @@ async function loadDashboard() {
 
 /* ── Init ──────────────────────────────────────────────────── */
 async function init() {
-  // Datas padrão: hoje
-  const hoje = new Date().toISOString().slice(0, 10);
+  // Datas padrão: hoje (local, não UTC)
+  const now = new Date();
+  const hoje = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
   document.getElementById('dataIni').value = hoje;
   document.getElementById('dataFim').value = hoje;
 
