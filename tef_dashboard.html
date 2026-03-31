@@ -481,8 +481,10 @@ async function loadDashboard() {
       // Pizza: aprovadas vs negadas
       const totalAprov = t7.reduce((s, r) => s + r.aprovadas, 0);
       const totalNeg   = t7.reduce((s, r) => s + r.negadas, 0);
-      chartTrend = new Chart(document.getElementById('chartTrend'), {
-        type: 'doughnut',
+      const chartCanvas = document.getElementById('chartTrend');
+      chartCanvas.style.maxHeight = '320px';
+      chartTrend = new Chart(chartCanvas, {
+        type: 'pie',
         data: {
           labels: ['Aprovadas', 'Negadas'],
           datasets: [{
@@ -493,6 +495,7 @@ async function loadDashboard() {
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           plugins: {
             legend: { position: 'bottom' },
             tooltip: {
@@ -509,10 +512,12 @@ async function loadDashboard() {
       });
     } else {
       // Barras empilhadas por dia
+      const chartCanvasBar = document.getElementById('chartTrend');
+      chartCanvasBar.style.maxHeight = '';
       const labels = t7.map(r => r.dia.slice(5));
       const aprovData = t7.map(r => r.aprovadas);
       const negaData  = t7.map(r => r.negadas);
-      chartTrend = new Chart(document.getElementById('chartTrend'), {
+      chartTrend = new Chart(chartCanvasBar, {
         type: 'bar',
         data: {
           labels,

@@ -256,6 +256,85 @@
 
         /* Radar mini chart wrapper */
         .radar-mini { height: 200px; }
+
+        /* ── Simulador de Capacidade ── */
+        .sim-health-banner {
+            background: linear-gradient(135deg, #0f1923 0%, #1a2940 50%, #0f2333 100%);
+            border-radius: 12px; padding: 24px; color: #e0f0ff; position: relative; overflow: hidden; margin-bottom: 18px;
+        }
+        .sim-health-banner::after {
+            content: ''; position: absolute; top: -60px; right: -60px; width: 250px; height: 250px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(0,180,255,0.06) 0%, transparent 70%);
+        }
+        .sim-score-ring { width: 140px; height: 140px; position: relative; flex-shrink: 0; }
+        .sim-score-ring canvas { width: 100% !important; height: 100% !important; }
+        .sim-score-value {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 2rem; font-weight: 800; font-family: "Inter", monospace; color: #fff;
+        }
+        .sim-score-label { font-size: 0.7rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.06em; text-align: center; margin-top: 4px; }
+        .sim-insight-list { list-style: none; padding: 0; margin: 0; }
+        .sim-insight-list li { padding: 6px 0; font-size: 0.88rem; border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: flex-start; gap: 8px; }
+        .sim-insight-list li:last-child { border-bottom: none; }
+        .sim-insight-icon { flex-shrink: 0; width: 22px; text-align: center; margin-top: 2px; }
+
+        .sim-section-title { font-size: 1rem; font-weight: 700; color: #1a2940; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+        .sim-section-title::before { content: ''; display: block; width: 4px; height: 20px; background: linear-gradient(180deg, #2c5f8a, #00b4d8); border-radius: 2px; }
+
+        .sim-alert-card {
+            border-radius: 10px; padding: 14px 18px; margin-bottom: 10px;
+            display: flex; align-items: flex-start; gap: 12px;
+            border-left: 4px solid;
+        }
+        .sim-alert-critico { background: #fff5f5; border-color: #dc3545; }
+        .sim-alert-alerta  { background: #fffbf0; border-color: #fd7e14; }
+        .sim-alert-ok      { background: #f0fff4; border-color: #28a745; }
+        .sim-alert-icon { font-size: 1.3rem; flex-shrink: 0; margin-top: 2px; }
+        .sim-alert-body { flex: 1; }
+        .sim-alert-title { font-weight: 700; font-size: 0.92rem; margin-bottom: 3px; }
+        .sim-alert-text  { font-size: 0.82rem; color: #555; line-height: 1.45; }
+        .sim-alert-meta  { font-size: 0.72rem; color: #999; margin-top: 4px; }
+
+        .sim-gap-table { font-size: 0.84rem; }
+        .sim-gap-table th { background: #f0f4f8; font-weight: 600; border-bottom: 2px solid #dee2e6; padding: 8px 10px; white-space: nowrap; }
+        .sim-gap-table td { padding: 7px 10px; vertical-align: middle; }
+        .sim-gap-table .gap-neg { color: #dc3545; font-weight: 700; }
+        .sim-gap-table .gap-ok  { color: #28a745; font-weight: 700; }
+
+        .sim-scenario-card {
+            background: #fff; border: 1px solid #e3e8ef; border-radius: 10px; padding: 16px 18px; margin-bottom: 12px;
+        }
+        .sim-scenario-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .sim-scenario-title { font-weight: 700; font-size: 0.95rem; color: #1a2940; }
+        .sim-scenario-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+        .sim-before-after { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: center; }
+        .sim-ba-box { text-align: center; padding: 12px; border-radius: 8px; }
+        .sim-ba-before { background: #fff5f5; }
+        .sim-ba-after  { background: #f0fff4; }
+        .sim-ba-num { font-size: 1.6rem; font-weight: 800; font-family: "Inter", monospace; }
+        .sim-ba-label { font-size: 0.72rem; color: #888; text-transform: uppercase; margin-top: 2px; }
+        .sim-ba-arrow { font-size: 1.4rem; color: #2c5f8a; }
+
+        .sim-rec-card {
+            background: linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%);
+            border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px 20px; margin-bottom: 10px;
+        }
+        .sim-rec-priority { display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 8px; border-radius: 8px; text-transform: uppercase; margin-bottom: 6px; }
+        .sim-rec-priority-alta   { background: #fed7d7; color: #c53030; }
+        .sim-rec-priority-media  { background: #fefcbf; color: #975a16; }
+        .sim-rec-priority-baixa  { background: #c6f6d5; color: #276749; }
+        .sim-rec-title { font-weight: 700; font-size: 0.92rem; color: #1a2940; margin-bottom: 4px; }
+        .sim-rec-text  { font-size: 0.82rem; color: #555; line-height: 1.5; }
+        .sim-rec-impact { font-size: 0.75rem; color: #2c5f8a; font-weight: 600; margin-top: 6px; }
+
+        .sim-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 18px; }
+        .sim-kpi-card { background: #fff; border: 1px solid #e3e8ef; border-radius: 10px; padding: 14px; text-align: center; }
+        .sim-kpi-num { font-size: 1.8rem; font-weight: 800; font-family: "Inter", monospace; line-height: 1; }
+        .sim-kpi-label { font-size: 0.75rem; color: #888; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.04em; }
+
+        .sim-filter-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; padding: 10px 16px; background: #f8fafc; border: 1px solid #e3e8ef; border-radius: 8px; }
+        .sim-filter-bar label { font-size: 0.82rem; font-weight: 600; color: #555; margin: 0; }
+        .sim-filter-bar select { font-size: 0.82rem; padding: 4px 10px; border-radius: 6px; border: 1px solid #d0d7e2; }
     </style>
 </head>
 
@@ -433,6 +512,11 @@
                                 <i class="fas fa-chart-bar mr-1"></i>Por Especialidade
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="tab-sim"  data-toggle="tab" href="#pane-sim"  role="tab">
+                                <i class="fas fa-calculator mr-1"></i>Simulador de Capacidade
+                            </a>
+                        </li>
                         {% if USER_IS_ADMIN %}
                         <li class="nav-item">
                             <a class="nav-link" id="tab-cfg"  data-toggle="tab" href="#pane-cfg"  role="tab">
@@ -497,6 +581,106 @@
                             <div id="espContainer">
                                 <div class="empty-state"><i class="fas fa-sync fa-spin"></i>Carregando...</div>
                             </div>
+                        </div>
+
+                        <!-- TAB: SIMULADOR DE CAPACIDADE -->
+                        <div class="tab-pane fade" id="pane-sim" role="tabpanel">
+
+                            <!-- Health Score Banner -->
+                            <div class="sim-health-banner">
+                                <div class="d-flex align-items-center" style="gap: 24px; flex-wrap: wrap;">
+                                    <div>
+                                        <div class="sim-score-ring">
+                                            <canvas id="simScoreRing"></canvas>
+                                            <div class="sim-score-value" id="simScoreVal">—</div>
+                                        </div>
+                                        <div class="sim-score-label">Saúde da Capacidade</div>
+                                    </div>
+                                    <div style="flex: 1; min-width: 280px;">
+                                        <div style="font-size: 1.1rem; font-weight: 700; color: #b8d9f7; margin-bottom: 8px;">
+                                            <i class="fas fa-heartbeat mr-2"></i>Diagnóstico Geral da Rede
+                                        </div>
+                                        <div id="simDiagnostico" style="font-size: 0.88rem; color: #c8ddf0; line-height: 1.55; margin-bottom: 12px;">
+                                            Analisando dados...
+                                        </div>
+                                        <ul class="sim-insight-list" id="simInsights"></ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- KPI Cards resumo -->
+                            <div class="sim-kpi-grid" id="simKpiGrid"></div>
+
+                            <!-- Filtro de foco -->
+                            <div class="sim-filter-bar">
+                                <label><i class="fas fa-filter mr-1"></i>Filtrar por status:</label>
+                                <select id="simFilterStatus" onchange="renderSimulador()">
+                                    <option value="">Todos</option>
+                                    <option value="CRITICO">Apenas Críticos</option>
+                                    <option value="SEM_VAGA">Apenas Sem Vaga</option>
+                                    <option value="ALERTA">Apenas Alerta</option>
+                                    <option value="OK">Apenas OK</option>
+                                </select>
+                                <label class="ml-3">Ordenar por:</label>
+                                <select id="simSortBy" onchange="renderSimulador()">
+                                    <option value="criticidade">Criticidade</option>
+                                    <option value="dias">Dias até vaga</option>
+                                    <option value="ocupacao">% Ocupação</option>
+                                    <option value="especialidade">Especialidade</option>
+                                </select>
+                            </div>
+
+                            <!-- Alertas Inteligentes -->
+                            <div class="sim-section-title"><i class="fas fa-bell mr-1"></i>Alertas Inteligentes</div>
+                            <div id="simAlertas" class="mb-4"></div>
+
+                            <!-- Análise de Gaps -->
+                            <div class="sim-section-title"><i class="fas fa-search-minus mr-1"></i>Análise de Gap — Capacidade vs Demanda</div>
+                            <div class="table-responsive mb-4">
+                                <table class="table sim-gap-table" id="simGapTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Status</th>
+                                            <th>Posto</th>
+                                            <th>Especialidade</th>
+                                            <th>Capacidade</th>
+                                            <th>Vagas Livres</th>
+                                            <th>% Livre</th>
+                                            <th>Dias p/ Vaga</th>
+                                            <th>Prazo ANS</th>
+                                            <th>Prazo CAMIM</th>
+                                            <th>Gap (dias)</th>
+                                            <th>Ocupação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="simGapBody"></tbody>
+                                </table>
+                            </div>
+
+                            <!-- Cenários de Impacto -->
+                            <div class="sim-section-title"><i class="fas fa-flask mr-1"></i>Cenários de Impacto — O que Aconteceria Se...</div>
+                            <div id="simCenarios" class="mb-4"></div>
+
+                            <!-- Recomendações -->
+                            <div class="sim-section-title"><i class="fas fa-lightbulb mr-1"></i>Recomendações Priorizadas</div>
+                            <div id="simRecomendacoes" class="mb-4"></div>
+
+                            <!-- Gráfico Radar de Saúde por Posto -->
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-chart-area mr-2 text-primary"></i>Saúde por Posto (% dentro do prazo)</h3></div>
+                                        <div class="card-body" style="height: 300px;"><canvas id="simRadarPosto"></canvas></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-chart-bar mr-2 text-danger"></i>Especialidades com Maior Déficit</h3></div>
+                                        <div class="card-body" style="height: 300px;"><canvas id="simBarDeficit"></canvas></div>
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
 
                         {% if USER_IS_ADMIN %}
@@ -807,6 +991,7 @@ function renderAll() {
     renderChartCritico(data);
     renderChartDistStatus(data);
     renderTop10(data);
+    renderSimulador();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1320,6 +1505,588 @@ function renderTop10(data) {
         </div>`;
     });
     container.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SIMULADOR DE CAPACIDADE
+// ─────────────────────────────────────────────────────────────────────────────
+let simScoreChart = null, simRadarChart = null, simBarDefChart = null;
+
+function renderSimulador() {
+    const data = getFilteredData();
+    renderSimHealthScore(data);
+    renderSimKpis(data);
+    renderSimAlertas(data);
+    renderSimGapTable(data);
+    renderSimCenarios(data);
+    renderSimRecomendacoes(data);
+    renderSimRadarPosto(data);
+    renderSimBarDeficit(data);
+}
+
+function renderSimHealthScore(data) {
+    if (!data.length) return;
+    const total = data.length;
+    const ok = data.filter(d => d.Status === 'OK').length;
+    const alerta = data.filter(d => d.Status === 'ALERTA').length;
+    const critico = data.filter(d => d.Status === 'CRITICO').length;
+    const semVaga = data.filter(d => d.Status === 'SEM_VAGA').length;
+
+    // Score: 100 = all OK, 0 = all CRITICO/SEM_VAGA
+    const score = Math.round(((ok * 1.0 + alerta * 0.5) / total) * 100);
+    const scoreColor = score >= 75 ? '#68d391' : score >= 50 ? '#f6ad55' : '#fc8181';
+
+    // Ring chart
+    const ctx = document.getElementById('simScoreRing');
+    if (ctx) {
+        if (simScoreChart) simScoreChart.destroy();
+        simScoreChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [score, 100 - score],
+                    backgroundColor: [scoreColor, 'rgba(255,255,255,0.08)'],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                cutout: '78%', responsive: true, maintainAspectRatio: true,
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                animation: { animateRotate: true, duration: 1200 }
+            }
+        });
+    }
+    el('simScoreVal').textContent = score;
+    el('simScoreVal').style.color = scoreColor;
+
+    // Diagnostic text
+    const postosVisiveis = getSelectedPostos();
+    let diagText = '';
+    if (score >= 80) {
+        diagText = `A rede está operando em bom estado. ${ok} de ${total} situações estão dentro do prazo ANS nos ${postosVisiveis.length} postos analisados. Foco deve ser na manutenção e prevenção.`;
+    } else if (score >= 50) {
+        diagText = `A rede apresenta pontos de atenção moderados. ${alerta} especialidades estão em alerta e ${critico + semVaga} em estado crítico/sem vaga. Ações preventivas são recomendadas para evitar deterioração.`;
+    } else {
+        diagText = `Situação preocupante: ${critico + semVaga} de ${total} situações estão em estado crítico ou sem vaga (${((critico+semVaga)/total*100).toFixed(0)}%). A capacidade da rede está comprometida e requer ações imediatas.`;
+    }
+    el('simDiagnostico').textContent = diagText;
+
+    // Insights
+    const insights = [];
+    // Find posto with most criticals
+    const criticosByPosto = {};
+    data.forEach(d => {
+        if (d.Status === 'CRITICO' || d.Status === 'SEM_VAGA') {
+            criticosByPosto[d.posto] = (criticosByPosto[d.posto] || 0) + 1;
+        }
+    });
+    const worstPosto = Object.entries(criticosByPosto).sort((a,b) => b[1]-a[1])[0];
+    if (worstPosto) {
+        const nome = postosInfo[worstPosto[0]] ? postosInfo[worstPosto[0]].nome : (POSTO_NOMES[worstPosto[0]]||worstPosto[0]);
+        insights.push({icon: 'fa-map-marker-alt', color: '#fc8181', text: `Posto mais crítico: <strong>${nome} (${worstPosto[0]})</strong> com ${worstPosto[1]} especialidades em risco`});
+    }
+    // Specialty with longest wait
+    const longestWait = [...data].filter(d => d.DiasAteProximaVaga !== null).sort((a,b) => b.DiasAteProximaVaga - a.DiasAteProximaVaga)[0];
+    if (longestWait) {
+        insights.push({icon: 'fa-clock', color: '#f6ad55', text: `Maior espera: <strong>${longestWait.Especialidade}</strong> no posto ${longestWait.posto} — ${longestWait.DiasAteProximaVaga} dias para próxima vaga`});
+    }
+    // Average occupancy
+    const withCap = data.filter(d => d.CapacidadeConsiderada > 0 && d.QuantidadeVagasDisponivelNaData !== null);
+    if (withCap.length) {
+        const avgOcup = withCap.reduce((s,d) => s + (1 - d.QuantidadeVagasDisponivelNaData / d.CapacidadeConsiderada), 0) / withCap.length * 100;
+        insights.push({icon: 'fa-battery-half', color: avgOcup > 85 ? '#fc8181' : '#90cdf4', text: `Ocupação média da rede: <strong>${avgOcup.toFixed(1)}%</strong> — ${avgOcup > 85 ? 'capacidade saturada' : avgOcup > 70 ? 'utilização alta' : 'capacidade saudável'}`});
+    }
+    // SEM_VAGA count
+    if (semVaga > 0) {
+        insights.push({icon: 'fa-ban', color: '#fc8181', text: `<strong>${semVaga} especialidades</strong> estão completamente sem vaga disponível em algum posto`});
+    }
+
+    el('simInsights').innerHTML = insights.map(i =>
+        `<li><span class="sim-insight-icon" style="color:${i.color}"><i class="fas ${i.icon}"></i></span><span>${i.text}</span></li>`
+    ).join('');
+}
+
+function renderSimKpis(data) {
+    if (!data.length) { el('simKpiGrid').innerHTML = ''; return; }
+    const total = data.length;
+    const critico = data.filter(d => d.Status === 'CRITICO').length;
+    const semVaga = data.filter(d => d.Status === 'SEM_VAGA').length;
+    const ok = data.filter(d => d.Status === 'OK').length;
+    const withDias = data.filter(d => d.DiasAteProximaVaga !== null && d.DiasAteProximaVaga > 0);
+    const avgDias = withDias.length ? Math.round(withDias.reduce((s,d) => s + d.DiasAteProximaVaga, 0) / withDias.length) : 0;
+    const withCap = data.filter(d => d.CapacidadeConsiderada > 0);
+    const totalCap = withCap.reduce((s,d) => s + d.CapacidadeConsiderada, 0);
+    const totalLivres = withCap.reduce((s,d) => s + (d.QuantidadeVagasDisponivelNaData || 0), 0);
+    const pctLivre = totalCap > 0 ? (totalLivres / totalCap * 100).toFixed(1) : 0;
+
+    // Specialties beyond ANS
+    const beyondAns = data.filter(d => d.prazoconsultaans > 0 && d.DiasAteProximaVaga !== null && d.DiasAteProximaVaga > d.prazoconsultaans).length;
+
+    const kpis = [
+        { num: critico + semVaga, label: 'Situações Críticas', color: '#dc3545' },
+        { num: beyondAns, label: 'Além do Prazo ANS', color: '#fd7e14' },
+        { num: avgDias + 'd', label: 'Média Dias p/ Vaga', color: '#2c5f8a' },
+        { num: pctLivre + '%', label: 'Vagas Livres na Rede', color: totalLivres/totalCap < 0.15 ? '#dc3545' : '#28a745' },
+        { num: totalCap, label: 'Capacidade Total', color: '#555' },
+        { num: getSelectedPostos().length, label: 'Postos Analisados', color: '#2c5f8a' },
+    ];
+
+    el('simKpiGrid').innerHTML = kpis.map(k =>
+        `<div class="sim-kpi-card"><div class="sim-kpi-num" style="color:${k.color}">${k.num}</div><div class="sim-kpi-label">${k.label}</div></div>`
+    ).join('');
+}
+
+function renderSimAlertas(data) {
+    const alertas = [];
+    const postosVisiveis = getSelectedPostos();
+
+    // 1. Especialidades SEM VAGA em múltiplos postos
+    const semVagaByEsp = {};
+    data.filter(d => d.Status === 'SEM_VAGA').forEach(d => {
+        if (!semVagaByEsp[d.Especialidade]) semVagaByEsp[d.Especialidade] = [];
+        semVagaByEsp[d.Especialidade].push(d.posto);
+    });
+    Object.entries(semVagaByEsp).sort((a,b) => b[1].length - a[1].length).forEach(([esp, postos]) => {
+        if (postos.length >= 3) {
+            alertas.push({
+                tipo: 'critico',
+                titulo: `${esp} — Sem Vaga em ${postos.length} postos`,
+                texto: `A especialidade ${esp} está completamente indisponível nos postos ${postos.join(', ')}. Isso representa um risco de descumprimento de ANS e impacto direto na experiência do paciente. Considere redistribuição imediata de profissionais ou contratação emergencial.`,
+                meta: `Postos afetados: ${postos.join(', ')} | Cobertura comprometida: ${(postos.length/postosVisiveis.length*100).toFixed(0)}% da rede filtrada`
+            });
+        } else if (postos.length >= 1) {
+            alertas.push({
+                tipo: 'critico',
+                titulo: `${esp} — Sem Vaga no posto ${postos.join(', ')}`,
+                texto: `Não há vagas disponíveis para ${esp}. Pacientes não conseguem agendar. Verifique se há profissionais afastados ou se a demanda superou a oferta configurada.`,
+                meta: `${postos.length} posto(s) sem vaga`
+            });
+        }
+    });
+
+    // 2. Especialidades críticas muito além do prazo ANS
+    data.filter(d => d.Status === 'CRITICO' && d.prazoconsultaans > 0 && d.DiasAteProximaVaga !== null)
+        .sort((a,b) => (b.DiasAteProximaVaga - b.prazoconsultaans) - (a.DiasAteProximaVaga - a.prazoconsultaans))
+        .slice(0, 5)
+        .forEach(d => {
+            const excesso = d.DiasAteProximaVaga - d.prazoconsultaans;
+            if (excesso > 0) {
+                const nomePosto = postosInfo[d.posto] ? postosInfo[d.posto].nome : (POSTO_NOMES[d.posto]||d.posto);
+                alertas.push({
+                    tipo: 'critico',
+                    titulo: `${d.Especialidade} no ${nomePosto} (${d.posto}) — ${excesso} dias além do ANS`,
+                    texto: `Próxima vaga em ${d.DiasAteProximaVaga} dias (prazo ANS: ${d.prazoconsultaans}d, prazo CAMIM: ${d.prazoconsultacamim}d). ` +
+                           `Com capacidade de ${d.CapacidadeConsiderada || '?'} vagas e apenas ${d.QuantidadeVagasDisponivelNaData ?? 0} livres, ` +
+                           `é necessário ampliar a oferta ou redirecionar demanda para postos com disponibilidade.`,
+                    meta: `Vagas livres: ${d.QuantidadeVagasDisponivelNaData ?? 0} | Capacidade: ${d.CapacidadeConsiderada ?? '?'} | % Livres: ${d.ValorPercentualVagasLivres ?? '?'}%`
+                });
+            }
+        });
+
+    // 3. Postos com alta concentração de problemas
+    const problemsByPosto = {};
+    data.filter(d => d.Status === 'CRITICO' || d.Status === 'SEM_VAGA').forEach(d => {
+        problemsByPosto[d.posto] = (problemsByPosto[d.posto] || 0) + 1;
+    });
+    const totalEspByPosto = {};
+    data.forEach(d => { totalEspByPosto[d.posto] = (totalEspByPosto[d.posto] || 0) + 1; });
+    Object.entries(problemsByPosto).sort((a,b) => b[1]-a[1]).forEach(([posto, cnt]) => {
+        const total = totalEspByPosto[posto] || 1;
+        const pct = (cnt/total*100).toFixed(0);
+        if (parseInt(pct) >= 50) {
+            const nome = postosInfo[posto] ? postosInfo[posto].nome : (POSTO_NOMES[posto]||posto);
+            alertas.push({
+                tipo: 'alerta',
+                titulo: `Posto ${nome} (${posto}) — ${pct}% das especialidades com problemas`,
+                texto: `${cnt} de ${total} especialidades em estado crítico ou sem vaga. Este posto pode estar sub-dimensionado em relação à demanda da região. Analise se a distribuição de profissionais está adequada.`,
+                meta: `Críticos/Sem vaga: ${cnt} | Total especialidades: ${total}`
+            });
+        }
+    });
+
+    // 4. Boa notícia se há alguma
+    const okPct = data.length ? (data.filter(d => d.Status === 'OK').length / data.length * 100) : 0;
+    if (okPct >= 70) {
+        alertas.push({
+            tipo: 'ok',
+            titulo: `${okPct.toFixed(0)}% da rede dentro do prazo ANS`,
+            texto: `A maioria das especialidades está operando dentro dos parâmetros aceitáveis. Mantenha o monitoramento para detectar tendências de deterioração antes que se tornem críticas.`,
+            meta: ''
+        });
+    }
+
+    if (!alertas.length) {
+        el('simAlertas').innerHTML = '<div class="text-muted text-center p-3"><i class="fas fa-check-circle text-success mr-2"></i>Nenhum alerta identificado para os filtros selecionados.</div>';
+        return;
+    }
+
+    el('simAlertas').innerHTML = alertas.slice(0, 10).map(a =>
+        `<div class="sim-alert-card sim-alert-${a.tipo}">
+            <div class="sim-alert-icon">${a.tipo === 'critico' ? '<i class="fas fa-exclamation-circle text-danger"></i>' : a.tipo === 'alerta' ? '<i class="fas fa-exclamation-triangle text-warning"></i>' : '<i class="fas fa-check-circle text-success"></i>'}</div>
+            <div class="sim-alert-body">
+                <div class="sim-alert-title">${a.titulo}</div>
+                <div class="sim-alert-text">${a.texto}</div>
+                ${a.meta ? '<div class="sim-alert-meta">' + a.meta + '</div>' : ''}
+            </div>
+        </div>`
+    ).join('');
+}
+
+function renderSimGapTable(data) {
+    const tbody = el('simGapBody');
+    const filterStatus = el('simFilterStatus').value;
+    const sortBy = el('simSortBy').value;
+
+    let filtered = [...data];
+    if (filterStatus) filtered = filtered.filter(d => d.Status === filterStatus);
+
+    // Sort
+    const statusOrder = { 'SEM_VAGA': 0, 'CRITICO': 1, 'ALERTA': 2, 'OK': 3 };
+    filtered.sort((a, b) => {
+        if (sortBy === 'criticidade') {
+            const so = (statusOrder[a.Status]||9) - (statusOrder[b.Status]||9);
+            if (so !== 0) return so;
+            return (b.DiasAteProximaVaga ?? 9999) - (a.DiasAteProximaVaga ?? 9999);
+        }
+        if (sortBy === 'dias') return (b.DiasAteProximaVaga ?? 9999) - (a.DiasAteProximaVaga ?? 9999);
+        if (sortBy === 'ocupacao') {
+            const occA = a.CapacidadeConsiderada ? (1 - (a.QuantidadeVagasDisponivelNaData||0)/a.CapacidadeConsiderada) : 0;
+            const occB = b.CapacidadeConsiderada ? (1 - (b.QuantidadeVagasDisponivelNaData||0)/b.CapacidadeConsiderada) : 0;
+            return occB - occA;
+        }
+        if (sortBy === 'especialidade') return a.Especialidade.localeCompare(b.Especialidade);
+        return 0;
+    });
+
+    if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">Nenhum dado para os filtros selecionados.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(d => {
+        const cap = d.CapacidadeConsiderada || 0;
+        const livres = d.QuantidadeVagasDisponivelNaData ?? 0;
+        const pctLivre = cap > 0 ? (livres / cap * 100).toFixed(1) : '—';
+        const ocupacao = cap > 0 ? ((1 - livres / cap) * 100).toFixed(0) : '—';
+        const dias = d.DiasAteProximaVaga;
+        const gapAns = d.prazoconsultaans > 0 && dias !== null ? dias - d.prazoconsultaans : null;
+        const gapClass = gapAns !== null ? (gapAns > 0 ? 'gap-neg' : 'gap-ok') : '';
+        const gapStr = gapAns !== null ? (gapAns > 0 ? `+${gapAns}d` : `${gapAns}d`) : '—';
+        const nomePosto = postosInfo[d.posto] ? postosInfo[d.posto].nome : (POSTO_NOMES[d.posto]||d.posto);
+
+        // Occupancy bar
+        const occPct = ocupacao !== '—' ? parseInt(ocupacao) : 0;
+        const occColor = occPct >= 90 ? '#dc3545' : occPct >= 75 ? '#fd7e14' : '#28a745';
+
+        return `<tr>
+            <td>${statusBadgeHtml(d.Status)}</td>
+            <td><strong>${d.posto}</strong><br><span style="font-size:0.72rem;color:#888">${nomePosto}</span></td>
+            <td>${d.Especialidade}</td>
+            <td class="text-center">${cap || '—'}</td>
+            <td class="text-center">${livres}</td>
+            <td class="text-center">${pctLivre}${pctLivre !== '—' ? '%' : ''}</td>
+            <td class="text-center font-weight-bold">${dias !== null ? dias + 'd' : '—'}</td>
+            <td class="text-center">${d.prazoconsultaans || '—'}d</td>
+            <td class="text-center">${d.prazoconsultacamim || '—'}d</td>
+            <td class="text-center ${gapClass}">${gapStr}</td>
+            <td style="min-width:90px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <div style="flex:1;height:8px;background:#e9ecef;border-radius:4px;overflow:hidden;">
+                        <div style="height:100%;width:${occPct}%;background:${occColor};border-radius:4px;"></div>
+                    </div>
+                    <span style="font-size:0.75rem;font-weight:700;color:${occColor};min-width:32px;text-align:right;">${ocupacao}%</span>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function renderSimCenarios(data) {
+    const container = el('simCenarios');
+    const cenarios = [];
+
+    // Cenário 1: "E se resolvêssemos todos os SEM_VAGA?"
+    const semVaga = data.filter(d => d.Status === 'SEM_VAGA');
+    if (semVaga.length > 0) {
+        const scoreBefore = calcScore(data);
+        const dataFixed = data.map(d => d.Status === 'SEM_VAGA' ? {...d, Status: 'ALERTA'} : d);
+        const scoreAfter = calcScore(dataFixed);
+        cenarios.push({
+            titulo: 'Resolver todas as especialidades SEM VAGA',
+            badge: `${semVaga.length} especialidades`,
+            badgeColor: '#dc3545',
+            descricao: `Se cada especialidade sem vaga recebesse ao menos 1 profissional para abrir agenda, ${semVaga.length} situações deixariam de ser críticas. As especialidades mais impactadas: ${[...new Set(semVaga.map(d=>d.Especialidade))].slice(0,3).join(', ')}.`,
+            before: scoreBefore, after: scoreAfter,
+            labelBefore: 'Score atual', labelAfter: 'Score projetado'
+        });
+    }
+
+    // Cenário 2: "E se o posto mais crítico recebesse reforço?"
+    const criticosByPosto = {};
+    data.filter(d => d.Status === 'CRITICO' || d.Status === 'SEM_VAGA').forEach(d => {
+        criticosByPosto[d.posto] = (criticosByPosto[d.posto] || 0) + 1;
+    });
+    const worstPosto = Object.entries(criticosByPosto).sort((a,b) => b[1]-a[1])[0];
+    if (worstPosto) {
+        const nome = postosInfo[worstPosto[0]] ? postosInfo[worstPosto[0]].nome : (POSTO_NOMES[worstPosto[0]]||worstPosto[0]);
+        const scoreBefore = calcScore(data);
+        const dataFixed = data.map(d => (d.posto === worstPosto[0] && (d.Status === 'CRITICO' || d.Status === 'SEM_VAGA')) ? {...d, Status: 'ALERTA'} : d);
+        const scoreAfter = calcScore(dataFixed);
+        cenarios.push({
+            titulo: `Reforçar o posto ${nome} (${worstPosto[0]})`,
+            badge: `${worstPosto[1]} especialidades em risco`,
+            badgeColor: '#fd7e14',
+            descricao: `Este é o posto com mais problemas. Adicionando profissionais para cobrir as ${worstPosto[1]} especialidades críticas, o score da rede saltaria de ${scoreBefore} para ${scoreAfter} pontos. Priorize as especialidades com maior excesso sobre o prazo ANS.`,
+            before: scoreBefore, after: scoreAfter,
+            labelBefore: 'Score atual', labelAfter: 'Score projetado'
+        });
+    }
+
+    // Cenário 3: "E se todas as ALERTA fossem trazidas para OK?"
+    const alertas = data.filter(d => d.Status === 'ALERTA');
+    if (alertas.length > 0) {
+        const scoreBefore = calcScore(data);
+        const dataFixed = data.map(d => d.Status === 'ALERTA' ? {...d, Status: 'OK'} : d);
+        const scoreAfter = calcScore(dataFixed);
+        cenarios.push({
+            titulo: 'Antecipar todas as vagas em ALERTA para dentro do prazo ANS',
+            badge: `${alertas.length} situações`,
+            badgeColor: '#fd7e14',
+            descricao: `${alertas.length} especialidades estão entre o prazo ANS e o CAMIM. Se a capacidade dessas fosse expandida para trazer o prazo abaixo do limite ANS, o score passaria de ${scoreBefore} para ${scoreAfter}.`,
+            before: scoreBefore, after: scoreAfter,
+            labelBefore: 'Score atual', labelAfter: 'Score projetado'
+        });
+    }
+
+    if (!cenarios.length) {
+        container.innerHTML = '<div class="text-muted text-center p-3">Nenhum cenário de impacto disponível para os dados filtrados.</div>';
+        return;
+    }
+
+    container.innerHTML = cenarios.map(c =>
+        `<div class="sim-scenario-card">
+            <div class="sim-scenario-header">
+                <i class="fas fa-flask" style="color:#2c5f8a;"></i>
+                <div class="sim-scenario-title">${c.titulo}</div>
+                <span class="sim-scenario-badge" style="background:${c.badgeColor}20;color:${c.badgeColor}">${c.badge}</span>
+            </div>
+            <p style="font-size:0.84rem;color:#555;margin-bottom:12px;">${c.descricao}</p>
+            <div class="sim-before-after">
+                <div class="sim-ba-box sim-ba-before">
+                    <div class="sim-ba-num" style="color:#dc3545">${c.before}</div>
+                    <div class="sim-ba-label">${c.labelBefore}</div>
+                </div>
+                <div class="sim-ba-arrow"><i class="fas fa-arrow-right"></i></div>
+                <div class="sim-ba-box sim-ba-after">
+                    <div class="sim-ba-num" style="color:#28a745">${c.after}</div>
+                    <div class="sim-ba-label">${c.labelAfter}</div>
+                </div>
+            </div>
+        </div>`
+    ).join('');
+}
+
+function calcScore(data) {
+    if (!data.length) return 0;
+    const ok = data.filter(d => d.Status === 'OK').length;
+    const alerta = data.filter(d => d.Status === 'ALERTA').length;
+    return Math.round(((ok * 1.0 + alerta * 0.5) / data.length) * 100);
+}
+
+function renderSimRecomendacoes(data) {
+    const container = el('simRecomendacoes');
+    const recs = [];
+
+    // Group by especialidade to find systemic issues
+    const byEsp = {};
+    data.forEach(d => {
+        if (!byEsp[d.Especialidade]) byEsp[d.Especialidade] = [];
+        byEsp[d.Especialidade].push(d);
+    });
+
+    // Rec 1: Specialties critical in many postos = systemic issue
+    Object.entries(byEsp).forEach(([esp, rows]) => {
+        const criticos = rows.filter(r => r.Status === 'CRITICO' || r.Status === 'SEM_VAGA');
+        if (criticos.length >= 3) {
+            const postosCriticos = criticos.map(r => r.posto).join(', ');
+            const okPostos = rows.filter(r => r.Status === 'OK');
+            const hint = okPostos.length > 0
+                ? ` Os postos ${okPostos.map(r=>r.posto).join(', ')} estão OK — analise o que eles fazem diferente (mais profissionais? menor demanda?) e replique.`
+                : ' Nenhum posto está OK para esta especialidade — o problema é sistêmico e requer contratação.';
+            recs.push({
+                prioridade: 'alta',
+                titulo: `Ampliar oferta de ${esp}`,
+                texto: `Crítica em ${criticos.length} postos (${postosCriticos}).${hint}`,
+                impacto: `Resolveria ${criticos.length} situações críticas de uma vez`
+            });
+        }
+    });
+
+    // Rec 2: Postos with high concentration of issues
+    const problemsByPosto = {};
+    data.forEach(d => {
+        if (!problemsByPosto[d.posto]) problemsByPosto[d.posto] = {critico: 0, total: 0};
+        problemsByPosto[d.posto].total++;
+        if (d.Status === 'CRITICO' || d.Status === 'SEM_VAGA') problemsByPosto[d.posto].critico++;
+    });
+    Object.entries(problemsByPosto).sort((a,b) => b[1].critico - a[1].critico).forEach(([posto, stats]) => {
+        const pct = (stats.critico / stats.total * 100);
+        if (pct >= 40 && stats.critico >= 3) {
+            const nome = postosInfo[posto] ? postosInfo[posto].nome : (POSTO_NOMES[posto]||posto);
+            recs.push({
+                prioridade: 'alta',
+                titulo: `Revisar dimensionamento do posto ${nome} (${posto})`,
+                texto: `${stats.critico} de ${stats.total} especialidades com problemas (${pct.toFixed(0)}%). Pode indicar falta generalizada de profissionais ou crescimento da demanda regional sem acompanhamento da oferta.`,
+                impacto: `Potencial melhoria de ${stats.critico} situações`
+            });
+        }
+    });
+
+    // Rec 3: Specialties barely in ALERTA (close to CRITICO)
+    data.filter(d => d.Status === 'ALERTA' && d.prazoconsultacamim > 0 && d.DiasAteProximaVaga !== null)
+        .filter(d => (d.DiasAteProximaVaga / d.prazoconsultacamim) > 0.8)
+        .slice(0, 3)
+        .forEach(d => {
+            const nome = postosInfo[d.posto] ? postosInfo[d.posto].nome : (POSTO_NOMES[d.posto]||d.posto);
+            recs.push({
+                prioridade: 'media',
+                titulo: `Preventiva: ${d.Especialidade} no ${nome} (${d.posto})`,
+                texto: `Está em ALERTA mas com ${d.DiasAteProximaVaga} dias de espera para prazo CAMIM de ${d.prazoconsultacamim} dias (${(d.DiasAteProximaVaga/d.prazoconsultacamim*100).toFixed(0)}% consumido). Sem ação, pode virar CRÍTICO em breve.`,
+                impacto: 'Prevenção — evitar escalada para crítico'
+            });
+        });
+
+    // Rec 4: Capacity redistribution opportunities
+    Object.entries(byEsp).forEach(([esp, rows]) => {
+        const okRows = rows.filter(r => r.Status === 'OK' && r.QuantidadeVagasDisponivelNaData > 5);
+        const critRows = rows.filter(r => r.Status === 'CRITICO' || r.Status === 'SEM_VAGA');
+        if (okRows.length > 0 && critRows.length > 0) {
+            recs.push({
+                prioridade: 'media',
+                titulo: `Redistribuir ${esp} entre postos`,
+                texto: `Postos com folga: ${okRows.map(r => r.posto + ' (' + r.QuantidadeVagasDisponivelNaData + ' vagas livres)').join(', ')}. Postos em crise: ${critRows.map(r => r.posto).join(', ')}. Considere redirecionar profissionais ou pacientes entre unidades.`,
+                impacto: `Potencial resolução de ${critRows.length} situação(ões) sem nova contratação`
+            });
+        }
+    });
+
+    // Rec 5: If everything is OK
+    const okPct = data.length ? (data.filter(d=>d.Status==='OK').length / data.length * 100) : 0;
+    if (okPct >= 90) {
+        recs.push({
+            prioridade: 'baixa',
+            titulo: 'Manutenção preventiva',
+            texto: 'A rede está saudável. Recomenda-se manter o monitoramento diário e planejar contratações preventivas para os meses de maior demanda (típicamente início de ano e retorno de férias).',
+            impacto: 'Sustentabilidade do nível de serviço'
+        });
+    }
+
+    if (!recs.length) {
+        container.innerHTML = '<div class="text-muted text-center p-3">Nenhuma recomendação gerada para os dados atuais.</div>';
+        return;
+    }
+
+    // Sort: alta first
+    const prioOrder = {alta: 0, media: 1, baixa: 2};
+    recs.sort((a,b) => (prioOrder[a.prioridade]||9) - (prioOrder[b.prioridade]||9));
+
+    container.innerHTML = recs.slice(0, 8).map(r =>
+        `<div class="sim-rec-card">
+            <div class="sim-rec-priority sim-rec-priority-${r.prioridade}">${r.prioridade === 'alta' ? 'Prioridade Alta' : r.prioridade === 'media' ? 'Prioridade Média' : 'Prioridade Baixa'}</div>
+            <div class="sim-rec-title">${r.titulo}</div>
+            <div class="sim-rec-text">${r.texto}</div>
+            <div class="sim-rec-impact"><i class="fas fa-chart-line mr-1"></i>${r.impacto}</div>
+        </div>`
+    ).join('');
+}
+
+function renderSimRadarPosto(data) {
+    const postosVisiveis = getSelectedPostos();
+    const healthByPosto = {};
+    postosVisiveis.forEach(p => { healthByPosto[p] = { ok: 0, total: 0 }; });
+    data.forEach(d => {
+        if (!healthByPosto[d.posto]) return;
+        healthByPosto[d.posto].total++;
+        if (d.Status === 'OK') healthByPosto[d.posto].ok++;
+        else if (d.Status === 'ALERTA') healthByPosto[d.posto].ok += 0.5;
+    });
+
+    const labels = postosVisiveis.map(p => postosInfo[p] ? postosInfo[p].nome.substring(0,10) : (POSTO_NOMES[p]||p));
+    const values = postosVisiveis.map(p => {
+        const h = healthByPosto[p];
+        return h.total > 0 ? Math.round(h.ok / h.total * 100) : 0;
+    });
+
+    const ctx = document.getElementById('simRadarPosto');
+    if (!ctx) return;
+    if (simRadarChart) simRadarChart.destroy();
+    simRadarChart = new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels,
+            datasets: [{
+                label: '% Saúde',
+                data: values,
+                backgroundColor: 'rgba(44, 95, 138, 0.2)',
+                borderColor: '#2c5f8a',
+                borderWidth: 2,
+                pointBackgroundColor: values.map(v => v >= 75 ? '#28a745' : v >= 50 ? '#fd7e14' : '#dc3545'),
+                pointRadius: 5,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { r: { min: 0, max: 100, ticks: { stepSize: 25, font: { size: 10 } }, pointLabels: { font: { size: 11 } } } },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+function renderSimBarDeficit(data) {
+    // Top 10 specialties with biggest gap (dias - prazo_ans)
+    const gaps = [];
+    data.forEach(d => {
+        if (d.prazoconsultaans > 0 && d.DiasAteProximaVaga !== null) {
+            const gap = d.DiasAteProximaVaga - d.prazoconsultaans;
+            if (gap > 0) gaps.push({ label: `${d.Especialidade} (${d.posto})`, gap });
+        }
+    });
+    // SEM_VAGA gets big gap
+    data.filter(d => d.Status === 'SEM_VAGA' && d.prazoconsultaans > 0).forEach(d => {
+        gaps.push({ label: `${d.Especialidade} (${d.posto})`, gap: d.prazoconsultacamim || d.prazoconsultaans * 2 });
+    });
+
+    gaps.sort((a,b) => b.gap - a.gap);
+    const top = gaps.slice(0, 10);
+
+    const ctx = document.getElementById('simBarDeficit');
+    if (!ctx) return;
+    if (simBarDefChart) simBarDefChart.destroy();
+
+    if (!top.length) {
+        simBarDefChart = null;
+        ctx.parentElement.innerHTML = '<div class="text-success text-center p-4"><i class="fas fa-check-circle mr-2"></i>Nenhum déficit detectado!</div>';
+        return;
+    }
+
+    simBarDefChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: top.map(t => t.label.length > 25 ? t.label.substring(0,22)+'...' : t.label),
+            datasets: [{
+                label: 'Dias além do ANS',
+                data: top.map(t => t.gap),
+                backgroundColor: top.map(t => t.gap > 30 ? '#dc3545' : t.gap > 15 ? '#fd7e14' : '#ffc107'),
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true, title: { display: true, text: 'Dias além do prazo ANS' } } }
+        }
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
