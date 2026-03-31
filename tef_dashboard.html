@@ -289,6 +289,19 @@
       </div>
     </div>
 
+    <!-- Registros negados agrupados por motivo -->
+    <div class="card stat-card mt-3">
+      <div class="card-body p-0">
+        <div class="d-flex align-items-center px-3 pt-3 pb-2">
+          <h6 class="mb-0"><i class="bi bi-x-circle-fill me-1 text-danger"></i> Registros Negados por Motivo — <span id="lblNegados">período</span></h6>
+          <small class="text-muted ms-auto" id="negadosCount"></small>
+        </div>
+        <div id="negadosAccordion" class="px-3 pb-3">
+          <p class="text-muted small py-3">Carregando...</p>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -520,6 +533,64 @@ async function loadDashboard() {
           <td class="text-center text-muted">${(p.total_geral||0).toLocaleString('pt-BR')}</td>
           <td class="text-center text-muted">${txGeral}</td>
         </tr>`;
+      }).join('');
+    }
+
+    // Registros negados agrupados por motivo
+    const negados = data.negados || [];
+    const negDiv = document.getElementById('negadosAccordion');
+    document.getElementById('lblNegados').textContent = sufixo;
+    document.getElementById('negadosCount').textContent = `${negados.length} registro${negados.length !== 1 ? 's' : ''}`;
+
+    if (!negados.length) {
+      negDiv.innerHTML = '<p class="text-muted small py-3">Nenhuma negação no período.</p>';
+    } else {
+      // Agrupar por motivo
+      const grupos = {};
+      negados.forEach(n => {
+        if (!grupos[n.erro]) grupos[n.erro] = [];
+        grupos[n.erro].push(n);
+      });
+
+      // Ordenar grupos por quantidade desc
+      const sorted = Object.entries(grupos).sort((a, b) => b[1].length - a[1].length);
+
+      negDiv.innerHTML = sorted.map(([motivo, regs], idx) => {
+        const id = `neg_${idx}`;
+        const rows = regs.map(r => `<tr>
+          <td><span class="badge bg-dark">${r.posto}</span> ${POSTOS_NAMES[r.posto] || ''}</td>
+          <td>${r.datahora ? r.datahora.slice(0, 16).replace('T', ' ') : '–'}</td>
+          <td>${esc(r.matricula || '–')}</td>
+          <td class="text-end">${fmtMoeda(r.valor)}</td>
+          <td><small class="text-muted">${esc(r.resposta)}</small></td>
+        </tr>`).join('');
+
+        return `
+        <div class="border rounded mb-2">
+          <div class="d-flex align-items-center px-3 py-2" style="cursor:pointer;background:#fef2f2"
+               data-bs-toggle="collapse" data-bs-target="#${id}">
+            <i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>
+            <strong class="flex-grow-1" style="font-size:.85rem">${esc(motivo)}</strong>
+            <span class="badge bg-danger">${regs.length}</span>
+            <i class="bi bi-chevron-down ms-2 text-muted"></i>
+          </div>
+          <div id="${id}" class="collapse">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0" style="font-size:.8rem">
+                <thead class="table-light">
+                  <tr>
+                    <th>Posto</th>
+                    <th>Data/Hora</th>
+                    <th>Matrícula</th>
+                    <th class="text-end">Valor</th>
+                    <th>Resposta Cielo</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>`;
       }).join('');
     }
 

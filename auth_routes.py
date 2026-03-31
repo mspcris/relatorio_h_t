@@ -1621,6 +1621,15 @@ def tef_dashboard():
         """, posto_params).fetchall()
         posto_total_map = {r[0]: {"total": r[1], "aprovadas": r[2]} for r in por_posto_total}
 
+        # Registros negados (detalhados) no período
+        negados = conn.execute(f"""
+            SELECT posto, datahora, matricula, erro, valor, resposta_cielo
+            FROM ind_tef
+            WHERE aprovado = 0
+              AND date(datahora) BETWEEN ? AND ? {posto_filter}
+            ORDER BY erro, posto, datahora
+        """, [data_ini, data_fim] + posto_params).fetchall()
+
         # Sync
         sync_row = conn.execute("""
             SELECT synced_at, status, mensagem FROM ind_sync_log
@@ -1649,6 +1658,12 @@ def tef_dashboard():
                  "total_geral": posto_total_map.get(r[0], {}).get("total", 0),
                  "aprov_geral": posto_total_map.get(r[0], {}).get("aprovadas", 0)}
                 for r in por_posto
+            ],
+            "negados": [
+                {"posto": r[0], "datahora": r[1], "matricula": r[2],
+                 "erro": r[3] or "(sem descrição)", "valor": round(r[4] or 0, 2),
+                 "resposta": r[5] or ""}
+                for r in negados
             ],
             "sync": {
                 "synced_at": sync_row[0] if sync_row else None,
