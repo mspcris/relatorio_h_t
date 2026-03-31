@@ -2387,22 +2387,21 @@ function renderCrossRef() {
             }
         }
 
-        // Fidelizacao: dados[month][posto].retencao_por_mes[N].{qtd, percentual}
-        // Structure: dados[ym_admissao][posto].retencao_por_mes[meses_diferenca]
+        // Fidelizacao: dados[month][posto].{admissoes, retencao_por_mes[N].qtd}
+        // NOTA: campo "percentual" no JSON é sempre 0.0 (bug no export). Calcular manualmente: qtd / admissoes * 100
         if (crossData.fidelizacao?.dados) {
             const fd = crossData.fidelizacao.dados;
-            // Find most recent cohort month that has this posto + 3-month retention
             const cohortMonths = Object.keys(fd).filter(k => /^\d{4}-\d{2}$/.test(k)).sort().reverse();
             for (const ym of cohortMonths) {
                 const postoData = fd[ym]?.[p];
-                if (postoData?.retencao_por_mes) {
-                    // Key is numeric (meses_diferenca), look for 3 months
+                if (postoData?.retencao_por_mes && postoData.admissoes > 0) {
                     const ret3 = postoData.retencao_por_mes['3'] || postoData.retencao_por_mes[3];
-                    if (ret3 && postoData.admissoes > 0) {
-                        // churn = 100 - retention percentage
-                        m.churn_3m = Math.round(100 - (ret3.percentual || 0));
+                    if (ret3 && ret3.qtd != null) {
+                        const retencao = (ret3.qtd / postoData.admissoes) * 100;
+                        m.churn_3m = Math.round(100 - retencao);
                         m.churn_cohort = ym;
                         m.churn_admissoes = postoData.admissoes;
+                        m.churn_retidos = ret3.qtd;
                         break;
                     }
                 }
@@ -2449,15 +2448,27 @@ function renderCrossRef() {
         }
 
         // Metas: json_metas/{POSTO}_metas_{YYYY-MM}.json
+        // Metas: json_metas/{POSTO}_metas_{YYYY-MM}.json
+        // Fields: meta.meta_venda (target vendas), meta.meta_mens (target mensalidades)
+        // Daily: vendas_por_dia[*].vendas_dia, mensalidades_por_dia[*].mens_dia
         if (crossData.metas?.[p]) {
             const metaData = crossData.metas[p];
             const meta = metaData.meta;
-            if (meta?.vendas_meta) {
-                m.meta_vendas = meta.vendas_meta;
-                const vendas_realizadas = metaData.vendas_por_dia
-                    ? metaData.vendas_por_dia.reduce((s, d) => s + (d.vendas_dia || 0), 0) : 0;
-                m.vendas_realizadas = vendas_realizadas;
-                m.meta_pct = meta.vendas_meta > 0 ? Math.round(vendas_realizadas / meta.vendas_meta * 100) : 0;
+            if (meta) {
+                // Vendas
+                if (meta.meta_venda > 0) {
+                    m.meta_vendas_target = meta.meta_venda;
+                    m.vendas_realizadas = metaData.vendas_por_dia
+                        ? metaData.vendas_por_dia.reduce((s, d) => s + (d.vendas_dia || 0), 0) : 0;
+                    m.meta_pct = Math.round(m.vendas_realizadas / meta.meta_venda * 100);
+                }
+                // Mensalidades
+                if (meta.meta_mens > 0) {
+                    m.meta_mens_target = meta.meta_mens;
+                    m.mens_realizadas = metaData.mensalidades_por_dia
+                        ? metaData.mensalidades_por_dia.reduce((s, d) => s + (d.mens_dia || 0), 0) : 0;
+                    m.meta_mens_pct = Math.round(m.mens_realizadas / meta.meta_mens * 100);
+                }
             }
         }
 
@@ -2881,7 +2892,7 @@ function buildIAContext() {
             if (crossData.metas?.[p]?.meta) {
                 const vr = crossData.metas[p].vendas_por_dia?.reduce((s,d) => s + (d.vendas_dia||0), 0) || 0;
                 crossSummary[p].vendas_realizadas = vr;
-                crossSummary[p].meta_vendas = crossData.metas[p].meta.vendas_meta;
+                crossSummary[p].meta_vendas = crossData.metas[p].meta.meta_venda;
             }
         });
     }
