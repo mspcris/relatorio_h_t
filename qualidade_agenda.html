@@ -966,6 +966,50 @@ const POSTO_NOMES  = {
 const GROUP_ALTAMIRO = ['A','B','G','I','N','R','X','Y'];
 const GROUP_COUTO    = ['C','D','J','M','P'];
 
+// Zonas geográficas e proximidade (baseado em localização real no Rio/Baixada)
+const POSTO_ZONA = {
+    A: 'Zona Norte',  B: 'Zona Oeste',  G: 'Zona Oeste',  R: 'Zona Oeste',
+    N: 'Baixada',     I: 'Baixada',     X: 'Baixada',     Y: 'Baixada',
+    C: 'Zona Oeste',  D: 'Zona Norte',  J: 'Zona Oeste',  M: 'Zona Norte',
+    P: 'Zona Oeste'
+};
+// Postos vizinhos (próximos geograficamente) — usados para sugestões de remanejamento
+const POSTO_VIZINHOS = {
+    A: ['M','G','B','D'],       // Anchieta: perto de Madureira, Guadalupe, Bangu, Del Castilho
+    B: ['R','A','G'],           // Bangu: perto de Realengo, Anchieta, Guadalupe
+    G: ['B','R','A','C'],       // Guadalupe→Campo Grande: perto de Bangu, Realengo, Anchieta
+    R: ['B','G','A'],           // Realengo: perto de Bangu, Guadalupe, Anchieta
+    N: ['I','Y','X'],           // Nilópolis: perto de Nova Iguaçu, Y Campo Grande, Xerém
+    I: ['N','X','Y'],           // Nova Iguaçu: perto de Nilópolis, Xerém, Y Campo Grande
+    X: ['I','N','Y'],           // Xerém: perto de Nova Iguaçu, Nilópolis
+    Y: ['N','I','X'],           // Y Campo Grande: perto de Nilópolis, Nova Iguaçu
+    C: ['J','P','G'],           // Campinho: perto de Jacarepaguá, Rio das Pedras, Campo Grande
+    D: ['M','A'],               // Del Castilho: perto de Méier, Anchieta
+    J: ['C','P','M'],           // Jacarepaguá: perto de Campinho, Rio das Pedras, Méier
+    M: ['D','A','J'],           // Madureira: perto de Del Castilho, Anchieta, Jacarepaguá
+    P: ['J','C']                // Rio das Pedras: perto de Jacarepaguá, Campinho
+};
+// Equivalência de especialidades (nomes diferentes, mesma prática)
+const ESP_EQUIVALENTES = {
+    'ALERGISTA': 'ALERGISTA E IMUNOLOGISTA',
+    'ALERGISTA E IMUNOLOGISTA': 'ALERGISTA',
+};
+// Abreviações para gráficos
+function abreviarEsp(nome) {
+    return nome
+        .replace(/GASTROENTEROLOGISTA/gi, 'GASTRO')
+        .replace(/OTORRINOLARINGOLOGISTA/gi, 'OTORRINO')
+        .replace(/ENDOCRINOLOGISTA/gi, 'ENDOCRINO')
+        .replace(/DERMATOLOGISTA/gi, 'DERMATO')
+        .replace(/PNEUMOLOGISTA/gi, 'PNEUMO')
+        .replace(/REUMATOLOGISTA/gi, 'REUMATO')
+        .replace(/GINECOLOGISTA/gi, 'GINECO')
+        .replace(/CARDIOLOGISTA/gi, 'CARDIO')
+        .replace(/ PEDIATRA/gi, ' PED')
+        .replace(/ PEDIATRICA/gi, ' PED')
+        .replace(/ PEDIÁTRICA/gi, ' PED');
+}
+
 // Injeção de USER_POSTOS do Flask (pode ser lista ou null)
 const USER_POSTOS_FROM_SERVER = {{ USER_POSTOS | safe }};
 const IS_ADMIN = {{ 'true' if USER_IS_ADMIN else 'false' }};
@@ -2092,90 +2136,208 @@ function simContexto() {
     return { loc: `nos postos ${sp.join(', ')}`, locDe: `dos postos ${sp.join(', ')}`, titulo: `dos Postos ${sp.join(', ')}`, label: `Nos Postos ${sp.join(', ')}` };
 }
 
+function nomePosto(p) {
+    return postosInfo[p] ? postosInfo[p].nome : (POSTO_NOMES[p]||p);
+}
+function fmtDataVaga(iso) {
+    if (!iso) return '?';
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+}
+function espEquivalente(esp) {
+    // Retorna todas as variantes de nome para a mesma especialidade
+    const eq = ESP_EQUIVALENTES[esp.toUpperCase()];
+    return eq ? [esp, eq] : [esp];
+}
+
 function renderSimRecomendacoes(data) {
     const container = el('simRecomendacoes');
     const recs = [];
 
-    // Group by especialidade to find systemic issues
-    const byEsp = {};
+    // ── Indexar dados ──
+    const byEsp = {};  // { esp: [rows] }
+    const byPosto = {}; // { posto: { critico, total, especs } }
     data.forEach(d => {
         if (!byEsp[d.Especialidade]) byEsp[d.Especialidade] = [];
         byEsp[d.Especialidade].push(d);
+        if (!byPosto[d.posto]) byPosto[d.posto] = { critico: 0, total: 0, especs: [] };
+        byPosto[d.posto].total++;
+        if (d.Status === 'CRITICO' || d.Status === 'SEM_VAGA') {
+            byPosto[d.posto].critico++;
+            byPosto[d.posto].especs.push(d.Especialidade);
+        }
     });
 
-    // Rec 1: Specialties critical in many postos = systemic issue
+    // ── 1. REMANEJAMENTO INTELIGENTE (geográfico + datas) ──
+    // Para cada especialidade crítica, buscar posto VIZINHO com folga
+    const remanejamentos = [];
     Object.entries(byEsp).forEach(([esp, rows]) => {
-        const criticos = rows.filter(r => r.Status === 'CRITICO' || r.Status === 'SEM_VAGA');
-        if (criticos.length >= 3) {
-            const postosCriticos = criticos.map(r => r.posto).join(', ');
-            const okPostos = rows.filter(r => r.Status === 'OK');
-            const hint = okPostos.length > 0
-                ? ` Os postos ${okPostos.map(r=>r.posto).join(', ')} estão OK — analise o que eles fazem diferente (mais profissionais? menor demanda?) e replique.`
-                : ' Nenhum posto está OK para esta especialidade — o problema é sistêmico e requer contratação.';
-            recs.push({
-                prioridade: 'alta',
-                titulo: `Ampliar oferta de ${esp}`,
-                texto: `Crítica em ${criticos.length} postos (${postosCriticos}).${hint}`,
-                impacto: `Resolveria ${criticos.length} situações críticas de uma vez`
-            });
-        }
-    });
+        const critRows = rows.filter(r => r.Status === 'CRITICO' || r.Status === 'SEM_VAGA');
+        if (!critRows.length) return;
 
-    // Rec 2: Postos with high concentration of issues
-    const problemsByPosto = {};
-    data.forEach(d => {
-        if (!problemsByPosto[d.posto]) problemsByPosto[d.posto] = {critico: 0, total: 0};
-        problemsByPosto[d.posto].total++;
-        if (d.Status === 'CRITICO' || d.Status === 'SEM_VAGA') problemsByPosto[d.posto].critico++;
-    });
-    Object.entries(problemsByPosto).sort((a,b) => b[1].critico - a[1].critico).forEach(([posto, stats]) => {
-        const pct = (stats.critico / stats.total * 100);
-        if (pct >= 40 && stats.critico >= 3) {
-            const nome = postosInfo[posto] ? postosInfo[posto].nome : (POSTO_NOMES[posto]||posto);
-            recs.push({
-                prioridade: 'alta',
-                titulo: `Revisar dimensionamento do posto ${nome} (${posto})`,
-                texto: `${stats.critico} de ${stats.total} especialidades com problemas (${pct.toFixed(0)}%). Pode indicar falta generalizada de profissionais ou crescimento da demanda regional sem acompanhamento da oferta.`,
-                impacto: `Potencial melhoria de ${stats.critico} situações`
-            });
-        }
-    });
-
-    // Rec 3: Specialties barely in ALERTA (close to CRITICO)
-    data.filter(d => d.Status === 'ALERTA' && d.prazoconsultacamim > 0 && d.DiasAteProximaVaga !== null)
-        .filter(d => (d.DiasAteProximaVaga / d.prazoconsultacamim) > 0.8)
-        .slice(0, 3)
-        .forEach(d => {
-            const nome = postosInfo[d.posto] ? postosInfo[d.posto].nome : (POSTO_NOMES[d.posto]||d.posto);
-            recs.push({
-                prioridade: 'media',
-                titulo: `Preventiva: ${d.Especialidade} no ${nome} (${d.posto})`,
-                texto: `Está em ALERTA mas com ${d.DiasAteProximaVaga} dias de espera para prazo CAMIM de ${d.prazoconsultacamim} dias (${(d.DiasAteProximaVaga/d.prazoconsultacamim*100).toFixed(0)}% consumido). Sem ação, pode virar CRÍTICO em breve.`,
-                impacto: 'Prevenção — evitar escalada para crítico'
+        // Considerar equivalentes (ex: Alergista = Alergista e Imunologista)
+        const variantes = espEquivalente(esp);
+        const allOkRows = [];
+        variantes.forEach(v => {
+            (byEsp[v] || []).filter(r => r.Status === 'OK').forEach(r => {
+                if (!allOkRows.find(x => x.posto === r.posto && x.Especialidade === r.Especialidade)) {
+                    allOkRows.push(r);
+                }
             });
         });
 
-    // Rec 4: Capacity redistribution opportunities
+        critRows.forEach(crit => {
+            const vizinhos = POSTO_VIZINHOS[crit.posto] || [];
+            // Buscar folga em vizinhos primeiro, depois em qualquer posto
+            const candidatos = allOkRows
+                .filter(r => r.posto !== crit.posto)
+                .sort((a, b) => {
+                    const aViz = vizinhos.indexOf(a.posto);
+                    const bViz = vizinhos.indexOf(b.posto);
+                    const aScore = aViz >= 0 ? aViz : 100;
+                    const bScore = bViz >= 0 ? bViz : 100;
+                    return aScore - bScore;
+                });
+
+            if (candidatos.length > 0) {
+                const best = candidatos[0];
+                const isVizinho = vizinhos.includes(best.posto);
+                const zona = POSTO_ZONA[crit.posto] || '';
+                const dataVaga = best.DataProximaVaga ? fmtDataVaga(best.DataProximaVaga) : null;
+                const diasVaga = best.DiasAteProximaVaga;
+                const vagasDisp = best.QuantidadeVagasDisponivelNaData || 0;
+                const medicos = best.QuantidadeVagasTotalMedicosAtendem || 0;
+
+                remanejamentos.push({
+                    prioridade: crit.Status === 'SEM_VAGA' ? 'alta' : 'alta',
+                    espCritica: esp,
+                    postoCritico: crit.posto,
+                    postoDoador: best.posto,
+                    isVizinho,
+                    zona,
+                    diasCrit: crit.DiasAteProximaVaga,
+                    dataVagaDoador: dataVaga,
+                    diasVagaDoador: diasVaga,
+                    vagasDoador: vagasDisp,
+                    medicosDoador: medicos,
+                    statusCrit: crit.Status,
+                    gapDias: crit.prazoconsultaans > 0 && crit.DiasAteProximaVaga != null
+                        ? crit.DiasAteProximaVaga - crit.prazoconsultaans : null,
+                });
+            }
+        });
+    });
+
+    // Ordenar remanejamentos: SEM_VAGA primeiro, depois por gap maior
+    remanejamentos.sort((a, b) => {
+        if (a.statusCrit === 'SEM_VAGA' && b.statusCrit !== 'SEM_VAGA') return -1;
+        if (b.statusCrit === 'SEM_VAGA' && a.statusCrit !== 'SEM_VAGA') return 1;
+        return (b.gapDias || 0) - (a.gapDias || 0);
+    });
+
+    // Gerar recomendações de remanejamento (top 5)
+    remanejamentos.slice(0, 5).forEach(rm => {
+        const nomeCrit = nomePosto(rm.postoCritico);
+        const nomeDoador = nomePosto(rm.postoDoador);
+        const espAbrev = abreviarEsp(rm.espCritica);
+
+        let texto = '';
+        if (rm.statusCrit === 'SEM_VAGA') {
+            texto += `<strong>${nomeCrit} (${rm.postoCritico})</strong> está sem nenhuma vaga para ${rm.espCritica}. `;
+        } else {
+            texto += `<strong>${nomeCrit} (${rm.postoCritico})</strong> tem próxima vaga apenas em ${rm.diasCrit} dias (${rm.gapDias > 0 ? rm.gapDias + ' dias além do ANS' : ''}). `;
+        }
+
+        texto += `O posto <strong>${nomeDoador} (${rm.postoDoador})</strong>`;
+        if (rm.isVizinho) {
+            texto += ` <span style="color:#28a745;font-weight:600;">(vizinho na ${rm.zona})</span>`;
+        }
+        texto += ` tem ${rm.medicosDoador} médico(s) atendendo com ${rm.vagasDoador} vagas disponíveis`;
+        if (rm.dataVagaDoador) {
+            texto += ` (próxima em ${rm.dataVagaDoador}, ${rm.diasVagaDoador}d)`;
+        }
+        texto += '. ';
+
+        if (rm.isVizinho) {
+            texto += `Por serem postos próximos, o deslocamento do profissional seria menor — o que facilita a negociação.`;
+        } else {
+            texto += `Sabemos que transferir profissionais entre regiões não é simples, mas pode ser a melhor alternativa para cobrir o gap na ${rm.zona}.`;
+        }
+
+        recs.push({
+            prioridade: 'alta',
+            titulo: `${espAbrev}: remanejar de ${rm.postoDoador} (${nomeDoador}) → ${rm.postoCritico} (${nomeCrit})`,
+            texto,
+            impacto: rm.statusCrit === 'SEM_VAGA'
+                ? 'Abriria agenda onde hoje não existe nenhuma vaga'
+                : `Reduziria espera de ${rm.diasCrit}d para dentro do prazo ANS`
+        });
+    });
+
+    // ── 2. PROBLEMAS SISTÊMICOS (especialidade crítica em muitos postos) ──
+    const espSistemica = new Set();
     Object.entries(byEsp).forEach(([esp, rows]) => {
-        const okRows = rows.filter(r => r.Status === 'OK' && r.QuantidadeVagasDisponivelNaData > 5);
-        const critRows = rows.filter(r => r.Status === 'CRITICO' || r.Status === 'SEM_VAGA');
-        if (okRows.length > 0 && critRows.length > 0) {
+        const criticos = rows.filter(r => r.Status === 'CRITICO' || r.Status === 'SEM_VAGA');
+        const variantes = espEquivalente(esp);
+        const allRows = [];
+        variantes.forEach(v => (byEsp[v]||[]).forEach(r => allRows.push(r)));
+        const allOk = allRows.filter(r => r.Status === 'OK');
+
+        if (criticos.length >= 3 && !espSistemica.has(esp)) {
+            variantes.forEach(v => espSistemica.add(v));
+            const zonas = [...new Set(criticos.map(r => POSTO_ZONA[r.posto]).filter(Boolean))];
+            const hint = allOk.length > 0
+                ? `Os postos ${allOk.map(r => r.posto + ' (' + nomePosto(r.posto) + ')').join(', ')} mantêm esta especialidade em dia — vale investigar o que fazem diferente.`
+                : `Nenhum posto está OK — o problema é estrutural e requer novas contratações.`;
             recs.push({
-                prioridade: 'media',
-                titulo: `Redistribuir ${esp} entre postos`,
-                texto: `Postos com folga: ${okRows.map(r => r.posto + ' (' + r.QuantidadeVagasDisponivelNaData + ' vagas livres)').join(', ')}. Postos em crise: ${critRows.map(r => r.posto).join(', ')}. Considere redirecionar profissionais ou pacientes entre unidades.`,
-                impacto: `Potencial resolução de ${critRows.length} situação(ões) sem nova contratação`
+                prioridade: 'alta',
+                titulo: `${esp}: crise sistêmica em ${criticos.length} postos`,
+                texto: `Crítica em ${criticos.map(r => r.posto).join(', ')} (${zonas.join(', ')}). ${hint}`,
+                impacto: `Contratação resolveria ${criticos.length} situações de uma vez`
             });
         }
     });
 
-    // Rec 5: If everything is OK
-    const okPct = data.length ? (data.filter(d=>d.Status==='OK').length / data.length * 100) : 0;
+    // ── 3. POSTOS COM CONCENTRAÇÃO DE PROBLEMAS ──
+    Object.entries(byPosto).sort((a,b) => b[1].critico - a[1].critico).forEach(([posto, stats]) => {
+        const pct = (stats.critico / stats.total * 100);
+        if (pct >= 40 && stats.critico >= 3) {
+            const nome = nomePosto(posto);
+            const zona = POSTO_ZONA[posto] || '';
+            const topEsp = [...new Set(stats.especs)].slice(0, 4).map(e => abreviarEsp(e)).join(', ');
+            recs.push({
+                prioridade: 'alta',
+                titulo: `${nome} (${posto}): ${stats.critico} de ${stats.total} especialidades em crise`,
+                texto: `${pct.toFixed(0)}% das especialidades com problemas neste posto (${zona}). Principais: ${topEsp}. Pode indicar crescimento da demanda na região sem acompanhamento na oferta de profissionais.`,
+                impacto: `Revisão de dimensionamento do posto`
+            });
+        }
+    });
+
+    // ── 4. ALERTAS PRESTES A VIRAR CRÍTICOS ──
+    data.filter(d => d.Status === 'ALERTA' && d.prazoconsultacamim > 0 && d.DiasAteProximaVaga != null)
+        .filter(d => (d.DiasAteProximaVaga / d.prazoconsultacamim) > 0.8)
+        .sort((a,b) => (b.DiasAteProximaVaga / b.prazoconsultacamim) - (a.DiasAteProximaVaga / a.prazoconsultacamim))
+        .slice(0, 3)
+        .forEach(d => {
+            const nome = nomePosto(d.posto);
+            const consumido = (d.DiasAteProximaVaga / d.prazoconsultacamim * 100).toFixed(0);
+            const dataVaga = d.DataProximaVaga ? fmtDataVaga(d.DataProximaVaga) : '?';
+            recs.push({
+                prioridade: 'media',
+                titulo: `Atenção: ${abreviarEsp(d.Especialidade)} em ${nome} (${d.posto}) quase crítico`,
+                texto: `Próxima vaga em ${dataVaga} (${d.DiasAteProximaVaga} dias). Prazo CAMIM: ${d.prazoconsultacamim}d — já consumiu ${consumido}%. Sem ação preventiva, esta especialidade vai escalar para CRÍTICO.`,
+                impacto: 'Prevenção — agir antes de virar crise'
+            });
+        });
+
+    // ── 5. TUDO OK ──
+    const okPct = data.length ? (data.filter(d => d.Status === 'OK').length / data.length * 100) : 0;
     if (okPct >= 90) {
         recs.push({
             prioridade: 'baixa',
-            titulo: 'Manutenção preventiva',
-            texto: 'A rede está saudável. Recomenda-se manter o monitoramento diário e planejar contratações preventivas para os meses de maior demanda (típicamente início de ano e retorno de férias).',
+            titulo: 'Operação saudável — manter monitoramento',
+            texto: 'A rede está com bom nível de serviço. Manter acompanhamento diário e planejar contratações preventivas para meses de maior demanda (início de ano e retorno de férias).',
             impacto: 'Sustentabilidade do nível de serviço'
         });
     }
@@ -2185,11 +2347,18 @@ function renderSimRecomendacoes(data) {
         return;
     }
 
-    // Sort: alta first
-    const prioOrder = {alta: 0, media: 1, baixa: 2};
-    recs.sort((a,b) => (prioOrder[a.prioridade]||9) - (prioOrder[b.prioridade]||9));
+    // Dedup e ordenar
+    const seen = new Set();
+    const unique = recs.filter(r => {
+        const key = r.titulo;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+    const prioOrder = { alta: 0, media: 1, baixa: 2 };
+    unique.sort((a, b) => (prioOrder[a.prioridade] || 9) - (prioOrder[b.prioridade] || 9));
 
-    container.innerHTML = recs.slice(0, 8).map(r =>
+    container.innerHTML = unique.slice(0, 10).map(r =>
         `<div class="sim-rec-card">
             <div class="sim-rec-priority sim-rec-priority-${r.prioridade}">${r.prioridade === 'alta' ? 'Prioridade Alta' : r.prioridade === 'media' ? 'Prioridade Média' : 'Prioridade Baixa'}</div>
             <div class="sim-rec-title">${r.titulo}</div>
@@ -2271,7 +2440,7 @@ function renderSimBarDeficit(data) {
     simBarDefChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: top.map(t => t.label.length > 25 ? t.label.substring(0,22)+'...' : t.label),
+            labels: top.map(t => abreviarEsp(t.label)),
             datasets: [{
                 label: 'Dias além do ANS',
                 data: top.map(t => t.gap),
