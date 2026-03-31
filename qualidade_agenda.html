@@ -817,7 +817,8 @@
                                     </div>
                                     <div class="card-footer" style="font-size:0.75rem;color:#888;background:#fafafa;border-top:1px solid #eee;padding:8px 12px;">
                                         <strong>Barras (eixo esquerdo):</strong> Score de saúde da agenda = (OK×1 + ALERTA×0.5) ÷ total × 100. Fonte: qualidade_agenda.json.<br>
-                                        <strong>Linha (eixo direito):</strong> Churn aos 3 meses = 100% − (retidos ÷ admitidos × 100). Usa a coorte de admissão mais recente com dado de 3 meses. Fonte: fidelizacao_cliente.json.<br>
+                                        <strong>Linha (eixo direito):</strong> Churn aos 3 meses = 100% − (retidos ÷ admitidos × 100). Fonte: fidelizacao_cliente.json.<br>
+                                        <strong>Regra de referência:</strong> Sempre usa a coorte do mês atual − 4, garantindo 3 meses completos de observação. Exemplo: em março/2026, a coorte é novembro/2025 (observação: dezembro, janeiro e fevereiro completos). Mesma lógica da página KPI Fidelização &amp; Churn.<br>
                                         <em>Hipótese: postos com agenda ruim perdem mais clientes.</em>
                                     </div>
                                 </div>
@@ -2389,31 +2390,30 @@ function renderCrossRef() {
 
         // Fidelizacao: dados[month][posto].{admissoes, retencao_por_mes[N].qtd}
         // NOTA: campo "percentual" no JSON é sempre 0.0 (bug no export). Calcular: qtd / admissoes * 100
-        // Média das últimas 3 coortes com dado de 3 meses e >= 20 admissões para estabilidade
+        // Usa 1 coorte: a mais recente com 3 meses COMPLETOS (mês atual - 4)
+        // Ex: março/2026 → coorte nov/2025 (dez, jan, fev = 3 meses completos)
+        // Assim mantém consistência com a página de fidelização.
         if (crossData.fidelizacao?.dados) {
             const fd = crossData.fidelizacao.dados;
-            const cohortMonths = Object.keys(fd).filter(k => /^\d{4}-\d{2}$/.test(k)).sort().reverse();
-            let churnSamples = [];
+            // Calcular coorte alvo: mês atual - 4 (garante 3 meses completos)
+            const now = new Date();
+            const targetDate = new Date(now.getFullYear(), now.getMonth() - 4, 1);
+            const targetYm = `${targetDate.getFullYear()}-${String(targetDate.getMonth()+1).padStart(2,'0')}`;
+            // Buscar a coorte alvo ou a mais próxima anterior com dados
+            const cohortMonths = Object.keys(fd).filter(k => /^\d{4}-\d{2}$/.test(k) && k <= targetYm).sort().reverse();
             for (const ym of cohortMonths) {
-                if (churnSamples.length >= 3) break;
                 const postoData = fd[ym]?.[p];
-                if (postoData?.retencao_por_mes && postoData.admissoes >= 20) {
+                if (postoData?.retencao_por_mes && postoData.admissoes > 0) {
                     const ret3 = postoData.retencao_por_mes['3'] || postoData.retencao_por_mes[3];
                     if (ret3 && ret3.qtd != null) {
                         const retencao = (ret3.qtd / postoData.admissoes) * 100;
-                        churnSamples.push({ ym, churn: 100 - retencao, admissoes: postoData.admissoes, retidos: ret3.qtd });
+                        m.churn_3m = Math.round(100 - retencao);
+                        m.churn_cohort = ym;
+                        m.churn_admissoes = postoData.admissoes;
+                        m.churn_retidos = ret3.qtd;
+                        break;
                     }
                 }
-            }
-            if (churnSamples.length > 0) {
-                // Média ponderada por admissões
-                const totalAdm = churnSamples.reduce((s, c) => s + c.admissoes, 0);
-                const totalRet = churnSamples.reduce((s, c) => s + c.retidos, 0);
-                m.churn_3m = Math.round(100 - (totalRet / totalAdm * 100));
-                m.churn_cohort = churnSamples.map(c => c.ym).join(', ');
-                m.churn_admissoes = totalAdm;
-                m.churn_retidos = totalRet;
-                m.churn_n_coortes = churnSamples.length;
             }
         }
 
