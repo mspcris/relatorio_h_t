@@ -1532,7 +1532,26 @@ def tef_dashboard():
         return ("", 401)
 
     kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
+
+    # ── Parâmetros de filtro (query string) ───────────────────
+    data_ini = request.args.get("data_ini", "").strip()
+    data_fim = request.args.get("data_fim", "").strip()
+    postos_param = request.args.get("postos", "").strip()
+
     hoje_str = date.today().isoformat()
+    if not data_fim:
+        data_fim = hoje_str
+    if not data_ini:
+        data_ini = data_fim          # padrão = só o dia final
+
+    # postos selecionados no frontend (intersecção com ACL do usuário)
+    if postos_param:
+        sel = [p.strip().upper() for p in postos_param.split(",") if p.strip()]
+        if user_postos:
+            sel = [p for p in sel if p in user_postos]
+        effective_postos = sel or (list(user_postos) if user_postos else [])
+    else:
+        effective_postos = list(user_postos) if user_postos else []
 
     try:
         _tef_ensure_table(kpi_db)
@@ -1540,47 +1559,47 @@ def tef_dashboard():
 
         posto_filter = ""
         posto_params = []
-        if user_postos:
-            ph = ",".join("?" * len(user_postos))
+        if effective_postos:
+            ph = ",".join("?" * len(effective_postos))
             posto_filter = f"AND posto IN ({ph})"
-            posto_params = list(user_postos)
+            posto_params = list(effective_postos)
 
-        # KPIs de hoje
+        # KPIs do período
         hoje_row = conn.execute(f"""
             SELECT COUNT(*),
                    SUM(CASE WHEN aprovado=1 THEN 1 ELSE 0 END),
                    SUM(CASE WHEN aprovado=0 THEN 1 ELSE 0 END),
                    SUM(CASE WHEN aprovado=1 THEN valor ELSE 0 END)
             FROM ind_tef
-            WHERE date(datahora) = ? {posto_filter}
-        """, [hoje_str] + posto_params).fetchone()
+            WHERE date(datahora) BETWEEN ? AND ? {posto_filter}
+        """, [data_ini, data_fim] + posto_params).fetchone()
 
         total_hoje    = hoje_row[0] or 0
         aprov_hoje    = hoje_row[1] or 0
         negad_hoje    = hoje_row[2] or 0
         valor_hoje    = hoje_row[3] or 0.0
 
-        # Últimos 7 dias por dia
+        # Tendência por dia no período
         trend7 = conn.execute(f"""
             SELECT date(datahora) AS dia,
                    SUM(CASE WHEN aprovado=1 THEN 1 ELSE 0 END) AS aprovadas,
                    SUM(CASE WHEN aprovado=0 THEN 1 ELSE 0 END) AS negadas
             FROM ind_tef
-            WHERE date(datahora) >= date(?, '-6 days') {posto_filter}
+            WHERE date(datahora) BETWEEN ? AND ? {posto_filter}
             GROUP BY dia ORDER BY dia
-        """, [hoje_str] + posto_params).fetchall()
+        """, [data_ini, data_fim] + posto_params).fetchall()
 
-        # Top erros de negação (últimos 7 dias)
+        # Top erros de negação no período
         top_erros = conn.execute(f"""
             SELECT COALESCE(NULLIF(TRIM(erro),''), '(sem descrição)') AS motivo,
                    COUNT(*) AS cnt
             FROM ind_tef
             WHERE aprovado = 0
-              AND date(datahora) >= date(?, '-6 days') {posto_filter}
+              AND date(datahora) BETWEEN ? AND ? {posto_filter}
             GROUP BY motivo ORDER BY cnt DESC LIMIT 10
-        """, [hoje_str] + posto_params).fetchall()
+        """, [data_ini, data_fim] + posto_params).fetchall()
 
-        # Por posto
+        # Por posto no período
         por_posto = conn.execute(f"""
             SELECT posto,
                    COUNT(*) AS total,
@@ -1589,11 +1608,11 @@ def tef_dashboard():
                    SUM(CASE WHEN aprovado=1 THEN valor ELSE 0 END) AS valor_aprov,
                    MAX(datahora) AS ultimo
             FROM ind_tef
-            WHERE date(datahora) = ? {posto_filter}
+            WHERE date(datahora) BETWEEN ? AND ? {posto_filter}
             GROUP BY posto ORDER BY posto
-        """, [hoje_str] + posto_params).fetchall()
+        """, [data_ini, data_fim] + posto_params).fetchall()
 
-        # Por posto — total geral (60 dias)
+        # Por posto — total geral (todos os dados)
         por_posto_total = conn.execute(f"""
             SELECT posto, COUNT(*), SUM(CASE WHEN aprovado=1 THEN 1 ELSE 0 END)
             FROM ind_tef
@@ -1611,6 +1630,8 @@ def tef_dashboard():
         conn.close()
 
         return jsonify({
+            "data_ini": data_ini,
+            "data_fim": data_fim,
             "hoje": {
                 "total":      total_hoje,
                 "aprovadas":  aprov_hoje,

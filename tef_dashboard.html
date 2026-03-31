@@ -55,6 +55,20 @@
     .table th { font-size: .78rem; }
     .table td { font-size: .82rem; vertical-align: middle; }
 
+    /* ── Filtros ─────────────────────────────── */
+    .scroll-tabs {
+      display: flex; flex-wrap: wrap; gap: 4px; list-style: none;
+      padding: 0; margin: 0; overflow-x: auto;
+    }
+    .scroll-tabs .nav-link {
+      padding: 2px 10px; font-size: .78rem; border-radius: 4px;
+      cursor: pointer; white-space: nowrap; user-select: none;
+      color: #495057; background: #e9ecef; border: none;
+    }
+    .scroll-tabs .nav-link.active { background: #4dabf7; color: #fff; }
+    .scroll-tabs .nav-link:hover:not(.active) { background: #dee2e6; }
+    .filter-bar { background: #fff; border-radius: .6rem; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+
     /* ── Hamburger button (hidden on desktop) ─── */
     #hamburger {
       display: none;
@@ -110,7 +124,7 @@
     <a href="/index.html" class="nav-link">
       <i class="bi bi-house"></i> Home Page
     </a>
-    <a href="/monitorarrobos" class="nav-link">
+    <a href="/indicadores" class="nav-link">
       <i class="bi bi-speedometer2"></i> Indicadores
     </a>
     {% if USER_IS_ADMIN %}
@@ -154,23 +168,53 @@
 
     <div id="alertBanner" class="alert alert-danger d-none mb-3"></div>
 
+    <!-- ── Filtros: Datas + Postos + Grupos ─────────────────── -->
+    <div class="card filter-bar mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="d-flex align-items-center flex-wrap" style="gap:12px">
+          <span class="fw-bold" style="font-size:.85rem">
+            <i class="bi bi-calendar3 me-1"></i> Período
+          </span>
+          <input type="date" id="dataIni" class="form-control form-control-sm" style="width:145px">
+          <span class="text-muted">até</span>
+          <input type="date" id="dataFim" class="form-control form-control-sm" style="width:145px">
+          <button id="btnAtualizar" class="btn btn-sm btn-primary">
+            <i class="bi bi-arrow-clockwise me-1"></i> Atualizar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card filter-bar mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="d-flex align-items-center flex-wrap" style="gap:12px">
+          <span class="fw-bold" style="font-size:.85rem">Posto</span>
+          <ul id="postoTabs" class="nav nav-pills scroll-tabs mb-0 flex-grow-1"></ul>
+          <div class="flex-shrink-0">
+            <button id="btnGrupoAltamiro" class="btn btn-sm btn-outline-secondary" title="A B G I N R X Y">Altamiro</button>
+            <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ms-1" title="C D J M P">Couto</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- KPI Cards -->
     <div class="row g-3 mb-3">
       <div class="col-6 col-lg-2">
         <div class="card stat-card h-100 p-3">
-          <div class="kpi-label">Tentativas hoje</div>
+          <div class="kpi-label" id="lblTentativas">Tentativas</div>
           <div class="kpi-val text-primary" id="kTentativas">–</div>
         </div>
       </div>
       <div class="col-6 col-lg-2">
         <div class="card stat-card h-100 p-3">
-          <div class="kpi-label">Aprovadas hoje</div>
+          <div class="kpi-label" id="lblAprovadas">Aprovadas</div>
           <div class="kpi-val text-success" id="kAprovadas">–</div>
         </div>
       </div>
       <div class="col-6 col-lg-2">
         <div class="card stat-card h-100 p-3">
-          <div class="kpi-label">Negadas hoje</div>
+          <div class="kpi-label" id="lblNegadas">Negadas</div>
           <div class="kpi-val text-danger" id="kNegadas">–</div>
         </div>
       </div>
@@ -182,7 +226,7 @@
       </div>
       <div class="col-6 col-lg-2">
         <div class="card stat-card h-100 p-3">
-          <div class="kpi-label">Valor aprovado hoje</div>
+          <div class="kpi-label">Valor aprovado</div>
           <div class="kpi-val text-success" id="kValor" style="font-size:1.3rem">–</div>
         </div>
       </div>
@@ -199,7 +243,7 @@
       <div class="col-lg-8">
         <div class="card stat-card h-100">
           <div class="card-body">
-            <h6 class="mb-3"><i class="bi bi-bar-chart-fill me-1 text-primary"></i> Tentativas por dia — últimos 7 dias</h6>
+            <h6 class="mb-3"><i class="bi bi-bar-chart-fill me-1 text-primary"></i> Tentativas por dia — <span id="lblTrend">período selecionado</span></h6>
             <canvas id="chartTrend" height="100"></canvas>
           </div>
         </div>
@@ -216,11 +260,11 @@
       </div>
     </div>
 
-    <!-- Tabela por posto hoje -->
+    <!-- Tabela por posto -->
     <div class="card stat-card">
       <div class="card-body p-0">
         <div class="d-flex align-items-center px-3 pt-3 pb-2">
-          <h6 class="mb-0"><i class="bi bi-geo-alt-fill me-1 text-danger"></i> Status por Posto — hoje</h6>
+          <h6 class="mb-0"><i class="bi bi-geo-alt-fill me-1 text-danger"></i> Status por Posto — <span id="lblTabela">período</span></h6>
           <small class="text-muted ms-auto" id="atualizadoAs"></small>
         </div>
         <div class="table-responsive">
@@ -257,8 +301,106 @@ const POSTOS_NAMES = {
   'P': 'Rio das Pedras',
 };
 
-let chartTrend = null;
+let POSTOS_USER  = [];
+let postosSel    = new Set();
+let chartTrend   = null;
 
+function postosSelecionados() {
+  if (!postosSel.size) return [...POSTOS_USER];
+  return POSTOS_USER.filter(p => postosSel.has(p));
+}
+
+/* ── Posto Tabs (multi-select) ─────────────────────────────── */
+function buildPostoTabs() {
+  const ul = document.getElementById('postoTabs');
+  ul.innerHTML = '';
+
+  const allActive = !postosSel.size;
+
+  // botão "Todos"
+  const liAll = document.createElement('li');
+  liAll.className = 'nav-item';
+  liAll.innerHTML = `<a class="nav-link${allActive ? ' active' : ''}" style="cursor:pointer">Todos</a>`;
+  ul.appendChild(liAll);
+
+  POSTOS_USER.forEach(p => {
+    const ativo = !allActive && postosSel.has(p);
+    const li = document.createElement('li');
+    li.className = 'nav-item';
+    li.innerHTML = `<a class="nav-link${ativo ? ' active' : ''}" style="cursor:pointer" data-posto="${p}">${p}</a>`;
+    ul.appendChild(li);
+  });
+
+  ul.onclick = (ev) => {
+    const a = ev.target.closest('.nav-link');
+    if (!a) return;
+    const posto = a.dataset.posto;
+
+    if (!posto) {
+      postosSel = new Set();
+    } else {
+      if (!postosSel.size) postosSel = new Set([posto]);
+      else {
+        if (postosSel.has(posto)) postosSel.delete(posto);
+        else postosSel.add(posto);
+        if (!postosSel.size) postosSel = new Set();
+      }
+    }
+
+    const allNow = !postosSel.size;
+    ul.querySelectorAll('.nav-link').forEach(a2 => {
+      const p2 = a2.dataset.posto;
+      if (!p2) a2.classList.toggle('active', allNow);
+      else a2.classList.toggle('active', !allNow && postosSel.has(p2));
+    });
+
+    _atualizarBotoesGrupo();
+    loadDashboard();
+  };
+
+  _atualizarBotoesGrupo();
+}
+
+/* ── Grupos de Postos ──────────────────────────────────────── */
+const GRUPOS_POSTO = {
+  altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+  couto:    ['C', 'D', 'J', 'M', 'P'],
+};
+
+function _grupoAtivo() {
+  if (!postosSel.size) return null;
+  const selArr = [...postosSel].sort().join(',');
+  for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+    const intersec = lista.filter(p => POSTOS_USER.includes(p)).sort().join(',');
+    if (intersec && selArr === intersec) return nome;
+  }
+  return null;
+}
+
+function _atualizarBotoesGrupo() {
+  const ativo = _grupoAtivo();
+  const btnA = document.getElementById('btnGrupoAltamiro');
+  const btnC = document.getElementById('btnGrupoCouto');
+  if (btnA) { btnA.classList.toggle('btn-secondary', ativo === 'altamiro'); btnA.classList.toggle('btn-outline-secondary', ativo !== 'altamiro'); }
+  if (btnC) { btnC.classList.toggle('btn-secondary', ativo === 'couto');    btnC.classList.toggle('btn-outline-secondary', ativo !== 'couto'); }
+}
+
+function selectGrupo(grupo) {
+  const intersec = GRUPOS_POSTO[grupo].filter(p => POSTOS_USER.includes(p));
+  postosSel = new Set(intersec);
+  buildPostoTabs();
+  _atualizarBotoesGrupo();
+  loadDashboard();
+}
+
+function wireGrupoButtons() {
+  const btnA = document.getElementById('btnGrupoAltamiro');
+  const btnC = document.getElementById('btnGrupoCouto');
+  if (btnA) btnA.onclick = () => selectGrupo('altamiro');
+  if (btnC) btnC.onclick = () => selectGrupo('couto');
+}
+
+/* ── Helpers ───────────────────────────────────────────────── */
 function fmtMoeda(v) {
   if (v == null) return '–';
   return 'R$ ' + Number(v).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -267,16 +409,42 @@ function taxa(aprov, total) {
   if (!total) return '–';
   return ((aprov / total) * 100).toFixed(1) + '%';
 }
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                  .replace(/"/g,'&quot;');
+}
+function fmtDataBR(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
 
+/* ── Load Dashboard ────────────────────────────────────────── */
 async function loadDashboard() {
   try {
-    const resp = await fetch('/api/tef/dashboard', { credentials: 'same-origin' });
+    const dataIni = document.getElementById('dataIni').value;
+    const dataFim = document.getElementById('dataFim').value;
+    const postos  = postosSelecionados().join(',');
+
+    const params = new URLSearchParams();
+    if (dataIni) params.set('data_ini', dataIni);
+    if (dataFim) params.set('data_fim', dataFim);
+    if (postos)  params.set('postos', postos);
+
+    const resp = await fetch('/api/tef/dashboard?' + params.toString(), { credentials: 'same-origin' });
     const data = await resp.json();
     if (data.erro) {
       document.getElementById('alertBanner').textContent = 'Erro: ' + data.erro;
       document.getElementById('alertBanner').classList.remove('d-none');
       return;
     }
+    document.getElementById('alertBanner').classList.add('d-none');
+
+    // Labels dinâmicos baseado no período
+    const isHoje = data.data_ini === data.data_fim;
+    const sufixo = isHoje ? 'hoje' : `${fmtDataBR(data.data_ini)} a ${fmtDataBR(data.data_fim)}`;
+    document.getElementById('lblTrend').textContent = isHoje ? 'últimos 7 dias' : sufixo;
+    document.getElementById('lblTabela').textContent = sufixo;
 
     // KPIs
     const h = data.hoje;
@@ -289,7 +457,7 @@ async function loadDashboard() {
     const sync = data.sync;
     if (sync?.synced_at) {
       document.getElementById('kSync').textContent = sync.synced_at.slice(0,16);
-      if (sync.status === 'erro') document.getElementById('kSync').style.color = '#dc3545';
+      document.getElementById('kSync').style.color = sync.status === 'erro' ? '#dc3545' : '#7c3aed';
     }
 
     // Gráfico tendência
@@ -317,7 +485,7 @@ async function loadDashboard() {
     // Top erros
     const errosDiv = document.getElementById('topErrosDiv');
     if (!data.top_erros?.length) {
-      errosDiv.innerHTML = '<p class="text-muted small">Nenhuma negação nos últimos 7 dias.</p>';
+      errosDiv.innerHTML = '<p class="text-muted small">Nenhuma negação no período.</p>';
     } else {
       const maxCnt = data.top_erros[0].cnt;
       errosDiv.innerHTML = data.top_erros.map(e => `
@@ -336,7 +504,7 @@ async function loadDashboard() {
     // Tabela postos
     const tbody = document.getElementById('postoBody');
     if (!data.por_posto_hoje?.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Nenhuma tentativa hoje</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Nenhuma tentativa no período</td></tr>';
     } else {
       tbody.innerHTML = data.por_posto_hoje.map(p => {
         const txHoje  = taxa(p.aprovadas, p.total);
@@ -364,9 +532,34 @@ async function loadDashboard() {
   }
 }
 
-function esc(s) {
-  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                  .replace(/"/g,'&quot;');
+/* ── Init ──────────────────────────────────────────────────── */
+async function init() {
+  // Datas padrão: hoje
+  const hoje = new Date().toISOString().slice(0, 10);
+  document.getElementById('dataIni').value = hoje;
+  document.getElementById('dataFim').value = hoje;
+
+  // Obter postos do usuário
+  try {
+    const r = await fetch('/session/me', { credentials: 'same-origin' });
+    if (!r.ok) { location.href = '/login.html'; return; }
+    const me = await r.json();
+    POSTOS_USER = Array.isArray(me.postos) ? [...me.postos].sort() : [];
+  } catch {
+    POSTOS_USER = [];
+  }
+
+  buildPostoTabs();
+  wireGrupoButtons();
+
+  // Botão Atualizar
+  document.getElementById('btnAtualizar').onclick = () => loadDashboard();
+
+  // Enter nos campos de data também atualiza
+  document.getElementById('dataIni').onchange = () => loadDashboard();
+  document.getElementById('dataFim').onchange = () => loadDashboard();
+
+  await loadDashboard();
 }
 
 // Data de hoje no topbar
@@ -378,7 +571,7 @@ setInterval(() => {
     new Date().toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'});
 }, 1000);
 
-loadDashboard();
+init();
 setInterval(loadDashboard, 120000);
 </script>
 <script>
