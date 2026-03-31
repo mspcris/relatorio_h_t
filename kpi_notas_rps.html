@@ -32,6 +32,46 @@
     .sidebar .nav-link { font-size:.95rem; }
     .brand-link .brand-text { font-size:1rem; }
     .muted{color:#6b7280;} .mini{font-size:.85rem;} .small-td{white-space:nowrap;}
+
+    /* ── Tabs principais ── */
+    .main-tabs { display:flex; gap:4px; margin-bottom:12px; }
+    .main-tabs .tab-btn {
+      padding:7px 20px; border-radius:6px 6px 0 0; border:1px solid #dee2e6;
+      border-bottom:none; background:#f8f9fa; color:#495057; cursor:pointer;
+      font-weight:500; font-size:.95rem; transition:background .15s;
+    }
+    .main-tabs .tab-btn.active { background:#fff; color:#007bff; border-color:#dee2e6; border-bottom:2px solid #fff; margin-bottom:-1px; z-index:1; }
+    .main-tabs .tab-btn:hover:not(.active) { background:#e9ecef; }
+    .tab-pane { display:none; }
+    .tab-pane.active { display:block; }
+
+    /* ── Seletor de posto único (registros) ── */
+    #regPostoWrap { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:12px; }
+    #regPostoWrap label { font-weight:500; margin-right:4px; margin-bottom:0; }
+    .reg-posto-btn {
+      padding:4px 14px; border-radius:20px; border:1px solid #adb5bd;
+      background:#fff; color:#495057; cursor:pointer; font-size:.88rem; transition:all .15s;
+    }
+    .reg-posto-btn.active { background:#007bff; color:#fff; border-color:#007bff; font-weight:600; }
+    .reg-posto-btn:hover:not(.active) { background:#e9ecef; }
+
+    /* ── Controles de ordenação ── */
+    #regSortWrap { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+    #regSortWrap label { font-weight:500; margin-bottom:0; }
+    .sort-btn {
+      padding:3px 12px; border-radius:4px; border:1px solid #adb5bd;
+      background:#fff; color:#495057; cursor:pointer; font-size:.85rem;
+      display:flex; align-items:center; gap:4px;
+    }
+    .sort-btn.active { background:#17a2b8; color:#fff; border-color:#17a2b8; }
+    .sort-btn:hover:not(.active) { background:#e9ecef; }
+
+    /* ── Tabela registros ── */
+    #tblRegistros thead th { cursor:pointer; user-select:none; white-space:nowrap; }
+    #tblRegistros thead th.sorted-asc::after { content:' ▲'; font-size:.75em; }
+    #tblRegistros thead th.sorted-desc::after { content:' ▼'; font-size:.75em; }
+    #regInfo { font-size:.85rem; color:#6b7280; margin-bottom:6px; }
+    .reg-empty { text-align:center; color:#aaa; padding:30px; }
   </style>
 
   <script>
@@ -647,6 +687,217 @@
     }
 
     window.addEventListener('DOMContentLoaded', boot);
+
+    // ============================================================
+    // ABA: VER REGISTROS
+    // ============================================================
+    let regPosto = null;     // posto selecionado nesta aba
+    let regSortCol = 'data'; // coluna de ordenação
+    let regSortDir = 'asc';  // direção
+
+    const POSTO_NOMES = {
+      A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho',
+      G:'Guadalupe', I:'Nova Iguaçu', J:'Jacarepaguá', M:'Madureira',
+      N:'Nilópolis', P:'Rio das Pedras', R:'Realengo', X:'Xerém', Y:'Campo Grande'
+    };
+
+    function buildRegPostoSelector() {
+      const wrap = el('#regPostoWrap');
+      if (!wrap) return;
+      const btns = POSTOS.map(p => {
+        const nome = POSTO_NOMES[p] || p;
+        const active = p === regPosto ? 'active' : '';
+        return `<button class="reg-posto-btn ${active}" data-posto="${p}" title="${nome}">${p} — ${nome}</button>`;
+      }).join('');
+      wrap.innerHTML = `<label>Clínica:</label>${btns}`;
+      wrap.querySelectorAll('.reg-posto-btn').forEach(btn => {
+        btn.onclick = () => {
+          regPosto = btn.dataset.posto;
+          wrap.querySelectorAll('.reg-posto-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          renderRegistros();
+        };
+      });
+    }
+
+    function getRegRows() {
+      if (!regPosto) return [];
+      const payload = CACHE[ymSel]?.[regPosto];
+      if (!payload) return [];
+
+      // Usa notas_por_dia se disponível; fallback para notas_emitidas sem data
+      const source = Array.isArray(payload.notas_por_dia) ? payload.notas_por_dia
+                   : (payload.notas_emitidas || []).map(r => ({ ...r, data_emissao: null }));
+
+      // Filtra por data e pelo filtro de grupo/operadora (reutiliza notasFilter)
+      return source.filter(r => {
+        if (r.data_emissao) {
+          if (r.data_emissao < dataIni || r.data_emissao > dataFim) return false;
+        }
+        return notasFilter(r);
+      });
+    }
+
+    function sortRegRows(rows) {
+      return [...rows].sort((a, b) => {
+        let va, vb;
+        if (regSortCol === 'data') {
+          va = a.data_emissao || '';
+          vb = b.data_emissao || '';
+          const cmp = va.localeCompare(vb);
+          return regSortDir === 'asc' ? cmp : -cmp;
+        }
+        if (regSortCol === 'valor') {
+          va = num(a.valor_notas_emitidas);
+          vb = num(b.valor_notas_emitidas);
+          return regSortDir === 'asc' ? va - vb : vb - va;
+        }
+        return 0;
+      });
+    }
+
+    function renderRegistros() {
+      if (!el('#tab-registros')?.classList.contains('active')) return;
+
+      buildRegPostoSelector();
+
+      const tbody = el('#tblRegBody');
+      const tfoot = el('#tblRegFoot');
+      const info  = el('#regInfo');
+      if (!tbody) return;
+
+      if (!regPosto) {
+        tbody.innerHTML = `<tr><td colspan="8" class="reg-empty">Selecione uma clínica acima para ver os registros.</td></tr>`;
+        tfoot.innerHTML = '';
+        if (info) info.textContent = '';
+        return;
+      }
+
+      const rows = getRegRows();
+      const sorted = sortRegRows(rows);
+
+      // Atualiza header com indicador de ordenação
+      el('#tblRegistros')?.querySelectorAll('thead th').forEach(th => {
+        th.classList.remove('sorted-asc', 'sorted-desc');
+        const col = th.dataset.col;
+        if (col === regSortCol) th.classList.add(regSortDir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+      });
+
+      if (sorted.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="reg-empty">Nenhum registro encontrado para o período selecionado.</td></tr>`;
+        tfoot.innerHTML = '';
+        if (info) info.textContent = `Posto ${regPosto} — ${POSTO_NOMES[regPosto] || ''} — nenhum registro.`;
+        return;
+      }
+
+      // Totalizadores
+      let totQtd = 0, totEmit = 0, totCancQtd = 0, totCancVal = 0, totContQtd = 0, totContVal = 0;
+
+      tbody.innerHTML = sorted.map(r => {
+        const data   = r.data_emissao ? r.data_emissao.split('-').reverse().join('/') : '—';
+        const emp    = r.Empresa || r.empresa || '—';
+        const qtd    = num(r.qtd_notas);
+        const emit   = num(r.valor_notas_emitidas);
+        const cancQ  = num(r.qtd_notas_canceladas);
+        const cancV  = num(r.valor_notas_canceladas);
+        const contQ  = num(r.qtd_notas_contabilizadas);
+        const contV  = num(r.valor_notas_contabilizadas);
+
+        totQtd += qtd; totEmit += emit; totCancQtd += cancQ;
+        totCancVal += cancV; totContQtd += contQ; totContVal += contV;
+
+        const rowClass = cancQ > 0 ? 'table-warning' : '';
+        return `<tr class="${rowClass}">
+          <td class="small-td">${data}</td>
+          <td>${emp}</td>
+          <td class="text-right small-td">${fmtInt.format(qtd)}</td>
+          <td class="text-right small-td">R$ ${fmt2.format(emit)}</td>
+          <td class="text-right small-td">${cancQ > 0 ? `<span class="text-danger">${fmtInt.format(cancQ)}</span>` : '—'}</td>
+          <td class="text-right small-td">${cancV > 0 ? `<span class="text-danger">R$ ${fmt2.format(cancV)}</span>` : '—'}</td>
+          <td class="text-right small-td">${fmtInt.format(contQ)}</td>
+          <td class="text-right small-td">R$ ${fmt2.format(contV)}</td>
+        </tr>`;
+      }).join('');
+
+      // Rodapé com totais
+      tfoot.innerHTML = `<tr class="bg-light">
+        <td colspan="2"><strong>TOTAL — ${sorted.length} registros</strong></td>
+        <td class="text-right"><strong>${fmtInt.format(totQtd)}</strong></td>
+        <td class="text-right"><strong>R$ ${fmt2.format(totEmit)}</strong></td>
+        <td class="text-right">${totCancQtd > 0 ? `<span class="text-danger"><strong>${fmtInt.format(totCancQtd)}</strong></span>` : '—'}</td>
+        <td class="text-right">${totCancVal > 0 ? `<span class="text-danger"><strong>R$ ${fmt2.format(totCancVal)}</strong></span>` : '—'}</td>
+        <td class="text-right"><strong>${fmtInt.format(totContQtd)}</strong></td>
+        <td class="text-right"><strong>R$ ${fmt2.format(totContVal)}</strong></td>
+      </tr>`;
+
+      const nomePosto = POSTO_NOMES[regPosto] || regPosto;
+      const fmtD = s => s ? s.split('-').reverse().join('/') : '';
+      if (info) info.textContent = `${nomePosto} (${regPosto}) · ${fmtD(dataIni)} a ${fmtD(dataFim)} · ${sorted.length} registros`;
+    }
+
+    // Clique nos cabeçalhos da tabela para ordenar
+    document.addEventListener('DOMContentLoaded', () => {
+      el('#tblRegistros')?.querySelectorAll('thead th[data-col]').forEach(th => {
+        th.style.cursor = 'pointer';
+        th.onclick = () => {
+          const col = th.dataset.col;
+          const colMap = { data: 'data', emitido: 'valor' };
+          const mapped = colMap[col];
+          if (!mapped) return;
+          if (regSortCol === mapped) {
+            regSortDir = regSortDir === 'asc' ? 'desc' : 'asc';
+          } else {
+            regSortCol = mapped;
+            regSortDir = mapped === 'data' ? 'asc' : 'desc';
+          }
+          updateSortBtns();
+          renderRegistros();
+        };
+      });
+
+      // Botões de sort
+      el('#sortData')?.addEventListener('click', () => {
+        if (regSortCol === 'data') regSortDir = regSortDir === 'asc' ? 'desc' : 'asc';
+        else { regSortCol = 'data'; regSortDir = 'asc'; }
+        updateSortBtns();
+        renderRegistros();
+      });
+      el('#sortValor')?.addEventListener('click', () => {
+        if (regSortCol === 'valor') regSortDir = regSortDir === 'asc' ? 'desc' : 'asc';
+        else { regSortCol = 'valor'; regSortDir = 'desc'; }
+        updateSortBtns();
+        renderRegistros();
+      });
+
+      // Tabs navegação
+      document.querySelectorAll('.main-tabs .tab-btn').forEach(btn => {
+        btn.onclick = () => {
+          const tab = btn.dataset.tab;
+          document.querySelectorAll('.main-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+          btn.classList.add('active');
+          el(`#tab-${tab}`)?.classList.add('active');
+          if (tab === 'registros') {
+            // Ao abrir, seleciona o primeiro posto se nenhum selecionado
+            if (!regPosto && POSTOS.length) regPosto = POSTOS[0];
+            renderRegistros();
+          }
+        };
+      });
+    });
+
+    function updateSortBtns() {
+      const btnD = el('#sortData');
+      const btnV = el('#sortValor');
+      if (btnD) {
+        btnD.classList.toggle('active', regSortCol === 'data');
+        el('#sortDataDir').textContent = regSortDir === 'asc' && regSortCol === 'data' ? '↑' : '↓';
+      }
+      if (btnV) {
+        btnV.classList.toggle('active', regSortCol === 'valor');
+        el('#sortValorDir').textContent = regSortDir === 'asc' && regSortCol === 'valor' ? '↑' : '↓';
+      }
+    }
   </script>
 </head>
 
@@ -768,52 +1019,113 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-header"><h3 class="card-title mb-0">Resumo do mês</h3></div>
-        <div class="card-body kpi-grid" id="kpis"></div>
+      <!-- Navegação principal de abas -->
+      <div class="main-tabs">
+        <button class="tab-btn active" data-tab="resumo">📊 Resumo</button>
+        <button class="tab-btn" data-tab="registros">🗂️ Ver Registros</button>
       </div>
 
-      <div class="card">
-        <div class="card-header"><h3 class="card-title mb-0">RPS pendentes</h3></div>
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-striped table-sm mb-0">
-              <thead>
-                <tr>
-                  <th class="small-td">Código</th>
-                  <th>Empresa</th>
-                  <th class="text-right small-td">Qtd</th>
-                  <th class="text-right small-td">Total</th>
-                </tr>
-              </thead>
-              <tbody id="tblRps"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      <!-- ─── ABA: RESUMO ─── -->
+      <div class="tab-pane active" id="tab-resumo">
 
-      <div class="card">
-        <div class="card-header"><h3 class="card-title mb-0">Notas emitidas</h3></div>
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-striped table-sm mb-0">
-              <thead>
-                <tr>
-                  <th class="small-td">Código</th>
-                  <th>Empresa</th>
-                  <th class="text-right small-td">Qtd</th>
-                  <th class="text-right small-td">Emitidas</th>
-                  <th class="text-right small-td">Canc</th>
-                  <th class="text-right small-td">Val Canc</th>
-                  <th class="text-right small-td">Cont</th>
-                  <th class="text-right small-td">Val Cont</th>
-                </tr>
-              </thead>
-              <tbody id="tblNotas"></tbody>
-            </table>
+        <div class="card">
+          <div class="card-header"><h3 class="card-title mb-0">Resumo do mês</h3></div>
+          <div class="card-body kpi-grid" id="kpis"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h3 class="card-title mb-0">RPS pendentes</h3></div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-striped table-sm mb-0">
+                <thead>
+                  <tr>
+                    <th class="small-td">Código</th>
+                    <th>Empresa</th>
+                    <th class="text-right small-td">Qtd</th>
+                    <th class="text-right small-td">Total</th>
+                  </tr>
+                </thead>
+                <tbody id="tblRps"></tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </div>
+
+        <div class="card">
+          <div class="card-header"><h3 class="card-title mb-0">Notas emitidas</h3></div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-striped table-sm mb-0">
+                <thead>
+                  <tr>
+                    <th class="small-td">Código</th>
+                    <th>Empresa</th>
+                    <th class="text-right small-td">Qtd</th>
+                    <th class="text-right small-td">Emitidas</th>
+                    <th class="text-right small-td">Canc</th>
+                    <th class="text-right small-td">Val Canc</th>
+                    <th class="text-right small-td">Cont</th>
+                    <th class="text-right small-td">Val Cont</th>
+                  </tr>
+                </thead>
+                <tbody id="tblNotas"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /tab-resumo -->
+
+      <!-- ─── ABA: VER REGISTROS ─── -->
+      <div class="tab-pane" id="tab-registros">
+
+        <div class="card">
+          <div class="card-header"><h3 class="card-title mb-0">Ver Registros — Notas por Dia</h3></div>
+          <div class="card-body">
+
+            <!-- Seletor de posto único -->
+            <div id="regPostoWrap">
+              <label>Clínica:</label>
+              <!-- preenchido por JS -->
+            </div>
+
+            <!-- Ordenação -->
+            <div id="regSortWrap">
+              <label>Ordenar por:</label>
+              <button class="sort-btn active" data-sort="data" data-dir="asc" id="sortData">
+                📅 Data <span id="sortDataDir">↑</span>
+              </button>
+              <button class="sort-btn" data-sort="valor" data-dir="desc" id="sortValor">
+                💰 Valor Emitido <span id="sortValorDir">↓</span>
+              </button>
+            </div>
+
+            <div id="regInfo"></div>
+
+            <div class="table-responsive">
+              <table class="table table-striped table-sm table-hover mb-0" id="tblRegistros">
+                <thead class="thead-light">
+                  <tr>
+                    <th data-col="data">Data</th>
+                    <th>Empresa</th>
+                    <th class="text-right" data-col="qtd">Qtd</th>
+                    <th class="text-right" data-col="emitido">Emitido (R$)</th>
+                    <th class="text-right" data-col="canc_qtd">Qtd Canc</th>
+                    <th class="text-right" data-col="canc_val">Val Canc (R$)</th>
+                    <th class="text-right" data-col="cont_qtd">Cont</th>
+                    <th class="text-right" data-col="cont_val">Val Cont (R$)</th>
+                  </tr>
+                </thead>
+                <tbody id="tblRegBody"></tbody>
+                <tfoot id="tblRegFoot" style="font-weight:600; border-top:2px solid #dee2e6;"></tfoot>
+              </table>
+            </div>
+
+          </div>
+        </div>
+
+      </div><!-- /tab-registros -->
 
     </section>
   </div>

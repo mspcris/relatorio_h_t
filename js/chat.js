@@ -33,8 +33,9 @@
   const PROVIDER_DEFAULT = 'groq';
 
   const ChatIA = {
-    _CFG: { TIMEOUT_MS: 180000 },
+    _CFG: { TIMEOUT_MS: 180000, MAX_HISTORY: 6 },
     _state: { mounted: false, size: 'M', provider: PROVIDER_DEFAULT, opts: null },
+    _history: [],
 
     init(options) {
       const defaults = {
@@ -347,11 +348,22 @@
         const payload = await this._state.opts.getPayload({ userQuery });
         if (payload && typeof payload === 'object') {
           payload.pagina   = window.IA_PAGINA || window.location.pathname;
-          payload.provider = this._state.provider;  // groq | openai | anthropic
+          payload.provider = this._state.provider;
+          // Envia histórico das últimas mensagens para contexto de conversa
+          if (this._history.length > 0) {
+            payload.historico = this._history.slice(-this._CFG.MAX_HISTORY);
+          }
         }
+        // Registra pergunta no histórico
+        this._history.push({ role: 'user', text: userQuery });
+
         const raw  = await this._callIA(payload, this._state.opts.timeoutMs);
+        const botText = this._coerceText(raw);
         this._dotsStop();
-        this._renderBotMessage(this._coerceText(raw));
+        this._renderBotMessage(botText);
+
+        // Registra resposta no histórico (truncada para economizar tokens)
+        this._history.push({ role: 'ia', text: (botText || '').slice(0, 800) });
       } catch (err) {
         this._dotsStop();
         this._append('bot', `<span style="color:#f39c12">Não foi possível responder — ${this._escapeHtml(err?.message || 'erro desconhecido.')}</span>`);

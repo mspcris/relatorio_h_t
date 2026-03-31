@@ -832,9 +832,30 @@ def ia_chat():
     resposta_json = None
     resposta_txt  = ""
 
+    # ── Monta histórico de conversa (se houver) ──────────────────────────────
+    historico_txt = ""
+    historico = d.get("historico") or []
+    if historico and isinstance(historico, list):
+        partes = []
+        for msg in historico[-6:]:  # últimas 6 mensagens (3 trocas)
+            role = msg.get("role", "")
+            text = str(msg.get("text", ""))[:800]
+            if role == "user":
+                partes.append(f"Usuário: {text}")
+            elif role == "ia":
+                partes.append(f"IA: {text}")
+        if partes:
+            historico_txt = (
+                "\n\nHISTÓRICO DA CONVERSA (mensagens anteriores — "
+                "use para entender o contexto da pergunta atual, "
+                "a pergunta de agora provavelmente é continuação da anterior):\n"
+                + "\n".join(partes)
+            )
+
     prompt_completo = (
         f"Dados do relatório (pré-calculados pelo sistema):\n\n{contexto}"
-        f"\n\nPergunta do usuário:\n{pergunta_txt}"
+        f"{historico_txt}"
+        f"\n\nPergunta atual do usuário:\n{pergunta_txt}"
     )
 
     # ── Seleciona o cliente LLM ──────────────────────────────────────────────
