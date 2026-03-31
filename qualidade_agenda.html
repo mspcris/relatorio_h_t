@@ -598,7 +598,7 @@
                                     </div>
                                     <div style="flex: 1; min-width: 280px;">
                                         <div style="font-size: 1.1rem; font-weight: 700; color: #b8d9f7; margin-bottom: 8px;">
-                                            <i class="fas fa-heartbeat mr-2"></i>Diagnóstico Geral da Rede
+                                            <i class="fas fa-heartbeat mr-2"></i>Diagnóstico Geral
                                         </div>
                                         <div id="simDiagnostico" style="font-size: 0.88rem; color: #c8ddf0; line-height: 1.55; margin-bottom: 12px;">
                                             Analisando dados...
@@ -669,7 +669,7 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="card">
-                                        <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-chart-area mr-2 text-primary"></i>Saúde por Posto (% dentro do prazo)</h3></div>
+                                        <div class="card-header"><h3 class="card-title mb-0" id="simRadarTitle"><i class="fas fa-chart-area mr-2 text-primary"></i>Saúde por Posto (% dentro do prazo)</h3></div>
                                         <div class="card-body" style="height: 300px;"><canvas id="simRadarPosto"></canvas></div>
                                     </div>
                                 </div>
@@ -1561,13 +1561,18 @@ function renderSimHealthScore(data) {
 
     // Diagnostic text
     const postosVisiveis = getSelectedPostos();
+    const ctx = simContexto();
+    // Update banner title
+    const bannerTitle = document.querySelector('#pane-sim .sim-health-banner div[style*="font-size: 1.1rem"]');
+    if (bannerTitle) bannerTitle.innerHTML = `<i class="fas fa-heartbeat mr-2"></i>Diagnóstico Geral ${ctx.titulo}`;
+
     let diagText = '';
     if (score >= 80) {
-        diagText = `A rede está operando em bom estado. ${ok} de ${total} situações estão dentro do prazo ANS nos ${postosVisiveis.length} postos analisados. Foco deve ser na manutenção e prevenção.`;
+        diagText = `Operação em bom estado ${ctx.loc}. ${ok} de ${total} situações estão dentro do prazo ANS. Foco deve ser na manutenção e prevenção.`;
     } else if (score >= 50) {
-        diagText = `A rede apresenta pontos de atenção moderados. ${alerta} especialidades estão em alerta e ${critico + semVaga} em estado crítico/sem vaga. Ações preventivas são recomendadas para evitar deterioração.`;
+        diagText = `Pontos de atenção ${ctx.loc}. ${alerta} especialidades em alerta e ${critico + semVaga} em estado crítico/sem vaga. Ações preventivas recomendadas.`;
     } else {
-        diagText = `Situação preocupante: ${critico + semVaga} de ${total} situações estão em estado crítico ou sem vaga (${((critico+semVaga)/total*100).toFixed(0)}%). A capacidade da rede está comprometida e requer ações imediatas.`;
+        diagText = `Situação preocupante ${ctx.loc}: ${critico + semVaga} de ${total} situações em estado crítico ou sem vaga (${((critico+semVaga)/total*100).toFixed(0)}%). Capacidade comprometida — ações imediatas necessárias.`;
     }
     el('simDiagnostico').textContent = diagText;
 
@@ -1594,7 +1599,7 @@ function renderSimHealthScore(data) {
     const withCap = data.filter(d => d.CapacidadeConsiderada > 0 && d.QuantidadeVagasDisponivelNaData !== null);
     if (withCap.length) {
         const avgOcup = withCap.reduce((s,d) => s + (1 - d.QuantidadeVagasDisponivelNaData / d.CapacidadeConsiderada), 0) / withCap.length * 100;
-        insights.push({icon: 'fa-battery-half', color: avgOcup > 85 ? '#fc8181' : '#90cdf4', text: `Ocupação média da rede: <strong>${avgOcup.toFixed(1)}%</strong> — ${avgOcup > 85 ? 'capacidade saturada' : avgOcup > 70 ? 'utilização alta' : 'capacidade saudável'}`});
+        insights.push({icon: 'fa-battery-half', color: avgOcup > 85 ? '#fc8181' : '#90cdf4', text: `Ocupação média ${ctx.locDe}: <strong>${avgOcup.toFixed(1)}%</strong> — ${avgOcup > 85 ? 'capacidade saturada' : avgOcup > 70 ? 'utilização alta' : 'capacidade saudável'}`});
     }
     // SEM_VAGA count
     if (semVaga > 0) {
@@ -1622,11 +1627,12 @@ function renderSimKpis(data) {
     // Specialties beyond ANS
     const beyondAns = data.filter(d => d.prazoconsultaans > 0 && d.DiasAteProximaVaga !== null && d.DiasAteProximaVaga > d.prazoconsultaans).length;
 
+    const ctxK = simContexto();
     const kpis = [
         { num: critico + semVaga, label: 'Situações Críticas', color: '#dc3545' },
         { num: beyondAns, label: 'Além do Prazo ANS', color: '#fd7e14' },
         { num: avgDias + 'd', label: 'Média Dias p/ Vaga', color: '#2c5f8a' },
-        { num: pctLivre + '%', label: 'Vagas Livres na Rede', color: totalLivres/totalCap < 0.15 ? '#dc3545' : '#28a745' },
+        { num: pctLivre + '%', label: `Vagas Livres ${ctxK.label}`, color: totalLivres/totalCap < 0.15 ? '#dc3545' : '#28a745' },
         { num: totalCap, label: 'Capacidade Total', color: '#555' },
         { num: getSelectedPostos().length, label: 'Postos Analisados', color: '#2c5f8a' },
     ];
@@ -1652,7 +1658,7 @@ function renderSimAlertas(data) {
                 tipo: 'critico',
                 titulo: `${esp} — Sem Vaga em ${postos.length} postos`,
                 texto: `A especialidade ${esp} está completamente indisponível nos postos ${postos.join(', ')}. Isso representa um risco de descumprimento de ANS e impacto direto na experiência do paciente. Considere redistribuição imediata de profissionais ou contratação emergencial.`,
-                meta: `Postos afetados: ${postos.join(', ')} | Cobertura comprometida: ${(postos.length/postosVisiveis.length*100).toFixed(0)}% da rede filtrada`
+                meta: `Postos afetados: ${postos.join(', ')} | Cobertura comprometida: ${(postos.length/postosVisiveis.length*100).toFixed(0)}% ${simContexto().locDe}`
             });
         } else if (postos.length >= 1) {
             alertas.push({
@@ -1709,7 +1715,7 @@ function renderSimAlertas(data) {
     if (okPct >= 70) {
         alertas.push({
             tipo: 'ok',
-            titulo: `${okPct.toFixed(0)}% da rede dentro do prazo ANS`,
+            titulo: `${okPct.toFixed(0)}% ${simContexto().locDe} dentro do prazo ANS`,
             texto: `A maioria das especialidades está operando dentro dos parâmetros aceitáveis. Mantenha o monitoramento para detectar tendências de deterioração antes que se tornem críticas.`,
             meta: ''
         });
@@ -1836,7 +1842,7 @@ function renderSimCenarios(data) {
             titulo: `Reforçar o posto ${nome} (${worstPosto[0]})`,
             badge: `${worstPosto[1]} especialidades em risco`,
             badgeColor: '#fd7e14',
-            descricao: `Este é o posto com mais problemas. Adicionando profissionais para cobrir as ${worstPosto[1]} especialidades críticas, o score da rede saltaria de ${scoreBefore} para ${scoreAfter} pontos. Priorize as especialidades com maior excesso sobre o prazo ANS.`,
+            descricao: `Este é o posto com mais problemas. Adicionando profissionais para cobrir as ${worstPosto[1]} especialidades críticas, o score saltaria de ${scoreBefore} para ${scoreAfter} pontos. Priorize as especialidades com maior excesso sobre o prazo ANS.`,
             before: scoreBefore, after: scoreAfter,
             labelBefore: 'Score atual', labelAfter: 'Score projetado'
         });
@@ -1891,6 +1897,27 @@ function calcScore(data) {
     const ok = data.filter(d => d.Status === 'OK').length;
     const alerta = data.filter(d => d.Status === 'ALERTA').length;
     return Math.round(((ok * 1.0 + alerta * 0.5) / data.length) * 100);
+}
+
+// Retorna texto contextual baseado na seleção de postos
+// "na rede" se Todos/Altamiro/Couto, "no posto A" se 1, "nos postos A e B" se >1
+function simContexto() {
+    const sp = selectedPostos;
+    const allowed = getAllowedPostos();
+    const altOk = GROUP_ALTAMIRO.filter(p => allowed.includes(p));
+    const coutoOk = GROUP_COUTO.filter(p => allowed.includes(p));
+    const isAll = sp.length === 0;
+    const isAltamiro = sp.length === altOk.length && altOk.every(p => sp.includes(p));
+    const isCouto = sp.length === coutoOk.length && coutoOk.every(p => sp.includes(p));
+
+    if (isAll) return { loc: 'na rede', locDe: 'da rede', titulo: 'da Rede', label: 'Na Rede' };
+    if (isAltamiro) return { loc: 'no grupo Altamiro', locDe: 'do grupo Altamiro', titulo: 'do Grupo Altamiro', label: 'No Grupo Altamiro' };
+    if (isCouto) return { loc: 'no grupo Couto', locDe: 'do grupo Couto', titulo: 'do Grupo Couto', label: 'No Grupo Couto' };
+    if (sp.length === 1) {
+        const nome = postosInfo[sp[0]] ? postosInfo[sp[0]].nome : (POSTO_NOMES[sp[0]]||sp[0]);
+        return { loc: `no posto ${nome} (${sp[0]})`, locDe: `do posto ${nome} (${sp[0]})`, titulo: `do Posto ${sp[0]}`, label: `No Posto ${sp[0]}` };
+    }
+    return { loc: `nos postos ${sp.join(', ')}`, locDe: `dos postos ${sp.join(', ')}`, titulo: `dos Postos ${sp.join(', ')}`, label: `Nos Postos ${sp.join(', ')}` };
 }
 
 function renderSimRecomendacoes(data) {
