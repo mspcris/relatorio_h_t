@@ -30,6 +30,7 @@ SQL_DIR = os.path.join(BASE_DIR, "sql_notas_rps")
 SQL_NOTAS_PATH     = os.path.join(SQL_DIR, "notas_emitidas.sql")
 SQL_NOTAS_DIA_PATH = os.path.join(SQL_DIR, "notas_emitidas_diario.sql")
 SQL_RPS_PATH       = os.path.join(SQL_DIR, "rps_pendentes.sql")
+SQL_IND_PATH       = os.path.join(SQL_DIR, "notas_individuais.sql")
 
 OUT_JSON_DIR = os.path.join(BASE_DIR, "json_notas_rps")
 os.makedirs(OUT_JSON_DIR, exist_ok=True)
@@ -139,6 +140,9 @@ def month_iter(start: date, end_exclusive: date):
 def json_path(posto: str, ym: str) -> str:
     return os.path.join(OUT_JSON_DIR, f"{posto}_notas_rps_{ym}.json")
 
+def json_ind_path(posto: str, ym: str) -> str:
+    return os.path.join(OUT_JSON_DIR, f"{posto}_notas_ind_{ym}.json")
+
 def should_write(out_path: str, force: bool) -> bool:
     if force:
         return True
@@ -179,12 +183,13 @@ def run_query(engine, sql_txt: str, ini: date, fim: date, retries: int = 4) -> p
 
 def write_outputs(posto: str, ym: str, ini: date, fim: date,
                   df_notas: pd.DataFrame, df_rps: pd.DataFrame,
-                  df_notas_dia: pd.DataFrame):
-    # converte data_emissao para string ISO (pode vir como date/Timestamp do pandas)
-    if "data_emissao" in df_notas_dia.columns:
-        df_notas_dia = df_notas_dia.copy()
-        df_notas_dia["data_emissao"] = df_notas_dia["data_emissao"].astype(str)
+                  df_notas_dia: pd.DataFrame, df_ind: pd.DataFrame):
+    # converte data_emissao para string ISO
+    for df_ref in [df_notas_dia, df_ind]:
+        if "data_emissao" in df_ref.columns:
+            df_ref["data_emissao"] = df_ref["data_emissao"].astype(str)
 
+    # JSON resumo (mantém estrutura original)
     payload = {
         "posto": posto,
         "periodo": {"ym": ym, "ini": ini.isoformat(), "fim": fim.isoformat()},
@@ -193,32 +198,39 @@ def write_outputs(posto: str, ym: str, ini: date, fim: date,
         "rps_pendentes": df_rps.to_dict(orient="records"),
         "gerado_em": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
     }
-
     out_json = json_path(posto, ym)
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     _set_mtime(out_json)
 
-    print(f"[{posto}] OK {ym} notas={len(df_notas)} notas_dia={len(df_notas_dia)} rps={len(df_rps)} -> {os.path.relpath(out_json, BASE_DIR)}")
+    # JSON notas individuais (separado — pode ser grande)
+    payload_ind = {
+        "posto": posto,
+        "periodo": {"ym": ym, "ini": ini.isoformat(), "fim": fim.isoformat()},
+        "notas": df_ind.to_dict(orient="records"),
+        "gerado_em": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+    }
+    out_ind = json_ind_path(posto, ym)
+    with open(out_ind, "w", encoding="utf-8") as f:
+        json.dump(payload_ind, f, ensure_ascii=False, indent=2)
+    _set_mtime(out_ind)
+
+    print(f"[{posto}] OK {ym} notas={len(df_notas)} notas_dia={len(df_notas_dia)} rps={len(df_rps)} ind={len(df_ind)} -> {os.path.relpath(out_json, BASE_DIR)}")
 
 
 def run_incremental_all_postos(postos=None, force_months=None):
-    if not os.path.exists(SQL_NOTAS_PATH):
-        raise FileNotFoundError(f"SQL não encontrado: {SQL_NOTAS_PATH}")
-    if not os.path.exists(SQL_NOTAS_DIA_PATH):
-        raise FileNotFoundError(f"SQL não encontrado: {SQL_NOTAS_DIA_PATH}")
-    if not os.path.exists(SQL_RPS_PATH):
-        raise FileNotFoundError(f"SQL não encontrado: {SQL_RPS_PATH}")
+    for p in [SQL_NOTAS_PATH, SQL_NOTAS_DIA_PATH, SQL_RPS_PATH, SQL_IND_PATH]:
+        if not os.path.exists(p):
+            raise FileNotFoundError(f"SQL não encontrado: {p}")
 
     sql_notas     = load_sql_strip_go(SQL_NOTAS_PATH)
     sql_notas_dia = load_sql_strip_go(SQL_NOTAS_DIA_PATH)
     sql_rps       = load_sql_strip_go(SQL_RPS_PATH)
-    if not sql_notas:
-        raise RuntimeError(f"SQL vazio: {SQL_NOTAS_PATH}")
-    if not sql_notas_dia:
-        raise RuntimeError(f"SQL vazio: {SQL_NOTAS_DIA_PATH}")
-    if not sql_rps:
-        raise RuntimeError(f"SQL vazio: {SQL_RPS_PATH}")
+    sql_ind       = load_sql_strip_go(SQL_IND_PATH)
+    for sql, path in [(sql_notas, SQL_NOTAS_PATH), (sql_notas_dia, SQL_NOTAS_DIA_PATH),
+                      (sql_rps, SQL_RPS_PATH), (sql_ind, SQL_IND_PATH)]:
+        if not sql:
+            raise RuntimeError(f"SQL vazio: {path}")
 
     conns = build_conns_from_env(postos=postos)
     if not conns:
@@ -269,7 +281,13 @@ def run_incremental_all_postos(postos=None, force_months=None):
                 continue
 
             try:
-                write_outputs(posto, ym, ini, fim, df_notas, df_rps, df_notas_dia)
+                df_ind = run_query(engine, sql_ind, ini, fim, retries=4)
+            except Exception as e:
+                print(f"[{posto}] ERRO notas_ind {ym}: {e} (pulando)")
+                continue
+
+            try:
+                write_outputs(posto, ym, ini, fim, df_notas, df_rps, df_notas_dia, df_ind)
             except Exception as e:
                 print(f"[{posto}] ERRO salvar {ym}: {e} (pulando)")
                 continue

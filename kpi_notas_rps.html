@@ -678,12 +678,17 @@
     window.addEventListener('DOMContentLoaded', boot);
 
     // ============================================================
-    // ABA: VER REGISTROS
+    // ABA: VER REGISTROS  (notas individuais — uma por linha)
     // ============================================================
     let regPosto   = null;
-    let regOrigem  = null;   // origem/empresa selecionada
+    let regOrigem  = null;
     let regSortCol = 'data';
     let regSortDir = 'asc';
+    let regPage    = 1;
+    const REG_PAGE_SIZE = 200;
+
+    // cache separado para notas individuais  { "POSTO_ym": [rows...] }
+    const CACHE_IND = {};
 
     const POSTO_NOMES = {
       A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho',
@@ -698,13 +703,30 @@
       'Laboratorio':   'Laboratório'
     };
 
-    // Retorna origens distintas disponíveis para o posto atual
+    function indJsonUrl(posto, ym) {
+      return `/json_notas_rps/${posto}_notas_ind_${ym}.json`;
+    }
+
+    async function loadIndividualNotes(posto, ym) {
+      const key = `${posto}_${ym}`;
+      if (CACHE_IND[key]) return CACHE_IND[key];
+      try {
+        const r = await fetch(indJsonUrl(posto, ym), { cache: 'no-store' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        CACHE_IND[key] = Array.isArray(d.notas) ? d.notas : [];
+      } catch {
+        CACHE_IND[key] = [];
+      }
+      return CACHE_IND[key];
+    }
+
+    // Retorna origens disponíveis para o posto atual (do cache individual)
     function getRegOrigens() {
-      if (!regPosto) return [];
-      const payload = CACHE[ymSel]?.[regPosto];
-      if (!payload || !Array.isArray(payload.notas_por_dia)) return [];
+      const key = `${regPosto}_${ymSel}`;
+      const rows = CACHE_IND[key] || [];
       const seen = new Set();
-      payload.notas_por_dia.forEach(r => { if (r.origem) seen.add(r.origem); });
+      rows.forEach(r => { if (r.origem) seen.add(r.origem); });
       return [...seen].sort();
     }
 
@@ -718,11 +740,15 @@
       }).join('');
       wrap.innerHTML = `<label>Clínica:</label>${btns}`;
       wrap.querySelectorAll('.reg-posto-btn').forEach(btn => {
-        btn.onclick = () => {
+        btn.onclick = async () => {
           regPosto = btn.dataset.posto;
-          regOrigem = null; // reset empresa ao trocar posto
+          regOrigem = null;
+          regPage = 1;
           wrap.querySelectorAll('.reg-posto-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
+          setRegLoading(true);
+          await loadIndividualNotes(regPosto, ymSel);
+          setRegLoading(false);
           buildRegEmpresaSelector();
           renderRegistros();
         };
@@ -734,7 +760,6 @@
       if (!wrap) return;
       const origens = getRegOrigens();
       if (!origens.length) { wrap.innerHTML = ''; return; }
-      // Auto-seleciona a primeira se nenhuma selecionada
       if (!regOrigem || !origens.includes(regOrigem)) regOrigem = origens[0];
       const btns = origens.map(o => {
         const label = ORIGEM_LABEL[o] || o;
@@ -745,6 +770,7 @@
       wrap.querySelectorAll('.reg-posto-btn').forEach(btn => {
         btn.onclick = () => {
           regOrigem = btn.dataset.origem;
+          regPage = 1;
           wrap.querySelectorAll('.reg-posto-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           renderRegistros();
@@ -752,11 +778,17 @@
       });
     }
 
+    function setRegLoading(on) {
+      const tbody = el('#tblRegBody');
+      if (!tbody) return;
+      if (on) tbody.innerHTML = `<tr><td colspan="6" class="reg-empty">Carregando...</td></tr>`;
+    }
+
     function getRegRows() {
       if (!regPosto || !regOrigem) return [];
-      const payload = CACHE[ymSel]?.[regPosto];
-      if (!payload || !Array.isArray(payload.notas_por_dia)) return [];
-      return payload.notas_por_dia.filter(r => {
+      const key = `${regPosto}_${ymSel}`;
+      const rows = CACHE_IND[key] || [];
+      return rows.filter(r => {
         if (r.origem !== regOrigem) return false;
         if (r.data_emissao) {
           if (r.data_emissao < dataIni || r.data_emissao > dataFim) return false;
@@ -772,10 +804,52 @@
           return regSortDir === 'asc' ? cmp : -cmp;
         }
         if (regSortCol === 'valor') {
-          const diff = num(a.valor_notas_emitidas) - num(b.valor_notas_emitidas);
+          const diff = num(a.valor) - num(b.valor);
+          return regSortDir === 'asc' ? diff : -diff;
+        }
+        if (regSortCol === 'nf') {
+          const diff = num(a.NotaFiscal) - num(b.NotaFiscal);
           return regSortDir === 'asc' ? diff : -diff;
         }
         return 0;
+      });
+    }
+
+    function renderPagination(total, page, pageSize) {
+      const wrap = el('#regPagination');
+      if (!wrap) return;
+      const totalPages = Math.ceil(total / pageSize);
+      if (totalPages <= 1) { wrap.innerHTML = ''; return; }
+
+      const maxBtn = 7;
+      let pages = [];
+      if (totalPages <= maxBtn) {
+        pages = Array.from({length: totalPages}, (_, i) => i + 1);
+      } else {
+        pages = [1];
+        let lo = Math.max(2, page - 2), hi = Math.min(totalPages - 1, page + 2);
+        if (lo > 2) pages.push('...');
+        for (let i = lo; i <= hi; i++) pages.push(i);
+        if (hi < totalPages - 1) pages.push('...');
+        pages.push(totalPages);
+      }
+
+      const btnClass = (p) => p === page ? 'btn btn-sm btn-primary mr-1 mb-1' : 'btn btn-sm btn-outline-secondary mr-1 mb-1';
+      wrap.innerHTML = `
+        <div class="d-flex align-items-center flex-wrap mt-2">
+          <span class="mr-2 small text-muted">Página ${page} de ${totalPages} (${fmtInt.format(total)} notas)</span>
+          <button class="btn btn-sm btn-outline-secondary mr-1 mb-1" data-pg="${page-1}" ${page===1?'disabled':''}>‹</button>
+          ${pages.map(p => p === '...' ? `<span class="mr-1">…</span>` : `<button class="${btnClass(p)} mb-1" data-pg="${p}">${p}</button>`).join('')}
+          <button class="btn btn-sm btn-outline-secondary mr-1 mb-1" data-pg="${page+1}" ${page===totalPages?'disabled':''}>›</button>
+        </div>`;
+      wrap.querySelectorAll('button[data-pg]').forEach(btn => {
+        btn.onclick = () => {
+          const pg = Number(btn.dataset.pg);
+          if (pg < 1 || pg > totalPages) return;
+          regPage = pg;
+          renderRegistros();
+          el('#tab-registros')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
       });
     }
 
@@ -791,75 +865,73 @@
       if (!tbody) return;
 
       if (!regPosto) {
-        tbody.innerHTML = `<tr><td colspan="7" class="reg-empty">Selecione uma clínica acima.</td></tr>`;
-        tfoot.innerHTML = '';
-        if (info) info.textContent = '';
-        return;
+        tbody.innerHTML = `<tr><td colspan="6" class="reg-empty">Selecione uma clínica acima.</td></tr>`;
+        tfoot.innerHTML = ''; el('#regPagination').innerHTML = ''; if (info) info.textContent = ''; return;
       }
-
       if (!regOrigem) {
-        tbody.innerHTML = `<tr><td colspan="7" class="reg-empty">Selecione a empresa acima.</td></tr>`;
-        tfoot.innerHTML = '';
-        if (info) info.textContent = '';
-        return;
+        tbody.innerHTML = `<tr><td colspan="6" class="reg-empty">Selecione a empresa acima.</td></tr>`;
+        tfoot.innerHTML = ''; el('#regPagination').innerHTML = ''; if (info) info.textContent = ''; return;
       }
 
-      const rows = getRegRows();
+      const rows   = getRegRows();
       const sorted = sortRegRows(rows);
+      const total  = sorted.length;
+      const totalPages = Math.ceil(total / REG_PAGE_SIZE);
+      if (regPage > totalPages && totalPages > 0) regPage = totalPages;
 
-      // Indicador de ordenação no cabeçalho
+      // Indicador de ordenação
       el('#tblRegistros')?.querySelectorAll('thead th[data-col]').forEach(th => {
         th.classList.remove('sorted-asc', 'sorted-desc');
         if (th.dataset.col === regSortCol) th.classList.add(regSortDir === 'asc' ? 'sorted-asc' : 'sorted-desc');
       });
 
-      if (sorted.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="reg-empty">Nenhum registro encontrado para o período selecionado.</td></tr>`;
-        tfoot.innerHTML = '';
+      if (total === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="reg-empty">Nenhuma nota encontrada para o período.</td></tr>`;
+        tfoot.innerHTML = ''; el('#regPagination').innerHTML = '';
         if (info) info.textContent = '';
         return;
       }
 
-      let totQtd = 0, totEmit = 0, totCancQtd = 0, totCancVal = 0, totContQtd = 0, totContVal = 0;
+      // Página atual
+      const start = (regPage - 1) * REG_PAGE_SIZE;
+      const page  = sorted.slice(start, start + REG_PAGE_SIZE);
 
-      tbody.innerHTML = sorted.map(r => {
-        const data  = r.data_emissao ? r.data_emissao.split('-').reverse().join('/') : '—';
-        const qtd   = num(r.qtd_notas);
-        const emit  = num(r.valor_notas_emitidas);
-        const cancQ = num(r.qtd_notas_canceladas);
-        const cancV = num(r.valor_notas_canceladas);
-        const contQ = num(r.qtd_notas_contabilizadas);
-        const contV = num(r.valor_notas_contabilizadas);
+      let totVal = 0, totCanc = 0;
+      sorted.forEach(r => {
+        totVal += num(r.valor);
+        if ((r.Cancelada || '').toString().toLowerCase() === 'sim') totCanc++;
+      });
 
-        totQtd += qtd; totEmit += emit; totCancQtd += cancQ;
-        totCancVal += cancV; totContQtd += contQ; totContVal += contV;
-
-        const rowClass = cancQ > 0 ? 'table-warning' : '';
+      tbody.innerHTML = page.map(r => {
+        const data    = r.data_emissao ? r.data_emissao.split('-').reverse().join('/') : '—';
+        const nf      = r.NotaFiscal || '—';
+        const cliente = r.Cliente || '—';
+        const cpfcnpj = (r.cpf && r.cpf.trim()) ? r.cpf.trim() : (r.cnpj && r.cnpj.trim()) ? r.cnpj.trim() : '—';
+        const valor   = num(r.valor);
+        const canc    = (r.Cancelada || '').toString().toLowerCase() === 'sim';
+        const rowClass = canc ? 'table-warning' : '';
+        const cancBadge = canc ? '<span class="badge badge-danger">Cancelada</span>' : '';
         return `<tr class="${rowClass}">
           <td class="small-td">${data}</td>
-          <td class="text-right small-td">${fmtInt.format(qtd)}</td>
-          <td class="text-right small-td">R$ ${fmt2.format(emit)}</td>
-          <td class="text-right small-td">${cancQ > 0 ? `<span class="text-danger font-weight-bold">${fmtInt.format(cancQ)}</span>` : '<span class="text-muted">—</span>'}</td>
-          <td class="text-right small-td">${cancV > 0 ? `<span class="text-danger">R$ ${fmt2.format(cancV)}</span>` : '<span class="text-muted">—</span>'}</td>
-          <td class="text-right small-td">${fmtInt.format(contQ)}</td>
-          <td class="text-right small-td">R$ ${fmt2.format(contV)}</td>
+          <td class="small-td text-right">${nf}</td>
+          <td>${cliente}</td>
+          <td class="small-td">${cpfcnpj}</td>
+          <td class="text-right small-td">R$ ${fmt2.format(valor)}</td>
+          <td class="text-center small-td">${cancBadge}</td>
         </tr>`;
       }).join('');
-
-      tfoot.innerHTML = `<tr class="bg-light">
-        <td><strong>TOTAL — ${sorted.length} dias</strong></td>
-        <td class="text-right"><strong>${fmtInt.format(totQtd)}</strong></td>
-        <td class="text-right"><strong>R$ ${fmt2.format(totEmit)}</strong></td>
-        <td class="text-right">${totCancQtd > 0 ? `<span class="text-danger"><strong>${fmtInt.format(totCancQtd)}</strong></span>` : '—'}</td>
-        <td class="text-right">${totCancVal > 0 ? `<span class="text-danger"><strong>R$ ${fmt2.format(totCancVal)}</strong></span>` : '—'}</td>
-        <td class="text-right"><strong>${fmtInt.format(totContQtd)}</strong></td>
-        <td class="text-right"><strong>R$ ${fmt2.format(totContVal)}</strong></td>
-      </tr>`;
 
       const nomePosto = POSTO_NOMES[regPosto] || regPosto;
       const nomeEmp   = ORIGEM_LABEL[regOrigem] || regOrigem;
       const fmtD = s => s ? s.split('-').reverse().join('/') : '';
-      if (info) info.textContent = `${nomePosto} (${regPosto}) · ${nomeEmp} · ${fmtD(dataIni)} a ${fmtD(dataFim)} · ${sorted.length} registros`;
+      tfoot.innerHTML = `<tr class="bg-light">
+        <td colspan="4"><strong>TOTAL — ${fmtInt.format(total)} notas${totCanc > 0 ? ` (${totCanc} canceladas)` : ''}</strong></td>
+        <td class="text-right"><strong>R$ ${fmt2.format(totVal)}</strong></td>
+        <td></td>
+      </tr>`;
+      if (info) info.textContent = `${nomePosto} (${regPosto}) · ${nomeEmp} · ${fmtD(dataIni)} a ${fmtD(dataFim)}`;
+
+      renderPagination(total, regPage, REG_PAGE_SIZE);
     }
 
     // Clique nos cabeçalhos da tabela para ordenar
@@ -871,15 +943,16 @@
             regSortDir = regSortDir === 'asc' ? 'desc' : 'asc';
           } else {
             regSortCol = col;
-            regSortDir = col === 'data' ? 'asc' : 'desc';
+            regSortDir = col === 'data' || col === 'nf' ? 'asc' : 'desc';
           }
+          regPage = 1;
           renderRegistros();
         };
       });
 
       // Tabs navegação
       document.querySelectorAll('.main-tabs .tab-btn').forEach(btn => {
-        btn.onclick = () => {
+        btn.onclick = async () => {
           const tab = btn.dataset.tab;
           document.querySelectorAll('.main-tabs .tab-btn').forEach(b => b.classList.remove('active'));
           document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
@@ -887,6 +960,9 @@
           el(`#tab-${tab}`)?.classList.add('active');
           if (tab === 'registros') {
             if (!regPosto && POSTOS.length) regPosto = POSTOS[0];
+            setRegLoading(true);
+            await loadIndividualNotes(regPosto, ymSel);
+            setRegLoading(false);
             renderRegistros();
           }
         };
@@ -894,7 +970,7 @@
     });
 
     function updateSortBtns() {
-      // mantido por compatibilidade (não há mais botões de sort separados)
+      // mantido por compatibilidade
     }
   </script>
 </head>
@@ -1092,25 +1168,26 @@
               <!-- preenchido por JS após escolha do posto -->
             </div>
 
-            <div id="regInfo" class="mb-2"></div>
+            <div id="regInfo" class="mb-1 text-muted mini"></div>
 
             <div class="table-responsive">
               <table class="table table-striped table-sm table-hover mb-0" id="tblRegistros">
                 <thead class="thead-light">
                   <tr>
-                    <th data-col="data" style="cursor:pointer">Data ▾</th>
-                    <th class="text-right" data-col="qtd" style="cursor:pointer">Qtd</th>
-                    <th class="text-right" data-col="valor" style="cursor:pointer">Emitido (R$)</th>
-                    <th class="text-right" data-col="canc_qtd">Qtd Canc</th>
-                    <th class="text-right" data-col="canc_val">Val Canc (R$)</th>
-                    <th class="text-right" data-col="cont_qtd">Cont</th>
-                    <th class="text-right" data-col="cont_val">Val Cont (R$)</th>
+                    <th data-col="data" style="cursor:pointer">Data</th>
+                    <th data-col="nf" class="text-right" style="cursor:pointer">NF #</th>
+                    <th data-col="cliente" style="cursor:pointer">Cliente</th>
+                    <th>CPF / CNPJ</th>
+                    <th data-col="valor" class="text-right" style="cursor:pointer">Valor (R$)</th>
+                    <th class="text-center">Status</th>
                   </tr>
                 </thead>
                 <tbody id="tblRegBody"></tbody>
                 <tfoot id="tblRegFoot" style="font-weight:600; border-top:2px solid #dee2e6;"></tfoot>
               </table>
             </div>
+
+            <div id="regPagination"></div>
 
           </div>
         </div>
