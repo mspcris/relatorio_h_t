@@ -1999,26 +1999,26 @@ function renderSimCenarios(data) {
         });
     }
 
-    // Cenário 2: "E se o posto mais crítico recebesse reforço?"
+    // Cenário 2+: "E se cada posto crítico recebesse reforço?" (top 3 piores)
     const criticosByPosto = {};
     data.filter(d => d.Status === 'CRITICO' || d.Status === 'SEM_VAGA').forEach(d => {
         criticosByPosto[d.posto] = (criticosByPosto[d.posto] || 0) + 1;
     });
-    const worstPosto = Object.entries(criticosByPosto).sort((a,b) => b[1]-a[1])[0];
-    if (worstPosto) {
-        const nome = postosInfo[worstPosto[0]] ? postosInfo[worstPosto[0]].nome : (POSTO_NOMES[worstPosto[0]]||worstPosto[0]);
+    const worstPostos = Object.entries(criticosByPosto).sort((a,b) => b[1]-a[1]).slice(0, 3);
+    worstPostos.forEach(([postoKey, count], idx) => {
+        const nome = postosInfo[postoKey] ? postosInfo[postoKey].nome : (POSTO_NOMES[postoKey]||postoKey);
         const scoreBefore = calcScore(data);
-        const dataFixed = data.map(d => (d.posto === worstPosto[0] && (d.Status === 'CRITICO' || d.Status === 'SEM_VAGA')) ? {...d, Status: 'ALERTA'} : d);
+        const dataFixed = data.map(d => (d.posto === postoKey && (d.Status === 'CRITICO' || d.Status === 'SEM_VAGA')) ? {...d, Status: 'ALERTA'} : d);
         const scoreAfter = calcScore(dataFixed);
         cenarios.push({
-            titulo: `Reforçar o posto ${nome} (${worstPosto[0]})`,
-            badge: `${worstPosto[1]} especialidades em risco`,
-            badgeColor: '#fd7e14',
-            descricao: `Este é o posto com mais problemas. Adicionando profissionais para cobrir as ${worstPosto[1]} especialidades críticas, o score saltaria de ${scoreBefore} para ${scoreAfter} pontos. Priorize as especialidades com maior excesso sobre o prazo ANS.`,
+            titulo: `Reforçar o posto ${nome} (${postoKey})`,
+            badge: `${count} especialidades em risco`,
+            badgeColor: idx === 0 ? '#dc3545' : '#fd7e14',
+            descricao: `${idx === 0 ? 'Posto com mais problemas. ' : ''}Adicionando profissionais para cobrir as ${count} especialidades críticas deste posto, o score saltaria de ${scoreBefore} para ${scoreAfter} pontos. Priorize as especialidades com maior excesso sobre o prazo ANS.`,
             before: scoreBefore, after: scoreAfter,
             labelBefore: 'Score atual', labelAfter: 'Score projetado'
         });
-    }
+    });
 
     // Cenário 3: "E se todas as ALERTA fossem trazidas para OK?"
     const alertas = data.filter(d => d.Status === 'ALERTA');
