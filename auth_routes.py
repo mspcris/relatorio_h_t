@@ -1579,28 +1579,15 @@ def tef_dashboard():
         negad_hoje    = hoje_row[2] or 0
         valor_hoje    = hoje_row[3] or 0.0
 
-        # Tendência por dia (se período = 1 dia, mostra últimos 7 dias p/ contexto)
-        trend_ini = data_ini
-        if data_ini == data_fim:
-            trend_ini = f"date('{data_fim}', '-6 days')"
-            trend7 = conn.execute(f"""
-                SELECT date(datahora) AS dia,
-                       SUM(CASE WHEN aprovado=1 THEN 1 ELSE 0 END) AS aprovadas,
-                       SUM(CASE WHEN aprovado=0 THEN 1 ELSE 0 END) AS negadas
-                FROM ind_tef
-                WHERE date(datahora) >= date(?, '-6 days')
-                  AND date(datahora) <= ? {posto_filter}
-                GROUP BY dia ORDER BY dia
-            """, [data_fim, data_fim] + posto_params).fetchall()
-        else:
-            trend7 = conn.execute(f"""
-                SELECT date(datahora) AS dia,
-                       SUM(CASE WHEN aprovado=1 THEN 1 ELSE 0 END) AS aprovadas,
-                       SUM(CASE WHEN aprovado=0 THEN 1 ELSE 0 END) AS negadas
-                FROM ind_tef
-                WHERE date(datahora) BETWEEN ? AND ? {posto_filter}
-                GROUP BY dia ORDER BY dia
-            """, [data_ini, data_fim] + posto_params).fetchall()
+        # Tendência por dia no período
+        trend7 = conn.execute(f"""
+            SELECT date(datahora) AS dia,
+                   SUM(CASE WHEN aprovado=1 THEN 1 ELSE 0 END) AS aprovadas,
+                   SUM(CASE WHEN aprovado=0 THEN 1 ELSE 0 END) AS negadas
+            FROM ind_tef
+            WHERE date(datahora) BETWEEN ? AND ? {posto_filter}
+            GROUP BY dia ORDER BY dia
+        """, [data_ini, data_fim] + posto_params).fetchall()
 
         # Top erros de negação no período
         top_erros = conn.execute(f"""
