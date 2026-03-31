@@ -335,6 +335,25 @@
         .sim-filter-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; padding: 10px 16px; background: #f8fafc; border: 1px solid #e3e8ef; border-radius: 8px; }
         .sim-filter-bar label { font-size: 0.82rem; font-weight: 600; color: #555; margin: 0; }
         .sim-filter-bar select { font-size: 0.82rem; padding: 4px 10px; border-radius: 6px; border: 1px solid #d0d7e2; }
+
+        /* ── Cross-reference section ── */
+        .cross-corr-card {
+            border-radius: 10px; padding: 14px 18px; margin-bottom: 10px;
+            display: flex; align-items: flex-start; gap: 12px;
+            border-left: 4px solid; background: #fff;
+        }
+        .cross-corr-positiva { border-color: #28a745; background: #f0fff4; }
+        .cross-corr-negativa { border-color: #dc3545; background: #fff5f5; }
+        .cross-corr-neutra   { border-color: #6c757d; background: #f8f9fa; }
+        .cross-corr-atencao  { border-color: #fd7e14; background: #fffbf0; }
+        .cross-corr-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 2px; }
+        .cross-corr-body { flex: 1; }
+        .cross-corr-title { font-weight: 700; font-size: 0.92rem; margin-bottom: 3px; }
+        .cross-corr-text  { font-size: 0.82rem; color: #555; line-height: 1.45; }
+        .cross-signal { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+        .cross-signal-red { background: #dc3545; }
+        .cross-signal-yellow { background: #fd7e14; }
+        .cross-signal-green { background: #28a745; }
     </style>
 </head>
 
@@ -748,6 +767,138 @@
                 </div>
             </div>
 
+            <!-- ══════════════════════════════════════════════════════════════
+                 SEÇÃO: CORRELAÇÕES COM INDICADORES OPERACIONAIS
+                 Cruza dados de qualidade da agenda com KPIs de negócio
+                 ══════════════════════════════════════════════════════════════ -->
+            <div class="card" id="crossRefSection"
+                 data-iso-section="cross_reference_operational_indicators"
+                 data-iso-description="Cross-references medical agenda quality (slot availability, wait times, ANS compliance) with operational KPIs: client churn/retention, monthly revenues (mensalidades), sales volume, medical consultation attendance rates, and sales targets achievement. All metrics are filtered by the same posto selection active in the page."
+            >
+                <div class="card-header" style="background: linear-gradient(135deg, #1a2940 0%, #2c5f8a 100%); color: #fff; border-radius: 10px 10px 0 0;">
+                    <h3 class="card-title mb-0" style="color:#fff;">
+                        <i class="fas fa-project-diagram mr-2"></i>Correlações Operacionais — Impacto da Agenda no Negócio
+                    </h3>
+                    <div style="font-size: 0.78rem; color: rgba(255,255,255,0.6); margin-top: 2px;">
+                        Cruzamento automático com cancelamentos, receitas, vendas, consultas e metas
+                    </div>
+                </div>
+                <div class="card-body p-3">
+
+                    <!-- Loading state -->
+                    <div id="crossRefLoading" class="text-center py-4">
+                        <i class="fas fa-sync fa-spin fa-2x text-muted mb-2" style="display:block;"></i>
+                        <span class="text-muted">Carregando dados cruzados...</span>
+                    </div>
+
+                    <!-- Content (hidden until loaded) -->
+                    <div id="crossRefContent" style="display:none;">
+
+                        <!-- KPI cards resumo do cruzamento -->
+                        <div class="sim-kpi-grid mb-3" id="crossKpiGrid"
+                             data-iso-description="Summary KPI cards: total clients (MRR count), monthly revenue, churn rate at 3 months, consultation no-show rate, sales count this month, percentage of postos meeting sales targets."
+                        ></div>
+
+                        <!-- Alertas de correlação -->
+                        <div class="sim-section-title"><i class="fas fa-link mr-1"></i>Correlações Detectadas</div>
+                        <div id="crossCorrelacoes" class="mb-4"
+                             data-iso-description="Auto-detected correlations between agenda quality and business outcomes. Each alert describes a relationship: e.g., postos with critical specialties tend to have higher churn, lower consultation attendance, or miss sales targets."
+                        ></div>
+
+                        <!-- Gráficos lado a lado -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h3 class="card-title mb-0"><i class="fas fa-user-minus mr-2 text-danger"></i>Saúde da Agenda vs Churn</h3>
+                                    </div>
+                                    <div class="card-body" style="height: 280px;"
+                                         data-iso-description="Scatter/bar chart: X-axis = postos, Y-axis left = agenda health score (0-100), Y-axis right = churn rate (%). Shows inverse correlation: postos with lower health scores tend to have higher churn."
+                                    >
+                                        <canvas id="crossChartAgendaChurn"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h3 class="card-title mb-0"><i class="fas fa-chart-line mr-2 text-success"></i>Saúde da Agenda vs Receita</h3>
+                                    </div>
+                                    <div class="card-body" style="height: 280px;"
+                                         data-iso-description="Bar chart: X-axis = postos, Y-axis left = agenda health score (0-100), Y-axis right = MRR (monthly recurring revenue, count of active mensalidades). Higher health tends to correlate with higher revenue base."
+                                    >
+                                        <canvas id="crossChartAgendaReceita"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h3 class="card-title mb-0"><i class="fas fa-stethoscope mr-2 text-primary"></i>Saúde da Agenda vs Faltas em Consultas</h3>
+                                    </div>
+                                    <div class="card-body" style="height: 280px;"
+                                         data-iso-description="Chart comparing agenda health with consultation no-show rates per posto. Hypothesis: poor agenda quality leads to more missed appointments as patients seek care elsewhere."
+                                    >
+                                        <canvas id="crossChartAgendaFaltas"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h3 class="card-title mb-0"><i class="fas fa-bullseye mr-2 text-warning"></i>Saúde da Agenda vs Metas de Vendas</h3>
+                                    </div>
+                                    <div class="card-body" style="height: 280px;"
+                                         data-iso-description="Chart comparing agenda health with sales target achievement rate per posto. Postos with better availability may attract more new clients."
+                                    >
+                                        <canvas id="crossChartAgendaMetas"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tabela completa de cruzamento -->
+                        <div class="sim-section-title"><i class="fas fa-table mr-1"></i>Painel Consolidado por Posto</div>
+                        <div class="table-responsive">
+                            <table class="table sim-gap-table" id="crossTable"
+                                   data-iso-description="Consolidated table per posto: health score (agenda quality 0-100), critical specialty count, MRR count, churn 3m %, no-show %, sales count, target achievement %. Allows row-by-row comparison."
+                            >
+                                <thead>
+                                    <tr>
+                                        <th>Posto</th>
+                                        <th>Saúde Agenda</th>
+                                        <th>Críticos</th>
+                                        <th>Clientes (MRR)</th>
+                                        <th>Churn 3m</th>
+                                        <th>Consultas (mês)</th>
+                                        <th>% Faltas</th>
+                                        <th>Vendas (mês)</th>
+                                        <th>Meta Vendas</th>
+                                        <th>Correlação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="crossTableBody">
+                                    <tr><td colspan="10" class="text-center text-muted">Carregando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Parecer Técnico -->
+                        <div class="sim-section-title mt-4"><i class="fas fa-file-medical-alt mr-1"></i>Parecer Técnico Automatizado</div>
+                        <div id="crossParecer" class="mb-3"
+                             data-iso-description="Auto-generated technical assessment of the operational impact of agenda quality on business metrics. Written in professional report format with evidence-based conclusions."
+                             style="background: linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%); border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; font-size: 0.88rem; line-height: 1.65; color: #333;"
+                        >
+                            Gerando parecer...
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
         </section>
     </div>
 </div>
@@ -992,6 +1143,7 @@ function renderAll() {
     renderChartDistStatus(data);
     renderTop10(data);
     renderSimulador();
+    if (crossLoaded) renderCrossRef();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2124,19 +2276,647 @@ function renderSimBarDeficit(data) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CORRELAÇÕES OPERACIONAIS — DADOS CRUZADOS
+// ─────────────────────────────────────────────────────────────────────────────
+let crossData = { growth: null, fidelizacao: null, consultas: null, vendas: null, mensalidades: null };
+let crossCharts = { churn: null, receita: null, faltas: null, metas: null };
+let crossLoaded = false;
+
+async function loadCrossData() {
+    const urls = {
+        growth:       '/json_consolidado/growth_dashboard.json',
+        fidelizacao:  '/json_consolidado/fidelizacao_cliente.json',
+        consultas:    '/json_consolidado/consultas_mensal_status_consolidado.json',
+        vendas:       '/json_vendas/vendas_mensal.json',
+        mensalidades: '/json_consolidado/consolidado_mensal_por_posto.json',
+    };
+    const promises = Object.entries(urls).map(async ([key, url]) => {
+        try {
+            const r = await fetch(url, { cache: 'no-store' });
+            if (!r.ok) return;
+            crossData[key] = await r.json();
+        } catch(e) { /* silently skip unavailable data */ }
+    });
+    await Promise.allSettled(promises);
+
+    // Also load current month metas for selected postos
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const postos = getSelectedPostos();
+    crossData.metas = {};
+    const metaPromises = postos.map(async p => {
+        try {
+            const r = await fetch(`/json_metas/${p}_metas_${ym}.json`, { cache: 'no-store' });
+            if (r.ok) crossData.metas[p] = await r.json();
+        } catch(e) {}
+    });
+    await Promise.allSettled(metaPromises);
+
+    crossLoaded = true;
+    el('crossRefLoading').style.display = 'none';
+    el('crossRefContent').style.display = '';
+    renderCrossRef();
+}
+
+function getPostoHealth(data) {
+    // Compute health score per posto from agenda data
+    const byPosto = {};
+    data.forEach(d => {
+        if (!byPosto[d.posto]) byPosto[d.posto] = { ok: 0, alerta: 0, critico: 0, sem_vaga: 0, total: 0 };
+        byPosto[d.posto].total++;
+        if (d.Status === 'OK') byPosto[d.posto].ok++;
+        else if (d.Status === 'ALERTA') byPosto[d.posto].alerta++;
+        else if (d.Status === 'CRITICO') byPosto[d.posto].critico++;
+        else byPosto[d.posto].sem_vaga++;
+    });
+    const result = {};
+    Object.entries(byPosto).forEach(([p, s]) => {
+        result[p] = {
+            score: s.total > 0 ? Math.round(((s.ok + s.alerta * 0.5) / s.total) * 100) : 0,
+            criticos: s.critico + s.sem_vaga,
+            total: s.total,
+            ...s
+        };
+    });
+    return result;
+}
+
+function getLatestMonth(jsonData) {
+    // Find latest month key in growth/mensalidades data
+    if (!jsonData) return null;
+    const dados = jsonData.dados || jsonData;
+    if (typeof dados !== 'object') return null;
+    const months = Object.keys(dados).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+    return months.length ? months[months.length - 1] : null;
+}
+
+function renderCrossRef() {
+    const agendaData = getFilteredData();
+    const postosVisiveis = getSelectedPostos();
+    const health = getPostoHealth(agendaData);
+    const ctx = simContexto();
+
+    // Extract cross-data per posto for latest month
+    const latestMonth = getLatestMonth(crossData.growth) || getLatestMonth(crossData.mensalidades);
+    const postoMetrics = {};
+
+    postosVisiveis.forEach(p => {
+        const m = { posto: p, health: health[p] || { score: 0, criticos: 0, total: 0 } };
+
+        // Growth data (MRR, admissoes, cancelamentos)
+        if (crossData.growth && crossData.growth.dados && latestMonth) {
+            const gd = crossData.growth.dados[latestMonth];
+            if (gd && gd[p]) {
+                m.mrr_count = gd[p].mrr_count || 0;
+                m.mrr_valor = gd[p].mrr_valor || 0;
+            }
+        }
+
+        // Fidelizacao (churn)
+        if (crossData.fidelizacao && crossData.fidelizacao.dados) {
+            const fd = crossData.fidelizacao.dados[p];
+            if (fd) {
+                // Get most recent cohort churn at 3 months
+                const cohorts = Object.keys(fd).sort().reverse();
+                for (const c of cohorts) {
+                    const d3 = fd[c]?.['3'];
+                    if (d3 && d3.admitidos > 0) {
+                        m.churn_3m = Math.round((1 - d3.retidos / d3.admitidos) * 100);
+                        m.churn_cohort = c;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Consultas (attendance, faltas)
+        if (crossData.consultas) {
+            const cd = Array.isArray(crossData.consultas) ? crossData.consultas
+                      : crossData.consultas.dados || [];
+            // Find latest month for this posto
+            const postoData = cd.filter(r => r.posto === p || r.Posto === p || r.codigo_posto === p);
+            if (postoData.length) {
+                const latest = postoData[postoData.length - 1];
+                m.consultas_total = latest.total || latest.Total || latest.agendadas || 0;
+                m.consultas_faltas = latest.faltas || latest.Faltas || 0;
+                m.consultas_pct_falta = m.consultas_total > 0
+                    ? Math.round(m.consultas_faltas / m.consultas_total * 100) : 0;
+            }
+        }
+
+        // Vendas
+        if (crossData.vendas) {
+            const vd = crossData.vendas.dados || crossData.vendas;
+            if (vd && latestMonth && vd[latestMonth] && vd[latestMonth][p]) {
+                m.vendas_qtd = vd[latestMonth][p].vendas || vd[latestMonth][p].qtd || 0;
+            }
+        }
+
+        // Mensalidades
+        if (crossData.mensalidades) {
+            const md = crossData.mensalidades.dados || crossData.mensalidades;
+            if (md && latestMonth && md[latestMonth] && md[latestMonth][p]) {
+                m.mensalidades = md[latestMonth][p].mensalidades || md[latestMonth][p].total || md[latestMonth][p].count || 0;
+            }
+        }
+
+        // Metas
+        if (crossData.metas && crossData.metas[p]) {
+            const meta = crossData.metas[p].meta;
+            if (meta && meta.vendas_meta) {
+                m.meta_vendas = meta.vendas_meta;
+                const vendas_realizadas = crossData.metas[p].vendas_por_dia
+                    ? crossData.metas[p].vendas_por_dia.reduce((s, d) => s + (d.vendas_dia || 0), 0) : 0;
+                m.vendas_realizadas = vendas_realizadas;
+                m.meta_pct = meta.vendas_meta > 0 ? Math.round(vendas_realizadas / meta.vendas_meta * 100) : 0;
+            }
+        }
+
+        postoMetrics[p] = m;
+    });
+
+    renderCrossKpis(postoMetrics, ctx);
+    renderCrossCorrelacoes(postoMetrics, health, ctx);
+    renderCrossCharts(postoMetrics, postosVisiveis);
+    renderCrossTable(postoMetrics, postosVisiveis);
+    renderCrossParecer(postoMetrics, health, agendaData, ctx);
+}
+
+function renderCrossKpis(metrics, ctx) {
+    const vals = Object.values(metrics);
+    const totalMrr = vals.reduce((s, m) => s + (m.mrr_count || 0), 0);
+    const totalMensalidades = vals.reduce((s, m) => s + (m.mensalidades || 0), 0);
+    const avgChurn = vals.filter(m => m.churn_3m !== undefined);
+    const churnAvg = avgChurn.length ? Math.round(avgChurn.reduce((s, m) => s + m.churn_3m, 0) / avgChurn.length) : null;
+    const totalConsultas = vals.reduce((s, m) => s + (m.consultas_total || 0), 0);
+    const totalFaltas = vals.reduce((s, m) => s + (m.consultas_faltas || 0), 0);
+    const pctFaltas = totalConsultas > 0 ? Math.round(totalFaltas / totalConsultas * 100) : null;
+    const totalVendas = vals.reduce((s, m) => s + (m.vendas_realizadas || m.vendas_qtd || 0), 0);
+    const withMeta = vals.filter(m => m.meta_pct !== undefined);
+    const avgMeta = withMeta.length ? Math.round(withMeta.reduce((s, m) => s + m.meta_pct, 0) / withMeta.length) : null;
+
+    const kpis = [
+        totalMrr > 0 ? { num: totalMrr.toLocaleString('pt-BR'), label: `Clientes Ativos ${ctx.label}`, color: '#2c5f8a' } : null,
+        totalMensalidades > 0 ? { num: totalMensalidades.toLocaleString('pt-BR'), label: 'Mensalidades (mês)', color: '#28a745' } : null,
+        churnAvg !== null ? { num: churnAvg + '%', label: 'Churn Médio 3m', color: churnAvg > 20 ? '#dc3545' : churnAvg > 10 ? '#fd7e14' : '#28a745' } : null,
+        pctFaltas !== null ? { num: pctFaltas + '%', label: 'Faltas em Consultas', color: pctFaltas > 20 ? '#dc3545' : pctFaltas > 10 ? '#fd7e14' : '#28a745' } : null,
+        totalVendas > 0 ? { num: totalVendas, label: 'Vendas no Mês', color: '#555' } : null,
+        avgMeta !== null ? { num: avgMeta + '%', label: 'Atingimento de Meta', color: avgMeta >= 100 ? '#28a745' : avgMeta >= 70 ? '#fd7e14' : '#dc3545' } : null,
+    ].filter(Boolean);
+
+    if (!kpis.length) {
+        el('crossKpiGrid').innerHTML = '<div class="text-muted text-center" style="grid-column:1/-1;">Dados operacionais não disponíveis no momento.</div>';
+        return;
+    }
+    el('crossKpiGrid').innerHTML = kpis.map(k =>
+        `<div class="sim-kpi-card"><div class="sim-kpi-num" style="color:${k.color}">${k.num}</div><div class="sim-kpi-label">${k.label}</div></div>`
+    ).join('');
+}
+
+function renderCrossCorrelacoes(metrics, health, ctx) {
+    const container = el('crossCorrelacoes');
+    const corrs = [];
+    const vals = Object.values(metrics);
+
+    // Correlation 1: Health vs Churn
+    const withChurn = vals.filter(m => m.churn_3m !== undefined && m.health.score !== undefined);
+    if (withChurn.length >= 2) {
+        const highHealth = withChurn.filter(m => m.health.score >= 60);
+        const lowHealth = withChurn.filter(m => m.health.score < 40);
+        const avgChurnHigh = highHealth.length ? Math.round(highHealth.reduce((s,m) => s + m.churn_3m, 0) / highHealth.length) : null;
+        const avgChurnLow = lowHealth.length ? Math.round(lowHealth.reduce((s,m) => s + m.churn_3m, 0) / lowHealth.length) : null;
+
+        if (avgChurnHigh !== null && avgChurnLow !== null && avgChurnLow > avgChurnHigh) {
+            corrs.push({
+                tipo: 'negativa',
+                titulo: 'Postos com agenda crítica têm maior churn',
+                texto: `Postos com saúde da agenda abaixo de 40% apresentam churn médio de ${avgChurnLow}%, enquanto postos acima de 60% têm churn de ${avgChurnHigh}%. Isso sugere que a falta de disponibilidade de especialidades contribui para a perda de clientes.`
+            });
+        } else if (avgChurnHigh !== null && avgChurnLow !== null) {
+            corrs.push({
+                tipo: 'neutra',
+                titulo: 'Churn não mostra correlação clara com a agenda',
+                texto: `Postos com saúde alta têm churn médio de ${avgChurnHigh}% e postos com saúde baixa ${avgChurnLow}%. A diferença não é significativa — outros fatores podem dominar a decisão de cancelamento.`
+            });
+        }
+    }
+
+    // Correlation 2: Health vs Faltas
+    const withFaltas = vals.filter(m => m.consultas_pct_falta !== undefined);
+    if (withFaltas.length >= 2) {
+        const highH = withFaltas.filter(m => m.health.score >= 60);
+        const lowH = withFaltas.filter(m => m.health.score < 40);
+        const avgFH = highH.length ? Math.round(highH.reduce((s,m)=>s+m.consultas_pct_falta,0)/highH.length) : null;
+        const avgFL = lowH.length ? Math.round(lowH.reduce((s,m)=>s+m.consultas_pct_falta,0)/lowH.length) : null;
+        if (avgFH !== null && avgFL !== null) {
+            corrs.push({
+                tipo: avgFL > avgFH ? 'atencao' : 'positiva',
+                titulo: avgFL > avgFH
+                    ? 'Postos com agenda ruim têm mais faltas em consultas'
+                    : 'Faltas não correlacionam com qualidade da agenda',
+                texto: avgFL > avgFH
+                    ? `Taxa de faltas em postos com agenda crítica: ${avgFL}% vs ${avgFH}% em postos saudáveis. Pacientes com dificuldade de agendar especialidades podem estar menos engajados com o atendimento geral.`
+                    : `A taxa de faltas é similar entre postos com diferentes níveis de saúde da agenda (${avgFL}% vs ${avgFH}%).`
+            });
+        }
+    }
+
+    // Correlation 3: Health vs Meta achievement
+    const withMeta = vals.filter(m => m.meta_pct !== undefined);
+    if (withMeta.length >= 2) {
+        const highH = withMeta.filter(m => m.health.score >= 50);
+        const lowH = withMeta.filter(m => m.health.score < 50);
+        const avgMH = highH.length ? Math.round(highH.reduce((s,m)=>s+m.meta_pct,0)/highH.length) : null;
+        const avgML = lowH.length ? Math.round(lowH.reduce((s,m)=>s+m.meta_pct,0)/lowH.length) : null;
+        if (avgMH !== null && avgML !== null) {
+            corrs.push({
+                tipo: avgMH > avgML ? 'positiva' : 'neutra',
+                titulo: avgMH > avgML
+                    ? 'Postos com boa agenda vendem mais'
+                    : 'Atingimento de meta independe da agenda',
+                texto: avgMH > avgML
+                    ? `Postos com saúde ≥50% atingem em média ${avgMH}% da meta de vendas, contra ${avgML}% dos postos com saúde <50%. Uma agenda com vagas disponíveis é argumento de venda para novos clientes.`
+                    : `Atingimento de meta similar: ${avgMH}% (agenda saudável) vs ${avgML}% (agenda comprometida).`
+            });
+        }
+    }
+
+    // Correlation 4: Critical specialties concentration
+    const critPorPosto = vals.filter(m => m.health.criticos > 0).sort((a,b) => b.health.criticos - a.health.criticos);
+    if (critPorPosto.length > 0) {
+        const worst = critPorPosto[0];
+        const nome = postosInfo[worst.posto] ? postosInfo[worst.posto].nome : (POSTO_NOMES[worst.posto]||worst.posto);
+        let extraInfo = '';
+        if (worst.churn_3m !== undefined) extraInfo += ` Churn 3m: ${worst.churn_3m}%.`;
+        if (worst.consultas_pct_falta !== undefined) extraInfo += ` Faltas: ${worst.consultas_pct_falta}%.`;
+        if (worst.meta_pct !== undefined) extraInfo += ` Meta: ${worst.meta_pct}%.`;
+        corrs.push({
+            tipo: 'negativa',
+            titulo: `${nome} (${worst.posto}) concentra ${worst.health.criticos} especialidades críticas`,
+            texto: `Com score de saúde de apenas ${worst.health.score}%, este posto requer atenção prioritária.${extraInfo} Se não corrigido, tende a impactar retenção e captação de novos clientes na região.`
+        });
+    }
+
+    // No cross data at all
+    if (!corrs.length) {
+        const hasAnyData = Object.values(crossData).some(v => v !== null);
+        container.innerHTML = hasAnyData
+            ? '<div class="text-muted text-center p-3"><i class="fas fa-info-circle mr-2"></i>Dados insuficientes para análise de correlação. Necessário ao menos 2 postos com dados operacionais.</div>'
+            : '<div class="text-muted text-center p-3"><i class="fas fa-database mr-2"></i>Dados operacionais (cancelamentos, consultas, vendas) não disponíveis no momento. O cruzamento será exibido automaticamente quando os dados estiverem acessíveis.</div>';
+        return;
+    }
+
+    container.innerHTML = corrs.map(c =>
+        `<div class="cross-corr-card cross-corr-${c.tipo}">
+            <div class="cross-corr-icon">${
+                c.tipo === 'negativa' ? '<i class="fas fa-exclamation-circle text-danger"></i>'
+                : c.tipo === 'atencao' ? '<i class="fas fa-exclamation-triangle text-warning"></i>'
+                : c.tipo === 'positiva' ? '<i class="fas fa-check-circle text-success"></i>'
+                : '<i class="fas fa-minus-circle text-muted"></i>'
+            }</div>
+            <div class="cross-corr-body">
+                <div class="cross-corr-title">${c.titulo}</div>
+                <div class="cross-corr-text">${c.texto}</div>
+            </div>
+        </div>`
+    ).join('');
+}
+
+function renderCrossCharts(metrics, postosVisiveis) {
+    const vals = postosVisiveis.map(p => metrics[p]).filter(Boolean);
+    const labels = postosVisiveis.map(p => postosInfo[p] ? postosInfo[p].nome.substring(0,10) : (POSTO_NOMES[p]||p));
+    const scores = postosVisiveis.map(p => metrics[p] ? metrics[p].health.score : 0);
+
+    // Chart 1: Health vs Churn
+    const churnData = postosVisiveis.map(p => metrics[p]?.churn_3m ?? null);
+    const ctxC = document.getElementById('crossChartAgendaChurn');
+    if (ctxC) {
+        if (crossCharts.churn) crossCharts.churn.destroy();
+        crossCharts.churn = new Chart(ctxC, {
+            type: 'bar', data: { labels,
+                datasets: [
+                    { label: 'Saúde Agenda (%)', data: scores, backgroundColor: scores.map(s => s >= 60 ? '#28a74588' : s >= 40 ? '#fd7e1488' : '#dc354588'), yAxisID: 'y', borderRadius: 4 },
+                    { label: 'Churn 3m (%)', data: churnData, type: 'line', borderColor: '#dc3545', backgroundColor: '#dc354533', fill: true, tension: 0.3, yAxisID: 'y1', pointRadius: 5 }
+                ]
+            }, options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 100, title: { display: true, text: 'Saúde (%)' } },
+                    y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Churn (%)' } }
+                },
+                plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }
+            }
+        });
+    }
+
+    // Chart 2: Health vs Receita (MRR)
+    const mrrData = postosVisiveis.map(p => metrics[p]?.mrr_count ?? metrics[p]?.mensalidades ?? null);
+    const ctxR = document.getElementById('crossChartAgendaReceita');
+    if (ctxR) {
+        if (crossCharts.receita) crossCharts.receita.destroy();
+        crossCharts.receita = new Chart(ctxR, {
+            type: 'bar', data: { labels,
+                datasets: [
+                    { label: 'Saúde Agenda (%)', data: scores, backgroundColor: scores.map(s => s >= 60 ? '#28a74588' : s >= 40 ? '#fd7e1488' : '#dc354588'), yAxisID: 'y', borderRadius: 4 },
+                    { label: 'Clientes/Mensalidades', data: mrrData, type: 'line', borderColor: '#2c5f8a', backgroundColor: '#2c5f8a33', fill: true, tension: 0.3, yAxisID: 'y1', pointRadius: 5 }
+                ]
+            }, options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 100, title: { display: true, text: 'Saúde (%)' } },
+                    y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Clientes' } }
+                },
+                plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }
+            }
+        });
+    }
+
+    // Chart 3: Health vs Faltas
+    const faltaData = postosVisiveis.map(p => metrics[p]?.consultas_pct_falta ?? null);
+    const ctxF = document.getElementById('crossChartAgendaFaltas');
+    if (ctxF) {
+        if (crossCharts.faltas) crossCharts.faltas.destroy();
+        crossCharts.faltas = new Chart(ctxF, {
+            type: 'bar', data: { labels,
+                datasets: [
+                    { label: 'Saúde Agenda (%)', data: scores, backgroundColor: scores.map(s => s >= 60 ? '#28a74588' : s >= 40 ? '#fd7e1488' : '#dc354588'), yAxisID: 'y', borderRadius: 4 },
+                    { label: 'Faltas (%)', data: faltaData, type: 'line', borderColor: '#6c757d', backgroundColor: '#6c757d33', fill: true, tension: 0.3, yAxisID: 'y1', pointRadius: 5 }
+                ]
+            }, options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 100, title: { display: true, text: 'Saúde (%)' } },
+                    y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Faltas (%)' } }
+                },
+                plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }
+            }
+        });
+    }
+
+    // Chart 4: Health vs Metas
+    const metaData = postosVisiveis.map(p => metrics[p]?.meta_pct ?? null);
+    const ctxM = document.getElementById('crossChartAgendaMetas');
+    if (ctxM) {
+        if (crossCharts.metas) crossCharts.metas.destroy();
+        crossCharts.metas = new Chart(ctxM, {
+            type: 'bar', data: { labels,
+                datasets: [
+                    { label: 'Saúde Agenda (%)', data: scores, backgroundColor: scores.map(s => s >= 60 ? '#28a74588' : s >= 40 ? '#fd7e1488' : '#dc354588'), yAxisID: 'y', borderRadius: 4 },
+                    { label: 'Meta Atingida (%)', data: metaData, type: 'line', borderColor: '#fd7e14', backgroundColor: '#fd7e1433', fill: true, tension: 0.3, yAxisID: 'y1', pointRadius: 5 }
+                ]
+            }, options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 100, title: { display: true, text: 'Saúde (%)' } },
+                    y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Meta (%)' } }
+                },
+                plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }
+            }
+        });
+    }
+}
+
+function renderCrossTable(metrics, postosVisiveis) {
+    const tbody = el('crossTableBody');
+    if (!postosVisiveis.length) { tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">Nenhum posto selecionado.</td></tr>'; return; }
+
+    tbody.innerHTML = postosVisiveis.map(p => {
+        const m = metrics[p] || {};
+        const h = m.health || { score: 0, criticos: 0 };
+        const nome = postosInfo[p] ? postosInfo[p].nome : (POSTO_NOMES[p]||p);
+        const scoreColor = h.score >= 60 ? '#28a745' : h.score >= 40 ? '#fd7e14' : '#dc3545';
+
+        // Signal: overall assessment
+        let signal = 'green', signalText = 'Saudável';
+        if (h.score < 40 || (m.churn_3m && m.churn_3m > 25) || (m.consultas_pct_falta && m.consultas_pct_falta > 25)) {
+            signal = 'red'; signalText = 'Crítico';
+        } else if (h.score < 60 || (m.churn_3m && m.churn_3m > 15) || (m.meta_pct !== undefined && m.meta_pct < 70)) {
+            signal = 'yellow'; signalText = 'Atenção';
+        }
+
+        return `<tr>
+            <td><strong>${p}</strong><br><span style="font-size:0.72rem;color:#888">${nome}</span></td>
+            <td class="text-center"><span style="font-weight:800;color:${scoreColor};font-size:1.1rem;">${h.score}</span></td>
+            <td class="text-center">${h.criticos > 0 ? `<span class="text-danger font-weight-bold">${h.criticos}</span>` : '<span class="text-success">0</span>'}</td>
+            <td class="text-center">${m.mrr_count != null ? m.mrr_count.toLocaleString('pt-BR') : (m.mensalidades != null ? m.mensalidades.toLocaleString('pt-BR') : '—')}</td>
+            <td class="text-center">${m.churn_3m != null ? `<span style="color:${m.churn_3m > 20 ? '#dc3545' : m.churn_3m > 10 ? '#fd7e14' : '#28a745'}">${m.churn_3m}%</span>` : '—'}</td>
+            <td class="text-center">${m.consultas_total != null ? m.consultas_total.toLocaleString('pt-BR') : '—'}</td>
+            <td class="text-center">${m.consultas_pct_falta != null ? `<span style="color:${m.consultas_pct_falta > 20 ? '#dc3545' : m.consultas_pct_falta > 10 ? '#fd7e14' : '#28a745'}">${m.consultas_pct_falta}%</span>` : '—'}</td>
+            <td class="text-center">${m.vendas_realizadas != null ? m.vendas_realizadas : (m.vendas_qtd != null ? m.vendas_qtd : '—')}</td>
+            <td class="text-center">${m.meta_pct != null ? `<span style="color:${m.meta_pct >= 100 ? '#28a745' : m.meta_pct >= 70 ? '#fd7e14' : '#dc3545'}">${m.meta_pct}%</span>` : '—'}</td>
+            <td class="text-center"><span class="cross-signal cross-signal-${signal}"></span>${signalText}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderCrossParecer(metrics, health, agendaData, ctx) {
+    const container = el('crossParecer');
+    const vals = Object.values(metrics);
+    const postosVisiveis = getSelectedPostos();
+    const total = agendaData.length;
+    const criticos = agendaData.filter(d => d.Status === 'CRITICO' || d.Status === 'SEM_VAGA').length;
+    const pctCritico = total > 0 ? (criticos / total * 100).toFixed(1) : 0;
+    const score = calcScore(agendaData);
+    const now = new Date();
+    const dataRef = now.toLocaleDateString('pt-BR');
+
+    let parecer = `<div style="margin-bottom: 12px;">`;
+    parecer += `<strong style="font-size: 1rem; color: #1a2940;">PARECER TÉCNICO — QUALIDADE DA AGENDA MÉDICA</strong><br>`;
+    parecer += `<span style="font-size: 0.78rem; color: #888;">Data: ${dataRef} | Escopo: ${ctx.titulo} | Postos: ${postosVisiveis.join(', ')} | Situações monitoradas: ${total}</span>`;
+    parecer += `</div>`;
+
+    // 1. Situação geral
+    parecer += `<p><strong>1. SITUAÇÃO GERAL:</strong> `;
+    if (score >= 75) {
+        parecer += `O índice de saúde da agenda ${ctx.locDe} é de <strong>${score}/100</strong>, classificado como <span style="color:#28a745;font-weight:700;">BOM</span>. ${criticos} de ${total} situações estão em estado crítico (${pctCritico}%).`;
+    } else if (score >= 50) {
+        parecer += `O índice de saúde da agenda ${ctx.locDe} é de <strong>${score}/100</strong>, classificado como <span style="color:#fd7e14;font-weight:700;">ATENÇÃO</span>. ${criticos} de ${total} situações estão em estado crítico (${pctCritico}%), exigindo ações preventivas.`;
+    } else {
+        parecer += `O índice de saúde da agenda ${ctx.locDe} é de <strong>${score}/100</strong>, classificado como <span style="color:#dc3545;font-weight:700;">CRÍTICO</span>. ${criticos} de ${total} situações (${pctCritico}%) estão comprometidas, indicando risco operacional e de compliance ANS.`;
+    }
+    parecer += `</p>`;
+
+    // 2. Impacto nos negócios
+    parecer += `<p><strong>2. IMPACTO NOS INDICADORES DE NEGÓCIO:</strong></p><ul style="margin:0 0 12px 16px;">`;
+
+    const avgChurn = vals.filter(m => m.churn_3m !== undefined);
+    if (avgChurn.length) {
+        const ac = Math.round(avgChurn.reduce((s,m) => s + m.churn_3m, 0) / avgChurn.length);
+        parecer += `<li><strong>Churn/Cancelamentos:</strong> A taxa média de churn a 3 meses ${ctx.locDe} é de ${ac}%. `;
+        if (ac > 15) parecer += `Valor <span style="color:#dc3545;">acima do saudável</span>. Recomenda-se investigar se especialidades críticas são citadas como motivo de cancelamento.`;
+        else parecer += `Valor dentro de parâmetros aceitáveis.`;
+        parecer += `</li>`;
+    }
+
+    const totalCons = vals.reduce((s,m) => s + (m.consultas_total||0), 0);
+    const totalFaltas = vals.reduce((s,m) => s + (m.consultas_faltas||0), 0);
+    if (totalCons > 0) {
+        const pf = Math.round(totalFaltas / totalCons * 100);
+        parecer += `<li><strong>Consultas e Faltas:</strong> ${totalCons.toLocaleString('pt-BR')} consultas no período com taxa de faltas de ${pf}%. `;
+        if (pf > 15) parecer += `Taxa <span style="color:#dc3545;">elevada</span> — verificar se pacientes estão desmarcando por dificuldade de agendar especialidades complementares.`;
+        else parecer += `Dentro do esperado.`;
+        parecer += `</li>`;
+    }
+
+    const withMeta = vals.filter(m => m.meta_pct !== undefined);
+    if (withMeta.length) {
+        const belowTarget = withMeta.filter(m => m.meta_pct < 100);
+        parecer += `<li><strong>Metas de Vendas:</strong> ${belowTarget.length} de ${withMeta.length} postos abaixo da meta. `;
+        if (belowTarget.length > withMeta.length / 2) parecer += `A maioria dos postos não atinge a meta — a falta de vagas em especialidades populares pode dificultar a captação de novos clientes.`;
+        else parecer += `A maioria atinge ou supera a meta, sugerindo que a capacidade comercial está adequada.`;
+        parecer += `</li>`;
+    }
+
+    parecer += `</ul>`;
+
+    // 3. Recomendações
+    parecer += `<p><strong>3. RECOMENDAÇÕES:</strong></p><ul style="margin:0 0 8px 16px;">`;
+
+    // Most critical posto
+    const worstPosto = vals.sort((a,b) => a.health.score - b.health.score)[0];
+    if (worstPosto && worstPosto.health.score < 50) {
+        const nome = postosInfo[worstPosto.posto] ? postosInfo[worstPosto.posto].nome : (POSTO_NOMES[worstPosto.posto]||worstPosto.posto);
+        parecer += `<li>Priorizar reforço do posto <strong>${nome} (${worstPosto.posto})</strong> — score ${worstPosto.health.score}/100 com ${worstPosto.health.criticos} especialidades em risco.</li>`;
+    }
+
+    if (criticos > total * 0.3) {
+        parecer += `<li>Mais de 30% das situações estão críticas. Recomenda-se reunião operacional de emergência para redistribuição de profissionais entre postos.</li>`;
+    }
+
+    const semVagaEsp = [...new Set(agendaData.filter(d => d.Status === 'SEM_VAGA').map(d => d.Especialidade))];
+    if (semVagaEsp.length) {
+        parecer += `<li>Especialidades completamente sem vaga (${semVagaEsp.length}): <strong>${semVagaEsp.slice(0,5).join(', ')}</strong>${semVagaEsp.length > 5 ? ` e mais ${semVagaEsp.length-5}` : ''}. Requer contratação ou redirecionamento imediato.</li>`;
+    }
+
+    parecer += `<li>Monitorar mensalmente a correlação entre score de saúde da agenda e taxa de churn para detectar tendências de deterioração precocemente.</li>`;
+    parecer += `</ul>`;
+
+    parecer += `<div style="margin-top: 12px; font-size: 0.75rem; color: #999; border-top: 1px solid #e2e8f0; padding-top: 8px;">`;
+    parecer += `Parecer gerado automaticamente em ${now.toLocaleString('pt-BR')} | Sistema CAMIM — Qualidade da Agenda Médica | Dados sujeitos à atualização`;
+    parecer += `</div>`;
+
+    container.innerHTML = parecer;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BUILD IA CONTEXT (ISO-compliant structured data for AI)
+// ─────────────────────────────────────────────────────────────────────────────
+function buildIAContext() {
+    const data = getFilteredData();
+    const ctx = simContexto();
+    const health = getPostoHealth(data);
+    const postos = getSelectedPostos();
+    const score = calcScore(data);
+    const total = data.length;
+    const criticos = data.filter(d => d.Status === 'CRITICO' || d.Status === 'SEM_VAGA').length;
+    const alertas = data.filter(d => d.Status === 'ALERTA').length;
+    const ok = data.filter(d => d.Status === 'OK').length;
+
+    // Agenda summary per posto
+    const agendaPorPosto = {};
+    postos.forEach(p => {
+        const h = health[p] || {};
+        const postoData = data.filter(d => d.posto === p);
+        const nome = postosInfo[p] ? postosInfo[p].nome : (POSTO_NOMES[p]||p);
+        agendaPorPosto[p] = {
+            nome,
+            score_saude: h.score || 0,
+            total_especialidades: h.total || 0,
+            ok: h.ok || 0,
+            alerta: h.alerta || 0,
+            critico: h.critico || 0,
+            sem_vaga: h.sem_vaga || 0,
+            especialidades_criticas: postoData.filter(d => d.Status === 'CRITICO' || d.Status === 'SEM_VAGA')
+                .map(d => ({ esp: d.Especialidade, dias: d.DiasAteProximaVaga, status: d.Status, vagas_livres: d.QuantidadeVagasDisponivelNaData, capacidade: d.CapacidadeConsiderada }))
+        };
+    });
+
+    // Cross metrics summary
+    const crossSummary = {};
+    if (crossLoaded) {
+        const latestMonth = getLatestMonth(crossData.growth) || getLatestMonth(crossData.mensalidades);
+        postos.forEach(p => {
+            crossSummary[p] = {};
+            if (crossData.growth?.dados?.[latestMonth]?.[p]) {
+                crossSummary[p].mrr_count = crossData.growth.dados[latestMonth][p].mrr_count;
+            }
+            if (crossData.metas?.[p]?.meta) {
+                const vr = crossData.metas[p].vendas_por_dia?.reduce((s,d) => s + (d.vendas_dia||0), 0) || 0;
+                crossSummary[p].vendas_realizadas = vr;
+                crossSummary[p].meta_vendas = crossData.metas[p].meta.vendas_meta;
+            }
+        });
+    }
+
+    return {
+        sistema: 'CAMIM — Qualidade da Agenda Médica',
+        data_referencia: new Date().toISOString().slice(0,10),
+        escopo: ctx.titulo,
+        postos_selecionados: postos,
+        resumo: {
+            score_saude_geral: score,
+            total_situacoes_monitoradas: total,
+            ok, alerta: alertas, critico: criticos,
+            pct_ok: total > 0 ? Math.round(ok/total*100) : 0,
+            pct_critico: total > 0 ? Math.round(criticos/total*100) : 0,
+        },
+        por_posto: agendaPorPosto,
+        indicadores_cruzados: crossSummary,
+        glossario: {
+            score_saude: 'Índice 0-100 onde 100 = todas especialidades dentro do prazo ANS. Fórmula: (OK*1 + ALERTA*0.5) / total * 100',
+            status_OK: 'Dias até próxima vaga ≤ prazo ANS',
+            status_ALERTA: 'Dias até próxima vaga > prazo ANS mas ≤ prazo CAMIM',
+            status_CRITICO: 'Dias até próxima vaga > prazo CAMIM',
+            status_SEM_VAGA: 'Nenhuma vaga disponível para agendamento',
+            prazo_ANS: 'Prazo regulatório máximo da Agência Nacional de Saúde para primeira consulta em especialidade',
+            prazo_CAMIM: 'Prazo interno da CAMIM, geralmente mais tolerante que o ANS',
+            mrr_count: 'Monthly Recurring Revenue count — número de mensalidades ativas no mês',
+            churn_3m: 'Taxa de cancelamento de clientes nos 3 primeiros meses após admissão',
+        }
+    };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    loadData();
+    loadData().then(() => {
+        // Load cross-reference data after main data is ready
+        loadCrossData();
+    });
 
     // Re-render when tab shown (for lazy rendering)
     document.querySelectorAll('#mainTabs a[data-toggle="tab"]').forEach(a => {
         a.addEventListener('shown.bs.tab', () => {
-            const data = getFilteredData();
             renderAll();
+            if (crossLoaded) renderCrossRef();
         });
     });
 });
+</script>
+
+<!-- IA Chat Integration -->
+<script>
+    if (window.ChatIA) {
+        ChatIA.init({
+            apiUrl: window.IA_API_URL || '/api/ia/chat',
+            mountAfterSelector: '#ia-anchor',
+            title: 'IA — Análise da Agenda Médica',
+            briefInstruction: 'Você é um analista de saúde operacional da CAMIM. Analise os dados de qualidade da agenda médica que receberá como contexto. Foque em: (1) situações críticas e sem vaga, (2) impacto no negócio (churn, vendas, consultas), (3) recomendações práticas. Responda em português, de forma direta e técnica. Use dados concretos.',
+            briefDefault: false,
+            getPayload: async ({ userQuery }) => {
+                const context = buildIAContext();
+                return {
+                    prompt: userQuery,
+                    kpi: 'qualidade_agenda',
+                    postos: getSelectedPostos(),
+                    contexto: JSON.stringify(context),
+                    pagina: '/qualidade_agenda',
+                    prefs: { accept_format: 'free_text' }
+                };
+            }
+        });
+    }
 </script>
 
 </body>
