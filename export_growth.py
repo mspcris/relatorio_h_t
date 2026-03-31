@@ -235,15 +235,16 @@ def main():
 
     logger.write(f"\nPostos configurados ({len(conns)}): {', '.join(sorted(conns.keys()))}")
 
-    sql_mrr = load_sql("mrr.sql")
-    sql_cac = load_sql("cac_despesas_vendas.sql")
+    sql_mrr   = load_sql("mrr.sql")
+    sql_cac   = load_sql("cac_despesas_vendas.sql")
+    sql_churn = load_sql("churn.sql")
 
     mysql_cfg = build_mysql_conn()
     if mysql_cfg:
         logger.write(f"MySQL leads: {mysql_cfg['host']}:{mysql_cfg['port']}/{mysql_cfg['database']}")
     else:
         logger.write("WARN: MySQL leads nao configurado (LEADS_DB_* no .env)")
-    logger.write(f"SQL carregados: mrr.sql, cac_despesas_vendas.sql")
+    logger.write(f"SQL carregados: mrr.sql, cac_despesas_vendas.sql, churn.sql")
 
     # Periodo
     today = date.today()
@@ -284,9 +285,9 @@ def main():
         ordem = [month_bounds(d)[2] for d in meses_to_run]
         logger.write(f"Ordem: {', '.join(ordem)}")
 
-    total_steps = len(meses_to_run) * len(conns) * 2  # 2 queries por posto/mes
+    total_steps = len(meses_to_run) * len(conns) * 3  # 3 queries por posto/mes (MRR, CAC, Churn)
     logger.write(f"Periodo: {start} -> {end_exc} ({len(meses_all)} meses, {len(meses_to_run)} a rodar)")
-    logger.write(f"Total de queries previstas: {total_steps} ({len(meses_to_run)} meses x {len(conns)} postos x 2 queries)")
+    logger.write(f"Total de queries previstas: {total_steps} ({len(meses_to_run)} meses x {len(conns)} postos x 3 queries)")
     logger.write("")
 
     # Iniciar com dados do cache
@@ -359,6 +360,23 @@ def main():
                 elapsed = time.time() - t0
                 stats.add(posto, ym, "CAC", elapsed, False, error=e)
                 logger.write(f"  [{posto}] CAC  -> ERRO: {e} | {fmt_time(elapsed):>6s} | {elapsed_pct:5.1f}%")
+
+            # CHURN (cancelamentos no mes)
+            step += 1
+            elapsed_pct = step / total_steps * 100
+            t0 = time.time()
+            try:
+                df = run_query(engine, sql_churn, ini, fim)
+                elapsed = time.time() - t0
+                rows = len(df)
+                if not df.empty:
+                    rec["cancelamentos"] = int(df.iloc[0].get("cancelamentos", 0) or 0)
+                stats.add(posto, ym, "CHURN", elapsed, True, rows)
+                logger.write(f"  [{posto}] CHURN-> {rec.get('cancelamentos', 0):>6d} cancelamentos | {fmt_time(elapsed):>6s} | {elapsed_pct:5.1f}%")
+            except Exception as e:
+                elapsed = time.time() - t0
+                stats.add(posto, ym, "CHURN", elapsed, False, error=e)
+                logger.write(f"  [{posto}] CHURN-> ERRO: {e} | {fmt_time(elapsed):>6s} | {elapsed_pct:5.1f}%")
 
             if rec:
                 dados.setdefault(ym, {})[posto] = rec

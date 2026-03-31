@@ -369,36 +369,44 @@
       const content = document.createElement('div');
       content.className = 'iad-content';
 
-      const blocks = this._parseBlocks(this._coerceText(text));
-      if (!blocks.length) {
-        const p = document.createElement('p');
-        p.style.margin = '.3em 0';
-        p.textContent = String(text || '').trim();
-        content.appendChild(p);
+      const coerced = this._coerceText(text);
+      const view = this._normalizeForView(coerced);
+
+      if (view.mode === 'html') {
+        // LLM retornou HTML — sanitiza e renderiza como HTML
+        content.innerHTML = this._safeHtml(view.html);
       } else {
-        blocks.forEach(b => {
-          let el;
-          if (b.type === 'h2') {
-            el = document.createElement('h5');
-            el.style.cssText = 'font-size:1em;font-weight:700;margin:.6em 0 .2em;color:#e0e0e0;border-bottom:1px solid #3a3a3a;padding-bottom:3px';
-          } else if (b.type === 'h3') {
-            el = document.createElement('h6');
-            el.style.cssText = 'font-size:.92em;font-weight:600;margin:.45em 0 .15em;color:#ccc';
-          } else if (b.type === 'li') {
-            el = document.createElement('p');
-            el.style.cssText = 'margin:.15em 0 .15em 1em';
-            b.text = '• ' + b.text;
-          } else if (b.type === 'li2') {
-            el = document.createElement('p');
-            el.style.cssText = 'margin:.1em 0 .1em 2em;opacity:.85';
-            b.text = '◦ ' + b.text;
-          } else {
-            el = document.createElement('p');
-            el.style.cssText = 'margin:.35em 0';
-          }
-          el.textContent = b.text;
-          content.appendChild(el);
-        });
+        const blocks = this._parseBlocks(view.text);
+        if (!blocks.length) {
+          const p = document.createElement('p');
+          p.style.margin = '.3em 0';
+          p.textContent = String(coerced || '').trim();
+          content.appendChild(p);
+        } else {
+          blocks.forEach(b => {
+            let el;
+            if (b.type === 'h2') {
+              el = document.createElement('h5');
+              el.style.cssText = 'font-size:1em;font-weight:700;margin:.6em 0 .2em;color:#e0e0e0;border-bottom:1px solid #3a3a3a;padding-bottom:3px';
+            } else if (b.type === 'h3') {
+              el = document.createElement('h6');
+              el.style.cssText = 'font-size:.92em;font-weight:600;margin:.45em 0 .15em;color:#ccc';
+            } else if (b.type === 'li') {
+              el = document.createElement('p');
+              el.style.cssText = 'margin:.15em 0 .15em 1em';
+              b.text = '• ' + b.text;
+            } else if (b.type === 'li2') {
+              el = document.createElement('p');
+              el.style.cssText = 'margin:.1em 0 .1em 2em;opacity:.85';
+              b.text = '◦ ' + b.text;
+            } else {
+              el = document.createElement('p');
+              el.style.cssText = 'margin:.35em 0';
+            }
+            el.textContent = b.text;
+            content.appendChild(el);
+          });
+        }
       }
 
       requestAnimationFrame(() => this._typeReveal(content));
@@ -508,7 +516,7 @@
     /* ═══════════════════ TYPEWRITER (rAF, char-by-char) ═══════════════════ */
     _typeReveal(container) {
       if (!container) return;
-      const els = [...container.querySelectorAll('h5, h6, p')];
+      const els = [...container.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, span, div:not(.iad-content)')];
       if (!els.length) return;
 
       // Salva texto completo e esvazia cada elemento

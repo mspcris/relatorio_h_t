@@ -233,6 +233,14 @@
             color: #721c24;
             font-weight: 500;
         }
+
+        /* Rastreabilidade */
+        .card-footer.rastro { font-size:.8rem; color:#666; line-height:1.5; }
+        .card-footer.rastro b { color:#333; }
+        .card-footer.rastro .btn-rastro-sql { font-size:.75rem; cursor:pointer; color:#007bff; background:none; border:none; padding:0; }
+        .card-footer.rastro .btn-rastro-sql:hover { text-decoration:underline; }
+        .card-footer.rastro pre { display:none; background:#1e1e1e; color:#d4d4d4; padding:8px 10px; border-radius:4px; font-size:.75rem; overflow-x:auto; margin:6px 0 0; white-space:pre-wrap; }
+        .card-footer.rastro pre.show { display:block; }
     </style>
 </head>
 
@@ -351,12 +359,28 @@
                   </div>
                 </div>
 
-                <!-- RESUMO ESTATÍSTICO -->
+                <!-- CHURN OPERACIONAL -->
+                <div class="card">
+                    <div class="card-header bg-dark">
+                        <h3 class="card-title mb-0"><i class="fas fa-chart-line mr-2"></i>Churn Operacional — Cancelamentos Reais</h3>
+                    </div>
+                    <div class="card-body kpi" id="churnOperacionalCards"></div>
+                    <div class="card-footer text-muted" style="font-size:0.85rem">
+                        <strong>Fórmula:</strong> Cancelamentos do mês ÷ Contratos ativos no mês anterior × 100.
+                        <strong>Fonte:</strong> Cad_Cliente (cancelamentos) e vw_fin_receita2 (contratos ativos).
+                    </div>
+                </div>
+
+                <!-- RESUMO POR COHORT -->
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="card-title mb-0">Resumo de Fidelização & Churn</h3>
+                        <h3 class="card-title mb-0">Análise por Cohort — Retenção de Novos Clientes</h3>
                     </div>
                     <div class="card-body kpi" id="statsCards"></div>
+                    <div class="card-footer text-muted" style="font-size:0.85rem">
+                        <strong>Diferença:</strong> O churn operacional (acima) mede cancelamentos reais sobre a base total.
+                        Os dados abaixo medem retenção de cada grupo de novos clientes ao longo do tempo (análise de coorte).
+                    </div>
                 </div>
 
                 <!-- CURVA DE SOBREVIVÊNCIA + CHURN INCREMENTAL -->
@@ -369,6 +393,14 @@
                             <div class="card-body" style="height:320px">
                                 <canvas id="chartSurvivor"></canvas>
                             </div>
+                            <div class="card-footer rastro">
+                                Dos clientes que entraram num determinado mes, quantos % continuam pagando apos 1, 2, 3... 12 meses. Media de todos os cohorts. Uma curva estavel indica previsibilidade; queda abrupta no mes 1 sugere problema de onboarding.
+                                <br><b>Fonte:</b> fidelizacao_cliente.json &rarr; export_fidelizacao.py &rarr; Stored Procedure PC_Fin_Fidelizacao
+                                <button class="btn-rastro-sql" onclick="this.nextElementSibling.classList.toggle('show')">&#x25B6; ver SQL</button>
+                                <pre>EXEC PC_Fin_Fidelizacao @database = @ini
+-- Retorna: AnoAdmissao, MesAdmissao, QuantidadeAdmissao,
+--          AnoReferencia, MesReferencia, QuantidadeRecebida, PercentualFidelizacao</pre>
+                            </div>
                         </div>
                     </div>
                     <div class="col-lg-5">
@@ -378,6 +410,10 @@
                             </div>
                             <div class="card-body" style="height:320px">
                                 <canvas id="chartChurnIncremental"></canvas>
+                            </div>
+                            <div class="card-footer rastro">
+                                Quanto % do cohort original foi perdido em cada intervalo. Ex: se 100 entraram e no mes 1 restaram 85, o churn incremental do mes 1 e 15%. Se no mes 2 restaram 78, o churn incremental do mes 2 e 7%. Mostra em qual momento os clientes mais saem.
+                                <br><b>Calculo:</b> Retencao[mes-1] - Retencao[mes] (como % do total original). Mesma fonte da curva de sobrevivencia.
                             </div>
                         </div>
                     </div>
@@ -393,6 +429,9 @@
                             <div class="card-body">
                                 <canvas id="chart1m"></canvas>
                             </div>
+                            <div class="card-footer rastro">
+                                Dos clientes que entraram no mes selecionado, quantos % pagaram a mensalidade do mes seguinte, em cada posto. Postos abaixo de 70% precisam de atencao no processo de boas-vindas e onboarding.
+                            </div>
                         </div>
                     </div>
                     <div class="col-lg-6">
@@ -402,6 +441,9 @@
                             </div>
                             <div class="card-body">
                                 <canvas id="chart3m"></canvas>
+                            </div>
+                            <div class="card-footer rastro">
+                                Dos que entraram no mes selecionado, quantos % ainda estavam pagando 3 meses depois. E o indicador mais importante para validar a qualidade da venda — clientes mal vendidos cancelam antes do 3o mes.
                             </div>
                         </div>
                     </div>
@@ -413,6 +455,9 @@
                             <div class="card-body">
                                 <canvas id="chart6m"></canvas>
                             </div>
+                            <div class="card-footer rastro">
+                                Retencao apos 6 meses. Clientes que passam dos 6 meses tendem a ser fieis a longo prazo. Se ha queda significativa entre 3m e 6m, pode indicar problema no atendimento continuado.
+                            </div>
                         </div>
                     </div>
                     <div class="col-lg-6">
@@ -422,6 +467,9 @@
                             </div>
                             <div class="card-body">
                                 <canvas id="chart12m"></canvas>
+                            </div>
+                            <div class="card-footer rastro">
+                                Retencao apos 1 ano. E o indicador de fidelidade real. Postos com retencao 12m acima de 60% tem base de clientes solida. Abaixo de 40% indica churn estrutural.
                             </div>
                         </div>
                     </div>
@@ -434,6 +482,21 @@
                     </div>
                     <div class="card-body heatmap" id="tableContainer">
                         <div class="text-muted text-center p-3">Carregando dados...</div>
+                    </div>
+                    <div class="card-footer rastro">
+                        Cada linha e um cohort (grupo de clientes que entraram no mesmo mes). As colunas mostram quantos desses clientes continuaram pagando apos 1, 3, 6 e 12 meses. QTD = numero absoluto de clientes retidos. Ret% = percentual de retencao. Churn% = percentual que saiu (100 - Ret%).
+                        <br><b>Fonte:</b> fidelizacao_cliente.json &rarr; export_fidelizacao.py &rarr; PC_Fin_Fidelizacao (Stored Procedure no SQL Server)
+                        <button class="btn-rastro-sql" onclick="this.nextElementSibling.classList.toggle('show')">&#x25B6; ver SQL</button>
+                        <pre>-- export_fidelizacao.py executa por posto:
+EXEC PC_Fin_Fidelizacao @database = @ini
+
+-- Retorna para cada cohort (mes de admissao):
+-- AnoAdmissao, MesAdmissao, QuantidadeAdmissao (total que entrou)
+-- AnoReferencia, MesReferencia, QuantidadeRecebida (quantos pagaram nesse mes)
+-- PercentualFidelizacao
+
+-- Os dados sao armazenados em SQLite (fidelizacao.db)
+-- e exportados para json_consolidado/fidelizacao_cliente.json</pre>
                     </div>
                 </div>
             </section>
@@ -703,11 +766,20 @@
             if (btnC) btnC.classList.toggle('active', ativo === 'couto');
         }
 
+        let growthData = null;
+
         async function loadData() {
             try {
-                const response = await fetch('/json_consolidado/fidelizacao_cliente.json');
-                if (!response.ok) throw new Error('Erro ao carregar dados');
-                const json = await response.json();
+                const [fidResp, growthResp] = await Promise.all([
+                    fetch('/json_consolidado/fidelizacao_cliente.json'),
+                    fetch('/json_consolidado/growth_dashboard.json')
+                ]);
+                if (!fidResp.ok) throw new Error('Erro ao carregar dados de fidelização');
+                const json = await fidResp.json();
+
+                if (growthResp.ok) {
+                    growthData = await growthResp.json();
+                }
 
                 el('jsonInfo').textContent = `Atualizado em: ${json.periodo?.fim || 'N/A'}`;
                 allData = json.dados || {};
@@ -753,11 +825,65 @@
 
         function render() {
             updateChartTitles();
+            renderChurnOperacional();
             renderStats();
             renderSurvivorCurve();
             renderChurnIncremental();
             renderCharts();
             renderTable();
+        }
+
+        function renderChurnOperacional() {
+            const container = el('churnOperacionalCards');
+            if (!container) return;
+            if (!growthData || !growthData.dados) {
+                container.innerHTML = '<p class="text-muted">Dados de growth não disponíveis</p>';
+                return;
+            }
+            const gd = growthData.dados;
+            const postos = getSelectedPostos();
+
+            // Pegar o mês selecionado + 1 (o churn do mês seguinte ao cohort)
+            // selMonth é o mês de admissão do cohort. Para churn operacional, mostramos o mês atual ou os últimos meses
+            // Vamos mostrar os últimos 6 meses disponíveis
+            const allMonths = Object.keys(gd).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+            const recentMonths = allMonths.slice(-6);
+
+            let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
+            html += '<thead><tr><th>Mês</th><th>Contratos (mês ant.)</th><th>Cancelamentos</th><th>Churn %</th><th>Tendência</th></tr></thead><tbody>';
+
+            let prevChurn = null;
+            for (const ym of recentMonths) {
+                // prevYm
+                const [y, m] = ym.split('-').map(Number);
+                const pm = m === 1 ? `${y-1}-12` : `${y}-${String(m-1).padStart(2,'0')}`;
+
+                let cancelamentos = 0, base = 0;
+                for (const p of postos) {
+                    const d = gd[ym]?.[p];
+                    if (d) cancelamentos += d.cancelamentos || 0;
+                    const prev = gd[pm]?.[p];
+                    if (prev) base += prev.mrr_count || 0;
+                }
+
+                const churnPct = base > 0 ? (cancelamentos / base * 100) : null;
+                const churnStr = churnPct != null ? churnPct.toFixed(2) + '%' : '-';
+                const churnCls = churnPct == null ? '' : churnPct <= 5 ? 'cell-high' : churnPct <= 10 ? 'cell-medium' : 'cell-low';
+
+                let trend = '';
+                if (prevChurn != null && churnPct != null) {
+                    if (churnPct < prevChurn) trend = '<span style="color:#28a745">▼</span>';
+                    else if (churnPct > prevChurn) trend = '<span style="color:#dc3545">▲</span>';
+                    else trend = '<span style="color:#6c757d">→</span>';
+                }
+
+                const fmtMes = formatMonth(ym);
+                html += `<tr><td>${fmtMes}</td><td>${base > 0 ? base.toLocaleString('pt-BR') : '-'}</td><td>${cancelamentos}</td><td class="${churnCls}">${churnStr}</td><td>${trend}</td></tr>`;
+
+                if (churnPct != null) prevChurn = churnPct;
+            }
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
         }
 
         function renderStats() {

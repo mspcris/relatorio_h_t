@@ -613,6 +613,269 @@ def _build_vendas(
 
 
 # ─────────────────────────────────────────────────────────────
+# Qualidade Agenda — context builder especializado
+# ─────────────────────────────────────────────────────────────
+
+_POSTO_NOMES = {
+    "A": "Anchieta", "B": "Bangu", "C": "Campinho", "D": "Del Castilho",
+    "G": "Guadalupe", "I": "Nova Iguaçu", "J": "Jacarepaguá",
+    "M": "Madureira", "N": "Nilópolis", "P": "Rio das Pedras",
+    "R": "Realengo", "X": "Xerém", "Y": "Campo Grande (Y)",
+}
+
+_POSTO_ZONA = {
+    "A": "Zona Norte", "B": "Zona Oeste", "C": "Zona Oeste",
+    "D": "Zona Norte", "G": "Zona Oeste", "I": "Baixada",
+    "J": "Zona Oeste", "M": "Zona Norte", "N": "Baixada",
+    "P": "Zona Oeste", "R": "Zona Oeste", "X": "Baixada", "Y": "Baixada",
+}
+
+_POSTO_VIZINHOS = {
+    "A": ["M", "G", "B", "D"], "B": ["R", "A", "G"], "G": ["B", "R", "A", "C"],
+    "R": ["B", "G", "A"], "N": ["I", "Y", "X"], "I": ["N", "X", "Y"],
+    "X": ["I", "N", "Y"], "Y": ["N", "I", "X"], "C": ["J", "P", "G"],
+    "D": ["M", "A"], "J": ["C", "P", "M"], "M": ["D", "A", "J"], "P": ["J", "C"],
+}
+
+
+def _build_qualidade_agenda(
+    postos: List[str], ini: str, fim: str, pergunta: str, incluir_retirada: bool
+) -> str:
+    """Context builder completo para qualidade_agenda — envia TUDO para a IA."""
+
+    # ── Carregar dados da agenda ──
+    qa_path = _path("json_consolidado", "qualidade_agenda.json")
+    if not os.path.exists(qa_path):
+        return "Erro: qualidade_agenda.json não encontrado."
+    with open(qa_path, encoding="utf-8") as f:
+        qa = json.load(f)
+
+    dados = qa.get("dados", [])
+    cbos = qa.get("cbos", {})
+    postos_info = qa.get("postos_info", {})
+    meta = qa.get("meta", {})
+
+    # Nomes dos postos (do JSON ou fallback)
+    pn = {}
+    for info in postos_info.values():
+        pn[info.get("letra", "")] = info.get("nome", "")
+    for k, v in _POSTO_NOMES.items():
+        pn.setdefault(k, v)
+
+    # Filtrar por postos selecionados
+    postos_sel = postos if postos else sorted(set(d["posto"] for d in dados))
+    postos_set = set(postos_sel)
+    dados_filtrados = [d for d in dados if d.get("posto") in postos_set]
+
+    if not dados_filtrados:
+        return "Nenhum dado de agenda encontrado para os postos selecionados."
+
+    lines = []
+
+    # ── CABEÇALHO ──
+    lines.append("QUALIDADE DA AGENDA MÉDICA — CAMIM")
+    lines.append(f"Data de referência: {meta.get('data_referencia', 'N/A')}")
+    lines.append(f"Postos selecionados: {', '.join(f'{p} ({pn.get(p, p)})' for p in sorted(postos_sel))}")
+
+    # ── RESUMO GERAL ──
+    total = len(dados_filtrados)
+    n_ok = sum(1 for d in dados_filtrados if d["Status"] == "OK")
+    n_al = sum(1 for d in dados_filtrados if d["Status"] == "ALERTA")
+    n_cr = sum(1 for d in dados_filtrados if d["Status"] == "CRITICO")
+    n_sv = sum(1 for d in dados_filtrados if d["Status"] == "SEM_VAGA")
+    score = round((n_ok + n_al * 0.5) / total * 100) if total else 0
+
+    lines.append(f"\nRESUMO GERAL:")
+    lines.append(f"Score de Saúde: {score}/100")
+    lines.append(f"Total combinações (posto × especialidade): {total}")
+    lines.append(f"OK: {n_ok} ({round(n_ok/total*100)}%) | ALERTA: {n_al} ({round(n_al/total*100)}%) | CRÍTICO: {n_cr} ({round(n_cr/total*100)}%) | SEM VAGA: {n_sv} ({round(n_sv/total*100)}%)")
+
+    # ── POR POSTO: cada especialidade com todos os dados ──
+    por_posto = {}
+    for d in dados_filtrados:
+        por_posto.setdefault(d["posto"], []).append(d)
+
+    lines.append(f"\nDETALHAMENTO COMPLETO POR POSTO:")
+
+    for p in sorted(por_posto.keys()):
+        pd_list = por_posto[p]
+        nome = pn.get(p, p)
+        zona = _POSTO_ZONA.get(p, "")
+        vizinhos = _POSTO_VIZINHOS.get(p, [])
+        viz_nomes = ", ".join(f"{v} ({pn.get(v, v)})" for v in vizinhos)
+
+        p_ok = sum(1 for d in pd_list if d["Status"] == "OK")
+        p_al = sum(1 for d in pd_list if d["Status"] == "ALERTA")
+        p_cr = sum(1 for d in pd_list if d["Status"] == "CRITICO")
+        p_sv = sum(1 for d in pd_list if d["Status"] == "SEM_VAGA")
+        p_total = len(pd_list)
+        p_score = round((p_ok + p_al * 0.5) / p_total * 100) if p_total else 0
+
+        lines.append(f"\n## {nome} ({p}) — {zona}")
+        lines.append(f"Score: {p_score}/100 | OK={p_ok} ALERTA={p_al} CRÍTICO={p_cr} SEM_VAGA={p_sv}")
+        lines.append(f"Vizinhos geográficos: {viz_nomes or 'nenhum mapeado'}")
+
+        # Ordenar: SEM_VAGA primeiro, depois CRITICO, ALERTA, OK
+        prioridade = {"SEM_VAGA": 0, "CRITICO": 1, "ALERTA": 2, "OK": 3}
+        for d in sorted(pd_list, key=lambda x: (prioridade.get(x["Status"], 9), x["Especialidade"])):
+            esp = d["Especialidade"]
+            st = d["Status"]
+            dias = d.get("DiasAteProximaVaga")
+            data_vaga = d.get("DataProximaVaga", "")
+            vagas_disp = max(d.get("QuantidadeVagasDisponivelNaData", 0), 0)
+            cap = max(d.get("QuantidadeVagasTotalMedicosAtendem", 0), 0)
+            prazo_ans = d.get("prazoconsultaans", 0)
+            prazo_camim = d.get("prazoconsultacamim", 0)
+            pct_livre = round(d.get("ValorPercentualVagasLivres", 0))
+            reserv = d.get("QuantidadeVagasReservadas", 0)
+
+            if st == "SEM_VAGA":
+                lines.append(f"  SEM_VAGA | {esp} | Sem agenda disponível | ANS={prazo_ans}d CAMIM={prazo_camim}d")
+            elif st == "CRITICO":
+                gap = (dias or 0) - prazo_ans
+                lines.append(f"  CRÍTICO  | {esp} | {dias}d até vaga (data: {data_vaga}) | Gap: +{gap}d além ANS | Vagas: {vagas_disp}/{cap} ({pct_livre}% livre) | ANS={prazo_ans}d CAMIM={prazo_camim}d")
+            elif st == "ALERTA":
+                lines.append(f"  ALERTA   | {esp} | {dias}d até vaga (data: {data_vaga}) | Vagas: {vagas_disp}/{cap} ({pct_livre}% livre) | ANS={prazo_ans}d CAMIM={prazo_camim}d")
+            else:
+                lines.append(f"  OK       | {esp} | {dias}d até vaga (data: {data_vaga}) | Vagas: {vagas_disp}/{cap} ({pct_livre}% livre) | ANS={prazo_ans}d")
+
+    # ── VISÃO POR ESPECIALIDADE — quais postos estão ruins para cada uma ──
+    lines.append(f"\nVISÃO POR ESPECIALIDADE:")
+    lines.append("(Para cada especialidade, lista a situação em todos os postos selecionados)")
+
+    # Agrupar por especialidade
+    por_esp = {}
+    for d in dados_filtrados:
+        por_esp.setdefault(d["Especialidade"], []).append(d)
+
+    # Ordenar: especialidades com mais problemas primeiro
+    def _esp_gravidade(items):
+        return sum(1 for d in items if d["Status"] in ("CRITICO", "SEM_VAGA")) * 100 + \
+               sum(1 for d in items if d["Status"] == "ALERTA")
+
+    for esp in sorted(por_esp.keys(), key=lambda e: -_esp_gravidade(por_esp[e])):
+        items = por_esp[esp]
+        n_prob = sum(1 for d in items if d["Status"] in ("CRITICO", "SEM_VAGA"))
+        n_alert = sum(1 for d in items if d["Status"] == "ALERTA")
+        n_ok_e = sum(1 for d in items if d["Status"] == "OK")
+        total_e = len(items)
+
+        # Calcular CBOS thresholds
+        cb = cbos.get(esp, {})
+        prazo_ans = cb.get("prazoconsultaans", 0)
+        prazo_camim = cb.get("prazoconsultacamim", 0)
+
+        sistemico = n_prob >= 3
+        tag = " *** PROBLEMA SISTÊMICO ***" if sistemico else ""
+
+        lines.append(f"\n### {esp} (ANS={prazo_ans}d CAMIM={prazo_camim}d) — Crítico/SemVaga: {n_prob}/{total_e} postos | Alerta: {n_alert} | OK: {n_ok_e}{tag}")
+
+        for d in sorted(items, key=lambda x: (prioridade.get(x["Status"], 9), x["posto"])):
+            nome_p = pn.get(d["posto"], d["posto"])
+            st = d["Status"]
+            dias = d.get("DiasAteProximaVaga")
+            vagas = max(d.get("QuantidadeVagasDisponivelNaData", 0), 0)
+            cap = max(d.get("QuantidadeVagasTotalMedicosAtendem", 0), 0)
+            data_v = d.get("DataProximaVaga", "")
+
+            if st == "SEM_VAGA":
+                lines.append(f"  {nome_p} ({d['posto']}): SEM VAGA")
+            else:
+                lines.append(f"  {nome_p} ({d['posto']}): {st} — {dias}d até vaga ({data_v}), {vagas}/{cap} vagas livres")
+
+        # Sugestões de remanejamento para postos críticos desta especialidade
+        criticos_esp = [d for d in items if d["Status"] in ("CRITICO", "SEM_VAGA")]
+        ok_esp = [d for d in items if d["Status"] == "OK"]
+        if criticos_esp and ok_esp:
+            alt_str = ", ".join(f"{pn.get(d['posto'], d['posto'])} ({d.get('DiasAteProximaVaga', '?')}d, {max(d.get('QuantidadeVagasDisponivelNaData',0),0)} vagas)" for d in ok_esp[:3])
+            lines.append(f"  -> Alternativas OK: {alt_str}")
+
+    # ── PROBLEMAS SISTÊMICOS (3+ postos críticos na mesma especialidade) ──
+    lines.append(f"\nPROBLEMAS SISTÊMICOS (especialidades críticas em 3+ postos):")
+    tem_sistemico = False
+    for esp, items in por_esp.items():
+        n_prob = sum(1 for d in items if d["Status"] in ("CRITICO", "SEM_VAGA"))
+        if n_prob >= 3:
+            tem_sistemico = True
+            postos_prob = [f"{pn.get(d['posto'], d['posto'])}" for d in items if d["Status"] in ("CRITICO", "SEM_VAGA")]
+            lines.append(f"  {esp}: {n_prob} postos afetados ({', '.join(postos_prob)}) — remanejamento insuficiente, necessita contratação")
+    if not tem_sistemico:
+        lines.append("  Nenhum problema sistêmico identificado.")
+
+    # ── DADOS CRUZADOS — churn, vendas, MRR ──
+    lines.append(f"\nINDICADORES OPERACIONAIS CRUZADOS:")
+
+    # Growth / MRR / Churn
+    gw_path = _path("json_consolidado", "growth_dashboard.json")
+    if os.path.exists(gw_path):
+        try:
+            with open(gw_path, encoding="utf-8") as f:
+                gw = json.load(f)
+            gw_dados = gw.get("dados", {})
+            meses = sorted(gw_dados.keys())
+            if meses:
+                ultimo_mes = meses[-1]
+                penultimo = meses[-2] if len(meses) > 1 else None
+                for p in sorted(postos_sel):
+                    nome_p = pn.get(p, p)
+                    d_atual = gw_dados.get(ultimo_mes, {}).get(p, {})
+                    d_ant = gw_dados.get(penultimo, {}).get(p, {}) if penultimo else {}
+                    mrr = d_atual.get("mrr_count", 0)
+                    cancel = d_atual.get("cancelamentos", 0)
+                    base_ant = d_ant.get("mrr_count", 0)
+                    churn_pct = round(cancel / base_ant * 100, 1) if base_ant > 0 else 0
+                    lines.append(f"  {nome_p} ({p}): {mrr} contratos ativos (ref {ultimo_mes}) | {cancel} cancelamentos | Churn: {churn_pct}%")
+        except Exception:
+            lines.append("  (Dados de growth/churn indisponíveis)")
+    else:
+        lines.append("  (growth_dashboard.json não encontrado)")
+
+    # Consultas / Faltas
+    cons_path = _path("json_consolidado", "consultas_mensal_status_consolidado.json")
+    if os.path.exists(cons_path):
+        try:
+            with open(cons_path, encoding="utf-8") as f:
+                cons = json.load(f)
+            # Pegar último mês disponível
+            meses_c = sorted(cons.keys())
+            if meses_c:
+                ult_c = meses_c[-1]
+                lines.append(f"\n  Consultas — mês referência: {ult_c}")
+                for p in sorted(postos_sel):
+                    cd = cons.get(ult_c, {}).get(p, {})
+                    if cd:
+                        pct_falta = cd.get("pct_falta", 0)
+                        total_c = cd.get("total", 0)
+                        lines.append(f"  {pn.get(p, p)} ({p}): {total_c} consultas, {round(pct_falta, 1)}% faltas")
+        except Exception:
+            pass
+
+    # ── GLOSSÁRIO ──
+    lines.append(f"\nGLOSSÁRIO:")
+    lines.append("- Score Saúde: 0-100. Fórmula: (OK×1 + ALERTA×0.5) / total × 100. Quanto maior melhor.")
+    lines.append("- OK: Dias até próxima vaga ≤ prazo ANS (dentro da regulação)")
+    lines.append("- ALERTA: Dias > prazo ANS mas ≤ prazo CAMIM (acima da regulação, dentro do interno)")
+    lines.append("- CRÍTICO: Dias > prazo CAMIM (acima de ambos os prazos)")
+    lines.append("- SEM_VAGA: Nenhuma vaga disponível para agendamento nesta especialidade")
+    lines.append("- Prazo ANS: prazo regulatório máximo da ANS para 1ª consulta na especialidade")
+    lines.append("- Prazo CAMIM: prazo interno da CAMIM, geralmente mais tolerante que ANS")
+    lines.append("- Gap: dias excedentes além do prazo ANS (DiasAteProximaVaga - prazoconsultaans)")
+    lines.append("- Problema Sistêmico: especialidade em estado CRITICO/SEM_VAGA em 3+ postos — indica necessidade de contratação, não apenas remanejamento")
+    lines.append("- Vagas X/Y: X = vagas disponíveis na data, Y = capacidade total de atendimento na agenda do dia")
+    lines.append("- Churn: cancelamentos do mês ÷ base de contratos do mês anterior × 100")
+    lines.append("- MRR count: número de contratos de mensalidade ativos no mês")
+    lines.append("- Vizinhos: postos geograficamente próximos, úteis para remanejamento de profissionais")
+
+    # ── ZONAS GEOGRÁFICAS ──
+    lines.append(f"\nZONAS GEOGRÁFICAS:")
+    lines.append("- Zona Norte: Anchieta (A), Del Castilho (D), Madureira (M)")
+    lines.append("- Zona Oeste: Bangu (B), Guadalupe (G), Realengo (R), Campinho (C), Jacarepaguá (J), Rio das Pedras (P)")
+    lines.append("- Baixada Fluminense: Nilópolis (N), Nova Iguaçu (I), Xerém (X), Campo Grande Y (Y)")
+
+    return "\n".join(lines)
+
+
+# ─────────────────────────────────────────────────────────────
 # Entry point público
 # ─────────────────────────────────────────────────────────────
 
@@ -621,6 +884,7 @@ _BUILDERS = {
     "receita_despesa_rateio": lambda p, i, f, q, r: _build_receita_despesa(p, i, f, q, r, "json_rateio"),
     "alimentacao": _build_alimentacao,
     "vendas": _build_vendas,
+    "qualidade_agenda": _build_qualidade_agenda,
 }
 
 

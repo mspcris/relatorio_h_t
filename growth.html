@@ -72,6 +72,18 @@
     .g-status.ok { background:#d4edda; color:#155724; }
     .g-status.warn { background:#fff3cd; color:#856404; }
     .g-status.bad { background:#f8d7da; color:#721c24; }
+
+    /* Rastreabilidade */
+    .g-card .card-body { position: relative; }
+    .g-card .btn-rastro { position:absolute; bottom:4px; right:8px; font-size:.7rem; color:#999; background:none; border:none; cursor:pointer; padding:2px 4px; }
+    .g-card .btn-rastro:hover { color:#007bff; }
+    .rastro-panel { display:none; background:#f8f9fa; border-top:1px solid #dee2e6; padding:10px 14px; font-size:.8rem; line-height:1.5; }
+    .rastro-panel.show { display:block; }
+    .rastro-panel .rastro-title { font-weight:700; color:#333; margin-bottom:4px; }
+    .rastro-panel .rastro-trail { color:#666; margin-bottom:6px; }
+    .rastro-panel .rastro-trail b { color:#333; }
+    .rastro-panel pre { background:#1e1e1e; color:#d4d4d4; padding:8px 10px; border-radius:4px; font-size:.75rem; overflow-x:auto; margin:0; white-space:pre-wrap; }
+    .rastro-panel .rastro-explain { color:#444; margin-bottom:6px; }
   </style>
 </head>
 
@@ -161,6 +173,20 @@
                   </div>
                   <div class="g-icon bg-blue"><i class="fas fa-dollar-sign"></i></div>
                 </div>
+                <button class="btn-rastro" onclick="toggleRastro(this)" title="Ver origem dos dados"><i class="fas fa-search"></i> rastro</button>
+              </div>
+              <div class="rastro-panel">
+                <div class="rastro-explain">Receita recorrente esperada: soma de todos os contratos ativos com mensalidade no mes.</div>
+                <div class="rastro-trail"><b>Pagina:</b> growth.html &rarr; <b>JSON:</b> growth_dashboard.json [mrr_count, mrr_valor] &rarr; <b>Export:</b> export_growth.py &rarr; <b>SQL:</b> sql_growth/mrr.sql &rarr; <b>View:</b> vw_fin_receita2</div>
+                <pre>SELECT count(r2.idcliente) as mrr_count,
+       sum(r2.[Valor devido]) as mrr_valor
+FROM vw_fin_receita2 r2
+CROSS JOIN sis_empresa emp
+WHERE r2.[Data referencia] >= :ini AND r2.[Data referencia] < :fim
+  AND r2.idEndereco = emp.idEndereco
+  AND isnull(r2.CanceladoANS,0) = 0
+  AND (r2.[cliente Situação] = N'adimplente' OR r2.[cliente Situação] = N'inadimplente')
+  AND r2.tipo = N'mensalidade'</pre>
               </div>
             </div>
 
@@ -175,6 +201,14 @@
                   </div>
                   <div class="g-icon bg-green"><i class="fas fa-hand-holding-usd"></i></div>
                 </div>
+                <button class="btn-rastro" onclick="toggleRastro(this)" title="Ver origem dos dados"><i class="fas fa-search"></i> rastro</button>
+              </div>
+              <div class="rastro-panel">
+                <div class="rastro-explain">Valor efetivamente recebido de mensalidades. A diferenca entre MRR e Receita indica inadimplencia.</div>
+                <div class="rastro-trail"><b>Pagina:</b> growth.html &rarr; <b>JSON:</b> consolidado_mensal_por_posto.json [mensalidade, mensalidade_qtd] &rarr; <b>Export:</b> export_consultas_mensal_json.py &rarr; <b>SQL:</b> sql_full/consultas_mensal.sql &rarr; <b>View:</b> vw_fin_receita2</div>
+                <pre>-- Extraido de vw_fin_receita2 com filtro tipo = N'mensalidade'
+-- e [Situação] = N'Pago'
+-- Campo: SUM([Valor pago]) as mensalidade</pre>
               </div>
             </div>
 
@@ -189,6 +223,11 @@
                   </div>
                   <div class="g-icon bg-cyan"><i class="fas fa-percentage"></i></div>
                 </div>
+                <button class="btn-rastro" onclick="toggleRastro(this)" title="Ver origem dos dados"><i class="fas fa-search"></i> rastro</button>
+              </div>
+              <div class="rastro-panel">
+                <div class="rastro-explain">Proporcao entre esperado e recebido. Se > 1: cobrou menos que devia (inadimplencia). Se < 1: recebeu mais. Ideal: proximo de 1.</div>
+                <div class="rastro-trail"><b>Calculo no JS:</b> MRR valor / Receita Mensalidades. Nao tem SQL proprio — usa os dois indicadores acima.</div>
               </div>
             </div>
 
@@ -203,6 +242,11 @@
                   </div>
                   <div class="g-icon bg-orange"><i class="fas fa-exclamation-triangle"></i></div>
                 </div>
+                <button class="btn-rastro" onclick="toggleRastro(this)" title="Ver origem dos dados"><i class="fas fa-search"></i> rastro</button>
+              </div>
+              <div class="rastro-panel">
+                <div class="rastro-explain">Quanto % faltou para receber tudo que deveria. Ex: MRR R$100k, Receita R$85k = Gap 15%.</div>
+                <div class="rastro-trail"><b>Calculo no JS:</b> (MRR - Receita) / MRR x 100. Positivo = faltou. Negativo = superou.</div>
               </div>
             </div>
 
@@ -217,6 +261,27 @@
                   </div>
                   <div class="g-icon bg-red"><i class="fas fa-user-minus"></i></div>
                 </div>
+                <button class="btn-rastro" onclick="toggleRastro(this)" title="Ver origem dos dados"><i class="fas fa-search"></i> rastro</button>
+              </div>
+              <div class="rastro-panel">
+                <div class="rastro-explain">Taxa de cancelamento real. Cancelamentos do mes dividido pela base de contratos ativos no mes anterior.</div>
+                <div class="rastro-trail"><b>Pagina:</b> growth.html &rarr; <b>JSON:</b> growth_dashboard.json [cancelamentos] &rarr; <b>Export:</b> export_growth.py &rarr; <b>SQL:</b> sql_growth/churn.sql &rarr; <b>Tabela:</b> Cad_Cliente</div>
+                <div class="rastro-trail"><b>Base (denominador):</b> growth_dashboard.json [mrr_count do mes anterior] &rarr; sql_growth/mrr.sql &rarr; vw_fin_receita2</div>
+                <pre>-- Cancelamentos do mes (sql_growth/churn.sql):
+SELECT COUNT(*) as cancelamentos
+FROM Cad_Cliente c
+CROSS JOIN Sis_Empresa emp
+WHERE c.Desativado = 0
+  AND ISNULL(c.DataCancelamentoAuto,
+      CASE WHEN c.DataCancelamentoANS IS NOT NULL
+            AND c.DataReativadoANS IS NULL
+           THEN c.DataCancelamentoANS
+           WHEN c.DataCancelamentoANS > c.DataReativadoANS
+           THEN c.DataCancelamentoANS END
+  ) >= :ini AND ... < :fim
+  AND c.idEndereco = emp.idEndereco
+
+-- Formula: cancelamentos / mrr_count(mes anterior) x 100</pre>
               </div>
             </div>
 
@@ -231,6 +296,11 @@
                   </div>
                   <div class="g-icon bg-teal"><i class="fas fa-user-check"></i></div>
                 </div>
+                <button class="btn-rastro" onclick="toggleRastro(this)" title="Ver origem dos dados"><i class="fas fa-search"></i> rastro</button>
+              </div>
+              <div class="rastro-panel">
+                <div class="rastro-explain">% de contratos que permaneceram ativos. Complemento do churn: 100% - Churn.</div>
+                <div class="rastro-trail"><b>Calculo no JS:</b> 1 - (cancelamentos / mrr_count_mes_anterior). Mesmas fontes do Churn acima.</div>
               </div>
             </div>
 
@@ -245,6 +315,21 @@
                   </div>
                   <div class="g-icon bg-purple"><i class="fas fa-funnel-dollar"></i></div>
                 </div>
+                <button class="btn-rastro" onclick="toggleRastro(this)" title="Ver origem dos dados"><i class="fas fa-search"></i> rastro</button>
+              </div>
+              <div class="rastro-panel">
+                <div class="rastro-explain">Custo de Aquisicao de Cliente: quanto gastou em vendas para cada novo cliente adquirido.</div>
+                <div class="rastro-trail"><b>Pagina:</b> growth.html &rarr; <b>JSON:</b> growth_dashboard.json [cac_despesas_vendas] &rarr; <b>Export:</b> export_growth.py &rarr; <b>SQL:</b> sql_growth/cac_despesas_vendas.sql &rarr; <b>View:</b> vw_Fin_Despesa</div>
+                <div class="rastro-trail"><b>Vendas (denominador):</b> metas_vendas.json [vendas_por_dia] &rarr; export_metas.py &rarr; tabela Metas</div>
+                <pre>-- Despesas de vendas (sql_growth/cac_despesas_vendas.sql):
+SELECT sum([Valor pago]) as cac_despesas_vendas
+FROM vw_Fin_Despesa
+WHERE idContaTipo <> 11
+  AND [Data prestação] >= :ini AND [Data prestação] < :fim
+  AND [Situação] = N'Pago'
+  AND plano = N'DESPESAS DE VENDAS'
+
+-- Formula: cac_despesas_vendas / total_vendas_no_mes</pre>
               </div>
             </div>
 
@@ -259,6 +344,14 @@
                   </div>
                   <div class="g-icon bg-indigo"><i class="fas fa-gem"></i></div>
                 </div>
+                <button class="btn-rastro" onclick="toggleRastro(this)" title="Ver origem dos dados"><i class="fas fa-search"></i> rastro</button>
+              </div>
+              <div class="rastro-panel">
+                <div class="rastro-explain">Valor do tempo de vida do cliente. Ticket medio x tempo medio de permanencia (1/churn meses).</div>
+                <div class="rastro-trail"><b>Calculo no JS:</b> Ticket medio (Receita Mensalidades / qtd contratos) x (1 / Churn). Combina fontes de Receita e Churn.</div>
+                <pre>-- Ticket medio = mensalidade_valor / mensalidade_qtd (consolidado_mensal_por_posto.json)
+-- Tempo medio = 1 / churn_mensal (em meses)
+-- LTV = ticket x tempo</pre>
               </div>
             </div>
 
@@ -273,6 +366,13 @@
                   </div>
                   <div class="g-icon bg-pink"><i class="fas fa-chart-pie"></i></div>
                 </div>
+                <button class="btn-rastro" onclick="toggleRastro(this)" title="Ver origem dos dados"><i class="fas fa-search"></i> rastro</button>
+              </div>
+              <div class="rastro-panel">
+                <div class="rastro-explain">LTV ajustado pela margem de lucro. Se a margem e 40%, o LTV real e 40% do LTV bruto.</div>
+                <div class="rastro-trail"><b>Calculo no JS:</b> LTV x Margem. Margem = (Receita Total - Despesa Total) / Receita Total.</div>
+                <div class="rastro-trail"><b>Receita Total:</b> consolidado_mensal_por_posto.json &rarr; export_consultas_mensal_json.py &rarr; vw_fin_receita2</div>
+                <div class="rastro-trail"><b>Despesa Total:</b> consolidado_mensal_por_posto.json &rarr; export_consultas_mensal_json.py &rarr; vw_Fin_Despesa</div>
               </div>
             </div>
 
@@ -287,6 +387,11 @@
                   </div>
                   <div class="g-icon bg-yellow"><i class="fas fa-balance-scale-right"></i></div>
                 </div>
+                <button class="btn-rastro" onclick="toggleRastro(this)" title="Ver origem dos dados"><i class="fas fa-search"></i> rastro</button>
+              </div>
+              <div class="rastro-panel">
+                <div class="rastro-explain">Retorno sobre investimento em aquisicao. >= 3x = saudavel. < 1x = prejuizo por cliente.</div>
+                <div class="rastro-trail"><b>Calculo no JS:</b> LTV / CAC. Combina todas as fontes de LTV e CAC acima.</div>
               </div>
             </div>
 
@@ -301,6 +406,18 @@
                   </div>
                   <div class="g-icon bg-cyan"><i class="fas fa-filter"></i></div>
                 </div>
+                <button class="btn-rastro" onclick="toggleRastro(this)" title="Ver origem dos dados"><i class="fas fa-search"></i> rastro</button>
+              </div>
+              <div class="rastro-panel">
+                <div class="rastro-explain">Taxa de conversao de leads: dos leads recebidos, quantos % viraram clientes.</div>
+                <div class="rastro-trail"><b>Pagina:</b> growth.html &rarr; <b>JSON:</b> growth_dashboard.json [leads_total, leads_convertidos] &rarr; <b>Export:</b> export_growth.py &rarr; <b>DB:</b> MySQL leads (tabela leads)</div>
+                <pre>SELECT filialCode,
+       COUNT(*) as leads_total,
+       SUM(finish_lead_signup) as leads_convertidos
+FROM leads
+WHERE created_at >= :ini AND created_at < :fim
+  AND deleted_at IS NULL
+GROUP BY filialCode</pre>
               </div>
             </div>
 
@@ -354,19 +471,20 @@
 
               <div class="manual-section">
                 <h6><i class="fas fa-user-minus text-danger mr-1"></i> Churn Mensal</h6>
-                <p><strong>O que mede:</strong> Taxa de cancelamento. Dos clientes que entraram no mes anterior, quantos % sairam no mes seguinte.</p>
-                <p><strong>Formula:</strong> 1 &minus; (Clientes retidos apos 1 mes &divide; Total de admissoes do mes anterior)</p>
+                <p><strong>O que mede:</strong> Taxa de cancelamento operacional. Quantos contratos foram cancelados no mes em relacao a base de contratos ativos no inicio do mes.</p>
+                <p><strong>Formula:</strong> Cancelamentos do mes &divide; Contratos ativos no mes anterior &times; 100</p>
+                <p><strong>Exemplo:</strong> 305 cancelamentos em marco / 6.406 contratos no fim de fevereiro = 4,76%</p>
                 <p><strong>Interpretacao:</strong> Churn &lt; 5% = excelente. 5-10% = atencao. &gt; 10% = critico.</p>
-                <span class="tag-fonte">Fonte: fidelizacao_cliente.json &rarr; retencao 1 mes da coorte anterior</span>
+                <span class="tag-fonte">Fonte: growth_dashboard.json &rarr; cancelamentos (Cad_Cliente) / mrr_count (mes anterior)</span>
               </div>
               <hr>
 
               <div class="manual-section">
                 <h6><i class="fas fa-user-check mr-1" style="color:#20c997"></i> Retencao</h6>
-                <p><strong>O que mede:</strong> % de clientes que permanecem ativos apos 1 mes.</p>
+                <p><strong>O que mede:</strong> % de contratos que permaneceram ativos no mes.</p>
                 <p><strong>Formula:</strong> 100% &minus; Churn</p>
                 <p><strong>Interpretacao:</strong> &gt; 95% = excelente. 90-95% = bom. &lt; 90% = atencao.</p>
-                <span class="tag-fonte">Fonte: fidelizacao_cliente.json &rarr; retencao 1 mes</span>
+                <span class="tag-fonte">Fonte: growth_dashboard.json &rarr; 1 - churn</span>
               </div>
               <hr>
 
@@ -470,6 +588,11 @@
   // Helpers
   // ============================
   function el(s) { return document.querySelector(s); }
+
+  function toggleRastro(btn) {
+    var panel = btn.closest('.g-card').querySelector('.rastro-panel');
+    if (panel) panel.classList.toggle('show');
+  }
   function num(v) { return Number(v) || 0; }
   function fmt(v, dec) { return v.toLocaleString('pt-BR', {minimumFractionDigits:dec||0, maximumFractionDigits:dec||0}); }
   function fmtR(v) { return 'R$ ' + fmt(v, 2); }
@@ -598,22 +721,22 @@
   }
 
   function calcChurn(ym) {
+    // Churn operacional: cancelamentos_do_mes / base_contratos_mes_anterior
     var postos = getPostos();
-    if (!DATA.fidel || !DATA.fidel.dados)
-      return {churn:0, retention:0, admissoes:0, ok:false};
+    var gd = DATA.growth && DATA.growth.dados;
+    if (!gd || !gd[ym]) return {churn:0, retention:0, cancelamentos:0, base:0, ok:false};
     var pm = prevYm(ym);
-    var adm = 0, ret = 0;
+    var cancelamentos = 0, base = 0;
     postos.forEach(function(p) {
-      var c = DATA.fidel.dados[pm] && DATA.fidel.dados[pm][p];
-      if (c) {
-        adm += num(c.admissoes);
-        var r1 = c.retencao_por_mes && c.retencao_por_mes['1'];
-        if (r1) ret += num(r1.qtd);
-      }
+      var d = gd[ym] && gd[ym][p];
+      if (d) cancelamentos += num(d.cancelamentos);
+      // base = mrr_count do mes anterior
+      var prev = gd[pm] && gd[pm][p];
+      if (prev) base += num(prev.mrr_count);
     });
-    if (adm === 0) return {churn:0, retention:0, admissoes:0, ok:false};
-    var retention = ret / adm;
-    return {churn: 1 - retention, retention:retention, admissoes:adm, ok:true};
+    if (base === 0) return {churn:0, retention:0, cancelamentos:cancelamentos, base:0, ok:false};
+    var churnRate = cancelamentos / base;
+    return {churn: churnRate, retention: 1 - churnRate, cancelamentos:cancelamentos, base:base, ok:true};
   }
 
   function calcVendas(ym) {
@@ -723,16 +846,16 @@
       mrr.ok ? fmt(gap, 1) + '%' : '--',
       gap > 0 ? 'Faltou ' + fmt(gap,1) + '% para atingir o MRR' : gap < 0 ? 'Superou o MRR em ' + fmt(Math.abs(gap),1) + '%' : '');
 
-    // 5. Churn
+    // 5. Churn operacional
     var churn = calcChurn(ym);
     setCard('churn',
       churn.ok ? fmtPct(churn.churn) : 'Sem dados',
-      churn.ok ? 'Base: ' + fmt(churn.admissoes) + ' admissoes (mes anterior)' : 'Sem dados de fidelizacao');
+      churn.ok ? fmt(churn.cancelamentos) + ' cancelamentos / ' + fmt(churn.base) + ' contratos (mes anterior)' : 'Sem dados do mes anterior');
 
     // 6. Retencao
     setCard('retencao',
       churn.ok ? fmtPct(churn.retention) : 'Sem dados',
-      churn.ok ? 'Clientes retidos apos 1 mes' : '');
+      churn.ok ? fmt(churn.base - churn.cancelamentos) + ' clientes retidos de ' + fmt(churn.base) : '');
 
     // 7. CAC
     var vendas = calcVendas(ym);

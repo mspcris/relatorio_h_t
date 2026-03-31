@@ -1,4 +1,4 @@
-from flask import Flask, request, make_response, jsonify, render_template
+from flask import Flask, request, make_response, jsonify, render_template, redirect
 import os, secrets, json, sqlite3
 from datetime import date, datetime
 import re
@@ -455,7 +455,7 @@ def render_protected_page(page_name, **extra_vars):
     from auth_db import SessionLocal, get_user_by_email as _gue
     email, postos = decode_user()
     if not email:
-        return ('', 401)
+        return redirect("/login")
 
     db = SessionLocal()
     try:
@@ -1020,7 +1020,7 @@ def any_html(filename):
 
     email, postos = decode_user()
     if not email:
-        return ('', 401)
+        return redirect("/login")
 
     from auth_db import SessionLocal, get_user_by_email as _gue
     db = SessionLocal()

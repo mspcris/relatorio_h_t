@@ -144,6 +144,18 @@ GROQ_API_KEY, OPENAI_API_KEY
 
 ---
 
+## REGRA CRÍTICA — Formato de datas no SQL Server
+
+O SQL Server da CAMIM tem `SET DATEFORMAT dmy` em todas as views.
+
+- **Views:** datas SEMPRE em DD/MM/YYYY → `date.strftime("%d/%m/%Y")`
+- **Tabelas:** pode usar formato ISO (YYYY-MM-DD)
+- **NUNCA** usar `str(date)` como parâmetro SQL — gera `'2026-03-01'` (ISO) que o SQL Server interpreta errado com SET DATEFORMAT dmy
+- Em março/2026, esse bug retornou 165 clientes em vez de 6.632 em Anchieta. Ficou meses sem ser detectado.
+- Todos os scripts `export_*.py` devem usar `strftime("%d/%m/%Y")` ao passar datas para queries em views
+
+---
+
 ## Regras de desenvolvimento
 
 - Cada KPI é independente — nunca compartilha cálculos entre páginas

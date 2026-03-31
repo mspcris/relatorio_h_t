@@ -32,7 +32,7 @@
 
     <!-- CONTEXTO IA + SESSÃO -->
     <script>
-        window.IA_API_URL = '/ia/analisar';
+        window.IA_API_URL = '/api/ia/chat';
         window.PROMPTS_API_BASE = '/prompts';
         fetch("/session/me", { credentials: 'same-origin' })
             .then(r => r.json())
@@ -662,6 +662,7 @@
                                             <th>Status</th>
                                             <th>Posto</th>
                                             <th>Especialidade</th>
+                                            <th>Data Vaga</th>
                                             <th>Capacidade</th>
                                             <th>Vagas Livres</th>
                                             <th>% Livre</th>
@@ -1894,13 +1895,14 @@ function renderSimAlertas(data) {
             const excesso = d.DiasAteProximaVaga - d.prazoconsultaans;
             if (excesso > 0) {
                 const nomePosto = postosInfo[d.posto] ? postosInfo[d.posto].nome : (POSTO_NOMES[d.posto]||d.posto);
+                const dataVagaAlerta = d.DataProximaVaga ? fmtDataVaga(d.DataProximaVaga) : '?';
                 alertas.push({
                     tipo: 'critico',
                     titulo: `${d.Especialidade} no ${nomePosto} (${d.posto}) — ${excesso} dias além do ANS`,
-                    texto: `Próxima vaga em ${d.DiasAteProximaVaga} dias (prazo ANS: ${d.prazoconsultaans}d, prazo CAMIM: ${d.prazoconsultacamim}d). ` +
-                           `Com capacidade de ${d.CapacidadeConsiderada || '?'} vagas e apenas ${d.QuantidadeVagasDisponivelNaData ?? 0} livres, ` +
-                           `é necessário ampliar a oferta ou redirecionar demanda para postos com disponibilidade.`,
-                    meta: `Vagas livres: ${d.QuantidadeVagasDisponivelNaData ?? 0} | Capacidade: ${d.CapacidadeConsiderada ?? '?'} | % Livres: ${d.ValorPercentualVagasLivres ?? '?'}%`
+                    texto: `Próxima vaga em ${d.DiasAteProximaVaga} dias, no dia ${dataVagaAlerta} (prazo ANS: ${d.prazoconsultaans}d, prazo CAMIM: ${d.prazoconsultacamim}d). ` +
+                           `Nessa data, a agenda tem capacidade de ${d.CapacidadeConsiderada || '?'} vagas e ${d.QuantidadeVagasDisponivelNaData ?? 0} estão livres. ` +
+                           `É necessário ampliar a oferta ou redirecionar demanda para postos com disponibilidade.`,
+                    meta: `Data: ${dataVagaAlerta} | Vagas livres: ${d.QuantidadeVagasDisponivelNaData ?? 0} de ${d.CapacidadeConsiderada ?? '?'} | % Livres: ${d.ValorPercentualVagasLivres ?? '?'}%`
                 });
             }
         });
@@ -1981,7 +1983,7 @@ function renderSimGapTable(data) {
     });
 
     if (!filtered.length) {
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">Nenhum dado para os filtros selecionados.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted">Nenhum dado para os filtros selecionados.</td></tr>';
         return;
     }
 
@@ -2000,10 +2002,12 @@ function renderSimGapTable(data) {
         const occPct = ocupacao !== '—' ? parseInt(ocupacao) : 0;
         const occColor = occPct >= 90 ? '#dc3545' : occPct >= 75 ? '#fd7e14' : '#28a745';
 
+        const dataVagaTbl = d.DataProximaVaga ? fmtDataVaga(d.DataProximaVaga) : '—';
         return `<tr>
             <td>${statusBadgeHtml(d.Status)}</td>
             <td><strong>${d.posto}</strong><br><span style="font-size:0.72rem;color:#888">${nomePosto}</span></td>
             <td>${d.Especialidade}</td>
+            <td class="text-center" style="white-space:nowrap">${dataVagaTbl}</td>
             <td class="text-center">${cap || '—'}</td>
             <td class="text-center">${livres}</td>
             <td class="text-center">${pctLivre}${pctLivre !== '—' ? '%' : ''}</td>
@@ -2205,8 +2209,8 @@ function renderSimRecomendacoes(data) {
                 const zona = POSTO_ZONA[crit.posto] || '';
                 const dataVaga = best.DataProximaVaga ? fmtDataVaga(best.DataProximaVaga) : null;
                 const diasVaga = best.DiasAteProximaVaga;
-                const vagasDisp = best.QuantidadeVagasDisponivelNaData || 0;
-                const medicos = best.QuantidadeVagasTotalMedicosAtendem || 0;
+                const vagasDisp = Math.max(best.QuantidadeVagasDisponivelNaData || 0, 0);
+                const medicos = Math.max(best.QuantidadeVagasTotalMedicosAtendem || 0, 0);
 
                 remanejamentos.push({
                     prioridade: crit.Status === 'SEM_VAGA' ? 'alta' : 'alta',
@@ -2236,7 +2240,23 @@ function renderSimRecomendacoes(data) {
     });
 
     // Gerar recomendações de remanejamento (top 5)
-    remanejamentos.slice(0, 5).forEach(rm => {
+    // Soluções alternativas variadas para não repetir texto
+    const SOLUCOES_VIZINHO = [
+        (rm, zona) => `Como os postos são próximos na ${zona}, o deslocamento do profissional seria curto e a negociação mais viável.`,
+        (rm, zona) => `A proximidade entre os postos (ambos na ${zona}) torna o remanejamento a opção mais rápida.`,
+        (rm, zona) => `Postos vizinhos na ${zona} — considere redirecionar pacientes temporariamente enquanto não resolve a agenda.`,
+        (rm, zona) => `Alternativa imediata pela proximidade na ${zona}. A médio prazo, avaliar contratação de mais um profissional para o posto deficitário.`,
+        (rm, zona) => `Postos próximos na ${zona}. Outra opção: verificar se há especialidades médicas com folga no posto crítico cujos horários possam ser remanejados.`,
+    ];
+    const SOLUCOES_LONGE = [
+        (rm, zona) => `Se o remanejamento entre regiões for inviável, avaliar contratação urgente de profissional para o posto deficitário.`,
+        (rm, zona) => `Outra alternativa: revisar a grade do posto crítico e reduzir horários de especialidades médicas com menor demanda para abrir espaço.`,
+        (rm, zona) => `Considerar também: contrato temporário com profissional da região ou encaminhamento de pacientes para unidade mais próxima com vaga.`,
+        (rm, zona) => `O gap é grande o suficiente para justificar abertura de processo seletivo. Enquanto isso, redirecionar os casos mais urgentes.`,
+        (rm, zona) => `Verificar se há profissional desta especialidade com carga horária parcial em outro posto que possa assumir turnos extras.`,
+    ];
+
+    remanejamentos.slice(0, 5).forEach((rm, idx) => {
         const nomeCrit = nomePosto(rm.postoCritico);
         const nomeDoador = nomePosto(rm.postoDoador);
         const espAbrev = abreviarEsp(rm.espCritica);
@@ -2252,16 +2272,16 @@ function renderSimRecomendacoes(data) {
         if (rm.isVizinho) {
             texto += ` <span style="color:#28a745;font-weight:600;">(vizinho na ${rm.zona})</span>`;
         }
-        texto += ` tem ${rm.medicosDoador} médico(s) atendendo com ${rm.vagasDoador} vagas disponíveis`;
-        if (rm.dataVagaDoador) {
-            texto += ` (próxima em ${rm.dataVagaDoador}, ${rm.diasVagaDoador}d)`;
+        texto += ` tem agenda com ${rm.medicosDoador} vagas no dia ${rm.dataVagaDoador || '?'}, sendo ${rm.vagasDoador} disponíveis`;
+        if (rm.diasVagaDoador != null) {
+            texto += ` (daqui a ${rm.diasVagaDoador}d)`;
         }
         texto += '. ';
 
         if (rm.isVizinho) {
-            texto += `Por serem postos próximos, o deslocamento do profissional seria menor — o que facilita a negociação.`;
+            texto += SOLUCOES_VIZINHO[idx % SOLUCOES_VIZINHO.length](rm, rm.zona);
         } else {
-            texto += `Sabemos que transferir profissionais entre regiões não é simples, mas pode ser a melhor alternativa para cobrir o gap na ${rm.zona}.`;
+            texto += SOLUCOES_LONGE[idx % SOLUCOES_LONGE.length](rm, rm.zona);
         }
 
         recs.push({
@@ -2557,32 +2577,23 @@ function renderCrossRef() {
             }
         }
 
-        // Fidelizacao: dados[month][posto].{admissoes, retencao_por_mes[N].qtd}
-        // NOTA: campo "percentual" no JSON é sempre 0.0 (bug no export). Calcular: qtd / admissoes * 100
-        // Usa 1 coorte: a mais recente com 3 meses COMPLETOS (mês atual - 4)
-        // Ex: março/2026 → coorte nov/2025 (dez, jan, fev = 3 meses completos)
-        // Assim mantém consistência com a página de fidelização.
-        if (crossData.fidelizacao?.dados) {
-            const fd = crossData.fidelizacao.dados;
-            // Calcular coorte alvo: mês atual - 4 (garante 3 meses completos)
-            const now = new Date();
-            const targetDate = new Date(now.getFullYear(), now.getMonth() - 4, 1);
-            const targetYm = `${targetDate.getFullYear()}-${String(targetDate.getMonth()+1).padStart(2,'0')}`;
-            // Buscar a coorte alvo ou a mais próxima anterior com dados
-            const cohortMonths = Object.keys(fd).filter(k => /^\d{4}-\d{2}$/.test(k) && k <= targetYm).sort().reverse();
-            for (const ym of cohortMonths) {
-                const postoData = fd[ym]?.[p];
-                if (postoData?.retencao_por_mes && postoData.admissoes > 0) {
-                    const ret3 = postoData.retencao_por_mes['3'] || postoData.retencao_por_mes[3];
-                    if (ret3 && ret3.qtd != null) {
-                        const retencao = (ret3.qtd / postoData.admissoes) * 100;
-                        m.churn_3m = Math.round(100 - retencao);
-                        m.churn_cohort = ym;
-                        m.churn_admissoes = postoData.admissoes;
-                        m.churn_retidos = ret3.qtd;
-                        break;
-                    }
-                }
+        // Churn operacional: cancelamentos do mês / base de contratos do mês anterior
+        // Fonte: growth_dashboard.json > dados[month][posto].cancelamentos
+        // Base: growth_dashboard.json > dados[month_anterior][posto].mrr_count
+        if (crossData.growth?.dados && latestGrowth) {
+            const gd = crossData.growth.dados;
+            const cancelData = gd[latestGrowth]?.[p];
+            // Calcular mês anterior
+            const [yg, mg] = latestGrowth.split('-').map(Number);
+            const prevYm = mg === 1 ? `${yg-1}-12` : `${yg}-${String(mg-1).padStart(2,'0')}`;
+            const baseData = gd[prevYm]?.[p];
+            if (cancelData && baseData && baseData.mrr_count > 0) {
+                const cancelamentos = cancelData.cancelamentos || 0;
+                const base = baseData.mrr_count;
+                m.churn_3m = Math.round(cancelamentos / base * 100 * 10) / 10;
+                m.churn_cancelamentos = cancelamentos;
+                m.churn_base = base;
+                m.churn_ref = latestGrowth;
             }
         }
 
@@ -2668,9 +2679,9 @@ function renderCrossKpis(metrics, ctx) {
     const totalMensQtd = vals.reduce((s, m) => s + (m.mensalidades_qtd || 0), 0);
     // mensalidades = valor R$ (consolidado_mensal_por_posto.json > [month][posto].mensalidade)
     const totalMensValor = vals.reduce((s, m) => s + (m.mensalidades || 0), 0);
-    // churn_3m = 100 - retenção aos 3 meses (fidelizacao_cliente.json > dados[cohort][posto].retencao_por_mes[3].percentual)
+    // churn_3m = churn operacional: cancelamentos_do_mes / base_contratos_mes_anterior * 100
     const avgChurn = vals.filter(m => m.churn_3m !== undefined);
-    const churnAvg = avgChurn.length ? Math.round(avgChurn.reduce((s, m) => s + m.churn_3m, 0) / avgChurn.length) : null;
+    const churnAvg = avgChurn.length ? Math.round(avgChurn.reduce((s, m) => s + m.churn_3m, 0) / avgChurn.length * 10) / 10 : null;
     // consultas (consultas_mensal_status_consolidado.json > months[month].postos[posto].totais)
     const totalConsultas = vals.reduce((s, m) => s + (m.consultas_total || 0), 0);
     const totalFaltas = vals.reduce((s, m) => s + (m.consultas_faltas || 0), 0);
@@ -2685,7 +2696,7 @@ function renderCrossKpis(metrics, ctx) {
         totalMrr > 0 ? { num: totalMrr.toLocaleString('pt-BR'), label: `Clientes Ativos ${ctx.label}`, color: '#2c5f8a', help: 'Contratos ativos (status cancelamento = 0). Fonte: growth_dashboard.json via vw_fin_receita2.' } : null,
         totalMensQtd > 0 ? { num: totalMensQtd.toLocaleString('pt-BR'), label: `Mensalidades Recebidas`, color: '#28a745', help: 'Quantidade de mensalidades recebidas no mês. Fonte: consolidado_mensal_por_posto.json.' } : null,
         totalMensValor > 0 ? { num: 'R$ ' + (totalMensValor / 1000).toFixed(0) + 'k', label: 'Receita Mensalidades', color: '#17a2b8', help: 'Valor total das mensalidades recebidas (R$). Fonte: consolidado_mensal_por_posto.json.' } : null,
-        churnAvg !== null ? { num: churnAvg + '%', label: 'Churn Médio 3m', color: churnAvg > 20 ? '#dc3545' : churnAvg > 10 ? '#fd7e14' : '#28a745', help: 'Média da taxa de evasão aos 3 meses após admissão. Cálculo: 100% − (retidos ÷ admitidos × 100). Fonte: fidelizacao_cliente.json.' } : null,
+        churnAvg !== null ? { num: churnAvg + '%', label: 'Churn Mensal', color: churnAvg > 10 ? '#dc3545' : churnAvg > 5 ? '#fd7e14' : '#28a745', help: 'Média do churn operacional: cancelamentos do mês ÷ base de contratos do mês anterior × 100. Fonte: growth_dashboard.json (Cad_Cliente + vw_fin_receita2).' } : null,
         pctFaltas !== null ? { num: pctFaltas + '%', label: 'Faltas em Consultas', color: pctFaltas > 20 ? '#dc3545' : pctFaltas > 10 ? '#fd7e14' : '#28a745', help: 'Percentual de faltas sobre total de consultas agendadas. Cálculo: faltas ÷ total × 100. Fonte: consultas_mensal_status_consolidado.json.' } : null,
         totalVendas > 0 ? { num: totalVendas, label: 'Vendas no Mês', color: '#555', help: 'Quantidade de vendas no mês. Fonte: vendas_mensal.json.' } : null,
         avgMeta !== null ? { num: avgMeta + '%', label: 'Atingimento de Meta', color: avgMeta >= 100 ? '#28a745' : avgMeta >= 70 ? '#fd7e14' : '#dc3545', help: 'Média do percentual de atingimento da meta de vendas. Cálculo: vendas_realizadas ÷ vendas_meta × 100. Fonte: json_metas.' } : null,
@@ -2774,7 +2785,7 @@ function renderCrossCorrelacoes(metrics, health, ctx) {
         const worst = critPorPosto[0];
         const nome = postosInfo[worst.posto] ? postosInfo[worst.posto].nome : (POSTO_NOMES[worst.posto]||worst.posto);
         let extraInfo = '';
-        if (worst.churn_3m !== undefined) extraInfo += ` Churn 3m: ${worst.churn_3m}%.`;
+        if (worst.churn_3m !== undefined) extraInfo += ` Churn: ${worst.churn_3m}%.`;
         if (worst.consultas_pct_falta !== undefined) extraInfo += ` Faltas: ${worst.consultas_pct_falta}%.`;
         if (worst.meta_pct !== undefined) extraInfo += ` Meta: ${worst.meta_pct}%.`;
         corrs.push({
@@ -3098,7 +3109,7 @@ function buildIAContext() {
             prazo_ANS: 'Prazo regulatório máximo da Agência Nacional de Saúde para primeira consulta em especialidade',
             prazo_CAMIM: 'Prazo interno da CAMIM, geralmente mais tolerante que o ANS',
             mrr_count: 'Monthly Recurring Revenue count — número de mensalidades ativas no mês',
-            churn_3m: 'Taxa de cancelamento de clientes nos 3 primeiros meses após admissão',
+            churn_3m: 'Churn operacional: cancelamentos do mês ÷ base de contratos do mês anterior',
         }
     };
 }
