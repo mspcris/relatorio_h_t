@@ -812,10 +812,13 @@
                                     <div class="card-header">
                                         <h3 class="card-title mb-0"><i class="fas fa-user-minus mr-2 text-danger"></i>Saúde da Agenda vs Churn</h3>
                                     </div>
-                                    <div class="card-body" style="height: 280px;"
-                                         data-iso-description="Scatter/bar chart: X-axis = postos, Y-axis left = agenda health score (0-100), Y-axis right = churn rate (%). Shows inverse correlation: postos with lower health scores tend to have higher churn."
-                                    >
+                                    <div class="card-body" style="height: 280px;">
                                         <canvas id="crossChartAgendaChurn"></canvas>
+                                    </div>
+                                    <div class="card-footer" style="font-size:0.75rem;color:#888;background:#fafafa;border-top:1px solid #eee;padding:8px 12px;">
+                                        <strong>Barras (eixo esquerdo):</strong> Score de saúde da agenda = (OK×1 + ALERTA×0.5) ÷ total × 100. Fonte: qualidade_agenda.json.<br>
+                                        <strong>Linha (eixo direito):</strong> Churn aos 3 meses = 100% − (retidos ÷ admitidos × 100). Usa a coorte de admissão mais recente com dado de 3 meses. Fonte: fidelizacao_cliente.json.<br>
+                                        <em>Hipótese: postos com agenda ruim perdem mais clientes.</em>
                                     </div>
                                 </div>
                             </div>
@@ -824,10 +827,13 @@
                                     <div class="card-header">
                                         <h3 class="card-title mb-0"><i class="fas fa-chart-line mr-2 text-success"></i>Saúde da Agenda vs Receita</h3>
                                     </div>
-                                    <div class="card-body" style="height: 280px;"
-                                         data-iso-description="Bar chart: X-axis = postos, Y-axis left = agenda health score (0-100), Y-axis right = MRR (monthly recurring revenue, count of active mensalidades). Higher health tends to correlate with higher revenue base."
-                                    >
+                                    <div class="card-body" style="height: 280px;">
                                         <canvas id="crossChartAgendaReceita"></canvas>
+                                    </div>
+                                    <div class="card-footer" style="font-size:0.75rem;color:#888;background:#fafafa;border-top:1px solid #eee;padding:8px 12px;">
+                                        <strong>Barras (eixo esquerdo):</strong> Score de saúde da agenda (mesma fórmula acima).<br>
+                                        <strong>Linha (eixo direito):</strong> Clientes ativos = contratos com status de cancelamento = 0 (mrr_count). Fonte: growth_dashboard.json via SQL vw_fin_receita2.<br>
+                                        <em>Hipótese: postos com mais vagas disponíveis tendem a reter mais clientes ativos.</em>
                                     </div>
                                 </div>
                             </div>
@@ -839,10 +845,13 @@
                                     <div class="card-header">
                                         <h3 class="card-title mb-0"><i class="fas fa-stethoscope mr-2 text-primary"></i>Saúde da Agenda vs Faltas em Consultas</h3>
                                     </div>
-                                    <div class="card-body" style="height: 280px;"
-                                         data-iso-description="Chart comparing agenda health with consultation no-show rates per posto. Hypothesis: poor agenda quality leads to more missed appointments as patients seek care elsewhere."
-                                    >
+                                    <div class="card-body" style="height: 280px;">
                                         <canvas id="crossChartAgendaFaltas"></canvas>
+                                    </div>
+                                    <div class="card-footer" style="font-size:0.75rem;color:#888;background:#fafafa;border-top:1px solid #eee;padding:8px 12px;">
+                                        <strong>Barras (eixo esquerdo):</strong> Score de saúde da agenda.<br>
+                                        <strong>Linha (eixo direito):</strong> % Faltas = consultas com status FALTOU/AUSENTE/NAO ATENDIDO ÷ total de consultas agendadas × 100. Fonte: consultas_mensal_status_consolidado.json.<br>
+                                        <em>Hipótese: pacientes com dificuldade de agendar especialistas podem faltar mais nas consultas gerais.</em>
                                     </div>
                                 </div>
                             </div>
@@ -851,10 +860,13 @@
                                     <div class="card-header">
                                         <h3 class="card-title mb-0"><i class="fas fa-bullseye mr-2 text-warning"></i>Saúde da Agenda vs Metas de Vendas</h3>
                                     </div>
-                                    <div class="card-body" style="height: 280px;"
-                                         data-iso-description="Chart comparing agenda health with sales target achievement rate per posto. Postos with better availability may attract more new clients."
-                                    >
+                                    <div class="card-body" style="height: 280px;">
                                         <canvas id="crossChartAgendaMetas"></canvas>
+                                    </div>
+                                    <div class="card-footer" style="font-size:0.75rem;color:#888;background:#fafafa;border-top:1px solid #eee;padding:8px 12px;">
+                                        <strong>Barras (eixo esquerdo):</strong> Score de saúde da agenda.<br>
+                                        <strong>Linha (eixo direito):</strong> % Meta atingida = vendas realizadas no mês ÷ meta de vendas × 100. Fonte: json_metas/{POSTO}_metas_{YYYY-MM}.json.<br>
+                                        <em>Hipótese: postos com agenda saudável conseguem vender mais porque oferecem disponibilidade como argumento.</em>
                                     </div>
                                 </div>
                             </div>
@@ -2342,11 +2354,11 @@ function getPostoHealth(data) {
 }
 
 function getLatestMonth(jsonData) {
-    // Find latest month key in growth/mensalidades data
     if (!jsonData) return null;
-    const dados = jsonData.dados || jsonData;
-    if (typeof dados !== 'object') return null;
-    const months = Object.keys(dados).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+    // growth: has .dados[month], vendas/mensalidades: top-level [month], consultas: .months[month]
+    const source = jsonData.dados || jsonData.months || jsonData;
+    if (typeof source !== 'object') return null;
+    const months = Object.keys(source).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
     return months.length ? months[months.length - 1] : null;
 }
 
@@ -2357,76 +2369,93 @@ function renderCrossRef() {
     const ctx = simContexto();
 
     // Extract cross-data per posto for latest month
-    const latestMonth = getLatestMonth(crossData.growth) || getLatestMonth(crossData.mensalidades);
+    const latestGrowth = getLatestMonth(crossData.growth);
+    const latestMens   = getLatestMonth(crossData.mensalidades);
+    const latestVendas = getLatestMonth(crossData.vendas);
+    const latestConsul = getLatestMonth(crossData.consultas);
     const postoMetrics = {};
 
     postosVisiveis.forEach(p => {
         const m = { posto: p, health: health[p] || { score: 0, criticos: 0, total: 0 } };
 
-        // Growth data (MRR, admissoes, cancelamentos)
-        if (crossData.growth && crossData.growth.dados && latestMonth) {
-            const gd = crossData.growth.dados[latestMonth];
-            if (gd && gd[p]) {
+        // Growth data: growth.dados[month][posto].{mrr_count, mrr_valor}
+        if (crossData.growth?.dados && latestGrowth) {
+            const gd = crossData.growth.dados[latestGrowth];
+            if (gd?.[p]) {
                 m.mrr_count = gd[p].mrr_count || 0;
                 m.mrr_valor = gd[p].mrr_valor || 0;
             }
         }
 
-        // Fidelizacao (churn)
-        if (crossData.fidelizacao && crossData.fidelizacao.dados) {
-            const fd = crossData.fidelizacao.dados[p];
-            if (fd) {
-                // Get most recent cohort churn at 3 months
-                const cohorts = Object.keys(fd).sort().reverse();
-                for (const c of cohorts) {
-                    const d3 = fd[c]?.['3'];
-                    if (d3 && d3.admitidos > 0) {
-                        m.churn_3m = Math.round((1 - d3.retidos / d3.admitidos) * 100);
-                        m.churn_cohort = c;
+        // Fidelizacao: dados[month][posto].retencao_por_mes[N].{qtd, percentual}
+        // Structure: dados[ym_admissao][posto].retencao_por_mes[meses_diferenca]
+        if (crossData.fidelizacao?.dados) {
+            const fd = crossData.fidelizacao.dados;
+            // Find most recent cohort month that has this posto + 3-month retention
+            const cohortMonths = Object.keys(fd).filter(k => /^\d{4}-\d{2}$/.test(k)).sort().reverse();
+            for (const ym of cohortMonths) {
+                const postoData = fd[ym]?.[p];
+                if (postoData?.retencao_por_mes) {
+                    // Key is numeric (meses_diferenca), look for 3 months
+                    const ret3 = postoData.retencao_por_mes['3'] || postoData.retencao_por_mes[3];
+                    if (ret3 && postoData.admissoes > 0) {
+                        // churn = 100 - retention percentage
+                        m.churn_3m = Math.round(100 - (ret3.percentual || 0));
+                        m.churn_cohort = ym;
+                        m.churn_admissoes = postoData.admissoes;
                         break;
                     }
                 }
             }
         }
 
-        // Consultas (attendance, faltas)
-        if (crossData.consultas) {
-            const cd = Array.isArray(crossData.consultas) ? crossData.consultas
-                      : crossData.consultas.dados || [];
-            // Find latest month for this posto
-            const postoData = cd.filter(r => r.posto === p || r.Posto === p || r.codigo_posto === p);
-            if (postoData.length) {
-                const latest = postoData[postoData.length - 1];
-                m.consultas_total = latest.total || latest.Total || latest.agendadas || 0;
-                m.consultas_faltas = latest.faltas || latest.Faltas || 0;
+        // Consultas: months[month].postos[posto].totais.{realizadas, faltas, total}
+        if (crossData.consultas?.months && latestConsul) {
+            const monthNode = crossData.consultas.months[latestConsul];
+            const postoNode = monthNode?.postos?.[p];
+            if (postoNode?.totais) {
+                const t = postoNode.totais;
+                m.consultas_total = t.total || 0;
+                m.consultas_realizadas = t.realizadas || 0;
+                m.consultas_faltas = t.faltas || 0;
+                m.consultas_medico_faltou = t.medico_faltou || 0;
                 m.consultas_pct_falta = m.consultas_total > 0
                     ? Math.round(m.consultas_faltas / m.consultas_total * 100) : 0;
             }
+            m._consultas_mes = latestConsul;
         }
 
-        // Vendas
-        if (crossData.vendas) {
-            const vd = crossData.vendas.dados || crossData.vendas;
-            if (vd && latestMonth && vd[latestMonth] && vd[latestMonth][p]) {
-                m.vendas_qtd = vd[latestMonth][p].vendas || vd[latestMonth][p].qtd || 0;
+        // Vendas: [month].por_posto[posto].{qtd_vendas, valor_total, ticket_medio}
+        if (crossData.vendas && latestVendas) {
+            const vMonth = crossData.vendas[latestVendas];
+            const vPosto = vMonth?.por_posto?.[p];
+            if (vPosto) {
+                m.vendas_qtd = vPosto.qtd_vendas || 0;
+                m.vendas_valor = vPosto.valor_total || 0;
+                m.vendas_ticket = vPosto.ticket_medio || 0;
             }
+            m._vendas_mes = latestVendas;
         }
 
-        // Mensalidades
-        if (crossData.mensalidades) {
-            const md = crossData.mensalidades.dados || crossData.mensalidades;
-            if (md && latestMonth && md[latestMonth] && md[latestMonth][p]) {
-                m.mensalidades = md[latestMonth][p].mensalidades || md[latestMonth][p].total || md[latestMonth][p].count || 0;
+        // Mensalidades (consolidado_mensal_por_posto): [month][posto].{mensalidade, mensalidade_qtd, ticket_medio}
+        if (crossData.mensalidades && latestMens) {
+            const md = crossData.mensalidades[latestMens];
+            if (md?.[p]) {
+                m.mensalidades = md[p].mensalidade || 0;
+                m.mensalidades_qtd = md[p].mensalidade_qtd || 0;
+                m.mensalidades_ticket = md[p].ticket_medio || 0;
             }
+            m._mensalidades_mes = latestMens;
         }
 
-        // Metas
-        if (crossData.metas && crossData.metas[p]) {
-            const meta = crossData.metas[p].meta;
-            if (meta && meta.vendas_meta) {
+        // Metas: json_metas/{POSTO}_metas_{YYYY-MM}.json
+        if (crossData.metas?.[p]) {
+            const metaData = crossData.metas[p];
+            const meta = metaData.meta;
+            if (meta?.vendas_meta) {
                 m.meta_vendas = meta.vendas_meta;
-                const vendas_realizadas = crossData.metas[p].vendas_por_dia
-                    ? crossData.metas[p].vendas_por_dia.reduce((s, d) => s + (d.vendas_dia || 0), 0) : 0;
+                const vendas_realizadas = metaData.vendas_por_dia
+                    ? metaData.vendas_por_dia.reduce((s, d) => s + (d.vendas_dia || 0), 0) : 0;
                 m.vendas_realizadas = vendas_realizadas;
                 m.meta_pct = meta.vendas_meta > 0 ? Math.round(vendas_realizadas / meta.vendas_meta * 100) : 0;
             }
@@ -2444,24 +2473,33 @@ function renderCrossRef() {
 
 function renderCrossKpis(metrics, ctx) {
     const vals = Object.values(metrics);
+    // mrr_count = clientes ativos (growth_dashboard.json > dados[month][posto].mrr_count)
     const totalMrr = vals.reduce((s, m) => s + (m.mrr_count || 0), 0);
-    const totalMensalidades = vals.reduce((s, m) => s + (m.mensalidades || 0), 0);
+    // mensalidades_qtd = qtd de mensalidades recebidas (consolidado_mensal_por_posto.json > [month][posto].mensalidade_qtd)
+    const totalMensQtd = vals.reduce((s, m) => s + (m.mensalidades_qtd || 0), 0);
+    // mensalidades = valor R$ (consolidado_mensal_por_posto.json > [month][posto].mensalidade)
+    const totalMensValor = vals.reduce((s, m) => s + (m.mensalidades || 0), 0);
+    // churn_3m = 100 - retenção aos 3 meses (fidelizacao_cliente.json > dados[cohort][posto].retencao_por_mes[3].percentual)
     const avgChurn = vals.filter(m => m.churn_3m !== undefined);
     const churnAvg = avgChurn.length ? Math.round(avgChurn.reduce((s, m) => s + m.churn_3m, 0) / avgChurn.length) : null;
+    // consultas (consultas_mensal_status_consolidado.json > months[month].postos[posto].totais)
     const totalConsultas = vals.reduce((s, m) => s + (m.consultas_total || 0), 0);
     const totalFaltas = vals.reduce((s, m) => s + (m.consultas_faltas || 0), 0);
     const pctFaltas = totalConsultas > 0 ? Math.round(totalFaltas / totalConsultas * 100) : null;
+    // vendas (vendas_mensal.json > [month].por_posto[posto].qtd_vendas)
     const totalVendas = vals.reduce((s, m) => s + (m.vendas_realizadas || m.vendas_qtd || 0), 0);
+    // metas (json_metas/{POSTO}_metas_{YYYY-MM}.json)
     const withMeta = vals.filter(m => m.meta_pct !== undefined);
     const avgMeta = withMeta.length ? Math.round(withMeta.reduce((s, m) => s + m.meta_pct, 0) / withMeta.length) : null;
 
     const kpis = [
-        totalMrr > 0 ? { num: totalMrr.toLocaleString('pt-BR'), label: `Clientes Ativos ${ctx.label}`, color: '#2c5f8a' } : null,
-        totalMensalidades > 0 ? { num: totalMensalidades.toLocaleString('pt-BR'), label: 'Mensalidades (mês)', color: '#28a745' } : null,
-        churnAvg !== null ? { num: churnAvg + '%', label: 'Churn Médio 3m', color: churnAvg > 20 ? '#dc3545' : churnAvg > 10 ? '#fd7e14' : '#28a745' } : null,
-        pctFaltas !== null ? { num: pctFaltas + '%', label: 'Faltas em Consultas', color: pctFaltas > 20 ? '#dc3545' : pctFaltas > 10 ? '#fd7e14' : '#28a745' } : null,
-        totalVendas > 0 ? { num: totalVendas, label: 'Vendas no Mês', color: '#555' } : null,
-        avgMeta !== null ? { num: avgMeta + '%', label: 'Atingimento de Meta', color: avgMeta >= 100 ? '#28a745' : avgMeta >= 70 ? '#fd7e14' : '#dc3545' } : null,
+        totalMrr > 0 ? { num: totalMrr.toLocaleString('pt-BR'), label: `Clientes Ativos ${ctx.label}`, color: '#2c5f8a', help: 'Contratos ativos (status cancelamento = 0). Fonte: growth_dashboard.json via vw_fin_receita2.' } : null,
+        totalMensQtd > 0 ? { num: totalMensQtd.toLocaleString('pt-BR'), label: `Mensalidades Recebidas`, color: '#28a745', help: 'Quantidade de mensalidades recebidas no mês. Fonte: consolidado_mensal_por_posto.json.' } : null,
+        totalMensValor > 0 ? { num: 'R$ ' + (totalMensValor / 1000).toFixed(0) + 'k', label: 'Receita Mensalidades', color: '#17a2b8', help: 'Valor total das mensalidades recebidas (R$). Fonte: consolidado_mensal_por_posto.json.' } : null,
+        churnAvg !== null ? { num: churnAvg + '%', label: 'Churn Médio 3m', color: churnAvg > 20 ? '#dc3545' : churnAvg > 10 ? '#fd7e14' : '#28a745', help: 'Média da taxa de evasão aos 3 meses após admissão. Cálculo: 100% − (retidos ÷ admitidos × 100). Fonte: fidelizacao_cliente.json.' } : null,
+        pctFaltas !== null ? { num: pctFaltas + '%', label: 'Faltas em Consultas', color: pctFaltas > 20 ? '#dc3545' : pctFaltas > 10 ? '#fd7e14' : '#28a745', help: 'Percentual de faltas sobre total de consultas agendadas. Cálculo: faltas ÷ total × 100. Fonte: consultas_mensal_status_consolidado.json.' } : null,
+        totalVendas > 0 ? { num: totalVendas, label: 'Vendas no Mês', color: '#555', help: 'Quantidade de vendas no mês. Fonte: vendas_mensal.json.' } : null,
+        avgMeta !== null ? { num: avgMeta + '%', label: 'Atingimento de Meta', color: avgMeta >= 100 ? '#28a745' : avgMeta >= 70 ? '#fd7e14' : '#dc3545', help: 'Média do percentual de atingimento da meta de vendas. Cálculo: vendas_realizadas ÷ vendas_meta × 100. Fonte: json_metas.' } : null,
     ].filter(Boolean);
 
     if (!kpis.length) {
@@ -2469,7 +2507,7 @@ function renderCrossKpis(metrics, ctx) {
         return;
     }
     el('crossKpiGrid').innerHTML = kpis.map(k =>
-        `<div class="sim-kpi-card"><div class="sim-kpi-num" style="color:${k.color}">${k.num}</div><div class="sim-kpi-label">${k.label}</div></div>`
+        `<div class="sim-kpi-card" title="${k.help}"><div class="sim-kpi-num" style="color:${k.color}">${k.num}</div><div class="sim-kpi-label">${k.label}</div></div>`
     ).join('');
 }
 
@@ -2609,8 +2647,8 @@ function renderCrossCharts(metrics, postosVisiveis) {
         });
     }
 
-    // Chart 2: Health vs Receita (MRR)
-    const mrrData = postosVisiveis.map(p => metrics[p]?.mrr_count ?? metrics[p]?.mensalidades ?? null);
+    // Chart 2: Health vs Receita (Clientes Ativos = mrr_count from growth_dashboard.json)
+    const mrrData = postosVisiveis.map(p => metrics[p]?.mrr_count ?? null);
     const ctxR = document.getElementById('crossChartAgendaReceita');
     if (ctxR) {
         if (crossCharts.receita) crossCharts.receita.destroy();
@@ -2618,13 +2656,13 @@ function renderCrossCharts(metrics, postosVisiveis) {
             type: 'bar', data: { labels,
                 datasets: [
                     { label: 'Saúde Agenda (%)', data: scores, backgroundColor: scores.map(s => s >= 60 ? '#28a74588' : s >= 40 ? '#fd7e1488' : '#dc354588'), yAxisID: 'y', borderRadius: 4 },
-                    { label: 'Clientes/Mensalidades', data: mrrData, type: 'line', borderColor: '#2c5f8a', backgroundColor: '#2c5f8a33', fill: true, tension: 0.3, yAxisID: 'y1', pointRadius: 5 }
+                    { label: 'Clientes Ativos (mrr_count)', data: mrrData, type: 'line', borderColor: '#2c5f8a', backgroundColor: '#2c5f8a33', fill: true, tension: 0.3, yAxisID: 'y1', pointRadius: 5 }
                 ]
             }, options: {
                 responsive: true, maintainAspectRatio: false,
                 scales: {
                     y: { beginAtZero: true, max: 100, title: { display: true, text: 'Saúde (%)' } },
-                    y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Clientes' } }
+                    y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Clientes Ativos' } }
                 },
                 plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }
             }
@@ -2698,7 +2736,7 @@ function renderCrossTable(metrics, postosVisiveis) {
             <td><strong>${p}</strong><br><span style="font-size:0.72rem;color:#888">${nome}</span></td>
             <td class="text-center"><span style="font-weight:800;color:${scoreColor};font-size:1.1rem;">${h.score}</span></td>
             <td class="text-center">${h.criticos > 0 ? `<span class="text-danger font-weight-bold">${h.criticos}</span>` : '<span class="text-success">0</span>'}</td>
-            <td class="text-center">${m.mrr_count != null ? m.mrr_count.toLocaleString('pt-BR') : (m.mensalidades != null ? m.mensalidades.toLocaleString('pt-BR') : '—')}</td>
+            <td class="text-center">${m.mrr_count != null ? m.mrr_count.toLocaleString('pt-BR') : '—'}</td>
             <td class="text-center">${m.churn_3m != null ? `<span style="color:${m.churn_3m > 20 ? '#dc3545' : m.churn_3m > 10 ? '#fd7e14' : '#28a745'}">${m.churn_3m}%</span>` : '—'}</td>
             <td class="text-center">${m.consultas_total != null ? m.consultas_total.toLocaleString('pt-BR') : '—'}</td>
             <td class="text-center">${m.consultas_pct_falta != null ? `<span style="color:${m.consultas_pct_falta > 20 ? '#dc3545' : m.consultas_pct_falta > 10 ? '#fd7e14' : '#28a745'}">${m.consultas_pct_falta}%</span>` : '—'}</td>
@@ -2880,12 +2918,9 @@ function buildIAContext() {
 // INIT
 // ─────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('[QA] DOMContentLoaded fired, calling loadData...');
     loadData().then(() => {
-        console.log('[QA] loadData OK, calling loadCrossData...');
         loadCrossData();
     }).catch(err => {
-        console.error('[QA] loadData failed:', err);
         el('err').textContent = 'Erro ao inicializar: ' + err.message;
     });
 
@@ -2900,7 +2935,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Global error handler to catch any uncaught JS errors
 window.addEventListener('error', (e) => {
-    console.error('[QA] Global error:', e.message, 'at', e.filename, ':', e.lineno);
     const errEl = document.getElementById('err');
     if (errEl) errEl.textContent = 'Erro JS: ' + e.message + ' (linha ' + e.lineno + ')';
 });
