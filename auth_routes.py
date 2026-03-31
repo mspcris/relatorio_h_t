@@ -837,32 +837,57 @@ def ia_chat():
         f"\n\nPergunta do usuário:\n{pergunta_txt}"
     )
 
-    # ── Groq ─────────────────────────────────────────────────────────────────
+    # ── Seleciona o cliente LLM ──────────────────────────────────────────────
+    llm_client = None
     if provider == "groq":
         try:
-            resposta_txt  = _get_groq().gerar_texto(prompt=prompt_completo, system_prompt=system_prompt)
-            resposta_json = {"resposta": resposta_txt, "provider": "groq"}
+            llm_client = _get_groq()
         except Exception as exc:
             return jsonify({"erro": f"Groq indisponível: {exc}"}), 502
-
-    # ── OpenAI ────────────────────────────────────────────────────────────────
     elif provider == "openai":
         try:
-            resposta_txt  = _get_openai().gerar_texto(prompt=prompt_completo, system_prompt=system_prompt)
-            resposta_json = {"resposta": resposta_txt, "provider": "openai"}
+            llm_client = _get_openai()
         except Exception as exc:
             return jsonify({"erro": f"OpenAI indisponível: {exc}"}), 502
-
-    # ── Anthropic ─────────────────────────────────────────────────────────────
     elif provider == "anthropic":
         try:
-            resposta_txt  = _get_anthropic().gerar_texto(prompt=prompt_completo, system_prompt=system_prompt)
-            resposta_json = {"resposta": resposta_txt, "provider": "anthropic"}
+            llm_client = _get_anthropic()
         except Exception as exc:
             return jsonify({"erro": f"Anthropic indisponível: {exc}"}), 502
-
     else:
         return jsonify({"erro": f"Provedor desconhecido: {provider}"}), 400
+
+    # ── Chamada com validação de resposta completa ───────────────────────────
+    try:
+        resposta_txt = llm_client.gerar_texto(
+            prompt=prompt_completo, system_prompt=system_prompt,
+        )
+        truncada = getattr(llm_client, "last_finish_reason", None) == "length"
+
+        # Se truncada, tenta de novo pedindo resposta concisa
+        if truncada:
+            prompt_retry = (
+                f"{prompt_completo}\n\n"
+                "ATENÇÃO: sua resposta anterior foi cortada por limite de tokens. "
+                "Responda a mesma pergunta de forma mais CONCISA e COMPLETA. "
+                "Priorize os dados mais relevantes. Não repita cabeçalhos longos."
+            )
+            resposta_txt = llm_client.gerar_texto(
+                prompt=prompt_retry, system_prompt=system_prompt,
+            )
+            ainda_truncada = getattr(llm_client, "last_finish_reason", None) == "length"
+
+            if ainda_truncada:
+                resposta_txt = (
+                    "Desculpe, não consegui gerar uma resposta completa para esta pergunta. "
+                    "Tente reformular de forma mais específica (ex: pergunte sobre um posto "
+                    "ou especialidade por vez).\n\n"
+                    "Resposta parcial:\n\n" + resposta_txt
+                )
+
+        resposta_json = {"resposta": resposta_txt, "provider": provider}
+    except Exception as exc:
+        return jsonify({"erro": f"{provider} indisponível: {exc}"}), 502
 
     # ── Persistir no SQLite ──────────────────────────────────────────────────
     db = SessionLocal()

@@ -31,7 +31,7 @@ class LLMConfig:
 
     # Parâmetros default (podem ser override por chamada)
     temperature: float = 0.1
-    max_tokens: int = 4096
+    max_tokens: int = 8192
 
     # Timeout “lógico” em segundos (apenas para controle externo, se quiser)
     timeout_s: int = 60
@@ -53,6 +53,7 @@ class LLMClient:
         if not api_key:
             raise RuntimeError("GROQ_API_KEY ausente no ambiente.")
         self._client = Groq(api_key=api_key)
+        self.last_finish_reason: Optional[str] = None
 
     def gerar_texto(
         self,
@@ -104,5 +105,6 @@ class LLMClient:
             kwargs["response_format"] = {"type": "json_object"}
 
         resp = self._client.chat.completions.create(**kwargs)
+        self.last_finish_reason = getattr(resp.choices[0], "finish_reason", None)
         out = (resp.choices[0].message.content or "").strip()
         return out

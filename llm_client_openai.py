@@ -24,6 +24,7 @@ class LLMClientOpenAI:
             raise RuntimeError("OPENAI_API_KEY ausente.")
 
         self.client = OpenAI(api_key=api_key)
+        self.last_finish_reason: Optional[str] = None
 
     def gerar_texto(
         self,
@@ -50,4 +51,5 @@ class LLMClientOpenAI:
             max_tokens=mtok
         )
 
+        self.last_finish_reason = getattr(resp.choices[0], "finish_reason", None)
         return resp.choices[0].message.content.strip()

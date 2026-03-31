@@ -624,10 +624,19 @@ _POSTO_NOMES = {
 }
 
 _POSTO_ZONA = {
-    "A": "Zona Norte", "B": "Zona Oeste", "C": "Zona Oeste",
-    "D": "Zona Norte", "G": "Zona Oeste", "I": "Baixada",
-    "J": "Zona Oeste", "M": "Zona Norte", "N": "Baixada",
-    "P": "Zona Oeste", "R": "Zona Oeste", "X": "Baixada", "Y": "Baixada",
+    "A": "Rio de Janeiro / Corredor Japeri",
+    "B": "Rio de Janeiro / Corredor Santa Cruz",
+    "C": "Rio de Janeiro",
+    "D": "Rio de Janeiro",
+    "G": "Rio de Janeiro / Corredor Santa Cruz",
+    "I": "Baixada Fluminense / Corredor Japeri",
+    "J": "Rio de Janeiro",
+    "M": "Rio de Janeiro",
+    "N": "Baixada Fluminense / Corredor Japeri",
+    "P": "Rio de Janeiro",
+    "R": "Rio de Janeiro / Corredor Santa Cruz",
+    "X": "Rio de Janeiro / Corredor Santa Cruz",
+    "Y": "Rio de Janeiro / Corredor Santa Cruz",
 }
 
 _POSTO_VIZINHOS = {
@@ -868,9 +877,10 @@ def _build_qualidade_agenda(
 
     # ── ZONAS GEOGRÁFICAS ──
     lines.append(f"\nZONAS GEOGRÁFICAS:")
-    lines.append("- Zona Norte: Anchieta (A), Del Castilho (D), Madureira (M)")
-    lines.append("- Zona Oeste: Bangu (B), Guadalupe (G), Realengo (R), Campinho (C), Jacarepaguá (J), Rio das Pedras (P)")
-    lines.append("- Baixada Fluminense: Nilópolis (N), Nova Iguaçu (I), Xerém (X), Campo Grande Y (Y)")
+    lines.append("- Baixada Fluminense: Nilópolis (N), Nova Iguaçu (I) — apenas 2 postos")
+    lines.append("- Cidade do Rio de Janeiro: A, R, B, Y, G, X, C, D, J, M, P")
+    lines.append("- Corredor Japeri (linha de trem): Nilópolis (N), Nova Iguaçu (I), Anchieta (A)")
+    lines.append("- Corredor Santa Cruz (linha de trem): Realengo (R), Bangu (B), Campo Grande Y (Y), Guadalupe (G), Xerém (X)")
 
     return "\n".join(lines)
 
