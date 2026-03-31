@@ -2388,23 +2388,32 @@ function renderCrossRef() {
         }
 
         // Fidelizacao: dados[month][posto].{admissoes, retencao_por_mes[N].qtd}
-        // NOTA: campo "percentual" no JSON é sempre 0.0 (bug no export). Calcular manualmente: qtd / admissoes * 100
+        // NOTA: campo "percentual" no JSON é sempre 0.0 (bug no export). Calcular: qtd / admissoes * 100
+        // Média das últimas 3 coortes com dado de 3 meses e >= 20 admissões para estabilidade
         if (crossData.fidelizacao?.dados) {
             const fd = crossData.fidelizacao.dados;
             const cohortMonths = Object.keys(fd).filter(k => /^\d{4}-\d{2}$/.test(k)).sort().reverse();
+            let churnSamples = [];
             for (const ym of cohortMonths) {
+                if (churnSamples.length >= 3) break;
                 const postoData = fd[ym]?.[p];
-                if (postoData?.retencao_por_mes && postoData.admissoes > 0) {
+                if (postoData?.retencao_por_mes && postoData.admissoes >= 20) {
                     const ret3 = postoData.retencao_por_mes['3'] || postoData.retencao_por_mes[3];
                     if (ret3 && ret3.qtd != null) {
                         const retencao = (ret3.qtd / postoData.admissoes) * 100;
-                        m.churn_3m = Math.round(100 - retencao);
-                        m.churn_cohort = ym;
-                        m.churn_admissoes = postoData.admissoes;
-                        m.churn_retidos = ret3.qtd;
-                        break;
+                        churnSamples.push({ ym, churn: 100 - retencao, admissoes: postoData.admissoes, retidos: ret3.qtd });
                     }
                 }
+            }
+            if (churnSamples.length > 0) {
+                // Média ponderada por admissões
+                const totalAdm = churnSamples.reduce((s, c) => s + c.admissoes, 0);
+                const totalRet = churnSamples.reduce((s, c) => s + c.retidos, 0);
+                m.churn_3m = Math.round(100 - (totalRet / totalAdm * 100));
+                m.churn_cohort = churnSamples.map(c => c.ym).join(', ');
+                m.churn_admissoes = totalAdm;
+                m.churn_retidos = totalRet;
+                m.churn_n_coortes = churnSamples.length;
             }
         }
 
