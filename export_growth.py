@@ -209,7 +209,7 @@ def month_iter(start, end_exclusive):
 def run_query(engine, sql_txt, ini, fim):
     body = sql_txt if sql_txt.lstrip().upper().startswith("SET NOCOUNT ON") else "SET NOCOUNT ON;\n" + sql_txt
     with engine.connect() as con:
-        return pd.read_sql_query(text(body), con, params={"ini": str(ini), "fim": str(fim)})
+        return pd.read_sql_query(text(body), con, params={"ini": ini.strftime("%d/%m/%Y"), "fim": fim.strftime("%d/%m/%Y")})
 
 def load_sql(name):
     path = os.path.join(SQL_DIR, name)
