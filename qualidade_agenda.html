@@ -2880,9 +2880,13 @@ function buildIAContext() {
 // INIT
 // ─────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('[QA] DOMContentLoaded fired, calling loadData...');
     loadData().then(() => {
-        // Load cross-reference data after main data is ready
+        console.log('[QA] loadData OK, calling loadCrossData...');
         loadCrossData();
+    }).catch(err => {
+        console.error('[QA] loadData failed:', err);
+        el('err').textContent = 'Erro ao inicializar: ' + err.message;
     });
 
     // Re-render when tab shown (for lazy rendering)
@@ -2892,6 +2896,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (crossLoaded) renderCrossRef();
         });
     });
+});
+
+// Global error handler to catch any uncaught JS errors
+window.addEventListener('error', (e) => {
+    console.error('[QA] Global error:', e.message, 'at', e.filename, ':', e.lineno);
+    const errEl = document.getElementById('err');
+    if (errEl) errEl.textContent = 'Erro JS: ' + e.message + ' (linha ' + e.lineno + ')';
 });
 </script>
 
