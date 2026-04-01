@@ -1038,10 +1038,8 @@ function getPermittedPostos() {
 }
 
 function getAllowedPostos() {
-    // Permissão real do usuário (filtra dados)
-    const allowed = Array.isArray(USER_POSTOS_FROM_SERVER) && USER_POSTOS_FROM_SERVER.length
-        ? USER_POSTOS_FROM_SERVER : null;
-    return allowed ? POSTOS_ORDEM.filter(p => allowed.includes(p)) : getPermittedPostos();
+    // Qualidade da Agenda: todos os postos liberados para todos os usuários
+    return getPermittedPostos();
 }
 
 function getSelectedPostos() {
@@ -1140,23 +1138,7 @@ async function loadData() {
 // FILTRO DE POSTOS
 // ─────────────────────────────────────────────────────────────────────────────
 function initPostoFilter() {
-    const allowed = getAllowedPostos();
-    // Esconder botões de postos que o usuário não tem acesso
-    document.querySelectorAll('#postoTabs .posto-tab[data-posto]').forEach(a => {
-        const p = a.getAttribute('data-posto');
-        a.style.display = allowed.includes(p) ? '' : 'none';
-    });
-    // Esconder grupos se não fazem sentido para o usuário
-    const altOk = GROUP_ALTAMIRO.filter(p => allowed.includes(p));
-    const coutoOk = GROUP_COUTO.filter(p => allowed.includes(p));
-    if (altOk.length === 0) el('btnGrupoAltamiro').style.display = 'none';
-    if (coutoOk.length === 0) el('btnGrupoCouto').style.display = 'none';
-    // Se só tem 1 posto, não precisa de "Todos"
-    if (allowed.length <= 1) {
-        el('btnGrupoTodos').style.display = 'none';
-        el('btnGrupoAltamiro').style.display = 'none';
-        el('btnGrupoCouto').style.display = 'none';
-    }
+    // Qualidade da Agenda: todos os postos visíveis para todos os usuários
 }
 
 function togglePosto(posto, el_a) {
