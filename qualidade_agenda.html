@@ -1112,11 +1112,6 @@ function showToast(msg, type='success') {
 // ─────────────────────────────────────────────────────────────────────────────
 async function loadData() {
     try {
-        // Inicializar datepicker com último dia do mês anterior
-        const hoje = new Date();
-        const ultimoDiaMesAnterior = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
-        el('filtroDataAte').value = ultimoDiaMesAnterior.toISOString().slice(0, 10);
-
         const r = await fetch('/json_consolidado/qualidade_agenda.json');
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const json = await r.json();
