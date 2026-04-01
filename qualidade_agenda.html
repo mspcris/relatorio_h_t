@@ -510,8 +510,12 @@
                         <span class="posto-tab" data-posto="J" onclick="togglePosto('J',this)" title="Jacarepaguá">J</span>
                     </div>
                     <div class="ml-auto d-flex align-items-center" style="gap:8px">
-                        <label for="filtroDataAte" class="mb-0" style="font-size:.85rem;font-weight:600;white-space:nowrap">Vagas até:</label>
-                        <input type="date" id="filtroDataAte" class="form-control form-control-sm" style="width:160px" onchange="renderAll()">
+                        <label for="filtroDataRef" class="mb-0" style="font-size:.85rem;font-weight:600;white-space:nowrap">
+                            <i class="fas fa-calendar-alt mr-1"></i>Referência:
+                        </label>
+                        <select id="filtroDataRef" class="form-control form-control-sm" style="width:180px" onchange="loadDataForDate(this.value)">
+                            <option value="">Carregando...</option>
+                        </select>
                     </div>
                 </div>
             </div>
@@ -1054,12 +1058,7 @@ function getSelectedPostos() {
 
 function getFilteredData() {
     const sp = getSelectedPostos();
-    const dataAte = el('filtroDataAte').value;
-    return allData.filter(d => {
-        if (!sp.includes(d.posto)) return false;
-        if (dataAte && d.DataProximaVaga && d.DataProximaVaga > dataAte) return false;
-        return true;
-    });
+    return allData.filter(d => sp.includes(d.posto));
 }
 
 function statusBadgeHtml(status) {
@@ -1110,37 +1109,78 @@ function showToast(msg, type='success') {
 // ─────────────────────────────────────────────────────────────────────────────
 // CARREGAMENTO DE DADOS
 // ─────────────────────────────────────────────────────────────────────────────
+function fmtDateBR(iso) {
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+}
+
 async function loadData() {
     try {
-        const r = await fetch('/json_consolidado/qualidade_agenda.json');
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const json = await r.json();
-        allData           = json.dados           || [];
-        cbosData          = json.cbos            || {};
-        postosInfo        = json.postos_info     || {};
-        allEspecialidades = json.especialidades  || [];
-        // Derivar postos diretamente dos dados: se há dado de A, A aparece no filtro
-        allPostos         = [...new Set(allData.map(d => d.posto))].filter(Boolean);
+        // Carregar datas disponíveis
+        const selRef = el('filtroDataRef');
+        try {
+            const rd = await fetch('/api/qualidade_agenda/datas');
+            if (rd.ok) {
+                const jd = await rd.json();
+                const datas = jd.datas || [];
+                selRef.innerHTML = '';
+                // "Hoje" = snapshot mais recente (arquivo principal)
+                const optHoje = document.createElement('option');
+                optHoje.value = '';
+                optHoje.textContent = 'Hoje (mais recente)';
+                selRef.appendChild(optHoje);
+                datas.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d;
+                    opt.textContent = fmtDateBR(d);
+                    selRef.appendChild(opt);
+                });
+            }
+        } catch(e) { /* fallback: só "Hoje" */ }
 
-        // Freshness
-        const gm = json.meta && json.meta.gerado_em;
-        if (gm) {
-            const dt = new Date(gm);
-            const now = new Date();
-            const diffMin = Math.round((now - dt) / 60000);
-            const diffStr = diffMin < 60
-                ? `${diffMin}min atrás`
-                : `${Math.round(diffMin/60)}h atrás`;
-            el('jsonInfo').textContent = `Dados de ${dt.toLocaleString('pt-BR')} (${diffStr})`;
-            el('bannerSub').textContent = `Referência: ${dt.toLocaleDateString('pt-BR')} — ${allPostos.length} postos, ${allEspecialidades.length} especialidades monitoradas`;
-        }
-
-        initPostoFilter();
-        renderAll();
+        await loadJsonData('');
     } catch(e) {
         el('err').textContent = 'Erro ao carregar dados: ' + e.message;
         el('bannerSub').textContent = 'Falha ao carregar dados do servidor.';
     }
+}
+
+async function loadDataForDate(dataRef) {
+    try {
+        await loadJsonData(dataRef);
+    } catch(e) {
+        el('err').textContent = 'Erro ao carregar dados: ' + e.message;
+    }
+}
+
+async function loadJsonData(dataRef) {
+    const url = dataRef
+        ? `/json_consolidado/qualidade_agenda/${dataRef}.json`
+        : '/json_consolidado/qualidade_agenda.json';
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const json = await r.json();
+    allData           = json.dados           || [];
+    cbosData          = json.cbos            || {};
+    postosInfo        = json.postos_info     || {};
+    allEspecialidades = json.especialidades  || [];
+    allPostos         = [...new Set(allData.map(d => d.posto))].filter(Boolean);
+
+    // Freshness
+    const gm = json.meta && json.meta.gerado_em;
+    if (gm) {
+        const dt = new Date(gm);
+        const now = new Date();
+        const diffMin = Math.round((now - dt) / 60000);
+        const diffStr = diffMin < 60
+            ? `${diffMin}min atrás`
+            : `${Math.round(diffMin/60)}h atrás`;
+        el('jsonInfo').textContent = `Dados de ${dt.toLocaleString('pt-BR')} (${diffStr})`;
+        el('bannerSub').textContent = `Referência: ${dt.toLocaleDateString('pt-BR')} — ${allPostos.length} postos, ${allEspecialidades.length} especialidades monitoradas`;
+    }
+
+    initPostoFilter();
+    renderAll();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

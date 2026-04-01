@@ -1063,6 +1063,20 @@ def any_html(filename):
 # API Qualidade da Agenda
 # ===============================
 
+@app.get("/api/qualidade_agenda/datas")
+def api_qa_datas():
+    email, _ = decode_user()
+    if not email:
+        return ("", 401)
+    snap_dir = "/opt/relatorio_h_t/json_consolidado/qualidade_agenda"
+    datas = []
+    if os.path.isdir(snap_dir):
+        for f in sorted(os.listdir(snap_dir), reverse=True):
+            if f.endswith(".json"):
+                datas.append(f.replace(".json", ""))
+    return jsonify({"datas": datas})
+
+
 @app.post("/api/qualidade_agenda/update_cbos")
 def api_update_cbos():
     email, _ = decode_user()

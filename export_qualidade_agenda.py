@@ -409,6 +409,15 @@ def run():
     os.replace(tmp_path, out_path)
     _set_mtime(out_path)
 
+    # Snapshot diário — permite consulta histórica
+    snap_dir  = os.path.join(JSON_DIR, "qualidade_agenda")
+    ensure_dir(snap_dir)
+    snap_path = os.path.join(snap_dir, f"{hoje.isoformat()}.json")
+    with open(snap_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _set_mtime(snap_path)
+    logger.write(f"  Snapshot diário: {snap_path}")
+
     elapsed = time.time() - total_start
     logger.write(f"  JSON salvo: {out_path}")
     logger.write(f"  Total registros: {len(all_dados)}")
