@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style2.css">
-  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+  <link rel="icon" href="/images/favicon-wpp.svg" type="image/svg+xml">
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
@@ -48,7 +48,7 @@
       <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a></li>
     </ul>
     <span class="ml-2 font-weight-bold d-flex align-items-center">
-      <img src="/images/Logo Camim-01_200px.png" style="height:28px">
+      <img src="/images/Logo%20Camim-01_200px.png" style="height:28px">
       <span class="ml-2">WhatsApp Cobrança</span>
     </span>
     <ul class="navbar-nav ml-auto">
@@ -125,6 +125,8 @@
                 <th>Template</th>
                 <th>Intervalo</th>
                 <th>Dias</th>
+                <th class="text-center">Chat</th>
+                <th class="text-center">Meta</th>
                 <th>Enviados</th>
                 <th>Não enviados</th>
                 <th>Status</th>
@@ -158,6 +160,12 @@
               <td>
                 {% set dm = {'0':'S','1':'T','2':'Q','3':'Q','4':'S','5':'Sá','6':'D'} %}
                 <small>{%- for d in (c.dias_semana or '0,1,2,3,4').split(',') %}{{ dm.get(d|trim, '?') }}{% if not loop.last %} {% endif %}{% endfor -%}</small>
+              </td>
+              <td class="text-center">
+                {% if c.enviar_chat %}<i class="fas fa-comments text-info"></i>{% else %}<i class="fas fa-times text-muted"></i>{% endif %}
+              </td>
+              <td class="text-center">
+                {% if c.enviar_meta %}<i class="fab fa-whatsapp text-success"></i>{% else %}<i class="fas fa-times text-muted"></i>{% endif %}
               </td>
               <td><span class="badge badge-success">{{ c.resumo.enviados }}</span></td>
               <td><span class="badge badge-warning text-dark">{{ c.resumo.nao_enviados }}</span></td>
