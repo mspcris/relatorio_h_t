@@ -509,6 +509,10 @@
                         <span class="posto-tab" data-posto="M" onclick="togglePosto('M',this)" title="Madureira">M</span>
                         <span class="posto-tab" data-posto="J" onclick="togglePosto('J',this)" title="Jacarepaguá">J</span>
                     </div>
+                    <div class="ml-auto d-flex align-items-center" style="gap:8px">
+                        <label for="filtroDataAte" class="mb-0" style="font-size:.85rem;font-weight:600;white-space:nowrap">Vagas até:</label>
+                        <input type="date" id="filtroDataAte" class="form-control form-control-sm" style="width:160px" onchange="renderAll()">
+                    </div>
                 </div>
             </div>
 
@@ -1050,7 +1054,12 @@ function getSelectedPostos() {
 
 function getFilteredData() {
     const sp = getSelectedPostos();
-    return allData.filter(d => sp.includes(d.posto));
+    const dataAte = el('filtroDataAte').value;
+    return allData.filter(d => {
+        if (!sp.includes(d.posto)) return false;
+        if (dataAte && d.DataProximaVaga && d.DataProximaVaga > dataAte) return false;
+        return true;
+    });
 }
 
 function statusBadgeHtml(status) {
@@ -1103,6 +1112,11 @@ function showToast(msg, type='success') {
 // ─────────────────────────────────────────────────────────────────────────────
 async function loadData() {
     try {
+        // Inicializar datepicker com último dia do mês anterior
+        const hoje = new Date();
+        const ultimoDiaMesAnterior = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+        el('filtroDataAte').value = ultimoDiaMesAnterior.toISOString().slice(0, 10);
+
         const r = await fetch('/json_consolidado/qualidade_agenda.json');
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const json = await r.json();
