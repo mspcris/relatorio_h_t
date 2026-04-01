@@ -87,6 +87,8 @@ _TEMPLATE_TO_PAGINA = {
     "ctrlq_desbloqueio":               "ctrlq_desbloqueio",
     "qualidade_agenda.html":            "qualidade_agenda",
     "qualidade_agenda":                 "qualidade_agenda",
+    "higienizacao.html":                "higienizacao",
+    "higienizacao":                     "higienizacao",
     # Itens de mais_servicos.html (internos)
     "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
     "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",
@@ -766,12 +768,20 @@ def r_qualidade_agenda():
     resp.headers['Pragma'] = 'no-cache'
     return resp
 
+@app.get('/higienizacao')
+def r_higienizacao():
+    return render_protected_page("higienizacao.html")
+
 @app.get('/qualidade_agenda.html')
 def h_qualidade_agenda():
     resp = make_response(render_protected_page("qualidade_agenda.html"))
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
     return resp
+
+@app.get('/higienizacao.html')
+def h_higienizacao():
+    return render_protected_page("higienizacao.html")
 
 @app.get('/kpi_receita_despesa_rateio')
 def r_rateio():
