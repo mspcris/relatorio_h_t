@@ -193,9 +193,9 @@
 
     <!-- KPI Cards -->
     <div class="kpi-row" id="kpiRow" style="display:none">
-      <div class="kpi-card"><div class="kpi-val" id="kpiTotal">0</div><div class="kpi-lbl">Agendados</div></div>
+      <div class="kpi-card"><div class="kpi-val" id="kpiTotal">0</div><div class="kpi-lbl">Atendimentos hoje</div></div>
       <div class="kpi-card"><div class="kpi-val text-success" id="kpiAtendidos">0</div><div class="kpi-lbl">Atendidos</div></div>
-      <div class="kpi-card"><div class="kpi-val text-danger" id="kpiFaltas">0</div><div class="kpi-lbl">Faltas</div></div>
+      <div class="kpi-card"><div class="kpi-val text-danger" id="kpiFaltas">0</div><div class="kpi-lbl">Ausentes</div></div>
       <div class="kpi-card"><div class="kpi-val text-warning" id="kpiAtrasados">0</div><div class="kpi-lbl">Atrasados</div></div>
       <div class="kpi-card"><div class="kpi-val text-info" id="kpiPagouMens">0</div><div class="kpi-lbl">Pagou mensalidade</div></div>
       <div class="kpi-card"><div class="kpi-val" id="kpiPagouAtrasado" style="color:#20c997">0</div><div class="kpi-lbl">Pagou e estava atrasado</div></div>
@@ -376,12 +376,10 @@
   }
 
   function _isAtendido(p) {
-    const a = (p.atendido||'').toUpperCase();
-    return a === 'SIM' || a === 'ATENDIDO' || a === 'S';
+    return (p.atendido||'').toUpperCase() === 'ATENDIDO';
   }
   function _isFalta(p) {
-    const a = (p.atendido||'').toUpperCase();
-    return a === 'FALTOU' || a === 'FALTA' || a === 'NÃO' || a === 'N' || a.includes('FALT');
+    return (p.atendido||'').toUpperCase() === 'AUSENTE';
   }
   function _isAtrasado(p) {
     const s = (p.situacao||'').toLowerCase();
@@ -442,10 +440,12 @@
   }
 
   function badgeAtendimento(val) {
-    if (!val) return '<span class="badge badge-agendado">Agendado</span>';
+    if (!val) return '<span class="badge badge-agendado">—</span>';
     const v = val.toUpperCase();
-    if (v === 'SIM' || v === 'ATENDIDO' || v === 'S') return '<span class="badge badge-atendido"><i class="fas fa-check mr-1"></i>Atendido</span>';
-    if (v.includes('FALT')) return '<span class="badge badge-faltou"><i class="fas fa-times mr-1"></i>Faltou</span>';
+    if (v === 'ATENDIDO') return '<span class="badge badge-atendido"><i class="fas fa-check mr-1"></i>Atendido</span>';
+    if (v === 'AUSENTE') return '<span class="badge badge-faltou"><i class="fas fa-times mr-1"></i>Ausente</span>';
+    if (v === 'AGUARDANDO') return '<span class="badge badge-agendado">Aguardando</span>';
+    if (v.startsWith('PENDÊNCIA')) return `<span class="badge" style="background:#6f42c1;color:#fff">${escHtml(val)}</span>`;
     return `<span class="badge badge-agendado">${escHtml(val)}</span>`;
   }
 
@@ -465,15 +465,15 @@
   function renderCharts() {
     // Presença
     const atendidos = DATA.filter(p => _isAtendido(p)).length;
-    const faltas    = DATA.filter(p => _isFalta(p)).length;
-    const aguard    = DATA.length - atendidos - faltas;
+    const ausentes  = DATA.filter(p => _isFalta(p)).length;
+    const outros    = DATA.length - atendidos - ausentes;
 
     if (chartPresenca) chartPresenca.destroy();
     chartPresenca = new Chart($('#chartPresenca')[0].getContext('2d'), {
       type: 'doughnut',
       data: {
-        labels: ['Atendidos', 'Faltas', 'Aguardando'],
-        datasets: [{ data: [atendidos, faltas, aguard], backgroundColor: ['#28a745','#dc3545','#6f42c1'] }]
+        labels: ['Atendidos', 'Ausentes', 'Outros'],
+        datasets: [{ data: [atendidos, ausentes, outros], backgroundColor: ['#28a745','#dc3545','#6c757d'] }]
       },
       options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
     });
