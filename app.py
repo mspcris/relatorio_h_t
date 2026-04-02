@@ -2066,19 +2066,19 @@ def api_agenda_dia():
             "pacientes": [],
         })
 
-    # 2) Agrupar matrículas por posto de ORIGEM (idendereco → letra)
-    #    para buscar status/pagamento no banco correto
+    # 2) Agrupar matrículas por posto de ORIGEM (cfcliente = codigo = letra real)
+    #    para buscar status/pagamento no banco correto do cliente
     matriculas_por_posto = defaultdict(set)  # letra -> {(matricula, idendereco)}
-    mat_to_letra = {}  # matricula -> letra do posto de origem
 
     for r in rows_agenda:
         mat = int(r["matricula"]) if r.get("matricula") else None
         if not mat:
             continue
-        id_end = r.get("idendereco")
-        letra = _get_letra(id_end, posto)  # fallback: posto atual
-        mat_to_letra[mat] = letra
-        matriculas_por_posto[letra].add((mat, id_end))
+        # cfcliente (campo codigo) = letra real do posto do cliente
+        cf = (str(r.get("cfcliente") or "")).strip().upper()
+        letra = cf if cf else posto  # fallback: posto da consulta
+        id_end_cliente = _get_id_endereco(letra)
+        matriculas_por_posto[letra].add((mat, id_end_cliente))
 
     # 3) Buscar status e pagamento em cada posto de origem
     status_map, pagou_map = _agenda_buscar_status_por_posto(
@@ -2100,8 +2100,8 @@ def api_agenda_dia():
                 hora_prev = str(hora_prev)[:5]
 
         atendido_raw = (str(r.get("Atendido") or "")).strip()
-        id_end = r.get("idendereco")
-        letra_origem = _get_letra(id_end, "?")
+        cf = (str(r.get("cfcliente") or "")).strip().upper()
+        letra_origem = cf if cf else "?"
         situacao = status_map.get(mat, "") if mat else ""
         pagou = mat in pagou_map if mat else False
 
