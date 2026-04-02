@@ -197,7 +197,8 @@
       <div class="kpi-card"><div class="kpi-val text-success" id="kpiAtendidos">0</div><div class="kpi-lbl">Atendidos</div></div>
       <div class="kpi-card"><div class="kpi-val text-danger" id="kpiFaltas">0</div><div class="kpi-lbl">Faltas</div></div>
       <div class="kpi-card"><div class="kpi-val text-warning" id="kpiAtrasados">0</div><div class="kpi-lbl">Atrasados</div></div>
-      <div class="kpi-card"><div class="kpi-val text-info" id="kpiPagaram">0</div><div class="kpi-lbl">Pagou e estava atrasado</div></div>
+      <div class="kpi-card"><div class="kpi-val text-info" id="kpiPagouMens">0</div><div class="kpi-lbl">Pagou mensalidade</div></div>
+      <div class="kpi-card"><div class="kpi-val" id="kpiPagouAtrasado" style="color:#20c997">0</div><div class="kpi-lbl">Pagou e estava atrasado</div></div>
     </div>
 
     <!-- Tabela -->
@@ -359,17 +360,19 @@
 
   // ── KPIs ──
   function updateKPIs() {
-    const total     = DATA.length;
-    const atendidos = DATA.filter(p => _isAtendido(p)).length;
-    const faltas    = DATA.filter(p => _isFalta(p)).length;
-    const atrasados = DATA.filter(p => _isAtrasado(p)).length;
+    const total         = DATA.length;
+    const atendidos     = DATA.filter(p => _isAtendido(p)).length;
+    const faltas        = DATA.filter(p => _isFalta(p)).length;
+    const atrasados     = DATA.filter(p => _isAtrasado(p)).length;
+    const pagouMens     = DATA.filter(p => p.pagou_no_dia).length;
     const pagouAtrasado = DATA.filter(p => p.pagou_no_dia && _isAtrasado(p)).length;
 
     $('#kpiTotal').text(total);
     $('#kpiAtendidos').text(atendidos);
     $('#kpiFaltas').text(faltas);
     $('#kpiAtrasados').text(atrasados);
-    $('#kpiPagaram').text(pagouAtrasado);
+    $('#kpiPagouMens').text(pagouMens);
+    $('#kpiPagouAtrasado').text(pagouAtrasado);
   }
 
   function _isAtendido(p) {
