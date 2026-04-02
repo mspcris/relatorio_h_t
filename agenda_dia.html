@@ -193,12 +193,11 @@
 
     <!-- KPI Cards -->
     <div class="kpi-row" id="kpiRow" style="display:none">
-      <div class="kpi-card"><div class="kpi-val" id="kpiTotal">0</div><div class="kpi-lbl">Total Agendados</div></div>
+      <div class="kpi-card"><div class="kpi-val" id="kpiTotal">0</div><div class="kpi-lbl">Agendados</div></div>
       <div class="kpi-card"><div class="kpi-val text-success" id="kpiAtendidos">0</div><div class="kpi-lbl">Atendidos</div></div>
       <div class="kpi-card"><div class="kpi-val text-danger" id="kpiFaltas">0</div><div class="kpi-lbl">Faltas</div></div>
-      <div class="kpi-card"><div class="kpi-val text-warning" id="kpiAtrasados">0</div><div class="kpi-lbl">Atrasados / Inadimplentes</div></div>
-      <div class="kpi-card"><div class="kpi-val text-info" id="kpiPagaram">0</div><div class="kpi-lbl">Pagaram Mensalidade no Dia</div></div>
-      <div class="kpi-card"><div class="kpi-val" id="kpiAguardando" style="color:#6f42c1">0</div><div class="kpi-lbl">Aguardando</div></div>
+      <div class="kpi-card"><div class="kpi-val text-warning" id="kpiAtrasados">0</div><div class="kpi-lbl">Atrasados</div></div>
+      <div class="kpi-card"><div class="kpi-val text-info" id="kpiPagaram">0</div><div class="kpi-lbl">Pagou e estava atrasado</div></div>
     </div>
 
     <!-- Tabela -->
@@ -348,16 +347,14 @@
     const total     = DATA.length;
     const atendidos = DATA.filter(p => _isAtendido(p)).length;
     const faltas    = DATA.filter(p => _isFalta(p)).length;
-    const aguard    = total - atendidos - faltas;
     const atrasados = DATA.filter(p => _isAtrasado(p)).length;
-    const pagaram   = DATA.filter(p => p.pagou_no_dia).length;
+    const pagouAtrasado = DATA.filter(p => p.pagou_no_dia && _isAtrasado(p)).length;
 
     $('#kpiTotal').text(total);
     $('#kpiAtendidos').text(atendidos);
     $('#kpiFaltas').text(faltas);
-    $('#kpiAguardando').text(aguard);
     $('#kpiAtrasados').text(atrasados);
-    $('#kpiPagaram').text(pagaram);
+    $('#kpiPagaram').text(pagouAtrasado);
   }
 
   function _isAtendido(p) {
