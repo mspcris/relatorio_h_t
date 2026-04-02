@@ -1885,115 +1885,15 @@ def api_leads_analytics_cache_status():
 
 
 # ===============================
-# API Agenda do Dia (F3)
+# API Agenda do Dia (F3) — lê JSON gerado pelo ETL export_agenda_dia.py
 # ===============================
 
-# Cache do mapa idEndereco → letra (carregado de cad_endereco)
-_id_endereco_cache = {}   # {idEndereco: letra}
-_letra_to_id_cache = {}   # {letra: idEndereco}
-
-
-def _load_endereco_map(eng):
-    """Carrega mapa idEndereco↔letra de cad_endereco (com cache)."""
-    global _id_endereco_cache, _letra_to_id_cache
-    if _id_endereco_cache:
-        return
-    try:
-        with eng.connect() as con:
-            rows = con.execute(text(
-                "SET NOCOUNT ON; SELECT idEndereco, Codigo FROM cad_endereco"
-            )).mappings().all()
-        for r in rows:
-            id_end = int(r["idEndereco"])
-            letra = (r["Codigo"] or "").strip().upper()
-            if letra:
-                _id_endereco_cache[id_end] = letra
-                _letra_to_id_cache[letra] = id_end
-    except Exception:
-        pass
-
-
-def _get_letra(id_endereco, fallback="?"):
-    return _id_endereco_cache.get(id_endereco, fallback)
-
-
-def _get_id_endereco(letra):
-    return _letra_to_id_cache.get(letra)
-
-
-def _agenda_buscar_status_por_posto(matriculas_por_posto, dt_dmy, dt_next):
-    """
-    Para cada posto, conecta no banco daquele posto e busca:
-    - [Cliente Situação] por matricula + idendereco (evita retornar 'Filial')
-    - Se pagou no dia (idcontatipo=5) por matricula + idendereco
-    Retorna (status_map, pagou_map).
-    matriculas_por_posto: {letra: {(matricula, idendereco), ...}}
-    """
-    status_map = {}   # matricula -> situação
-    pagou_map = set()  # matrículas que pagaram no dia
-
-    # Usar cache de cad_endereco
-
-    for letra_posto, mat_id_pairs in matriculas_por_posto.items():
-        if not mat_id_pairs:
-            continue
-        try:
-            eng_posto = _try_build_engine_for_posto(letra_posto, retries=2)
-        except Exception:
-            continue  # posto offline, fica sem status
-
-        # Extrair matrículas e o idendereco do posto
-        mat_list = list({m for m, _ in mat_id_pairs})
-        id_endereco = _get_id_endereco(letra_posto)
-
-        for i in range(0, len(mat_list), 500):
-            batch = mat_list[i:i+500]
-            placeholders = ",".join(str(m) for m in batch)
-
-            # Filtro por idendereco para não retornar 'Filial'
-            id_filter = f"AND idendereco = {id_endereco}" if id_endereco else ""
-
-            # Status financeiro
-            sql_status = f"""
-            SET NOCOUNT ON;
-            SELECT DISTINCT matricula, [Cliente Situação] AS situacao
-            FROM vw_fin_receita2
-            WHERE matricula IN ({placeholders})
-            {id_filter}
-            """
-            try:
-                with eng_posto.connect() as con:
-                    for r in con.execute(text(sql_status)).mappings().all():
-                        mat = int(r["matricula"])
-                        sit = (r["situacao"] or "").strip()
-                        status_map[mat] = sit
-            except Exception:
-                pass
-
-            # Pagamento no dia
-            sql_pagou = f"""
-            SET NOCOUNT ON;
-            SELECT DISTINCT matricula
-            FROM vw_fin_receita2
-            WHERE matricula IN ({placeholders})
-              {id_filter}
-              AND idcontatipo = 5
-              AND [data prestação] >= :dt_ini
-              AND [data prestação] <  :dt_fim
-            """
-            try:
-                with eng_posto.connect() as con:
-                    for r in con.execute(text(sql_pagou), {"dt_ini": dt_dmy, "dt_fim": dt_next}).mappings().all():
-                        pagou_map.add(int(r["matricula"]))
-            except Exception:
-                pass
-
-    return status_map, pagou_map
+_AGENDA_DIA_JSON = "/opt/relatorio_h_t/json_consolidado/agenda_dia.json"
 
 
 @app.get("/api/agenda_dia")
 def api_agenda_dia():
-    """Consulta agenda do dia por posto: pacientes, status financeiro, pagamento no dia."""
+    """Retorna dados da agenda do dia a partir do JSON pré-gerado pelo ETL."""
     email, postos_acl = decode_user()
     if not email:
         return ("", 401)
@@ -2007,120 +1907,18 @@ def api_agenda_dia():
     if posto not in (postos_acl or []):
         return jsonify({"ok": False, "error": "posto não autorizado"}), 403
 
-    # Validar formato de data (YYYY-MM-DD)
-    try:
-        dt = datetime.strptime(data_str, "%Y-%m-%d").date()
-    except ValueError:
-        return jsonify({"ok": False, "error": "data inválida (use YYYY-MM-DD)"}), 400
-
-    # Formato DD/MM/YYYY para views SQL Server (REGRA CRÍTICA)
-    dt_dmy = dt.strftime("%d/%m/%Y")
-    dt_next = (dt + timedelta(days=1)).strftime("%d/%m/%Y")
+    # Ler JSON do ETL
+    if not os.path.exists(_AGENDA_DIA_JSON):
+        return jsonify({"ok": False, "error": "Dados ainda não gerados. Aguarde o ETL rodar."}), 503
 
     try:
-        eng = _try_build_engine_for_posto(posto, retries=3)
+        with open(_AGENDA_DIA_JSON, "r", encoding="utf-8") as f:
+            payload = json.load(f)
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Posto {posto} offline: {e}"}), 503
+        return jsonify({"ok": False, "error": f"Erro ao ler dados: {e}"}), 500
 
-    # Carregar mapa idEndereco↔letra de cad_endereco (uma vez, com cache)
-    _load_endereco_map(eng)
-
-    # 1) Agenda do dia
-    sql_agenda = """
-    SET NOCOUNT ON;
-    SELECT
-        idendereco,
-        matricula,
-        codigo       AS cfcliente,
-        paciente,
-        idadePaciente,
-        especialidade,
-        nomemedico   AS medico,
-        HoraPrevistaConsulta,
-        CONVERT(varchar(5), dataconfirmacaoconsulta, 108) AS hora_confirmacao,
-        Dif_dias_agend_cons,
-        Atendido
-    FROM vw_Cad_LancamentoProntuarioComDesistencia
-    WHERE dataconsulta >= :dt_ini
-      AND dataconsulta <  :dt_fim
-      AND desistencia = 0
-      AND atendido <> 'MÉDICO faltou'
-    ORDER BY nomemedico, HoraPrevistaConsulta ASC
-    """
-
-    try:
-        with eng.connect() as con:
-            rows_agenda = con.execute(
-                text(sql_agenda),
-                {"dt_ini": dt_dmy, "dt_fim": dt_next}
-            ).mappings().all()
-    except Exception as e:
-        return jsonify({"ok": False, "error": f"Erro na consulta da agenda: {e}"}), 500
-
-    if not rows_agenda:
-        return jsonify({
-            "ok": True,
-            "posto": posto,
-            "data": data_str,
-            "total": 0,
-            "pacientes": [],
-        })
-
-    # 2) Agrupar matrículas por posto de ORIGEM (cfcliente = codigo = letra real)
-    #    para buscar status/pagamento no banco correto do cliente
-    matriculas_por_posto = defaultdict(set)  # letra -> {(matricula, idendereco)}
-
-    for r in rows_agenda:
-        mat = int(r["matricula"]) if r.get("matricula") else None
-        if not mat:
-            continue
-        # cfcliente (campo codigo) = letra real do posto do cliente
-        cf = (str(r.get("cfcliente") or "")).strip().upper()
-        letra = cf if cf else posto  # fallback: posto da consulta
-        id_end_cliente = _get_id_endereco(letra)
-        matriculas_por_posto[letra].add((mat, id_end_cliente))
-
-    # 3) Buscar status e pagamento em cada posto de origem
-    status_map, pagou_map = _agenda_buscar_status_por_posto(
-        matriculas_por_posto, dt_dmy, dt_next
-    )
-
-    # 4) Montar resultado
-    pacientes = []
-    for r in rows_agenda:
-        mat = int(r["matricula"]) if r.get("matricula") else None
-        hora_prev = r.get("HoraPrevistaConsulta")
-        if hora_prev is not None:
-            if isinstance(hora_prev, datetime):
-                hora_prev = hora_prev.strftime("%H:%M")
-            elif isinstance(hora_prev, timedelta):
-                total_sec = int(hora_prev.total_seconds())
-                hora_prev = f"{total_sec // 3600:02d}:{(total_sec % 3600) // 60:02d}"
-            else:
-                hora_prev = str(hora_prev)[:5]
-
-        atendido_raw = (str(r.get("Atendido") or "")).strip()
-        cf = (str(r.get("cfcliente") or "")).strip().upper()
-        letra_origem = cf if cf else "?"
-        situacao = status_map.get(mat, "") if mat else ""
-        pagou = mat in pagou_map if mat else False
-
-        pacientes.append({
-            "matricula":        mat,
-            "cfcliente":        r.get("cfcliente"),
-            "posto_cliente":    letra_origem,
-            "paciente":         (r.get("paciente") or "").strip(),
-            "idade":            r.get("idadePaciente"),
-            "especialidade":    (r.get("especialidade") or "").strip(),
-            "medico":           (r.get("medico") or "").strip(),
-            "hora_prevista":    hora_prev,
-            "hora_confirmacao": (r.get("hora_confirmacao") or "").strip(),
-            "dias_agend_cons":  r.get("Dif_dias_agend_cons"),
-            "atendido":         atendido_raw,
-            "situacao":         situacao,
-            "pagou_no_dia":     pagou,
-            "idendereco":       r.get("idendereco"),
-        })
+    dados_posto = payload.get("dados", {}).get(posto, {})
+    pacientes = dados_posto.get(data_str, [])
 
     return jsonify({
         "ok": True,
@@ -2128,6 +1926,7 @@ def api_agenda_dia():
         "data": data_str,
         "total": len(pacientes),
         "pacientes": pacientes,
+        "gerado_em": payload.get("meta", {}).get("gerado_em", ""),
     })
 
 

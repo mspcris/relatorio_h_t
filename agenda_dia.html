@@ -159,6 +159,7 @@
     <div class="ad-banner">
       <h1><i class="fas fa-calendar-check mr-2"></i>Agenda do Dia</h1>
       <p>Relatório de clientes agendados — presença, situação financeira e pagamentos</p>
+      <span id="geradoEm" style="position:absolute;top:12px;right:18px;font-size:.8rem;color:#8ab4d8"></span>
     </div>
 
     <!-- Filtros -->
@@ -345,6 +346,12 @@
         $('#loadingOverlay').removeClass('active');
         if (!res.ok) { alert(res.error || 'Erro'); return; }
         DATA = deduplicarExames(res.pacientes || []);
+        if (res.gerado_em) {
+          try {
+            const d = new Date(res.gerado_em);
+            $('#geradoEm').text('Atualizado: ' + d.toLocaleString('pt-BR'));
+          } catch(e) { $('#geradoEm').text('Atualizado: ' + res.gerado_em); }
+        }
         if (!DATA.length) { $('#msgVazio').show(); return; }
         updateKPIs();
         renderTable();
