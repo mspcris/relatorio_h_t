@@ -179,6 +179,7 @@
           <option value="especialidade">Especialidade</option>
           <option value="situacao">Situação Financeira</option>
           <option value="atendido">Status Atendimento</option>
+          <option value="posto_cliente">Posto do Cliente</option>
         </select>
       </div>
       <div>
@@ -209,6 +210,7 @@
             <th>Confirmação</th>
             <th>Paciente</th>
             <th>Matrícula</th>
+            <th>Posto</th>
             <th>Idade</th>
             <th>Especialidade</th>
             <th>Médico</th>
@@ -399,18 +401,21 @@
       const sortedKeys = Object.keys(groups).sort();
       sortedKeys.forEach(key => {
         const items = groups[key];
-        tbody.append(`<tr class="group-header"><td colspan="11"><i class="fas fa-caret-down mr-1"></i>${escHtml(key)} (${items.length})</td></tr>`);
+        tbody.append(`<tr class="group-header"><td colspan="12"><i class="fas fa-caret-down mr-1"></i>${escHtml(key)} (${items.length})</td></tr>`);
         items.forEach(p => tbody.append(rowHtml(p)));
       });
     }
   }
 
   function rowHtml(p) {
+    const postoCliente = p.posto_cliente || '?';
+    const postoClass = postoCliente !== $('#selPosto').val() ? 'font-weight-bold text-danger' : '';
     return `<tr>
       <td>${escHtml(p.hora_prevista||'—')}</td>
       <td>${escHtml(p.hora_confirmacao||'—')}</td>
       <td>${escHtml(p.paciente)}</td>
       <td>${p.matricula||'—'}</td>
+      <td class="text-center ${postoClass}">${escHtml(postoCliente)}</td>
       <td class="text-center">${p.idade!=null?p.idade:'—'}</td>
       <td>${escHtml(p.especialidade)}</td>
       <td>${escHtml(p.medico)}</td>

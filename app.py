@@ -1888,6 +1888,72 @@ def api_leads_analytics_cache_status():
 # API Agenda do Dia (F3)
 # ===============================
 
+# Mapeamento idEndereco → letra do posto
+_ID_ENDERECO_TO_LETRA = {
+    1: "R", 2: "C", 3: "A", 4: "J", 5: "G", 6: "I", 7: "B",
+    12: "N", 20: "D", 21: "X", 25: "M", 26: "P", 51: "Y",
+}
+
+
+def _agenda_buscar_status_por_posto(matriculas_por_posto, dt_dmy, dt_next):
+    """
+    Para cada posto, conecta no banco daquele posto e busca:
+    - [Cliente Situação] de cada matrícula
+    - Se pagou no dia (idcontatipo=5)
+    Retorna (status_map, pagou_map).
+    """
+    status_map = {}   # matricula -> situação
+    pagou_map = set()  # matrículas que pagaram no dia
+
+    for letra_posto, mats in matriculas_por_posto.items():
+        if not mats:
+            continue
+        try:
+            eng_posto = _try_build_engine_for_posto(letra_posto, retries=2)
+        except Exception:
+            continue  # posto offline, fica sem status
+
+        mat_list = list(mats)
+        for i in range(0, len(mat_list), 500):
+            batch = mat_list[i:i+500]
+            placeholders = ",".join(str(m) for m in batch)
+
+            # Status financeiro
+            sql_status = f"""
+            SET NOCOUNT ON;
+            SELECT DISTINCT matricula, [Cliente Situação] AS situacao
+            FROM vw_fin_receita2
+            WHERE matricula IN ({placeholders})
+            """
+            try:
+                with eng_posto.connect() as con:
+                    for r in con.execute(text(sql_status)).mappings().all():
+                        mat = int(r["matricula"])
+                        sit = (r["situacao"] or "").strip()
+                        status_map[mat] = sit
+            except Exception:
+                pass
+
+            # Pagamento no dia
+            sql_pagou = f"""
+            SET NOCOUNT ON;
+            SELECT DISTINCT matricula
+            FROM vw_fin_receita2
+            WHERE matricula IN ({placeholders})
+              AND idcontatipo = 5
+              AND [data prestação] >= :dt_ini
+              AND [data prestação] <  :dt_fim
+            """
+            try:
+                with eng_posto.connect() as con:
+                    for r in con.execute(text(sql_pagou), {"dt_ini": dt_dmy, "dt_fim": dt_next}).mappings().all():
+                        pagou_map.add(int(r["matricula"]))
+            except Exception:
+                pass
+
+    return status_map, pagou_map
+
+
 @app.get("/api/agenda_dia")
 def api_agenda_dia():
     """Consulta agenda do dia por posto: pacientes, status financeiro, pagamento no dia."""
@@ -1960,61 +2026,26 @@ def api_agenda_dia():
             "pacientes": [],
         })
 
-    # Coletar matrículas únicas para buscar status e pagamento em batch
-    matriculas = list({int(r["matricula"]) for r in rows_agenda if r.get("matricula")})
+    # 2) Agrupar matrículas por posto de ORIGEM (idendereco → letra)
+    #    para buscar status/pagamento no banco correto
+    matriculas_por_posto = defaultdict(set)  # letra -> {matriculas}
+    mat_to_letra = {}  # matricula -> letra do posto de origem
 
-    # 2) Status financeiro — vw_fin_receita2
-    status_map = {}  # matricula -> Cliente Situação
-    if matriculas:
-        # Buscar em lotes para não estourar parâmetros
-        for i in range(0, len(matriculas), 500):
-            batch = matriculas[i:i+500]
-            placeholders = ",".join(str(m) for m in batch)
-            sql_status = f"""
-            SET NOCOUNT ON;
-            SELECT DISTINCT
-                matricula,
-                [Cliente Situação] AS situacao
-            FROM vw_fin_receita2
-            WHERE matricula IN ({placeholders})
-            """
-            try:
-                with eng.connect() as con:
-                    rows_st = con.execute(text(sql_status)).mappings().all()
-                for r in rows_st:
-                    mat = int(r["matricula"])
-                    sit = (r["situacao"] or "").strip()
-                    status_map[mat] = sit
-            except Exception:
-                pass  # se falhar, fica sem status
+    for r in rows_agenda:
+        mat = int(r["matricula"]) if r.get("matricula") else None
+        if not mat:
+            continue
+        id_end = r.get("idendereco")
+        letra = _ID_ENDERECO_TO_LETRA.get(id_end, posto)  # fallback: posto atual
+        mat_to_letra[mat] = letra
+        matriculas_por_posto[letra].add(mat)
 
-    # 3) Pagamento no dia — vw_fin_receita2 com idcontatipo=5 e data prestação = dia
-    pagou_map = set()  # matrículas que pagaram no dia
-    if matriculas:
-        for i in range(0, len(matriculas), 500):
-            batch = matriculas[i:i+500]
-            placeholders = ",".join(str(m) for m in batch)
-            sql_pagou = f"""
-            SET NOCOUNT ON;
-            SELECT DISTINCT matricula
-            FROM vw_fin_receita2
-            WHERE matricula IN ({placeholders})
-              AND idcontatipo = 5
-              AND [data prestação] >= :dt_ini
-              AND [data prestação] <  :dt_fim
-            """
-            try:
-                with eng.connect() as con:
-                    rows_pg = con.execute(
-                        text(sql_pagou),
-                        {"dt_ini": dt_dmy, "dt_fim": dt_next}
-                    ).mappings().all()
-                for r in rows_pg:
-                    pagou_map.add(int(r["matricula"]))
-            except Exception:
-                pass
+    # 3) Buscar status e pagamento em cada posto de origem
+    status_map, pagou_map = _agenda_buscar_status_por_posto(
+        matriculas_por_posto, dt_dmy, dt_next
+    )
 
-    # Montar resultado
+    # 4) Montar resultado
     pacientes = []
     for r in rows_agenda:
         mat = int(r["matricula"]) if r.get("matricula") else None
@@ -2029,12 +2060,15 @@ def api_agenda_dia():
                 hora_prev = str(hora_prev)[:5]
 
         atendido_raw = (str(r.get("Atendido") or "")).strip()
+        id_end = r.get("idendereco")
+        letra_origem = _ID_ENDERECO_TO_LETRA.get(id_end, "?")
         situacao = status_map.get(mat, "") if mat else ""
         pagou = mat in pagou_map if mat else False
 
         pacientes.append({
             "matricula":        mat,
             "cfcliente":        r.get("cfcliente"),
+            "posto_cliente":    letra_origem,
             "paciente":         (r.get("paciente") or "").strip(),
             "idade":            r.get("idadePaciente"),
             "especialidade":    (r.get("especialidade") or "").strip(),
@@ -2045,7 +2079,7 @@ def api_agenda_dia():
             "atendido":         atendido_raw,
             "situacao":         situacao,
             "pagou_no_dia":     pagou,
-            "idendereco":       r.get("idendereco"),
+            "idendereco":       id_end,
         })
 
     return jsonify({
