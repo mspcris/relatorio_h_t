@@ -265,6 +265,21 @@
   let DATA = [];
   let chartPresenca, chartSituacao, chartPagamento;
 
+  // ── Dedup exames: 1 linha por paciente quando especialidade = EXAME ──
+  function deduplicarExames(pacientes) {
+    const result = [];
+    const vistos = new Set();
+    for (const p of pacientes) {
+      if ((p.especialidade||'').toUpperCase() === 'EXAME') {
+        const chave = `${p.matricula}_${p.medico}_EXAME`;
+        if (vistos.has(chave)) continue;
+        vistos.add(chave);
+      }
+      result.push(p);
+    }
+    return result;
+  }
+
   // ── Init ──
   function init() {
     const hoje = new Date().toISOString().slice(0,10);
@@ -328,7 +343,7 @@
       .done(function(res) {
         $('#loadingOverlay').removeClass('active');
         if (!res.ok) { alert(res.error || 'Erro'); return; }
-        DATA = res.pacientes || [];
+        DATA = deduplicarExames(res.pacientes || []);
         if (!DATA.length) { $('#msgVazio').show(); return; }
         updateKPIs();
         renderTable();
