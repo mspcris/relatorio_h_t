@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>CAMIM — Agenda do Dia</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- KPI Metadata -->
+  <meta name="kpi-id" content="agenda_dia" />
+  <meta name="kpi-title" content="Agenda do Dia" />
+  <meta name="kpi-description" content="Relatório de status dos clientes agendados no dia: presença, situação financeira e pagamentos realizados." />
+  <meta name="kpi-category" content="Operacional" />
+
+  <!-- CORE CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&family=Inter:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="/css/style2.css?v=20260401">
+  <link rel="stylesheet" href="/css/style_kpi.css?v=20260401">
+  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <!-- JS BASE -->
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- SESSAO -->
+  <script>
+    window.IA_API_URL = '/api/ia/chat';
+    window.PROMPTS_API_BASE = '/prompts';
+    fetch("/session/me", { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => { window.USER_EMAIL = data.email; window.USER_POSTOS = data.postos; })
+      .catch(() => { window.USER_EMAIL = null; window.USER_POSTOS = []; });
+  </script>
+  <script src="/js/chat.js?v=20260401"></script>
+
+  <style>
+    html { font-size: 16px; zoom: 1; }
+    body {
+      font-size: 1rem;
+      -webkit-text-size-adjust: 100%;
+      -webkit-font-smoothing: antialiased;
+      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    body.text-sm { font-size: 1rem; }
+    .text-sm .btn, .text-sm .form-control, .text-sm .nav-link, .text-sm .card-title { font-size: 1rem; }
+    h1,h2,h3 { margin-top:0; margin-bottom:.5rem; font-weight:600; line-height:1.25; }
+    h1 { font-size:2rem; } h2 { font-size:1.5rem; } h3,.card-title { font-size:1.15rem; font-weight:600; }
+
+    /* Banner */
+    .ad-banner {
+      background: linear-gradient(135deg, #0f1923 0%, #1a2940 50%, #0f2333 100%);
+      border-radius: 12px; padding: 20px 24px; margin-bottom: 0;
+      color: #e0f0ff; position: relative; overflow: hidden;
+    }
+    .ad-banner h1 { color: #fff; font-size: 1.6rem; margin: 0; }
+    .ad-banner p { color: #8ab4d8; margin: 4px 0 0; font-size: .95rem; }
+
+    /* Filtros */
+    .filtros-bar { background: #f4f6f9; border-radius: 8px; padding: 12px 16px; margin: 12px 0; display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+    .filtros-bar label { font-size: .85rem; font-weight: 600; color: #495057; margin-bottom: 2px; }
+    .filtros-bar .form-control, .filtros-bar .custom-select { font-size: .9rem; }
+
+    /* KPI cards */
+    .kpi-row { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+    .kpi-card { flex: 1; min-width: 140px; background: #fff; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 4px rgba(0,0,0,.08); text-align: center; }
+    .kpi-card .kpi-val { font-size: 1.8rem; font-weight: 700; line-height: 1.1; }
+    .kpi-card .kpi-lbl { font-size: .82rem; color: #6c757d; margin-top: 4px; }
+
+    /* Status badges */
+    .badge-adimplente  { background: #28a745; color: #fff; }
+    .badge-atrasado    { background: #fd7e14; color: #fff; }
+    .badge-inadimplente{ background: #dc3545; color: #fff; }
+    .badge-cancelado   { background: #6c757d; color: #fff; }
+    .badge-sem-info    { background: #adb5bd; color: #fff; }
+    .badge-pagou       { background: #17a2b8; color: #fff; }
+    .badge-atendido    { background: #28a745; color: #fff; }
+    .badge-agendado    { background: #007bff; color: #fff; }
+    .badge-faltou      { background: #dc3545; color: #fff; }
+
+    .badge { font-size: .78rem; padding: 3px 9px; border-radius: 12px; font-weight: 600; }
+
+    /* Tabela */
+    #tblAgenda th { position: sticky; top: 0; background: #343a40; color: #fff; font-size: .82rem; white-space: nowrap; z-index: 2; }
+    #tblAgenda td { font-size: .85rem; vertical-align: middle; white-space: nowrap; }
+    .table-container { max-height: 65vh; overflow: auto; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    #tblAgenda .group-header td { background: #e9ecef; font-weight: 700; font-size: .9rem; }
+
+    /* Charts */
+    .chart-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+    /* Loading */
+    .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(255,255,255,.7); z-index: 9999; align-items: center; justify-content: center; }
+    .loading-overlay.active { display: flex; }
+    .spinner-lg { width: 48px; height: 48px; }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini text-sm">
+<div class="wrapper">
+
+  {% include '_sidebar_menu.html' %}
+
+  <div class="content-wrapper" style="margin-left:250px; padding:20px;">
+
+    <!-- Banner -->
+    <div class="ad-banner">
+      <h1><i class="fas fa-calendar-check mr-2"></i>Agenda do Dia</h1>
+      <p>Relatório de clientes agendados — presença, situação financeira e pagamentos</p>
+    </div>
+
+    <!-- Filtros -->
+    <div class="filtros-bar">
+      <div>
+        <label>Posto</label>
+        <select id="selPosto" class="custom-select custom-select-sm" style="width:180px"></select>
+      </div>
+      <div>
+        <label>Data</label>
+        <input type="date" id="inpData" class="form-control form-control-sm" style="width:170px" />
+      </div>
+      <div>
+        <label>Agrupar por</label>
+        <select id="selGroup" class="custom-select custom-select-sm" style="width:180px">
+          <option value="">Sem agrupamento</option>
+          <option value="medico" selected>Médico</option>
+          <option value="especialidade">Especialidade</option>
+          <option value="situacao">Situação Financeira</option>
+          <option value="atendido">Status Atendimento</option>
+        </select>
+      </div>
+      <div>
+        <label>Buscar paciente</label>
+        <input type="text" id="inpBusca" class="form-control form-control-sm" placeholder="Nome ou matrícula..." style="width:200px" />
+      </div>
+      <div>
+        <button id="btnCarregar" class="btn btn-sm btn-primary"><i class="fas fa-search mr-1"></i>Consultar</button>
+      </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-row" id="kpiRow" style="display:none">
+      <div class="kpi-card"><div class="kpi-val" id="kpiTotal">0</div><div class="kpi-lbl">Total Agendados</div></div>
+      <div class="kpi-card"><div class="kpi-val text-success" id="kpiAtendidos">0</div><div class="kpi-lbl">Atendidos</div></div>
+      <div class="kpi-card"><div class="kpi-val text-danger" id="kpiFaltas">0</div><div class="kpi-lbl">Faltas</div></div>
+      <div class="kpi-card"><div class="kpi-val text-warning" id="kpiAtrasados">0</div><div class="kpi-lbl">Atrasados / Inadimplentes</div></div>
+      <div class="kpi-card"><div class="kpi-val text-info" id="kpiPagaram">0</div><div class="kpi-lbl">Pagaram Mensalidade no Dia</div></div>
+      <div class="kpi-card"><div class="kpi-val" id="kpiAguardando" style="color:#6f42c1">0</div><div class="kpi-lbl">Aguardando</div></div>
+    </div>
+
+    <!-- Tabela -->
+    <div class="table-container mt-3" id="tblContainer" style="display:none">
+      <table class="table table-sm table-bordered table-hover mb-0" id="tblAgenda">
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Confirmação</th>
+            <th>Paciente</th>
+            <th>Matrícula</th>
+            <th>Idade</th>
+            <th>Especialidade</th>
+            <th>Médico</th>
+            <th>Atendimento</th>
+            <th>Situação Financeira</th>
+            <th>Pagou no Dia</th>
+            <th>Dias Agend→Cons</th>
+          </tr>
+        </thead>
+        <tbody id="tblBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="row mt-4" id="chartsRow" style="display:none">
+      <div class="col-md-4">
+        <div class="chart-card">
+          <h3 class="card-title">Presença</h3>
+          <canvas id="chartPresenca"></canvas>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="chart-card">
+          <h3 class="card-title">Situação Financeira</h3>
+          <canvas id="chartSituacao"></canvas>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="chart-card">
+          <h3 class="card-title">Pagamento no Dia</h3>
+          <canvas id="chartPagamento"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mensagem vazia -->
+    <div id="msgVazio" class="text-center text-muted py-5" style="display:none">
+      <i class="fas fa-calendar-times fa-3x mb-3"></i>
+      <p class="h5">Nenhum agendamento encontrado para este dia/posto.</p>
+    </div>
+
+  </div><!-- content-wrapper -->
+</div><!-- wrapper -->
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner-border spinner-lg text-primary" role="status"><span class="sr-only">Carregando...</span></div>
+</div>
+
+<script>
+(function(){
+  // ── Globals ──
+  let DATA = [];
+  let chartPresenca, chartSituacao, chartPagamento;
+
+  // ── Init ──
+  function init() {
+    const hoje = new Date().toISOString().slice(0,10);
+    $('#inpData').val(hoje);
+
+    // Aguardar sessão carregar os postos
+    const waitPostos = setInterval(() => {
+      if (window.USER_POSTOS && window.USER_POSTOS.length) {
+        clearInterval(waitPostos);
+        populatePostos(window.USER_POSTOS);
+        carregar();
+      }
+    }, 100);
+    setTimeout(() => clearInterval(waitPostos), 5000);
+
+    $('#btnCarregar').on('click', carregar);
+    $('#selGroup').on('change', renderTable);
+    $('#inpBusca').on('input', renderTable);
+    $('#inpData').on('change', carregar);
+  }
+
+  const NOMES_POSTOS = {
+    A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho', G:'Campo Grande',
+    I:'Nova Iguaçu', J:'Jacarepaguá', M:'Madureira', N:'Nilópolis',
+    P:'Rio das Pedras', R:'Realengo', X:'X Campo Grande', Y:'Y Campo Grande'
+  };
+
+  function populatePostos(postos) {
+    const altamuro = ['A','B','G','I','N','R','X','Y'];
+    const couto    = ['C','D','J','M','P'];
+    let html = '<optgroup label="Altamuro">';
+    postos.filter(p => altamuro.includes(p)).sort().forEach(p => {
+      html += `<option value="${p}">${p} — ${NOMES_POSTOS[p]||p}</option>`;
+    });
+    html += '</optgroup><optgroup label="Couto">';
+    postos.filter(p => couto.includes(p)).sort().forEach(p => {
+      html += `<option value="${p}">${p} — ${NOMES_POSTOS[p]||p}</option>`;
+    });
+    html += '</optgroup>';
+    // Outros
+    const outros = postos.filter(p => !altamuro.includes(p) && !couto.includes(p));
+    if (outros.length) {
+      html += '<optgroup label="Outros">';
+      outros.sort().forEach(p => { html += `<option value="${p}">${p} — ${NOMES_POSTOS[p]||p}</option>`; });
+      html += '</optgroup>';
+    }
+    $('#selPosto').html(html);
+  }
+
+  // ── Carregar dados ──
+  function carregar() {
+    const posto = $('#selPosto').val();
+    const data  = $('#inpData').val();
+    if (!posto || !data) return;
+
+    $('#loadingOverlay').addClass('active');
+    $('#msgVazio').hide();
+    $('#kpiRow, #tblContainer, #chartsRow').hide();
+
+    $.getJSON(`/api/agenda_dia?posto=${posto}&data=${data}`)
+      .done(function(res) {
+        $('#loadingOverlay').removeClass('active');
+        if (!res.ok) { alert(res.error || 'Erro'); return; }
+        DATA = res.pacientes || [];
+        if (!DATA.length) { $('#msgVazio').show(); return; }
+        updateKPIs();
+        renderTable();
+        renderCharts();
+        $('#kpiRow, #tblContainer, #chartsRow').show();
+      })
+      .fail(function(xhr) {
+        $('#loadingOverlay').removeClass('active');
+        const msg = xhr.responseJSON ? xhr.responseJSON.error : 'Erro de conexão';
+        alert(msg);
+      });
+  }
+
+  // ── KPIs ──
+  function updateKPIs() {
+    const total     = DATA.length;
+    const atendidos = DATA.filter(p => _isAtendido(p)).length;
+    const faltas    = DATA.filter(p => _isFalta(p)).length;
+    const aguard    = total - atendidos - faltas;
+    const atrasados = DATA.filter(p => _isAtrasado(p)).length;
+    const pagaram   = DATA.filter(p => p.pagou_no_dia).length;
+
+    $('#kpiTotal').text(total);
+    $('#kpiAtendidos').text(atendidos);
+    $('#kpiFaltas').text(faltas);
+    $('#kpiAguardando').text(aguard);
+    $('#kpiAtrasados').text(atrasados);
+    $('#kpiPagaram').text(pagaram);
+  }
+
+  function _isAtendido(p) {
+    const a = (p.atendido||'').toUpperCase();
+    return a === 'SIM' || a === 'ATENDIDO' || a === 'S';
+  }
+  function _isFalta(p) {
+    const a = (p.atendido||'').toUpperCase();
+    return a === 'FALTOU' || a === 'FALTA' || a === 'NÃO' || a === 'N' || a.includes('FALT');
+  }
+  function _isAtrasado(p) {
+    const s = (p.situacao||'').toLowerCase();
+    return s.includes('atrasad') || s.includes('inadimplente');
+  }
+
+  // ── Tabela ──
+  function renderTable() {
+    const groupBy = $('#selGroup').val();
+    const busca   = ($('#inpBusca').val()||'').toLowerCase().trim();
+
+    let filtered = DATA;
+    if (busca) {
+      filtered = DATA.filter(p =>
+        (p.paciente||'').toLowerCase().includes(busca) ||
+        String(p.matricula||'').includes(busca)
+      );
+    }
+
+    const tbody = $('#tblBody');
+    tbody.empty();
+
+    if (!groupBy) {
+      filtered.forEach(p => tbody.append(rowHtml(p)));
+    } else {
+      const groups = {};
+      filtered.forEach(p => {
+        const key = (p[groupBy] || '(sem info)').toString();
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(p);
+      });
+      const sortedKeys = Object.keys(groups).sort();
+      sortedKeys.forEach(key => {
+        const items = groups[key];
+        tbody.append(`<tr class="group-header"><td colspan="11"><i class="fas fa-caret-down mr-1"></i>${escHtml(key)} (${items.length})</td></tr>`);
+        items.forEach(p => tbody.append(rowHtml(p)));
+      });
+    }
+  }
+
+  function rowHtml(p) {
+    return `<tr>
+      <td>${escHtml(p.hora_prevista||'—')}</td>
+      <td>${escHtml(p.hora_confirmacao||'—')}</td>
+      <td>${escHtml(p.paciente)}</td>
+      <td>${p.matricula||'—'}</td>
+      <td class="text-center">${p.idade!=null?p.idade:'—'}</td>
+      <td>${escHtml(p.especialidade)}</td>
+      <td>${escHtml(p.medico)}</td>
+      <td>${badgeAtendimento(p.atendido)}</td>
+      <td>${badgeSituacao(p.situacao)}</td>
+      <td>${p.pagou_no_dia ? '<span class="badge badge-pagou"><i class="fas fa-check mr-1"></i>Sim</span>' : '—'}</td>
+      <td class="text-center">${p.dias_agend_cons!=null?p.dias_agend_cons:'—'}</td>
+    </tr>`;
+  }
+
+  function badgeAtendimento(val) {
+    if (!val) return '<span class="badge badge-agendado">Agendado</span>';
+    const v = val.toUpperCase();
+    if (v === 'SIM' || v === 'ATENDIDO' || v === 'S') return '<span class="badge badge-atendido"><i class="fas fa-check mr-1"></i>Atendido</span>';
+    if (v.includes('FALT')) return '<span class="badge badge-faltou"><i class="fas fa-times mr-1"></i>Faltou</span>';
+    return `<span class="badge badge-agendado">${escHtml(val)}</span>`;
+  }
+
+  function badgeSituacao(val) {
+    if (!val) return '<span class="badge badge-sem-info">—</span>';
+    const v = val.toLowerCase();
+    if (v.includes('adimplente') && !v.includes('inadimplente')) return `<span class="badge badge-adimplente">${escHtml(val)}</span>`;
+    if (v.includes('atrasad'))       return `<span class="badge badge-atrasado">${escHtml(val)}</span>`;
+    if (v.includes('inadimplente'))  return `<span class="badge badge-inadimplente">${escHtml(val)}</span>`;
+    if (v.includes('cancelad'))      return `<span class="badge badge-cancelado">${escHtml(val)}</span>`;
+    return `<span class="badge badge-sem-info">${escHtml(val)}</span>`;
+  }
+
+  function escHtml(s) { return $('<span>').text(s||'').html(); }
+
+  // ── Charts ──
+  function renderCharts() {
+    // Presença
+    const atendidos = DATA.filter(p => _isAtendido(p)).length;
+    const faltas    = DATA.filter(p => _isFalta(p)).length;
+    const aguard    = DATA.length - atendidos - faltas;
+
+    if (chartPresenca) chartPresenca.destroy();
+    chartPresenca = new Chart($('#chartPresenca')[0].getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Atendidos', 'Faltas', 'Aguardando'],
+        datasets: [{ data: [atendidos, faltas, aguard], backgroundColor: ['#28a745','#dc3545','#6f42c1'] }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    // Situação Financeira
+    const sitCount = {};
+    DATA.forEach(p => {
+      const s = p.situacao || '(sem info)';
+      sitCount[s] = (sitCount[s]||0) + 1;
+    });
+    const sitLabels = Object.keys(sitCount).sort();
+    const sitColors = sitLabels.map(s => {
+      const v = s.toLowerCase();
+      if (v.includes('adimplente') && !v.includes('inadimplente')) return '#28a745';
+      if (v.includes('atrasad')) return '#fd7e14';
+      if (v.includes('inadimplente')) return '#dc3545';
+      if (v.includes('cancelad')) return '#6c757d';
+      return '#adb5bd';
+    });
+
+    if (chartSituacao) chartSituacao.destroy();
+    chartSituacao = new Chart($('#chartSituacao')[0].getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: sitLabels,
+        datasets: [{ data: sitLabels.map(l => sitCount[l]), backgroundColor: sitColors }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    // Pagamento no dia — entre atrasados/inadimplentes
+    const atrasados = DATA.filter(p => _isAtrasado(p));
+    const pagaram   = atrasados.filter(p => p.pagou_no_dia).length;
+    const naoPag    = atrasados.length - pagaram;
+
+    if (chartPagamento) chartPagamento.destroy();
+    chartPagamento = new Chart($('#chartPagamento')[0].getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Pagaram no dia', 'Não pagaram'],
+        datasets: [{ data: [pagaram, naoPag], backgroundColor: ['#17a2b8','#e9ecef'] }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+  }
+
+  $(init);
+})();
+</script>
+
+</body>
+</html>

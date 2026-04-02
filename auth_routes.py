@@ -170,6 +170,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "wpp_campanhas",            "label": "WhatsApp Campanhas",          "group": "mais"},
     {"key": "camila_crm",               "label": "Camila.ai CRM",               "group": "mais"},
     {"key": "crm",                      "label": "CRM",                         "group": "mais"},
+    {"key": "agenda_dia",                "label": "Agenda do Dia (F3)",          "group": "mais"},
 ]
 
 # ── Estado inicializado por init_auth() ───────────────────────────────────────

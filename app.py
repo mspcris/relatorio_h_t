@@ -1,10 +1,13 @@
 from flask import Flask, request, make_response, jsonify, render_template, redirect
 import os, secrets, json, sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import re
 import time
+import logging
+import subprocess
 from urllib.parse import quote_plus
 from pathlib import Path
+from collections import defaultdict
 
 from sqlalchemy import create_engine, text
 
@@ -89,6 +92,8 @@ _TEMPLATE_TO_PAGINA = {
     "qualidade_agenda":                 "qualidade_agenda",
     "higienizacao.html":                "higienizacao",
     "higienizacao":                     "higienizacao",
+    "agenda_dia.html":                  "agenda_dia",
+    "agenda_dia":                       "agenda_dia",
     # Itens de mais_servicos.html (internos)
     "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
     "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",
@@ -106,6 +111,232 @@ _TEMPLATE_TO_PAGINA = {
 }
 
 _MENU_RESOURCES_CACHE = None
+_log = logging.getLogger(__name__)
+
+
+def _run_higienizacao_sql(sql: str) -> list[str]:
+    """Executa SQL no PostgreSQL remoto da higienização via SSH e retorna linhas."""
+    ssh_host = os.getenv("HIGIENIZACAO_DB_SSH", "root@217.216.85.81")
+    db_name = os.getenv("HIGIENIZACAO_DB_NAME", "gestao_higienizacao")
+    sql_safe = sql.replace("\\", "\\\\").replace('"', '\\"')
+    remote_cmd = f"sudo -u postgres psql -d {db_name} -AtF '|' -c \"{sql_safe}\""
+    p = subprocess.run(
+        ["ssh", "-o", "BatchMode=yes", ssh_host, remote_cmd],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if p.returncode != 0:
+        raise RuntimeError((p.stderr or p.stdout or "falha ao consultar higienização").strip())
+    return [ln for ln in p.stdout.splitlines() if ln.strip()]
+
+
+def _parse_higienizacao_rows(lines: list[str]) -> list[dict]:
+    rows = []
+    for ln in lines:
+        parts = ln.split("|")
+        if len(parts) != 10:
+            continue
+        rows.append({
+            "posto": parts[0].strip() or "(sem posto)",
+            "setor": parts[1].strip() or "(sem setor)",
+            "periodicidade": parts[2].strip() or "(sem periodicidade)",
+            "funcionario": parts[3].strip() or "SEM_FUNCIONARIO",
+            "funcionario_id": parts[4].strip(),
+            "data_hora": parts[5].strip(),
+            "dia": parts[6].strip(),
+            "ambiente_id": parts[7].strip(),
+            "posto_id": parts[8].strip(),
+            "qr_code_id": parts[9].strip(),
+        })
+    return rows
+
+
+def _build_higienizacao_report(dt_ini: str | None, dt_fim: str | None) -> dict:
+    where = []
+    if dt_ini and re.match(r"^\d{4}-\d{2}-\d{2}$", dt_ini):
+        where.append(f"(hl.created_at AT TIME ZONE 'America/Sao_Paulo')::date >= DATE '{dt_ini}'")
+    if dt_fim and re.match(r"^\d{4}-\d{2}-\d{2}$", dt_fim):
+        where.append(f"(hl.created_at AT TIME ZONE 'America/Sao_Paulo')::date <= DATE '{dt_fim}'")
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    sql_logs = f"""
+SELECT
+  COALESCE(l.name, '(sem posto)') AS posto,
+  COALESCE(e.name, '(sem setor)') AS setor,
+  COALESCE(e.periodicity, '(sem periodicidade)') AS periodicidade,
+  COALESCE(NULLIF(BTRIM(hl.employee_name), ''), hl.employee_id, 'SEM_FUNCIONARIO') AS funcionario,
+  COALESCE(hl.employee_id, '') AS funcionario_id,
+  TO_CHAR((hl.created_at AT TIME ZONE 'America/Sao_Paulo'), 'YYYY-MM-DD HH24:MI:SS') AS data_hora,
+  TO_CHAR((hl.created_at AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS dia,
+  COALESCE(e.id::text, '') AS ambiente_id,
+  COALESCE(l.id::text, '') AS posto_id,
+  COALESCE(hl.qr_code_id::text, '') AS qr_code_id
+FROM public.hygiene_logs hl
+LEFT JOIN public.environments e ON e.id = hl.environment_id
+LEFT JOIN public.locations l ON l.id = e.location_id
+{where_sql}
+ORDER BY hl.created_at DESC
+LIMIT 20000;
+"""
+    registros = _parse_higienizacao_rows(_run_higienizacao_sql(sql_logs))
+
+    sql_env = """
+SELECT
+  COALESCE(l.name, '(sem posto)') AS posto,
+  COALESCE(e.name, '(sem setor)') AS setor,
+  COALESCE(e.periodicity, '(sem periodicidade)') AS periodicidade,
+  TO_CHAR(MAX((hl.created_at AT TIME ZONE 'America/Sao_Paulo')::date), 'YYYY-MM-DD') AS ultimo_dia_log
+FROM public.environments e
+LEFT JOIN public.locations l ON l.id = e.location_id
+LEFT JOIN public.hygiene_logs hl ON hl.environment_id = e.id
+GROUP BY l.name, e.name, e.periodicity
+ORDER BY posto, setor;
+"""
+    ambientes = []
+    for ln in _run_higienizacao_sql(sql_env):
+        p = ln.split("|")
+        if len(p) != 4:
+            continue
+        ambientes.append({
+            "posto": p[0].strip() or "(sem posto)",
+            "setor": p[1].strip() or "(sem setor)",
+            "periodicidade": p[2].strip() or "(sem periodicidade)",
+            "ultimo_dia_log": p[3].strip(),
+        })
+
+    hoje = datetime.now().strftime("%Y-%m-%d")
+
+    total_logs = len(registros)
+    logs_hoje = sum(1 for r in registros if r["dia"] == hoje)
+    postos_ativos = len({r["posto"] for r in registros})
+    setores_ativos = len({r["setor"] for r in registros})
+    funcionarios_ativos = len({r["funcionario"] for r in registros})
+
+    by_posto = defaultdict(lambda: {"posto": "", "total_logs": 0, "logs_hoje": 0, "setores_distintos": set(), "funcionarios_distintos": set(), "ultima_higienizacao": ""})
+    by_setor = defaultdict(lambda: {"posto": "", "setor": "", "periodicidade": "", "total_logs": 0, "logs_hoje": 0, "funcionarios_distintos": set(), "ultima_higienizacao": ""})
+    by_func = defaultdict(lambda: {"funcionario": "", "funcionario_id": "", "total_logs": 0, "logs_hoje": 0, "postos_distintos": set(), "setores_distintos": set(), "ultimo_registro": ""})
+    by_dia = defaultdict(int)
+
+    for r in registros:
+        by_dia[r["dia"]] += 1
+
+        p = by_posto[r["posto"]]
+        p["posto"] = r["posto"]
+        p["total_logs"] += 1
+        if r["dia"] == hoje:
+            p["logs_hoje"] += 1
+        p["setores_distintos"].add(r["setor"])
+        p["funcionarios_distintos"].add(r["funcionario"])
+        if not p["ultima_higienizacao"] or r["data_hora"] > p["ultima_higienizacao"]:
+            p["ultima_higienizacao"] = r["data_hora"]
+
+        s_key = f'{r["posto"]}__{r["setor"]}'
+        s = by_setor[s_key]
+        s["posto"] = r["posto"]
+        s["setor"] = r["setor"]
+        s["periodicidade"] = r["periodicidade"]
+        s["total_logs"] += 1
+        if r["dia"] == hoje:
+            s["logs_hoje"] += 1
+        s["funcionarios_distintos"].add(r["funcionario"])
+        if not s["ultima_higienizacao"] or r["data_hora"] > s["ultima_higienizacao"]:
+            s["ultima_higienizacao"] = r["data_hora"]
+
+        f = by_func[r["funcionario"]]
+        f["funcionario"] = r["funcionario"]
+        f["funcionario_id"] = r["funcionario_id"]
+        f["total_logs"] += 1
+        if r["dia"] == hoje:
+            f["logs_hoje"] += 1
+        f["postos_distintos"].add(r["posto"])
+        f["setores_distintos"].add(r["setor"])
+        if not f["ultimo_registro"] or r["data_hora"] > f["ultimo_registro"]:
+            f["ultimo_registro"] = r["data_hora"]
+
+    postos = sorted([
+        {
+            "posto": v["posto"],
+            "total_logs": v["total_logs"],
+            "logs_hoje": v["logs_hoje"],
+            "setores_distintos": len(v["setores_distintos"]),
+            "funcionarios_distintos": len(v["funcionarios_distintos"]),
+            "ultima_higienizacao": v["ultima_higienizacao"],
+        }
+        for v in by_posto.values()
+    ], key=lambda x: (-x["total_logs"], x["posto"]))
+
+    setores = sorted([
+        {
+            "posto": v["posto"],
+            "setor": v["setor"],
+            "periodicidade": v["periodicidade"],
+            "total_logs": v["total_logs"],
+            "logs_hoje": v["logs_hoje"],
+            "funcionarios_distintos": len(v["funcionarios_distintos"]),
+            "ultima_higienizacao": v["ultima_higienizacao"],
+        }
+        for v in by_setor.values()
+    ], key=lambda x: (-x["total_logs"], x["posto"], x["setor"]))
+
+    funcionarios = sorted([
+        {
+            "funcionario": v["funcionario"],
+            "funcionario_id": v["funcionario_id"],
+            "total_logs": v["total_logs"],
+            "logs_hoje": v["logs_hoje"],
+            "postos_distintos": len(v["postos_distintos"]),
+            "setores_distintos": len(v["setores_distintos"]),
+            "ultimo_registro": v["ultimo_registro"],
+        }
+        for v in by_func.values()
+    ], key=lambda x: (-x["total_logs"], x["funcionario"]))
+
+    timeline = sorted(
+        [{"dia": k, "total_logs": v} for k, v in by_dia.items()],
+        key=lambda x: x["dia"],
+        reverse=True,
+    )[:31]
+
+    pendencias = []
+    hoje_date = datetime.now().date()
+    monday = hoje_date.fromordinal(hoje_date.toordinal() - hoje_date.weekday())
+    for a in ambientes:
+        periodicidade = (a["periodicidade"] or "").lower()
+        ultimo = a["ultimo_dia_log"]
+        pendente = False
+        if periodicidade == "diaria":
+            pendente = (not ultimo) or (ultimo < hoje)
+        elif periodicidade == "semanal":
+            pendente = True
+            # regra semanal: ao menos um log na semana atual (segunda em diante)
+            if ultimo:
+                dt_ult = datetime.strptime(ultimo, "%Y-%m-%d").date()
+                pendente = dt_ult < monday
+        if pendente:
+            pendencias.append(a)
+
+    pendencias = sorted(pendencias, key=lambda x: (x["posto"], x["setor"]))[:300]
+
+    return {
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "filtros": {"dt_ini": dt_ini, "dt_fim": dt_fim},
+        "kpis": {
+            "total_logs": total_logs,
+            "logs_hoje": logs_hoje,
+            "postos_ativos": postos_ativos,
+            "setores_ativos": setores_ativos,
+            "funcionarios_ativos": funcionarios_ativos,
+            "ambientes_total": len(ambientes),
+            "pendencias_hoje": len(pendencias),
+        },
+        "agrupado_posto": postos,
+        "agrupado_setor": setores,
+        "agrupado_funcionario": funcionarios,
+        "timeline_diaria": timeline,
+        "pendencias": pendencias,
+        "registros": registros[:1000],
+    }
 
 
 def _page_db():
@@ -782,6 +1013,38 @@ def h_qualidade_agenda():
 @app.get('/higienizacao.html')
 def h_higienizacao():
     return render_protected_page("higienizacao.html")
+
+@app.get('/api/higienizacao/relatorio')
+def api_higienizacao_relatorio():
+    email, _ = decode_user()
+    if not email:
+        return jsonify({"erro": "Não autorizado"}), 401
+
+    dt_ini = (request.args.get("dt_ini") or "").strip() or None
+    dt_fim = (request.args.get("dt_fim") or "").strip() or None
+
+    hoje = date.today()
+    primeiro_dia = hoje.replace(day=1)
+    proximo_mes = (primeiro_dia + timedelta(days=32)).replace(day=1)
+    ultimo_dia = proximo_mes - timedelta(days=1)
+
+    # Sempre trabalha com período fechado; se não vier, usa mês atual completo.
+    if not dt_ini:
+        dt_ini = primeiro_dia.isoformat()
+    if not dt_fim:
+        dt_fim = ultimo_dia.isoformat()
+
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", dt_ini or "") or not re.match(r"^\d{4}-\d{2}-\d{2}$", dt_fim or ""):
+        return jsonify({"erro": "Formato de data inválido. Use YYYY-MM-DD."}), 400
+    if dt_ini > dt_fim:
+        return jsonify({"erro": "Data inicial não pode ser maior que a final."}), 400
+
+    try:
+        payload = _build_higienizacao_report(dt_ini=dt_ini, dt_fim=dt_fim)
+        return jsonify(payload)
+    except Exception as e:
+        _log.exception("Falha ao montar relatório de higienização")
+        return jsonify({"erro": f"Falha ao gerar relatório: {e}"}), 500
 
 @app.get('/kpi_receita_despesa_rateio')
 def r_rateio():
@@ -1535,6 +1798,179 @@ def api_leads_analytics_cache_status():
         "modo": meta.get("modo"),
         "periodo_ini": meta.get("periodo_ini"),
         "periodo_fim": meta.get("periodo_fim"),
+    })
+
+
+# ===============================
+# API Agenda do Dia (F3)
+# ===============================
+
+@app.get("/api/agenda_dia")
+def api_agenda_dia():
+    """Consulta agenda do dia por posto: pacientes, status financeiro, pagamento no dia."""
+    email, postos_acl = decode_user()
+    if not email:
+        return ("", 401)
+
+    posto = (request.args.get("posto") or "").strip().upper()
+    data_str = (request.args.get("data") or "").strip()
+
+    if not posto or not data_str:
+        return jsonify({"ok": False, "error": "posto e data são obrigatórios"}), 400
+
+    if posto not in (postos_acl or []):
+        return jsonify({"ok": False, "error": "posto não autorizado"}), 403
+
+    # Validar formato de data (YYYY-MM-DD)
+    try:
+        dt = datetime.strptime(data_str, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"ok": False, "error": "data inválida (use YYYY-MM-DD)"}), 400
+
+    # Formato DD/MM/YYYY para views SQL Server (REGRA CRÍTICA)
+    dt_dmy = dt.strftime("%d/%m/%Y")
+    dt_next = (dt + timedelta(days=1)).strftime("%d/%m/%Y")
+
+    try:
+        eng = _try_build_engine_for_posto(posto, retries=3)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Posto {posto} offline: {e}"}), 503
+
+    # 1) Agenda do dia
+    sql_agenda = """
+    SET NOCOUNT ON;
+    SELECT
+        idendereco,
+        matricula,
+        codigo       AS cfcliente,
+        paciente,
+        idadePaciente,
+        especialidade,
+        nomemedico   AS medico,
+        HoraPrevistaConsulta,
+        CONVERT(varchar(5), dataconfirmacaoconsulta, 108) AS hora_confirmacao,
+        Dif_dias_agend_cons,
+        Atendido
+    FROM vw_Cad_LancamentoProntuarioComDesistencia
+    WHERE dataconsulta >= :dt_ini
+      AND dataconsulta <  :dt_fim
+      AND desistencia = 0
+      AND atendido <> 'MÉDICO faltou'
+    ORDER BY nomemedico, HoraPrevistaConsulta ASC
+    """
+
+    try:
+        with eng.connect() as con:
+            rows_agenda = con.execute(
+                text(sql_agenda),
+                {"dt_ini": dt_dmy, "dt_fim": dt_next}
+            ).mappings().all()
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Erro na consulta da agenda: {e}"}), 500
+
+    if not rows_agenda:
+        return jsonify({
+            "ok": True,
+            "posto": posto,
+            "data": data_str,
+            "total": 0,
+            "pacientes": [],
+        })
+
+    # Coletar matrículas únicas para buscar status e pagamento em batch
+    matriculas = list({int(r["matricula"]) for r in rows_agenda if r.get("matricula")})
+
+    # 2) Status financeiro — vw_fin_receita2
+    status_map = {}  # matricula -> Cliente Situação
+    if matriculas:
+        # Buscar em lotes para não estourar parâmetros
+        for i in range(0, len(matriculas), 500):
+            batch = matriculas[i:i+500]
+            placeholders = ",".join(str(m) for m in batch)
+            sql_status = f"""
+            SET NOCOUNT ON;
+            SELECT DISTINCT
+                matricula,
+                [Cliente Situação] AS situacao
+            FROM vw_fin_receita2
+            WHERE matricula IN ({placeholders})
+            """
+            try:
+                with eng.connect() as con:
+                    rows_st = con.execute(text(sql_status)).mappings().all()
+                for r in rows_st:
+                    mat = int(r["matricula"])
+                    sit = (r["situacao"] or "").strip()
+                    status_map[mat] = sit
+            except Exception:
+                pass  # se falhar, fica sem status
+
+    # 3) Pagamento no dia — vw_fin_receita2 com idcontatipo=5 e data prestação = dia
+    pagou_map = set()  # matrículas que pagaram no dia
+    if matriculas:
+        for i in range(0, len(matriculas), 500):
+            batch = matriculas[i:i+500]
+            placeholders = ",".join(str(m) for m in batch)
+            sql_pagou = f"""
+            SET NOCOUNT ON;
+            SELECT DISTINCT matricula
+            FROM vw_fin_receita2
+            WHERE matricula IN ({placeholders})
+              AND idcontatipo = 5
+              AND [data prestação] >= :dt_ini
+              AND [data prestação] <  :dt_fim
+            """
+            try:
+                with eng.connect() as con:
+                    rows_pg = con.execute(
+                        text(sql_pagou),
+                        {"dt_ini": dt_dmy, "dt_fim": dt_next}
+                    ).mappings().all()
+                for r in rows_pg:
+                    pagou_map.add(int(r["matricula"]))
+            except Exception:
+                pass
+
+    # Montar resultado
+    pacientes = []
+    for r in rows_agenda:
+        mat = int(r["matricula"]) if r.get("matricula") else None
+        hora_prev = r.get("HoraPrevistaConsulta")
+        if hora_prev is not None:
+            if isinstance(hora_prev, datetime):
+                hora_prev = hora_prev.strftime("%H:%M")
+            elif isinstance(hora_prev, timedelta):
+                total_sec = int(hora_prev.total_seconds())
+                hora_prev = f"{total_sec // 3600:02d}:{(total_sec % 3600) // 60:02d}"
+            else:
+                hora_prev = str(hora_prev)[:5]
+
+        atendido_raw = (str(r.get("Atendido") or "")).strip()
+        situacao = status_map.get(mat, "") if mat else ""
+        pagou = mat in pagou_map if mat else False
+
+        pacientes.append({
+            "matricula":        mat,
+            "cfcliente":        r.get("cfcliente"),
+            "paciente":         (r.get("paciente") or "").strip(),
+            "idade":            r.get("idadePaciente"),
+            "especialidade":    (r.get("especialidade") or "").strip(),
+            "medico":           (r.get("medico") or "").strip(),
+            "hora_prevista":    hora_prev,
+            "hora_confirmacao": (r.get("hora_confirmacao") or "").strip(),
+            "dias_agend_cons":  r.get("Dif_dias_agend_cons"),
+            "atendido":         atendido_raw,
+            "situacao":         situacao,
+            "pagou_no_dia":     pagou,
+            "idendereco":       r.get("idendereco"),
+        })
+
+    return jsonify({
+        "ok": True,
+        "posto": posto,
+        "data": data_str,
+        "total": len(pacientes),
+        "pacientes": pacientes,
     })
 
 
