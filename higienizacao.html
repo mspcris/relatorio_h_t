@@ -2,62 +2,32 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8" />
-  <title>CAMIM - Higienizacao</title>
+  <title>CAMIM - Relatório de Higienização</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style2.css">
   <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
-
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
-
   <style>
     html { font-size: 16px; }
-    body {
-      font-size: 1rem;
-      -webkit-text-size-adjust: 100%;
-      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    }
-    .text-sm .btn, .text-sm .form-control, .text-sm .custom-select,
-    .text-sm .page-link, .text-sm .breadcrumb, .text-sm .nav-link, .text-sm .card-title {
-      font-size: 1rem;
-    }
-    .kpi-chip {
-      display: inline-flex;
-      align-items: center;
-      padding: .35rem .65rem;
-      margin: .2rem .2rem .2rem 0;
-      border-radius: 999px;
-      background: #e9f5ff;
-      color: #0d5e9f;
-      font-weight: 600;
-      font-size: .9rem;
-    }
-    .code-box {
-      background: #0f172a;
-      color: #e2e8f0;
-      border-radius: .5rem;
-      padding: .9rem;
-      overflow: auto;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: .88rem;
-      line-height: 1.45;
-    }
+    body { font-size: 1rem; -webkit-text-size-adjust: 100%; font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .small-box .icon { top: 10px; }
+    .table td, .table th { vertical-align: middle; }
+    .sticky-head thead th { position: sticky; top: 0; background: #fff; z-index: 1; }
+    .table-wrap { max-height: 360px; overflow: auto; }
+    .muted { color: #6c757d; }
   </style>
 </head>
-
 <body class="hold-transition sidebar-mini">
   <div class="wrapper">
     <nav class="main-header navbar navbar-expand navbar-white navbar-light">
       <ul class="navbar-nav">
-        <li class="nav-item">
-          <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
-        </li>
+        <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li>
       </ul>
       <span class="ml-2 font-weight-bold d-flex align-items-center">
         <img src="/images/Logo Camim-01_200px.png" alt="Logo Camim" style="height:28px;width:auto">
@@ -78,53 +48,94 @@
       <section class="content p-3">
         <div class="card mb-3">
           <div class="card-body">
-            <h2 class="mb-1"><i class="fas fa-broom mr-2 text-info"></i>Higienizacao</h2>
-            <p class="lead mb-2">Painel de referencia para acompanhamento operacional de higienizacao por local, ambiente e colaborador.</p>
-            <a href="/mais_servicos" class="btn btn-outline-secondary btn-sm">
-              <i class="fas fa-arrow-left mr-1"></i> Voltar para Mais Servicos
-            </a>
+            <h2 class="mb-1"><i class="fas fa-broom mr-2 text-info"></i>Relatório de Higienização</h2>
+            <p class="lead mb-2">Visão operacional com agrupamentos por posto, setor e funcionário.</p>
+            <p class="mb-0 muted">Atualizado em: <span id="updatedAt">-</span></p>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-3">
+                <label class="mb-1">Data Inicial</label>
+                <input id="dtIni" type="date" class="form-control" required>
+              </div>
+              <div class="col-md-3">
+                <label class="mb-1">Data Final</label>
+                <input id="dtFim" type="date" class="form-control" required>
+              </div>
+              <div class="col-md-3 d-flex align-items-end">
+                <button id="btnAtualizar" class="btn btn-primary"><i class="fas fa-sync-alt mr-1"></i>Atualizar</button>
+              </div>
+              <div class="col-md-3 d-flex align-items-end justify-content-md-end">
+                <a href="/mais_servicos" class="btn btn-outline-secondary"><i class="fas fa-arrow-left mr-1"></i>Mais Serviços</a>
+              </div>
+            </div>
           </div>
         </div>
 
         <div class="row">
-          <div class="col-lg-8">
-            <div class="card">
-              <div class="card-header">
-                <h3 class="card-title"><i class="fas fa-chart-pie mr-1"></i>Escopo do Relatorio</h3>
-              </div>
-              <div class="card-body">
-                <span class="kpi-chip">Resumo Geral</span>
-                <span class="kpi-chip">Serie Diaria</span>
-                <span class="kpi-chip">Cobertura por Local</span>
-                <span class="kpi-chip">Ranking por Colaborador</span>
-                <span class="kpi-chip">Aderencia por Periodicidade</span>
-                <span class="kpi-chip">Pendencias por Ambiente</span>
-                <span class="kpi-chip">QRCode sem Uso</span>
-                <span class="kpi-chip">Ultimos Registros</span>
-              </div>
-            </div>
+          <div class="col-md-2 col-6"><div class="small-box bg-info"><div class="inner"><h3 id="kTotalLogs">0</h3><p>Total Logs</p></div><div class="icon"><i class="fas fa-clipboard-check"></i></div></div></div>
+          <div class="col-md-2 col-6"><div class="small-box bg-success"><div class="inner"><h3 id="kLogsHoje">0</h3><p>Logs Hoje</p></div><div class="icon"><i class="fas fa-calendar-day"></i></div></div></div>
+          <div class="col-md-2 col-6"><div class="small-box bg-warning"><div class="inner"><h3 id="kPostos">0</h3><p>Postos Ativos</p></div><div class="icon"><i class="fas fa-hospital"></i></div></div></div>
+          <div class="col-md-2 col-6"><div class="small-box bg-primary"><div class="inner"><h3 id="kSetores">0</h3><p>Setores Ativos</p></div><div class="icon"><i class="fas fa-door-open"></i></div></div></div>
+          <div class="col-md-2 col-6"><div class="small-box bg-danger"><div class="inner"><h3 id="kFuncs">0</h3><p>Funcionários</p></div><div class="icon"><i class="fas fa-users"></i></div></div></div>
+          <div class="col-md-2 col-6"><div class="small-box bg-secondary"><div class="inner"><h3 id="kPend">0</h3><p>Pendências</p></div><div class="icon"><i class="fas fa-exclamation-triangle"></i></div></div></div>
+        </div>
 
-            <div class="card">
-              <div class="card-header">
-                <h3 class="card-title"><i class="fas fa-terminal mr-1"></i>Execucao do SQL</h3>
-              </div>
-              <div class="card-body">
-                <p class="mb-2">Execute o relatorio completo no banco <code>gestao_higienizacao</code>:</p>
-                <div class="code-box">ssh root@217.216.85.81
-sudo -u postgres psql -d gestao_higienizacao -f /caminho/do/projeto/sql_higienizacao/relatorio_completo_higienizacao_postgres.sql</div>
-                <p class="text-muted mt-3 mb-0">Arquivo SQL: <code>sql_higienizacao/relatorio_completo_higienizacao_postgres.sql</code></p>
-              </div>
-            </div>
+        <div class="card">
+          <div class="card-header p-2">
+            <ul class="nav nav-pills">
+              <li class="nav-item"><a class="nav-link active" href="#tab-posto" data-toggle="tab">Por Posto</a></li>
+              <li class="nav-item"><a class="nav-link" href="#tab-setor" data-toggle="tab">Por Setor</a></li>
+              <li class="nav-item"><a class="nav-link" href="#tab-func" data-toggle="tab">Por Funcionário</a></li>
+              <li class="nav-item"><a class="nav-link" href="#tab-pend" data-toggle="tab">Pendências</a></li>
+              <li class="nav-item"><a class="nav-link" href="#tab-reg" data-toggle="tab">Registros</a></li>
+            </ul>
           </div>
-
-          <div class="col-lg-4">
-            <div class="card card-info card-outline">
-              <div class="card-header">
-                <h3 class="card-title"><i class="fas fa-info-circle mr-1"></i>Observacoes</h3>
+          <div class="card-body p-0">
+            <div class="tab-content">
+              <div class="tab-pane active" id="tab-posto">
+                <div class="table-wrap">
+                  <table class="table table-sm table-striped sticky-head mb-0">
+                    <thead><tr><th>Posto</th><th class="text-right">Logs</th><th class="text-right">Hoje</th><th class="text-right">Setores</th><th class="text-right">Funcionários</th><th>Última Higienização</th></tr></thead>
+                    <tbody id="tbPosto"></tbody>
+                  </table>
+                </div>
               </div>
-              <div class="card-body">
-                <p class="mb-2">Esta pagina e um atalho de operacao para o modulo de Higienizacao.</p>
-                <p class="mb-0">Os dados analiticos sao gerados diretamente do PostgreSQL da VM.</p>
+              <div class="tab-pane" id="tab-setor">
+                <div class="table-wrap">
+                  <table class="table table-sm table-striped sticky-head mb-0">
+                    <thead><tr><th>Posto</th><th>Setor</th><th>Periodicidade</th><th class="text-right">Logs</th><th class="text-right">Hoje</th><th class="text-right">Funcionários</th><th>Última Higienização</th></tr></thead>
+                    <tbody id="tbSetor"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="tab-pane" id="tab-func">
+                <div class="table-wrap">
+                  <table class="table table-sm table-striped sticky-head mb-0">
+                    <thead><tr><th>Funcionário</th><th>ID</th><th class="text-right">Logs</th><th class="text-right">Hoje</th><th class="text-right">Postos</th><th class="text-right">Setores</th><th>Último Registro</th></tr></thead>
+                    <tbody id="tbFunc"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="tab-pane" id="tab-pend">
+                <div class="table-wrap">
+                  <table class="table table-sm table-striped sticky-head mb-0">
+                    <thead><tr><th>Posto</th><th>Setor</th><th>Periodicidade</th><th>Último Dia com Log</th></tr></thead>
+                    <tbody id="tbPend"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="tab-pane" id="tab-reg">
+                <div class="p-2"><input id="buscaReg" type="text" class="form-control" placeholder="Filtrar por posto, setor ou funcionário"></div>
+                <div class="table-wrap">
+                  <table class="table table-sm table-striped sticky-head mb-0">
+                    <thead><tr><th>Posto</th><th>Setor</th><th>Funcionário</th><th>Data/Hora</th><th>Periodicidade</th></tr></thead>
+                    <tbody id="tbReg"></tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -133,6 +144,106 @@ sudo -u postgres psql -d gestao_higienizacao -f /caminho/do/projeto/sql_higieniz
     </div>
   </div>
 
+  <script>
+    const state = { registros: [] };
+    function ymdLocal(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+    function mesAtualCompleto() {
+      const hoje = new Date();
+      const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+      return { ini: ymdLocal(ini), fim: ymdLocal(fim) };
+    }
+
+    function esc(s) {
+      return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function fmtN(n) { return Number(n || 0).toLocaleString('pt-BR'); }
+
+    function renderTable(id, rowsHtml) {
+      document.getElementById(id).innerHTML = rowsHtml || '<tr><td colspan="20" class="text-center text-muted py-3">Sem dados</td></tr>';
+    }
+
+    function renderRegistros() {
+      const q = (document.getElementById('buscaReg').value || '').toLowerCase().trim();
+      const rows = state.registros.filter(r => {
+        if (!q) return true;
+        return (r.posto + ' ' + r.setor + ' ' + r.funcionario).toLowerCase().includes(q);
+      });
+      renderTable('tbReg', rows.map(r => `<tr><td>${esc(r.posto)}</td><td>${esc(r.setor)}</td><td>${esc(r.funcionario)}</td><td>${esc(r.data_hora)}</td><td>${esc(r.periodicidade)}</td></tr>`).join(''));
+    }
+
+    async function carregar() {
+      let dtIni = document.getElementById('dtIni').value;
+      let dtFim = document.getElementById('dtFim').value;
+      if (!dtIni || !dtFim) {
+        const p = mesAtualCompleto();
+        dtIni = dtIni || p.ini;
+        dtFim = dtFim || p.fim;
+        document.getElementById('dtIni').value = dtIni;
+        document.getElementById('dtFim').value = dtFim;
+      }
+      if (dtIni > dtFim) {
+        alert('Data inicial não pode ser maior que a data final.');
+        return;
+      }
+      const qs = new URLSearchParams();
+      qs.set('dt_ini', dtIni);
+      qs.set('dt_fim', dtFim);
+      const url = '/api/higienizacao/relatorio' + (qs.toString() ? ('?' + qs.toString()) : '');
+
+      document.getElementById('btnAtualizar').disabled = true;
+      try {
+        const r = await fetch(url, { credentials: 'same-origin' });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.erro || 'Falha ao carregar');
+
+        document.getElementById('updatedAt').textContent = j.updated_at || '-';
+        document.getElementById('kTotalLogs').textContent = fmtN(j.kpis.total_logs);
+        document.getElementById('kLogsHoje').textContent = fmtN(j.kpis.logs_hoje);
+        document.getElementById('kPostos').textContent = fmtN(j.kpis.postos_ativos);
+        document.getElementById('kSetores').textContent = fmtN(j.kpis.setores_ativos);
+        document.getElementById('kFuncs').textContent = fmtN(j.kpis.funcionarios_ativos);
+        document.getElementById('kPend').textContent = fmtN(j.kpis.pendencias_hoje);
+
+        renderTable('tbPosto', (j.agrupado_posto || []).map(r =>
+          `<tr><td>${esc(r.posto)}</td><td class="text-right">${fmtN(r.total_logs)}</td><td class="text-right">${fmtN(r.logs_hoje)}</td><td class="text-right">${fmtN(r.setores_distintos)}</td><td class="text-right">${fmtN(r.funcionarios_distintos)}</td><td>${esc(r.ultima_higienizacao)}</td></tr>`
+        ).join(''));
+
+        renderTable('tbSetor', (j.agrupado_setor || []).map(r =>
+          `<tr><td>${esc(r.posto)}</td><td>${esc(r.setor)}</td><td>${esc(r.periodicidade)}</td><td class="text-right">${fmtN(r.total_logs)}</td><td class="text-right">${fmtN(r.logs_hoje)}</td><td class="text-right">${fmtN(r.funcionarios_distintos)}</td><td>${esc(r.ultima_higienizacao)}</td></tr>`
+        ).join(''));
+
+        renderTable('tbFunc', (j.agrupado_funcionario || []).map(r =>
+          `<tr><td>${esc(r.funcionario)}</td><td>${esc(r.funcionario_id)}</td><td class="text-right">${fmtN(r.total_logs)}</td><td class="text-right">${fmtN(r.logs_hoje)}</td><td class="text-right">${fmtN(r.postos_distintos)}</td><td class="text-right">${fmtN(r.setores_distintos)}</td><td>${esc(r.ultimo_registro)}</td></tr>`
+        ).join(''));
+
+        renderTable('tbPend', (j.pendencias || []).map(r =>
+          `<tr><td>${esc(r.posto)}</td><td>${esc(r.setor)}</td><td>${esc(r.periodicidade)}</td><td>${esc(r.ultimo_dia_log || 'SEM_LOG')}</td></tr>`
+        ).join(''));
+
+        state.registros = j.registros || [];
+        renderRegistros();
+      } catch (e) {
+        alert(e.message || 'Falha ao carregar relatório');
+      } finally {
+        document.getElementById('btnAtualizar').disabled = false;
+      }
+    }
+
+    (function init() {
+      const p = mesAtualCompleto();
+      document.getElementById('dtIni').value = p.ini;
+      document.getElementById('dtFim').value = p.fim;
+      document.getElementById('btnAtualizar').addEventListener('click', carregar);
+      document.getElementById('buscaReg').addEventListener('input', renderRegistros);
+      carregar();
+    })();
+  </script>
   <script src="/js/menu.js" defer></script>
 </body>
 </html>
