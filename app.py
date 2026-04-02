@@ -2119,7 +2119,7 @@ def api_agenda_dia():
             "atendido":         atendido_raw,
             "situacao":         situacao,
             "pagou_no_dia":     pagou,
-            "idendereco":       id_end,
+            "idendereco":       r.get("idendereco"),
         })
 
     return jsonify({
