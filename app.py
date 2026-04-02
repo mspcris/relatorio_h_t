@@ -1888,11 +1888,37 @@ def api_leads_analytics_cache_status():
 # API Agenda do Dia (F3)
 # ===============================
 
-# Mapeamento idEndereco → letra do posto
-_ID_ENDERECO_TO_LETRA = {
-    1: "R", 2: "C", 3: "A", 4: "J", 5: "G", 6: "I", 7: "B",
-    12: "N", 20: "D", 21: "X", 25: "M", 26: "P", 51: "Y",
-}
+# Cache do mapa idEndereco → letra (carregado de cad_endereco)
+_id_endereco_cache = {}   # {idEndereco: letra}
+_letra_to_id_cache = {}   # {letra: idEndereco}
+
+
+def _load_endereco_map(eng):
+    """Carrega mapa idEndereco↔letra de cad_endereco (com cache)."""
+    global _id_endereco_cache, _letra_to_id_cache
+    if _id_endereco_cache:
+        return
+    try:
+        with eng.connect() as con:
+            rows = con.execute(text(
+                "SET NOCOUNT ON; SELECT idEndereco, Codigo FROM cad_endereco"
+            )).mappings().all()
+        for r in rows:
+            id_end = int(r["idEndereco"])
+            letra = (r["Codigo"] or "").strip().upper()
+            if letra:
+                _id_endereco_cache[id_end] = letra
+                _letra_to_id_cache[letra] = id_end
+    except Exception:
+        pass
+
+
+def _get_letra(id_endereco, fallback="?"):
+    return _id_endereco_cache.get(id_endereco, fallback)
+
+
+def _get_id_endereco(letra):
+    return _letra_to_id_cache.get(letra)
 
 
 def _agenda_buscar_status_por_posto(matriculas_por_posto, dt_dmy, dt_next):
@@ -1906,8 +1932,7 @@ def _agenda_buscar_status_por_posto(matriculas_por_posto, dt_dmy, dt_next):
     status_map = {}   # matricula -> situação
     pagou_map = set()  # matrículas que pagaram no dia
 
-    # Inverter _ID_ENDERECO_TO_LETRA para obter idendereco a partir da letra
-    _LETRA_TO_ID = {v: k for k, v in _ID_ENDERECO_TO_LETRA.items()}
+    # Usar cache de cad_endereco
 
     for letra_posto, mat_id_pairs in matriculas_por_posto.items():
         if not mat_id_pairs:
@@ -1919,7 +1944,7 @@ def _agenda_buscar_status_por_posto(matriculas_por_posto, dt_dmy, dt_next):
 
         # Extrair matrículas e o idendereco do posto
         mat_list = list({m for m, _ in mat_id_pairs})
-        id_endereco = _LETRA_TO_ID.get(letra_posto)
+        id_endereco = _get_id_endereco(letra_posto)
 
         for i in range(0, len(mat_list), 500):
             batch = mat_list[i:i+500]
@@ -1997,6 +2022,9 @@ def api_agenda_dia():
     except Exception as e:
         return jsonify({"ok": False, "error": f"Posto {posto} offline: {e}"}), 503
 
+    # Carregar mapa idEndereco↔letra de cad_endereco (uma vez, com cache)
+    _load_endereco_map(eng)
+
     # 1) Agenda do dia
     sql_agenda = """
     SET NOCOUNT ON;
@@ -2048,7 +2076,7 @@ def api_agenda_dia():
         if not mat:
             continue
         id_end = r.get("idendereco")
-        letra = _ID_ENDERECO_TO_LETRA.get(id_end, posto)  # fallback: posto atual
+        letra = _get_letra(id_end, posto)  # fallback: posto atual
         mat_to_letra[mat] = letra
         matriculas_por_posto[letra].add((mat, id_end))
 
@@ -2073,7 +2101,7 @@ def api_agenda_dia():
 
         atendido_raw = (str(r.get("Atendido") or "")).strip()
         id_end = r.get("idendereco")
-        letra_origem = _ID_ENDERECO_TO_LETRA.get(id_end, "?")
+        letra_origem = _get_letra(id_end, "?")
         situacao = status_map.get(mat, "") if mat else ""
         pagou = mat in pagou_map if mat else False
 
