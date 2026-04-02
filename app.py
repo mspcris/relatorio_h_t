@@ -1898,25 +1898,35 @@ _ID_ENDERECO_TO_LETRA = {
 def _agenda_buscar_status_por_posto(matriculas_por_posto, dt_dmy, dt_next):
     """
     Para cada posto, conecta no banco daquele posto e busca:
-    - [Cliente Situação] de cada matrícula
-    - Se pagou no dia (idcontatipo=5)
+    - [Cliente Situação] por matricula + idendereco (evita retornar 'Filial')
+    - Se pagou no dia (idcontatipo=5) por matricula + idendereco
     Retorna (status_map, pagou_map).
+    matriculas_por_posto: {letra: {(matricula, idendereco), ...}}
     """
     status_map = {}   # matricula -> situação
     pagou_map = set()  # matrículas que pagaram no dia
 
-    for letra_posto, mats in matriculas_por_posto.items():
-        if not mats:
+    # Inverter _ID_ENDERECO_TO_LETRA para obter idendereco a partir da letra
+    _LETRA_TO_ID = {v: k for k, v in _ID_ENDERECO_TO_LETRA.items()}
+
+    for letra_posto, mat_id_pairs in matriculas_por_posto.items():
+        if not mat_id_pairs:
             continue
         try:
             eng_posto = _try_build_engine_for_posto(letra_posto, retries=2)
         except Exception:
             continue  # posto offline, fica sem status
 
-        mat_list = list(mats)
+        # Extrair matrículas e o idendereco do posto
+        mat_list = list({m for m, _ in mat_id_pairs})
+        id_endereco = _LETRA_TO_ID.get(letra_posto)
+
         for i in range(0, len(mat_list), 500):
             batch = mat_list[i:i+500]
             placeholders = ",".join(str(m) for m in batch)
+
+            # Filtro por idendereco para não retornar 'Filial'
+            id_filter = f"AND idendereco = {id_endereco}" if id_endereco else ""
 
             # Status financeiro
             sql_status = f"""
@@ -1924,6 +1934,7 @@ def _agenda_buscar_status_por_posto(matriculas_por_posto, dt_dmy, dt_next):
             SELECT DISTINCT matricula, [Cliente Situação] AS situacao
             FROM vw_fin_receita2
             WHERE matricula IN ({placeholders})
+            {id_filter}
             """
             try:
                 with eng_posto.connect() as con:
@@ -1940,6 +1951,7 @@ def _agenda_buscar_status_por_posto(matriculas_por_posto, dt_dmy, dt_next):
             SELECT DISTINCT matricula
             FROM vw_fin_receita2
             WHERE matricula IN ({placeholders})
+              {id_filter}
               AND idcontatipo = 5
               AND [data prestação] >= :dt_ini
               AND [data prestação] <  :dt_fim
@@ -2028,7 +2040,7 @@ def api_agenda_dia():
 
     # 2) Agrupar matrículas por posto de ORIGEM (idendereco → letra)
     #    para buscar status/pagamento no banco correto
-    matriculas_por_posto = defaultdict(set)  # letra -> {matriculas}
+    matriculas_por_posto = defaultdict(set)  # letra -> {(matricula, idendereco)}
     mat_to_letra = {}  # matricula -> letra do posto de origem
 
     for r in rows_agenda:
@@ -2038,7 +2050,7 @@ def api_agenda_dia():
         id_end = r.get("idendereco")
         letra = _ID_ENDERECO_TO_LETRA.get(id_end, posto)  # fallback: posto atual
         mat_to_letra[mat] = letra
-        matriculas_por_posto[letra].add(mat)
+        matriculas_por_posto[letra].add((mat, id_end))
 
     # 3) Buscar status e pagamento em cada posto de origem
     status_map, pagou_map = _agenda_buscar_status_por_posto(
