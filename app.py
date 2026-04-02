@@ -112,6 +112,10 @@ _TEMPLATE_TO_PAGINA = {
 
 _MENU_RESOURCES_CACHE = None
 _log = logging.getLogger(__name__)
+HIGIENIZACAO_SNAPSHOT_PATH = os.getenv(
+    "HIGIENIZACAO_SNAPSHOT_PATH",
+    "/opt/relatorio_h_t/json_consolidado/higienizacao_snapshot.json",
+)
 
 
 def _run_higienizacao_sql(sql: str) -> list[str]:
@@ -121,7 +125,15 @@ def _run_higienizacao_sql(sql: str) -> list[str]:
     sql_safe = sql.replace("\\", "\\\\").replace('"', '\\"')
     remote_cmd = f"sudo -u postgres psql -d {db_name} -AtF '|' -c \"{sql_safe}\""
     p = subprocess.run(
-        ["ssh", "-o", "BatchMode=yes", ssh_host, remote_cmd],
+        [
+            "ssh",
+            "-o", "BatchMode=yes",
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
+            "-o", "ConnectTimeout=10",
+            ssh_host,
+            remote_cmd,
+        ],
         capture_output=True,
         text=True,
         timeout=60,
@@ -152,49 +164,9 @@ def _parse_higienizacao_rows(lines: list[str]) -> list[dict]:
     return rows
 
 
-def _build_higienizacao_report(dt_ini: str | None, dt_fim: str | None) -> dict:
-    where = []
-    if dt_ini and re.match(r"^\d{4}-\d{2}-\d{2}$", dt_ini):
-        where.append(f"(hl.created_at AT TIME ZONE 'America/Sao_Paulo')::date >= DATE '{dt_ini}'")
-    if dt_fim and re.match(r"^\d{4}-\d{2}-\d{2}$", dt_fim):
-        where.append(f"(hl.created_at AT TIME ZONE 'America/Sao_Paulo')::date <= DATE '{dt_fim}'")
-    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
-
-    sql_logs = f"""
-SELECT
-  COALESCE(l.name, '(sem posto)') AS posto,
-  COALESCE(e.name, '(sem setor)') AS setor,
-  COALESCE(e.periodicity, '(sem periodicidade)') AS periodicidade,
-  COALESCE(NULLIF(BTRIM(hl.employee_name), ''), hl.employee_id, 'SEM_FUNCIONARIO') AS funcionario,
-  COALESCE(hl.employee_id, '') AS funcionario_id,
-  TO_CHAR((hl.created_at AT TIME ZONE 'America/Sao_Paulo'), 'YYYY-MM-DD HH24:MI:SS') AS data_hora,
-  TO_CHAR((hl.created_at AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS dia,
-  COALESCE(e.id::text, '') AS ambiente_id,
-  COALESCE(l.id::text, '') AS posto_id,
-  COALESCE(hl.qr_code_id::text, '') AS qr_code_id
-FROM public.hygiene_logs hl
-LEFT JOIN public.environments e ON e.id = hl.environment_id
-LEFT JOIN public.locations l ON l.id = e.location_id
-{where_sql}
-ORDER BY hl.created_at DESC
-LIMIT 20000;
-"""
-    registros = _parse_higienizacao_rows(_run_higienizacao_sql(sql_logs))
-
-    sql_env = """
-SELECT
-  COALESCE(l.name, '(sem posto)') AS posto,
-  COALESCE(e.name, '(sem setor)') AS setor,
-  COALESCE(e.periodicity, '(sem periodicidade)') AS periodicidade,
-  TO_CHAR(MAX((hl.created_at AT TIME ZONE 'America/Sao_Paulo')::date), 'YYYY-MM-DD') AS ultimo_dia_log
-FROM public.environments e
-LEFT JOIN public.locations l ON l.id = e.location_id
-LEFT JOIN public.hygiene_logs hl ON hl.environment_id = e.id
-GROUP BY l.name, e.name, e.periodicity
-ORDER BY posto, setor;
-"""
+def _parse_higienizacao_ambientes(lines: list[str]) -> list[dict]:
     ambientes = []
-    for ln in _run_higienizacao_sql(sql_env):
+    for ln in lines:
         p = ln.split("|")
         if len(p) != 4:
             continue
@@ -204,55 +176,97 @@ ORDER BY posto, setor;
             "periodicidade": p[2].strip() or "(sem periodicidade)",
             "ultimo_dia_log": p[3].strip(),
         })
+    return ambientes
 
+
+def _load_higienizacao_snapshot() -> tuple[list[dict], list[dict], str]:
+    path = HIGIENIZACAO_SNAPSHOT_PATH
+    with open(path, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+
+    registros = payload.get("registros") if isinstance(payload, dict) else None
+    ambientes = payload.get("ambientes") if isinstance(payload, dict) else None
+    updated_at = (payload.get("updated_at") if isinstance(payload, dict) else None) or ""
+
+    if not isinstance(registros, list):
+        raise RuntimeError("snapshot sem chave 'registros' válida")
+    if not isinstance(ambientes, list):
+        raise RuntimeError("snapshot sem chave 'ambientes' válida")
+    return registros, ambientes, updated_at
+
+
+def _aggregate_higienizacao(
+    registros: list[dict],
+    ambientes: list[dict],
+    dt_ini: str | None,
+    dt_fim: str | None,
+    updated_at: str | None = None,
+) -> dict:
     hoje = datetime.now().strftime("%Y-%m-%d")
+    registros_filtrados = []
+    for r in registros:
+        dia = (r.get("dia") or "").strip()
+        if dt_ini and dia and dia < dt_ini:
+            continue
+        if dt_fim and dia and dia > dt_fim:
+            continue
+        registros_filtrados.append(r)
 
-    total_logs = len(registros)
-    logs_hoje = sum(1 for r in registros if r["dia"] == hoje)
-    postos_ativos = len({r["posto"] for r in registros})
-    setores_ativos = len({r["setor"] for r in registros})
-    funcionarios_ativos = len({r["funcionario"] for r in registros})
+    total_logs = len(registros_filtrados)
+    logs_hoje = sum(1 for r in registros_filtrados if (r.get("dia") or "") == hoje)
+    postos_ativos = len({(r.get("posto") or "(sem posto)") for r in registros_filtrados})
+    setores_ativos = len({(r.get("setor") or "(sem setor)") for r in registros_filtrados})
+    funcionarios_ativos = len({(r.get("funcionario") or "SEM_FUNCIONARIO") for r in registros_filtrados})
 
     by_posto = defaultdict(lambda: {"posto": "", "total_logs": 0, "logs_hoje": 0, "setores_distintos": set(), "funcionarios_distintos": set(), "ultima_higienizacao": ""})
     by_setor = defaultdict(lambda: {"posto": "", "setor": "", "periodicidade": "", "total_logs": 0, "logs_hoje": 0, "funcionarios_distintos": set(), "ultima_higienizacao": ""})
     by_func = defaultdict(lambda: {"funcionario": "", "funcionario_id": "", "total_logs": 0, "logs_hoje": 0, "postos_distintos": set(), "setores_distintos": set(), "ultimo_registro": ""})
     by_dia = defaultdict(int)
 
-    for r in registros:
-        by_dia[r["dia"]] += 1
+    for r in registros_filtrados:
+        posto = r.get("posto") or "(sem posto)"
+        setor = r.get("setor") or "(sem setor)"
+        funcionario = r.get("funcionario") or "SEM_FUNCIONARIO"
+        funcionario_id = r.get("funcionario_id") or ""
+        data_hora = r.get("data_hora") or ""
+        dia = r.get("dia") or ""
+        periodicidade = r.get("periodicidade") or "(sem periodicidade)"
 
-        p = by_posto[r["posto"]]
-        p["posto"] = r["posto"]
+        if dia:
+            by_dia[dia] += 1
+
+        p = by_posto[posto]
+        p["posto"] = posto
         p["total_logs"] += 1
-        if r["dia"] == hoje:
+        if dia == hoje:
             p["logs_hoje"] += 1
-        p["setores_distintos"].add(r["setor"])
-        p["funcionarios_distintos"].add(r["funcionario"])
-        if not p["ultima_higienizacao"] or r["data_hora"] > p["ultima_higienizacao"]:
-            p["ultima_higienizacao"] = r["data_hora"]
+        p["setores_distintos"].add(setor)
+        p["funcionarios_distintos"].add(funcionario)
+        if not p["ultima_higienizacao"] or data_hora > p["ultima_higienizacao"]:
+            p["ultima_higienizacao"] = data_hora
 
-        s_key = f'{r["posto"]}__{r["setor"]}'
+        s_key = f"{posto}__{setor}"
         s = by_setor[s_key]
-        s["posto"] = r["posto"]
-        s["setor"] = r["setor"]
-        s["periodicidade"] = r["periodicidade"]
+        s["posto"] = posto
+        s["setor"] = setor
+        s["periodicidade"] = periodicidade
         s["total_logs"] += 1
-        if r["dia"] == hoje:
+        if dia == hoje:
             s["logs_hoje"] += 1
-        s["funcionarios_distintos"].add(r["funcionario"])
-        if not s["ultima_higienizacao"] or r["data_hora"] > s["ultima_higienizacao"]:
-            s["ultima_higienizacao"] = r["data_hora"]
+        s["funcionarios_distintos"].add(funcionario)
+        if not s["ultima_higienizacao"] or data_hora > s["ultima_higienizacao"]:
+            s["ultima_higienizacao"] = data_hora
 
-        f = by_func[r["funcionario"]]
-        f["funcionario"] = r["funcionario"]
-        f["funcionario_id"] = r["funcionario_id"]
+        f = by_func[funcionario]
+        f["funcionario"] = funcionario
+        f["funcionario_id"] = funcionario_id
         f["total_logs"] += 1
-        if r["dia"] == hoje:
+        if dia == hoje:
             f["logs_hoje"] += 1
-        f["postos_distintos"].add(r["posto"])
-        f["setores_distintos"].add(r["setor"])
-        if not f["ultimo_registro"] or r["data_hora"] > f["ultimo_registro"]:
-            f["ultimo_registro"] = r["data_hora"]
+        f["postos_distintos"].add(posto)
+        f["setores_distintos"].add(setor)
+        if not f["ultimo_registro"] or data_hora > f["ultimo_registro"]:
+            f["ultimo_registro"] = data_hora
 
     postos = sorted([
         {
@@ -302,24 +316,28 @@ ORDER BY posto, setor;
     hoje_date = datetime.now().date()
     monday = hoje_date.fromordinal(hoje_date.toordinal() - hoje_date.weekday())
     for a in ambientes:
-        periodicidade = (a["periodicidade"] or "").lower()
-        ultimo = a["ultimo_dia_log"]
+        periodicidade = ((a.get("periodicidade") or "").lower()).strip()
+        ultimo = (a.get("ultimo_dia_log") or "").strip()
         pendente = False
         if periodicidade == "diaria":
             pendente = (not ultimo) or (ultimo < hoje)
         elif periodicidade == "semanal":
             pendente = True
-            # regra semanal: ao menos um log na semana atual (segunda em diante)
             if ultimo:
                 dt_ult = datetime.strptime(ultimo, "%Y-%m-%d").date()
                 pendente = dt_ult < monday
         if pendente:
-            pendencias.append(a)
+            pendencias.append({
+                "posto": a.get("posto") or "(sem posto)",
+                "setor": a.get("setor") or "(sem setor)",
+                "periodicidade": a.get("periodicidade") or "(sem periodicidade)",
+                "ultimo_dia_log": ultimo,
+            })
 
     pendencias = sorted(pendencias, key=lambda x: (x["posto"], x["setor"]))[:300]
 
     return {
-        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "updated_at": updated_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "filtros": {"dt_ini": dt_ini, "dt_fim": dt_fim},
         "kpis": {
             "total_logs": total_logs,
@@ -335,8 +353,69 @@ ORDER BY posto, setor;
         "agrupado_funcionario": funcionarios,
         "timeline_diaria": timeline,
         "pendencias": pendencias,
-        "registros": registros[:1000],
+        "registros": registros_filtrados[:1000],
     }
+
+
+def _build_higienizacao_report_live(dt_ini: str | None, dt_fim: str | None) -> dict:
+    sql_logs = """
+SELECT
+  COALESCE(l.name, '(sem posto)') AS posto,
+  COALESCE(e.name, '(sem setor)') AS setor,
+  COALESCE(e.periodicity, '(sem periodicidade)') AS periodicidade,
+  COALESCE(NULLIF(BTRIM(hl.employee_name), ''), hl.employee_id, 'SEM_FUNCIONARIO') AS funcionario,
+  COALESCE(hl.employee_id, '') AS funcionario_id,
+  TO_CHAR((hl.created_at AT TIME ZONE 'America/Sao_Paulo'), 'YYYY-MM-DD HH24:MI:SS') AS data_hora,
+  TO_CHAR((hl.created_at AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') AS dia,
+  COALESCE(e.id::text, '') AS ambiente_id,
+  COALESCE(l.id::text, '') AS posto_id,
+  COALESCE(hl.qr_code_id::text, '') AS qr_code_id
+FROM public.hygiene_logs hl
+LEFT JOIN public.environments e ON e.id = hl.environment_id
+LEFT JOIN public.locations l ON l.id = e.location_id
+ORDER BY hl.created_at DESC
+LIMIT 50000;
+"""
+    registros = _parse_higienizacao_rows(_run_higienizacao_sql(sql_logs))
+
+    sql_env = """
+SELECT
+  COALESCE(l.name, '(sem posto)') AS posto,
+  COALESCE(e.name, '(sem setor)') AS setor,
+  COALESCE(e.periodicity, '(sem periodicidade)') AS periodicidade,
+  TO_CHAR(MAX((hl.created_at AT TIME ZONE 'America/Sao_Paulo')::date), 'YYYY-MM-DD') AS ultimo_dia_log
+FROM public.environments e
+LEFT JOIN public.locations l ON l.id = e.location_id
+LEFT JOIN public.hygiene_logs hl ON hl.environment_id = e.id
+GROUP BY l.name, e.name, e.periodicity
+ORDER BY posto, setor;
+"""
+    ambientes = _parse_higienizacao_ambientes(_run_higienizacao_sql(sql_env))
+    return _aggregate_higienizacao(
+        registros=registros,
+        ambientes=ambientes,
+        dt_ini=dt_ini,
+        dt_fim=dt_fim,
+        updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+
+
+def _build_higienizacao_report(dt_ini: str | None, dt_fim: str | None) -> dict:
+    source = (os.getenv("HIGIENIZACAO_SOURCE", "etl") or "etl").lower().strip()
+    if source in ("etl", "snapshot", "json"):
+        try:
+            registros, ambientes, updated_at = _load_higienizacao_snapshot()
+            return _aggregate_higienizacao(
+                registros=registros,
+                ambientes=ambientes,
+                dt_ini=dt_ini,
+                dt_fim=dt_fim,
+                updated_at=updated_at,
+            )
+        except Exception as e:
+            _log.warning("Snapshot ETL indisponível (%s). Tentando consulta direta.", e)
+
+    return _build_higienizacao_report_live(dt_ini=dt_ini, dt_fim=dt_fim)
 
 
 def _page_db():
@@ -1009,6 +1088,10 @@ def h_qualidade_agenda():
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
     return resp
+
+@app.get('/agenda_dia.html')
+def h_agenda_dia():
+    return render_protected_page("agenda_dia.html")
 
 @app.get('/higienizacao.html')
 def h_higienizacao():
