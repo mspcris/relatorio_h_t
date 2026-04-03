@@ -1005,7 +1005,7 @@ def build_liberty_detalhado_json():
 
     meses_sorted = sorted(meses)
     payload = sanitize_nan({
-        "meta": build_meta(f"{key}.json"),
+        "meta": build_meta("liberty_detalhado.json"),
         "periodo": {
             "inicio": meses_sorted[0],
             "fim": meses_sorted[-1],
