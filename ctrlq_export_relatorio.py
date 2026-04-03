@@ -18,6 +18,7 @@ from urllib.parse import quote_plus
 
 import pandas as pd
 from sqlalchemy import create_engine, text
+from etl_meta import ETLMeta
 from dotenv import load_dotenv
 
 
@@ -250,6 +251,7 @@ def main():
     # 1) limpa outputs antigos (antes de gerar novos)
     cleanup_json_dir(JSON_DIR)
 
+    meta = ETLMeta('ctrlq_export_relatorio', 'json_ctrlq_relatorio')
     all_rows_by_posto = {}
 
     # Executar por posto
@@ -259,6 +261,7 @@ def main():
             engine = make_engine(odbc)
         except Exception as e:
             print(f"[{posto}] ERRO criando engine: {e}")
+            meta.error(posto, str(e))
             continue
 
         print(f"[{posto}] Executando SELECT...")
@@ -266,6 +269,7 @@ def main():
             df = run_select(engine, sql)
         except Exception as e:
             print(f"[{posto}] ERRO ao executar SQL: {e}")
+            meta.error(posto, str(e))
             continue
 
         rows = []
@@ -282,8 +286,10 @@ def main():
         try:
             atomic_write_json(path_out, rows)
             print(f"[{posto}] OK -> {path_out}  ({len(rows)} registros)")
+            meta.ok(posto)
         except Exception as e:
             print(f"[{posto}] ERRO salvando JSON: {e}")
+            meta.error(posto, str(e))
 
     if not all_rows_by_posto:
         print("\nERRO: nenhuma exportação bem-sucedida.")
@@ -299,6 +305,7 @@ def main():
     except Exception as e:
         print(f"\n[CONSOLIDADO] ERRO salvando JSON: {e}")
 
+    meta.save()
     print("\n=== Concluído ===")
 
 
