@@ -37,6 +37,7 @@ import time
 import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+from etl_meta import ETLMeta
 
 
 # =========================
@@ -395,6 +396,8 @@ def sum_totais_gerais(postos_dict: dict) -> dict:
 # Orquestração
 # =========================
 def run_incremental_all_postos(postos=None, do_csv=False, force_months=None):
+    meta = ETLMeta('export_consultas_mensal_json', 'json_consolidado')
+
     ensure_dir(OUT_JSON_DIR)
     ensure_dir(OUT_CSV_DIR)
     ensure_dir(OUT_CONSOL_DIR)
@@ -459,25 +462,30 @@ def run_incremental_all_postos(postos=None, do_csv=False, force_months=None):
                     engine = try_build_engine(odbc_str, retries=ENGINE_RETRIES)
                 except Exception as e:
                     print(f"[{posto}] ERRO conexão {ym}: {e} (pulando)")
+                    meta.error(posto, str(e))
                     continue
 
                 try:
                     df = run_query(engine, sql_txt, ini, fim, retries=QUERY_RETRIES)
                 except Exception as e:
                     print(f"[{posto}] ERRO exec {ym}: {e} (pulando)")
+                    meta.error(posto, str(e))
                     continue
 
                 try:
                     write_outputs(posto, ym, ini, fim, df, do_csv=do_csv)
                 except Exception as e:
                     print(f"[{posto}] ERRO salvar mensal {ym}: {e} (pulando)")
+                    meta.error(posto, str(e))
                     continue
 
                 try:
                     postos_node[posto] = build_consolidado_payload_for_month_posto(posto, ym, df)
                     any_change = True
+                    meta.ok(posto)
                 except Exception as e:
                     print(f"[{posto}] ERRO consolidar {ym}: {e} (pulando)")
+                    meta.error(posto, str(e))
                     continue
 
             else:
@@ -506,6 +514,7 @@ def run_incremental_all_postos(postos=None, do_csv=False, force_months=None):
     consol["generated_at"] = datetime.now(timezone.utc).astimezone().isoformat()
     safe_write_json(CONSOL_PATH, consol)
 
+    meta.save()
     print(f"[CONSOL] OK -> {os.path.relpath(CONSOL_PATH, BASE_DIR)}  meses={len(consol['months'])}")
 
 

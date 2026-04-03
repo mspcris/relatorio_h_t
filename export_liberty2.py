@@ -10,6 +10,7 @@
 import os, sys, json, argparse, re
 from datetime import date, datetime, timezone
 from urllib.parse import quote_plus
+from etl_meta import ETLMeta
 
 import numpy as np
 import pandas as pd
@@ -524,6 +525,8 @@ def run():
         print(f"ERRO ao carregar SQLs: {e}")
         sys.exit(1)
 
+    meta = ETLMeta('export_liberty2', 'json_consolidado')
+
     all_consultas = []
     all_taxa = []
     all_mensalidade_forma = []
@@ -538,7 +541,10 @@ def run():
                 engine = make_engine(odbc_str)
             except Exception as e:
                 print(f"   [{posto}] ERRO engine: {e}")
+                meta.error(posto, str(e))
                 continue
+
+            posto_ok = True
 
             # CONSULTAS
             try:
@@ -550,6 +556,8 @@ def run():
                 print(f"      Consultas: {len(df_c)} linhas")
             except Exception as e:
                 print(f"      ERRO consultas ({ym}, posto {posto}): {e}")
+                meta.error(posto, str(e))
+                posto_ok = False
 
             # TAXA INSCRIÇÃO
             try:
@@ -561,6 +569,8 @@ def run():
                 print(f"      Taxa inscrição: {len(df_t)} linhas")
             except Exception as e:
                 print(f"      ERRO taxa inscrição ({ym}, posto {posto}): {e}")
+                meta.error(posto, str(e))
+                posto_ok = False
 
             # MENSALIDADE POR FORMA
             try:
@@ -573,6 +583,11 @@ def run():
                 print(f"      Mensalidade/forma: {len(df_m)} linhas")
             except Exception as e:
                 print(f"      ERRO mensalidade/forma ({ym}, posto {posto}): {e}")
+                meta.error(posto, str(e))
+                posto_ok = False
+
+            if posto_ok:
+                meta.ok(posto)
 
     df_consultas = pd.concat(all_consultas, ignore_index=True) if all_consultas else pd.DataFrame()
     df_taxa = pd.concat(all_taxa, ignore_index=True) if all_taxa else pd.DataFrame()
@@ -631,6 +646,7 @@ def run():
         json.dump(payload, f, ensure_ascii=False, indent=2)
     _set_mtime(out_path)
 
+    meta.save()
     print(f"\n✅ JSON gerado -> {os.path.relpath(out_path, BASE_DIR)}")
 
 

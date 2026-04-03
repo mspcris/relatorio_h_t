@@ -16,6 +16,8 @@ from datetime import date, datetime, timezone
 from urllib.parse import quote_plus
 import time
 
+from etl_meta import ETLMeta
+
 import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
@@ -219,6 +221,8 @@ def write_outputs(posto: str, ym: str, ini: date, fim: date,
 
 
 def run_incremental_all_postos(postos=None, force_months=None):
+    meta = ETLMeta('export_notas_rps', 'json_notas_rps')
+
     for p in [SQL_NOTAS_PATH, SQL_NOTAS_DIA_PATH, SQL_RPS_PATH, SQL_IND_PATH]:
         if not os.path.exists(p):
             raise FileNotFoundError(f"SQL não encontrado: {p}")
@@ -260,36 +264,43 @@ def run_incremental_all_postos(postos=None, force_months=None):
                 engine = try_build_engine(odbc_str, retries=4)
             except Exception as e:
                 print(f"[{posto}] ERRO conexão {ym}: {e} (pulando)")
+                meta.error(posto, str(e))
                 continue
 
             try:
                 df_notas = run_query(engine, sql_notas, ini, fim, retries=4)
             except Exception as e:
                 print(f"[{posto}] ERRO notas {ym}: {e} (pulando)")
+                meta.error(posto, str(e))
                 continue
 
             try:
                 df_notas_dia = run_query(engine, sql_notas_dia, ini, fim, retries=4)
             except Exception as e:
                 print(f"[{posto}] ERRO notas_dia {ym}: {e} (pulando)")
+                meta.error(posto, str(e))
                 continue
 
             try:
                 df_rps = run_query(engine, sql_rps, ini, fim, retries=4)
             except Exception as e:
                 print(f"[{posto}] ERRO rps {ym}: {e} (pulando)")
+                meta.error(posto, str(e))
                 continue
 
             try:
                 df_ind = run_query(engine, sql_ind, ini, fim, retries=4)
             except Exception as e:
                 print(f"[{posto}] ERRO notas_ind {ym}: {e} (pulando)")
+                meta.error(posto, str(e))
                 continue
 
             try:
                 write_outputs(posto, ym, ini, fim, df_notas, df_rps, df_notas_dia, df_ind)
+                meta.ok(posto)
             except Exception as e:
                 print(f"[{posto}] ERRO salvar {ym}: {e} (pulando)")
+                meta.error(posto, str(e))
                 continue
 
 
@@ -297,6 +308,9 @@ def parse_args():
     p = argparse.ArgumentParser(description="Export Notas Emitidas + RPS Pendentes (JSON) incremental desde 2026-01; força mês atual e anterior.")
     p.add_argument("--postos", default="", help="Opcional: subset de postos. Ex: ANX. Se vazio, usa lista padrão.")
     return p.parse_args()
+
+    meta.save()
+
 
 def main():
     args = parse_args()

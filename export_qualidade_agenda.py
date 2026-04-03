@@ -14,6 +14,8 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
+from etl_meta import ETLMeta
+
 # =========================
 # Constantes
 # =========================
@@ -221,6 +223,8 @@ def calc_status(dias, prazo_ans: int, prazo_camim: int) -> str:
 # =========================
 
 def run():
+    meta = ETLMeta('export_qualidade_agenda', 'json_consolidado')
+
     load_dotenv(os.path.join(BASE_DIR, ".env"))
     ensure_dir(JSON_DIR)
 
@@ -236,6 +240,8 @@ def run():
     conn_str = build_conn_str(POSTO_MASTER)
     if not conn_str:
         logger.write(f"ERRO FATAL: sem configuracao de conexao para '{POSTO_MASTER}'")
+        meta.error('geral', f"sem configuracao de conexao para '{POSTO_MASTER}'")
+        meta.save()
         sys.exit(1)
 
     eng = make_engine(conn_str)
@@ -288,6 +294,8 @@ def run():
         logger.write(f"  OK: {len(cbos_map)} especialidades ({t.format()})")
     except Exception as e:
         logger.write(f"  ERRO cad_cbos: {e}")
+        meta.error('geral', str(e))
+        meta.save()
         sys.exit(1)
 
     # ── 3. vw_rel_especialidadeProximaVaga → todos os postos de uma vez ───────
@@ -379,6 +387,8 @@ def run():
 
     except Exception as e:
         logger.write(f"  ERRO consulta vagas: {e}")
+        meta.error('geral', str(e))
+        meta.save()
         sys.exit(1)
 
     # ── 4. Salvar JSON ────────────────────────────────────────────────────────
@@ -424,6 +434,9 @@ def run():
     logger.write(f"  Postos: {len(postos_ordenados)} — {', '.join(postos_ordenados)}")
     logger.write(f"  Especialidades: {len(especialidades)}")
     logger.write(f"  Tempo total: {elapsed:.1f}s")
+    meta.ok('geral')
+    meta.save()
+
     logger.write(f"\nFinalizado export_qualidade_agenda.")
     logger.write(f"Log salvo em: {LOG_FILE}\n")
     logger.close()

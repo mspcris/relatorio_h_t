@@ -10,6 +10,7 @@ from urllib.parse import quote_plus
 import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+from etl_meta import ETLMeta
 
 # =========================
 # Constantes
@@ -331,6 +332,8 @@ def run_extraction_filtered(start_date: date, end_date: date, postos_str: str):
     """Extrai dados de postos filtrados para período especificado."""
     import pyodbc
 
+    meta = ETLMeta('export_fidelizacao', 'json_consolidado')
+
     global stats
     total_start = time.time()
 
@@ -437,10 +440,13 @@ def run_extraction_filtered(start_date: date, end_date: date, postos_str: str):
                 else:
                     logger.write(f"{prefix} {status:20s} | conn:{t_conn.format():>6s} | proc:{t_proc.format():>6s} | fetch:{t_fetch.format():>6s} | [{call_time}]")
 
+                meta.ok(posto)
+
             except Exception as e:
                 call_elapsed = time.time() - call_start
                 call_time = f"{call_elapsed*1000:.0f}ms" if call_elapsed < 1 else f"{call_elapsed:.1f}s"
                 logger.write(f"{prefix} ✗ ERRO: {str(e)[:40]:40s} [{call_time}]")
+                meta.error(posto, str(e))
                 calls_failed += 1
             finally:
                 try:
@@ -473,6 +479,8 @@ def run_extraction_filtered(start_date: date, end_date: date, postos_str: str):
     logger.write(f"  ✓ Chamadas completadas: {calls_completed}/{total_calls}")
     logger.write(f"  ✓ Chamadas falhadas: {calls_failed}")
     logger.write(f"  ✓ DB: {stats._format_time(stats.db_time)} | JSON: {stats._format_time(stats.json_time)} | Total: {stats._format_time(stats.total_time)}")
+
+    meta.save()
 
     stats.report()
     logger.write("\n✅ Finalizado export_fidelizacao.")

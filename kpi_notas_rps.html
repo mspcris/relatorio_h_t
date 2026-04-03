@@ -483,19 +483,42 @@
     }
 
     // =========================
-    // Status de conexão por posto
+    // Status de conexão por posto (lê metadata ETL + gerado_em dos JSONs)
     // =========================
-    function renderConnStatus(ym){
+    const POSTO_NAMES = {A:'Anchieta',B:'Boa Viagem',C:'Couto Pereira',D:'Derby',G:'Graças',I:'Ilha do Leite',J:'Jaqueira',M:'Madalena',N:'Nações Unidas',P:'Piedade',R:'Rosarinho',X:'Espinheiro',Y:'Tamarineira'};
+    let _etlMeta = null;
+    async function loadETLMeta(){
+      if(_etlMeta) return _etlMeta;
+      try {
+        const r = await fetch('/json_notas_rps/_etl_meta_export_notas_rps.json',{cache:'no-store'});
+        if(r.ok) _etlMeta = await r.json();
+      } catch{}
+      return _etlMeta;
+    }
+    async function renderConnStatus(ym){
       const wrap = el('#connStatus');
       if(!wrap) return;
       const postos = selectedPostosList();
       const now = Date.now();
-      const STALE_MS = 3 * 60 * 60 * 1000; // 3 horas
+      const STALE_MS = 3 * 60 * 60 * 1000;
+      const meta = await loadETLMeta();
+      let header = '<div class="etl-header">Status ETL <span style="color:#6b7280;font-weight:400;">(export_notas_rps.py)</span>';
+      if(meta?.finished_at){
+        const dt = new Date(meta.finished_at);
+        const age = now - dt.getTime();
+        const h = Math.floor(age/3600000);
+        const ageStr = h>=24 ? Math.floor(h/24)+'d '+(h%24)+'h' : h>0 ? h+'h '+Math.floor((age%3600000)/60000)+'min' : Math.floor(age/60000)+'min';
+        header += ` — última execução: ${dt.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})} (${ageStr} atrás)`;
+      }
+      header += '</div>';
       const parts = [];
       for(const p of postos){
+        const nome = POSTO_NAMES[p] ? ` (${POSTO_NAMES[p]})` : '';
+        const metaPosto = meta?.postos?.[p];
         const payload = CACHE[ym]?.[p];
         if(!payload){
-          parts.push(`<span class="conn-item conn-warn">Posto ${p}: sem dados para este mês</span>`);
+          const errMsg = metaPosto?.status==='error' ? ` — ${metaPosto.msg?.substring(0,80)||'erro'}` : '';
+          parts.push(`<span class="conn-item conn-warn">Posto ${p}${nome}: sem dados${errMsg}</span>`);
           continue;
         }
         const gerado = payload.gerado_em;
@@ -506,12 +529,12 @@
         if(age > STALE_MS){
           const horas = Math.floor(age / 3_600_000);
           const label = horas >= 24 ? `${Math.floor(horas/24)}d ${horas%24}h` : `${horas}h`;
-          parts.push(`<span class="conn-item conn-warn">Posto ${p}: ultima atualização ${fmt} (${label} atrás — possível falha de conexão)</span>`);
+          parts.push(`<span class="conn-item conn-warn">Posto ${p}${nome}: atualizado ${fmt} (${label} atrás — possível falha)</span>`);
         } else {
-          parts.push(`<span class="conn-item conn-ok">Posto ${p}: atualizado ${fmt}</span>`);
+          parts.push(`<span class="conn-item conn-ok">Posto ${p}${nome}: atualizado ${fmt}</span>`);
         }
       }
-      wrap.innerHTML = parts.join('');
+      wrap.innerHTML = header + parts.join('');
     }
 
     // =========================

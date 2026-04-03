@@ -8,6 +8,8 @@ from collections import defaultdict
 import pymysql
 from dotenv import load_dotenv
 
+from etl_meta import ETLMeta
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 JSON_DIR = os.path.join(BASE_DIR, "json_consolidado")
 LOG_DIR  = os.path.join(BASE_DIR, "logs")
@@ -794,6 +796,8 @@ def generate_insights(data):
 # ========================= Main =========================
 
 def main():
+    meta = ETLMeta('export_leads_analytics', 'json_consolidado')
+
     t_total = time.time()
     os.makedirs(JSON_DIR, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -803,7 +807,12 @@ def main():
     logger.write(f"  Inicio: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.write("=" * 70)
 
-    conn = get_conn()
+    try:
+        conn = get_conn()
+    except Exception as e:
+        meta.error('geral', str(e))
+        meta.save()
+        raise
     logger.write(f"MySQL conectado: {env('LEADS_DB_HOST')}:{env('LEADS_DB_PORT', '3306')}/{env('LEADS_DB_NAME')}")
 
     # Periodo: ultimos 12 meses
@@ -879,6 +888,9 @@ def main():
     out_path = os.path.join(JSON_DIR, "leads_analytics.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
+
+    meta.ok('geral')
+    meta.save()
 
     elapsed_total = time.time() - t_total
     logger.write(f"\nJSON gravado: {out_path}")

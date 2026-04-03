@@ -5,6 +5,7 @@
 import os, re, json, sys, time
 from datetime import date, datetime, timezone
 from urllib.parse import quote_plus
+from etl_meta import ETLMeta
 import pandas as pd
 import pymysql
 from sqlalchemy import create_engine, text
@@ -285,6 +286,8 @@ def main():
         ordem = [month_bounds(d)[2] for d in meses_to_run]
         logger.write(f"Ordem: {', '.join(ordem)}")
 
+    meta = ETLMeta('export_growth', 'json_consolidado')
+
     total_steps = len(meses_to_run) * len(conns) * 3  # 3 queries por posto/mes (MRR, CAC, Churn)
     logger.write(f"Periodo: {start} -> {end_exc} ({len(meses_all)} meses, {len(meses_to_run)} a rodar)")
     logger.write(f"Total de queries previstas: {total_steps} ({len(meses_to_run)} meses x {len(conns)} postos x 3 queries)")
@@ -325,6 +328,7 @@ def main():
             all_postos.add(posto)
             engine = make_engine(odbc_str)
             rec = {}
+            posto_ok = True
 
             # MRR
             step += 1
@@ -343,6 +347,8 @@ def main():
                 elapsed = time.time() - t0
                 stats.add(posto, ym, "MRR", elapsed, False, error=e)
                 logger.write(f"  [{posto}] MRR  -> ERRO: {e} | {fmt_time(elapsed):>6s} | {elapsed_pct:5.1f}%")
+                meta.error(posto, str(e))
+                posto_ok = False
 
             # CAC
             step += 1
@@ -360,6 +366,8 @@ def main():
                 elapsed = time.time() - t0
                 stats.add(posto, ym, "CAC", elapsed, False, error=e)
                 logger.write(f"  [{posto}] CAC  -> ERRO: {e} | {fmt_time(elapsed):>6s} | {elapsed_pct:5.1f}%")
+                meta.error(posto, str(e))
+                posto_ok = False
 
             # CHURN (cancelamentos no mes)
             step += 1
@@ -377,6 +385,11 @@ def main():
                 elapsed = time.time() - t0
                 stats.add(posto, ym, "CHURN", elapsed, False, error=e)
                 logger.write(f"  [{posto}] CHURN-> ERRO: {e} | {fmt_time(elapsed):>6s} | {elapsed_pct:5.1f}%")
+                meta.error(posto, str(e))
+                posto_ok = False
+
+            if posto_ok:
+                meta.ok(posto)
 
             if rec:
                 dados.setdefault(ym, {})[posto] = rec
@@ -429,6 +442,8 @@ def main():
 
     logger.write(f"JSON gravado: {out_path} ({fmt_time(elapsed_json)})")
     logger.write(f"Tempo total: {fmt_time(elapsed_total)}")
+
+    meta.save()
 
     stats.report()
     logger.write(f"\nLog salvo em: {LOG_FILE}")

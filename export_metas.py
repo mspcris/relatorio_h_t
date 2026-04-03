@@ -19,6 +19,7 @@ import time
 import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+from etl_meta import ETLMeta
 
 
 # =========================
@@ -239,6 +240,8 @@ def write_outputs(posto: str, ym: str, ini: date, fim: date,
     )
 
 def run_incremental_all_postos(postos=None, force_months=None):
+    meta = ETLMeta('export_metas', 'json_metas')
+
     if not os.path.exists(SQL_MENS_PATH):
         raise FileNotFoundError(f"SQL não encontrado: {SQL_MENS_PATH}")
     if not os.path.exists(SQL_VENDAS_PATH):
@@ -288,30 +291,38 @@ def run_incremental_all_postos(postos=None, force_months=None):
                 engine = try_build_engine(odbc_str, retries=4)
             except Exception as e:
                 print(f"[{posto}] ERRO conexão {ym}: {e} (pulando)")
+                meta.error(posto, str(e))
                 continue
 
             try:
                 df_mens = run_query(engine, sql_mens, ini, fim, retries=4)
             except Exception as e:
                 print(f"[{posto}] ERRO mensalidades {ym}: {e} (pulando)")
+                meta.error(posto, str(e))
                 continue
 
             try:
                 df_vendas = run_query(engine, sql_vendas, ini, fim, retries=4)
             except Exception as e:
                 print(f"[{posto}] ERRO vendas {ym}: {e} (pulando)")
+                meta.error(posto, str(e))
                 continue
             try:
                 df_meta = run_query(engine, sql_meta, ini, fim, retries=4)
             except Exception as e:
                 print(f"[{posto}] ERRO metas {ym}: {e} (pulando)")
+                meta.error(posto, str(e))
                 continue
 
             try:
                 write_outputs(posto, ym, ini, fim, df_mens, df_vendas, df_meta)
+                meta.ok(posto)
             except Exception as e:
                 print(f"[{posto}] ERRO salvar {ym}: {e} (pulando)")
+                meta.error(posto, str(e))
                 continue
+
+    meta.save()
 
 
 def parse_args():

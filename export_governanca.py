@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+from etl_meta import ETLMeta
 
 def build_meta(nome_arquivo: str):
     return {
@@ -1258,6 +1259,8 @@ def run():
     ensure_dir(DADOS_DIR)
     ensure_dir(JSON_DIR)
 
+    meta = ETLMeta('export_governanca', 'json_consolidado')
+
     # =========================
     # ONLY JSON (sem SQL / CSV)
     # =========================
@@ -1289,6 +1292,7 @@ def run():
         print("\n[EXTRA] JSON Liberty VIDAS (todas as vidas por posto)")
         build_liberty_vidas_json()
 
+        meta.save()
         print("\n✅ Finalizado (ONLY-JSON).")
         return
 
@@ -1350,6 +1354,7 @@ def run():
                 engine = make_engine(odbc_str)
             except Exception as e:
                 print(f"   [{posto}] ERRO engine: {e}")
+                meta.error(posto, str(e))
                 continue
 
             for entry in sqls_mensais:
@@ -1369,14 +1374,17 @@ def run():
                     df = run_query(engine, sql_txt, ini, fim)
                 except Exception as e:
                     print(f"   [{posto}] ERRO exec: {e}")
+                    meta.error(posto, str(e))
                     continue
 
                 try:
                     df.to_csv(out_path, index=False, encoding="utf-8-sig")
                     action = "sobrescrito" if ym in forced_months or args.force else "criado"
                     print(f"   [{posto}] OK {action}  linhas={len(df)}")
+                    meta.ok(posto)
                 except Exception as e:
                     print(f"   [{posto}] ERRO salvar: {e}")
+                    meta.error(posto, str(e))
 
     # NOVO: LIBERTY VIDAS – executa uma vez por posto (sem laço de mês)
     if sqls_vidas:
@@ -1389,6 +1397,7 @@ def run():
                 engine = make_engine(odbc_str)
             except Exception as e:
                 print(f"   [{posto}] ERRO engine VIDAS: {e}")
+                meta.error(posto, str(e))
                 continue
 
             out_path = os.path.join(DADOS_DIR, f"{posto}_liberty_vidas.csv")
@@ -1404,13 +1413,16 @@ def run():
                 df = run_query_simple(engine, sql_txt_vidas)
             except Exception as e:
                 print(f"   [{posto}] ERRO exec VIDAS: {e}")
+                meta.error(posto, str(e))
                 continue
 
             try:
                 df.to_csv(out_path, index=False, encoding="utf-8-sig")
                 print(f"   [{posto}] OK VIDAS  linhas={len(df)}")
+                meta.ok(posto)
             except Exception as e:
                 print(f"   [{posto}] ERRO salvar VIDAS: {e}")
+                meta.error(posto, str(e))
 
     if args.dry_run:
         print("\n[ETAPA 3/6] Consolidados -> SKIP (dry-run)")
@@ -1465,6 +1477,7 @@ def run():
         print("\n[EXTRA] Cópia de templates")
         copy_templates()
 
+    meta.save()
     print("\n✅ Finalizado.")
 
 if __name__ == "__main__":

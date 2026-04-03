@@ -25,6 +25,7 @@ from export_governanca import (
     POSTOS,
     load_sql_strip_go,
 )
+from etl_meta import ETLMeta
 
 # --------------------------------------------------------
 # METADADOS
@@ -64,7 +65,7 @@ def save_json(path: str, data):
 # EXPORTAÇÕES
 # --------------------------------------------------------
 
-def export_matriculas(sql_path: str, json_out: str, conns: dict, postos: list):
+def export_matriculas(sql_path: str, json_out: str, conns: dict, postos: list, meta=None):
     print(f"\n=== EXPORTANDO {json_out} ===")
 
     sql_text = load_sql_strip_go(sql_path)
@@ -81,6 +82,8 @@ def export_matriculas(sql_path: str, json_out: str, conns: dict, postos: list):
                 df = pd.read_sql_query(text(sql_text), con)
         except Exception as e:
             print(f"[ERRO] Exec SQL {posto}: {e}")
+            if meta:
+                meta.error(posto, str(e))
             continue
 
         required = {"posto", "total"}
@@ -91,12 +94,14 @@ def export_matriculas(sql_path: str, json_out: str, conns: dict, postos: list):
 
         total_post = int(df["total"].sum()) if not df.empty else 0
         final[posto] = total_post
+        if meta:
+            meta.ok(posto)
 
     save_json(json_out, final)
     print(f"[OK] Gerado: {json_out}")
 
 
-def export_vidas(sql_path: str, json_out: str, conns: dict, postos: list, col_total="total"):
+def export_vidas(sql_path: str, json_out: str, conns: dict, postos: list, col_total="total", meta=None):
     print(f"\n=== EXPORTANDO {json_out} ===")
 
     sql_text = load_sql_strip_go(sql_path)
@@ -113,6 +118,8 @@ def export_vidas(sql_path: str, json_out: str, conns: dict, postos: list, col_to
                 df = pd.read_sql_query(text(sql_text), con)
         except Exception as e:
             print(f"[ERRO] Exec SQL {posto}: {e}")
+            if meta:
+                meta.error(posto, str(e))
             continue
 
         required = {"faixa_etaria", col_total}
@@ -129,13 +136,15 @@ def export_vidas(sql_path: str, json_out: str, conns: dict, postos: list, col_to
                 .astype(int)
                 .to_dict()
             )
+        if meta:
+            meta.ok(posto)
 
     save_json(json_out, final)
     print(f"[OK] Gerado: {json_out}")
 
 
 # ---------------------- NOVOS EXPORTADORES ------------------------------
-def export_matriculas_tipo(sql_path: str, json_out: str, conns: dict, postos: list):
+def export_matriculas_tipo(sql_path: str, json_out: str, conns: dict, postos: list, meta=None):
     print(f"\n=== EXPORTANDO {json_out} (PF/PJ) ===")
 
     sql_text = load_sql_strip_go(sql_path)
@@ -151,6 +160,8 @@ def export_matriculas_tipo(sql_path: str, json_out: str, conns: dict, postos: li
                 df = pd.read_sql_query(text(sql_text), con)
         except Exception as e:
             print(f"[ERRO] Exec SQL {posto}: {e}")
+            if meta:
+                meta.error(posto, str(e))
             continue
 
         # garante só o posto atual
@@ -178,6 +189,8 @@ def export_matriculas_tipo(sql_path: str, json_out: str, conns: dict, postos: li
             mapa["ticket_medio_previsto"] = float(df["ticket_medio_previsto"].iloc[0])
 
         final[posto] = mapa
+        if meta:
+            meta.ok(posto)
 
     save_json(json_out, final)
     print(f"[OK] Gerado: {json_out}")
@@ -190,27 +203,27 @@ def export_matriculas_tipo(sql_path: str, json_out: str, conns: dict, postos: li
 SQL_HANDLERS = {
     "matriculas": {
         "required": {"posto", "total"},
-        "func": lambda sql, out, conns, postos: export_matriculas(sql, out, conns, postos)
+        "func": lambda sql, out, conns, postos, meta=None: export_matriculas(sql, out, conns, postos, meta=meta)
     },
     "matriculas_tipo": {
         "required": {"posto", "tipo", "matriculas"},
-        "func": lambda sql, out, conns, postos: export_matriculas_tipo(sql, out, conns, postos)
+        "func": lambda sql, out, conns, postos, meta=None: export_matriculas_tipo(sql, out, conns, postos, meta=meta)
     },
     "matriculas_consolidado": {
         "required": {"posto", "tipo", "matriculas"},
-        "func": lambda sql, out, conns, postos: export_matriculas_consolidado(sql, out, conns, postos)
+        "func": lambda sql, out, conns, postos, meta=None: export_matriculas_consolidado(sql, out, conns, postos)
     },
     "vidas": {
         "required": {"posto", "faixa_etaria", "total"},
-        "func": lambda sql, out, conns, postos: export_vidas(sql, out, conns, postos, col_total="total")
+        "func": lambda sql, out, conns, postos, meta=None: export_vidas(sql, out, conns, postos, col_total="total", meta=meta)
     },
     "beneficiarios": {
         "required": {"posto", "faixa_etaria", "beneficiarios"},
-        "func": lambda sql, out, conns, postos: export_vidas(sql, out, conns, postos, col_total="beneficiarios")
+        "func": lambda sql, out, conns, postos, meta=None: export_vidas(sql, out, conns, postos, col_total="beneficiarios", meta=meta)
     },
     "beneficiarios_pj": {
         "required": {"posto", "faixa_etaria", "total"},
-        "func": lambda sql, out, conns, postos: export_vidas(sql, out, conns, postos, col_total="total")
+        "func": lambda sql, out, conns, postos, meta=None: export_vidas(sql, out, conns, postos, col_total="total", meta=meta)
     }
 }
 
@@ -246,7 +259,7 @@ def detect_sql_type(df: pd.DataFrame):
 # EXECUÇÃO DINÂMICA
 # --------------------------------------------------------
 
-def run_dynamic(conns, postos):
+def run_dynamic(conns, postos, meta=None):
     print("========== EXPORT DINÂMICO DE SQLs ==========")
 
     for file in os.listdir(SQL_DIR):
@@ -279,7 +292,7 @@ def run_dynamic(conns, postos):
             continue
 
         handler = SQL_HANDLERS[sql_type]["func"]
-        handler(sql_path, json_out, conns, postos)
+        handler(sql_path, json_out, conns, postos, meta=meta)
 
     print("\n✔ Concluído.")
 
@@ -305,7 +318,9 @@ def run():
         print("ERRO: Nenhuma conexão configurada no .env")
         return
 
-    run_dynamic(conns, postos)
+    meta = ETLMeta('export_cad_cliente_incremental', 'json_cadastro')
+    run_dynamic(conns, postos, meta=meta)
+    meta.save()
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@
 import os, re, glob, json, argparse
 import pandas as pd
 from datetime import date, datetime  # <-- inclui datetime
+from etl_meta import ETLMeta
 
 # Reuso de utilitários do pipeline legado
 from export_governanca import (
@@ -233,6 +234,8 @@ def run():
     print(f"- SQLs full: {[os.path.basename(s['path']) for s in sqls]}")
     print(f"- Force={args.force}  DryRun={args.dry_run}")
 
+    meta = ETLMeta('export_fin_full_rateio', 'json_rateio')
+
     # Execução
     for month_start in month_iter(start, end_exclusive):
         ini, fim, ym = month_bounds(month_start)
@@ -243,8 +246,10 @@ def run():
                 engine = make_engine(odbc_str)
             except Exception as e:
                 print(f"   [{posto}] ERRO engine: {e}")
+                meta.error(posto, str(e))
                 continue
 
+            posto_ok = True
             for entry in sqls:
                 key = entry["key"]  # fin_receita_full ou fin_despesa_full
                 sql_txt = entry["sql"]
@@ -262,6 +267,8 @@ def run():
                     df = run_query(engine, sql_txt, ini, fim)
                 except Exception as e:
                     print(f"   [{posto}] ERRO exec: {e}")
+                    meta.error(posto, str(e))
+                    posto_ok = False
                     continue
 
                 try:
@@ -269,6 +276,11 @@ def run():
                     print(f"   [{posto}] OK linhas={len(df)}")
                 except Exception as e:
                     print(f"   [{posto}] ERRO salvar: {e}")
+                    meta.error(posto, str(e))
+                    posto_ok = False
+
+            if posto_ok:
+                meta.ok(posto)
 
     if args.dry_run:
         print("\n[JSON] SKIP (dry-run)")
@@ -285,6 +297,7 @@ def run():
     build_json_full("fin_despesa_tipo")
 
 
+    meta.save()
     print("\nConcluído.")
 
 

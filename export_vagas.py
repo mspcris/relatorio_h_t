@@ -14,6 +14,7 @@ from urllib.parse import quote_plus
 import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+from etl_meta import ETLMeta
 
 # -------------------------------------------
 # CONFIG
@@ -167,6 +168,8 @@ def build_json_por_posto():
 def run():
     print("========== EXPORT VAGAS ==========")
 
+    meta = ETLMeta('export_vagas', 'json_vagas')
+
     ensure_dir(DADOS_DIR)
     ensure_dir(JSON_DIR)
 
@@ -207,18 +210,22 @@ def run():
                 df = run_sp(engine, ini, fim)
             except Exception as e:
                 print(f"[{posto}] ERRO ao executar SP: {e}")
+                meta.error(posto, str(e))
                 continue
 
             try:
                 df.to_csv(out_file, index=False, encoding="utf-8-sig")
                 print(f"[{posto}] CSV salvo -> {out_file}  ({len(df)} linhas)")
+                meta.ok(posto)
             except Exception as e:
                 print(f"[{posto}] ERRO ao salvar CSV: {e}")
+                meta.error(posto, str(e))
 
     print("\nGerando JSONs...")
     build_json_global()
     build_json_por_posto()
 
+    meta.save()
     print("\n✅ Finalizado export_vagas.py")
 
 # -------------------------------------------

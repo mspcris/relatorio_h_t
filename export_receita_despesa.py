@@ -6,6 +6,7 @@
 import os, re, sys, glob, json, argparse
 from datetime import date, datetime, timezone
 from urllib.parse import quote_plus
+from etl_meta import ETLMeta
 
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -378,6 +379,8 @@ def run():
     print(f"- SQLs: {[os.path.basename(s['path']) for s in sqls]}")
     print(f"- Force={args.force}  DryRun={args.dry_run}  Validate={not args.no_validate}  Outubro={args.outubro}")
 
+    meta = ETLMeta('export_receita_despesa', 'json_consolidado')
+
     print("\n[ETAPA 2/3] Execução por mês/posto/sql")
     for month_start in month_iter(start, end_exclusive):
         ini, fim, ym = month_bounds(month_start)
@@ -388,8 +391,10 @@ def run():
                 engine = make_engine(odbc_str)
             except Exception as e:
                 print(f"   [{posto}] ERRO engine: {e}")
+                meta.error(posto, str(e))
                 continue
 
+            posto_ok = True
             for entry in sqls:
                 key = entry["key"] or "desconhecido"
                 sql_txt = entry["sql"]
@@ -407,6 +412,8 @@ def run():
                     df = run_query(engine, sql_txt, ini, fim)
                 except Exception as e:
                     print(f"   [{posto}] ERRO exec: {e}")
+                    meta.error(posto, str(e))
+                    posto_ok = False
                     continue
 
                 try:
@@ -414,6 +421,11 @@ def run():
                     print(f"   [{posto}] OK linhas={len(df)}")
                 except Exception as e:
                     print(f"   [{posto}] ERRO salvar: {e}")
+                    meta.error(posto, str(e))
+                    posto_ok = False
+
+            if posto_ok:
+                meta.ok(posto)
 
     if args.dry_run:
         print("\n[ETAPA 3/3] JSON resumo -> SKIP (dry-run)")
@@ -427,6 +439,7 @@ def run():
         print("\n[EXTRA] Cópia de templates")
         copy_templates()
 
+    meta.save()
     print("\n✅ Finalizado export_receita_despesa.")
 
 if __name__ == "__main__":
