@@ -61,6 +61,12 @@
     #tblRegistros thead th.sorted-desc::after { content:' ▼'; font-size:.75em; }
     #regInfo { font-size:.85rem; color:#6b7280; margin-bottom:6px; }
     .reg-empty { text-align:center; color:#aaa; padding:30px; }
+
+    /* ── Banner de status de conexão ── */
+    #connStatus { margin-bottom:10px; font-size:.85rem; }
+    #connStatus .conn-ok   { color:#28a745; }
+    #connStatus .conn-warn { color:#dc3545; font-weight:600; }
+    #connStatus .conn-item { display:inline-block; margin-right:14px; white-space:nowrap; }
   </style>
 
   <script>
@@ -474,6 +480,38 @@
     }
 
     // =========================
+    // Status de conexão por posto
+    // =========================
+    function renderConnStatus(ym){
+      const wrap = el('#connStatus');
+      if(!wrap) return;
+      const postos = selectedPostosList();
+      const now = Date.now();
+      const STALE_MS = 3 * 60 * 60 * 1000; // 3 horas
+      const parts = [];
+      for(const p of postos){
+        const payload = CACHE[ym]?.[p];
+        if(!payload){
+          parts.push(`<span class="conn-item conn-warn">Posto ${p}: sem dados para este mês</span>`);
+          continue;
+        }
+        const gerado = payload.gerado_em;
+        if(!gerado) continue;
+        const dt = new Date(gerado);
+        const age = now - dt.getTime();
+        const fmt = dt.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
+        if(age > STALE_MS){
+          const horas = Math.floor(age / 3_600_000);
+          const label = horas >= 24 ? `${Math.floor(horas/24)}d ${horas%24}h` : `${horas}h`;
+          parts.push(`<span class="conn-item conn-warn">Posto ${p}: ultima atualização ${fmt} (${label} atrás — possível falha de conexão)</span>`);
+        } else {
+          parts.push(`<span class="conn-item conn-ok">Posto ${p}: atualizado ${fmt}</span>`);
+        }
+      }
+      wrap.innerHTML = parts.join('');
+    }
+
+    // =========================
     // UI
     // =========================
     function kpiCard(title, val, kind){
@@ -521,6 +559,7 @@
       const modoTxt = operadoraMode ? `Operadora: ${operadoraMode}` : `Grupo: ${selGrupo}`;
       const fmtData = s => s ? s.split('-').reverse().join('/') : '';
       el('#hdrSel').textContent = `${fmtData(dataIni)} a ${fmtData(dataFim)} • Postos: ${postoLabel} • ${modoTxt}`;
+      renderConnStatus(ym);
 
       const agg = aggAllSelected(ym);
 
@@ -1036,6 +1075,7 @@
 
     <section class="content p-3">
       <div id="err" class="text-danger mb-2"></div>
+      <div id="connStatus"></div>
 
       <div class="card">
         <div class="kpi-filter-panel">
