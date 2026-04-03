@@ -21,10 +21,10 @@
 
   /* ── Nomes legíveis dos postos ── */
   var POSTO_NAMES = {
-    A:'Anchieta', B:'Boa Viagem', C:'Couto Pereira', D:'Derby',
-    G:'Graças', I:'Ilha do Leite', J:'Jaqueira', M:'Madalena',
-    N:'Nações Unidas', P:'Piedade', R:'Rosarinho', X:'Espinheiro',
-    Y:'Tamarineira'
+    A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho',
+    G:'Campo Grande', I:'Nova Iguaçu', J:'Jacarepaguá', M:'Madureira',
+    N:'Nilópolis', P:'Rio das Pedras', R:'Realengo', X:'X Campo Grande',
+    Y:'Y Campo Grande'
   };
 
   function fmtDate(d) {
