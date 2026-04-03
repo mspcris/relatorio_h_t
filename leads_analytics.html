@@ -97,6 +97,7 @@
       <span class="ml-2">Corretores.camim - Leads Analytics</span>
     </span>
     <span id="jsonInfo" class="ml-3 text-muted" style="font-size:.78rem"></span>
+    <div class="ml-auto"><span id="ia-anchor"></span></div>
   </nav>
 
   <aside class="main-sidebar sidebar-dark-primary elevation-4">
@@ -1088,6 +1089,16 @@ function renderCorretorDeepDive(uid) {
 
 /* ========================= Init ========================= */
 initPage();
+</script>
+<script src="/js/etl_status.js"></script>
+<script>
+ETLStatus.init({
+  etlScript: 'export_leads_analytics.py',
+  sources: [
+    { label: 'Leads Geral', url: '/json_consolidado/leads_analytics_geral.json' },
+    { label: 'Leads Postos', url: '/json_consolidado/leads_analytics_postos.json' }
+  ]
+});
 </script>
 <script src="/js/menu_enforce.js" defer></script>
 </body>

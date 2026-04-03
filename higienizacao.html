@@ -2,25 +2,53 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>CAMIM - Relatório de Higienização</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="kpi-id" content="higienizacao" />
+  <meta name="kpi-title" content="Higienização" />
+  <meta name="kpi-description" content="Controle operacional de higienização por posto, setor, funcionário. Duplicidades, cobertura, pendências." />
+  <meta name="kpi-category" content="Operacional" />
+
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap">
   <link rel="stylesheet" href="/css/style2.css">
   <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <script>
+    fetch("/session/me", { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => { window.USER_EMAIL = data.email; window.USER_POSTOS = data.postos; })
+      .catch(() => { window.USER_EMAIL = null; window.USER_POSTOS = []; });
+  </script>
+
   <style>
     html { font-size: 16px; }
-    body { font-size: 1rem; -webkit-text-size-adjust: 100%; font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    body { font-size: 1rem; font-family: "Source Sans Pro", system-ui, sans-serif; }
     .small-box .icon { top: 10px; }
-    .table td, .table th { vertical-align: middle; }
-    .sticky-head thead th { position: sticky; top: 0; background: #fff; z-index: 1; }
-    .table-wrap { max-height: 360px; overflow: auto; }
-    .muted { color: #6c757d; }
+    .table td, .table th { vertical-align: middle; font-size: .88rem; }
+    .sticky-head thead th { position: sticky; top: 0; background: #fff; z-index: 2; box-shadow: 0 1px 0 #dee2e6; }
+    .table-wrap { max-height: 500px; overflow: auto; }
+    .badge-dup { font-size: .78rem; padding: 3px 8px; }
+    .badge-mesma { background: #ffc107; color: #333; }
+    .badge-diff  { background: #dc3545; color: #fff; }
+    .kpi-banner { background: linear-gradient(135deg, #343a40, #495057); color: #fff; border-radius: .5rem; }
+    .cobertura-bar { height: 22px; border-radius: 4px; background: #e9ecef; overflow: hidden; }
+    .cobertura-fill { height: 100%; border-radius: 4px; }
+    .fill-green  { background: #28a745; }
+    .fill-yellow { background: #ffc107; }
+    .fill-red    { background: #dc3545; }
+    .chart-container { position: relative; height: 250px; }
+    .text-muted-sm { font-size: .82rem; color: #6c757d; }
+    #filtro-posto { min-width: 140px; }
   </style>
 </head>
 <body class="hold-transition sidebar-mini">
@@ -30,9 +58,10 @@
         <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li>
       </ul>
       <span class="ml-2 font-weight-bold d-flex align-items-center">
-        <img src="/images/Logo Camim-01_200px.png" alt="Logo Camim" style="height:28px;width:auto">
+        <img src="/images/Logo Camim-01_200px.png" alt="Logo Camim" style="height:28px">
         <span class="ml-2">Quem tem saude e mais feliz!</span>
       </span>
+      <div class="ml-auto"><span id="ia-anchor"></span></div>
     </nav>
 
     <aside class="main-sidebar sidebar-dark-primary elevation-4">
@@ -46,203 +75,666 @@
 
     <div class="content-wrapper">
       <section class="content p-3">
-        <div class="card mb-3">
-          <div class="card-body">
-            <h2 class="mb-1"><i class="fas fa-broom mr-2 text-info"></i>Relatório de Higienização</h2>
-            <p class="lead mb-2">Visão operacional com agrupamentos por posto, setor e funcionário.</p>
-            <p class="mb-0 muted">Atualizado em: <span id="updatedAt">-</span></p>
-          </div>
-        </div>
 
-        <div class="card mb-3">
-          <div class="card-body">
-            <div class="row">
-              <div class="col-md-3">
-                <label class="mb-1">Data Inicial</label>
-                <input id="dtIni" type="date" class="form-control" required>
+        <!-- Banner -->
+        <div class="card kpi-banner mb-3">
+          <div class="card-body py-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
+              <div>
+                <h3 class="mb-1"><i class="fas fa-broom mr-2"></i>Relatório de Higienização</h3>
+                <p class="mb-0 text-white-50" style="font-size:.9rem">Controle operacional: cobertura, duplicidades, pendências e produtividade.</p>
               </div>
-              <div class="col-md-3">
-                <label class="mb-1">Data Final</label>
-                <input id="dtFim" type="date" class="form-control" required>
-              </div>
-              <div class="col-md-3 d-flex align-items-end">
-                <button id="btnAtualizar" class="btn btn-primary"><i class="fas fa-sync-alt mr-1"></i>Atualizar</button>
-              </div>
-              <div class="col-md-3 d-flex align-items-end justify-content-md-end">
-                <a href="/mais_servicos" class="btn btn-outline-secondary"><i class="fas fa-arrow-left mr-1"></i>Mais Serviços</a>
+              <div class="text-right">
+                <small class="text-white-50">Atualizado em:</small><br>
+                <span id="updatedAt" class="font-weight-bold">-</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="row">
-          <div class="col-md-2 col-6"><div class="small-box bg-info"><div class="inner"><h3 id="kTotalLogs">0</h3><p>Total Logs</p></div><div class="icon"><i class="fas fa-clipboard-check"></i></div></div></div>
-          <div class="col-md-2 col-6"><div class="small-box bg-success"><div class="inner"><h3 id="kLogsHoje">0</h3><p>Logs Hoje</p></div><div class="icon"><i class="fas fa-calendar-day"></i></div></div></div>
-          <div class="col-md-2 col-6"><div class="small-box bg-warning"><div class="inner"><h3 id="kPostos">0</h3><p>Postos Ativos</p></div><div class="icon"><i class="fas fa-hospital"></i></div></div></div>
-          <div class="col-md-2 col-6"><div class="small-box bg-primary"><div class="inner"><h3 id="kSetores">0</h3><p>Setores Ativos</p></div><div class="icon"><i class="fas fa-door-open"></i></div></div></div>
-          <div class="col-md-2 col-6"><div class="small-box bg-danger"><div class="inner"><h3 id="kFuncs">0</h3><p>Funcionários</p></div><div class="icon"><i class="fas fa-users"></i></div></div></div>
-          <div class="col-md-2 col-6"><div class="small-box bg-secondary"><div class="inner"><h3 id="kPend">0</h3><p>Pendências</p></div><div class="icon"><i class="fas fa-exclamation-triangle"></i></div></div></div>
+        <!-- Filtros -->
+        <div class="card mb-3">
+          <div class="card-body py-2">
+            <div class="row align-items-end">
+              <div class="col-md-2 col-6 mb-2">
+                <label class="mb-1 small">Posto</label>
+                <select id="filtro-posto" class="form-control form-control-sm">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+              <div class="col-md-2 col-6 mb-2">
+                <label class="mb-1 small">Data Inicial</label>
+                <input id="dtIni" type="date" class="form-control form-control-sm">
+              </div>
+              <div class="col-md-2 col-6 mb-2">
+                <label class="mb-1 small">Data Final</label>
+                <input id="dtFim" type="date" class="form-control form-control-sm">
+              </div>
+              <div class="col-md-2 col-6 mb-2">
+                <label class="mb-1 small">Buscar</label>
+                <input id="busca" type="text" class="form-control form-control-sm" placeholder="Funcionário, setor...">
+              </div>
+              <div class="col-md-2 col-6 mb-2 d-flex align-items-end">
+                <button id="btnAtualizar" class="btn btn-primary btn-sm mr-2"><i class="fas fa-sync-alt mr-1"></i>Atualizar</button>
+              </div>
+              <div class="col-md-2 col-6 mb-2 d-flex align-items-end justify-content-md-end">
+                <a href="/mais_servicos" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left mr-1"></i>Mais Serviços</a>
+              </div>
+            </div>
+          </div>
         </div>
 
+        <!-- KPI Cards -->
+        <div class="row" id="kpi-row">
+          <div class="col-lg-2 col-md-4 col-6">
+            <div class="small-box bg-info"><div class="inner"><h3 id="kTotal">0</h3><p>Registros</p></div><div class="icon"><i class="fas fa-clipboard-check"></i></div></div>
+          </div>
+          <div class="col-lg-2 col-md-4 col-6">
+            <div class="small-box bg-success"><div class="inner"><h3 id="kHoje">0</h3><p>Hoje</p></div><div class="icon"><i class="fas fa-calendar-day"></i></div></div>
+          </div>
+          <div class="col-lg-2 col-md-4 col-6">
+            <div class="small-box bg-primary"><div class="inner"><h3 id="kAmbientes">0</h3><p>Ambientes</p></div><div class="icon"><i class="fas fa-door-open"></i></div></div>
+          </div>
+          <div class="col-lg-2 col-md-4 col-6">
+            <div class="small-box bg-warning"><div class="inner"><h3 id="kCobertura">0%</h3><p>Cobertura Hoje</p></div><div class="icon"><i class="fas fa-check-circle"></i></div></div>
+          </div>
+          <div class="col-lg-2 col-md-4 col-6">
+            <div class="small-box bg-danger"><div class="inner"><h3 id="kDuplicidades">0</h3><p>Duplicidades</p></div><div class="icon"><i class="fas fa-exclamation-triangle"></i></div></div>
+          </div>
+          <div class="col-lg-2 col-md-4 col-6">
+            <div class="small-box bg-secondary"><div class="inner"><h3 id="kPendencias">0</h3><p>Pendências</p></div><div class="icon"><i class="fas fa-clock"></i></div></div>
+          </div>
+        </div>
+
+        <!-- Charts row -->
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <div class="card">
+              <div class="card-header py-2"><h6 class="mb-0"><i class="fas fa-chart-line mr-1"></i>Registros por Dia</h6></div>
+              <div class="card-body p-2"><div class="chart-container"><canvas id="chartTimeline"></canvas></div></div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card">
+              <div class="card-header py-2"><h6 class="mb-0"><i class="fas fa-chart-pie mr-1"></i>Cobertura por Posto</h6></div>
+              <div class="card-body p-2"><div class="chart-container"><canvas id="chartCobertura"></canvas></div></div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card">
+              <div class="card-header py-2"><h6 class="mb-0"><i class="fas fa-chart-bar mr-1"></i>Top Funcionários</h6></div>
+              <div class="card-body p-2"><div class="chart-container"><canvas id="chartFuncionarios"></canvas></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabs -->
         <div class="card">
           <div class="card-header p-2">
-            <ul class="nav nav-pills">
-              <li class="nav-item"><a class="nav-link active" href="#tab-posto" data-toggle="tab">Por Posto</a></li>
-              <li class="nav-item"><a class="nav-link" href="#tab-setor" data-toggle="tab">Por Setor</a></li>
-              <li class="nav-item"><a class="nav-link" href="#tab-func" data-toggle="tab">Por Funcionário</a></li>
-              <li class="nav-item"><a class="nav-link" href="#tab-pend" data-toggle="tab">Pendências</a></li>
-              <li class="nav-item"><a class="nav-link" href="#tab-reg" data-toggle="tab">Registros</a></li>
+            <ul class="nav nav-pills" id="tabs">
+              <li class="nav-item"><a class="nav-link active" href="#tab-posto" data-toggle="tab"><i class="fas fa-hospital mr-1"></i>Por Posto</a></li>
+              <li class="nav-item"><a class="nav-link" href="#tab-setor" data-toggle="tab"><i class="fas fa-door-open mr-1"></i>Por Setor</a></li>
+              <li class="nav-item"><a class="nav-link" href="#tab-func" data-toggle="tab"><i class="fas fa-user mr-1"></i>Por Funcionário</a></li>
+              <li class="nav-item"><a class="nav-link" href="#tab-cobertura" data-toggle="tab"><i class="fas fa-tasks mr-1"></i>Cobertura</a></li>
+              <li class="nav-item"><a class="nav-link" href="#tab-dup" data-toggle="tab"><i class="fas fa-clone mr-1"></i>Duplicidades <span id="dupBadge" class="badge badge-danger ml-1">0</span></a></li>
+              <li class="nav-item"><a class="nav-link" href="#tab-pend" data-toggle="tab"><i class="fas fa-clock mr-1"></i>Pendências</a></li>
+              <li class="nav-item"><a class="nav-link" href="#tab-reg" data-toggle="tab"><i class="fas fa-list mr-1"></i>Registros</a></li>
             </ul>
           </div>
           <div class="card-body p-0">
             <div class="tab-content">
+
+              <!-- TAB: Por Posto -->
               <div class="tab-pane active" id="tab-posto">
                 <div class="table-wrap">
-                  <table class="table table-sm table-striped sticky-head mb-0">
-                    <thead><tr><th>Posto</th><th class="text-right">Logs</th><th class="text-right">Hoje</th><th class="text-right">Setores</th><th class="text-right">Funcionários</th><th>Última Higienização</th></tr></thead>
+                  <table class="table table-sm table-striped table-hover sticky-head mb-0">
+                    <thead><tr>
+                      <th>Posto</th>
+                      <th class="text-right">Registros</th>
+                      <th class="text-right">Hoje</th>
+                      <th class="text-right">Ambientes</th>
+                      <th class="text-right">Cobertos Hoje</th>
+                      <th class="text-right">Cobertura</th>
+                      <th class="text-right">Funcionários</th>
+                      <th class="text-right">Duplicidades</th>
+                      <th>Última Higienização</th>
+                    </tr></thead>
                     <tbody id="tbPosto"></tbody>
                   </table>
                 </div>
               </div>
+
+              <!-- TAB: Por Setor -->
               <div class="tab-pane" id="tab-setor">
                 <div class="table-wrap">
-                  <table class="table table-sm table-striped sticky-head mb-0">
-                    <thead><tr><th>Posto</th><th>Setor</th><th>Periodicidade</th><th class="text-right">Logs</th><th class="text-right">Hoje</th><th class="text-right">Funcionários</th><th>Última Higienização</th></tr></thead>
+                  <table class="table table-sm table-striped table-hover sticky-head mb-0">
+                    <thead><tr>
+                      <th>Posto</th>
+                      <th>Setor</th>
+                      <th>Periodicidade</th>
+                      <th class="text-right">Registros</th>
+                      <th class="text-right">Hoje</th>
+                      <th class="text-right">Funcionários</th>
+                      <th>Última Higienização</th>
+                      <th>Status</th>
+                    </tr></thead>
                     <tbody id="tbSetor"></tbody>
                   </table>
                 </div>
               </div>
+
+              <!-- TAB: Por Funcionário -->
               <div class="tab-pane" id="tab-func">
                 <div class="table-wrap">
-                  <table class="table table-sm table-striped sticky-head mb-0">
-                    <thead><tr><th>Funcionário</th><th>ID</th><th class="text-right">Logs</th><th class="text-right">Hoje</th><th class="text-right">Postos</th><th class="text-right">Setores</th><th>Último Registro</th></tr></thead>
+                  <table class="table table-sm table-striped table-hover sticky-head mb-0">
+                    <thead><tr>
+                      <th>Funcionário</th>
+                      <th>ID</th>
+                      <th class="text-right">Registros</th>
+                      <th class="text-right">Hoje</th>
+                      <th class="text-right">Postos</th>
+                      <th class="text-right">Setores</th>
+                      <th class="text-right">Média/Dia</th>
+                      <th>Último Registro</th>
+                    </tr></thead>
                     <tbody id="tbFunc"></tbody>
                   </table>
                 </div>
               </div>
-              <div class="tab-pane" id="tab-pend">
+
+              <!-- TAB: Cobertura -->
+              <div class="tab-pane" id="tab-cobertura">
+                <div class="p-3">
+                  <p class="text-muted-sm mb-2">Cobertura de hoje: ambientes com pelo menos 1 registro vs total cadastrado. Barra verde = coberto, vermelha = pendente.</p>
+                </div>
                 <div class="table-wrap">
-                  <table class="table table-sm table-striped sticky-head mb-0">
-                    <thead><tr><th>Posto</th><th>Setor</th><th>Periodicidade</th><th>Último Dia com Log</th></tr></thead>
+                  <table class="table table-sm table-striped table-hover sticky-head mb-0">
+                    <thead><tr>
+                      <th>Posto</th>
+                      <th>Setor (Ambiente)</th>
+                      <th>Periodicidade</th>
+                      <th>Ativo</th>
+                      <th class="text-right">Total Logs</th>
+                      <th>Último Log</th>
+                      <th>Status Hoje</th>
+                    </tr></thead>
+                    <tbody id="tbCobertura"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- TAB: Duplicidades -->
+              <div class="tab-pane" id="tab-dup">
+                <div class="p-3">
+                  <p class="text-muted-sm mb-2">Registros no mesmo ambiente com intervalo menor que 60 minutos. <span class="badge badge-mesma badge-dup">Mesma pessoa</span> = possível scan duplo. <span class="badge badge-diff badge-dup">Pessoas diferentes</span> = retrabalho.</p>
+                </div>
+                <div class="table-wrap">
+                  <table class="table table-sm table-striped table-hover sticky-head mb-0">
+                    <thead><tr>
+                      <th>Data</th>
+                      <th>Posto</th>
+                      <th>Setor</th>
+                      <th>1o Funcionário</th>
+                      <th>Hora</th>
+                      <th>2o Funcionário</th>
+                      <th>Hora</th>
+                      <th class="text-right">Intervalo</th>
+                      <th>Tipo</th>
+                    </tr></thead>
+                    <tbody id="tbDup"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- TAB: Pendências -->
+              <div class="tab-pane" id="tab-pend">
+                <div class="p-3">
+                  <p class="text-muted-sm mb-2">Ambientes ativos que deveriam ter sido higienizados mas estão sem registro recente (diária: hoje; semanal: últimos 7 dias).</p>
+                </div>
+                <div class="table-wrap">
+                  <table class="table table-sm table-striped table-hover sticky-head mb-0">
+                    <thead><tr>
+                      <th>Posto</th>
+                      <th>Setor</th>
+                      <th>Periodicidade</th>
+                      <th>Último Registro</th>
+                      <th>Atraso</th>
+                    </tr></thead>
                     <tbody id="tbPend"></tbody>
                   </table>
                 </div>
               </div>
+
+              <!-- TAB: Registros -->
               <div class="tab-pane" id="tab-reg">
-                <div class="p-2"><input id="buscaReg" type="text" class="form-control" placeholder="Filtrar por posto, setor ou funcionário"></div>
                 <div class="table-wrap">
-                  <table class="table table-sm table-striped sticky-head mb-0">
-                    <thead><tr><th>Posto</th><th>Setor</th><th>Funcionário</th><th>Data/Hora</th><th>Periodicidade</th></tr></thead>
+                  <table class="table table-sm table-striped table-hover sticky-head mb-0">
+                    <thead><tr>
+                      <th>Data/Hora</th>
+                      <th>Posto</th>
+                      <th>Setor</th>
+                      <th>Funcionário</th>
+                      <th>ID</th>
+                      <th>Periodicidade</th>
+                      <th>Selfie</th>
+                    </tr></thead>
                     <tbody id="tbReg"></tbody>
                   </table>
                 </div>
               </div>
-            </div>
+
+            </div><!-- /tab-content -->
           </div>
         </div>
+
       </section>
     </div>
   </div>
 
   <script>
-    const state = { registros: [] };
-    function ymdLocal(d) {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    }
-    function mesAtualCompleto() {
-      const hoje = new Date();
-      const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-      const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-      return { ini: ymdLocal(ini), fim: ymdLocal(fim) };
+  (function() {
+    'use strict';
+
+    // ===== State =====
+    let DATA = { registros: [], ambientes: [], duplicidades: [], locations: [] };
+    let charts = {};
+
+    // ===== Helpers =====
+    const esc = s => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const fmtN = n => Number(n||0).toLocaleString('pt-BR');
+    const $  = id => document.getElementById(id);
+    const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const hoje = ymd(new Date());
+
+    function mesAtual() {
+      const h = new Date();
+      return { ini: ymd(new Date(h.getFullYear(), h.getMonth(), 1)), fim: ymd(new Date(h.getFullYear(), h.getMonth()+1, 0)) };
     }
 
-    function esc(s) {
-      return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    }
-    function fmtN(n) { return Number(n || 0).toLocaleString('pt-BR'); }
-
-    function renderTable(id, rowsHtml) {
-      document.getElementById(id).innerHTML = rowsHtml || '<tr><td colspan="20" class="text-center text-muted py-3">Sem dados</td></tr>';
+    function diffDays(dateStr) {
+      if (!dateStr) return 999;
+      const d = new Date(dateStr + 'T00:00:00');
+      const t = new Date(hoje + 'T00:00:00');
+      return Math.floor((t - d) / 86400000);
     }
 
-    function renderRegistros() {
-      const q = (document.getElementById('buscaReg').value || '').toLowerCase().trim();
-      const rows = state.registros.filter(r => {
-        if (!q) return true;
-        return (r.posto + ' ' + r.setor + ' ' + r.funcionario).toLowerCase().includes(q);
+    function badgePeriod(p) {
+      const s = (p||'').toLowerCase();
+      if (s === 'diaria') return '<span class="badge badge-info">Diária</span>';
+      if (s === 'semanal') return '<span class="badge badge-warning">Semanal</span>';
+      return `<span class="badge badge-secondary">${esc(p)}</span>`;
+    }
+
+    function badgeStatus(amb) {
+      const p = (amb.periodicidade||'').toLowerCase();
+      const ultimo = amb.ultimo_dia_log || '';
+      if (!ultimo) return '<span class="badge badge-danger">Sem registro</span>';
+      const dias = diffDays(ultimo);
+      if (p === 'diaria') {
+        if (dias === 0) return '<span class="badge badge-success">Em dia</span>';
+        if (dias === 1) return '<span class="badge badge-warning">Ontem</span>';
+        return `<span class="badge badge-danger">Atrasado ${dias}d</span>`;
+      }
+      if (p === 'semanal') {
+        if (dias <= 7) return '<span class="badge badge-success">Em dia</span>';
+        return `<span class="badge badge-danger">Atrasado ${dias}d</span>`;
+      }
+      return `<span class="badge badge-secondary">${dias}d atrás</span>`;
+    }
+
+    function renderTable(id, html) {
+      $(id).innerHTML = html || '<tr><td colspan="20" class="text-center text-muted py-3">Sem dados no período</td></tr>';
+    }
+
+    // ===== Filters =====
+    function getFilters() {
+      return {
+        dtIni:  $('dtIni').value,
+        dtFim:  $('dtFim').value,
+        posto:  $('filtro-posto').value.toLowerCase(),
+        busca:  $('busca').value.toLowerCase().trim(),
+      };
+    }
+
+    function filterRegs(regs) {
+      const f = getFilters();
+      return regs.filter(r => {
+        if (f.dtIni && (r.dia||'') < f.dtIni) return false;
+        if (f.dtFim && (r.dia||'') > f.dtFim) return false;
+        if (f.posto && (r.posto||'').toLowerCase() !== f.posto) return false;
+        if (f.busca) {
+          const txt = `${r.posto} ${r.setor} ${r.funcionario} ${r.funcionario_id}`.toLowerCase();
+          if (!txt.includes(f.busca)) return false;
+        }
+        return true;
       });
-      renderTable('tbReg', rows.map(r => `<tr><td>${esc(r.posto)}</td><td>${esc(r.setor)}</td><td>${esc(r.funcionario)}</td><td>${esc(r.data_hora)}</td><td>${esc(r.periodicidade)}</td></tr>`).join(''));
     }
 
+    function filterDups(dups) {
+      const f = getFilters();
+      return dups.filter(d => {
+        if (f.dtIni && (d.dia||'') < f.dtIni) return false;
+        if (f.dtFim && (d.dia||'') > f.dtFim) return false;
+        if (f.posto && (d.posto||'').toLowerCase() !== f.posto) return false;
+        if (f.busca) {
+          const txt = `${d.posto} ${d.setor} ${d.funcionario_1} ${d.funcionario_2}`.toLowerCase();
+          if (!txt.includes(f.busca)) return false;
+        }
+        return true;
+      });
+    }
+
+    function filterAmbs(ambs) {
+      const f = getFilters();
+      return ambs.filter(a => {
+        if (f.posto && (a.posto||'').toLowerCase() !== f.posto) return false;
+        if (f.busca) {
+          const txt = `${a.posto} ${a.setor}`.toLowerCase();
+          if (!txt.includes(f.busca)) return false;
+        }
+        return true;
+      });
+    }
+
+    // ===== Render =====
+    function render() {
+      const regs = filterRegs(DATA.registros);
+      const dups = filterDups(DATA.duplicidades);
+      const ambs = filterAmbs(DATA.ambientes);
+      const f = getFilters();
+
+      // ---- KPIs ----
+      const regsHoje = regs.filter(r => r.dia === hoje);
+      const ambsAtivos = ambs.filter(a => a.ativo !== false);
+      const ambsHoje = new Set(regsHoje.map(r => r.ambiente_id));
+      const coberturaHojePct = ambsAtivos.length ? Math.round(100 * ambsHoje.size / ambsAtivos.length) : 0;
+      const pendencias = ambsAtivos.filter(a => {
+        const p = (a.periodicidade||'').toLowerCase();
+        const u = a.ultimo_dia_log || '';
+        if (p === 'diaria') return !u || u < hoje;
+        if (p === 'semanal') return !u || diffDays(u) > 7;
+        return false;
+      });
+
+      $('kTotal').textContent = fmtN(regs.length);
+      $('kHoje').textContent = fmtN(regsHoje.length);
+      $('kAmbientes').textContent = fmtN(ambsAtivos.length);
+      $('kCobertura').textContent = coberturaHojePct + '%';
+      $('kDuplicidades').textContent = fmtN(dups.length);
+      $('kPendencias').textContent = fmtN(pendencias.length);
+      $('dupBadge').textContent = dups.length;
+
+      // ---- Tab: Por Posto ----
+      const byPosto = {};
+      regs.forEach(r => {
+        const k = r.posto || '(sem posto)';
+        if (!byPosto[k]) byPosto[k] = { logs: 0, hoje: 0, funcs: new Set(), setores: new Set(), ultimo: '', dups: 0 };
+        byPosto[k].logs++;
+        if (r.dia === hoje) byPosto[k].hoje++;
+        byPosto[k].funcs.add(r.funcionario);
+        byPosto[k].setores.add(r.setor);
+        if (!byPosto[k].ultimo || r.data_hora > byPosto[k].ultimo) byPosto[k].ultimo = r.data_hora;
+      });
+      dups.forEach(d => {
+        const k = d.posto || '(sem posto)';
+        if (byPosto[k]) byPosto[k].dups++;
+      });
+      // Ambientes e cobertura por posto
+      const ambsByPosto = {};
+      ambs.forEach(a => {
+        const k = a.posto || '(sem posto)';
+        if (!ambsByPosto[k]) ambsByPosto[k] = { total: 0, cobertos: 0 };
+        if (a.ativo !== false) {
+          ambsByPosto[k].total++;
+          if (a.ultimo_dia_log === hoje) ambsByPosto[k].cobertos++;
+        }
+      });
+
+      const postoKeys = Object.keys(byPosto).sort((a,b) => byPosto[b].logs - byPosto[a].logs);
+      renderTable('tbPosto', postoKeys.map(k => {
+        const p = byPosto[k];
+        const ap = ambsByPosto[k] || { total: 0, cobertos: 0 };
+        const pct = ap.total ? Math.round(100 * ap.cobertos / ap.total) : 0;
+        const barClass = pct >= 80 ? 'fill-green' : pct >= 50 ? 'fill-yellow' : 'fill-red';
+        return `<tr>
+          <td><strong>${esc(k)}</strong></td>
+          <td class="text-right">${fmtN(p.logs)}</td>
+          <td class="text-right">${fmtN(p.hoje)}</td>
+          <td class="text-right">${fmtN(ap.total)}</td>
+          <td class="text-right">${fmtN(ap.cobertos)}</td>
+          <td class="text-right"><div class="cobertura-bar" title="${pct}%"><div class="cobertura-fill ${barClass}" style="width:${pct}%"></div></div><small>${pct}%</small></td>
+          <td class="text-right">${fmtN(p.funcs.size)}</td>
+          <td class="text-right">${p.dups ? `<span class="text-danger font-weight-bold">${p.dups}</span>` : '0'}</td>
+          <td class="text-muted-sm">${esc(p.ultimo)}</td>
+        </tr>`;
+      }).join(''));
+
+      // ---- Tab: Por Setor ----
+      const bySetor = {};
+      regs.forEach(r => {
+        const k = `${r.posto}__${r.setor}`;
+        if (!bySetor[k]) bySetor[k] = { posto: r.posto, setor: r.setor, periodicidade: r.periodicidade, logs: 0, hoje: 0, funcs: new Set(), ultimo: '' };
+        bySetor[k].logs++;
+        if (r.dia === hoje) bySetor[k].hoje++;
+        bySetor[k].funcs.add(r.funcionario);
+        if (!bySetor[k].ultimo || r.data_hora > bySetor[k].ultimo) bySetor[k].ultimo = r.data_hora;
+      });
+      const setorKeys = Object.keys(bySetor).sort((a,b) => bySetor[b].logs - bySetor[a].logs);
+      renderTable('tbSetor', setorKeys.map(k => {
+        const s = bySetor[k];
+        const amb = ambs.find(a => a.posto === s.posto && a.setor === s.setor);
+        return `<tr>
+          <td>${esc(s.posto)}</td>
+          <td><strong>${esc(s.setor)}</strong></td>
+          <td>${badgePeriod(s.periodicidade)}</td>
+          <td class="text-right">${fmtN(s.logs)}</td>
+          <td class="text-right">${fmtN(s.hoje)}</td>
+          <td class="text-right">${fmtN(s.funcs.size)}</td>
+          <td class="text-muted-sm">${esc(s.ultimo)}</td>
+          <td>${amb ? badgeStatus(amb) : ''}</td>
+        </tr>`;
+      }).join(''));
+
+      // ---- Tab: Por Funcionário ----
+      const byFunc = {};
+      regs.forEach(r => {
+        const k = r.funcionario_id || r.funcionario;
+        if (!byFunc[k]) byFunc[k] = { nome: r.funcionario, id: r.funcionario_id, logs: 0, hoje: 0, postos: new Set(), setores: new Set(), ultimo: '', dias: new Set() };
+        byFunc[k].logs++;
+        if (r.dia === hoje) byFunc[k].hoje++;
+        byFunc[k].postos.add(r.posto);
+        byFunc[k].setores.add(r.setor);
+        byFunc[k].dias.add(r.dia);
+        if (!byFunc[k].ultimo || r.data_hora > byFunc[k].ultimo) byFunc[k].ultimo = r.data_hora;
+      });
+      const funcKeys = Object.keys(byFunc).sort((a,b) => byFunc[b].logs - byFunc[a].logs);
+      renderTable('tbFunc', funcKeys.map(k => {
+        const ff = byFunc[k];
+        const media = ff.dias.size ? (ff.logs / ff.dias.size).toFixed(1) : '0';
+        return `<tr>
+          <td><strong>${esc(ff.nome)}</strong></td>
+          <td class="text-muted-sm">${esc(ff.id)}</td>
+          <td class="text-right">${fmtN(ff.logs)}</td>
+          <td class="text-right">${fmtN(ff.hoje)}</td>
+          <td class="text-right">${fmtN(ff.postos.size)}</td>
+          <td class="text-right">${fmtN(ff.setores.size)}</td>
+          <td class="text-right">${media}</td>
+          <td class="text-muted-sm">${esc(ff.ultimo)}</td>
+        </tr>`;
+      }).join(''));
+
+      // ---- Tab: Cobertura ----
+      renderTable('tbCobertura', ambs.map(a => `<tr>
+        <td>${esc(a.posto)}</td>
+        <td><strong>${esc(a.setor)}</strong></td>
+        <td>${badgePeriod(a.periodicidade)}</td>
+        <td>${a.ativo !== false ? '<span class="badge badge-success">Sim</span>' : '<span class="badge badge-secondary">Não</span>'}</td>
+        <td class="text-right">${fmtN(a.total_logs)}</td>
+        <td class="text-muted-sm">${esc(a.ultimo_log || 'Nunca')}</td>
+        <td>${badgeStatus(a)}</td>
+      </tr>`).join(''));
+
+      // ---- Tab: Duplicidades ----
+      renderTable('tbDup', dups.map(d => {
+        const badge = d.tipo === 'mesma_pessoa'
+          ? '<span class="badge badge-mesma badge-dup">Mesma pessoa</span>'
+          : '<span class="badge badge-diff badge-dup">Pessoas diferentes</span>';
+        return `<tr>
+          <td>${esc(d.dia)}</td>
+          <td>${esc(d.posto)}</td>
+          <td><strong>${esc(d.setor)}</strong></td>
+          <td>${esc(d.funcionario_1)}</td>
+          <td>${esc(d.hora_1)}</td>
+          <td>${esc(d.funcionario_2)}</td>
+          <td>${esc(d.hora_2)}</td>
+          <td class="text-right"><strong>${d.minutos} min</strong></td>
+          <td>${badge}</td>
+        </tr>`;
+      }).join(''));
+
+      // ---- Tab: Pendências ----
+      renderTable('tbPend', pendencias.map(a => {
+        const dias = a.ultimo_dia_log ? diffDays(a.ultimo_dia_log) : null;
+        const atraso = dias === null ? '<span class="badge badge-danger">Nunca feito</span>'
+          : dias === 0 ? '-'
+          : `<span class="badge badge-danger">${dias} dia${dias>1?'s':''}</span>`;
+        return `<tr>
+          <td>${esc(a.posto)}</td>
+          <td><strong>${esc(a.setor)}</strong></td>
+          <td>${badgePeriod(a.periodicidade)}</td>
+          <td class="text-muted-sm">${esc(a.ultimo_dia_log || 'Nunca')}</td>
+          <td>${atraso}</td>
+        </tr>`;
+      }).join(''));
+
+      // ---- Tab: Registros ----
+      const regsSlice = regs.slice(0, 2000);
+      renderTable('tbReg', regsSlice.map(r => `<tr>
+        <td>${esc(r.data_hora)}</td>
+        <td>${esc(r.posto)}</td>
+        <td>${esc(r.setor)}</td>
+        <td><strong>${esc(r.funcionario)}</strong></td>
+        <td class="text-muted-sm">${esc(r.funcionario_id)}</td>
+        <td>${badgePeriod(r.periodicidade)}</td>
+        <td>${r.tem_selfie ? '<i class="fas fa-camera text-success"></i>' : '<i class="fas fa-camera text-muted"></i>'}</td>
+      </tr>`).join(''));
+
+      // ---- Charts ----
+      renderCharts(regs, postoKeys, byPosto, funcKeys, byFunc);
+    }
+
+    // ===== Charts =====
+    function renderCharts(regs, postoKeys, byPosto, funcKeys, byFunc) {
+      // Timeline
+      const byDay = {};
+      regs.forEach(r => { byDay[r.dia] = (byDay[r.dia]||0) + 1; });
+      const days = Object.keys(byDay).sort();
+      const lastDays = days.slice(-30);
+
+      if (charts.timeline) charts.timeline.destroy();
+      charts.timeline = new Chart($('chartTimeline'), {
+        type: 'line',
+        data: {
+          labels: lastDays.map(d => d.slice(5)),
+          datasets: [{ label: 'Registros', data: lastDays.map(d => byDay[d]||0), borderColor: '#17a2b8', backgroundColor: 'rgba(23,162,184,0.1)', fill: true, tension: 0.3 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+
+      // Cobertura por posto (doughnut)
+      const postoLabels = postoKeys.slice(0, 8);
+      const postoData = postoLabels.map(k => byPosto[k].logs);
+      const colors = ['#17a2b8','#28a745','#ffc107','#dc3545','#6f42c1','#fd7e14','#20c997','#e83e8c'];
+
+      if (charts.cobertura) charts.cobertura.destroy();
+      charts.cobertura = new Chart($('chartCobertura'), {
+        type: 'doughnut',
+        data: {
+          labels: postoLabels,
+          datasets: [{ data: postoData, backgroundColor: colors.slice(0, postoLabels.length) }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } } }
+      });
+
+      // Top funcionários (bar)
+      const topFunc = funcKeys.slice(0, 10);
+      const funcLabels = topFunc.map(k => {
+        const n = byFunc[k].nome;
+        return n.length > 18 ? n.slice(0,18) + '...' : n;
+      });
+      const funcData = topFunc.map(k => byFunc[k].logs);
+
+      if (charts.funcionarios) charts.funcionarios.destroy();
+      charts.funcionarios = new Chart($('chartFuncionarios'), {
+        type: 'bar',
+        data: {
+          labels: funcLabels,
+          datasets: [{ label: 'Registros', data: funcData, backgroundColor: '#6f42c1' }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+      });
+    }
+
+    // ===== Load data =====
     async function carregar() {
-      let dtIni = document.getElementById('dtIni').value;
-      let dtFim = document.getElementById('dtFim').value;
+      let dtIni = $('dtIni').value;
+      let dtFim = $('dtFim').value;
       if (!dtIni || !dtFim) {
-        const p = mesAtualCompleto();
+        const p = mesAtual();
         dtIni = dtIni || p.ini;
         dtFim = dtFim || p.fim;
-        document.getElementById('dtIni').value = dtIni;
-        document.getElementById('dtFim').value = dtFim;
+        $('dtIni').value = dtIni;
+        $('dtFim').value = dtFim;
       }
-      if (dtIni > dtFim) {
-        alert('Data inicial não pode ser maior que a data final.');
-        return;
-      }
-      const qs = new URLSearchParams();
-      qs.set('dt_ini', dtIni);
-      qs.set('dt_fim', dtFim);
-      const url = '/api/higienizacao/relatorio' + (qs.toString() ? ('?' + qs.toString()) : '');
 
-      document.getElementById('btnAtualizar').disabled = true;
+      $('btnAtualizar').disabled = true;
       try {
-        const r = await fetch(url, { credentials: 'same-origin' });
+        const r = await fetch('/api/higienizacao/snapshot', { credentials: 'same-origin' });
+        if (!r.ok) throw new Error('Falha ao carregar snapshot');
         const j = await r.json();
-        if (!r.ok) throw new Error(j.erro || 'Falha ao carregar');
 
-        document.getElementById('updatedAt').textContent = j.updated_at || '-';
-        document.getElementById('kTotalLogs').textContent = fmtN(j.kpis.total_logs);
-        document.getElementById('kLogsHoje').textContent = fmtN(j.kpis.logs_hoje);
-        document.getElementById('kPostos').textContent = fmtN(j.kpis.postos_ativos);
-        document.getElementById('kSetores').textContent = fmtN(j.kpis.setores_ativos);
-        document.getElementById('kFuncs').textContent = fmtN(j.kpis.funcionarios_ativos);
-        document.getElementById('kPend').textContent = fmtN(j.kpis.pendencias_hoje);
+        $('updatedAt').textContent = j.updated_at || '-';
+        DATA.registros    = j.registros    || [];
+        DATA.ambientes    = j.ambientes    || [];
+        DATA.duplicidades = j.duplicidades || [];
+        DATA.locations    = j.locations    || [];
 
-        renderTable('tbPosto', (j.agrupado_posto || []).map(r =>
-          `<tr><td>${esc(r.posto)}</td><td class="text-right">${fmtN(r.total_logs)}</td><td class="text-right">${fmtN(r.logs_hoje)}</td><td class="text-right">${fmtN(r.setores_distintos)}</td><td class="text-right">${fmtN(r.funcionarios_distintos)}</td><td>${esc(r.ultima_higienizacao)}</td></tr>`
-        ).join(''));
+        // Popular filtro de postos
+        const postos = [...new Set(DATA.registros.map(r => r.posto))].sort();
+        const sel = $('filtro-posto');
+        const curVal = sel.value;
+        sel.innerHTML = '<option value="">Todos</option>' + postos.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+        sel.value = curVal;
 
-        renderTable('tbSetor', (j.agrupado_setor || []).map(r =>
-          `<tr><td>${esc(r.posto)}</td><td>${esc(r.setor)}</td><td>${esc(r.periodicidade)}</td><td class="text-right">${fmtN(r.total_logs)}</td><td class="text-right">${fmtN(r.logs_hoje)}</td><td class="text-right">${fmtN(r.funcionarios_distintos)}</td><td>${esc(r.ultima_higienizacao)}</td></tr>`
-        ).join(''));
-
-        renderTable('tbFunc', (j.agrupado_funcionario || []).map(r =>
-          `<tr><td>${esc(r.funcionario)}</td><td>${esc(r.funcionario_id)}</td><td class="text-right">${fmtN(r.total_logs)}</td><td class="text-right">${fmtN(r.logs_hoje)}</td><td class="text-right">${fmtN(r.postos_distintos)}</td><td class="text-right">${fmtN(r.setores_distintos)}</td><td>${esc(r.ultimo_registro)}</td></tr>`
-        ).join(''));
-
-        renderTable('tbPend', (j.pendencias || []).map(r =>
-          `<tr><td>${esc(r.posto)}</td><td>${esc(r.setor)}</td><td>${esc(r.periodicidade)}</td><td>${esc(r.ultimo_dia_log || 'SEM_LOG')}</td></tr>`
-        ).join(''));
-
-        state.registros = j.registros || [];
-        renderRegistros();
+        render();
       } catch (e) {
-        alert(e.message || 'Falha ao carregar relatório');
+        alert(e.message || 'Erro ao carregar dados');
       } finally {
-        document.getElementById('btnAtualizar').disabled = false;
+        $('btnAtualizar').disabled = false;
       }
     }
 
-    (function init() {
-      const p = mesAtualCompleto();
-      document.getElementById('dtIni').value = p.ini;
-      document.getElementById('dtFim').value = p.fim;
-      document.getElementById('btnAtualizar').addEventListener('click', carregar);
-      document.getElementById('buscaReg').addEventListener('input', renderRegistros);
-      carregar();
-    })();
+    // ===== Init =====
+    const p = mesAtual();
+    $('dtIni').value = p.ini;
+    $('dtFim').value = p.fim;
+    $('btnAtualizar').addEventListener('click', carregar);
+    $('busca').addEventListener('input', render);
+    $('filtro-posto').addEventListener('change', render);
+    $('dtIni').addEventListener('change', render);
+    $('dtFim').addEventListener('change', render);
+
+    carregar();
+  })();
+  </script>
+  <script src="/js/etl_status.js"></script>
+  <script>
+  ETLStatus.init({
+    etlScript: 'etl_higienizacao_snapshot.py',
+    sources: [
+      { label: 'Higienização', url: '/json_consolidado/higienizacao_snapshot.json' }
+    ]
+  });
   </script>
   <script src="/js/menu.js" defer></script>
 </body>

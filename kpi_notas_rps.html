@@ -63,10 +63,13 @@
     .reg-empty { text-align:center; color:#aaa; padding:30px; }
 
     /* ── Banner de status de conexão ── */
-    #connStatus { margin-bottom:10px; font-size:.85rem; }
+    #connStatus { margin-bottom:10px; font-size:.85rem; display:none; padding:8px 12px; background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; }
+    #connStatus.show { display:block; }
     #connStatus .conn-ok   { color:#28a745; }
     #connStatus .conn-warn { color:#dc3545; font-weight:600; }
     #connStatus .conn-item { display:inline-block; margin-right:14px; white-space:nowrap; }
+    #connStatus .etl-header { font-size:.85rem; font-weight:600; margin-bottom:4px; }
+    #btnETLStatus { display:inline-flex; align-items:center; gap:4px; font-size:.8rem; padding:2px 8px; border-radius:4px; }
   </style>
 
   <script>
@@ -1069,13 +1072,19 @@
     <nav class="navbar navbar-expand navbar-white navbar-light">
       <div class="d-flex w-100 align-items-center">
         <span class="ml-2 font-weight-bold" id="hdrSel"></span>
-        <div class="ml-auto"><span id="ia-anchor"></span></div>
+        <div class="ml-auto">
+          <button id="btnETLStatus" class="btn btn-sm btn-outline-secondary" title="Status do ETL" onclick="document.getElementById('connStatus').classList.toggle('show')">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><ellipse cx="12" cy="6" rx="8" ry="3" opacity=".9"/><path d="M4 6v4c0 1.66 3.58 3 8 3s8-1.34 8-3V6" opacity=".7"/><path d="M4 10v4c0 1.66 3.58 3 8 3s8-1.34 8-3v-4" opacity=".5"/><circle cx="18" cy="18" r="5" fill="#fff" stroke="currentColor" stroke-width="1.5"/><path d="M18 15.5v1.2l.9.5m-.9-.2a1.5 1.5 0 1 0 1.5 1.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+            <span class="d-none d-md-inline">ETL</span>
+          </button>
+          <span id="ia-anchor"></span>
+        </div>
       </div>
     </nav>
 
     <section class="content p-3">
       <div id="err" class="text-danger mb-2"></div>
-      <div id="connStatus"></div>
+      <div id="connStatus"><div class="etl-header">Status ETL <span style="color:#6b7280;font-weight:400;">(export_notas_rps.py)</span></div></div>
 
       <div class="card">
         <div class="kpi-filter-panel">
