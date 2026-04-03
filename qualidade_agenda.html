@@ -1077,6 +1077,17 @@ function statusHmClass(status) {
          : 'hm-cell-none';
 }
 
+function diasColor(dias) {
+    if (dias === null || dias === undefined) return '#6c757d';
+    if (dias <=  7) return '#0a7a7a';  // azul petróleo
+    if (dias <= 14) return '#28a745';  // verde
+    if (dias <= 20) return '#fd7e14';  // laranja
+    if (dias <= 30) return '#e85d5d';  // vermelho claro
+    if (dias <= 40) return '#d63333';  // vermelho médio
+    if (dias <= 50) return '#b71c1c';  // vermelho forte
+    return '#7b0000';                  // vermelho super forte (51+)
+}
+
 function statusColor(status) {
     return status === 'OK'     ? '#28a745'
          : status === 'ALERTA' ? '#fd7e14'
@@ -1465,7 +1476,7 @@ function renderRanking(data) {
         let barColor = '#6c757d';
         if (prazo_camim > 0 && dias !== null) {
             barPct = Math.min(100, Math.round((dias / prazo_camim) * 100));
-            barColor = statusColor(d.Status);
+            barColor = diasColor(dias);
         }
         const barHtml = `<div class="dias-bar"><div class="dias-bar-fill" style="width:${barPct}%;background:${barColor};"></div></div>
             <div style="font-size:0.7rem;color:#888;margin-top:1px;">${barPct}% do prazo CAMIM</div>`;
@@ -1546,7 +1557,7 @@ function renderByEspecialidade(data) {
             const nomePosto = postosInfo[p] ? postosInfo[p].nome : (POSTO_NOMES[p]||p);
             const dias = d.DiasAteProximaVaga;
             const status = d.Status;
-            const barCls = `esp-bar-${status.toLowerCase().replace('_','-').replace('sem-vaga','sem-vaga')}`;
+            const barClr = status === 'SEM_VAGA' ? '#6c757d' : diasColor(dias);
             let barWidth = '0%';
             let barLabel = '';
 
@@ -1562,12 +1573,12 @@ function renderByEspecialidade(data) {
             const vagas = d.QuantidadeVagasDisponivelNaData !== null ? d.QuantidadeVagasDisponivelNaData : '—';
             const dataFmt = d.DataProximaVaga ? fmtDate(d.DataProximaVaga) : '—';
 
-            barsHtml += `<div class="esp-posto-bar ${barCls}" title="${nomePosto}: ${dias !== null ? dias+'d' : 'sem vaga'} | Data: ${dataFmt} | Vagas: ${vagas} | Livres: ${pct_livres}">
+            barsHtml += `<div class="esp-posto-bar" title="${nomePosto}: ${dias !== null ? dias+'d' : 'sem vaga'} | Data: ${dataFmt} | Vagas: ${vagas} | Livres: ${pct_livres}">
                 <div class="esp-posto-name">${p} <span style="font-weight:400;color:#888;font-size:0.7rem;">${nomePosto.substring(0,8)}</span></div>
                 <div class="esp-bar-container">
-                    <div class="esp-bar-fill" style="width:${barWidth};">${barLabel}</div>
+                    <div class="esp-bar-fill" style="width:${barWidth};background:${barClr};">${barLabel}</div>
                 </div>
-                <div class="esp-bar-days" style="color:${statusColor(status)}">${dias !== null ? dias+'d' : '—'}</div>
+                <div class="esp-bar-days" style="color:${barClr}">${dias !== null ? dias+'d' : '—'}</div>
             </div>`;
         });
 
