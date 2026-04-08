@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Painel CAMIM - Atualizando...</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #fff;
+      padding: 20px;
+      overflow: hidden;
+    }
+    .card {
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: blur(20px);
+      border-radius: 24px;
+      padding: 40px 32px;
+      text-align: center;
+      max-width: 440px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .logo { font-size: 2rem; font-weight: 800; margin-bottom: 8px; letter-spacing: -1px; }
+    .logo span { color: #4facfe; }
+    .subtitle { font-size: .85rem; opacity: 0.5; margin-bottom: 24px; }
+
+    .progress-wrap {
+      background: rgba(255,255,255,0.1);
+      border-radius: 8px;
+      height: 6px;
+      margin: 0 20px 20px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      border-radius: 8px;
+      background: linear-gradient(90deg, #4facfe, #00f2fe, #4facfe);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease infinite, grow 30s ease-out forwards;
+      width: 0%;
+    }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+    @keyframes grow { 0%{width:0%} 30%{width:45%} 60%{width:70%} 80%{width:85%} 100%{width:95%} }
+
+    .phrase {
+      font-size: 1.05rem;
+      min-height: 3.2em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 8px;
+      transition: opacity .4s;
+      line-height: 1.5;
+    }
+
+    .retry-btn {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 12px 32px;
+      background: linear-gradient(135deg, #4facfe, #00f2fe);
+      border: none;
+      border-radius: 12px;
+      color: #1a1a2e;
+      font-size: .95rem;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s;
+    }
+    .retry-btn:hover { transform: scale(1.03); box-shadow: 0 4px 20px rgba(79,172,254,0.4); }
+    .retry-btn:active { transform: scale(0.97); }
+
+    .timer { font-size: .78rem; opacity: 0.4; margin-top: 14px; }
+
+    .particles {
+      position: fixed; inset: 0; pointer-events: none; z-index: -1;
+    }
+    .particle {
+      position: absolute;
+      width: 4px; height: 4px;
+      background: rgba(79,172,254,0.3);
+      border-radius: 50%;
+      animation: float linear infinite;
+    }
+    @keyframes float {
+      0% { transform: translateY(100vh) scale(0); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { transform: translateY(-10vh) scale(1); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="particles" id="particles"></div>
+
+  <div class="card">
+    <div class="logo">Painel <span>CAMIM</span></div>
+    <div class="subtitle">Dashboards &amp; Indicadores KPI</div>
+
+    <div class="progress-wrap">
+      <div class="progress-bar"></div>
+    </div>
+
+    <div class="phrase" id="phrase">Atualizando o servidor...</div>
+
+    <button class="retry-btn" onclick="location.reload()">Tentar novamente</button>
+    <div class="timer" id="timer">Tentando reconectar em 15s...</div>
+  </div>
+
+<script>
+var phrases = [
+  "Atualizando o servidor...",
+  "Preparando as novidades...",
+  "Quase l&aacute;, s&oacute; mais um instante...",
+  "Instalando melhorias no sistema...",
+  "Carregando os dashboards...",
+  "Calculando os indicadores...",
+  "Alimentando o banco de dados...",
+  "Ajustando os parafusos digitais...",
+  "Leonardo fechando a folha...",
+  "J&uacute;lio: N&atilde;o autorizo!",
+  "Camila.AI acordando do cochilo...",
+  "Processando os KPIs...",
+  "Sincronizando com o SQL Server...",
+  "Polindo os gr&aacute;ficos...",
+  "Atualizando os relat&oacute;rios...",
+  "R&ocirc;mulo testando o sistema...",
+  "Migrando os dados com carinho...",
+  "Reiniciando os servi&ccedil;os...",
+  "Otimizando a velocidade...",
+  "Compilando o c&oacute;digo novo...",
+  "Aplicando as corre&ccedil;&otilde;es...",
+  "Recarregando os estilos...",
+  "Limpando o cache antigo...",
+  "Preparando o caf&eacute; do servidor...",
+  "Afiando as engrenagens...",
+  "Conferindo os indicadores...",
+  "Rodando o ETL...",
+  "Testando as conex&otilde;es...",
+  "Atualizando as depend&ecirc;ncias...",
+  "Validando as migra&ccedil;&otilde;es...",
+  "Reorganizando os dados...",
+  "Recalibrando o sistema...",
+  "Dando um tapa no visual...",
+  "O servidor pediu 5 minutinhos...",
+  "Aguarde... magia acontecendo...",
+  "Deploy em andamento, respira fundo...",
+  "Certificando que tudo est&aacute; perfeito...",
+  "Quase pronto, prometo!",
+  "Finalizando a atualiza&ccedil;&atilde;o...",
+  "Cristiano est&aacute; verificando os CRM's.",
+  "Juliana est&aacute; postando novos Reclames Aqui.",
+  "M&eacute;dicos chegando atrasado.",
+  "Plantonista n&atilde;o avisou que o m&eacute;dico saiu antes do hor&aacute;rio.",
+  "Ronald chegando na unidade.",
+  "Rone verificando o DHO.",
+  "Roberta vendo nas c&acirc;meras se os gerentes chegaram no hor&aacute;rio.",
+  "Davi procurando mais um oftalmo pediatra.",
+  "Davi n&atilde;o quer abrir agenda de oftalmo.",
+  "Leonardo Pereira n&atilde;o autorizou a abertura da agenda.",
+  "Cristiano conferindo se o rob&ocirc; rodou.",
+  "Juliana respondendo reclama&ccedil;&atilde;o das 7h da manh&atilde;.",
+  "Ronald pedindo relat&oacute;rio que ningu&eacute;m sabia que existia.",
+  "Rone cruzando ponto com escala do DHO.",
+  "Roberta dando zoom na c&acirc;mera de Campinho.",
+  "Roberta contando quantos minutos o gerente atrasou.",
+  "Davi explicando por que s&oacute; tem oftalmo em Bangu.",
+  "Davi fugindo de liga&ccedil;&atilde;o sobre agenda de oftalmo.",
+  "Leonardo Pereira negando outra abertura de agenda.",
+  "Leonardo Pereira lendo e-mail e fingindo que n&atilde;o viu.",
+  "Cristiano descobrindo mais um bug escondido no CSS.",
+  "Juliana copiando resposta padr&atilde;o no Reclame Aqui.",
+  "Ronald perguntando &quot;cad&ecirc; o n&uacute;mero atualizado?&quot;.",
+  "Rone pedindo atestado que ningu&eacute;m entregou.",
+  "Roberta ampliando c&acirc;mera pra ver quem saiu pro caf&eacute;.",
+  "Davi rezando pra oftalmo de Bangu n&atilde;o pedir f&eacute;rias.",
+  "Davi inventando desculpa pra n&atilde;o abrir agenda nova.",
+  "Cristiano rodando ETL de madrugada.",
+  "Juliana respondendo cliente que reclamou do ar-condicionado.",
+  "Ronald fazendo ronda surpresa.",
+  "Rone ligando pra quem n&atilde;o bateu ponto.",
+  "Roberta anotando hor&aacute;rio de chegada dos gerentes.",
+  "Plantonista inventando desculpa pro m&eacute;dico que sumiu.",
+  "M&eacute;dico pedindo pra trocar hor&aacute;rio em cima da hora.",
+  "Paciente ligando pra remarcar pela terceira vez.",
+  "Gerente perguntando por que a agenda est&aacute; fechada.",
+  "Davi procurando oftalmo que atenda crian&ccedil;a e aceite o plano.",
+  "Leonardo Pereira dizendo &quot;vou analisar&quot; pela quinta vez.",
+  "Cristiano esperando o SQL Server responder.",
+  "Juliana printando tela do Reclame Aqui como prova.",
+  "Ronald conferindo se o caf&eacute; da recep&ccedil;&atilde;o acabou.",
+  "Rone calculando banco de horas que n&atilde;o fecha.",
+  "Roberta fazendo screenshot das c&acirc;meras &agrave;s 8h01.",
+  "M&eacute;dico chegando 40 minutos atrasado e perguntando &quot;tem paciente?&quot;.",
+  "Recepcionista ligando pro plantonista que n&atilde;o atende.",
+  "Davi ouvindo &quot;s&oacute; tem oftalmo em Bangu?&quot; pela cent&eacute;sima vez.",
+  "J&uacute;lio n&atilde;o autorizou. Nem perguntou o que era.",
+  "J&uacute;lio leu o pedido, pensou dois segundos e disse n&atilde;o.",
+  "Elisangela tentando convencer J&uacute;lio a autorizar alguma coisa.",
+  "Elisangela resolvendo o que J&uacute;lio n&atilde;o autorizou.",
+  "Luann organizando a escala de Campo Grande.",
+  "Petterson cobrindo Luann enquanto ele est&aacute; em reuni&atilde;o.",
+  "Raissa pedindo refor&ccedil;o pra Y Campo Grande.",
+  "Raissa descobrindo que o ar-condicionado de Y quebrou de novo.",
+  "Camilla conferindo o financeiro de Realengo com Tiago.",
+  "Tiago fechando o caixa de Realengo e encontrando diferen&ccedil;a.",
+  "Tiago explicando pra Camilla por que o n&uacute;mero n&atilde;o bate.",
+  "Thais reorganizando a recep&ccedil;&atilde;o de Nil&oacute;polis.",
+  "Romulo segurando Nil&oacute;polis enquanto Thais est&aacute; em reuni&atilde;o.",
+  "Romulo atendendo paciente porque a recepcionista saiu pro almo&ccedil;o.",
+  "Dantas abrindo Nova Igua&ccedil;u sozinho de novo.",
+  "Dantas ligando pro m&eacute;dico que n&atilde;o apareceu em Nova Igua&ccedil;u.",
+  "Alessandra controlando a agenda de X Campo Grande.",
+  "Alessandra pedindo transfer&ecirc;ncia de m&eacute;dico pra X.",
+  "Vin&iacute;cius Valle montando campanha que ningu&eacute;m pediu.",
+  "Vin&iacute;cius Valle perguntando por que o post n&atilde;o foi aprovado.",
+  "Ronald pedindo dashboard atualizado antes das 9h.",
+  "Ronald visitando unidade sem avisar.",
+  "Cristiano recebendo mensagem &quot;o sistema caiu&quot; &agrave;s 23h.",
+  "Cristiano explicando que n&atilde;o foi o sistema, foi a internet.",
+  "Juliana editando resposta do Reclame Aqui pela quarta vez.",
+  "Juliana recebendo reclama&ccedil;&atilde;o de paciente que nem &eacute; cliente.",
+  "Rone descobrindo que funcion&aacute;rio bateu ponto e foi embora.",
+  "Rone explicando c&aacute;lculo de hora extra pra quem n&atilde;o entende.",
+  "Roberta vendo na c&acirc;mera que o gerente chegou de Uber &agrave;s 8h45.",
+  "Roberta ligando pro gerente que ainda n&atilde;o apareceu na c&acirc;mera.",
+  "Davi encaminhando paciente de oftalmo pra Bangu pela mil&eacute;sima vez.",
+  "Davi fingindo que n&atilde;o ouviu o telefone tocar.",
+  "Leonardo Pereira devolvendo e-mail com &quot;pendente de an&aacute;lise&quot;.",
+  "Leonardo Pereira marcando reuni&atilde;o pra semana que vem sobre o mesmo assunto.",
+  "J&uacute;lio respondendo &quot;n&atilde;o&quot; antes de terminar de ler o e-mail.",
+  "J&uacute;lio autorizou algo e todo mundo ficou em choque.",
+  "Elisangela fazendo milagre com o que J&uacute;lio n&atilde;o aprovou.",
+  "Elisangela pedindo desculpa pelo J&uacute;lio pro m&eacute;dico.",
+  "Luann pedindo pra Petterson resolver enquanto almo&ccedil;a.",
+  "Luann reclamando que o sistema travou em Campo Grande.",
+  "Petterson resolvendo problema que ningu&eacute;m sabe como surgiu.",
+  "Petterson atendendo liga&ccedil;&atilde;o que era pro Luann.",
+  "Raissa mandando &aacute;udio de 3 minutos no grupo sobre Y.",
+  "Raissa pedindo manuten&ccedil;&atilde;o do elevador de Y Campo Grande.",
+  "Camilla organizando planilha que Tiago vai refazer depois.",
+  "Camilla pedindo relat&oacute;rio pra ontem.",
+  "Tiago achando lan&ccedil;amento duplicado no financeiro de Realengo.",
+  "Tiago ligando pra fornecedor que mandou boleto errado.",
+  "Thais treinando recepcionista nova em Nil&oacute;polis.",
+  "Thais pedindo material que acabou h&aacute; duas semanas.",
+  "Romulo improvisando solu&ccedil;&atilde;o pra fila de Nil&oacute;polis.",
+  "Romulo perguntando quando vai chegar o material que Thais pediu.",
+  "Dantas reclamando do estacionamento de Nova Igua&ccedil;u.",
+  "Dantas tentando encaixar paciente em agenda lotada.",
+  "Alessandra reorganizando escala de X pela terceira vez na semana.",
+  "Alessandra perguntando quando vai ter mais m&eacute;dico em X.",
+  "Vin&iacute;cius Valle criando arte que o gerente n&atilde;o vai usar.",
+  "Vin&iacute;cius Valle pedindo foto da unidade e ningu&eacute;m manda.",
+  "Ronald ligando &agrave;s 7h pra saber se a unidade abriu.",
+  "Ronald perguntando &quot;quem autorizou isso?&quot;.",
+  "Cristiano atualizando o painel e ningu&eacute;m percebeu.",
+  "Cristiano explicando pela terceira vez que o dado &eacute; do SQL Server.",
+  "Juliana respondendo reclama&ccedil;&atilde;o sobre fila de espera de 2 horas.",
+  "Juliana criando template de resposta que vai usar 50 vezes.",
+  "Rone conferindo se o funcion&aacute;rio est&aacute; realmente doente.",
+  "Rone recebendo atestado com letra ileg&iacute;vel.",
+  "Roberta voltando o v&iacute;deo da c&acirc;mera pra provar que o gerente atrasou.",
+  "Roberta avisando que a c&acirc;mera da unidade X est&aacute; offline.",
+  "Davi dizendo &quot;semana que vem resolvo o oftalmo&quot;.",
+  "Davi transferindo liga&ccedil;&atilde;o de oftalmo pra qualquer um.",
+  "Leonardo Pereira pedindo mais dados antes de decidir.",
+  "Leonardo Pereira agendando reuni&atilde;o pra semana que vem sobre o mesmo assunto.",
+  "J&uacute;lio perguntando quanto custa antes de dizer n&atilde;o.",
+  "J&uacute;lio dizendo que vai pensar, que &eacute; o mesmo que n&atilde;o.",
+  "Elisangela contornando a negativa do J&uacute;lio diplomaticamente.",
+  "Elisangela resolvendo crise que J&uacute;lio causou dizendo n&atilde;o.",
+  "Luann mandando mensagem no grupo &agrave;s 6h da manh&atilde;.",
+  "Luann pedindo pra trocar l&acirc;mpada de Campo Grande h&aacute; tr&ecirc;s dias.",
+  "Petterson cobrindo falta de funcion&aacute;rio sem reclamar.",
+  "Petterson fingindo surpresa quando Luann pede favor.",
+  "Raissa brigando com a manuten&ccedil;&atilde;o do ar de Y Campo Grande.",
+  "Raissa contando paciente na fila e pedindo refor&ccedil;o.",
+  "Camilla fazendo lista de pend&ecirc;ncias que s&oacute; cresce.",
+  "Camilla pedindo pra Tiago conferir n&uacute;mero que ela j&aacute; conferiu.",
+  "Tiago fechando planilha financeira &agrave;s 22h.",
+  "Tiago explicando o que &eacute; rateio pela en&eacute;sima vez.",
+  "Thais mandando foto da unidade de Nil&oacute;polis arrumada.",
+  "Thais reclamando que limparam o consult&oacute;rio pela metade.",
+  "Romulo resolvendo briga de paciente na recep&ccedil;&atilde;o de Nil&oacute;polis.",
+  "Romulo tentando achar chave do consult&oacute;rio 3.",
+  "Dantas abrindo chamado de manuten&ccedil;&atilde;o que ningu&eacute;m leu.",
+  "Dantas explicando pro paciente que o m&eacute;dico vai atrasar &quot;s&oacute; um pouquinho&quot;.",
+  "Alessandra fazendo escala de X e sobrando buraco.",
+  "Alessandra pedindo m&eacute;dico emprestado de outra unidade.",
+  "Vin&iacute;cius Valle lan&ccedil;ando campanha no Instagram sem avisar a unidade.",
+  "Vin&iacute;cius Valle perguntando qual &eacute; o hor&aacute;rio de funcionamento da unidade.",
+  "Ronald mandando &quot;bom dia&quot; no grupo e todo mundo ficando em alerta.",
+  "Ronald pedindo n&uacute;mero de consultas do dia anterior.",
+  "Cristiano recebendo &quot;o gr&aacute;fico t&aacute; errado&quot; quando o dado &eacute; real.",
+  "Cristiano reiniciando servi&ccedil;o na VM &agrave;s 2h da manh&atilde;.",
+  "Juliana mediando briga de paciente com recepcionista pelo Reclame Aqui.",
+  "Juliana marcando reclama&ccedil;&atilde;o como resolvida e paciente abrindo outra.",
+  "Rone processando admiss&atilde;o que era pra ontem.",
+  "Rone tentando entender escala que o gerente montou no papel.",
+  "Roberta mandando print da c&acirc;mera no grupo dos gerentes.",
+  "Roberta perguntando por que tem gente na unidade depois do hor&aacute;rio.",
+  "Davi dizendo que Bangu n&atilde;o precisa de mais oftalmo.",
+  "Davi escondendo curr&iacute;culo de oftalmo que chegou.",
+  "Leonardo Pereira criando subcomit&ecirc; pra decidir sobre uma agenda.",
+  "Leonardo Pereira adiando decis&atilde;o at&eacute; todo mundo esquecer.",
+  "J&uacute;lio olhando a solicita&ccedil;&atilde;o e perguntando &quot;precisa mesmo?&quot;.",
+  "J&uacute;lio autorizando meia hora antes de fechar o prazo.",
+  "Elisangela sorrindo enquanto resolve o caos de Anchieta.",
+  "Elisangela sendo a &uacute;nica que consegue fazer J&uacute;lio dizer talvez.",
+  "Luann reclamando do Wi-Fi de Campo Grande no grupo.",
+  "Luann pedindo feedback que ningu&eacute;m vai dar.",
+  "Petterson resolvendo tudo em sil&ecirc;ncio em Campo Grande.",
+  "Petterson recebendo cr&eacute;dito que era do estagi&aacute;rio.",
+  "Raissa mandando lista de compras urgentes de Y Campo Grande.",
+  "Raissa conferindo se o gerador de Y est&aacute; funcionando.",
+  "Camilla ligando pra paciente que n&atilde;o veio na consulta.",
+  "Camilla perguntando pra Tiago se o pagamento caiu.",
+  "Tiago encontrando nota fiscal de dois meses atr&aacute;s na gaveta.",
+  "Tiago pedindo extrato banc&aacute;rio pela segunda vez no dia.",
+  "Thais fazendo reuni&atilde;o rel&acirc;mpago em Nil&oacute;polis.",
+  "Thais descobrindo que a geladeira do consult&oacute;rio desligou.",
+  "Romulo segurando a porta de Nil&oacute;polis porque a fechadura travou.",
+  "Romulo explicando pro paciente que o sistema est&aacute; &quot;atualizando&quot;.",
+  "Dantas contando quantas vezes o ar-condicionado de Nova Igua&ccedil;u quebrou.",
+  "Dantas improvisando sala porque o consult&oacute;rio est&aacute; ocupado.",
+  "Alessandra reorganizando o fluxo de pacientes de X.",
+  "Alessandra descobrindo que marcaram dois m&eacute;dicos na mesma sala.",
+  "Vin&iacute;cius Valle pedindo depoimento de paciente pro Instagram.",
+  "Vin&iacute;cius Valle reclamando que ningu&eacute;m curtiu o post da unidade.",
+  "Ronald entrando na unidade e todo mundo endireitando a postura.",
+  "Ronald perguntando por que a recep&ccedil;&atilde;o est&aacute; vazia.",
+  "Cristiano explicando que &quot;o sistema t&aacute; lento&quot; &eacute; culpa do servidor em Anchieta.",
+  "Cristiano descobrindo que o posto A sumiu do painel por causa de um CSS.",
+  "Juliana recebendo reclama&ccedil;&atilde;o de paciente que elogiou no m&ecirc;s passado.",
+  "Juliana explicando que &quot;2 estrelas&quot; n&atilde;o &eacute; elogio.",
+  "Rone recalculando f&eacute;rias que j&aacute; foram recalculadas.",
+  "Rone recebendo pedido de folga pra amanh&atilde;.",
+  "Roberta assistindo replay da c&acirc;mera como se fosse novela.",
+  "Roberta identificando funcion&aacute;rio pelo jeito de andar na c&acirc;mera.",
+  "Paciente de oftalmo ligando pra Bangu e sendo transferido tr&ecirc;s vezes.",
+  "Paciente chegando em Campo Grande achando que &eacute; X Campo Grande.",
+  "Recepcionista de Nil&oacute;polis pedindo senha do sistema pro Romulo.",
+  "M&eacute;dico perguntando &quot;posso sair mais cedo?&quot; com a sala cheia.",
+  "Fornecedor entregando material na unidade errada.",
+  "Luann e Petterson discutindo quem fecha Campo Grande hoje.",
+  "Thais e Romulo decidindo no par ou &iacute;mpar quem resolve a fila.",
+  "J&uacute;lio negando pedido que Elisangela j&aacute; tinha resolvido.",
+  "Davi recebendo liga&ccedil;&atilde;o &quot;tem oftalmo a&iacute;?&quot; e respondendo &quot;s&oacute; em Bangu&quot;.",
+  "Ronald mandando &quot;preciso falar com voc&ecirc;s&quot; e todo mundo entrando em p&acirc;nico.",
+  "Vin&iacute;cius Valle criando story da unidade que est&aacute; em reforma.",
+  "Cristiano olhando o painel verde e desconfiando.",
+  "Tiago encontrando centavo que faltava no fechamento de Realengo.",
+  "Alessandra mandando print da agenda vazia de X e perguntando &quot;cad&ecirc; os m&eacute;dicos?&quot;.",
+  "Leonardo Pereira finalmente autorizando algo e o prazo j&aacute; passou."
+];
+
+var idx = 0;
+var el = document.getElementById('phrase');
+
+function nextPhrase() {
+  el.style.opacity = '0';
+  setTimeout(function() {
+    idx = (idx + 1) % phrases.length;
+    el.innerHTML = phrases[idx];
+    el.style.opacity = '1';
+  }, 400);
+}
+
+setInterval(nextPhrase, 3000);
+
+// Shuffle on load
+for (var i = phrases.length - 1; i > 0; i--) {
+  var j = Math.floor(Math.random() * (i + 1));
+  var t = phrases[i]; phrases[i] = phrases[j]; phrases[j] = t;
+}
+el.innerHTML = phrases[0];
+
+// Countdown + auto reload
+var secs = 15;
+var timerEl = document.getElementById('timer');
+setInterval(function() {
+  secs--;
+  if (secs <= 0) { location.reload(); return; }
+  timerEl.textContent = 'Tentando reconectar em ' + secs + 's...';
+}, 1000);
+
+// Particles
+var pc = document.getElementById('particles');
+for (var p = 0; p < 20; p++) {
+  var d = document.createElement('div');
+  d.className = 'particle';
+  d.style.left = Math.random() * 100 + '%';
+  d.style.animationDuration = (6 + Math.random() * 8) + 's';
+  d.style.animationDelay = Math.random() * 8 + 's';
+  d.style.width = d.style.height = (2 + Math.random() * 4) + 'px';
+  pc.appendChild(d);
+}
+</script>
+</body>
+</html>

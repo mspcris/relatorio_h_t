@@ -459,6 +459,23 @@ jobs:
           "
 
       # ================================================================
+      # 8C) 502.html -> /etc/nginx + configurar error_page
+      # ================================================================
+      - name: 502.html -> /etc/nginx
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          if [ -f "nginx/502.html" ]; then
+            rsync -lvz \
+              --omit-dir-times --no-perms --no-owner --no-group \
+              -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+              nginx/502.html "$SSH_USER@$SSH_HOST:/etc/nginx/502.html"
+          fi
+
+      # ================================================================
       # 9) Restart FINAL (camim-auth + wpp-campanhas + nginx)
       # ================================================================
       - name: Restart camim-auth + wpp-campanhas + nginx

@@ -1129,6 +1129,21 @@ def api_higienizacao_relatorio():
         _log.exception("Falha ao montar relatório de higienização")
         return jsonify({"erro": f"Falha ao gerar relatório: {e}"}), 500
 
+@app.get('/api/higienizacao/snapshot')
+def api_higienizacao_snapshot():
+    email, _ = decode_user()
+    if not email:
+        return jsonify({"erro": "Não autorizado"}), 401
+    try:
+        with open(HIGIENIZACAO_SNAPSHOT_PATH, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        return jsonify(payload)
+    except FileNotFoundError:
+        return jsonify({"erro": "Snapshot não encontrado. ETL ainda não rodou."}), 404
+    except Exception as e:
+        _log.exception("Falha ao ler snapshot de higienização")
+        return jsonify({"erro": f"Falha: {e}"}), 500
+
 @app.get('/kpi_receita_despesa_rateio')
 def r_rateio():
     return render_protected_page("kpi_receita_despesa_rateio.html")

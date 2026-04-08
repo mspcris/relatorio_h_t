@@ -713,6 +713,38 @@
 
 
     <script>
+        /* ── Drawer toggle ─────────────────────────────────────── */
+        (function () {
+            var btn     = document.getElementById('menuToggle');
+            var drawer  = document.getElementById('app-drawer');
+            var overlay = document.getElementById('drawerOverlay');
+            var close   = document.getElementById('drawerClose');
+
+            function open() {
+                drawer.hidden  = false;
+                overlay.hidden = false;
+                drawer.setAttribute('data-open', 'true');
+                overlay.setAttribute('aria-hidden', 'false');
+                btn.setAttribute('aria-expanded', 'true');
+                // anima itens do menu
+                drawer.querySelectorAll('.menu-list > li').forEach(function (li, i) {
+                    li.style.animation = 'slideIn .25s ease ' + (i * 40) + 'ms forwards';
+                });
+            }
+
+            function shut() {
+                drawer.setAttribute('data-open', 'false');
+                overlay.setAttribute('aria-hidden', 'true');
+                btn.setAttribute('aria-expanded', 'false');
+                setTimeout(function () { drawer.hidden = true; overlay.hidden = true; }, 200);
+            }
+
+            if (btn)     btn.addEventListener('click', open);
+            if (close)   close.addEventListener('click', shut);
+            if (overlay) overlay.addEventListener('click', shut);
+        })();
+
+        /* ── Logout ────────────────────────────────────────────── */
         document.getElementById('btnLogout')?.addEventListener('click', async (e) => {
             e.preventDefault();
             try { await fetch('/session/logout', { method: 'POST', credentials: 'include' }); } catch (_) { }
