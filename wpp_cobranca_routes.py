@@ -601,6 +601,49 @@ def auditoria():
 
 
 # ---------------------------------------------------------------------------
+# Dashboard WhatsApp (Meta) — envios + conversão + custo
+# ---------------------------------------------------------------------------
+
+@wpp_bp.get("/dashboard")
+def dashboard_page():
+    email, is_admin = _check_auth()
+    if not email:
+        return ('', 401)
+    return render_template(
+        "wpp_dashboard.html",
+        USER_EMAIL=email, USER_IS_ADMIN=is_admin,
+    )
+
+
+@wpp_bp.get("/dashboard/data")
+def dashboard_data():
+    """Serve o JSON gerado por export_wpp_dashboard.py.
+
+    O arquivo é produzido pelo cron em /opt/relatorio_h_t/json_consolidado/
+    (ou /var/www/json_consolidado/ após sincronização). Tentamos ambos.
+    """
+    email, _ = _check_auth()
+    if not email:
+        return ('', 401)
+
+    candidatos = [
+        "/opt/relatorio_h_t/json_consolidado/wpp_dashboard.json",
+        "/var/www/json_consolidado/wpp_dashboard.json",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                     "json_consolidado", "wpp_dashboard.json"),
+    ]
+    for path in candidatos:
+        if os.path.isfile(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    return Response(f.read(), mimetype="application/json")
+            except Exception as e:
+                return jsonify({"error": f"falha ao ler {path}: {e}"}), 500
+
+    return jsonify({"error": "wpp_dashboard.json não encontrado — rode export_wpp_dashboard.py"}), 404
+
+
+# ---------------------------------------------------------------------------
 # Teste de envio manual
 # ---------------------------------------------------------------------------
 
