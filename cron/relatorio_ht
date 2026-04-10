@@ -1,0 +1,88 @@
+# ============================================================================
+# /etc/cron.d/relatorio_ht  —  Jobs do projeto relatorio_h_t
+# ----------------------------------------------------------------------------
+# Destino final na VM: /etc/nginx/... NÃO — /etc/cron.d/relatorio_ht
+#
+# Deployado automaticamente por .github/workflows/deploy.yml.
+# Para alterar, edite ESTE arquivo e faça commit — NÃO edite direto na VM.
+# Editar direto na VM faz com que o próximo deploy sobrescreva sua mudança.
+#
+# Histórico:
+#   2026-04-05  hardening removeu vários jobs sem versionamento — perdemos
+#               agenda_dia, alarmes, sync_email, sync_tef, ctrlq_*, etc.
+#   2026-04-10  versionado neste repo para impedir nova perda silenciosa.
+# ============================================================================
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/relatorio_h_t/.venv/bin
+MAILTO=""
+TZ=America/Sao_Paulo
+
+# ─── Jobs originais ─────────────────────────────────────────────────────
+*/10 * * * * root flock -n /opt/relatorio_h_t/locks/build_html.lock       /opt/relatorio_h_t/build_relatorio_html.sh  >>/var/log/relatorio_h_t/build_relatorio_html.log 2>&1
+*/15 * * * * root flock -n /opt/relatorio_h_t/locks/export_governanca.lock /opt/relatorio_h_t/export_governanca.sh     >>/var/log/relatorio_h_t/export_governanca.log 2>&1
+*/4  * * * * root flock -n /opt/relatorio_h_t/locks/export_harvest.lock    /opt/relatorio_h_t/export_harvest.sh        >>/var/log/relatorio_h_t/export_harvest.log 2>&1
+*/4  * * * * root flock -n /opt/relatorio_h_t/locks/export_trello.lock     /opt/relatorio_h_t/export_trello.sh         >>/var/log/relatorio_h_t/export_trello.log 2>&1
+0    6 * * * root flock -n /opt/relatorio_h_t/locks/schedule0.lock         /opt/relatorio_h_t/schedule0.sh             >>/var/log/relatorio_h_t/schedule0.log 2>&1
+*/5  * * * * root flock -n /opt/relatorio_h_t/locks/sync_www.lock          /opt/relatorio_h_t/sync_www.sh              >>/var/log/relatorio_h_t/sync_www.log 2>&1
+
+# ─── Jobs restaurados após hardening 2026-04-05 ─────────────────────────
+
+# WhatsApp campanhas — a cada 15 min
+*/15 * * * * root flock -n /opt/relatorio_h_t/locks/sync_wpp.lock          /opt/relatorio_h_t/sync_wpp.sh              >>/var/log/relatorio_h_t/sync_wpp.log 2>&1
+
+# Alarmes — a cada minuto
+*    * * * * root flock -n /opt/relatorio_h_t/locks/alarmes.lock           /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/disparar_alarmes.py >>/var/log/relatorio_h_t/disparar_alarmes.log 2>&1
+
+# Smoke test (heartbeat do cron) — a cada minuto
+*    * * * * root date -Is >>/var/log/relatorio_h_t/smoke.log
+
+# Sync email — full 1x/dia 00:00 + incremental a cada 4 min
+0    0 * * * root flock -n /opt/relatorio_h_t/locks/sync_email.lock        /opt/relatorio_h_t/sync_email.sh            >>/var/log/relatorio_h_t/sync_email.log 2>&1
+*/4  * * * * root flock -n /opt/relatorio_h_t/locks/sync_email_inc.lock    /opt/relatorio_h_t/sync_email.sh --dias 1   >>/var/log/relatorio_h_t/sync_email_inc.log 2>&1
+
+# Sync TEF — full 1x/dia 00:00 + incremental a cada 4 min
+0    0 * * * root flock -n /opt/relatorio_h_t/locks/sync_tef.lock          /opt/relatorio_h_t/sync_tef.sh              >>/var/log/relatorio_h_t/sync_tef.log 2>&1
+*/4  * * * * root flock -n /opt/relatorio_h_t/locks/sync_tef_inc.lock      /opt/relatorio_h_t/sync_tef.sh --dias 1     >>/var/log/relatorio_h_t/sync_tef_inc.log 2>&1
+
+# CTRLQ relatório — a cada 15 min
+*/15 * * * * root flock -n /opt/relatorio_h_t/locks/ctrlq_relatorio.lock   /opt/relatorio_h_t/export_ctrlq_relatorio.sh >>/var/log/relatorio_h_t/cron_export_ctrlq_relatorio.log 2>&1
+
+# CTRLQ desbloqueio — a cada 30 min
+*/30 * * * * root flock -n /opt/relatorio_h_t/locks/ctrlq_desbloqueio.lock /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/ctrlq_desbloqueio.py >>/var/log/relatorio_h_t/ctrlq_desbloqueio.log 2>&1
+
+# Sync gerentes — 1x/dia 23:00
+0   23 * * * root flock -n /opt/relatorio_h_t/locks/sync_gerentes.lock     /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/sync_gerentes.py >>/var/log/relatorio_h_t/sync_gerentes.log 2>&1
+
+# Leads analytics cache — 2x/dia (03:30 e 12:30)
+30 3,12 * * * root flock -n /opt/relatorio_h_t/locks/leads_cache.lock      /opt/relatorio_h_t/export_leads_analytics_cache.sh >>/var/log/relatorio_h_t/export_leads_analytics_cache.log 2>&1
+
+# Export metas — a cada 6h
+0  */6 * * * root flock -n /opt/relatorio_h_t/locks/export_metas.lock      /opt/relatorio_h_t/export_metas.sh          >>/var/log/relatorio_h_t/export_metas.log 2>&1
+
+# Export receita/despesa — a cada 6h
+0  */6 * * * root flock -n /opt/relatorio_h_t/locks/receita_despesa.lock   /opt/relatorio_h_t/export_receita_despesa.sh >>/var/log/relatorio_h_t/export_receita_despesa.log 2>&1
+
+# Export cadastro vendas — 1x/dia 01:00
+0    1 * * * root flock -n /opt/relatorio_h_t/locks/cadastro_vendas.lock   /opt/relatorio_h_t/export_cadastro_vendas.sh >>/var/log/relatorio_h_t/cron_export_cadastro_vendas.log 2>&1
+
+# Export consultas mensal — 1x/dia 02:00
+0    2 * * * root flock -n /opt/relatorio_h_t/locks/consultas_mensal.lock  /opt/relatorio_h_t/export_consultas_mensal.sh >>/var/log/relatorio_h_t/export_consultas_mensal.log 2>&1
+
+# Export growth — 1x/dia 03:00
+0    3 * * * root flock -n /opt/relatorio_h_t/locks/export_growth.lock     /opt/relatorio_h_t/export_growth.sh         >>/var/log/relatorio_h_t/export_growth.log 2>&1
+
+# Export notas RPS — 1x/dia 04:00
+0    4 * * * root flock -n /opt/relatorio_h_t/locks/export_notas_rps.lock  /opt/relatorio_h_t/export_notas_rps.sh      >>/var/log/relatorio_h_t/export_notas_rps.log 2>&1
+
+# Export qualidade agenda — 1x/dia 05:00
+0    5 * * * root flock -n /opt/relatorio_h_t/locks/qualidade_agenda.lock  /opt/relatorio_h_t/export_qualidade_agenda.sh >>/var/log/relatorio_h_t/export_qualidade_agenda.log 2>&1
+
+# Export financeiro rateio — 1x/dia 01:30
+30   1 * * * root flock -n /opt/relatorio_h_t/locks/fin_full_rateio.lock   /opt/relatorio_h_t/export_fin_full_rateio.sh >>/var/log/relatorio_h_t/cron_export_fin_full_rateio.log 2>&1
+
+# Export fidelização — 1x/dia 02:30
+30   2 * * * root flock -n /opt/relatorio_h_t/locks/fidelizacao.lock       /opt/relatorio_h_t/run_export_fidelizacao.sh >>/var/log/relatorio_h_t/export_fidelizacao.log 2>&1
+
+# Agenda do dia — de hora em hora 7h-17h (restaurado em 2026-04-10)
+0 7-17 * * * root flock -n /opt/relatorio_h_t/locks/agenda_dia.lock /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/export_agenda_dia.py >>/var/log/relatorio_h_t/export_agenda_dia.log 2>&1

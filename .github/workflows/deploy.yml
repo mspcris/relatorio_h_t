@@ -530,6 +530,41 @@ jobs:
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "sudo /usr/sbin/nginx -t"
 
       # ================================================================
+      # 8E) Cron files versionados -> /etc/cron.d/
+      # ================================================================
+      # Copia cada cron/<arquivo> do repo para /etc/cron.d/<arquivo>.
+      # /etc/cron.d/ é root:root → usa --rsync-path="sudo rsync".
+      # Cron daemon relê /etc/cron.d/ a cada minuto, sem reload.
+      #
+      # Histórico: em 2026-04-05 o hardening removeu vários jobs do
+      # /etc/cron.d/relatorio_ht (agenda_dia, alarmes, sync_email, etc.)
+      # sem deixar rastro porque o arquivo não era versionado.
+      # Versionar aqui garante que qualquer remoção manual é desfeita
+      # no próximo deploy.
+      # ================================================================
+      - name: Cron files -> /etc/cron.d
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          shopt -s nullglob
+          for f in cron/*; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f")
+            echo ">>> deploy cron: $base"
+            rsync -lvz \
+              --omit-dir-times --no-perms --no-owner --no-group \
+              --rsync-path="sudo rsync" \
+              -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+              "$f" "$SSH_USER@$SSH_HOST:/etc/cron.d/$base"
+            # /etc/cron.d/ exige 644 e dono root — força perms via sudo
+            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
+              "sudo chmod 644 /etc/cron.d/$base && sudo chown root:root /etc/cron.d/$base"
+          done
+
+      # ================================================================
       # 9) Restart FINAL (camim-auth + wpp-campanhas + nginx)
       # ================================================================
       - name: Restart camim-auth + wpp-campanhas + nginx
