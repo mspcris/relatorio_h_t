@@ -187,6 +187,60 @@
         </div>
 
         <!-- ============================================================ -->
+        <!-- SEÇÃO 1B — ESTIMATIVA DE CUSTO (Meta)                        -->
+        <!-- ============================================================ -->
+        <h2 class="section-title"><i class="fas fa-dollar-sign mr-1"></i> Estimativa de custo (Meta)</h2>
+        <p class="section-subtitle">
+          Preços padrão por conversa do WhatsApp Business API (Brasil). Você pode alterar os valores pra simular outros cenários — os totais recalculam ao vivo.
+        </p>
+
+        <div class="row mb-3">
+          <div class="col-md-4 mb-2">
+            <label class="detail-label small mb-1"><i class="fas fa-bullhorn mr-1"></i> Marketing (US$ por mensagem)</label>
+            <input type="number" id="custoMkt" class="form-control" value="0.0625" step="0.0001" min="0">
+            <small class="text-muted">padrão Meta Brasil: US$ 0,0625</small>
+          </div>
+          <div class="col-md-4 mb-2">
+            <label class="detail-label small mb-1"><i class="fas fa-file-invoice mr-1"></i> Utility/Cobrança (US$ por mensagem)</label>
+            <input type="number" id="custoUtil" class="form-control" value="0.0068" step="0.0001" min="0">
+            <small class="text-muted">padrão Meta Brasil: US$ 0,0068</small>
+          </div>
+          <div class="col-md-4 mb-2">
+            <label class="detail-label small mb-1"><i class="fas fa-coins mr-1"></i> Dólar hoje (R$ por US$)</label>
+            <input type="number" id="usdRate" class="form-control" value="5.20" step="0.0001" min="0">
+            <small class="text-muted" id="usdSource">buscando cotação...</small>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-6 mb-2">
+            <div class="kpi-box orange">
+              <div class="label">Custo marketing</div>
+              <div class="value" id="custoMktTotalBrl">—</div>
+              <div class="sub" id="custoMktDet"></div>
+            </div>
+          </div>
+          <div class="col-md-6 mb-2">
+            <div class="kpi-box blue">
+              <div class="label">Custo utility/cobrança</div>
+              <div class="value" id="custoUtilTotalBrl">—</div>
+              <div class="sub" id="custoUtilDet"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-3" style="background:#f0fdf4;border:2px solid #15803d;">
+          <div class="card-body text-center py-4">
+            <div class="label" style="color:#15803d;font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:.9rem;">
+              Custo total estimado — mensagens de cobrança
+            </div>
+            <div id="custoCobBig" style="font-size:3rem;font-weight:700;color:#15803d;line-height:1.1;margin:8px 0;">—</div>
+            <div id="custoCobDet" class="text-muted" style="font-size:.9rem;"></div>
+            <div id="custoRoi" class="mt-2" style="font-size:.95rem;"></div>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
         <!-- SEÇÃO 2 — CONVERSÃO GERAL                                    -->
         <!-- ============================================================ -->
         <h2 class="section-title"><i class="fas fa-check-circle mr-1"></i> Conversão geral (enviou → pagou em até 30d)</h2>
@@ -232,7 +286,7 @@
           </div>
           <div class="col-md-6 mb-2">
             <div class="card">
-              <div class="card-header"><h3 class="card-title">Valor previsto (R$)</h3></div>
+              <div class="card-header"><h3 class="card-title">Valor arrecadado (R$)</h3></div>
               <div class="card-body">
                 <div class="kpi-box green" style="text-align:center;">
                   <div class="label">Faturas pagas em 30d após envio</div>
@@ -352,14 +406,14 @@
                 <h3 class="card-title">Conversão por campanha</h3>
                 <div class="card-tools">
                   <small class="text-muted" title="Soma de fin_receita.ValorPago das faturas pagas em até 30d após o envio. Não desconta mensagens não entregues pela Meta nem pagamentos que ocorreriam sem a mensagem — é um teto de atribuição, não valor realizado.">
-                    <i class="fas fa-info-circle"></i> Valor previsto = teto atribuído
+                    <i class="fas fa-info-circle"></i> Valor arrecadado = teto atribuído
                   </small>
                 </div>
               </div>
               <div class="card-body p-0">
                 <div style="max-height:320px;overflow:auto;">
                   <table class="table table-sm mb-0">
-                    <thead><tr><th>Campanha</th><th class="text-right">Enviados</th><th class="text-right">Pagos</th><th class="text-right">Conversão</th><th class="text-right">Dias médios</th><th class="text-right">Valor previsto (R$)</th></tr></thead>
+                    <thead><tr><th>Campanha</th><th class="text-right">Enviados</th><th class="text-right">Pagos</th><th class="text-right">Conversão</th><th class="text-right">Dias médios</th><th class="text-right">Valor arrecadado (R$)</th></tr></thead>
                     <tbody id="tblConvCampanha"></tbody>
                   </table>
                 </div>
@@ -431,6 +485,75 @@
   document.getElementById('kpiComRec').textContent = fmtInt(ec.com_idreceita);
   document.getElementById('kpiSemRec').textContent = fmtInt(ec.sem_idreceita);
   document.getElementById('kpiHist').textContent  = (meta.historico_dias || '—') + 'd';
+
+  // ── Seção 1b: Estimativa de custo (Meta) ──────────────────────
+  const custoMktInp  = document.getElementById('custoMkt');
+  const custoUtilInp = document.getElementById('custoUtil');
+  const usdRateInp   = document.getElementById('usdRate');
+  const usdSourceEl  = document.getElementById('usdSource');
+
+  function recalcCusto() {
+    const nMkt  = Number(ec.sem_idreceita || 0);
+    const nUtil = Number(ec.com_idreceita || 0);
+    const pMkt  = parseFloat(custoMktInp.value)  || 0;
+    const pUtil = parseFloat(custoUtilInp.value) || 0;
+    const usd   = parseFloat(usdRateInp.value)   || 0;
+
+    const mktUsd  = nMkt  * pMkt;
+    const utilUsd = nUtil * pUtil;
+    const mktBrl  = mktUsd  * usd;
+    const utilBrl = utilUsd * usd;
+
+    document.getElementById('custoMktTotalBrl').textContent  = fmtBR(mktBrl);
+    document.getElementById('custoMktDet').textContent =
+      `${fmtInt(nMkt)} msgs × US$ ${pMkt.toFixed(4)} = US$ ${mktUsd.toFixed(2)}`;
+
+    document.getElementById('custoUtilTotalBrl').textContent = fmtBR(utilBrl);
+    document.getElementById('custoUtilDet').textContent =
+      `${fmtInt(nUtil)} msgs × US$ ${pUtil.toFixed(4)} = US$ ${utilUsd.toFixed(2)}`;
+
+    // Big number — custo cobrança (utility)
+    document.getElementById('custoCobBig').textContent = fmtBR(utilBrl);
+    document.getElementById('custoCobDet').textContent =
+      `${fmtInt(nUtil)} mensagens × US$ ${pUtil.toFixed(4)} × R$ ${usd.toFixed(4)}/USD`;
+
+    // ROI comparativo com Valor arrecadado
+    const arrec = Number((data.conversao_geral || {}).valor_pago_total || 0);
+    if (arrec > 0 && utilBrl > 0) {
+      const roi = ((arrec - utilBrl) / utilBrl) * 100;
+      document.getElementById('custoRoi').innerHTML =
+        `<i class="fas fa-chart-line mr-1"></i> Valor arrecadado: <b>${fmtBR(arrec)}</b> · ` +
+        `ROI: <b>${roi.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%</b> ` +
+        `(cada R$ 1 gasto retornou R$ ${(arrec / utilBrl).toLocaleString('pt-BR', { maximumFractionDigits: 2 })})`;
+    } else {
+      document.getElementById('custoRoi').textContent = '';
+    }
+  }
+
+  // Busca cotação USD-BRL (awesomeapi, sem auth) — não bloqueia o render
+  (async () => {
+    try {
+      const r = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', { cache: 'no-store' });
+      if (r.ok) {
+        const j = await r.json();
+        const rate = parseFloat(j.USDBRL.bid);
+        if (rate > 0) {
+          usdRateInp.value = rate.toFixed(4);
+          const ts = new Date(parseInt(j.USDBRL.timestamp, 10) * 1000);
+          usdSourceEl.textContent = 'awesomeapi.com.br · ' + ts.toLocaleString('pt-BR');
+          recalcCusto();
+          return;
+        }
+      }
+      usdSourceEl.textContent = 'cotação indisponível — usando 5,20 (edite manualmente)';
+    } catch (e) {
+      usdSourceEl.textContent = 'cotação offline — usando 5,20 (edite manualmente)';
+    }
+  })();
+
+  // Recalcula ao vivo ao digitar
+  [custoMktInp, custoUtilInp, usdRateInp].forEach(el => el.addEventListener('input', recalcCusto));
+  recalcCusto();
 
   // Série diária
   const serie = ec.serie_diaria || [];
