@@ -790,6 +790,20 @@
     return `há ${dias} dias`;
   }
 
+  function fmtDateBR(str) {
+    if (!str) return '';
+    try {
+      const d = new Date(str.replace(' ', 'T'));
+      if (isNaN(d)) return str;
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mi = String(d.getMinutes()).padStart(2, '0');
+      return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
+    } catch (_) { return str; }
+  }
+
   /* ── Render de uma barra ────────────────────────────────────── */
   const PREFIX_ICON = {
     WPP:   'fab fa-whatsapp',
@@ -1005,7 +1019,7 @@
       const s    = STATUS[sKey];
       const nome = mostrar1Posto ? 'Push Cobrança' : `Push Cobrança — Posto ${it.posto}`;
       const texto = it.ultimo
-        ? `${fmtDias(it.dias)} · ${it.ultimo.slice(0, 16)}`
+        ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo)}`
         : fmtDias(it.dias);
       return { html: barraHTML('PUSH', nome, sKey, texto, it.posto), order: s.order };
     });
@@ -1050,7 +1064,7 @@
         const it = lista[0];
         const sKey = diasParaStatus(it.dias);
         const texto = it.ultimo_envio
-          ? `${fmtDias(it.dias)} · ${it.ultimo_envio.slice(0, 16)} · ${it.total} enviados`
+          ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo_envio)} · ${it.total} enviados`
           : fmtDias(it.dias);
         itens.push({ html: barraHTML('EMAIL', cat, sKey, texto, it.posto), order: STATUS[sKey].order });
       } else {
@@ -1058,7 +1072,7 @@
         for (const it of lista) {
           const sKey = diasParaStatus(it.dias);
           const texto = it.ultimo_envio
-            ? `${fmtDias(it.dias)} · ${it.ultimo_envio.slice(0, 16)}`
+            ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo_envio)}`
             : fmtDias(it.dias);
           const nome = `${cat} — Posto ${it.posto}`;
           itens.push({ html: barraHTML('EMAIL', nome, sKey, texto, it.posto), order: STATUS[sKey].order });
@@ -1091,7 +1105,7 @@
       const sKey = diasParaStatus(it.dias);
       const nome = mostrar1Posto ? 'TEF Recorrente' : `TEF Recorrente — Posto ${it.posto}`;
       const texto = it.ultimo
-        ? `${fmtDias(it.dias)} · ${it.ultimo.slice(0, 16)}`
+        ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo)}`
         : fmtDias(it.dias);
       return { html: barraHTML('TEF', nome, sKey, texto, it.posto), order: STATUS[sKey].order };
     });
@@ -1118,7 +1132,7 @@
           ? (camp.nome || 'WhatsApp Cobrança')
           : `${camp.nome || 'WhatsApp Cobrança'} — Posto ${posto}`;
         const texto = d.ultimo_envio
-          ? `${fmtDias(d.dias)} · ${d.ultimo_envio.slice(0, 16)}`
+          ? `${fmtDias(d.dias)} · ${fmtDateBR(d.ultimo_envio)}`
           : fmtDias(d.dias);
         itens.push({ html: barraHTML('WPP', nome, sKey, texto, posto), order: STATUS[sKey].order });
       }
