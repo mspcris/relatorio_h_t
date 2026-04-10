@@ -496,6 +496,40 @@ jobs:
           fi
 
       # ================================================================
+      # 8D) Vhosts nginx versionados -> /etc/nginx/sites-available/
+      # ================================================================
+      # Copia cada nginx/*.conf do repo para /etc/nginx/sites-available/<base>
+      # (onde <base> é o nome do arquivo sem .conf), garante o symlink em
+      # sites-enabled e roda `nginx -t` pra abortar o deploy se a config
+      # estiver inválida. O reload efetivo acontece no step 9 (restart nginx).
+      #
+      # Como /etc/nginx/sites-available/ é root:root, usamos
+      # --rsync-path="sudo rsync" (sudoers NOPASSWD já libera /usr/bin/rsync,
+      # /bin/ln e /usr/sbin/nginx -t para o usuário deploy).
+      # ================================================================
+      - name: nginx vhosts -> /etc/nginx/sites-available
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          shopt -s nullglob
+          for f in nginx/*.conf; do
+            base=$(basename "$f" .conf)
+            echo ">>> deploy vhost: $base"
+            rsync -lvz \
+              --omit-dir-times --no-perms --no-owner --no-group \
+              --rsync-path="sudo rsync" \
+              -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+              "$f" "$SSH_USER@$SSH_HOST:/etc/nginx/sites-available/$base"
+            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
+              "sudo ln -sf /etc/nginx/sites-available/$base /etc/nginx/sites-enabled/$base"
+          done
+          # Valida sintaxe; se falhar, aborta o deploy antes do restart.
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "sudo /usr/sbin/nginx -t"
+
+      # ================================================================
       # 9) Restart FINAL (camim-auth + wpp-campanhas + nginx)
       # ================================================================
       - name: Restart camim-auth + wpp-campanhas + nginx
