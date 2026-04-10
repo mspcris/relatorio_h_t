@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — Dashboard WhatsApp (Meta)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="kpi-id" content="wpp_dashboard" />
+  <meta name="kpi-title" content="Dashboard WhatsApp (Meta)" />
+  <meta name="kpi-description" content="Conversão de envios WhatsApp via Meta: enviados, pagos, dias até pagar, comparativo lembrança vs cobrança 1-15 vs 16+." />
+  <meta name="kpi-category" content="Operacional" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="/css/style2.css">
+  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <script>
+    fetch("/session/me", { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => { window.USER_EMAIL = data.email; window.USER_POSTOS = data.postos; })
+      .catch(() => { window.USER_EMAIL = null; window.USER_POSTOS = []; });
+  </script>
+
+  <style>
+    html { font-size: 16px; }
+    body { font-family: "Source Sans Pro", system-ui, sans-serif; font-size: 1rem; }
+    h3, .card-title { font-size: 1.1rem; font-weight: 600; }
+    .kpi-box { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; height: 100%; }
+    .kpi-box .label { font-size: .82rem; color: #6b7280; text-transform: uppercase; letter-spacing: .03em; }
+    .kpi-box .value { font-size: 1.8rem; font-weight: 700; color: #111827; line-height: 1.1; margin-top: 4px; }
+    .kpi-box .sub   { font-size: .78rem; color: #6b7280; margin-top: 2px; }
+    .kpi-box.green .value  { color: #15803d; }
+    .kpi-box.blue  .value  { color: #1d4ed8; }
+    .kpi-box.orange .value { color: #c2410c; }
+    .kpi-box.red   .value  { color: #b91c1c; }
+    .section-title { font-size: 1.1rem; font-weight: 700; color: #111827; margin: 20px 0 10px; }
+    .section-subtitle { font-size: .85rem; color: #6b7280; margin-bottom: 12px; }
+    .table-sm td, .table-sm th { font-size: .85rem; padding: .45rem .55rem; }
+    .chart-container { position: relative; height: 280px; }
+    .chart-container-sm { position: relative; height: 220px; }
+    .conv-bar { height: 10px; border-radius: 5px; background: #e5e7eb; overflow: hidden; }
+    .conv-bar > div { height: 100%; background: linear-gradient(90deg, #10b981, #059669); }
+    .badge-meta { background: #25d366; color: #fff; font-weight: 600; }
+    #loadingMsg { color: #6b7280; padding: 20px; text-align: center; }
+    #errBox { display: none; }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a></li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+      <span class="ml-2">Dashboard WhatsApp <span class="badge badge-meta ml-1">Meta</span></span>
+      <span id="jsonInfo" class="ml-3 text-muted" style="font-size:.8rem;"></span>
+    </span>
+  </nav>
+
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" role="menu" data-accordion="false">
+          <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a></li>
+          <li class="nav-item"><a href="monitorarrobos.html" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Monitorar Robôs</p></a></li>
+          {% if USER_IS_ADMIN %}
+          <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+          {% endif %}
+          <li class="nav-item"><a href="wpp_dashboard.html" class="nav-link active"><i class="nav-icon fab fa-whatsapp"></i><p>Dashboard WhatsApp</p></a></li>
+          <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+          <li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline">
+              <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                <i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p>
+              </button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="content-wrapper">
+    <section class="content p-3">
+
+      <div class="alert alert-info py-2 px-3 mb-3" style="font-size:.85rem;">
+        <i class="fas fa-info-circle mr-1"></i>
+        Conta apenas envios pela <b>API da Meta</b> (campanhas com <code>enviar_meta=1</code>, status <code>accepted</code>).
+        Janela de atribuição: <b>30 dias</b> após o envio.
+      </div>
+
+      <div id="errBox" class="alert alert-danger py-2 px-3 mb-3"></div>
+      <div id="loadingMsg"><i class="fas fa-spinner fa-spin"></i> Carregando dashboard...</div>
+
+      <div id="mainContent" style="display:none;">
+
+        <!-- ============================================================ -->
+        <!-- SEÇÃO 1 — ENVIOS & CUSTO                                     -->
+        <!-- ============================================================ -->
+        <h2 class="section-title"><i class="fas fa-paper-plane mr-1"></i> Envios & Custo (Meta)</h2>
+        <p class="section-subtitle">Todas as mensagens enviadas, inclusive marketing (sem idreceita). Use para estimar custo mensal.</p>
+
+        <div class="row mb-3">
+          <div class="col-sm-6 col-md-3 mb-2">
+            <div class="kpi-box blue">
+              <div class="label">Total enviado (Meta)</div>
+              <div class="value" id="kpiTotal">—</div>
+              <div class="sub" id="kpiTotalSub"></div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-md-3 mb-2">
+            <div class="kpi-box">
+              <div class="label">Cobrança / Lembrança</div>
+              <div class="value" id="kpiComRec">—</div>
+              <div class="sub">com idreceita</div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-md-3 mb-2">
+            <div class="kpi-box orange">
+              <div class="label">Marketing</div>
+              <div class="value" id="kpiSemRec">—</div>
+              <div class="sub">sem idreceita (ex.: indique um amigo)</div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-md-3 mb-2">
+            <div class="kpi-box">
+              <div class="label">Histórico analisado</div>
+              <div class="value" id="kpiHist">—</div>
+              <div class="sub">dias de envios</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-8 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Envios por dia</h3></div>
+              <div class="card-body"><div class="chart-container"><canvas id="chartSerieDiaria"></canvas></div></div>
+            </div>
+          </div>
+          <div class="col-md-4 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Por posto</h3></div>
+              <div class="card-body p-0">
+                <div style="max-height:280px;overflow:auto;">
+                  <table class="table table-sm mb-0">
+                    <thead><tr><th>Posto</th><th class="text-right">Envios</th></tr></thead>
+                    <tbody id="tblPorPosto"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-6 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Envios por template</h3></div>
+              <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                  <thead><tr><th>Template</th><th class="text-right">Envios</th></tr></thead>
+                  <tbody id="tblPorTemplate"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Envios por campanha</h3></div>
+              <div class="card-body p-0">
+                <div style="max-height:320px;overflow:auto;">
+                  <table class="table table-sm mb-0">
+                    <thead><tr><th>Campanha</th><th>Modo</th><th class="text-right">Envios</th></tr></thead>
+                    <tbody id="tblPorCampanha"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SEÇÃO 2 — CONVERSÃO GERAL                                    -->
+        <!-- ============================================================ -->
+        <h2 class="section-title"><i class="fas fa-check-circle mr-1"></i> Conversão geral (enviou → pagou em até 30d)</h2>
+        <p class="section-subtitle">Todas as mensagens de cobrança/lembrança com idreceita vinculada a mensalidade.</p>
+
+        <div class="row mb-3">
+          <div class="col-sm-6 col-md-3 mb-2">
+            <div class="kpi-box blue">
+              <div class="label">Enviados</div>
+              <div class="value" id="gEnv">—</div>
+              <div class="sub">faturas distintas</div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-md-3 mb-2">
+            <div class="kpi-box green">
+              <div class="label">Pagaram</div>
+              <div class="value" id="gPag">—</div>
+              <div class="sub">em até 30d após envio</div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-md-3 mb-2">
+            <div class="kpi-box green">
+              <div class="label">Taxa de conversão</div>
+              <div class="value" id="gConv">—</div>
+              <div class="sub" id="gConvSub"></div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-md-3 mb-2">
+            <div class="kpi-box orange">
+              <div class="label">Dias médios até pagar</div>
+              <div class="value" id="gDias">—</div>
+              <div class="sub" id="gDiasSub"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-6 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Curva de pagamento (acumulada)</h3></div>
+              <div class="card-body"><div class="chart-container-sm"><canvas id="chartCurva"></canvas></div></div>
+            </div>
+          </div>
+          <div class="col-md-6 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Valor pago (R$)</h3></div>
+              <div class="card-body">
+                <div class="kpi-box green" style="text-align:center;">
+                  <div class="label">Total pago em 30d após envio</div>
+                  <div class="value" id="gValor">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SEÇÃO 3 — 1 A 15 vs 16+                                      -->
+        <!-- ============================================================ -->
+        <h2 class="section-title"><i class="fas fa-balance-scale mr-1"></i> Cobrança: 1 a 15 dias vs 16+ dias de atraso</h2>
+        <p class="section-subtitle">Qual faixa de atraso tem melhor retorno de pagamento?</p>
+
+        <div class="row mb-3">
+          <div class="col-md-6 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span class="badge badge-info mr-1">1 a 15 dias</span></h3></div>
+              <div class="card-body">
+                <div class="row">
+                  <div class="col-6"><div class="kpi-box"><div class="label">Enviados</div><div class="value" id="f1Env">—</div></div></div>
+                  <div class="col-6"><div class="kpi-box green"><div class="label">Pagaram</div><div class="value" id="f1Pag">—</div></div></div>
+                  <div class="col-6 mt-2"><div class="kpi-box green"><div class="label">Conversão</div><div class="value" id="f1Conv">—</div></div></div>
+                  <div class="col-6 mt-2"><div class="kpi-box orange"><div class="label">Dias médios</div><div class="value" id="f1Dias">—</div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><span class="badge badge-warning mr-1">16+ dias</span></h3></div>
+              <div class="card-body">
+                <div class="row">
+                  <div class="col-6"><div class="kpi-box"><div class="label">Enviados</div><div class="value" id="f2Env">—</div></div></div>
+                  <div class="col-6"><div class="kpi-box green"><div class="label">Pagaram</div><div class="value" id="f2Pag">—</div></div></div>
+                  <div class="col-6 mt-2"><div class="kpi-box green"><div class="label">Conversão</div><div class="value" id="f2Conv">—</div></div></div>
+                  <div class="col-6 mt-2"><div class="kpi-box orange"><div class="label">Dias médios</div><div class="value" id="f2Dias">—</div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="alert alert-success py-2 px-3 mb-3" id="vencedorBox" style="font-size:.95rem;"></div>
+
+        <!-- ============================================================ -->
+        <!-- SEÇÃO 4 — LEMBRANÇA (PRÉ-VENCIMENTO)                         -->
+        <!-- ============================================================ -->
+        <h2 class="section-title"><i class="fas fa-bell mr-1"></i> Lembrança (pré-vencimento)</h2>
+        <p class="section-subtitle">Quantos pagaram após a lembrança sem precisar de cobrança depois.</p>
+
+        <div class="row mb-3">
+          <div class="col-sm-6 col-md-3 mb-2">
+            <div class="kpi-box blue">
+              <div class="label">Total lembranças</div>
+              <div class="value" id="lTotal">—</div>
+              <div class="sub">faturas distintas</div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-md-3 mb-2">
+            <div class="kpi-box green">
+              <div class="label">Pagou sem cobrança</div>
+              <div class="value" id="lSucesso">—</div>
+              <div class="sub" id="lSucessoSub"></div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-md-3 mb-2">
+            <div class="kpi-box orange">
+              <div class="label">Pagou (precisou cobrar)</div>
+              <div class="value" id="lCobrou">—</div>
+              <div class="sub">recebeu lembrança + cobrança</div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-md-3 mb-2">
+            <div class="kpi-box red">
+              <div class="label">Não pagou</div>
+              <div class="value" id="lNaoPagou">—</div>
+              <div class="sub">em 30d após lembrança</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SEÇÃO 5 — BREAKDOWNS                                         -->
+        <!-- ============================================================ -->
+        <h2 class="section-title"><i class="fas fa-layer-group mr-1"></i> Detalhes por dimensão</h2>
+
+        <div class="row mb-3">
+          <div class="col-md-6 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Conversão por posto</h3></div>
+              <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                  <thead><tr><th>Posto</th><th class="text-right">Env.</th><th class="text-right">Pagos</th><th class="text-right">Conv.</th><th>%</th></tr></thead>
+                  <tbody id="tblConvPosto"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Conversão por faixa de atraso</h3></div>
+              <div class="card-body"><div class="chart-container-sm"><canvas id="chartFaixa"></canvas></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-12 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Conversão por campanha</h3></div>
+              <div class="card-body p-0">
+                <div style="max-height:320px;overflow:auto;">
+                  <table class="table table-sm mb-0">
+                    <thead><tr><th>Campanha</th><th class="text-right">Enviados</th><th class="text-right">Pagos</th><th class="text-right">Conversão</th><th class="text-right">Dias médios</th><th class="text-right">Valor (R$)</th></tr></thead>
+                    <tbody id="tblConvCampanha"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-6 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Conversão por hora do envio</h3></div>
+              <div class="card-body"><div class="chart-container-sm"><canvas id="chartHora"></canvas></div></div>
+            </div>
+          </div>
+          <div class="col-md-6 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Conversão por dia da semana</h3></div>
+              <div class="card-body"><div class="chart-container-sm"><canvas id="chartDow"></canvas></div></div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /mainContent -->
+    </section>
+  </div>
+</div>
+
+<script>
+(async () => {
+  const URL_JSON = '/json_consolidado/wpp_dashboard.json';
+  const errBox = document.getElementById('errBox');
+  const loading = document.getElementById('loadingMsg');
+  const main = document.getElementById('mainContent');
+
+  const fmtInt  = n => (n == null ? '—' : Number(n).toLocaleString('pt-BR'));
+  const fmtPct  = n => (n == null ? '—' : Number(n).toFixed(1) + '%');
+  const fmtDias = n => (n == null ? '—' : Number(n).toFixed(1) + 'd');
+  const fmtBR   = n => (n == null ? '—' : Number(n).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+
+  let data;
+  try {
+    const r = await fetch(URL_JSON, { cache: 'no-store' });
+    if (!r.ok) throw new Error('JSON não encontrado (HTTP ' + r.status + '). O ETL já rodou?');
+    data = await r.json();
+  } catch (e) {
+    loading.style.display = 'none';
+    errBox.style.display = 'block';
+    errBox.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> ' + e.message;
+    return;
+  }
+
+  loading.style.display = 'none';
+  main.style.display = 'block';
+
+  const meta = data.meta || {};
+  document.getElementById('jsonInfo').textContent =
+    '• atualizado em ' + (meta.gerado_em_br || '?');
+
+  // ── Seção 1: Envios & Custo ────────────────────────────────────
+  const ec = data.envios_custo || {};
+  document.getElementById('kpiTotal').textContent  = fmtInt(ec.total_meta);
+  document.getElementById('kpiTotalSub').textContent = 'últimos ' + (meta.historico_dias || '?') + ' dias';
+  document.getElementById('kpiComRec').textContent = fmtInt(ec.com_idreceita);
+  document.getElementById('kpiSemRec').textContent = fmtInt(ec.sem_idreceita);
+  document.getElementById('kpiHist').textContent  = (meta.historico_dias || '—') + 'd';
+
+  // Série diária
+  const serie = ec.serie_diaria || [];
+  new Chart(document.getElementById('chartSerieDiaria'), {
+    type: 'line',
+    data: {
+      labels: serie.map(s => s.data),
+      datasets: [{
+        label: 'Envios',
+        data: serie.map(s => s.envios),
+        borderColor: '#25d366',
+        backgroundColor: 'rgba(37, 211, 102, .15)',
+        tension: .25,
+        fill: true,
+      }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+  });
+
+  // Por posto (tabela)
+  const tbPosto = document.getElementById('tblPorPosto');
+  (ec.por_posto || []).forEach(r => {
+    tbPosto.insertAdjacentHTML('beforeend',
+      `<tr><td>${r.posto}</td><td class="text-right">${fmtInt(r.envios)}</td></tr>`);
+  });
+
+  // Por template
+  const tbT = document.getElementById('tblPorTemplate');
+  (ec.por_template || []).forEach(r => {
+    tbT.insertAdjacentHTML('beforeend',
+      `<tr><td><code>${r.template}</code></td><td class="text-right">${fmtInt(r.envios)}</td></tr>`);
+  });
+
+  // Por campanha
+  const tbC = document.getElementById('tblPorCampanha');
+  (ec.por_campanha || []).forEach(r => {
+    const badge = r.modo_envio === 'pre_vencimento'
+      ? '<span class="badge badge-info">lembrança</span>'
+      : '<span class="badge badge-warning">cobrança</span>';
+    tbC.insertAdjacentHTML('beforeend',
+      `<tr><td>${r.campanha_nome}</td><td>${badge}</td><td class="text-right">${fmtInt(r.envios)}</td></tr>`);
+  });
+
+  // ── Seção 2: Conversão geral ───────────────────────────────────
+  const g = data.conversao_geral || {};
+  document.getElementById('gEnv').textContent  = fmtInt(g.enviados);
+  document.getElementById('gPag').textContent  = fmtInt(g.pagos);
+  document.getElementById('gConv').textContent = fmtPct(g.conversao);
+  document.getElementById('gConvSub').textContent = `${fmtInt(g.pagos)} / ${fmtInt(g.enviados)}`;
+  document.getElementById('gDias').textContent = fmtDias(g.dias_medio);
+  document.getElementById('gDiasSub').textContent = g.dias_mediana != null
+    ? `mediana ${fmtDias(g.dias_mediana)} · p75 ${fmtDias(g.dias_p75)}`
+    : '';
+  document.getElementById('gValor').textContent = fmtBR(g.valor_pago_total);
+
+  // Curva de sobrevivência
+  const curva = (data.breakdowns || {}).curva_sobrevivencia || [];
+  new Chart(document.getElementById('chartCurva'), {
+    type: 'line',
+    data: {
+      labels: curva.map(c => '≤' + c.dias + 'd'),
+      datasets: [{
+        label: '% pago acumulado',
+        data: curva.map(c => c.pct),
+        borderColor: '#059669',
+        backgroundColor: 'rgba(5, 150, 105, .15)',
+        fill: true,
+        tension: .25,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } },
+      plugins: { legend: { display: false } }
+    }
+  });
+
+  // ── Seção 3: 1-15 vs 16+ ───────────────────────────────────────
+  const f1 = (data.conversao_faixa || {}).faixa_1_15   || {};
+  const f2 = (data.conversao_faixa || {}).faixa_16_mais || {};
+  document.getElementById('f1Env').textContent  = fmtInt(f1.enviados);
+  document.getElementById('f1Pag').textContent  = fmtInt(f1.pagos);
+  document.getElementById('f1Conv').textContent = fmtPct(f1.conversao);
+  document.getElementById('f1Dias').textContent = fmtDias(f1.dias_medio);
+  document.getElementById('f2Env').textContent  = fmtInt(f2.enviados);
+  document.getElementById('f2Pag').textContent  = fmtInt(f2.pagos);
+  document.getElementById('f2Conv').textContent = fmtPct(f2.conversao);
+  document.getElementById('f2Dias').textContent = fmtDias(f2.dias_medio);
+
+  const vencedor = document.getElementById('vencedorBox');
+  if (f1.enviados && f2.enviados) {
+    if (f1.conversao > f2.conversao) {
+      vencedor.innerHTML = `<i class="fas fa-trophy mr-1"></i> <b>1 a 15 dias</b> tem melhor retorno: ${fmtPct(f1.conversao)} vs ${fmtPct(f2.conversao)} (+${(f1.conversao - f2.conversao).toFixed(1)}pp).`;
+    } else if (f2.conversao > f1.conversao) {
+      vencedor.innerHTML = `<i class="fas fa-trophy mr-1"></i> <b>16+ dias</b> tem melhor retorno: ${fmtPct(f2.conversao)} vs ${fmtPct(f1.conversao)} (+${(f2.conversao - f1.conversao).toFixed(1)}pp).`;
+    } else {
+      vencedor.innerHTML = 'Empate de conversão entre as faixas.';
+    }
+  } else {
+    vencedor.style.display = 'none';
+  }
+
+  // ── Seção 4: Lembrança ─────────────────────────────────────────
+  const l = data.lembranca || {};
+  document.getElementById('lTotal').textContent   = fmtInt(l.total_lembrancas);
+  document.getElementById('lSucesso').textContent = fmtInt(l.pagou_sem_cobrar);
+  document.getElementById('lSucessoSub').textContent = fmtPct(l.pct_sucesso) + ' do total';
+  document.getElementById('lCobrou').textContent  = fmtInt(l.pagou_mas_precisou_cobrar);
+  document.getElementById('lNaoPagou').textContent = fmtInt(l.nao_pagou);
+
+  // ── Seção 5: Breakdowns ────────────────────────────────────────
+  const bd = data.breakdowns || {};
+
+  // Conversão por posto
+  const tbCP = document.getElementById('tblConvPosto');
+  (bd.por_posto || []).forEach(r => {
+    tbCP.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td><b>${r.posto}</b></td>
+        <td class="text-right">${fmtInt(r.enviados)}</td>
+        <td class="text-right">${fmtInt(r.pagos)}</td>
+        <td class="text-right">${fmtPct(r.conversao)}</td>
+        <td style="width:100px;"><div class="conv-bar"><div style="width:${Math.min(r.conversao, 100)}%"></div></div></td>
+      </tr>`);
+  });
+
+  // Por faixa (chart barras)
+  const faixas = bd.por_faixa || [];
+  new Chart(document.getElementById('chartFaixa'), {
+    type: 'bar',
+    data: {
+      labels: faixas.map(f => f.faixa),
+      datasets: [
+        { label: 'Conversão %', data: faixas.map(f => f.conversao), backgroundColor: '#10b981' },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            afterLabel: ctx => {
+              const f = faixas[ctx.dataIndex];
+              return `${f.pagos} de ${f.enviados} pagos`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Por campanha (tabela)
+  const tbCc = document.getElementById('tblConvCampanha');
+  (bd.por_campanha || []).forEach(r => {
+    tbCc.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${r.campanha_nome}</td>
+        <td class="text-right">${fmtInt(r.enviados)}</td>
+        <td class="text-right">${fmtInt(r.pagos)}</td>
+        <td class="text-right">${fmtPct(r.conversao)}</td>
+        <td class="text-right">${fmtDias(r.dias_medio)}</td>
+        <td class="text-right">${fmtBR(r.valor_pago_total)}</td>
+      </tr>`);
+  });
+
+  // Por hora
+  const horas = bd.por_hora || [];
+  new Chart(document.getElementById('chartHora'), {
+    type: 'bar',
+    data: {
+      labels: horas.map(h => h.hora + 'h'),
+      datasets: [{ label: 'Conversão %', data: horas.map(h => h.conversao), backgroundColor: '#1d4ed8' }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
+      plugins: { legend: { display: false } }
+    }
+  });
+
+  // Por dia da semana
+  const dow = bd.por_dow || [];
+  new Chart(document.getElementById('chartDow'), {
+    type: 'bar',
+    data: {
+      labels: dow.map(d => d.dow_label),
+      datasets: [{ label: 'Conversão %', data: dow.map(d => d.conversao), backgroundColor: '#c2410c' }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
+      plugins: { legend: { display: false } }
+    }
+  });
+
+})();
+</script>
+
+<script src="/js/menu.js"></script>
+</body>
+</html>
