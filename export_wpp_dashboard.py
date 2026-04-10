@@ -54,8 +54,8 @@ HIST_DIAS = int(os.getenv("WPP_DASH_HIST_DIAS", "180"))
 JANELA_DIAS = int(os.getenv("WPP_DASH_JANELA_DIAS", "30"))
 
 # Faixas de dias de atraso (cobrança)
-FAIXA_1_MIN, FAIXA_1_MAX = 1, 15     # "1 a 15"
-FAIXA_2_MIN              = 16        # "16+"
+FAIXA_1_MIN, FAIXA_1_MAX = 1, 14     # "1 a 14"
+FAIXA_2_MIN              = 15        # "15+"
 
 
 # =============================================================================
@@ -282,9 +282,23 @@ def curva_sobrevivencia(df: pd.DataFrame) -> list[dict]:
 def build_dashboard(df_envios: pd.DataFrame, pagamentos_por_posto: dict) -> dict:
     gerado_em = datetime.now().astimezone()
 
+    # ── Classificação marketing vs cobrança ────────────────────────────────
+    # Regra: qualquer campanha/template que contenha "indique" é MARKETING,
+    # independentemente de modo_envio ou de ter idreceita.
+    tpl = df_envios["envio_template"].fillna("").str.lower()
+    cam = df_envios["campanha_nome"].fillna("").str.lower()
+    df_envios["is_mkt"] = tpl.str.contains("indique") | cam.str.contains("indique")
+
+    # modo_envio para exibição: "marketing" sobrepõe "atraso"/"pre_vencimento"
+    df_envios["modo_display"] = df_envios.apply(
+        lambda r: "marketing" if r["is_mkt"] else r["modo_envio"], axis=1
+    )
+
     # ── Divide envios ──────────────────────────────────────────────────────
-    df_com_rec = df_envios[df_envios["idreceita"] != ""].copy()
-    df_sem_rec = df_envios[df_envios["idreceita"] == ""].copy()
+    # Cobrança/lembrança = tem idreceita E não é marketing
+    df_com_rec = df_envios[(df_envios["idreceita"] != "") & (~df_envios["is_mkt"])].copy()
+    # Marketing = é marketing (indique) OU não tem idreceita
+    df_sem_rec = df_envios[df_envios["is_mkt"] | (df_envios["idreceita"] == "")].copy()
 
     # ── Agrega por idreceita (cobrança/lembrança) ──────────────────────────
     agg = agregar_por_idreceita(df_com_rec)
@@ -330,7 +344,7 @@ def build_dashboard(df_envios: pd.DataFrame, pagamentos_por_posto: dict) -> dict
     ]
 
     por_campanha = (
-        df_envios.groupby(["campanha_id", "campanha_nome", "modo_envio"])
+        df_envios.groupby(["campanha_id", "campanha_nome", "modo_display"])
         .size()
         .reset_index(name="n")
         .sort_values("n", ascending=False)
@@ -339,7 +353,7 @@ def build_dashboard(df_envios: pd.DataFrame, pagamentos_por_posto: dict) -> dict
         {
             "campanha_id":   int(r["campanha_id"]),
             "campanha_nome": r["campanha_nome"] or "?",
-            "modo_envio":    r["modo_envio"],
+            "modo_envio":    r["modo_display"],
             "envios":        int(r["n"]),
         }
         for _, r in por_campanha.iterrows()
@@ -379,11 +393,11 @@ def build_dashboard(df_envios: pd.DataFrame, pagamentos_por_posto: dict) -> dict
     # =========================================================================
     agg_atraso = agg[agg["has_atraso"] == True].copy()
 
-    faixa_1_15 = agg_atraso[
+    faixa_1_14 = agg_atraso[
         (agg_atraso["max_dias_atraso"] >= FAIXA_1_MIN) &
         (agg_atraso["max_dias_atraso"] <= FAIXA_1_MAX)
     ]
-    faixa_16   = agg_atraso[agg_atraso["max_dias_atraso"] >= FAIXA_2_MIN]
+    faixa_15   = agg_atraso[agg_atraso["max_dias_atraso"] >= FAIXA_2_MIN]
 
     # =========================================================================
     # SEÇÃO 4 — Lembrança (pré-vencimento) que NÃO precisou de cobrança
@@ -502,8 +516,8 @@ def build_dashboard(df_envios: pd.DataFrame, pagamentos_por_posto: dict) -> dict
         },
         "conversao_geral": geral,
         "conversao_faixa": {
-            "faixa_1_15":   metricas_bloco(faixa_1_15),
-            "faixa_16_mais": metricas_bloco(faixa_16),
+            "faixa_1_14":   metricas_bloco(faixa_1_14),
+            "faixa_15_mais": metricas_bloco(faixa_15),
         },
         "lembranca": lembranca,
         "breakdowns": {

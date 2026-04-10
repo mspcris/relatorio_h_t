@@ -7,7 +7,7 @@
 
   <meta name="kpi-id" content="wpp_dashboard" />
   <meta name="kpi-title" content="Dashboard WhatsApp (Meta)" />
-  <meta name="kpi-description" content="Conversão de envios WhatsApp via Meta: enviados, pagos, dias até pagar, comparativo lembrança vs cobrança 1-15 vs 16+." />
+  <meta name="kpi-description" content="Conversão de envios WhatsApp via Meta: enviados, pagos, dias até pagar, comparativo lembrança vs cobrança 1-14 vs 15+." />
   <meta name="kpi-category" content="Operacional" />
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
@@ -118,14 +118,14 @@
             <div class="kpi-box">
               <div class="label">Cobrança / Lembrança</div>
               <div class="value" id="kpiComRec">—</div>
-              <div class="sub">com idreceita</div>
+              <div class="sub">com idreceita (não marketing)</div>
             </div>
           </div>
           <div class="col-sm-6 col-md-3 mb-2">
             <div class="kpi-box orange">
               <div class="label">Marketing</div>
               <div class="value" id="kpiSemRec">—</div>
-              <div class="sub">sem idreceita (ex.: indique um amigo)</div>
+              <div class="sub">mensagens de marketing (indique um amigo)</div>
             </div>
           </div>
           <div class="col-sm-6 col-md-3 mb-2">
@@ -244,15 +244,15 @@
         </div>
 
         <!-- ============================================================ -->
-        <!-- SEÇÃO 3 — 1 A 15 vs 16+                                      -->
+        <!-- SEÇÃO 3 — 1 A 14 vs 15+                                      -->
         <!-- ============================================================ -->
-        <h2 class="section-title"><i class="fas fa-balance-scale mr-1"></i> Cobrança: 1 a 15 dias vs 16+ dias de atraso</h2>
+        <h2 class="section-title"><i class="fas fa-balance-scale mr-1"></i> Cobrança: 1 a 14 dias vs 15+ dias de atraso</h2>
         <p class="section-subtitle">Qual faixa de atraso tem melhor retorno de pagamento?</p>
 
         <div class="row mb-3">
           <div class="col-md-6 mb-2">
             <div class="card">
-              <div class="card-header"><h3 class="card-title"><span class="badge badge-info mr-1">1 a 15 dias</span></h3></div>
+              <div class="card-header"><h3 class="card-title"><span class="badge badge-info mr-1">1 a 14 dias</span></h3></div>
               <div class="card-body">
                 <div class="row">
                   <div class="col-6"><div class="kpi-box"><div class="label">Enviados</div><div class="value" id="f1Env">—</div></div></div>
@@ -265,7 +265,7 @@
           </div>
           <div class="col-md-6 mb-2">
             <div class="card">
-              <div class="card-header"><h3 class="card-title"><span class="badge badge-warning mr-1">16+ dias</span></h3></div>
+              <div class="card-header"><h3 class="card-title"><span class="badge badge-warning mr-1">15+ dias</span></h3></div>
               <div class="card-body">
                 <div class="row">
                   <div class="col-6"><div class="kpi-box"><div class="label">Enviados</div><div class="value" id="f2Env">—</div></div></div>
@@ -457,9 +457,14 @@
   // Por campanha
   const tbC = document.getElementById('tblPorCampanha');
   (ec.por_campanha || []).forEach(r => {
-    const badge = r.modo_envio === 'pre_vencimento'
-      ? '<span class="badge badge-info">lembrança</span>'
-      : '<span class="badge badge-warning">cobrança</span>';
+    let badge;
+    if (r.modo_envio === 'marketing') {
+      badge = '<span class="badge badge-success">marketing</span>';
+    } else if (r.modo_envio === 'pre_vencimento') {
+      badge = '<span class="badge badge-info">lembrança</span>';
+    } else {
+      badge = '<span class="badge badge-warning">cobrança</span>';
+    }
     tbC.insertAdjacentHTML('beforeend',
       `<tr><td>${r.campanha_nome}</td><td>${badge}</td><td class="text-right">${fmtInt(r.envios)}</td></tr>`);
   });
@@ -498,9 +503,9 @@
     }
   });
 
-  // ── Seção 3: 1-15 vs 16+ ───────────────────────────────────────
-  const f1 = (data.conversao_faixa || {}).faixa_1_15   || {};
-  const f2 = (data.conversao_faixa || {}).faixa_16_mais || {};
+  // ── Seção 3: 1-14 vs 15+ ───────────────────────────────────────
+  const f1 = (data.conversao_faixa || {}).faixa_1_14   || {};
+  const f2 = (data.conversao_faixa || {}).faixa_15_mais || {};
   document.getElementById('f1Env').textContent  = fmtInt(f1.enviados);
   document.getElementById('f1Pag').textContent  = fmtInt(f1.pagos);
   document.getElementById('f1Conv').textContent = fmtPct(f1.conversao);
@@ -513,9 +518,9 @@
   const vencedor = document.getElementById('vencedorBox');
   if (f1.enviados && f2.enviados) {
     if (f1.conversao > f2.conversao) {
-      vencedor.innerHTML = `<i class="fas fa-trophy mr-1"></i> <b>1 a 15 dias</b> tem melhor retorno: ${fmtPct(f1.conversao)} vs ${fmtPct(f2.conversao)} (+${(f1.conversao - f2.conversao).toFixed(1)}pp).`;
+      vencedor.innerHTML = `<i class="fas fa-trophy mr-1"></i> <b>1 a 14 dias</b> tem melhor retorno: ${fmtPct(f1.conversao)} vs ${fmtPct(f2.conversao)} (+${(f1.conversao - f2.conversao).toFixed(1)}pp).`;
     } else if (f2.conversao > f1.conversao) {
-      vencedor.innerHTML = `<i class="fas fa-trophy mr-1"></i> <b>16+ dias</b> tem melhor retorno: ${fmtPct(f2.conversao)} vs ${fmtPct(f1.conversao)} (+${(f2.conversao - f1.conversao).toFixed(1)}pp).`;
+      vencedor.innerHTML = `<i class="fas fa-trophy mr-1"></i> <b>15+ dias</b> tem melhor retorno: ${fmtPct(f2.conversao)} vs ${fmtPct(f1.conversao)} (+${(f2.conversao - f1.conversao).toFixed(1)}pp).`;
     } else {
       vencedor.innerHTML = 'Empate de conversão entre as faixas.';
     }
