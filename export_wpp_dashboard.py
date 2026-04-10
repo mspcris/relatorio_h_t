@@ -431,11 +431,13 @@ def build_dashboard(df_envios: pd.DataFrame, pagamentos_por_posto: dict) -> dict
     conv_por_posto.sort(key=lambda x: x["conversao"], reverse=True)
 
     # Conversão por campanha
+    # IMPORTANTE: idreceita é sequencial POR POSTO, então postos diferentes
+    # podem ter o mesmo número. Precisamos filtrar por (posto, idreceita),
+    # senão uma campanha do posto N puxa faturas do A com mesmo id numérico.
     conv_por_campanha = []
     for (cid, cnome), grp in df_com_rec.groupby(["campanha_id", "campanha_nome"]):
-        # precisamos usar o agg por receita; filtra pelo conjunto de idreceitas desta campanha
-        ids_camp = set(grp["idreceita"].unique())
-        sub = agg[agg["idreceita"].isin(ids_camp)]
+        chaves = grp[["posto", "idreceita"]].drop_duplicates()
+        sub = agg.merge(chaves, on=["posto", "idreceita"], how="inner")
         if sub.empty:
             continue
         m = metricas_bloco(sub)
