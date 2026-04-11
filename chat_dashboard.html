@@ -292,7 +292,12 @@
           <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
              title="Mostra <b>quanto tempo cada etapa demora</b> numa conversa típica: cliente fala → Camila responde → Camila manda pra fila → humano atende → fecha. Só conta conversas que passaram por humano (o funil completo).<br><br><b>Mediana (p50)</b>: o valor do meio — metade demora menos, metade mais.<br><b>p95</b>: só os 5% mais lentos demoram mais que isso.<br><b>Média</b>: soma tudo e divide (mais sensível a outliers)."></i>
         </h2>
-        <p class="section-subtitle">Mediana e p95 — distribuição mais robusta que média (média sofre com outliers).</p>
+        <p class="section-subtitle">
+          <b>med</b> = média ·
+          <b>p50</b> = mediana (metade dos tickets demora menos) ·
+          <b>p95</b> = 95º percentil (os 5% mais lentos demoram mais que isso) ·
+          <b>n</b> = tamanho da amostra.
+        </p>
         <div class="card mb-3"><div class="card-body" id="funilBox"></div></div>
 
         <!-- ============================================================ -->
@@ -1087,11 +1092,13 @@
   // ============================================================
   const funil = data.funil_segundos || {};
   const funilOrdem = [
-    ['Camila responde 1ª msg do cliente',         'camila_responde'],
-    ['Camila classifica e transfere',             'camila_classifica'],
-    ['Espera até humano pegar',                   'espera_humano'],
-    ['Humano resolve (até fechar)',               'humano_resolve'],
-    ['Total (cliente abriu → fechado)',           'total'],
+    ['Camila responde 1ª msg do cliente',                         'camila_responde'],
+    ['Camila classifica e transfere',                             'camila_classifica'],
+    ['Espera até humano pegar',                                   'espera_humano'],
+    ['Humano resolve (até fechar)',                               'humano_resolve'],
+    ['Total (cliente abriu → fechado)',                           'total'],
+    ['Até humano fechar o ticket (de verdade)',                   'total_humano_fechado'],
+    ['Até Camila encerrar por falta de comunicação (auto)',       'total_auto_fechado'],
   ];
   const funilBox = document.getElementById('funilBox');
   // Escala: maior p95 vira 100% da barra

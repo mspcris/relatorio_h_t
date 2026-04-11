@@ -518,12 +518,26 @@ def build_payload(tickets, msgs, transf, evals, humans, last, last_human):
     nota_media = float(pd.to_numeric(df["eval_score"], errors="coerce").dropna().mean()) if avaliados else None
 
     inbound_human = df[df["bucket"] == "inbound_atendido_humano"]
+
+    # Subconjuntos por tipo de fechamento — só inbound que passou por humano
+    # (se a Camila fecha um outbound sem reply, não faz sentido medir "tempo até
+    # humano fechar"). Isso responde diretamente:
+    #   • Quanto tempo, em média, a Camila leva para matar o ticket por ociosidade?
+    #   • Quanto tempo o humano leva para fechar quando fecha de verdade?
+    inbound_auto_closed = inbound_human[
+        inbound_human["fechamento"].isin(["auto_timeout", "auto_inatividade"])
+    ]
+    inbound_humano_closed = inbound_human[inbound_human["fechamento"] == "humano"]
+
     funil = {
         "camila_responde":   stats(df["delta_camila_responde"]),
         "camila_classifica": stats(df["delta_camila_classifica"]),
         "espera_humano":     stats(inbound_human["delta_espera_humano"]),
         "humano_resolve":    stats(inbound_human["delta_humano_resolve"]),
         "total":             stats(inbound_human["delta_total"]),
+        # Novos: tempo total separado por quem fechou o ticket.
+        "total_auto_fechado":    stats(inbound_auto_closed["delta_total"]),
+        "total_humano_fechado":  stats(inbound_humano_closed["delta_total"]),
     }
 
     # ============================================================================
