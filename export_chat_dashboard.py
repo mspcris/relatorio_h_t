@@ -233,6 +233,24 @@ FROM (
 ) x WHERE x.rn = 1
 """
 
+# Última mensagem de HUMANO REAL (não Camila, não sector IA). Usada para saber
+# se o dono do ticket foi o mesmo que encerrou, ou se passou pra frente.
+SQL_LAST_HUMAN = """
+SELECT x.ticketId, x.userId, x.name, x.createdAt
+FROM (
+  SELECT m.ticketId, u.id AS userId, u.name, m.createdAt,
+         ROW_NUMBER() OVER (PARTITION BY m.ticketId ORDER BY m.createdAt DESC) AS rn
+  FROM Message m
+  JOIN Ticket t        ON t.id = m.ticketId
+  JOIN UserProfile up  ON up.id = m.userProfileId
+  JOIN User u          ON u.id = up.userId
+  WHERE t.deletedAt IS NULL AND m.deletedAt IS NULL
+    AND t.createdAt >= %s
+    AND u.id != %s
+    AND (u.sector IS NULL OR u.sector != 'IA')
+) x WHERE x.rn = 1
+"""
+
 
 # ─── ETL ────────────────────────────────────────────────────────────────────
 def main():
@@ -277,11 +295,15 @@ def main():
         print("  → last msg...")
         last = pd.DataFrame(fetch(c, SQL_LAST_MSG, (corte,)))
         print(f"    {len(last):,}")
+
+        print("  → last human msg...")
+        last_human = pd.DataFrame(fetch(c, SQL_LAST_HUMAN, (corte, CAMILA_USER_ID)))
+        print(f"    {len(last_human):,}")
     finally:
         c.close()
 
     print("  → build payload...")
-    payload = build_payload(tickets, msgs, transf, evals, humans, last)
+    payload = build_payload(tickets, msgs, transf, evals, humans, last, last_human)
     # JSON compacto: tickets_index sozinho pesa ~10 MB com indent=2
     atomic_write_json(OUT_PATH, payload, compact=True)
     print(f"  ✔ {OUT_PATH}")
@@ -289,7 +311,7 @@ def main():
 
 
 # ─── Pandas pipeline ────────────────────────────────────────────────────────
-def build_payload(tickets, msgs, transf, evals, humans, last):
+def build_payload(tickets, msgs, transf, evals, humans, last, last_human):
     # ── Merge base ticket + msg agg ──
     df = tickets.merge(msgs, left_on="id", right_on="ticketId", how="left")
     df = df.drop(columns=["ticketId"], errors="ignore")
@@ -356,6 +378,20 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
         df["last_customerId"] = None
         df["last_sector"] = None
         df["last_userId"] = None
+
+    # ── Último humano real a falar (p/ saber se dono == quem fechou) ──
+    if not last_human.empty:
+        last_human = last_human.drop_duplicates("ticketId")
+        df = df.merge(
+            last_human[["ticketId", "userId", "name"]].rename(
+                columns={"userId": "last_human_userId", "name": "last_human_name"}
+            ),
+            left_on="id", right_on="ticketId", how="left"
+        )
+        df = df.drop(columns=["ticketId"], errors="ignore")
+    else:
+        df["last_human_userId"] = None
+        df["last_human_name"] = None
 
     # ── Avaliações (última por ticket) ──
     if not evals.empty:
@@ -578,20 +614,72 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
     por_fila.sort(key=lambda x: x["tickets"], reverse=True)
 
     # ── Por usuário humano ──
+    # Cada linha mostra *o que o atendente realmente entregou* — não basta ver
+    # quantos tickets ele pegou, é preciso saber:
+    #   • quantos ele FECHOU ativamente (última msg foi dele mesmo)
+    #   • quantos a Camila fechou por ele (auto_timeout / auto_inatividade)
+    #   • quantos o cliente abandonou (não necessariamente culpa dele)
+    #   • quantos ele passou pra frente (outro humano entrou e fechou)
+    #   • tempo de resolução SEPARADO por tipo de fechamento
+    def med(series):
+        s = pd.to_numeric(series, errors="coerce").dropna()
+        return round(float(s.median()), 1) if not s.empty else None
+
     por_user = []
     for uid, g in df[df["human_userId"].notna()].groupby("human_userId"):
+        total = int(len(g))
         gh = g[g["bucket"] == "inbound_atendido_humano"]
         eval_scores = pd.to_numeric(g["eval_score"], errors="coerce").dropna()
+
+        # Splits por tipo de fechamento (todos considerando tickets em que esse
+        # usuário foi o *dono* do ticket = primeiro humano a mandar msg)
+        fech_humano_mask = (g["fechamento"] == "humano")
+        same_closer      = fech_humano_mask & (g["last_human_userId"] == uid)
+        other_closer     = fech_humano_mask & g["last_human_userId"].notna() & (g["last_human_userId"] != uid)
+        fechou_sozinho      = g[same_closer]     # entregou sozinho
+        passou_pra_outro    = g[other_closer]    # pegou e empurrou pra colega
+        camila_encerrou     = g[g["fechamento"].isin(["auto_timeout", "auto_inatividade"])]
+        cli_abandonou       = g[g["fechamento"] == "cliente_sem_retorno"]
+        bot_residual        = g[g["fechamento"] == "bot_sem_conclusao"]
+        abertos_df          = g[g["fechamento"] == "aberto"]
+
+        n_fechou   = int(len(fechou_sozinho))
+        n_passou   = int(len(passou_pra_outro))
+        n_camila   = int(len(camila_encerrou))
+        n_cliaban  = int(len(cli_abandonou))
+        n_bot      = int(len(bot_residual))
+        n_abertos  = int(len(abertos_df))
+
+        efetividade = round(n_fechou / total * 100, 1) if total else None
+
         por_user.append({
             "userId": uid,
-            "nome": g["human_name"].iloc[0],
+            "nome":   g["human_name"].iloc[0],
             "sector": g["human_sector"].iloc[0],
-            "tickets": int(len(g)),
+            "tickets": total,
+            # métricas de produtividade real
+            "fechou_sozinho":    n_fechou,
+            "efetividade_pct":   efetividade,
+            "passou_pra_outro":  n_passou,
+            "camila_encerrou":   n_camila,
+            "cli_abandonou":     n_cliaban,
+            "bot_residual":      n_bot,
+            "abertos":           n_abertos,
+            # tempos separados
             "primeira_resposta_med": round(float(gh["delta_espera_humano"].dropna().mean()), 1) if gh["delta_espera_humano"].notna().any() else None,
-            "resolucao_med":         round(float(gh["delta_total"].dropna().mean()), 1) if gh["delta_total"].notna().any() else None,
-            "nota_media":            round(float(eval_scores.mean()), 2) if not eval_scores.empty else None,
-            "n_avaliacoes":          int(len(eval_scores)),
-            "ids":                   ids_of(g),
+            "tempo_resolucao_humano_med": med(fechou_sozinho["delta_total"]),
+            "tempo_ate_camila_fechar_med": med(camila_encerrou["delta_total"]),
+            # avaliação
+            "nota_media":    round(float(eval_scores.mean()), 2) if not eval_scores.empty else None,
+            "n_avaliacoes":  int(len(eval_scores)),
+            # ids para drill-down por categoria
+            "ids":                 ids_of(g),
+            "ids_fechou_sozinho":  ids_of(fechou_sozinho),
+            "ids_passou_pra_outro": ids_of(passou_pra_outro),
+            "ids_camila_encerrou": ids_of(camila_encerrou),
+            "ids_cli_abandonou":   ids_of(cli_abandonou),
+            "ids_bot_residual":    ids_of(bot_residual),
+            "ids_abertos":         ids_of(abertos_df),
         })
     por_user.sort(key=lambda x: x["tickets"], reverse=True)
 

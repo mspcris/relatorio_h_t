@@ -116,6 +116,27 @@
     .tooltip.bs-tooltip-auto[x-placement^="top"] .arrow::before { border-top-color: #111827; }
     .tooltip.bs-tooltip-bottom .arrow::before,
     .tooltip.bs-tooltip-auto[x-placement^="bottom"] .arrow::before { border-bottom-color: #111827; }
+
+    /* Cabeçalho de tabela ordenável */
+    th.sortable { cursor: pointer; user-select: none; position: relative; }
+    th.sortable:hover { background: #e5e7eb; }
+    th.sortable::after {
+      content: '▼'; margin-left: 5px; font-size: .65em; opacity: .25;
+      display: inline-block; vertical-align: middle; transition: opacity .1s;
+    }
+    th.sortable.sort-desc::after { opacity: 1; color:#2563eb; }
+    th.sortable.sort-asc::after  { content: '▲'; opacity: 1; color:#2563eb; }
+    th.sortable[data-sort-order]::before {
+      content: attr(data-sort-order);
+      display: inline-block;
+      background: #2563eb; color: #fff;
+      border-radius: 10px;
+      font-size: .65em;
+      padding: 1px 6px;
+      margin-right: 5px;
+      font-weight: 700;
+      vertical-align: middle;
+    }
   </style>
 </head>
 
@@ -327,52 +348,53 @@
           <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
              title="Cada <b>fila</b> é uma 'porta' do atendimento. Ex: 'Financeiro', 'Suporte ao APP', 'Adesão'. A tabela mostra como cada porta está se saindo: volume, tempo de espera, fechamento e avaliação."></i>
         </h2>
+        <p class="section-subtitle">Clique numa coluna para ordenar. <b>Shift+clique</b> para combinar várias (ex: setor depois nota).</p>
         <div class="card mb-3">
           <div class="card-body p-0">
-            <table class="table table-sm table-hover mb-0">
+            <table class="table table-sm table-hover mb-0" id="tableFila">
               <thead class="thead-light">
                 <tr>
-                  <th>Fila
+                  <th class="sortable" data-sort-key="fila" data-sort-type="string">Fila
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Nome da fila de atendimento. Ex: 'Financeiro', 'Suporte ao APP'."></i>
                   </th>
-                  <th class="text-right">Tickets
+                  <th class="text-right sortable" data-sort-key="tickets">Tickets
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Quantas conversas passaram por essa fila nos últimos 90 dias."></i>
                   </th>
-                  <th class="text-right">Atend. humano
+                  <th class="text-right sortable" data-sort-key="atendidos_humano">Atend. humano
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Dessas conversas, quantas um humano realmente chegou a atender (resto foi robô ou ninguém pegou)."></i>
                   </th>
-                  <th class="text-right">Espera humano (med)
+                  <th class="text-right sortable" data-sort-key="espera_humano_med">Espera humano (med)
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Tempo médio (mediana) que o cliente ficou esperando na fila até alguém da equipe começar a responder. Menor é melhor."></i>
                   </th>
-                  <th class="text-right">Resolução (med)
+                  <th class="text-right sortable" data-sort-key="resolucao_med">Resolução (med)
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Tempo médio total da conversa inteira: do primeiro 'oi' do cliente até ser fechada."></i>
                   </th>
-                  <th class="text-right">Fech. humano
+                  <th class="text-right sortable" data-sort-key="fechado_humano">Fech. humano
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Quantas conversas foram encerradas por um humano (última msg da equipe). Significa atendimento completo."></i>
                   </th>
-                  <th class="text-right">Fech. auto
+                  <th class="text-right sortable" data-sort-key="fechado_auto">Fech. auto
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Encerradas automaticamente pelo bot: timeout de 1h/3h em aberto, ou script de inatividade (madrugada)."></i>
                   </th>
-                  <th class="text-right">Bot s/ concl.
+                  <th class="text-right sortable" data-sort-key="fechado_bot_outro">Bot s/ concl.
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Bot falou por último mas sem bater padrão de encerramento — saudação inicial que o cliente ignorou, negativa de áudio, aviso de transferência, etc."></i>
                   </th>
-                  <th class="text-right">Cli. abandonou
+                  <th class="text-right sortable" data-sort-key="fechado_cli_abandono">Cli. abandonou
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Última mensagem foi do cliente e nunca foi respondida."></i>
                   </th>
-                  <th class="text-right">Abertos
+                  <th class="text-right sortable" data-sort-key="abertos">Abertos
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Quantas ainda estão em aberto, aguardando alguma ação."></i>
                   </th>
-                  <th class="text-right">Nota
+                  <th class="text-right sortable" data-sort-key="nota_media">Nota
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Nota média dos clientes nessa fila (de 1 a 5). Entre parênteses, quantas avaliações foram feitas."></i>
                   </th>
@@ -391,39 +413,55 @@
           <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
              title="Ranking dos atendentes humanos: quem pega mais conversas, quem responde mais rápido e quem é melhor avaliado. O 'dono' de cada conversa é definido como o primeiro humano que mandou mensagem."></i>
         </h2>
-        <p class="section-subtitle">Atendente "dono" do ticket = primeiro humano (não-IA) que enviou mensagem.</p>
+        <p class="section-subtitle">Atendente "dono" do ticket = primeiro humano (não-IA) que enviou mensagem. Clique numa coluna para ordenar. <b>Shift+clique</b> para combinar várias (ex: setor depois nota).</p>
         <div class="card mb-3">
           <div class="card-body p-0">
-            <table class="table table-sm table-hover mb-0">
+            <table class="table table-sm table-hover mb-0" id="tableUser">
               <thead class="thead-light">
                 <tr>
-                  <th>Atendente
+                  <th class="sortable" data-sort-key="nome" data-sort-type="string">Atendente
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Nome da pessoa da equipe que atendeu a conversa."></i>
                   </th>
-                  <th>Setor
+                  <th class="sortable" data-sort-key="sector" data-sort-type="string">Setor
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Departamento dessa pessoa (Financeiro, Suporte, etc.)."></i>
                   </th>
-                  <th class="text-right">Tickets
+                  <th class="text-right sortable" data-sort-key="tickets">Tickets
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
-                       title="Quantas conversas essa pessoa pegou nos últimos 90 dias."></i>
+                       title="Quantas conversas essa pessoa pegou nos últimos 90 dias (foi o primeiro humano a mandar msg)."></i>
                   </th>
-                  <th class="text-right">1ª resposta (med)
-                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
-                       title="Tempo médio entre a conversa cair na fila e essa pessoa mandar a primeira mensagem. Menor é melhor (cliente esperando menos)."></i>
+                  <th class="text-right sortable" data-sort-key="fechou_sozinho">Fechou (ele mesmo)
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                       title="<b>Entregou de verdade.</b> Tickets em que essa pessoa foi quem mandou a <b>última mensagem humana</b> antes do fechamento — ou seja, pegou e finalizou sozinha. É a métrica mais honesta de trabalho concluído."></i>
                   </th>
-                  <th class="text-right">Resolução (med)
-                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
-                       title="Tempo médio total das conversas atendidas por essa pessoa — do começo até fechar."></i>
+                  <th class="text-right sortable" data-sort-key="efetividade_pct">% Efet
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                       title="<b>Fechou / Tickets × 100.</b> % dos tickets que esse atendente pegou e realmente finalizou. Quanto mais baixo, mais a Camila/cliente abandonou e ele saiu no meio."></i>
                   </th>
-                  <th class="text-right">Nota
-                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
-                       title="Nota média dada pelos clientes que essa pessoa atendeu (de 1 a 5)."></i>
+                  <th class="text-right sortable" data-sort-key="passou_pra_outro">Passou p/ outro
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                       title="Pegou o ticket mas outro humano assumiu depois e foi quem fechou. Pode ser transferência direta, troca de turno, colega interveio, etc."></i>
                   </th>
-                  <th class="text-right">N aval
+                  <th class="text-right sortable" data-sort-key="camila_encerrou">Camila encerrou
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                       title="<b>Camila fechou no lugar dele.</b> Tickets que o atendente pegou mas ficaram largados, e depois a Camila bateu o timeout (1h/3h) ou rodou o script de inatividade (madrugada) e encerrou. Se o mesmo atendente tem muitos tickets aqui, ele está deixando a IA trabalhar por ele."></i>
+                  </th>
+                  <th class="text-right sortable" data-sort-key="cli_abandonou">Cli abandonou
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
-                       title="Quantas avaliações essa pessoa recebeu. Quanto maior a amostra, mais confiável é a nota."></i>
+                       title="Cliente mandou última msg e nunca foi respondido. Cliente sumiu antes de qualquer reação do humano ou foi ignorado."></i>
+                  </th>
+                  <th class="text-right sortable" data-sort-key="tempo_resolucao_humano_med">Resol. humano (med)
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                       title="Tempo <b>mediano</b> do começo do ticket até o fechamento, <b>apenas</b> dos tickets que o atendente finalizou sozinho. Tempo de trabalho real."></i>
+                  </th>
+                  <th class="text-right sortable" data-sort-key="tempo_ate_camila_fechar_med">Até auto (med)
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                       title="Tempo mediano entre o começo do ticket e o momento em que a Camila o encerrou automaticamente. Relevante apenas dos tickets que ele deixou a Camila fechar."></i>
+                  </th>
+                  <th class="text-right sortable" data-sort-key="nota_media">Nota
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Nota média (1–5). Entre parênteses, número de avaliações."></i>
                   </th>
                 </tr>
               </thead>
@@ -652,6 +690,91 @@
     return (s / 3600).toFixed(1) + 'h';
   }
   function pctOf(n, total) { return total ? (n / total * 100) : null; }
+
+  /**
+   * Torna uma tabela clicável nos cabeçalhos para ordenar.
+   *  - Clique simples: ordena só por essa coluna (toggle asc/desc se já for a ativa).
+   *  - Shift+clique: adiciona/alterna uma coluna adicional como critério secundário.
+   *    Um badge numérico mostra a prioridade (1 = mais importante, 2 = desempate, ...).
+   * tableId: id do <table>. rows: array de dados. render(sortedRows): callback.
+   * defaultKey/defaultDir: ordenação inicial (opcional).
+   */
+  function makeSortable(tableId, rows, render, defaultKey, defaultDir) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const thead = table.querySelector('thead');
+    let sortKeys = defaultKey ? [{ key: defaultKey, dir: defaultDir || 'desc' }] : [];
+
+    function valueOf(row, key) {
+      let v = row[key];
+      if (v == null) return null;
+      if (typeof v === 'number' && isNaN(v)) return null;
+      return v;
+    }
+
+    function apply() {
+      let sorted = rows;
+      if (sortKeys.length) {
+        const keyInfo = sortKeys.map(sk => {
+          const th = thead.querySelector(`th[data-sort-key="${sk.key}"]`);
+          return Object.assign({}, sk, { isString: !!(th && th.dataset.sortType === 'string') });
+        });
+        sorted = [...rows].sort((a, b) => {
+          for (const { key, dir, isString } of keyInfo) {
+            const av = valueOf(a, key), bv = valueOf(b, key);
+            if (av == null && bv == null) continue;
+            if (av == null) return 1;   // null sempre no fim
+            if (bv == null) return -1;
+            let cmp;
+            if (isString) {
+              cmp = String(av).localeCompare(String(bv), 'pt-BR', { sensitivity: 'base' });
+            } else {
+              cmp = av - bv;
+            }
+            if (cmp !== 0) return dir === 'asc' ? cmp : -cmp;
+          }
+          return 0;
+        });
+      }
+      render(sorted);
+      thead.querySelectorAll('th.sortable').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+        th.removeAttribute('data-sort-order');
+        const idx = sortKeys.findIndex(sk => sk.key === th.dataset.sortKey);
+        if (idx >= 0) {
+          th.classList.add('sort-' + sortKeys[idx].dir);
+          if (sortKeys.length > 1) th.setAttribute('data-sort-order', idx + 1);
+        }
+      });
+    }
+
+    thead.querySelectorAll('th.sortable').forEach(th => {
+      th.addEventListener('click', (e) => {
+        if (e.target.closest('.hint-ico')) return; // clique no tooltip não ordena
+        const key = th.dataset.sortKey;
+        const defDir = th.dataset.sortType === 'string' ? 'asc' : 'desc';
+        const idx = sortKeys.findIndex(sk => sk.key === key);
+        if (e.shiftKey) {
+          // Multi-sort: adiciona/alterna
+          if (idx >= 0) {
+            sortKeys[idx].dir = sortKeys[idx].dir === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortKeys.push({ key, dir: defDir });
+          }
+        } else {
+          // Sort simples: troca tudo
+          if (idx >= 0 && sortKeys.length === 1) {
+            sortKeys[0].dir = sortKeys[0].dir === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortKeys = [{ key, dir: defDir }];
+          }
+        }
+        apply();
+      });
+    });
+
+    apply();
+  }
 
   // ── Carrega JSON ──
   let data, lastErr;
@@ -1141,56 +1264,97 @@
   })();
 
   // ============================================================
-  // Tabela por fila
+  // Tabela por fila (com ordenação por coluna + multi-sort via shift)
   // ============================================================
   const tbF = document.getElementById('tblFila');
   const filaRows = data.por_fila || [];
-  filaRows.forEach((r, i) => {
-    const nota = r.nota_media != null ? `${Number(r.nota_media).toFixed(2)} (${fmtInt(r.n_avaliacoes)})` : '—';
-    tbF.insertAdjacentHTML('beforeend',
-      `<tr class="drill" data-idx="${i}" title="Clique pra ver as conversas dessa fila">
-         <td><i class="fas fa-search-plus text-muted mr-1" style="font-size:.7rem;"></i>${escapeHtml(r.fila)}</td>
-         <td class="text-right">${fmtInt(r.tickets)}</td>
-         <td class="text-right">${fmtInt(r.atendidos_humano)}</td>
-         <td class="text-right">${fmtSec(r.espera_humano_med)}</td>
-         <td class="text-right">${fmtSec(r.resolucao_med)}</td>
-         <td class="text-right">${fmtInt(r.fechado_humano)}</td>
-         <td class="text-right">${fmtInt(r.fechado_auto)}</td>
-         <td class="text-right">${fmtInt(r.fechado_bot_outro)}</td>
-         <td class="text-right">${fmtInt(r.fechado_cli_abandono)}</td>
-         <td class="text-right">${fmtInt(r.abertos)}</td>
-         <td class="text-right">${nota}</td>
-       </tr>`);
-  });
+  let filaDisplayed = filaRows;
+  function renderFila(rows) {
+    filaDisplayed = rows;
+    tbF.innerHTML = '';
+    rows.forEach((r, i) => {
+      const nota = r.nota_media != null ? `${Number(r.nota_media).toFixed(2)} (${fmtInt(r.n_avaliacoes)})` : '—';
+      tbF.insertAdjacentHTML('beforeend',
+        `<tr class="drill" data-idx="${i}" title="Clique pra ver as conversas dessa fila">
+           <td><i class="fas fa-search-plus text-muted mr-1" style="font-size:.7rem;"></i>${escapeHtml(r.fila)}</td>
+           <td class="text-right">${fmtInt(r.tickets)}</td>
+           <td class="text-right">${fmtInt(r.atendidos_humano)}</td>
+           <td class="text-right">${fmtSec(r.espera_humano_med)}</td>
+           <td class="text-right">${fmtSec(r.resolucao_med)}</td>
+           <td class="text-right">${fmtInt(r.fechado_humano)}</td>
+           <td class="text-right">${fmtInt(r.fechado_auto)}</td>
+           <td class="text-right">${fmtInt(r.fechado_bot_outro)}</td>
+           <td class="text-right">${fmtInt(r.fechado_cli_abandono)}</td>
+           <td class="text-right">${fmtInt(r.abertos)}</td>
+           <td class="text-right">${nota}</td>
+         </tr>`);
+    });
+  }
   tbF.addEventListener('click', (e) => {
     const tr = e.target.closest('tr.drill'); if (!tr) return;
-    const r = filaRows[+tr.dataset.idx];
+    const r = filaDisplayed[+tr.dataset.idx];
     openDrill(r.ids || [], 'Fila — ' + r.fila);
   });
+  makeSortable('tableFila', filaRows, renderFila, 'tickets', 'desc');
 
   // ============================================================
-  // Tabela por usuário
+  // Tabela por usuário (ordenação + drill-down por categoria de fechamento)
   // ============================================================
   const tbU = document.getElementById('tblUser');
   const userRows = data.por_usuario || [];
-  userRows.forEach((r, i) => {
-    const nota = r.nota_media != null ? `${Number(r.nota_media).toFixed(2)} (${fmtInt(r.n_avaliacoes)})` : '—';
-    tbU.insertAdjacentHTML('beforeend',
-      `<tr class="drill" data-idx="${i}" title="Clique pra ver as conversas desse atendente">
-         <td><i class="fas fa-search-plus text-muted mr-1" style="font-size:.7rem;"></i>${escapeHtml(r.nome || '—')}</td>
-         <td>${escapeHtml(r.sector || '—')}</td>
-         <td class="text-right">${fmtInt(r.tickets)}</td>
-         <td class="text-right">${fmtSec(r.primeira_resposta_med)}</td>
-         <td class="text-right">${fmtSec(r.resolucao_med)}</td>
-         <td class="text-right">${nota}</td>
-         <td class="text-right">${fmtInt(r.n_avaliacoes)}</td>
-       </tr>`);
-  });
+  let userDisplayed = userRows;
+  function renderUser(rows) {
+    userDisplayed = rows;
+    tbU.innerHTML = '';
+    rows.forEach((r, i) => {
+      const nota = r.nota_media != null ? `${Number(r.nota_media).toFixed(2)} (${fmtInt(r.n_avaliacoes)})` : '—';
+      const efet = r.efetividade_pct != null ? Number(r.efetividade_pct).toFixed(1) + '%' : '—';
+      // Cor do % efetividade: verde ≥70, amarelo 40-70, vermelho <40
+      let efetCls = 'text-muted';
+      if (r.efetividade_pct != null) {
+        if (r.efetividade_pct >= 70) efetCls = 'text-success font-weight-bold';
+        else if (r.efetividade_pct >= 40) efetCls = 'text-warning';
+        else efetCls = 'text-danger font-weight-bold';
+      }
+      tbU.insertAdjacentHTML('beforeend',
+        `<tr data-idx="${i}">
+           <td class="drill-user" style="cursor:pointer;" title="Ver todos os tickets desse atendente">
+             <i class="fas fa-search-plus text-muted mr-1" style="font-size:.7rem;"></i>${escapeHtml(r.nome || '—')}
+           </td>
+           <td>${escapeHtml(r.sector || '—')}</td>
+           <td class="text-right">${fmtInt(r.tickets)}</td>
+           <td class="text-right drill-cell" data-cat="fechou" style="cursor:pointer;" title="Ver tickets que esse atendente finalizou sozinho">${fmtInt(r.fechou_sozinho)}</td>
+           <td class="text-right ${efetCls}">${efet}</td>
+           <td class="text-right drill-cell" data-cat="passou" style="cursor:pointer;" title="Ver tickets que ele passou p/ outro humano">${fmtInt(r.passou_pra_outro)}</td>
+           <td class="text-right drill-cell" data-cat="camila" style="cursor:pointer;" title="Ver tickets que a Camila encerrou automaticamente">${fmtInt(r.camila_encerrou)}</td>
+           <td class="text-right drill-cell" data-cat="cli" style="cursor:pointer;" title="Ver tickets que o cliente abandonou">${fmtInt(r.cli_abandonou)}</td>
+           <td class="text-right">${fmtSec(r.tempo_resolucao_humano_med)}</td>
+           <td class="text-right text-muted">${fmtSec(r.tempo_ate_camila_fechar_med)}</td>
+           <td class="text-right">${nota}</td>
+         </tr>`);
+    });
+  }
   tbU.addEventListener('click', (e) => {
-    const tr = e.target.closest('tr.drill'); if (!tr) return;
-    const r = userRows[+tr.dataset.idx];
-    openDrill(r.ids || [], 'Atendente — ' + (r.nome || '—'));
+    const tr = e.target.closest('tr[data-idx]'); if (!tr) return;
+    const r = userDisplayed[+tr.dataset.idx];
+    const cell = e.target.closest('.drill-cell');
+    if (cell) {
+      const cat = cell.dataset.cat;
+      const map = {
+        fechou: { ids: r.ids_fechou_sozinho, label: 'Fechou sozinho' },
+        passou: { ids: r.ids_passou_pra_outro, label: 'Passou p/ outro' },
+        camila: { ids: r.ids_camila_encerrou, label: 'Camila encerrou' },
+        cli:    { ids: r.ids_cli_abandonou,   label: 'Cli abandonou' },
+      };
+      const m = map[cat];
+      if (m) openDrill(m.ids || [], `${r.nome || '—'} — ${m.label}`);
+      return;
+    }
+    if (e.target.closest('.drill-user')) {
+      openDrill(r.ids || [], 'Atendente — ' + (r.nome || '—'));
+    }
   });
+  makeSortable('tableUser', userRows, renderUser, 'tickets', 'desc');
 
   // ============================================================
   // Série 30d
