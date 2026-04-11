@@ -57,9 +57,13 @@
     .com-card .com-meta { color:#6b7280; font-size:.75rem; margin-top:4px; }
 
     /* Funil */
-    .funil-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #f1f5f9; }
+    .funil-row { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #f1f5f9; }
     .funil-row:last-child { border-bottom:0; }
-    .funil-row .funil-lbl { width:230px; font-weight:600; color:#374151; font-size:.88rem; }
+    .funil-row .funil-lbl { width:340px; font-weight:600; color:#374151; font-size:.88rem; }
+    .funil-row .funil-lbl .funil-desc {
+      display:block; font-weight:400; font-size:.74rem; color:#6b7280;
+      margin-top:2px; line-height:1.35;
+    }
     .funil-row .funil-bar { flex:1; height:18px; background:#f3f4f6; border-radius:9px; overflow:hidden; position:relative; }
     .funil-row .funil-bar > div { height:100%; background:linear-gradient(90deg,#0ea5e9,#0369a1); }
     .funil-row .funil-val { width:200px; text-align:right; font-size:.83rem; color:#374151; }
@@ -1188,25 +1192,49 @@
   // Funil
   // ============================================================
   const funil = data.funil_segundos || {};
+  // [label curto, chave, descrição plana embaixo do label]
   const funilOrdem = [
-    ['Camila responde 1ª msg do cliente',                         'camila_responde'],
-    ['Camila classifica e transfere',                             'camila_classifica'],
-    ['Espera até humano pegar',                                   'espera_humano'],
-    ['Humano resolve (até fechar)',                               'humano_resolve'],
-    ['Total (cliente abriu → fechado)',                           'total'],
-    ['Até humano fechar o ticket (de verdade)',                   'total_humano_fechado'],
-    ['Até Camila encerrar por falta de comunicação (auto)',       'total_auto_fechado'],
+    ['Camila responde 1ª msg do cliente',
+     'camila_responde',
+     'Quanto tempo o robô leva pra dar a 1ª resposta depois que o cliente manda a 1ª mensagem.'],
+
+    ['Camila classifica e transfere',
+     'camila_classifica',
+     'Quanto tempo a Camila leva pra entender o assunto e mandar pra fila certa (Financeiro, Suporte, etc.).'],
+
+    ['Espera até humano pegar',
+     'espera_humano',
+     'Quanto tempo o ticket fica esperando na fila depois que a Camila transferiu, até alguém da equipe começar a responder.'],
+
+    ['Humano resolve (até fechar)',
+     'humano_resolve',
+     'Da 1ª resposta humana até o ticket fechar. Inclui qualquer fechamento (humano de verdade ou Camila estourando o tempo no meio do atendimento).'],
+
+    ['Total (cliente abriu → fechado)',
+     'total',
+     'A jornada inteira: do <b>primeiro "oi" do cliente</b> até o <b>ticket fechar</b> — não importa quem fechou. É a soma de todas as etapas acima. Só conta tickets que passaram por humano.'],
+
+    ['Até humano fechar o ticket (de verdade)',
+     'total_humano_fechado',
+     'Mesmo "cliente abriu → fechado", mas <b>só</b> dos tickets que terminaram com <b>fechamento humano</b> (alguém da equipe deu a última palavra). É o tempo real de quem foi atendido até o fim.'],
+
+    ['Até Camila encerrar por falta de comunicação (auto)',
+     'total_auto_fechado',
+     'Mesmo "cliente abriu → fechado", mas <b>só</b> dos tickets que a <b>Camila fechou sozinha</b> (timeout 1h/3h ou varredura de madrugada). É quanto tempo o cliente ficou no vácuo antes do robô desistir.'],
   ];
   const funilBox = document.getElementById('funilBox');
   // Escala: maior p95 vira 100% da barra
   let maxP95 = 0;
   funilOrdem.forEach(([_, key]) => { const v = (funil[key] || {}).p95; if (v > maxP95) maxP95 = v; });
-  funilOrdem.forEach(([label, key]) => {
+  funilOrdem.forEach(([label, key, desc]) => {
     const v = funil[key] || {};
     const barW = v.p95 ? (v.p95 / maxP95 * 100) : 0;
     funilBox.insertAdjacentHTML('beforeend',
       `<div class="funil-row">
-         <div class="funil-lbl">${label}</div>
+         <div class="funil-lbl">
+           ${label}
+           <span class="funil-desc">${desc}</span>
+         </div>
          <div class="funil-bar"><div style="width:${barW.toFixed(1)}%"></div></div>
          <div class="funil-val">
            med${hi('med')} <b>${fmtSec(v.media)}</b> ·
