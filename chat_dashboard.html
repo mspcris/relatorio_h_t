@@ -88,8 +88,11 @@
     #drillModal .tbl-drill { font-size:.8rem; }
     #drillModal .tbl-drill td, #drillModal .tbl-drill th { padding:.35rem .5rem; vertical-align:middle; }
     #drillModal .tbl-drill thead th { background:#f3f4f6; position:sticky; top:0; z-index:1; }
-    #drillModal .modal-body-scroll { max-height:70vh; overflow-y:auto; }
-    #drillModal .drill-filter { width:260px; }
+    #drillModal .tbl-drill thead th.sortable { cursor:pointer; user-select:none; }
+    #drillModal .tbl-drill thead th.sortable:hover { background:#e5e7eb; }
+    #drillModal .tbl-drill thead th .sort-arrow { color:#2563eb; font-weight:700; }
+    #drillModal .modal-body-scroll { max-height:65vh; overflow-y:auto; }
+    #drillModal .drill-filter { width:300px; }
     #drillModal .badge-mini { font-size:.65rem; padding:2px 6px; }
     .b-fechado-humano { background:#dcfce7; color:#166534; }
     .b-fechado-camila { background:#dbeafe; color:#1e40af; }
@@ -567,25 +570,25 @@
       <div class="modal-body p-2">
         <div class="d-flex align-items-center mb-2 px-1" style="gap:10px; flex-wrap:wrap;">
           <input type="text" class="form-control form-control-sm drill-filter" id="drillFilter"
-                 placeholder="Filtrar por cliente, fila, comentário…">
+                 placeholder="Filtrar por cliente, fila, comentário, atendente, #ticket…">
           <small class="text-muted" id="drillInfo"></small>
           <div class="ml-auto">
-            <small class="text-muted">Clique em uma linha para abrir a conversa no chat</small>
+            <small class="text-muted"><i class="fas fa-info-circle"></i> Clique no cabeçalho pra ordenar · linha inteira abre a conversa</small>
           </div>
         </div>
         <div class="modal-body-scroll">
           <table class="table table-sm table-hover tbl-drill mb-0">
             <thead>
               <tr>
-                <th>#</th>
-                <th>Cliente</th>
-                <th>Data</th>
-                <th>Fila</th>
-                <th>Tipo</th>
-                <th>Fechamento</th>
-                <th>Atendente</th>
-                <th class="text-right">Nota</th>
-                <th>Comentário</th>
+                <th class="sortable" data-sort="n">#<span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="c">Cliente<span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="d">Data<span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="f">Fila<span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="b">Tipo<span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="z">Fechamento<span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="h">Atendente<span class="sort-arrow"></span></th>
+                <th class="sortable text-right" data-sort="s">Nota<span class="sort-arrow"></span></th>
+                <th class="sortable" data-sort="o">Comentário<span class="sort-arrow"></span></th>
                 <th class="text-center">Abrir</th>
               </tr>
             </thead>
@@ -593,9 +596,9 @@
           </table>
         </div>
       </div>
-      <div class="modal-footer py-2">
-        <small class="text-muted mr-auto">Mostrando até 500 conversas mais recentes do grupo.</small>
-        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Fechar</button>
+      <div class="modal-footer py-2 d-flex align-items-center" style="gap:4px; flex-wrap:wrap;">
+        <div id="drillPager" class="d-flex align-items-center" style="gap:4px; flex-wrap:wrap;"></div>
+        <button type="button" class="btn btn-secondary btn-sm ml-auto" data-dismiss="modal">Fechar</button>
       </div>
     </div>
   </div>
@@ -668,33 +671,113 @@
     aberto:             '<span class="badge badge-mini b-fechado-aberto">Aberto</span>',
   };
 
-  // Abre o modal listando até 500 tickets mais recentes (por data desc)
+  // ── Parse "DD/MM/YYYY HH:MM" pra ordenação cronológica ──
+  const parseBRDate = (s) => {
+    if (!s) return 0;
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/.exec(s);
+    if (!m) return 0;
+    return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)).getTime();
+  };
+
+  // Estado da drill atual (pra paginação + ordenação + filtro)
+  const drillState = {
+    allRows: [],     // linhas completas do grupo aberto
+    filtered: [],    // após filtro textual
+    pageSize: 50,
+    page: 1,
+    sortKey: 'd',    // default: data
+    sortDir: -1,     // desc
+  };
+
+  // Abre o modal listando TODAS as conversas do grupo, com paginação/ordenação/filtro
   function openDrill(ids, title) {
     if (!Array.isArray(ids) || ids.length === 0) {
       alert('Sem tickets para exibir neste grupo.');
       return;
     }
-    // Enriquece com tickets_index e ordena por data desc
+    // Enriquece com tickets_index
     const rows = ids
       .map(id => {
         const t = TICKETS_IDX[id];
         if (!t) return null;
         return { id, ...t };
       })
-      .filter(Boolean)
-      .sort((a, b) => (b.d || '').localeCompare(a.d || ''));
-    const total = rows.length;
-    const showing = rows.slice(0, 500);
+      .filter(Boolean);
+
+    drillState.allRows = rows;
+    drillState.filtered = rows.slice();
+    drillState.page = 1;
+    drillState.sortKey = 'd';
+    drillState.sortDir = -1;
 
     document.getElementById('drillTitle').textContent = title || 'Conversas';
-    document.getElementById('drillCount').textContent = '(' + fmtInt(total) + ' total)';
-    document.getElementById('drillInfo').textContent =
-      showing.length < total
-        ? 'Exibindo as ' + fmtInt(showing.length) + ' mais recentes de ' + fmtInt(total)
-        : 'Exibindo ' + fmtInt(showing.length) + ' conversa(s)';
+    document.getElementById('drillCount').textContent = '(' + fmtInt(rows.length) + ' total)';
 
+    // Reset do filtro
+    const filter = document.getElementById('drillFilter');
+    filter.value = '';
+    filter.oninput = () => {
+      const q = filter.value.trim().toLowerCase();
+      drillState.filtered = !q ? drillState.allRows.slice() :
+        drillState.allRows.filter(r => {
+          const hay = ((r.c||'') + ' ' + (r.f||'') + ' ' + (r.o||'') + ' ' + (r.h||'') + ' #' + (r.n||'') + ' ' + (r.b||'') + ' ' + (r.z||'') + ' ' + (r.d||'')).toLowerCase();
+          return hay.includes(q);
+        });
+      drillState.page = 1;
+      renderDrill();
+    };
+
+    renderDrill();
+    $('#drillModal').modal('show');
+  }
+  window._openDrill = openDrill;
+
+  // Click nos headers da tabela drill → alterna ordenação
+  document.querySelectorAll('#drillModal thead th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      if (drillState.sortKey === key) {
+        drillState.sortDir = -drillState.sortDir;
+      } else {
+        drillState.sortKey = key;
+        drillState.sortDir = (key === 'd' || key === 'n' || key === 's') ? -1 : 1;
+      }
+      drillState.page = 1;
+      renderDrill();
+    });
+  });
+
+  // ── Renderiza a página atual + controles de paginação ──
+  function renderDrill() {
+    const st = drillState;
+    // Ordena in-place segundo sortKey/sortDir
+    const cmp = (a, b) => {
+      const k = st.sortKey;
+      let va = a[k], vb = b[k];
+      if (k === 'd' || k === 'e') { va = parseBRDate(va); vb = parseBRDate(vb); }
+      else if (k === 'n' || k === 's') { va = va == null ? -Infinity : +va; vb = vb == null ? -Infinity : +vb; }
+      else { va = (va || '').toString().toLowerCase(); vb = (vb || '').toString().toLowerCase(); }
+      if (va < vb) return -1 * st.sortDir;
+      if (va > vb) return  1 * st.sortDir;
+      return 0;
+    };
+    st.filtered.sort(cmp);
+
+    const total = st.filtered.length;
+    const pages = Math.max(1, Math.ceil(total / st.pageSize));
+    if (st.page > pages) st.page = pages;
+    const start = (st.page - 1) * st.pageSize;
+    const end = Math.min(total, start + st.pageSize);
+    const slice = st.filtered.slice(start, end);
+
+    // Info / contagem
+    document.getElementById('drillInfo').textContent = total === 0
+      ? 'Nenhuma conversa corresponde ao filtro'
+      : `Mostrando ${fmtInt(start + 1)}–${fmtInt(end)} de ${fmtInt(total)}`;
+
+    // Corpo da tabela
     const body = document.getElementById('drillBody');
-    body.innerHTML = showing.map(r => {
+    body.innerHTML = slice.map(r => {
       const url = CHAT_URL(r.n);
       const stars = r.s != null ? ('★'.repeat(r.s) + '☆'.repeat(5 - r.s)) : '—';
       return `<tr class="drill-row">
@@ -717,29 +800,73 @@
       </tr>`;
     }).join('');
 
-    // Linha inteira clicável → abre a conversa
+    // Linha clicável
     body.querySelectorAll('tr.drill-row').forEach((tr, i) => {
       tr.style.cursor = 'pointer';
       tr.addEventListener('click', () => {
-        const r = showing[i];
+        const r = slice[i];
         window.open(CHAT_URL(r.n), '_blank', 'noopener');
       });
     });
 
-    // Filtro
-    const filter = document.getElementById('drillFilter');
-    filter.value = '';
-    filter.oninput = () => {
-      const q = filter.value.trim().toLowerCase();
-      body.querySelectorAll('tr.drill-row').forEach((tr, i) => {
-        if (!q) { tr.style.display = ''; return; }
-        const r = showing[i];
-        const hay = ((r.c||'') + ' ' + (r.f||'') + ' ' + (r.o||'') + ' ' + (r.h||'') + ' #' + (r.n||'')).toLowerCase();
-        tr.style.display = hay.includes(q) ? '' : 'none';
-      });
-    };
+    // Indicadores de ordenação no cabeçalho
+    document.querySelectorAll('#drillModal thead th[data-sort]').forEach(th => {
+      const arrow = th.querySelector('.sort-arrow');
+      if (arrow) {
+        arrow.textContent = (th.dataset.sort === st.sortKey)
+          ? (st.sortDir === 1 ? ' ↑' : ' ↓')
+          : '';
+      }
+    });
 
-    $('#drillModal').modal('show');
+    // Paginação
+    renderDrillPager(total, pages);
+  }
+
+  function renderDrillPager(total, pages) {
+    const st = drillState;
+    const pager = document.getElementById('drillPager');
+    if (!pager) return;
+    if (total === 0) { pager.innerHTML = ''; return; }
+
+    // Janela de páginas (1 … cur-2, cur-1, cur, cur+1, cur+2 … last)
+    const cur = st.page;
+    const set = new Set([1, pages, cur, cur - 1, cur + 1, cur - 2, cur + 2]);
+    const list = [...set].filter(p => p >= 1 && p <= pages).sort((a, b) => a - b);
+
+    let html = '';
+    html += `<button class="btn btn-sm btn-light" data-p="first" ${cur === 1 ? 'disabled' : ''} title="Primeira">«</button>`;
+    html += `<button class="btn btn-sm btn-light" data-p="prev"  ${cur === 1 ? 'disabled' : ''} title="Anterior">‹</button>`;
+    let prev = 0;
+    list.forEach(p => {
+      if (prev && p - prev > 1) html += '<span class="px-1 text-muted">…</span>';
+      html += `<button class="btn btn-sm ${p === cur ? 'btn-primary' : 'btn-light'}" data-p="${p}">${p}</button>`;
+      prev = p;
+    });
+    html += `<button class="btn btn-sm btn-light" data-p="next" ${cur === pages ? 'disabled' : ''} title="Próxima">›</button>`;
+    html += `<button class="btn btn-sm btn-light" data-p="last" ${cur === pages ? 'disabled' : ''} title="Última">»</button>`;
+    html += `<span class="ml-2 text-muted small">Página ${cur} de ${pages}</span>`;
+    html += `<select class="form-control form-control-sm ml-2" id="drillPageSize" style="width:auto; display:inline-block;">
+        ${[25, 50, 100, 200, 500].map(n => `<option value="${n}" ${n === st.pageSize ? 'selected' : ''}>${n}/pág</option>`).join('')}
+    </select>`;
+    pager.innerHTML = html;
+
+    pager.querySelectorAll('button[data-p]').forEach(b => {
+      b.addEventListener('click', () => {
+        const p = b.dataset.p;
+        if (p === 'first') st.page = 1;
+        else if (p === 'prev') st.page = Math.max(1, cur - 1);
+        else if (p === 'next') st.page = Math.min(pages, cur + 1);
+        else if (p === 'last') st.page = pages;
+        else st.page = +p;
+        renderDrill();
+      });
+    });
+    document.getElementById('drillPageSize').addEventListener('change', (e) => {
+      st.pageSize = +e.target.value;
+      st.page = 1;
+      renderDrill();
+    });
   }
   // Expõe globalmente pra handlers inline
   window._openDrill = openDrill;
