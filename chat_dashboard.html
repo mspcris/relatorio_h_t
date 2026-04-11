@@ -94,10 +94,12 @@
     #drillModal .modal-body-scroll { max-height:65vh; overflow-y:auto; }
     #drillModal .drill-filter { width:300px; }
     #drillModal .badge-mini { font-size:.65rem; padding:2px 6px; }
-    .b-fechado-humano { background:#dcfce7; color:#166534; }
-    .b-fechado-camila { background:#dbeafe; color:#1e40af; }
-    .b-fechado-inativ { background:#fef3c7; color:#92400e; }
-    .b-fechado-aberto { background:#f3f4f6; color:#374151; }
+    .b-fechado-humano  { background:#dcfce7; color:#166534; }
+    .b-fechado-bot     { background:#dbeafe; color:#1e40af; }
+    .b-fechado-inativ  { background:#fef3c7; color:#92400e; }
+    .b-fechado-timeout { background:#ffedd5; color:#9a3412; }
+    .b-fechado-cli     { background:#ede9fe; color:#5b21b6; }
+    .b-fechado-aberto  { background:#f3f4f6; color:#374151; }
 
     /* Hint / tooltip ícone */
     .hint-ico {
@@ -159,6 +161,7 @@
         <i class="fas fa-info-circle mr-1"></i>
         Janela: <b>últimos 90 dias</b> · base <code>camim_chat_production</code> · atualização a cada 120 min.
         Tempos derivados das mensagens — <code>firstContactAt</code> ignorado (vem com bug).
+        Fechamento classificado em 5 tipos (humano, auto-timeout 1h/3h, auto-inatividade, bot s/conclusão, cliente abandonou).
       </div>
 
       <div id="errBox" class="alert alert-danger py-2 px-3 mb-3"></div>
@@ -290,9 +293,28 @@
               <div class="card-header"><h3 class="card-title">
                 Tipo de fechamento
                 <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
-                   title="Mostra <b>como cada conversa foi encerrada</b>:<br><b>Humano fechou</b> — alguém da equipe encerrou (bom sinal).<br><b>Camila fechou (normal)</b> — o robô encerrou porque resolveu.<br><b>Camila fechou (inatividade)</b> — ninguém mexeu por muito tempo e o sistema fechou sozinho à noite (às vezes cliente abandonou).<br><b>Aberto</b> — ainda em andamento."></i>
+                   title="Classificado pela <b>última mensagem</b> do ticket:<br><b>Humano fechou</b> — alguém da equipe deu a última palavra (atendimento completo).<br><b>Auto — timeout</b> — ticket atingiu o tempo máximo (1h ou 3h) e o bot mandou aviso de encerramento.<br><b>Auto — inatividade</b> — bot mandou o template 'notamos que seu atendimento ainda está em andamento' ou 'encerrando por inatividade' (script roda 23:58/23:59).<br><b>Bot s/ conclusão</b> — bot falou por último mas sem bater padrão de encerramento automático. Inclui saudações iniciais ignoradas, resposta negando áudio, aviso de transferência e raras despedidas genuínas. <b>Não</b> é sinônimo de 'Camila resolveu'.<br><b>Cliente abandonou</b> — última msg foi do próprio cliente, nunca respondida.<br><b>Aberto</b> — ainda em andamento."></i>
               </h3></div>
               <div class="card-body"><div class="chart-container"><canvas id="chartFech"></canvas></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- MATRIZ BUCKET × FECHAMENTO                                    -->
+        <!-- ============================================================ -->
+        <h2 class="section-title">
+          <i class="fas fa-th mr-1"></i> Cruzamento: bucket × fechamento
+          <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+             title="Cruza o <b>tipo de conversa</b> (linhas) com <b>como ela terminou</b> (colunas). Útil pra responder: 'quantos tickets foram transferidos a humanos mas finalizados pelo bot por ociosidade?' → some 'Auto timeout' + 'Auto inatividade' nas linhas de Humano/Pendente. Clique numa célula pra abrir a lista."></i>
+        </h2>
+        <div class="card mb-3">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0 text-right" id="tblMatriz">
+                <thead class="thead-light"><tr id="tblMatrizHead"></tr></thead>
+                <tbody id="tblMatrizBody"></tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -332,11 +354,19 @@
                   </th>
                   <th class="text-right">Fech. humano
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
-                       title="Quantas conversas foram encerradas por um humano. Significa atendimento completo."></i>
+                       title="Quantas conversas foram encerradas por um humano (última msg da equipe). Significa atendimento completo."></i>
                   </th>
-                  <th class="text-right">Fech. Camila
+                  <th class="text-right">Fech. auto
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
-                       title="Quantas foram encerradas pelo robô — seja porque ele resolveu, seja porque ninguém respondeu e o sistema fechou sozinho."></i>
+                       title="Encerradas automaticamente pelo bot: timeout de 1h/3h em aberto, ou script de inatividade (madrugada)."></i>
+                  </th>
+                  <th class="text-right">Bot s/ concl.
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Bot falou por último mas sem bater padrão de encerramento — saudação inicial que o cliente ignorou, negativa de áudio, aviso de transferência, etc."></i>
+                  </th>
+                  <th class="text-right">Cli. abandonou
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Última mensagem foi do cliente e nunca foi respondida."></i>
                   </th>
                   <th class="text-right">Abertos
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
@@ -665,10 +695,12 @@
     vazio:                           '<span class="badge badge-mini" style="background:#e5e7eb;color:#374151;">Vazio</span>',
   };
   const fechBadge = {
-    humano:             '<span class="badge badge-mini b-fechado-humano">Humano</span>',
-    camila_normal:      '<span class="badge badge-mini b-fechado-camila">Camila</span>',
-    camila_inatividade: '<span class="badge badge-mini b-fechado-inativ">Inatividade</span>',
-    aberto:             '<span class="badge badge-mini b-fechado-aberto">Aberto</span>',
+    humano:              '<span class="badge badge-mini b-fechado-humano">Humano</span>',
+    auto_inatividade:    '<span class="badge badge-mini b-fechado-inativ">Inatividade</span>',
+    auto_timeout:        '<span class="badge badge-mini b-fechado-timeout">Timeout 1h/3h</span>',
+    cliente_sem_retorno: '<span class="badge badge-mini b-fechado-cli">Cliente abandonou</span>',
+    bot_sem_conclusao:   '<span class="badge badge-mini b-fechado-bot">Bot s/ conclusão</span>',
+    aberto:              '<span class="badge badge-mini b-fechado-aberto">Aberto</span>',
   };
 
   // ── Parse "DD/MM/YYYY HH:MM" pra ordenação cronológica ──
@@ -1003,18 +1035,24 @@
   // ============================================================
   const fc = k.fechamento || {};
   const fcLabels = {
-    humano: 'Humano fechou',
-    camila_normal: 'Camila fechou (normal)',
-    camila_inatividade: 'Camila fechou (inatividade)',
-    aberto: 'Aberto',
+    humano:              'Humano fechou',
+    auto_inatividade:    'Auto — inatividade (Camila fecha de madrugada)',
+    auto_timeout:        'Auto — timeout 1h/3h em aberto',
+    cliente_sem_retorno: 'Cliente abandonou (última msg)',
+    bot_sem_conclusao:   'Bot falou por último, s/ conclusão',
+    aberto:              'Aberto',
   };
   const fcColors = {
-    humano: '#10b981',
-    camila_normal: '#3b82f6',
-    camila_inatividade: '#f59e0b',
-    aberto: '#9ca3af',
+    humano:              '#10b981',
+    auto_inatividade:    '#f59e0b',
+    auto_timeout:        '#f97316',
+    cliente_sem_retorno: '#8b5cf6',
+    bot_sem_conclusao:   '#3b82f6',
+    aberto:              '#9ca3af',
   };
-  const fcKeys = Object.keys(fc);
+  // Ordem canônica para legenda estável
+  const fcOrder = ['humano','auto_timeout','auto_inatividade','bot_sem_conclusao','cliente_sem_retorno','aberto'];
+  const fcKeys = fcOrder.filter(x => fc[x] != null);
   new Chart(document.getElementById('chartFech'), {
     type: 'doughnut',
     data: {
@@ -1038,6 +1076,71 @@
   });
 
   // ============================================================
+  // Matriz bucket × fechamento
+  // ============================================================
+  (function renderMatriz(){
+    const matriz = (data.kpis && data.kpis.matriz_bf) || {};
+    const matrizIds = data.matriz_bf_ids || {};
+    // Ordem das linhas (buckets)
+    const bkOrder = [
+      'inbound_resolvido_camila',
+      'inbound_atendido_humano',
+      'inbound_transferido_sem_humano',
+      'outbound_com_reply',
+      'outbound_sem_reply',
+      'vazio',
+    ];
+    const bkLabelsShort = {
+      inbound_resolvido_camila:       'Inbound resolvido Camila',
+      inbound_atendido_humano:        'Inbound atendido por humano',
+      inbound_transferido_sem_humano: 'Inbound transferido s/ humano',
+      outbound_com_reply:             'Outbound c/ reply',
+      outbound_sem_reply:             'Outbound s/ reply',
+      vazio:                          'Vazio',
+    };
+    const rows = bkOrder.filter(b => matriz[b]);
+    if (rows.length === 0) return;
+
+    // Cabeçalho: bucket + uma coluna por fechamento na ordem canônica + total
+    const head = document.getElementById('tblMatrizHead');
+    head.insertAdjacentHTML('beforeend',
+      `<th class="text-left">Bucket</th>` +
+      fcOrder.map(fk => `<th><span class="badge badge-mini" style="background:${fcColors[fk]};color:#fff;">${fcLabels[fk].split(' —')[0]}</span></th>`).join('') +
+      `<th>Total</th>`);
+
+    const body = document.getElementById('tblMatrizBody');
+    rows.forEach(bk => {
+      const cells = fcOrder.map(fk => {
+        const n = (matriz[bk] && matriz[bk][fk]) || 0;
+        if (n === 0) return `<td class="text-muted">·</td>`;
+        return `<td class="drill-cell" data-bk="${bk}" data-fk="${fk}" style="cursor:pointer;text-decoration:underline;color:#1e40af;">${fmtInt(n)}</td>`;
+      }).join('');
+      const total = Object.values(matriz[bk] || {}).reduce((s, v) => s + v, 0);
+      body.insertAdjacentHTML('beforeend',
+        `<tr><td class="text-left"><strong>${bkLabelsShort[bk] || bk}</strong></td>${cells}<td><strong>${fmtInt(total)}</strong></td></tr>`);
+    });
+
+    // Linha de total por coluna
+    const colTotals = fcOrder.map(fk =>
+      rows.reduce((s, bk) => s + ((matriz[bk] && matriz[bk][fk]) || 0), 0)
+    );
+    const grandTotal = colTotals.reduce((s, v) => s + v, 0);
+    body.insertAdjacentHTML('beforeend',
+      `<tr class="thead-light"><td class="text-left"><strong>Total</strong></td>` +
+      colTotals.map(n => `<td><strong>${fmtInt(n)}</strong></td>`).join('') +
+      `<td><strong>${fmtInt(grandTotal)}</strong></td></tr>`);
+
+    // Drill por célula
+    body.addEventListener('click', (e) => {
+      const td = e.target.closest('.drill-cell'); if (!td) return;
+      const bk = td.dataset.bk, fk = td.dataset.fk;
+      const ids = (matrizIds[bk] && matrizIds[bk][fk]) || [];
+      const title = (bkLabelsShort[bk] || bk) + ' × ' + (fcLabels[fk] || fk);
+      openDrill(ids, title);
+    });
+  })();
+
+  // ============================================================
   // Tabela por fila
   // ============================================================
   const tbF = document.getElementById('tblFila');
@@ -1052,7 +1155,9 @@
          <td class="text-right">${fmtSec(r.espera_humano_med)}</td>
          <td class="text-right">${fmtSec(r.resolucao_med)}</td>
          <td class="text-right">${fmtInt(r.fechado_humano)}</td>
-         <td class="text-right">${fmtInt(r.fechado_camila)}</td>
+         <td class="text-right">${fmtInt(r.fechado_auto)}</td>
+         <td class="text-right">${fmtInt(r.fechado_bot_outro)}</td>
+         <td class="text-right">${fmtInt(r.fechado_cli_abandono)}</td>
          <td class="text-right">${fmtInt(r.abertos)}</td>
          <td class="text-right">${nota}</td>
        </tr>`);

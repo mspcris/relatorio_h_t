@@ -31,13 +31,49 @@ OBS: NÃO usamos t.firstContactAt (vem com valores negativos no DB).
      Tudo é derivado de Message.createdAt.
 
 ═══════════════════════════════════════════════════════════════════════════════
-FECHAMENTO
+FECHAMENTO (v2 — 2026-04-11)
 ═══════════════════════════════════════════════════════════════════════════════
-  humano               — última mensagem antes de closedAt foi de humano
-  camila_inatividade   — última msg do bot bate o regex do script de inatividade
-                         (Camila roda 23:58/23:59 todo dia fechando inativos)
-  camila_normal        — fechado pelo lado bot por outro motivo
+Derivado da ÚLTIMA mensagem do ticket. A versão anterior (só humano / inatividade /
+normal / aberto) enganava: ~70% dos "camila_normal" eram fechamentos automáticos
+por timeout de 1h ou 3h que não batiam o regex antigo — mascarando a realidade de
+que a Camila quase nunca "resolve sozinha", a maioria das conversas expira.
+
+  humano               — última msg antes de closedAt foi de humano da equipe
+                         (algum membro real da operação encerrou ou respondeu por
+                         último, independente de ter havido transferência)
+
+  auto_inatividade     — bot mandou um dos 2 templates de inatividade:
+                         • "Notamos que seu atendimento ainda está em andamento"
+                           (Camila pergunta se ainda precisa; roda 23:58/23:59)
+                         • "Estamos encerrando automaticamente este atendimento
+                           devido ao tempo de inatividade"
+
+  auto_timeout         — bot mandou template de timeout absoluto:
+                         • "atendimento atingiu nosso tempo máximo de 3 horas"
+                         • "atendimento atingiu o tempo máximo de 1 hora"
+                         (fechamento por duração total, não por ociosidade)
+
+  cliente_sem_retorno  — última mensagem foi do próprio cliente e ninguém
+                         respondeu até o closedAt. Cliente mandou e sumiu antes
+                         de qualquer reação; depois algum processo fechou.
+
+  bot_sem_conclusao    — residual: última msg foi do bot, SEM bater nenhum regex
+                         acima. Inclui: saudações iniciais que o cliente ignorou,
+                         "não consigo ouvir áudios", aviso de transferência, e
+                         raríssimas despedidas genuínas do bot. NÃO é sinônimo
+                         de "Camila resolveu o problema" — é só "o bot falou por
+                         último e o ticket fechou sem sinal claro".
+
   aberto               — sem closedAt
+
+═══════════════════════════════════════════════════════════════════════════════
+CRUZAMENTO bucket × fechamento
+═══════════════════════════════════════════════════════════════════════════════
+O JSON expõe `kpis.matriz_bf` e `matriz_bf_ids` para permitir drill-down de
+perguntas como "quantos tickets foram transferidos a humanos mas finalizados
+pela Camila por ociosidade" = matriz_bf[inbound_atendido_humano][auto_timeout]
+                             + matriz_bf[inbound_atendido_humano][auto_inatividade]
+                             + matriz_bf[inbound_transferido_sem_humano][auto_*]
 """
 
 import json
@@ -60,9 +96,17 @@ JANELA_DIAS = int(os.getenv("CHAT_DASH_DIAS", "90"))
 # userId da Camila.ai — concentra ~97% das mensagens de bot
 CAMILA_USER_ID = "cmg8cum8g0519jbbm6r9l93f7"
 
-# Padrão do script de fechamento por inatividade da Camila
-CAMILA_INATIVIDADE_RE = re.compile(
-    r"Notamos que seu atendimento ainda est[áa] em andamento", re.IGNORECASE
+# Regex para detectar fechamento automático por INATIVIDADE (dois templates conhecidos)
+RE_AUTO_INATIVIDADE = re.compile(
+    r"Notamos que seu atendimento ainda est[áa] em andamento"
+    r"|Estamos encerrando automaticamente este atendimento devido ao tempo de inatividade",
+    re.IGNORECASE,
+)
+
+# Regex para detectar fechamento automático por TIMEOUT de duração (1h / 3h em aberto)
+RE_AUTO_TIMEOUT = re.compile(
+    r"atendimento atingiu (nosso tempo m[áa]ximo|o tempo m[áa]ximo) de (1 hora|3 horas)",
+    re.IGNORECASE,
 )
 
 
@@ -373,18 +417,43 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
     df["delta_humano_resolve"]    = df.apply(lambda r: delta(r["closedAt"],          r["first_human_at"]),    axis=1)
     df["delta_total"]             = df.apply(lambda r: delta(r["closedAt"],          r["first_customer_at"]), axis=1)
 
-    # ── FECHAMENTO ──
+    # ── FECHAMENTO (v2, derivado da ÚLTIMA mensagem; ver docstring) ──
     def fechamento(r):
         if pd.isna(r["closedAt"]):
             return "aberto"
-        body = r.get("last_body") or ""
-        if isinstance(body, str) and CAMILA_INATIVIDADE_RE.search(body):
-            return "camila_inatividade"
+
         last_uid = r.get("last_userId")
         last_sector = r.get("last_sector") or ""
-        if last_uid and last_uid != CAMILA_USER_ID and last_sector != "IA":
+        last_uprofile = r.get("last_userProfileId")
+        last_customer = r.get("last_customerId")
+        body = r.get("last_body") or ""
+        if not isinstance(body, str):
+            body = ""
+
+        # Humano foi o último a falar — independe de tudo
+        is_bot_last = (
+            pd.notna(last_uprofile)
+            and (last_uid == CAMILA_USER_ID or last_sector == "IA")
+        )
+        is_human_last = pd.notna(last_uprofile) and not is_bot_last
+        if is_human_last:
             return "humano"
-        return "camila_normal"
+
+        # Cliente foi o último a falar
+        if pd.notna(last_customer) and not pd.notna(last_uprofile):
+            return "cliente_sem_retorno"
+
+        # Última msg veio do bot → classifica por conteúdo
+        if is_bot_last:
+            if RE_AUTO_INATIVIDADE.search(body):
+                return "auto_inatividade"
+            if RE_AUTO_TIMEOUT.search(body):
+                return "auto_timeout"
+            return "bot_sem_conclusao"
+
+        # Sem msg nenhuma (raro) — ticket fechou sem histórico
+        return "bot_sem_conclusao"
+
     df["fechamento"] = df.apply(fechamento, axis=1)
 
     # ── Fila efetiva (último transfer ou queue atual) ──
@@ -469,6 +538,22 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
         for k in df["fechamento"].dropna().unique()
     }
 
+    # ── Matriz de cruzamento bucket × fechamento ──
+    # Responde perguntas do tipo: "quantos tickets transferidos foram fechados
+    # pela Camila por ociosidade?" sem precisar fazer interseção de sets no front.
+    matriz_bf = {}
+    matriz_bf_ids = {}
+    for bk in df["bucket"].dropna().unique():
+        sub = df[df["bucket"] == bk]
+        matriz_bf[str(bk)] = {
+            str(fk): int(v)
+            for fk, v in sub["fechamento"].value_counts().to_dict().items()
+        }
+        matriz_bf_ids[str(bk)] = {
+            str(fk): ids_of(sub[sub["fechamento"] == fk])
+            for fk in sub["fechamento"].dropna().unique()
+        }
+
     # ── Por fila ──
     por_fila = []
     for fila, g in df[df["fila_efetiva"].notna()].groupby("fila_efetiva"):
@@ -481,7 +566,9 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
             "espera_humano_med":   round(float(gh["delta_espera_humano"].dropna().mean()), 1) if gh["delta_espera_humano"].notna().any() else None,
             "humano_resolve_med": round(float(gh["delta_humano_resolve"].dropna().mean()), 1) if gh["delta_humano_resolve"].notna().any() else None,
             "resolucao_med":       round(float(gh["delta_total"].dropna().mean()), 1) if gh["delta_total"].notna().any() else None,
-            "fechado_camila":     int(g["fechamento"].isin(["camila_normal", "camila_inatividade"]).sum()),
+            "fechado_auto":       int(g["fechamento"].isin(["auto_timeout", "auto_inatividade"]).sum()),
+            "fechado_bot_outro":  int((g["fechamento"] == "bot_sem_conclusao").sum()),
+            "fechado_cli_abandono": int((g["fechamento"] == "cliente_sem_retorno").sum()),
             "fechado_humano":     int((g["fechamento"] == "humano").sum()),
             "abertos":            int((g["fechamento"] == "aberto").sum()),
             "nota_media":         round(float(eval_scores.mean()), 2) if not eval_scores.empty else None,
@@ -607,6 +694,7 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
             "total_tickets": total,
             "buckets":       bk,
             "fechamento":    fc,
+            "matriz_bf":     matriz_bf,
             "avaliados":     avaliados,
             "nota_media":    round(nota_media, 2) if nota_media is not None else None,
         },
@@ -629,6 +717,7 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
         "tickets_index":  tickets_index,
         "bucket_ids":     bucket_ids,
         "fechamento_ids": fechamento_ids,
+        "matriz_bf_ids":  matriz_bf_ids,
     }
 
 
