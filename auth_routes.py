@@ -154,6 +154,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "tef",                       "label": "TEF Recorrente",              "group": "kpi"},
     {"key": "email_clientes",            "label": "Email de Cobrança",           "group": "kpi"},
     {"key": "chat_avaliacoes",           "label": "CHAT Avaliações",             "group": "kpi"},
+    {"key": "chat_dashboard",            "label": "Dashboard Chat (Camila.ai)",  "group": "kpi"},
     {"key": "wpp_dashboard",             "label": "Dashboard WhatsApp (Meta)",   "group": "kpi"},
     {"key": "ctrlq_desbloqueio",         "label": "Desbloqueio de Agenda CTRL-Q","group": "kpi"},
     {"key": "qualidade_agenda",          "label": "Qualidade da Agenda Médica",  "group": "kpi"},

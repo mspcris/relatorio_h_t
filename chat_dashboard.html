@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — Dashboard Chat (Camila.ai)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="kpi-id" content="chat_dashboard" />
+  <meta name="kpi-title" content="Dashboard Chat — Camila.ai" />
+  <meta name="kpi-description" content="Métricas operacionais do chat camim_chat_production: tempos da Camila, fila, humano, fechamento, avaliações e outbound separado." />
+  <meta name="kpi-category" content="Operacional" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="/css/style2.css">
+  <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    html { font-size: 16px; }
+    body { font-family: "Source Sans Pro", system-ui, sans-serif; font-size: 1rem; }
+    h3, .card-title { font-size: 1.05rem; font-weight: 600; }
+    .kpi-box { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:14px 16px; height:100%; }
+    .kpi-box .label { font-size:.78rem; color:#6b7280; text-transform:uppercase; letter-spacing:.03em; }
+    .kpi-box .value { font-size:1.7rem; font-weight:700; color:#111827; line-height:1.1; margin-top:4px; }
+    .kpi-box .sub   { font-size:.76rem; color:#6b7280; margin-top:2px; }
+    .kpi-box.green  .value { color:#15803d; }
+    .kpi-box.blue   .value { color:#1d4ed8; }
+    .kpi-box.orange .value { color:#c2410c; }
+    .kpi-box.red    .value { color:#b91c1c; }
+    .kpi-box.purple .value { color:#7c3aed; }
+    .kpi-box.teal   .value { color:#0d9488; }
+    .section-title { font-size:1.1rem; font-weight:700; color:#111827; margin:20px 0 6px; }
+    .section-subtitle { font-size:.83rem; color:#6b7280; margin-bottom:12px; }
+    .table-sm td, .table-sm th { font-size:.83rem; padding:.4rem .55rem; vertical-align:middle; }
+    .chart-container    { position:relative; height:280px; }
+    .chart-container-sm { position:relative; height:220px; }
+    .chart-container-lg { position:relative; height:340px; }
+
+    /* Heatmap */
+    .heatmap { display:grid; grid-template-columns:50px repeat(24, 1fr); gap:2px; font-size:.7rem; }
+    .heatmap .hd { color:#6b7280; text-align:center; font-weight:600; }
+    .heatmap .row-lbl { color:#6b7280; font-weight:600; padding-right:6px; text-align:right; line-height:22px; }
+    .heatmap .cell { height:22px; border-radius:3px; background:#f3f4f6; cursor:default; transition:transform .1s; }
+    .heatmap .cell:hover { transform:scale(1.1); outline:1px solid #111; }
+
+    /* Avaliações */
+    .nota-bar { display:inline-block; width:120px; height:8px; background:#e5e7eb; border-radius:4px; overflow:hidden; vertical-align:middle; }
+    .nota-bar > div { height:100%; background:linear-gradient(90deg, #f59e0b, #d97706); }
+    .com-card { background:#f9fafb; border-left:3px solid #d1d5db; padding:10px 12px; margin-bottom:8px; border-radius:4px; font-size:.85rem; }
+    .com-card .com-meta { color:#6b7280; font-size:.75rem; margin-top:4px; }
+
+    /* Funil */
+    .funil-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #f1f5f9; }
+    .funil-row:last-child { border-bottom:0; }
+    .funil-row .funil-lbl { width:230px; font-weight:600; color:#374151; font-size:.88rem; }
+    .funil-row .funil-bar { flex:1; height:18px; background:#f3f4f6; border-radius:9px; overflow:hidden; position:relative; }
+    .funil-row .funil-bar > div { height:100%; background:linear-gradient(90deg,#0ea5e9,#0369a1); }
+    .funil-row .funil-val { width:200px; text-align:right; font-size:.83rem; color:#374151; }
+
+    .badge-bucket { font-weight:600; font-size:.7rem; padding:3px 7px; border-radius:10px; }
+    .b-camila    { background:#dbeafe; color:#1e40af; }
+    .b-humano    { background:#dcfce7; color:#166534; }
+    .b-pendente  { background:#fef3c7; color:#92400e; }
+    .b-out-noreply { background:#fee2e2; color:#991b1b; }
+    .b-out-reply { background:#ede9fe; color:#5b21b6; }
+
+    #loadingMsg { color:#6b7280; padding:20px; text-align:center; }
+    #errBox { display:none; }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a></li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+      <span class="ml-2">Dashboard Chat <span class="badge badge-info ml-1">Camila.ai</span></span>
+      <span id="jsonInfo" class="ml-3 text-muted" style="font-size:.8rem;"></span>
+    </span>
+  </nav>
+
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="/mais_servicos" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item"><a href="/kpi_home.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home</p></a></li>
+          <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+          <li class="nav-item"><a href="https://chat.camim.com.br/" target="_blank" class="nav-link"><i class="nav-icon fas fa-comments"></i><p>Chat (externo)</p></a></li>
+          <li class="nav-item"><a href="/chat_avaliacoes" class="nav-link"><i class="nav-icon fas fa-star"></i><p>CHAT Avaliações</p></a></li>
+          <li class="nav-item"><a href="/chat_dashboard.html" class="nav-link active"><i class="nav-icon fas fa-chart-line"></i><p>Dashboard Chat</p></a></li>
+        </ul>
+      </nav>
+    </div>
+    <div style="padding:10px 16px;margin-top:auto">
+      <button type="button" onclick="window.location.assign('/session/logout')"
+              style="color:rgba(255,255,255,.8);background:rgba(255,255,255,.08);border:none;display:block;width:100%;padding:8px 12px;border-radius:4px;cursor:pointer;text-align:left;font-size:inherit">
+        <i class="fas fa-sign-out-alt mr-2"></i>Sair
+      </button>
+    </div>
+  </aside>
+
+  <div class="content-wrapper">
+    <section class="content p-3">
+
+      <div class="alert alert-info py-2 px-3 mb-3" style="font-size:.85rem;">
+        <i class="fas fa-info-circle mr-1"></i>
+        Janela: <b>últimos 90 dias</b> · base <code>camim_chat_production</code> · atualização a cada 120 min.
+        Tempos derivados das mensagens — <code>firstContactAt</code> ignorado (vem com bug).
+      </div>
+
+      <div id="errBox" class="alert alert-danger py-2 px-3 mb-3"></div>
+      <div id="loadingMsg"><i class="fas fa-spinner fa-spin"></i> Carregando dashboard...</div>
+
+      <div id="mainContent" style="display:none;">
+
+        <!-- ============================================================ -->
+        <!-- KPIs                                                          -->
+        <!-- ============================================================ -->
+        <h2 class="section-title"><i class="fas fa-chart-pie mr-1"></i> Visão geral</h2>
+        <div class="row mb-3">
+          <div class="col-md-3 col-sm-6 mb-2">
+            <div class="kpi-box blue">
+              <div class="label">Total tickets</div>
+              <div class="value" id="kTotal">—</div>
+              <div class="sub" id="kTotalSub"></div>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6 mb-2">
+            <div class="kpi-box">
+              <div class="label">Resolvido pela Camila</div>
+              <div class="value" id="kCamila">—</div>
+              <div class="sub" id="kCamilaSub"></div>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6 mb-2">
+            <div class="kpi-box green">
+              <div class="label">Atendido por humano</div>
+              <div class="value" id="kHumano">—</div>
+              <div class="sub" id="kHumanoSub"></div>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6 mb-2">
+            <div class="kpi-box orange">
+              <div class="label">Transferido (sem humano)</div>
+              <div class="value" id="kPendente">—</div>
+              <div class="sub">tickets enfileirados sem retorno</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-3 col-sm-6 mb-2">
+            <div class="kpi-box red">
+              <div class="label">Outbound CAMIM (sem reply)</div>
+              <div class="value" id="kOutNoReply">—</div>
+              <div class="sub">cobrança / lembrete sem resposta</div>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6 mb-2">
+            <div class="kpi-box purple">
+              <div class="label">Outbound CAMIM (com reply)</div>
+              <div class="value" id="kOutReply">—</div>
+              <div class="sub" id="kOutReplySub"></div>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6 mb-2">
+            <div class="kpi-box teal">
+              <div class="label">Avaliados</div>
+              <div class="value" id="kAval">—</div>
+              <div class="sub" id="kAvalSub"></div>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6 mb-2">
+            <div class="kpi-box">
+              <div class="label">Nota média</div>
+              <div class="value" id="kNota">—</div>
+              <div class="sub">de 1 a 5</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- FUNIL                                                         -->
+        <!-- ============================================================ -->
+        <h2 class="section-title"><i class="fas fa-stream mr-1"></i> Funil de tempo (inbound atendido por humano)</h2>
+        <p class="section-subtitle">Mediana e p95 — distribuição mais robusta que média (média sofre com outliers).</p>
+        <div class="card mb-3"><div class="card-body" id="funilBox"></div></div>
+
+        <!-- ============================================================ -->
+        <!-- DONUTS: BUCKETS + FECHAMENTO                                  -->
+        <!-- ============================================================ -->
+        <div class="row mb-3">
+          <div class="col-md-6 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Distribuição por bucket</h3></div>
+              <div class="card-body"><div class="chart-container"><canvas id="chartBucket"></canvas></div></div>
+            </div>
+          </div>
+          <div class="col-md-6 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Tipo de fechamento</h3></div>
+              <div class="card-body"><div class="chart-container"><canvas id="chartFech"></canvas></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- TABELA POR FILA                                               -->
+        <!-- ============================================================ -->
+        <h2 class="section-title"><i class="fas fa-layer-group mr-1"></i> Por fila</h2>
+        <div class="card mb-3">
+          <div class="card-body p-0">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="thead-light">
+                <tr>
+                  <th>Fila</th>
+                  <th class="text-right">Tickets</th>
+                  <th class="text-right">Atend. humano</th>
+                  <th class="text-right">Espera humano (med)</th>
+                  <th class="text-right">Resolução (med)</th>
+                  <th class="text-right">Fech. humano</th>
+                  <th class="text-right">Fech. Camila</th>
+                  <th class="text-right">Abertos</th>
+                  <th class="text-right">Nota</th>
+                </tr>
+              </thead>
+              <tbody id="tblFila"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- TABELA POR USUÁRIO HUMANO                                     -->
+        <!-- ============================================================ -->
+        <h2 class="section-title"><i class="fas fa-user-tie mr-1"></i> Por atendente humano</h2>
+        <p class="section-subtitle">Atendente "dono" do ticket = primeiro humano (não-IA) que enviou mensagem.</p>
+        <div class="card mb-3">
+          <div class="card-body p-0">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="thead-light">
+                <tr>
+                  <th>Atendente</th>
+                  <th>Setor</th>
+                  <th class="text-right">Tickets</th>
+                  <th class="text-right">1ª resposta (med)</th>
+                  <th class="text-right">Resolução (med)</th>
+                  <th class="text-right">Nota</th>
+                  <th class="text-right">N aval</th>
+                </tr>
+              </thead>
+              <tbody id="tblUser"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SÉRIE 30D + HEATMAP                                           -->
+        <!-- ============================================================ -->
+        <div class="row mb-3">
+          <div class="col-md-12 mb-2">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Tickets por dia (últimos 30 dias)</h3></div>
+              <div class="card-body"><div class="chart-container-lg"><canvas id="chartSerie"></canvas></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-12 mb-2">
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">Heatmap atividade — hora × dia da semana</h3>
+              </div>
+              <div class="card-body">
+                <div id="heatmap" class="heatmap"></div>
+                <div class="text-muted mt-2" style="font-size:.75rem;">Cada célula mostra o número de tickets criados naquele slot. Cor mais escura = mais tickets.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- AVALIAÇÕES                                                    -->
+        <!-- ============================================================ -->
+        <div class="row mb-3">
+          <div class="col-md-5 mb-2">
+            <div class="card h-100">
+              <div class="card-header"><h3 class="card-title">Distribuição de notas</h3></div>
+              <div class="card-body"><div class="chart-container-sm"><canvas id="chartNotas"></canvas></div></div>
+            </div>
+          </div>
+          <div class="col-md-7 mb-2">
+            <div class="card h-100">
+              <div class="card-header"><h3 class="card-title">Comentários recentes</h3></div>
+              <div class="card-body" id="comentariosBox" style="max-height:340px; overflow-y:auto;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- OUTBOUND — CATEGORIA À PARTE                                  -->
+        <!-- ============================================================ -->
+        <h2 class="section-title">
+          <i class="fas fa-paper-plane mr-1"></i> Outbound — CAMIM iniciou
+          <small class="text-muted ml-2" style="font-size:.75rem;">disparos de cobrança/lembrete sem cliente abrindo conversa</small>
+        </h2>
+        <div class="row mb-3">
+          <div class="col-md-3 col-sm-6 mb-2">
+            <div class="kpi-box red"><div class="label">Sem reply do cliente</div><div class="value" id="oNoReply">—</div></div>
+          </div>
+          <div class="col-md-3 col-sm-6 mb-2">
+            <div class="kpi-box purple"><div class="label">Com reply do cliente</div><div class="value" id="oReply">—</div></div>
+          </div>
+          <div class="col-md-3 col-sm-6 mb-2">
+            <div class="kpi-box"><div class="label">Total outbound</div><div class="value" id="oTotal">—</div></div>
+          </div>
+          <div class="col-md-3 col-sm-6 mb-2">
+            <div class="kpi-box orange"><div class="label">Taxa de reply geral</div><div class="value" id="oTaxa">—</div></div>
+          </div>
+        </div>
+        <div class="card mb-3">
+          <div class="card-header"><h3 class="card-title">Outbound por fila</h3></div>
+          <div class="card-body p-0">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="thead-light">
+                <tr>
+                  <th>Fila</th>
+                  <th class="text-right">Total</th>
+                  <th class="text-right">Sem reply</th>
+                  <th class="text-right">Com reply</th>
+                  <th class="text-right">Taxa reply</th>
+                </tr>
+              </thead>
+              <tbody id="tblOutFila"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /mainContent -->
+    </section>
+  </div>
+</div>
+
+<script>
+(async () => {
+  const URLS_JSON = ['/json_consolidado/chat_dashboard.json', '/dados/chat_dashboard.json'];
+  const errBox = document.getElementById('errBox');
+  const loading = document.getElementById('loadingMsg');
+  const main = document.getElementById('mainContent');
+
+  // ── Helpers ──
+  const fmtInt = n => (n == null ? '—' : Number(n).toLocaleString('pt-BR'));
+  const fmtPct = n => (n == null ? '—' : Number(n).toFixed(1) + '%');
+  function fmtSec(s) {
+    if (s == null) return '—';
+    s = Number(s);
+    if (s < 60)   return s.toFixed(0) + 's';
+    if (s < 3600) return (s / 60).toFixed(1) + 'min';
+    return (s / 3600).toFixed(1) + 'h';
+  }
+  function pctOf(n, total) { return total ? (n / total * 100) : null; }
+
+  // ── Carrega JSON ──
+  let data, lastErr;
+  for (const url of URLS_JSON) {
+    try {
+      const r = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+      if (!r.ok) { lastErr = new Error('HTTP ' + r.status + ' em ' + url); continue; }
+      data = await r.json();
+      break;
+    } catch (e) { lastErr = e; }
+  }
+  if (!data) {
+    loading.style.display = 'none';
+    errBox.style.display = 'block';
+    errBox.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> JSON não encontrado. ETL já rodou? ' + (lastErr ? lastErr.message : '');
+    return;
+  }
+
+  loading.style.display = 'none';
+  main.style.display = 'block';
+
+  const meta = data.meta || {};
+  document.getElementById('jsonInfo').textContent =
+    '• atualizado em ' + (meta.gerado_em_br || '?') + ' · ' + (meta.janela_dias || '?') + 'd';
+
+  // ============================================================
+  // KPIs
+  // ============================================================
+  const k = data.kpis || {};
+  const total = k.total_tickets || 0;
+  const bk = k.buckets || {};
+  document.getElementById('kTotal').textContent = fmtInt(total);
+  document.getElementById('kTotalSub').textContent = 'janela ' + (meta.janela_dias || '?') + 'd';
+
+  const nCam = bk.inbound_resolvido_camila || 0;
+  const nHum = bk.inbound_atendido_humano || 0;
+  const nPend = bk.inbound_transferido_sem_humano || 0;
+  const nOutNo = bk.outbound_sem_reply || 0;
+  const nOutR  = bk.outbound_com_reply || 0;
+
+  document.getElementById('kCamila').textContent = fmtInt(nCam);
+  document.getElementById('kCamilaSub').textContent = fmtPct(pctOf(nCam, total)) + ' do total';
+  document.getElementById('kHumano').textContent = fmtInt(nHum);
+  document.getElementById('kHumanoSub').textContent = fmtPct(pctOf(nHum, total)) + ' do total';
+  document.getElementById('kPendente').textContent = fmtInt(nPend);
+  document.getElementById('kOutNoReply').textContent = fmtInt(nOutNo);
+  document.getElementById('kOutReply').textContent = fmtInt(nOutR);
+  const txReply = (nOutNo + nOutR) ? (nOutR / (nOutNo + nOutR) * 100) : null;
+  document.getElementById('kOutReplySub').textContent = txReply != null ? ('taxa de reply: ' + fmtPct(txReply)) : '';
+
+  document.getElementById('kAval').textContent = fmtInt(k.avaliados);
+  document.getElementById('kAvalSub').textContent = fmtPct(pctOf(k.avaliados, total)) + ' do total';
+  document.getElementById('kNota').textContent = (k.nota_media != null) ? Number(k.nota_media).toFixed(2) : '—';
+
+  // ============================================================
+  // Funil
+  // ============================================================
+  const funil = data.funil_segundos || {};
+  const funilOrdem = [
+    ['Camila responde 1ª msg do cliente',         'camila_responde'],
+    ['Camila classifica e transfere',             'camila_classifica'],
+    ['Espera até humano pegar',                   'espera_humano'],
+    ['Humano resolve (até fechar)',               'humano_resolve'],
+    ['Total (cliente abriu → fechado)',           'total'],
+  ];
+  const funilBox = document.getElementById('funilBox');
+  // Escala: maior p95 vira 100% da barra
+  let maxP95 = 0;
+  funilOrdem.forEach(([_, key]) => { const v = (funil[key] || {}).p95; if (v > maxP95) maxP95 = v; });
+  funilOrdem.forEach(([label, key]) => {
+    const v = funil[key] || {};
+    const barW = v.p95 ? (v.p95 / maxP95 * 100) : 0;
+    funilBox.insertAdjacentHTML('beforeend',
+      `<div class="funil-row">
+         <div class="funil-lbl">${label}</div>
+         <div class="funil-bar"><div style="width:${barW.toFixed(1)}%"></div></div>
+         <div class="funil-val">
+           med <b>${fmtSec(v.media)}</b> · p50 ${fmtSec(v.p50)} · p95 ${fmtSec(v.p95)}
+           <div style="font-size:.7rem;color:#9ca3af">n=${fmtInt(v.n)}</div>
+         </div>
+       </div>`);
+  });
+
+  // ============================================================
+  // Donut buckets
+  // ============================================================
+  const bkLabels = {
+    inbound_resolvido_camila:        'Resolvido pela Camila',
+    inbound_atendido_humano:         'Atendido por humano',
+    inbound_transferido_sem_humano:  'Transferido sem humano',
+    outbound_sem_reply:              'Outbound sem reply',
+    outbound_com_reply:              'Outbound com reply',
+    vazio:                           'Vazio',
+  };
+  const bkColors = {
+    inbound_resolvido_camila:        '#3b82f6',
+    inbound_atendido_humano:         '#10b981',
+    inbound_transferido_sem_humano:  '#f59e0b',
+    outbound_sem_reply:              '#ef4444',
+    outbound_com_reply:              '#8b5cf6',
+    vazio:                           '#9ca3af',
+  };
+  const bkKeys = Object.keys(bk);
+  new Chart(document.getElementById('chartBucket'), {
+    type: 'doughnut',
+    data: {
+      labels: bkKeys.map(k => bkLabels[k] || k),
+      datasets: [{
+        data: bkKeys.map(k => bk[k]),
+        backgroundColor: bkKeys.map(k => bkColors[k] || '#9ca3af'),
+      }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+  });
+
+  // ============================================================
+  // Donut fechamento
+  // ============================================================
+  const fc = k.fechamento || {};
+  const fcLabels = {
+    humano: 'Humano fechou',
+    camila_normal: 'Camila fechou (normal)',
+    camila_inatividade: 'Camila fechou (inatividade)',
+    aberto: 'Aberto',
+  };
+  const fcColors = {
+    humano: '#10b981',
+    camila_normal: '#3b82f6',
+    camila_inatividade: '#f59e0b',
+    aberto: '#9ca3af',
+  };
+  const fcKeys = Object.keys(fc);
+  new Chart(document.getElementById('chartFech'), {
+    type: 'doughnut',
+    data: {
+      labels: fcKeys.map(k => fcLabels[k] || k),
+      datasets: [{
+        data: fcKeys.map(k => fc[k]),
+        backgroundColor: fcKeys.map(k => fcColors[k] || '#9ca3af'),
+      }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+  });
+
+  // ============================================================
+  // Tabela por fila
+  // ============================================================
+  const tbF = document.getElementById('tblFila');
+  (data.por_fila || []).forEach(r => {
+    const nota = r.nota_media != null ? `${Number(r.nota_media).toFixed(2)} (${fmtInt(r.n_avaliacoes)})` : '—';
+    tbF.insertAdjacentHTML('beforeend',
+      `<tr>
+         <td>${r.fila}</td>
+         <td class="text-right">${fmtInt(r.tickets)}</td>
+         <td class="text-right">${fmtInt(r.atendidos_humano)}</td>
+         <td class="text-right">${fmtSec(r.espera_humano_med)}</td>
+         <td class="text-right">${fmtSec(r.resolucao_med)}</td>
+         <td class="text-right">${fmtInt(r.fechado_humano)}</td>
+         <td class="text-right">${fmtInt(r.fechado_camila)}</td>
+         <td class="text-right">${fmtInt(r.abertos)}</td>
+         <td class="text-right">${nota}</td>
+       </tr>`);
+  });
+
+  // ============================================================
+  // Tabela por usuário
+  // ============================================================
+  const tbU = document.getElementById('tblUser');
+  (data.por_usuario || []).forEach(r => {
+    const nota = r.nota_media != null ? `${Number(r.nota_media).toFixed(2)} (${fmtInt(r.n_avaliacoes)})` : '—';
+    tbU.insertAdjacentHTML('beforeend',
+      `<tr>
+         <td>${r.nome || '—'}</td>
+         <td>${r.sector || '—'}</td>
+         <td class="text-right">${fmtInt(r.tickets)}</td>
+         <td class="text-right">${fmtSec(r.primeira_resposta_med)}</td>
+         <td class="text-right">${fmtSec(r.resolucao_med)}</td>
+         <td class="text-right">${nota}</td>
+         <td class="text-right">${fmtInt(r.n_avaliacoes)}</td>
+       </tr>`);
+  });
+
+  // ============================================================
+  // Série 30d
+  // ============================================================
+  const serie = data.serie_30d || [];
+  new Chart(document.getElementById('chartSerie'), {
+    type: 'bar',
+    data: {
+      labels: serie.map(s => s.data),
+      datasets: [
+        { label: 'Resolvido Camila',     data: serie.map(s => s.inbound_camila),     backgroundColor: '#3b82f6', stack: 's' },
+        { label: 'Atendido humano',      data: serie.map(s => s.inbound_humano),     backgroundColor: '#10b981', stack: 's' },
+        { label: 'Transferido pendente', data: serie.map(s => s.inbound_pendente),   backgroundColor: '#f59e0b', stack: 's' },
+        { label: 'Outbound sem reply',   data: serie.map(s => s.outbound_sem_reply), backgroundColor: '#ef4444', stack: 's' },
+        { label: 'Outbound com reply',   data: serie.map(s => s.outbound_com_reply), backgroundColor: '#8b5cf6', stack: 's' },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { x: { stacked: true }, y: { stacked: true } },
+      plugins: { legend: { position: 'bottom' } }
+    }
+  });
+
+  // ============================================================
+  // Heatmap hora x dow
+  // ============================================================
+  const hm = data.heatmap || [];
+  // Indexa: matriz[dow][hora]
+  const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
+  hm.forEach(c => { grid[c.dow][c.hora] = c.tickets; });
+  const maxV = Math.max(1, ...hm.map(c => c.tickets));
+  const dowLbl = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+  const heatBox = document.getElementById('heatmap');
+
+  // Header
+  heatBox.insertAdjacentHTML('beforeend', '<div class="hd"></div>');
+  for (let h = 0; h < 24; h++) heatBox.insertAdjacentHTML('beforeend', `<div class="hd">${h}</div>`);
+
+  for (let d = 0; d < 7; d++) {
+    heatBox.insertAdjacentHTML('beforeend', `<div class="row-lbl">${dowLbl[d]}</div>`);
+    for (let h = 0; h < 24; h++) {
+      const v = grid[d][h];
+      const intensity = v / maxV;
+      // gradiente azul: branco → #1e3a8a
+      const bg = v ? `rgba(30, 58, 138, ${0.1 + intensity * 0.8})` : '#f9fafb';
+      heatBox.insertAdjacentHTML('beforeend',
+        `<div class="cell" style="background:${bg}" title="${dowLbl[d]} ${h}h: ${fmtInt(v)} tickets"></div>`);
+    }
+  }
+
+  // ============================================================
+  // Notas + comentários
+  // ============================================================
+  const notas = data.notas_dist || [];
+  new Chart(document.getElementById('chartNotas'), {
+    type: 'bar',
+    data: {
+      labels: notas.map(n => n.nota + '★'),
+      datasets: [{
+        label: 'Avaliações',
+        data: notas.map(n => n.n),
+        backgroundColor: ['#dc2626', '#f97316', '#eab308', '#22c55e', '#15803d'].slice(0, notas.length),
+      }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+  });
+
+  const coms = data.comentarios_recentes || [];
+  const cb = document.getElementById('comentariosBox');
+  if (coms.length === 0) {
+    cb.innerHTML = '<div class="text-muted">Nenhum comentário no período.</div>';
+  } else {
+    coms.forEach(c => {
+      const stars = '★'.repeat(c.nota || 0) + '☆'.repeat(5 - (c.nota || 0));
+      cb.insertAdjacentHTML('beforeend',
+        `<div class="com-card">
+           <div>${escapeHtml(c.obs)}</div>
+           <div class="com-meta">${stars} · ${escapeHtml(c.fila || '—')} · #${c.ticket || '?'} · ${c.data || ''}</div>
+         </div>`);
+    });
+  }
+
+  // ============================================================
+  // Outbound
+  // ============================================================
+  const ob = data.outbound || {};
+  document.getElementById('oNoReply').textContent = fmtInt(ob.sem_reply);
+  document.getElementById('oReply').textContent = fmtInt(ob.com_reply);
+  document.getElementById('oTotal').textContent = fmtInt(ob.total);
+  document.getElementById('oTaxa').textContent = ob.total ? fmtPct(ob.com_reply / ob.total * 100) : '—';
+
+  const tbO = document.getElementById('tblOutFila');
+  (ob.por_fila || []).forEach(r => {
+    tbO.insertAdjacentHTML('beforeend',
+      `<tr>
+         <td>${r.fila}</td>
+         <td class="text-right">${fmtInt(r.total)}</td>
+         <td class="text-right">${fmtInt(r.sem_reply)}</td>
+         <td class="text-right">${fmtInt(r.com_reply)}</td>
+         <td class="text-right">${fmtPct(r.taxa_reply)}</td>
+       </tr>`);
+  });
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+})();
+</script>
+
+</body>
+</html>
