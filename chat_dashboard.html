@@ -244,7 +244,7 @@
         <div class="row mb-3">
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box red">
-              <div class="label">Outbound CAMIM (sem reply)
+              <div class="label"><span class="text-muted">Outbound<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Outbound</b> = conversa iniciada pela CAMIM (template, lembrete, cobrança, campanha). Oposto de <b>inbound</b> (iniciada pelo cliente)."></i></span> CAMIM (sem <span class="text-muted">reply<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Reply</b> = resposta do cliente. 'Sem reply' = o disparo ficou no vácuo."></i></span>)
                 <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
                    title="Foi a <b>CAMIM que começou a conversa</b> — mandando lembrete de vencimento, cobrança ou promoção — e o cliente <b>não respondeu nada</b>. Igual mandar WhatsApp pra alguém e a pessoa não abrir."></i>
               </div>
@@ -254,7 +254,7 @@
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box purple">
-              <div class="label">Outbound CAMIM (com reply)
+              <div class="label"><span class="text-muted">Outbound<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Outbound</b> = conversa iniciada pela CAMIM (template, lembrete, cobrança)."></i></span> CAMIM (com <span class="text-muted">reply<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Reply</b> = resposta do cliente. 'Com reply' = o cliente voltou a falar após o disparo."></i></span>)
                 <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
                    title="A CAMIM começou a conversa (cobrança, lembrete, template) e <b>o cliente voltou a falar</b>. É sinal que a mensagem chamou atenção — a pessoa respondeu."></i>
               </div>
@@ -288,9 +288,10 @@
         <!-- FUNIL                                                         -->
         <!-- ============================================================ -->
         <h2 class="section-title">
-          <i class="fas fa-stream mr-1"></i> Funil de tempo (inbound atendido por humano)
+          <i class="fas fa-stream mr-1"></i> Funil de tempo
+          (<span class="text-muted">inbound<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Inbound</b> = conversa <b>iniciada pelo cliente</b> (ele mandou a 1ª mensagem pelo WhatsApp/app/chat). O funil só conta essas porque só elas têm o ciclo completo cliente → Camila → humano → fechamento."></i></span> atendido por humano)
           <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
-             title="Mostra <b>quanto tempo cada etapa demora</b> numa conversa típica: cliente fala → Camila responde → Camila manda pra fila → humano atende → fecha. Só conta conversas que passaram por humano (o funil completo).<br><br><b>Mediana (p50)</b>: o valor do meio — metade demora menos, metade mais.<br><b>p95</b>: só os 5% mais lentos demoram mais que isso.<br><b>Média</b>: soma tudo e divide (mais sensível a outliers)."></i>
+             title="Mostra <b>quanto tempo cada etapa demora</b> numa conversa típica: cliente fala → Camila responde → Camila manda pra fila → humano atende → fecha. Só conta conversas que passaram por humano (o funil completo)."></i>
         </h2>
         <p class="section-subtitle">
           <b>med</b> = média ·
@@ -309,7 +310,7 @@
               <div class="card-header"><h3 class="card-title">
                 Distribuição por bucket
                 <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
-                   title="Divide <b>todas as conversas por tipo</b>: quantas o robô resolveu sozinho, quantas precisaram de humano, quantas foram disparos da CAMIM, etc. Serve pra entender onde o volume tá concentrado."></i>
+                   title="<b>Bucket</b> = categoria do ticket (tipo de conversa). Divide <b>todas as conversas por tipo</b>: quantas o robô resolveu sozinho, quantas precisaram de humano, quantas foram disparos da CAMIM (outbound), etc. Cada ticket cai em um único bucket."></i>
               </h3></div>
               <div class="card-body"><div class="chart-container"><canvas id="chartBucket"></canvas></div></div>
             </div>
@@ -330,7 +331,9 @@
         <!-- MATRIZ BUCKET × FECHAMENTO                                    -->
         <!-- ============================================================ -->
         <h2 class="section-title">
-          <i class="fas fa-th mr-1"></i> Cruzamento: bucket × fechamento
+          <i class="fas fa-th mr-1"></i> Cruzamento:
+          <span class="text-muted">bucket<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Bucket</b> = categoria do ticket (tipo de conversa). Ex: cliente iniciou e Camila resolveu; cliente iniciou e humano atendeu; CAMIM disparou sem resposta; etc."></i></span>
+          × fechamento<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Fechamento</b> = <i>como</i> o ticket terminou. Categorias: humano (alguém da equipe fechou); auto_timeout (Camila fechou porque passou de 1h/3h em aberto); auto_inatividade (Camila fechou de madrugada); cliente_sem_retorno (cliente sumiu); bot_sem_conclusão (residual); aberto."></i>
           <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
              title="Cruza o <b>tipo de conversa</b> (linhas) com <b>como ela terminou</b> (colunas). Útil pra responder: 'quantos tickets foram transferidos a humanos mas finalizados pelo bot por ociosidade?' → some 'Auto timeout' + 'Auto inatividade' nas linhas de Humano/Pendente. Clique numa célula pra abrir a lista."></i>
         </h2>
@@ -539,7 +542,9 @@
         <!-- OUTBOUND — CATEGORIA À PARTE                                  -->
         <!-- ============================================================ -->
         <h2 class="section-title">
-          <i class="fas fa-paper-plane mr-1"></i> Outbound — CAMIM iniciou
+          <i class="fas fa-paper-plane mr-1"></i>
+          <span class="text-muted">Outbound<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Outbound</b> = conversa <b>iniciada pela CAMIM</b> (template, lembrete de boleto, campanha). O contrário de <b>inbound</b>, que é quando o cliente que começa. Outbound é tratado separado porque funciona totalmente diferente: a equipe dispara antes do cliente falar e espera resposta."></i></span>
+          — CAMIM iniciou
           <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
              title="Conversas em que <b>foi a CAMIM que começou</b> — mandando cobrança, lembrete de vencimento ou promoção — e não o cliente. Esses casos são separados do atendimento normal porque funcionam totalmente diferente: numa, o cliente pede ajuda; na outra, a CAMIM avisa algo e espera resposta."></i>
           <small class="text-muted ml-2" style="font-size:.75rem;">disparos de cobrança/lembrete sem cliente abrindo conversa</small>
@@ -547,7 +552,7 @@
         <div class="row mb-3">
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box red">
-              <div class="label">Sem reply do cliente
+              <div class="label">Sem <span class="text-muted">reply<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Reply</b> = resposta do cliente. 'Sem reply' significa que a CAMIM disparou e o cliente <b>não voltou a falar</b>."></i></span> do cliente
                 <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
                    title="Disparos em que <b>o cliente não respondeu nada</b>. Se esse número é grande em relação ao total, significa que a mensagem não tá chamando atenção (ou tá indo pra quem não se importa)."></i>
               </div>
@@ -556,7 +561,7 @@
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box purple">
-              <div class="label">Com reply do cliente
+              <div class="label">Com <span class="text-muted">reply<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Reply</b> = resposta do cliente. 'Com reply' significa que a CAMIM disparou e o cliente <b>voltou a falar</b> — o disparo engajou."></i></span> do cliente
                 <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
                    title="Disparos em que <b>o cliente voltou a falar</b> depois da mensagem. É o 'sucesso' do disparo — a pessoa se interessou o suficiente pra responder."></i>
               </div>
@@ -565,16 +570,16 @@
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box">
-              <div class="label">Total outbound
+              <div class="label">Total <span class="text-muted">outbound<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Outbound</b> = conversa iniciada pela CAMIM (template, lembrete, cobrança). Oposto de <b>inbound</b> (iniciada pelo cliente)."></i></span>
                 <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
-                   title="Soma de todos os disparos feitos pela CAMIM nos últimos 90 dias (com ou sem reply)."></i>
+                   title="Soma de todos os disparos feitos pela CAMIM nos últimos 90 dias (com ou sem resposta)."></i>
               </div>
               <div class="value" id="oTotal">—</div>
             </div>
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box orange">
-              <div class="label">Taxa de reply geral
+              <div class="label">Taxa de <span class="text-muted">reply<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Reply</b> = resposta do cliente. 'Taxa de reply' é o <b>% de disparos que geraram resposta</b>."></i></span> geral
                 <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
                    title="De cada 100 disparos, <b>quantos o cliente respondeu</b>. Quanto maior, melhor — significa que as mensagens tão funcionando."></i>
               </div>
@@ -584,7 +589,7 @@
         </div>
         <div class="card mb-3">
           <div class="card-header"><h3 class="card-title">
-            Outbound por fila
+            <span class="text-muted">Outbound<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Outbound</b> = conversa iniciada pela CAMIM (template, lembrete, cobrança)."></i></span> por fila
             <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
                title="Quebra os disparos por <b>tipo/fila de origem</b>. Ex: 'Mensagens MKT' = marketing; 'Template Enviado ao Cliente' = lembretes e cobranças. Dá pra ver qual tipo de disparo funciona melhor."></i>
           </h3></div>
@@ -600,15 +605,15 @@
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Quantos disparos essa fila fez no total."></i>
                   </th>
-                  <th class="text-right">Sem reply
+                  <th class="text-right">Sem <span class="text-muted">reply<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Reply</b> = resposta do cliente."></i></span>
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Quantos clientes não responderam."></i>
                   </th>
-                  <th class="text-right">Com reply
+                  <th class="text-right">Com <span class="text-muted">reply<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Reply</b> = resposta do cliente."></i></span>
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Quantos clientes voltaram a falar depois."></i>
                   </th>
-                  <th class="text-right">Taxa reply
+                  <th class="text-right">Taxa <span class="text-muted">reply<i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="<b>Reply</b> = resposta do cliente. 'Taxa de reply' = % dos disparos que geraram resposta."></i></span>
                     <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
                        title="Percentual de quem respondeu sobre o total. Quanto maior, mais a mensagem engajou."></i>
                   </th>
@@ -695,6 +700,31 @@
     return (s / 3600).toFixed(1) + 'h';
   }
   function pctOf(n, total) { return total ? (n / total * 100) : null; }
+
+  // ── Mini-dicionário de termos técnicos / em inglês ──
+  // Usado pelo helper hi(key) para injetar um ícone de hint inline
+  // onde o termo aparece no texto renderizado.
+  const GLOSSARIO = {
+    inbound: "<b>Inbound</b> = conversa <b>iniciada pelo cliente</b> (ele mandou a 1ª mensagem pelo WhatsApp/app/chat).",
+    outbound: "<b>Outbound</b> = conversa <b>iniciada pela CAMIM</b> (template, lembrete de boleto, campanha de marketing). A equipe dispara antes do cliente falar.",
+    reply: "<b>Reply</b> = resposta do cliente. 'Com reply' = o cliente voltou a falar após o disparo. 'Sem reply' = o disparo ficou no vácuo.",
+    bucket: "<b>Bucket</b> = categoria do ticket (tipo de conversa). Ex: cliente iniciou e Camila resolveu; cliente iniciou e humano atendeu; CAMIM disparou sem resposta; etc. Cada ticket cai em exatamente um bucket.",
+    fechamento: "<b>Fechamento</b> = <i>como</i> o ticket terminou. Categorias: humano (alguém da equipe fechou), auto_timeout (Camila fechou porque passou de 1h/3h), auto_inatividade (Camila fechou de madrugada), cliente_sem_retorno (cliente sumiu), bot_sem_conclusão (residual), aberto (ainda rolando).",
+    timeout: "<b>Timeout</b> = tempo limite automático. Se o ticket fica mais de 1h ou 3h sem resposta, o sistema fecha sozinho.",
+    auto: "<b>Auto</b> = fechamento <b>automático</b> (a Camila/sistema fechou o ticket sozinho, sem ação humana). Existem duas variantes: <b>auto_timeout</b> (passou de 1h/3h em aberto) e <b>auto_inatividade</b> (Camila varre os tickets de madrugada).",
+    auto_timeout: "<b>auto_timeout</b> = Camila fechou sozinha porque o ticket passou do tempo máximo (1h ou 3h em aberto sem progresso).",
+    auto_inatividade: "<b>auto_inatividade</b> = Camila fechou sozinha durante a varredura de madrugada, em tickets parados há tempo.",
+    med: "<b>Média</b> (med) = soma de todos os tempos ÷ quantidade. Fica distorcida por casos extremos (1 ticket que ficou 30 dias aberto puxa a média pra cima).",
+    p50: "<b>p50</b> = mediana. É o valor do <b>meio</b>: metade dos tickets demora menos que isso, metade mais. Imune a outliers — representa o 'caso típico'.",
+    p95: "<b>p95</b> = 95º percentil. <b>95% dos tickets são mais rápidos que isso</b>. Mede 'quão ruim é o pior caso realista' (ignora os 5% mais extremos).",
+    n:   "<b>n</b> = tamanho da amostra. Quantos tickets entraram nessa conta. Quanto maior, mais confiável o número.",
+    score: "<b>Score</b> = nota dada pelo cliente no final do atendimento (1 a 5 estrelas).",
+  };
+  function hi(key) {
+    const txt = GLOSSARIO[key];
+    if (!txt) return '';
+    return ` <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true" title="${txt.replace(/"/g, '&quot;')}"></i>`;
+  }
 
   /**
    * Torna uma tabela clicável nos cabeçalhos para ordenar.
@@ -1112,8 +1142,10 @@
          <div class="funil-lbl">${label}</div>
          <div class="funil-bar"><div style="width:${barW.toFixed(1)}%"></div></div>
          <div class="funil-val">
-           med <b>${fmtSec(v.media)}</b> · p50 ${fmtSec(v.p50)} · p95 ${fmtSec(v.p95)}
-           <div style="font-size:.7rem;color:#9ca3af">n=${fmtInt(v.n)}</div>
+           med${hi('med')} <b>${fmtSec(v.media)}</b> ·
+           p50${hi('p50')} ${fmtSec(v.p50)} ·
+           p95${hi('p95')} ${fmtSec(v.p95)}
+           <div style="font-size:.7rem;color:#9ca3af">n${hi('n')}=${fmtInt(v.n)}</div>
          </div>
        </div>`);
   });
@@ -1220,22 +1252,35 @@
       'outbound_sem_reply',
       'vazio',
     ];
+    // Labels com hint inline no termo em inglês (inbound / outbound / reply)
+    const IN  = '<span class="text-muted">Inbound' + hi('inbound') + '</span>';
+    const OUT = '<span class="text-muted">Outbound' + hi('outbound') + '</span>';
+    const RPL = '<span class="text-muted">reply' + hi('reply') + '</span>';
     const bkLabelsShort = {
-      inbound_resolvido_camila:       'Inbound resolvido Camila',
-      inbound_atendido_humano:        'Inbound atendido por humano',
-      inbound_transferido_sem_humano: 'Inbound transferido s/ humano',
-      outbound_com_reply:             'Outbound c/ reply',
-      outbound_sem_reply:             'Outbound s/ reply',
+      inbound_resolvido_camila:       IN  + ' resolvido Camila',
+      inbound_atendido_humano:        IN  + ' atendido por humano',
+      inbound_transferido_sem_humano: IN  + ' transferido s/ humano',
+      outbound_com_reply:             OUT + ' c/ ' + RPL,
+      outbound_sem_reply:             OUT + ' s/ ' + RPL,
       vazio:                          'Vazio',
     };
     const rows = bkOrder.filter(b => matriz[b]);
     if (rows.length === 0) return;
 
     // Cabeçalho: bucket + uma coluna por fechamento na ordem canônica + total
+    // Rótulos curtos distintos para cada fechamento (com hint nos termos técnicos)
+    const fcLabelsMatriz = {
+      humano:              'Humano fechou',
+      auto_timeout:        'Auto' + hi('auto_timeout') + ' timeout' + hi('timeout'),
+      auto_inatividade:    'Auto' + hi('auto_inatividade') + ' inativ.',
+      bot_sem_conclusao:   'Bot s/ conclusão',
+      cliente_sem_retorno: 'Cliente abandonou',
+      aberto:              'Aberto',
+    };
     const head = document.getElementById('tblMatrizHead');
     head.insertAdjacentHTML('beforeend',
-      `<th class="text-left">Bucket</th>` +
-      fcOrder.map(fk => `<th><span class="badge badge-mini" style="background:${fcColors[fk]};color:#fff;">${fcLabels[fk].split(' —')[0]}</span></th>`).join('') +
+      `<th class="text-left">Bucket${hi('bucket')}</th>` +
+      fcOrder.map(fk => `<th><span class="badge badge-mini" style="background:${fcColors[fk]};color:#fff;">${fcLabelsMatriz[fk] || fcLabels[fk]}</span></th>`).join('') +
       `<th>Total</th>`);
 
     const body = document.getElementById('tblMatrizBody');
