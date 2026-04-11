@@ -543,13 +543,13 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
     # pela Camila por ociosidade?" sem precisar fazer interseção de sets no front.
     matriz_bf = {}
     matriz_bf_ids = {}
-    for bk in df["bucket"].dropna().unique():
-        sub = df[df["bucket"] == bk]
-        matriz_bf[str(bk)] = {
+    for _bucket_key in df["bucket"].dropna().unique():
+        sub = df[df["bucket"] == _bucket_key]
+        matriz_bf[str(_bucket_key)] = {
             str(fk): int(v)
             for fk, v in sub["fechamento"].value_counts().to_dict().items()
         }
-        matriz_bf_ids[str(bk)] = {
+        matriz_bf_ids[str(_bucket_key)] = {
             str(fk): ids_of(sub[sub["fechamento"] == fk])
             for fk in sub["fechamento"].dropna().unique()
         }
