@@ -101,6 +101,41 @@
     .b-fechado-cli     { background:#ede9fe; color:#5b21b6; }
     .b-fechado-aberto  { background:#f3f4f6; color:#374151; }
 
+    /* Caixa de explicação visível na tela (não tooltip) */
+    .info-box {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      border-radius: 6px;
+      padding: 14px 18px;
+      margin: 0 0 16px 0;
+      font-size: .88rem;
+      line-height: 1.55;
+      color: #451a03;
+    }
+    .info-box .info-title {
+      font-weight: 700;
+      color: #92400e;
+      font-size: .95rem;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .info-box ul { margin: 6px 0 0 0; padding-left: 20px; }
+    .info-box li { margin-bottom: 3px; }
+    .info-box .destaque {
+      background: #fde68a;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+    .info-box.cinza {
+      background: #f8fafc;
+      border-left-color: #64748b;
+      color: #1e293b;
+    }
+    .info-box.cinza .info-title { color: #334155; }
+
     /* Hint / tooltip ícone */
     .hint-ico {
       color:#9ca3af; cursor:help; margin-left:6px; font-size:.72em;
@@ -189,6 +224,21 @@
       <div id="loadingMsg"><i class="fas fa-spinner fa-spin"></i> Carregando dashboard...</div>
 
       <div id="mainContent" style="display:none;">
+
+        <div class="info-box cinza">
+          <div class="info-title"><i class="fas fa-book-open"></i> Como ler esta página (em uma respirada)</div>
+          Cada conversa do chat vira um <b>ticket</b>. A página classifica cada ticket de duas maneiras ao mesmo tempo:
+          <ul>
+            <li><b>Tipo de conversa</b> (chamado de <i>bucket</i>): quem começou a falar e o que aconteceu. Ex.: <i>cliente iniciou e a Camila resolveu</i>; <i>cliente iniciou e humano atendeu</i>; <i>a CAMIM disparou e o cliente não respondeu</i>.</li>
+            <li><b>Como terminou</b> (chamado de <i>fechamento</i>): quem deu a última palavra. Pode ser <b>humano</b> (alguém da equipe fechou de verdade), <b>Auto</b> (a Camila fechou sozinha porque estourou tempo ou na varredura da madrugada), <b>cliente abandonou</b>, <b>bot s/ conclusão</b> ou <b>aberto</b>.</li>
+          </ul>
+          <div style="margin-top:8px;">
+            <span class="destaque">⚠️ Cuidado:</span> "<b>Camila resolveu</b>" e "<b>Auto</b>" <b>não significam atendimento bom</b>. Quase sempre significam que <b>ninguém respondeu</b> e o robô fechou o ticket sozinho depois de 1h, 3h ou na madrugada. Pra ver atendimento real, olhe a coluna <b>"Humano fechou"</b> nas tabelas.
+          </div>
+          <div style="margin-top:8px; font-size:.82rem; color:#475569;">
+            Termos em inglês ou abreviados (<i>inbound</i>, <i>outbound</i>, <i>reply</i>, <i>med</i>, <i>p50</i>, <i>p95</i>…) têm uma <b>?</b> cinza ao lado — passe o mouse pra ver a explicação.
+          </div>
+        </div>
 
         <!-- ============================================================ -->
         <!-- KPIs                                                          -->
@@ -337,6 +387,23 @@
           <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
              title="Cruza o <b>tipo de conversa</b> (linhas) com <b>como ela terminou</b> (colunas). Útil pra responder: 'quantos tickets foram transferidos a humanos mas finalizados pelo bot por ociosidade?' → some 'Auto timeout' + 'Auto inatividade' nas linhas de Humano/Pendente. Clique numa célula pra abrir a lista."></i>
         </h2>
+
+        <div class="info-box">
+          <div class="info-title"><i class="fas fa-lightbulb"></i> Como ler esta tabela (importante)</div>
+          As <b>linhas</b> são o <b>tipo de conversa</b> (quem começou e o que aconteceu). As <b>colunas</b> são <b>como a conversa terminou</b>. Cada número é a quantidade de tickets que se encaixam nas duas coisas ao mesmo tempo. Clique num número pra ver a lista.
+
+          <div style="margin-top:10px;"><b>Atenção às duas colunas "Auto":</b> as duas significam que <b>a Camila (robô) fechou o ticket sozinha</b>, sem ninguém da equipe encostar nele. A diferença é por que ela fechou:</div>
+          <ul>
+            <li><b>Auto timeout</b> — o ticket passou do <b>tempo máximo</b> em aberto (1h ou 3h). A Camila percebeu e fechou.</li>
+            <li><b>Auto inativ.</b> (inatividade) — varredura da <b>madrugada</b>. A Camila passa nos tickets parados há tempo e fecha em lote.</li>
+          </ul>
+
+          <div style="margin-top:10px;">
+            <span class="destaque">⚠️ "Inbound resolvido Camila" raramente significa que ela resolveu de verdade.</span>
+            Na maior parte das vezes, é só que <b>ninguém respondeu</b> e o tempo estourou. Se quiser ver quem está atendendo de verdade, olhe a coluna <b>"Humano fechou"</b>. Se quiser ver onde a Camila está fechando o trabalho dos atendentes, some <b>"Auto timeout" + "Auto inativ."</b> na linha <b>"Inbound atendido por humano"</b>.
+          </div>
+        </div>
+
         <div class="card mb-3">
           <div class="card-body p-0">
             <div class="table-responsive">
