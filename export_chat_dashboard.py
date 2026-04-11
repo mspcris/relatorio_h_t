@@ -417,6 +417,40 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
         "total":             stats(inbound_human["delta_total"]),
     }
 
+    # ============================================================================
+    # DRILL-DOWN: tickets_index + ids por agregação
+    # ============================================================================
+    def ids_of(d):
+        return [str(x) for x in d["id"].tolist()]
+
+    # ── Índice compacto de tickets (keys curtas pra reduzir tamanho do JSON) ──
+    tickets_index = {}
+    for _, r in df.iterrows():
+        cr = r.get("createdAt")
+        cl = r.get("closedAt")
+        tickets_index[str(r["id"])] = {
+            "n": int(r["ticketNumber"]) if pd.notna(r.get("ticketNumber")) else None,
+            "c": (str(r.get("customer_nome") or ""))[:60],
+            "f": str(r.get("fila_efetiva") or ""),
+            "b": str(r.get("bucket") or ""),
+            "z": str(r.get("fechamento") or ""),
+            "d": cr.strftime("%d/%m/%Y %H:%M") if pd.notna(cr) else "",
+            "e": cl.strftime("%d/%m/%Y %H:%M") if pd.notna(cl) else "",
+            "h": str(r.get("human_name") or ""),
+            "s": int(r["eval_score"]) if pd.notna(r.get("eval_score")) else None,
+            "o": (str(r.get("eval_obs") or ""))[:200],
+        }
+
+    # IDs agrupados por bucket e por tipo de fechamento
+    bucket_ids = {
+        str(k): ids_of(df[df["bucket"] == k])
+        for k in df["bucket"].dropna().unique()
+    }
+    fechamento_ids = {
+        str(k): ids_of(df[df["fechamento"] == k])
+        for k in df["fechamento"].dropna().unique()
+    }
+
     # ── Por fila ──
     por_fila = []
     for fila, g in df[df["fila_efetiva"].notna()].groupby("fila_efetiva"):
@@ -434,6 +468,7 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
             "abertos":            int((g["fechamento"] == "aberto").sum()),
             "nota_media":         round(float(eval_scores.mean()), 2) if not eval_scores.empty else None,
             "n_avaliacoes":       int(len(eval_scores)),
+            "ids":                ids_of(g),
         })
     por_fila.sort(key=lambda x: x["tickets"], reverse=True)
 
@@ -451,6 +486,7 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
             "resolucao_med":         round(float(gh["delta_total"].dropna().mean()), 1) if gh["delta_total"].notna().any() else None,
             "nota_media":            round(float(eval_scores.mean()), 2) if not eval_scores.empty else None,
             "n_avaliacoes":          int(len(eval_scores)),
+            "ids":                   ids_of(g),
         })
     por_user.sort(key=lambda x: x["tickets"], reverse=True)
 
@@ -459,17 +495,24 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
     df["dow"] = df["createdAt"].dt.weekday
     heatmap = []
     for (h, d), g in df.dropna(subset=["hora", "dow"]).groupby(["hora", "dow"]):
-        heatmap.append({"hora": int(h), "dow": int(d), "tickets": int(len(g))})
+        heatmap.append({
+            "hora": int(h), "dow": int(d),
+            "tickets": int(len(g)),
+            "ids": ids_of(g),
+        })
 
     # ── Série diária últimos 30d ──
     df["data"] = df["createdAt"].dt.strftime("%Y-%m-%d")
+    df["data_br"] = df["createdAt"].dt.strftime("%d/%m/%Y")
     cutoff_30 = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     df30 = df[df["data"] >= cutoff_30]
     serie = []
     for d, g in df30.groupby("data"):
         gh = g[g["bucket"] == "inbound_atendido_humano"]
+        data_br = g["data_br"].iloc[0] if not g.empty else d
         serie.append({
             "data": d,
+            "data_br": data_br,
             "total": int(len(g)),
             "inbound_camila":     int((g["bucket"] == "inbound_resolvido_camila").sum()),
             "inbound_humano":     int((g["bucket"] == "inbound_atendido_humano").sum()),
@@ -477,6 +520,7 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
             "outbound_sem_reply": int((g["bucket"] == "outbound_sem_reply").sum()),
             "outbound_com_reply": int((g["bucket"] == "outbound_com_reply").sum()),
             "tempo_total_med":    round(float(gh["delta_total"].dropna().mean()), 1) if gh["delta_total"].notna().any() else None,
+            "ids":                ids_of(g),
         })
     serie.sort(key=lambda x: x["data"])
 
@@ -487,14 +531,20 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
             "source": src if pd.notna(src) else "(null)",
             "tickets": int(len(g)),
             "buckets": {k: int(v) for k, v in g["bucket"].value_counts().to_dict().items()},
+            "ids": ids_of(g),
         })
     por_source.sort(key=lambda x: x["tickets"], reverse=True)
 
     # ── Distribuição de notas ──
     notas_dist = []
     if avaliados:
-        for n, cnt in pd.to_numeric(df["eval_score"], errors="coerce").dropna().astype(int).value_counts().sort_index().items():
-            notas_dist.append({"nota": int(n), "n": int(cnt)})
+        scores_num = pd.to_numeric(df["eval_score"], errors="coerce")
+        for n, cnt in scores_num.dropna().astype(int).value_counts().sort_index().items():
+            notas_dist.append({
+                "nota": int(n),
+                "n": int(cnt),
+                "ids": ids_of(df[scores_num == n]),
+            })
 
     # ── Comentários recentes (até 20) ──
     coms_df = df[df["eval_obs"].notna()].copy()
@@ -502,11 +552,12 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
     coms_df = coms_df[coms_df["obs_str"].str.len() > 0]
     coms_df = coms_df.sort_values("createdAt", ascending=False).head(20)
     coms = [{
+        "id":      str(r["id"]),
         "ticket":  int(r["ticketNumber"]) if pd.notna(r["ticketNumber"]) else None,
         "nota":    int(r["eval_score"]) if pd.notna(r["eval_score"]) else None,
         "obs":     r["obs_str"][:300],
         "fila":    r["fila_efetiva"],
-        "data":    r["createdAt"].strftime("%Y-%m-%d %H:%M") if pd.notna(r["createdAt"]) else None,
+        "data":    r["createdAt"].strftime("%d/%m/%Y %H:%M") if pd.notna(r["createdAt"]) else None,
     } for _, r in coms_df.iterrows()]
 
     # ── Outbound — top filas/templates ──
@@ -521,6 +572,9 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
             "sem_reply": sr,
             "com_reply": cr,
             "taxa_reply": round(cr / len(g) * 100, 1) if len(g) else 0.0,
+            "ids":       ids_of(g),
+            "ids_sem_reply": ids_of(g[g["bucket"] == "outbound_sem_reply"]),
+            "ids_com_reply": ids_of(g[g["bucket"] == "outbound_com_reply"]),
         })
     outbound_filas.sort(key=lambda x: x["total"], reverse=True)
 
@@ -550,8 +604,13 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
             "total":         int(len(outbound)),
             "sem_reply":     int((outbound["bucket"] == "outbound_sem_reply").sum()),
             "com_reply":     int((outbound["bucket"] == "outbound_com_reply").sum()),
+            "ids_sem_reply": ids_of(outbound[outbound["bucket"] == "outbound_sem_reply"]),
+            "ids_com_reply": ids_of(outbound[outbound["bucket"] == "outbound_com_reply"]),
             "por_fila":      outbound_filas,
         },
+        "tickets_index":  tickets_index,
+        "bucket_ids":     bucket_ids,
+        "fechamento_ids": fechamento_ids,
     }
 
 

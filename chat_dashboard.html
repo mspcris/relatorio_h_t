@@ -73,6 +73,44 @@
 
     #loadingMsg { color:#6b7280; padding:20px; text-align:center; }
     #errBox { display:none; }
+
+    /* Drill-down clickable */
+    .drill { cursor:pointer; }
+    .drill:hover { background:#eff6ff !important; }
+    .kpi-box.drill:hover { outline:2px solid #3b82f6; }
+    .kpi-box .drill-hint { font-size:.62rem; color:#3b82f6; margin-top:4px; opacity:.7; }
+    .kpi-box.drill:hover .drill-hint { opacity:1; }
+
+    /* Modal drill */
+    #drillModal .modal-dialog { max-width:1100px; }
+    #drillModal .modal-header { background:#1e40af; color:#fff; }
+    #drillModal .modal-header .close { color:#fff; text-shadow:none; opacity:.9; }
+    #drillModal .tbl-drill { font-size:.8rem; }
+    #drillModal .tbl-drill td, #drillModal .tbl-drill th { padding:.35rem .5rem; vertical-align:middle; }
+    #drillModal .tbl-drill thead th { background:#f3f4f6; position:sticky; top:0; z-index:1; }
+    #drillModal .modal-body-scroll { max-height:70vh; overflow-y:auto; }
+    #drillModal .drill-filter { width:260px; }
+    #drillModal .badge-mini { font-size:.65rem; padding:2px 6px; }
+    .b-fechado-humano { background:#dcfce7; color:#166534; }
+    .b-fechado-camila { background:#dbeafe; color:#1e40af; }
+    .b-fechado-inativ { background:#fef3c7; color:#92400e; }
+    .b-fechado-aberto { background:#f3f4f6; color:#374151; }
+
+    /* Hint / tooltip ícone */
+    .hint-ico {
+      color:#9ca3af; cursor:help; margin-left:6px; font-size:.72em;
+      vertical-align:middle; transition:color .1s;
+    }
+    .hint-ico:hover { color:#2563eb; }
+    .tooltip { font-family: inherit; }
+    .tooltip-inner {
+      max-width: 340px; text-align: left; padding: 9px 11px;
+      font-size: .78rem; line-height: 1.45; background: #111827;
+    }
+    .tooltip.bs-tooltip-top .arrow::before,
+    .tooltip.bs-tooltip-auto[x-placement^="top"] .arrow::before { border-top-color: #111827; }
+    .tooltip.bs-tooltip-bottom .arrow::before,
+    .tooltip.bs-tooltip-auto[x-placement^="bottom"] .arrow::before { border-bottom-color: #111827; }
   </style>
 </head>
 
@@ -128,32 +166,48 @@
         <!-- ============================================================ -->
         <!-- KPIs                                                          -->
         <!-- ============================================================ -->
-        <h2 class="section-title"><i class="fas fa-chart-pie mr-1"></i> Visão geral</h2>
+        <h2 class="section-title">
+          <i class="fas fa-chart-pie mr-1"></i> Visão geral
+          <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-placement="right" data-html="true"
+             title="Resumo rápido das conversas dos últimos 90 dias. Cada bloco abaixo é uma 'foto' de uma informação importante."></i>
+        </h2>
         <div class="row mb-3">
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box blue">
-              <div class="label">Total tickets</div>
+              <div class="label">Total tickets
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="Cada <b>ticket</b> é uma conversa no chat. Este número mostra quantas conversas existiram no total nos últimos 90 dias — somando robô, humano e disparos da CAMIM."></i>
+              </div>
               <div class="value" id="kTotal">—</div>
               <div class="sub" id="kTotalSub"></div>
             </div>
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box">
-              <div class="label">Resolvido pela Camila</div>
+              <div class="label">Resolvido pela Camila
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="A <b>Camila.ai</b> é um robô (IA) que atende sozinho no chat. Este número mostra quantas conversas ela resolveu do começo ao fim <b>sem precisar chamar</b> alguém da equipe."></i>
+              </div>
               <div class="value" id="kCamila">—</div>
               <div class="sub" id="kCamilaSub"></div>
             </div>
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box green">
-              <div class="label">Atendido por humano</div>
+              <div class="label">Atendido por humano
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="Quando a Camila não consegue resolver sozinha, ela passa a conversa pra uma pessoa da equipe. Aqui estão quantas conversas um <b>humano de verdade</b> chegou a atender."></i>
+              </div>
               <div class="value" id="kHumano">—</div>
               <div class="sub" id="kHumanoSub"></div>
             </div>
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box orange">
-              <div class="label">Transferido (sem humano)</div>
+              <div class="label">Transferido (sem humano)
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="A Camila mandou a conversa pra uma fila de atendimento, mas <b>ninguém da equipe chegou a responder</b>. Se esse número está alto, é cliente esperando sem retorno."></i>
+              </div>
               <div class="value" id="kPendente">—</div>
               <div class="sub">tickets enfileirados sem retorno</div>
             </div>
@@ -163,28 +217,40 @@
         <div class="row mb-3">
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box red">
-              <div class="label">Outbound CAMIM (sem reply)</div>
+              <div class="label">Outbound CAMIM (sem reply)
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="Foi a <b>CAMIM que começou a conversa</b> — mandando lembrete de vencimento, cobrança ou promoção — e o cliente <b>não respondeu nada</b>. Igual mandar WhatsApp pra alguém e a pessoa não abrir."></i>
+              </div>
               <div class="value" id="kOutNoReply">—</div>
               <div class="sub">cobrança / lembrete sem resposta</div>
             </div>
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box purple">
-              <div class="label">Outbound CAMIM (com reply)</div>
+              <div class="label">Outbound CAMIM (com reply)
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="A CAMIM começou a conversa (cobrança, lembrete, template) e <b>o cliente voltou a falar</b>. É sinal que a mensagem chamou atenção — a pessoa respondeu."></i>
+              </div>
               <div class="value" id="kOutReply">—</div>
               <div class="sub" id="kOutReplySub"></div>
             </div>
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box teal">
-              <div class="label">Avaliados</div>
+              <div class="label">Avaliados
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="Quantas conversas receberam uma <b>nota de 1 a 5</b> do cliente no final (parecido com avaliar motorista de Uber no final da corrida)."></i>
+              </div>
               <div class="value" id="kAval">—</div>
               <div class="sub" id="kAvalSub"></div>
             </div>
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
             <div class="kpi-box">
-              <div class="label">Nota média</div>
+              <div class="label">Nota média
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="Média das estrelinhas dadas pelos clientes. <b>5 = excelente</b>, <b>1 = péssimo</b>. Boa referência pra saber se o atendimento tá bom no geral."></i>
+              </div>
               <div class="value" id="kNota">—</div>
               <div class="sub">de 1 a 5</div>
             </div>
@@ -194,7 +260,11 @@
         <!-- ============================================================ -->
         <!-- FUNIL                                                         -->
         <!-- ============================================================ -->
-        <h2 class="section-title"><i class="fas fa-stream mr-1"></i> Funil de tempo (inbound atendido por humano)</h2>
+        <h2 class="section-title">
+          <i class="fas fa-stream mr-1"></i> Funil de tempo (inbound atendido por humano)
+          <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+             title="Mostra <b>quanto tempo cada etapa demora</b> numa conversa típica: cliente fala → Camila responde → Camila manda pra fila → humano atende → fecha. Só conta conversas que passaram por humano (o funil completo).<br><br><b>Mediana (p50)</b>: o valor do meio — metade demora menos, metade mais.<br><b>p95</b>: só os 5% mais lentos demoram mais que isso.<br><b>Média</b>: soma tudo e divide (mais sensível a outliers)."></i>
+        </h2>
         <p class="section-subtitle">Mediana e p95 — distribuição mais robusta que média (média sofre com outliers).</p>
         <div class="card mb-3"><div class="card-body" id="funilBox"></div></div>
 
@@ -204,13 +274,21 @@
         <div class="row mb-3">
           <div class="col-md-6 mb-2">
             <div class="card">
-              <div class="card-header"><h3 class="card-title">Distribuição por bucket</h3></div>
+              <div class="card-header"><h3 class="card-title">
+                Distribuição por bucket
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="Divide <b>todas as conversas por tipo</b>: quantas o robô resolveu sozinho, quantas precisaram de humano, quantas foram disparos da CAMIM, etc. Serve pra entender onde o volume tá concentrado."></i>
+              </h3></div>
               <div class="card-body"><div class="chart-container"><canvas id="chartBucket"></canvas></div></div>
             </div>
           </div>
           <div class="col-md-6 mb-2">
             <div class="card">
-              <div class="card-header"><h3 class="card-title">Tipo de fechamento</h3></div>
+              <div class="card-header"><h3 class="card-title">
+                Tipo de fechamento
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="Mostra <b>como cada conversa foi encerrada</b>:<br><b>Humano fechou</b> — alguém da equipe encerrou (bom sinal).<br><b>Camila fechou (normal)</b> — o robô encerrou porque resolveu.<br><b>Camila fechou (inatividade)</b> — ninguém mexeu por muito tempo e o sistema fechou sozinho à noite (às vezes cliente abandonou).<br><b>Aberto</b> — ainda em andamento."></i>
+              </h3></div>
               <div class="card-body"><div class="chart-container"><canvas id="chartFech"></canvas></div></div>
             </div>
           </div>
@@ -219,21 +297,52 @@
         <!-- ============================================================ -->
         <!-- TABELA POR FILA                                               -->
         <!-- ============================================================ -->
-        <h2 class="section-title"><i class="fas fa-layer-group mr-1"></i> Por fila</h2>
+        <h2 class="section-title">
+          <i class="fas fa-layer-group mr-1"></i> Por fila
+          <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+             title="Cada <b>fila</b> é uma 'porta' do atendimento. Ex: 'Financeiro', 'Suporte ao APP', 'Adesão'. A tabela mostra como cada porta está se saindo: volume, tempo de espera, fechamento e avaliação."></i>
+        </h2>
         <div class="card mb-3">
           <div class="card-body p-0">
             <table class="table table-sm table-hover mb-0">
               <thead class="thead-light">
                 <tr>
-                  <th>Fila</th>
-                  <th class="text-right">Tickets</th>
-                  <th class="text-right">Atend. humano</th>
-                  <th class="text-right">Espera humano (med)</th>
-                  <th class="text-right">Resolução (med)</th>
-                  <th class="text-right">Fech. humano</th>
-                  <th class="text-right">Fech. Camila</th>
-                  <th class="text-right">Abertos</th>
-                  <th class="text-right">Nota</th>
+                  <th>Fila
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Nome da fila de atendimento. Ex: 'Financeiro', 'Suporte ao APP'."></i>
+                  </th>
+                  <th class="text-right">Tickets
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Quantas conversas passaram por essa fila nos últimos 90 dias."></i>
+                  </th>
+                  <th class="text-right">Atend. humano
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Dessas conversas, quantas um humano realmente chegou a atender (resto foi robô ou ninguém pegou)."></i>
+                  </th>
+                  <th class="text-right">Espera humano (med)
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Tempo médio (mediana) que o cliente ficou esperando na fila até alguém da equipe começar a responder. Menor é melhor."></i>
+                  </th>
+                  <th class="text-right">Resolução (med)
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Tempo médio total da conversa inteira: do primeiro 'oi' do cliente até ser fechada."></i>
+                  </th>
+                  <th class="text-right">Fech. humano
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Quantas conversas foram encerradas por um humano. Significa atendimento completo."></i>
+                  </th>
+                  <th class="text-right">Fech. Camila
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Quantas foram encerradas pelo robô — seja porque ele resolveu, seja porque ninguém respondeu e o sistema fechou sozinho."></i>
+                  </th>
+                  <th class="text-right">Abertos
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Quantas ainda estão em aberto, aguardando alguma ação."></i>
+                  </th>
+                  <th class="text-right">Nota
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Nota média dos clientes nessa fila (de 1 a 5). Entre parênteses, quantas avaliações foram feitas."></i>
+                  </th>
                 </tr>
               </thead>
               <tbody id="tblFila"></tbody>
@@ -244,20 +353,45 @@
         <!-- ============================================================ -->
         <!-- TABELA POR USUÁRIO HUMANO                                     -->
         <!-- ============================================================ -->
-        <h2 class="section-title"><i class="fas fa-user-tie mr-1"></i> Por atendente humano</h2>
+        <h2 class="section-title">
+          <i class="fas fa-user-tie mr-1"></i> Por atendente humano
+          <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+             title="Ranking dos atendentes humanos: quem pega mais conversas, quem responde mais rápido e quem é melhor avaliado. O 'dono' de cada conversa é definido como o primeiro humano que mandou mensagem."></i>
+        </h2>
         <p class="section-subtitle">Atendente "dono" do ticket = primeiro humano (não-IA) que enviou mensagem.</p>
         <div class="card mb-3">
           <div class="card-body p-0">
             <table class="table table-sm table-hover mb-0">
               <thead class="thead-light">
                 <tr>
-                  <th>Atendente</th>
-                  <th>Setor</th>
-                  <th class="text-right">Tickets</th>
-                  <th class="text-right">1ª resposta (med)</th>
-                  <th class="text-right">Resolução (med)</th>
-                  <th class="text-right">Nota</th>
-                  <th class="text-right">N aval</th>
+                  <th>Atendente
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Nome da pessoa da equipe que atendeu a conversa."></i>
+                  </th>
+                  <th>Setor
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Departamento dessa pessoa (Financeiro, Suporte, etc.)."></i>
+                  </th>
+                  <th class="text-right">Tickets
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Quantas conversas essa pessoa pegou nos últimos 90 dias."></i>
+                  </th>
+                  <th class="text-right">1ª resposta (med)
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Tempo médio entre a conversa cair na fila e essa pessoa mandar a primeira mensagem. Menor é melhor (cliente esperando menos)."></i>
+                  </th>
+                  <th class="text-right">Resolução (med)
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Tempo médio total das conversas atendidas por essa pessoa — do começo até fechar."></i>
+                  </th>
+                  <th class="text-right">Nota
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Nota média dada pelos clientes que essa pessoa atendeu (de 1 a 5)."></i>
+                  </th>
+                  <th class="text-right">N aval
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Quantas avaliações essa pessoa recebeu. Quanto maior a amostra, mais confiável é a nota."></i>
+                  </th>
                 </tr>
               </thead>
               <tbody id="tblUser"></tbody>
@@ -271,7 +405,11 @@
         <div class="row mb-3">
           <div class="col-md-12 mb-2">
             <div class="card">
-              <div class="card-header"><h3 class="card-title">Tickets por dia (últimos 30 dias)</h3></div>
+              <div class="card-header"><h3 class="card-title">
+                Tickets por dia (últimos 30 dias)
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="Gráfico de barras com os últimos 30 dias. Cada barra é um dia, e as cores mostram o <b>tipo de conversa</b> (robô, humano, pendente, outbound). Serve pra ver tendência: se o volume cresce, se os disparos outbound aumentaram, se o atendimento humano tá saudável."></i>
+              </h3></div>
               <div class="card-body"><div class="chart-container-lg"><canvas id="chartSerie"></canvas></div></div>
             </div>
           </div>
@@ -281,7 +419,11 @@
           <div class="col-md-12 mb-2">
             <div class="card">
               <div class="card-header">
-                <h3 class="card-title">Heatmap atividade — hora × dia da semana</h3>
+                <h3 class="card-title">
+                  Heatmap atividade — hora × dia da semana
+                  <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                     title="Mostra em <b>quais horários e dias da semana</b> acontecem mais conversas. Cada quadradinho é uma hora. Quanto mais escuro, mais conversas naquele horário. Útil pra saber quando escalar mais atendentes (ex: 'segunda de manhã é pico')."></i>
+                </h3>
               </div>
               <div class="card-body">
                 <div id="heatmap" class="heatmap"></div>
@@ -297,13 +439,21 @@
         <div class="row mb-3">
           <div class="col-md-5 mb-2">
             <div class="card h-100">
-              <div class="card-header"><h3 class="card-title">Distribuição de notas</h3></div>
+              <div class="card-header"><h3 class="card-title">
+                Distribuição de notas
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="Mostra <b>quantos clientes deram cada nota</b>. Ex: '300 deram 5★, 10 deram 1★'. Dá pra ver rapidinho se o atendimento tá sendo elogiado ou reclamado."></i>
+              </h3></div>
               <div class="card-body"><div class="chart-container-sm"><canvas id="chartNotas"></canvas></div></div>
             </div>
           </div>
           <div class="col-md-7 mb-2">
             <div class="card h-100">
-              <div class="card-header"><h3 class="card-title">Comentários recentes</h3></div>
+              <div class="card-header"><h3 class="card-title">
+                Comentários recentes
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="Últimos <b>20 comentários</b> escritos pelos clientes quando eles avaliaram a conversa. É a voz do cliente no cru — sem filtro, direto."></i>
+              </h3></div>
               <div class="card-body" id="comentariosBox" style="max-height:340px; overflow-y:auto;"></div>
             </div>
           </div>
@@ -314,33 +464,78 @@
         <!-- ============================================================ -->
         <h2 class="section-title">
           <i class="fas fa-paper-plane mr-1"></i> Outbound — CAMIM iniciou
+          <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+             title="Conversas em que <b>foi a CAMIM que começou</b> — mandando cobrança, lembrete de vencimento ou promoção — e não o cliente. Esses casos são separados do atendimento normal porque funcionam totalmente diferente: numa, o cliente pede ajuda; na outra, a CAMIM avisa algo e espera resposta."></i>
           <small class="text-muted ml-2" style="font-size:.75rem;">disparos de cobrança/lembrete sem cliente abrindo conversa</small>
         </h2>
         <div class="row mb-3">
           <div class="col-md-3 col-sm-6 mb-2">
-            <div class="kpi-box red"><div class="label">Sem reply do cliente</div><div class="value" id="oNoReply">—</div></div>
+            <div class="kpi-box red">
+              <div class="label">Sem reply do cliente
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="Disparos em que <b>o cliente não respondeu nada</b>. Se esse número é grande em relação ao total, significa que a mensagem não tá chamando atenção (ou tá indo pra quem não se importa)."></i>
+              </div>
+              <div class="value" id="oNoReply">—</div>
+            </div>
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
-            <div class="kpi-box purple"><div class="label">Com reply do cliente</div><div class="value" id="oReply">—</div></div>
+            <div class="kpi-box purple">
+              <div class="label">Com reply do cliente
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="Disparos em que <b>o cliente voltou a falar</b> depois da mensagem. É o 'sucesso' do disparo — a pessoa se interessou o suficiente pra responder."></i>
+              </div>
+              <div class="value" id="oReply">—</div>
+            </div>
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
-            <div class="kpi-box"><div class="label">Total outbound</div><div class="value" id="oTotal">—</div></div>
+            <div class="kpi-box">
+              <div class="label">Total outbound
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                   title="Soma de todos os disparos feitos pela CAMIM nos últimos 90 dias (com ou sem reply)."></i>
+              </div>
+              <div class="value" id="oTotal">—</div>
+            </div>
           </div>
           <div class="col-md-3 col-sm-6 mb-2">
-            <div class="kpi-box orange"><div class="label">Taxa de reply geral</div><div class="value" id="oTaxa">—</div></div>
+            <div class="kpi-box orange">
+              <div class="label">Taxa de reply geral
+                <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+                   title="De cada 100 disparos, <b>quantos o cliente respondeu</b>. Quanto maior, melhor — significa que as mensagens tão funcionando."></i>
+              </div>
+              <div class="value" id="oTaxa">—</div>
+            </div>
           </div>
         </div>
         <div class="card mb-3">
-          <div class="card-header"><h3 class="card-title">Outbound por fila</h3></div>
+          <div class="card-header"><h3 class="card-title">
+            Outbound por fila
+            <i class="fas fa-question-circle hint-ico" data-toggle="tooltip" data-html="true"
+               title="Quebra os disparos por <b>tipo/fila de origem</b>. Ex: 'Mensagens MKT' = marketing; 'Template Enviado ao Cliente' = lembretes e cobranças. Dá pra ver qual tipo de disparo funciona melhor."></i>
+          </h3></div>
           <div class="card-body p-0">
             <table class="table table-sm table-hover mb-0">
               <thead class="thead-light">
                 <tr>
-                  <th>Fila</th>
-                  <th class="text-right">Total</th>
-                  <th class="text-right">Sem reply</th>
-                  <th class="text-right">Com reply</th>
-                  <th class="text-right">Taxa reply</th>
+                  <th>Fila
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Qual fila/canal fez o disparo. Identifica o tipo da mensagem."></i>
+                  </th>
+                  <th class="text-right">Total
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Quantos disparos essa fila fez no total."></i>
+                  </th>
+                  <th class="text-right">Sem reply
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Quantos clientes não responderam."></i>
+                  </th>
+                  <th class="text-right">Com reply
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Quantos clientes voltaram a falar depois."></i>
+                  </th>
+                  <th class="text-right">Taxa reply
+                    <i class="fas fa-question-circle hint-ico" data-toggle="tooltip"
+                       title="Percentual de quem respondeu sobre o total. Quanto maior, mais a mensagem engajou."></i>
+                  </th>
                 </tr>
               </thead>
               <tbody id="tblOutFila"></tbody>
@@ -350,6 +545,59 @@
 
       </div><!-- /mainContent -->
     </section>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- Modal drill-down — lista de tickets de uma agregação              -->
+<!-- ================================================================ -->
+<div class="modal fade" id="drillModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fas fa-comments mr-2"></i>
+          <span id="drillTitle">Conversas</span>
+          <small id="drillCount" class="ml-2" style="opacity:.85;"></small>
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Fechar">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body p-2">
+        <div class="d-flex align-items-center mb-2 px-1" style="gap:10px; flex-wrap:wrap;">
+          <input type="text" class="form-control form-control-sm drill-filter" id="drillFilter"
+                 placeholder="Filtrar por cliente, fila, comentário…">
+          <small class="text-muted" id="drillInfo"></small>
+          <div class="ml-auto">
+            <small class="text-muted">Clique em uma linha para abrir a conversa no chat</small>
+          </div>
+        </div>
+        <div class="modal-body-scroll">
+          <table class="table table-sm table-hover tbl-drill mb-0">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Cliente</th>
+                <th>Data</th>
+                <th>Fila</th>
+                <th>Tipo</th>
+                <th>Fechamento</th>
+                <th>Atendente</th>
+                <th class="text-right">Nota</th>
+                <th>Comentário</th>
+                <th class="text-center">Abrir</th>
+              </tr>
+            </thead>
+            <tbody id="drillBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <small class="text-muted mr-auto">Mostrando até 500 conversas mais recentes do grupo.</small>
+        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Fechar</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -397,6 +645,106 @@
     '• atualizado em ' + (meta.gerado_em_br || '?') + ' · ' + (meta.janela_dias || '?') + 'd';
 
   // ============================================================
+  // DRILL-DOWN: modal que mostra a lista de tickets de uma agregação
+  // ============================================================
+  const TICKETS_IDX  = data.tickets_index || {};
+  const BUCKET_IDS   = data.bucket_ids || {};
+  const FECH_IDS     = data.fechamento_ids || {};
+  // URL pattern do chat — abre a conversa diretamente
+  const CHAT_URL = n => 'https://chat.camim.com.br/tickets/' + (n != null ? n : '');
+
+  const bucketBadge = {
+    inbound_resolvido_camila:        '<span class="badge badge-mini b-camila">Camila</span>',
+    inbound_atendido_humano:         '<span class="badge badge-mini b-humano">Humano</span>',
+    inbound_transferido_sem_humano:  '<span class="badge badge-mini b-pendente">Pendente</span>',
+    outbound_sem_reply:              '<span class="badge badge-mini b-out-noreply">Out s/reply</span>',
+    outbound_com_reply:              '<span class="badge badge-mini b-out-reply">Out c/reply</span>',
+    vazio:                           '<span class="badge badge-mini" style="background:#e5e7eb;color:#374151;">Vazio</span>',
+  };
+  const fechBadge = {
+    humano:             '<span class="badge badge-mini b-fechado-humano">Humano</span>',
+    camila_normal:      '<span class="badge badge-mini b-fechado-camila">Camila</span>',
+    camila_inatividade: '<span class="badge badge-mini b-fechado-inativ">Inatividade</span>',
+    aberto:             '<span class="badge badge-mini b-fechado-aberto">Aberto</span>',
+  };
+
+  // Abre o modal listando até 500 tickets mais recentes (por data desc)
+  function openDrill(ids, title) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      alert('Sem tickets para exibir neste grupo.');
+      return;
+    }
+    // Enriquece com tickets_index e ordena por data desc
+    const rows = ids
+      .map(id => {
+        const t = TICKETS_IDX[id];
+        if (!t) return null;
+        return { id, ...t };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.d || '').localeCompare(a.d || ''));
+    const total = rows.length;
+    const showing = rows.slice(0, 500);
+
+    document.getElementById('drillTitle').textContent = title || 'Conversas';
+    document.getElementById('drillCount').textContent = '(' + fmtInt(total) + ' total)';
+    document.getElementById('drillInfo').textContent =
+      showing.length < total
+        ? 'Exibindo as ' + fmtInt(showing.length) + ' mais recentes de ' + fmtInt(total)
+        : 'Exibindo ' + fmtInt(showing.length) + ' conversa(s)';
+
+    const body = document.getElementById('drillBody');
+    body.innerHTML = showing.map(r => {
+      const url = CHAT_URL(r.n);
+      const stars = r.s != null ? ('★'.repeat(r.s) + '☆'.repeat(5 - r.s)) : '—';
+      return `<tr class="drill-row">
+        <td><b>#${r.n != null ? r.n : '?'}</b></td>
+        <td>${escapeHtml(r.c || '—')}</td>
+        <td>${escapeHtml(r.d || '—')}</td>
+        <td>${escapeHtml(r.f || '—')}</td>
+        <td>${bucketBadge[r.b] || escapeHtml(r.b)}</td>
+        <td>${fechBadge[r.z] || escapeHtml(r.z)}</td>
+        <td>${escapeHtml(r.h || '—')}</td>
+        <td class="text-right" title="${r.s != null ? r.s + '/5' : 'sem avaliação'}">${stars}</td>
+        <td class="text-muted" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+            title="${escapeHtml(r.o || '')}">${escapeHtml(r.o || '')}</td>
+        <td class="text-center">
+          <a href="${url}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary"
+             title="Abrir conversa no chat" onclick="event.stopPropagation();">
+            <i class="fas fa-external-link-alt"></i>
+          </a>
+        </td>
+      </tr>`;
+    }).join('');
+
+    // Linha inteira clicável → abre a conversa
+    body.querySelectorAll('tr.drill-row').forEach((tr, i) => {
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', () => {
+        const r = showing[i];
+        window.open(CHAT_URL(r.n), '_blank', 'noopener');
+      });
+    });
+
+    // Filtro
+    const filter = document.getElementById('drillFilter');
+    filter.value = '';
+    filter.oninput = () => {
+      const q = filter.value.trim().toLowerCase();
+      body.querySelectorAll('tr.drill-row').forEach((tr, i) => {
+        if (!q) { tr.style.display = ''; return; }
+        const r = showing[i];
+        const hay = ((r.c||'') + ' ' + (r.f||'') + ' ' + (r.o||'') + ' ' + (r.h||'') + ' #' + (r.n||'')).toLowerCase();
+        tr.style.display = hay.includes(q) ? '' : 'none';
+      });
+    };
+
+    $('#drillModal').modal('show');
+  }
+  // Expõe globalmente pra handlers inline
+  window._openDrill = openDrill;
+
+  // ============================================================
   // KPIs
   // ============================================================
   const k = data.kpis || {};
@@ -424,6 +772,33 @@
   document.getElementById('kAval').textContent = fmtInt(k.avaliados);
   document.getElementById('kAvalSub').textContent = fmtPct(pctOf(k.avaliados, total)) + ' do total';
   document.getElementById('kNota').textContent = (k.nota_media != null) ? Number(k.nota_media).toFixed(2) : '—';
+
+  // ── KPI cards clicáveis: cada um abre o drill-down do seu bucket/tipo ──
+  function wireKpi(boxId, ids, title) {
+    const el = document.getElementById(boxId);
+    if (!el) return;
+    const box = el.closest('.kpi-box');
+    if (!box) return;
+    box.classList.add('drill');
+    box.insertAdjacentHTML('beforeend', '<div class="drill-hint">👆 clique pra ver as conversas</div>');
+    box.addEventListener('click', () => openDrill(ids || [], title));
+  }
+  // Coleta ids de "avaliados": tickets com nota
+  const avaliadosIds = (function(){
+    const out = [];
+    for (const id in TICKETS_IDX) { if (TICKETS_IDX[id].s != null) out.push(id); }
+    return out;
+  })();
+  const todosIds = Object.keys(TICKETS_IDX);
+
+  wireKpi('kTotal',     todosIds,                              'Todas as conversas');
+  wireKpi('kCamila',    BUCKET_IDS.inbound_resolvido_camila,   'Resolvido pela Camila');
+  wireKpi('kHumano',    BUCKET_IDS.inbound_atendido_humano,    'Atendido por humano');
+  wireKpi('kPendente',  BUCKET_IDS.inbound_transferido_sem_humano, 'Transferido sem humano');
+  wireKpi('kOutNoReply',BUCKET_IDS.outbound_sem_reply,         'Outbound sem reply');
+  wireKpi('kOutReply',  BUCKET_IDS.outbound_com_reply,         'Outbound com reply');
+  wireKpi('kAval',      avaliadosIds,                          'Conversas avaliadas');
+  wireKpi('kNota',      avaliadosIds,                          'Conversas avaliadas (nota média)');
 
   // ============================================================
   // Funil
@@ -483,7 +858,17 @@
         backgroundColor: bkKeys.map(k => bkColors[k] || '#9ca3af'),
       }],
     },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right' } },
+      onClick: (evt, items) => {
+        if (!items || items.length === 0) return;
+        const idx = items[0].index;
+        const key = bkKeys[idx];
+        openDrill(BUCKET_IDS[key] || [], bkLabels[key] || key);
+      },
+      onHover: (e, items) => { e.native.target.style.cursor = items.length ? 'pointer' : 'default'; },
+    }
   });
 
   // ============================================================
@@ -512,18 +897,29 @@
         backgroundColor: fcKeys.map(k => fcColors[k] || '#9ca3af'),
       }],
     },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right' } },
+      onClick: (evt, items) => {
+        if (!items || items.length === 0) return;
+        const idx = items[0].index;
+        const key = fcKeys[idx];
+        openDrill(FECH_IDS[key] || [], 'Fechamento — ' + (fcLabels[key] || key));
+      },
+      onHover: (e, items) => { e.native.target.style.cursor = items.length ? 'pointer' : 'default'; },
+    }
   });
 
   // ============================================================
   // Tabela por fila
   // ============================================================
   const tbF = document.getElementById('tblFila');
-  (data.por_fila || []).forEach(r => {
+  const filaRows = data.por_fila || [];
+  filaRows.forEach((r, i) => {
     const nota = r.nota_media != null ? `${Number(r.nota_media).toFixed(2)} (${fmtInt(r.n_avaliacoes)})` : '—';
     tbF.insertAdjacentHTML('beforeend',
-      `<tr>
-         <td>${r.fila}</td>
+      `<tr class="drill" data-idx="${i}" title="Clique pra ver as conversas dessa fila">
+         <td><i class="fas fa-search-plus text-muted mr-1" style="font-size:.7rem;"></i>${escapeHtml(r.fila)}</td>
          <td class="text-right">${fmtInt(r.tickets)}</td>
          <td class="text-right">${fmtInt(r.atendidos_humano)}</td>
          <td class="text-right">${fmtSec(r.espera_humano_med)}</td>
@@ -534,17 +930,23 @@
          <td class="text-right">${nota}</td>
        </tr>`);
   });
+  tbF.addEventListener('click', (e) => {
+    const tr = e.target.closest('tr.drill'); if (!tr) return;
+    const r = filaRows[+tr.dataset.idx];
+    openDrill(r.ids || [], 'Fila — ' + r.fila);
+  });
 
   // ============================================================
   // Tabela por usuário
   // ============================================================
   const tbU = document.getElementById('tblUser');
-  (data.por_usuario || []).forEach(r => {
+  const userRows = data.por_usuario || [];
+  userRows.forEach((r, i) => {
     const nota = r.nota_media != null ? `${Number(r.nota_media).toFixed(2)} (${fmtInt(r.n_avaliacoes)})` : '—';
     tbU.insertAdjacentHTML('beforeend',
-      `<tr>
-         <td>${r.nome || '—'}</td>
-         <td>${r.sector || '—'}</td>
+      `<tr class="drill" data-idx="${i}" title="Clique pra ver as conversas desse atendente">
+         <td><i class="fas fa-search-plus text-muted mr-1" style="font-size:.7rem;"></i>${escapeHtml(r.nome || '—')}</td>
+         <td>${escapeHtml(r.sector || '—')}</td>
          <td class="text-right">${fmtInt(r.tickets)}</td>
          <td class="text-right">${fmtSec(r.primeira_resposta_med)}</td>
          <td class="text-right">${fmtSec(r.resolucao_med)}</td>
@@ -552,15 +954,30 @@
          <td class="text-right">${fmtInt(r.n_avaliacoes)}</td>
        </tr>`);
   });
+  tbU.addEventListener('click', (e) => {
+    const tr = e.target.closest('tr.drill'); if (!tr) return;
+    const r = userRows[+tr.dataset.idx];
+    openDrill(r.ids || [], 'Atendente — ' + (r.nome || '—'));
+  });
 
   // ============================================================
   // Série 30d
   // ============================================================
   const serie = data.serie_30d || [];
+  // Helper: se não tem data_br no JSON (JSON antigo), converte ISO → DD/MM
+  const toBR = (iso) => {
+    if (!iso) return '';
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    return m ? (m[3] + '/' + m[2] + '/' + m[1]) : iso;
+  };
+  const toBRcurto = (iso) => {
+    const full = toBR(iso);
+    return full ? full.substring(0, 5) : ''; // DD/MM
+  };
   new Chart(document.getElementById('chartSerie'), {
     type: 'bar',
     data: {
-      labels: serie.map(s => s.data),
+      labels: serie.map(s => toBRcurto(s.data)),
       datasets: [
         { label: 'Resolvido Camila',     data: serie.map(s => s.inbound_camila),     backgroundColor: '#3b82f6', stack: 's' },
         { label: 'Atendido humano',      data: serie.map(s => s.inbound_humano),     backgroundColor: '#10b981', stack: 's' },
@@ -572,7 +989,24 @@
     options: {
       responsive: true, maintainAspectRatio: false,
       scales: { x: { stacked: true }, y: { stacked: true } },
-      plugins: { legend: { position: 'bottom' } }
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const i = items[0].dataIndex;
+              return (serie[i] && (serie[i].data_br || toBR(serie[i].data))) || '';
+            }
+          }
+        }
+      },
+      onClick: (evt, items) => {
+        if (!items || items.length === 0) return;
+        const i = items[0].index;
+        const s = serie[i];
+        openDrill(s.ids || [], 'Dia ' + (s.data_br || toBR(s.data)));
+      },
+      onHover: (e, items) => { e.native.target.style.cursor = items.length ? 'pointer' : 'default'; },
     }
   });
 
@@ -580,9 +1014,10 @@
   // Heatmap hora x dow
   // ============================================================
   const hm = data.heatmap || [];
-  // Indexa: matriz[dow][hora]
+  // Indexa: matriz[dow][hora] e idsGrid[dow][hora]
   const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
-  hm.forEach(c => { grid[c.dow][c.hora] = c.tickets; });
+  const idsGrid = Array.from({ length: 7 }, () => Array(24).fill(null));
+  hm.forEach(c => { grid[c.dow][c.hora] = c.tickets; idsGrid[c.dow][c.hora] = c.ids || []; });
   const maxV = Math.max(1, ...hm.map(c => c.tickets));
   const dowLbl = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
   const heatBox = document.getElementById('heatmap');
@@ -598,10 +1033,18 @@
       const intensity = v / maxV;
       // gradiente azul: branco → #1e3a8a
       const bg = v ? `rgba(30, 58, 138, ${0.1 + intensity * 0.8})` : '#f9fafb';
+      const cursor = v ? 'pointer' : 'default';
       heatBox.insertAdjacentHTML('beforeend',
-        `<div class="cell" style="background:${bg}" title="${dowLbl[d]} ${h}h: ${fmtInt(v)} tickets"></div>`);
+        `<div class="cell" data-d="${d}" data-h="${h}" style="background:${bg};cursor:${cursor}" title="${dowLbl[d]} ${h}h: ${fmtInt(v)} tickets"></div>`);
     }
   }
+  heatBox.addEventListener('click', (e) => {
+    const cell = e.target.closest('.cell'); if (!cell) return;
+    const d = +cell.dataset.d, h = +cell.dataset.h;
+    const ids = idsGrid[d][h] || [];
+    if (ids.length === 0) return;
+    openDrill(ids, `${dowLbl[d]} ${h}h`);
+  });
 
   // ============================================================
   // Notas + comentários
@@ -617,7 +1060,17 @@
         backgroundColor: ['#dc2626', '#f97316', '#eab308', '#22c55e', '#15803d'].slice(0, notas.length),
       }],
     },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      onClick: (evt, items) => {
+        if (!items || items.length === 0) return;
+        const i = items[0].index;
+        const n = notas[i];
+        openDrill(n.ids || [], `Avaliação ${n.nota}★`);
+      },
+      onHover: (e, items) => { e.native.target.style.cursor = items.length ? 'pointer' : 'default'; },
+    }
   });
 
   const coms = data.comentarios_recentes || [];
@@ -627,11 +1080,15 @@
   } else {
     coms.forEach(c => {
       const stars = '★'.repeat(c.nota || 0) + '☆'.repeat(5 - (c.nota || 0));
+      const url = CHAT_URL(c.ticket);
       cb.insertAdjacentHTML('beforeend',
-        `<div class="com-card">
+        `<a href="${url}" target="_blank" rel="noopener" class="com-card d-block text-body text-decoration-none"
+            title="Abrir conversa #${c.ticket || '?'} no chat">
            <div>${escapeHtml(c.obs)}</div>
-           <div class="com-meta">${stars} · ${escapeHtml(c.fila || '—')} · #${c.ticket || '?'} · ${c.data || ''}</div>
-         </div>`);
+           <div class="com-meta">${stars} · ${escapeHtml(c.fila || '—')} · #${c.ticket || '?'} · ${escapeHtml(c.data || '')}
+             <i class="fas fa-external-link-alt ml-1" style="font-size:.7rem;opacity:.6;"></i>
+           </div>
+         </a>`);
     });
   }
 
@@ -644,17 +1101,38 @@
   document.getElementById('oTotal').textContent = fmtInt(ob.total);
   document.getElementById('oTaxa').textContent = ob.total ? fmtPct(ob.com_reply / ob.total * 100) : '—';
 
+  // KPIs outbound clicáveis
+  wireKpi('oNoReply', (data.outbound && data.outbound.ids_sem_reply) || [], 'Outbound sem reply do cliente');
+  wireKpi('oReply',   (data.outbound && data.outbound.ids_com_reply) || [], 'Outbound com reply do cliente');
+  const allOutboundIds = [].concat(
+    (data.outbound && data.outbound.ids_sem_reply) || [],
+    (data.outbound && data.outbound.ids_com_reply) || []
+  );
+  wireKpi('oTotal', allOutboundIds, 'Todos os disparos outbound');
+  wireKpi('oTaxa',  allOutboundIds, 'Todos os disparos outbound (taxa de reply)');
+
   const tbO = document.getElementById('tblOutFila');
-  (ob.por_fila || []).forEach(r => {
+  const outRows = ob.por_fila || [];
+  outRows.forEach((r, i) => {
     tbO.insertAdjacentHTML('beforeend',
-      `<tr>
-         <td>${r.fila}</td>
+      `<tr class="drill" data-idx="${i}" title="Clique pra ver os disparos dessa fila">
+         <td><i class="fas fa-search-plus text-muted mr-1" style="font-size:.7rem;"></i>${escapeHtml(r.fila)}</td>
          <td class="text-right">${fmtInt(r.total)}</td>
          <td class="text-right">${fmtInt(r.sem_reply)}</td>
          <td class="text-right">${fmtInt(r.com_reply)}</td>
          <td class="text-right">${fmtPct(r.taxa_reply)}</td>
        </tr>`);
   });
+  tbO.addEventListener('click', (e) => {
+    const tr = e.target.closest('tr.drill'); if (!tr) return;
+    const r = outRows[+tr.dataset.idx];
+    openDrill(r.ids || [], 'Outbound — ' + r.fila);
+  });
+
+  // ============================================================
+  // Inicializa tooltips Bootstrap (opt-in)
+  // ============================================================
+  $('[data-toggle="tooltip"]').tooltip({ html: true, container: 'body', boundary: 'viewport' });
 
   function escapeHtml(s) {
     if (s == null) return '';
