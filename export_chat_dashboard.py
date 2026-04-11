@@ -86,11 +86,14 @@ def fetch(c, sql, params=None):
         return cur.fetchall()
 
 
-def atomic_write_json(path, payload):
+def atomic_write_json(path, payload, compact=False):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
+        if compact:
+            json.dump(payload, f, ensure_ascii=False, separators=(",", ":"), default=str)
+        else:
+            json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
@@ -235,7 +238,8 @@ def main():
 
     print("  → build payload...")
     payload = build_payload(tickets, msgs, transf, evals, humans, last)
-    atomic_write_json(OUT_PATH, payload)
+    # JSON compacto: tickets_index sozinho pesa ~10 MB com indent=2
+    atomic_write_json(OUT_PATH, payload, compact=True)
     print(f"  ✔ {OUT_PATH}")
     print(f"  ⏱  {time.time() - t0:.1f}s")
 
@@ -424,21 +428,35 @@ def build_payload(tickets, msgs, transf, evals, humans, last):
         return [str(x) for x in d["id"].tolist()]
 
     # ── Índice compacto de tickets (keys curtas pra reduzir tamanho do JSON) ──
+    def _s(v, maxlen=None):
+        """Converte pra string; NaN/None → ''."""
+        if v is None or (isinstance(v, float) and pd.isna(v)) or (hasattr(pd, "isna") and pd.isna(v) is True):
+            return ""
+        try:
+            if pd.isna(v):
+                return ""
+        except (TypeError, ValueError):
+            pass
+        s = str(v).strip()
+        if s.lower() == "nan":
+            return ""
+        return s[:maxlen] if maxlen else s
+
     tickets_index = {}
     for _, r in df.iterrows():
         cr = r.get("createdAt")
         cl = r.get("closedAt")
         tickets_index[str(r["id"])] = {
             "n": int(r["ticketNumber"]) if pd.notna(r.get("ticketNumber")) else None,
-            "c": (str(r.get("customer_nome") or ""))[:60],
-            "f": str(r.get("fila_efetiva") or ""),
-            "b": str(r.get("bucket") or ""),
-            "z": str(r.get("fechamento") or ""),
+            "c": _s(r.get("customer_nome"), 60),
+            "f": _s(r.get("fila_efetiva")),
+            "b": _s(r.get("bucket")),
+            "z": _s(r.get("fechamento")),
             "d": cr.strftime("%d/%m/%Y %H:%M") if pd.notna(cr) else "",
             "e": cl.strftime("%d/%m/%Y %H:%M") if pd.notna(cl) else "",
-            "h": str(r.get("human_name") or ""),
+            "h": _s(r.get("human_name")),
             "s": int(r["eval_score"]) if pd.notna(r.get("eval_score")) else None,
-            "o": (str(r.get("eval_obs") or ""))[:200],
+            "o": _s(r.get("eval_obs"), 200),
         }
 
     # IDs agrupados por bucket e por tipo de fechamento
