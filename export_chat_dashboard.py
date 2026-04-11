@@ -627,7 +627,7 @@ def build_payload(tickets, msgs, transf, evals, humans, last, last_human):
 
     por_user = []
     for uid, g in df[df["human_userId"].notna()].groupby("human_userId"):
-        total = int(len(g))
+        n_total = int(len(g))
         gh = g[g["bucket"] == "inbound_atendido_humano"]
         eval_scores = pd.to_numeric(g["eval_score"], errors="coerce").dropna()
 
@@ -650,13 +650,13 @@ def build_payload(tickets, msgs, transf, evals, humans, last, last_human):
         n_bot      = int(len(bot_residual))
         n_abertos  = int(len(abertos_df))
 
-        efetividade = round(n_fechou / total * 100, 1) if total else None
+        efetividade = round(n_fechou / n_total * 100, 1) if n_total else None
 
         por_user.append({
             "userId": uid,
             "nome":   g["human_name"].iloc[0],
             "sector": g["human_sector"].iloc[0],
-            "tickets": total,
+            "tickets": n_total,
             # métricas de produtividade real
             "fechou_sozinho":    n_fechou,
             "efetividade_pct":   efetividade,
