@@ -15,13 +15,13 @@ mkdir -p "$LOG_DIR"
 
 {
     echo "========== $(date '+%Y-%m-%d %H:%M:%S') =========="
-    echo "Iniciando export_fidelizacao.py (posto Y)..."
+    echo "Iniciando export_fidelizacao.py (todos os postos)..."
 
     cd "$SCRIPT_DIR"
     source .venv/bin/activate
 
-    # Executar exportador com apenas o posto Y
-    python3 export_fidelizacao.py --postos Y
+    # Executar exportador para todos os postos configurados no .env
+    python3 export_fidelizacao.py
 
     echo "✅ Export concluído com sucesso"
 

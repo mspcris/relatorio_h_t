@@ -377,16 +377,30 @@
                 <!-- CHURN OPERACIONAL -->
                 <div class="card">
                     <div class="card-header bg-dark">
-                        <h3 class="card-title mb-0"><i class="fas fa-chart-line mr-2"></i>Churn Operacional — Cancelamentos Reais</h3>
+                        <h3 class="card-title mb-0"><i class="fas fa-chart-line mr-2"></i>Churn Mensal — Cancelamentos dos ultimos 6 meses</h3>
                     </div>
                     <div class="card-body" id="churnOperacionalCards"></div>
                     <div class="card-footer text-muted" style="font-size:0.85rem">
-                        <div style="background:#f0f4ff;border-radius:8px;padding:10px 14px;margin-bottom:8px;border-left:4px solid #5b9bd5;">
-                            <strong>O que e isso?</strong> Imagina que voce tem 100 amigos num grupo de WhatsApp.
-                            Se 3 sairem do grupo neste mes, o churn e 3%. Quanto menor, melhor!
-                            <br><strong>Conta:</strong> <code style="background:#e8eef7;padding:2px 6px;border-radius:3px;" title="Cancelamentos do mes dividido pelo total de contratos ativos no mes anterior, vezes 100">Cancelamentos do mes &divide; Contratos ativos (mes anterior) &times; 100</code>
+                        <div style="background:#f0f4ff;border-radius:8px;padding:12px 16px;margin-bottom:10px;border-left:4px solid #5b9bd5;line-height:1.55;">
+                            <strong>O que esta tabela mostra:</strong> Quantos clientes cancelaram o plano em <strong>cada um dos ultimos 6 meses</strong>, e qual % isso representa da base de clientes.
+                            <br><br>
+                            <strong>Como ler a linha de <code style="background:#e8eef7;padding:1px 5px;border-radius:3px;">mar/26</code> (exemplo real da tabela):</strong>
+                            <ul style="margin:6px 0 6px 18px;padding:0;">
+                                <li>No fim de <strong>fev/26</strong> a rede tinha <strong>33.248</strong> clientes pagando (coluna "Base ativa").</li>
+                                <li>Durante <strong>marco de 2026</strong>, <strong>2.087</strong> desses clientes cancelaram o plano.</li>
+                                <li>Conta: 2.087 &divide; 33.248 = <strong>6,28%</strong> sairam em marco.</li>
+                            </ul>
+                            <strong>Regra geral:</strong> em cada linha, os <strong>cancelamentos sao do proprio mes da linha</strong>. A base de contratos e sempre do <strong>mes anterior</strong>, porque quem cancelou em marco ja fazia parte da base no fim de fevereiro.
+                            <br><br>
+                            <strong>&#9888; Atencao com o mes em curso:</strong> o ultimo mes da tabela (abr/26) ainda <strong>nao fechou</strong> — os cancelamentos sao parciais (contados ate hoje) e o % vai subir ate o fim do mes. Nao compare diretamente com os meses completos.
+                            <br><br>
+                            <strong>Periodo da taxa:</strong> cada linha e de <strong>1 mes isolado</strong>, nao acumulado. Com churn mensal constante de ~6%, cerca de 52% da base rotaciona em 12 meses.
+                            <br>
+                            <strong>Cores:</strong> <span style="background:#d4edda;padding:1px 6px;border-radius:3px;">verde</span> &le; 5% (bom) &nbsp;&middot;&nbsp; <span style="background:#fff3cd;padding:1px 6px;border-radius:3px;">amarelo</span> 5&ndash;10% (atencao) &nbsp;&middot;&nbsp; <span style="background:#f8d7da;padding:1px 6px;border-radius:3px;">vermelho</span> &gt; 10% (critico).
                         </div>
-                        <strong>Fonte:</strong> Cad_Cliente (cancelamentos) e vw_fin_receita2 (contratos ativos).
+                        <strong>Conta:</strong> Cancelamentos do mes &divide; Base ativa no fim do mes anterior &times; 100
+                        <br><strong>Fonte:</strong> Cad_Cliente (cancelamentos) e vw_fin_receita2 (contratos ativos).
+                        <br><strong>Atualizacao:</strong> 1x por dia as 02:30 (cron da VM).
                     </div>
                 </div>
 
@@ -397,15 +411,26 @@
                     </div>
                     <div class="card-body kpi" id="statsCards"></div>
                     <div class="card-footer text-muted" style="font-size:0.85rem">
-                        <div style="background:#f0fff4;border-radius:8px;padding:10px 14px;margin-bottom:8px;border-left:4px solid #28a745;">
-                            <strong>O que e isso?</strong> Pense assim: um grupo de alunos novos entrou na escola no mesmo mes.
-                            Depois de 1, 3, 6 e 12 meses, quantos continuam estudando la?
-                            Se entraram 100 e depois de 3 meses restam 70, a retencao e 70% (e o churn e 30%, os que sairam).
-                            <br><strong>Retencao</strong> = <code style="background:#e8f5e9;padding:2px 6px;border-radius:3px;" title="Quantos clientes do grupo original continuam pagando apos X meses">% que ficou</code>
-                            &nbsp;|&nbsp; <strong>Churn</strong> = <code style="background:#fce4ec;padding:2px 6px;border-radius:3px;" title="100% menos a retencao = percentual que saiu">100% &minus; Retencao = % que saiu</code>
+                        <div style="background:#f0fff4;border-radius:8px;padding:12px 16px;margin-bottom:10px;border-left:4px solid #28a745;line-height:1.55;">
+                            <strong>O que e "cohort"?</strong> Cohort e <strong>turma</strong>. Pensa numa escola: a "turma de 2020" sao todos os alunos que entraram juntos em 2020. Voce acompanha essa turma especifica ao longo do tempo pra ver quantos continuam la depois de 1, 2, 3 anos.
+                            <br><br>
+                            Aqui e a mesma ideia, so que com clientes: um <strong>cohort</strong> e o grupo de clientes que aderiram <strong>no mesmo mes</strong>. Ex: o "cohort de jan/26" sao todos que viraram clientes em janeiro de 2026. Dai a gente pergunta:
+                            <ul style="margin:6px 0 6px 18px;padding:0;">
+                                <li>Depois de <strong>1 mes</strong>, quantos % desses clientes continuam pagando?</li>
+                                <li>Depois de <strong>3 meses</strong>? <strong>6 meses</strong>? <strong>12 meses</strong>?</li>
+                            </ul>
+                            Se entraram 100 clientes e apos 3 meses restam 70, a <strong>retencao</strong> e 70% (e o <strong>churn do cohort</strong> e 30% — os que sairam).
+                            <br><br>
+                            <strong>Qual a diferenca do Churn Mensal (tabela acima)?</strong>
+                            <ul style="margin:6px 0 6px 18px;padding:0;">
+                                <li><strong>Churn mensal:</strong> olha a <u>base inteira</u> num mes — "saiu 6% este mes" (todo mundo junto, clientes antigos e novos).</li>
+                                <li><strong>Cohort:</strong> isola <u>so quem entrou no mesmo mes</u> e acompanha essa turma ao longo do tempo — "dos que entraram em jan/26, 70% ainda estao pagando apos 3 meses".</li>
+                            </ul>
+                            O cohort revela <strong>em qual momento da jornada</strong> o cliente mais desiste (problema de onboarding? do 6&ordm; mes?) — coisa que a media geral esconde.
+                            <br><br>
+                            <strong>Retencao</strong> = <code style="background:#e8f5e9;padding:2px 6px;border-radius:3px;">% que ficou</code>
+                            &nbsp;|&nbsp; <strong>Churn do cohort</strong> = <code style="background:#fce4ec;padding:2px 6px;border-radius:3px;">100% &minus; Retencao = % que saiu</code>
                         </div>
-                        <strong>Diferenca com o Churn Operacional:</strong> O churn operacional (acima) mede cancelamentos sobre a base total.
-                        Aqui medimos apenas os clientes novos que entraram no mes selecionado — acompanhando eles ao longo do tempo.
                     </div>
                 </div>
 
@@ -900,13 +925,15 @@ EXEC PC_Fin_Fidelizacao @database = @ini
 
             const allMonths = Object.keys(gd).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
             const recentMonths = allMonths.slice(-6);
+            const hoje = new Date();
+            const currentYm = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
 
             let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0" style="font-size:0.9rem;">';
             html += '<thead style="background:#343a40;color:#fff;"><tr>';
             html += '<th style="padding:10px 14px;">Mes</th>';
-            html += '<th style="padding:10px 14px;text-align:right;">Contratos<br><small>(mes anterior)</small></th>';
-            html += '<th style="padding:10px 14px;text-align:right;">Cancelamentos</th>';
-            html += '<th style="padding:10px 14px;text-align:center;">Churn %</th>';
+            html += '<th style="padding:10px 14px;text-align:right;" title="Total de clientes pagando no ultimo dia do mes anterior">Base ativa<br><small>(fim do mes anterior)</small></th>';
+            html += '<th style="padding:10px 14px;text-align:right;" title="Clientes que cancelaram o plano dentro do mes da linha">Cancelamentos<br><small>(no mes)</small></th>';
+            html += '<th style="padding:10px 14px;text-align:center;" title="Cancelamentos do mes dividido pela base ativa do mes anterior, vezes 100">Churn %</th>';
             html += '<th style="padding:10px 14px;text-align:center;">Tendencia</th>';
             html += '</tr></thead><tbody>';
 
@@ -935,11 +962,15 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 }
 
                 const isSelected = ym === selMonth;
+                const isPartial = ym === currentYm;
                 const rowStyle = isSelected
                     ? 'background:#fff0f0;font-weight:700;border-left:4px solid #dc3545;'
-                    : '';
+                    : (isPartial ? 'background:#fffbe6;font-style:italic;' : '');
                 const fmtMes = formatMonth(ym);
-                const mesLabel = isSelected ? `<span style="color:#dc3545;">${fmtMes} &#9668;</span>` : fmtMes;
+                let mesLabel = isSelected ? `<span style="color:#dc3545;">${fmtMes} &#9668;</span>` : fmtMes;
+                if (isPartial) {
+                    mesLabel += ` <span class="badge badge-warning" style="font-size:0.7rem;vertical-align:middle;" title="Mes ainda nao fechou — cancelamentos contados so ate hoje. O % vai subir ate o fim do mes.">PARCIAL</span>`;
+                }
 
                 html += `<tr style="${rowStyle}">`;
                 html += `<td style="padding:8px 14px;">${mesLabel}</td>`;
@@ -1028,9 +1059,18 @@ EXEC PC_Fin_Fidelizacao @database = @ini
 
         function renderTable() {
             const postos = getSelectedPostos();
+            const hoje = new Date();
+            const currentYm = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+
+            const addMonthsYm = (ym, n) => {
+                const [y, m] = ym.split('-').map(Number);
+                const total = (y*12 + (m-1)) + n;
+                const ny = Math.floor(total/12), nm = (total%12) + 1;
+                return `${ny}-${String(nm).padStart(2,'0')}`;
+            };
+
             let html = '<table class="table table-sm mb-0"><thead><tr><th>Mês Admissão</th>';
 
-            // Headers para cada período
             html += '<th>Admissões</th>';
             html += '<th colspan="3">1 mês</th><th colspan="3">3 meses</th><th colspan="3">6 meses</th><th colspan="3">12 meses</th></tr>';
             html += '<tr><th></th><th></th><th>QTD</th><th>Ret%</th><th>Churn%</th><th>QTD</th><th>Ret%</th><th>Churn%</th><th>QTD</th><th>Ret%</th><th>Churn%</th><th>QTD</th><th>Ret%</th><th>Churn%</th></tr></thead><tbody>';
@@ -1053,25 +1093,38 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 const has6 = postos.some(p => row[p]?.retencao_por_mes?.['6'] != null);
                 const has12 = postos.some(p => row[p]?.retencao_por_mes?.['12'] != null);
 
-                // Calcular percentuais
                 const r1_pct = admTotal > 0 ? Math.round((r1_qtd / admTotal) * 100) : 0;
                 const r3_pct = admTotal > 0 ? Math.round((r3_qtd / admTotal) * 100) : 0;
                 const r6_pct = admTotal > 0 ? Math.round((r6_qtd / admTotal) * 100) : 0;
                 const r12_pct = admTotal > 0 ? Math.round((r12_qtd / admTotal) * 100) : 0;
 
-                const fmt = (qtd, pct, has) => {
+                // Marca celula como PARCIAL se o mes de referencia (ym + N) >= mes atual
+                const isPartial1 = addMonthsYm(ym, 1) >= currentYm;
+                const isPartial3 = addMonthsYm(ym, 3) >= currentYm;
+                const isPartial6 = addMonthsYm(ym, 6) >= currentYm;
+                const isPartial12 = addMonthsYm(ym, 12) >= currentYm;
+
+                const fmt = (qtd, pct, has, partial, nMeses) => {
                     if (!has) return `<td>-</td><td>-</td><td>-</td>`;
                     const churn = 100 - pct;
                     const retCls = pct >= 70 ? 'cell-high' : pct >= 40 ? 'cell-medium' : 'cell-low';
                     const churnCls = churn <= 30 ? 'cell-high' : churn <= 60 ? 'cell-medium' : 'cell-low';
+                    if (partial) {
+                        const refYm = addMonthsYm(ym, nMeses);
+                        const tip = `Parcial: o mes de referencia (${refYm}) ainda nao fechou. Os % vao subir ate o fim do mes.`;
+                        const tag = `<span class="badge badge-warning" style="font-size:0.6rem;margin-left:3px;vertical-align:middle;" title="${tip}">PARCIAL</span>`;
+                        return `<td style="opacity:0.6;font-style:italic;" title="${tip}">${qtd}${tag}</td>` +
+                               `<td class="${retCls}" style="opacity:0.6;font-style:italic;" title="${tip}">${pct}%</td>` +
+                               `<td class="${churnCls}" style="opacity:0.6;font-style:italic;" title="${tip}">${churn}%</td>`;
+                    }
                     return `<td>${qtd}</td><td class="${retCls}">${pct}%</td><td class="${churnCls}">${churn}%</td>`;
                 };
 
                 html += `<tr><td><strong>${ym}</strong></td><td>${admTotal}</td>`;
-                html += fmt(r1_qtd, r1_pct, has1);
-                html += fmt(r3_qtd, r3_pct, has3);
-                html += fmt(r6_qtd, r6_pct, has6);
-                html += fmt(r12_qtd, r12_pct, has12);
+                html += fmt(r1_qtd, r1_pct, has1, isPartial1, 1);
+                html += fmt(r3_qtd, r3_pct, has3, isPartial3, 3);
+                html += fmt(r6_qtd, r6_pct, has6, isPartial6, 6);
+                html += fmt(r12_qtd, r12_pct, has12, isPartial12, 12);
                 html += `</tr>`;
             }
 
@@ -1317,7 +1370,8 @@ EXEC PC_Fin_Fidelizacao @database = @ini
 <script src="/js/etl_status.js"></script>
 <script>
 ETLStatus.init({
-  metaUrl: '/json_consolidado/_etl_meta_export_fidelizacao.json'
+  metaUrl: '/json_consolidado/_etl_meta_export_fidelizacao.json',
+  expectedPostos: ['A','N','X','Y','B','R','P','C','D','G','I','M','J']
 });
 </script>
 <script src="/js/menu.js"></script>

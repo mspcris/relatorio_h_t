@@ -68,16 +68,26 @@
     return panel;
   }
 
-  function renderMeta(panel, data, staleHours) {
+  function renderMeta(panel, data, staleHours, expectedPostos) {
     var now = Date.now();
     var staleMs = staleHours * 3600000;
     var script = data.script || '?';
     var finished = data.finished_at ? new Date(data.finished_at) : null;
     var postos = data.postos || {};
-    var keys = Object.keys(postos).sort();
 
-    var countOk = 0, countErr = 0;
-    keys.forEach(function (k) { postos[k].status === 'ok' ? countOk++ : countErr++; });
+    /* Lista completa de postos: uniao de expectedPostos com os que aparecem no meta */
+    var allKeys = {};
+    (expectedPostos || []).forEach(function (k) { allKeys[k] = true; });
+    Object.keys(postos).forEach(function (k) { allKeys[k] = true; });
+    var keys = Object.keys(allKeys).sort();
+
+    var countOk = 0, countErr = 0, countMissing = 0;
+    keys.forEach(function (k) {
+      var p = postos[k];
+      if (!p) countMissing++;
+      else if (p.status === 'ok') countOk++;
+      else countErr++;
+    });
 
     /* ── Cabeçalho ── */
     var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">' +
@@ -88,9 +98,11 @@
       html += '<span style="font-size:.78rem;color:#6b7280;">Última execução: ' + fmtDate(finished) + ' (' + fmtAge(age) + ' atrás)</span>';
     }
     if (keys.length > 0) {
-      html += '<span style="font-size:.78rem;">' + dot(countErr === 0) +
-        '<b>' + countOk + '</b> ok' + (countErr > 0 ? ', <b style="color:#dc3545">' + countErr + '</b> erro' : '') +
-        '</span>';
+      html += '<span style="font-size:.78rem;">' + dot(countErr === 0 && countMissing === 0) +
+        '<b>' + countOk + '</b> ok';
+      if (countErr > 0) html += ', <b style="color:#dc3545">' + countErr + '</b> erro';
+      if (countMissing > 0) html += ', <b style="color:#f0ad4e">' + countMissing + '</b> nao rodou';
+      html += '</span>';
     }
     html += '</div>';
 
@@ -100,6 +112,11 @@
       keys.forEach(function (k) {
         var p = postos[k];
         var label = 'Posto ' + k + (POSTO_NAMES[k] ? ' (' + POSTO_NAMES[k] + ')' : '');
+        if (!p) {
+          html += '<span>' + dot(false) + label + ': ' +
+            '<span style="color:#f0ad4e;font-weight:600;" title="Este posto nao apareceu na ultima execucao do ETL — talvez nao esteja configurado no .env ou a conexao falhou sem registrar erro.">Nunca rodou (ou nao registrado)</span></span>';
+          return;
+        }
         if (p.status === 'ok') {
           var dt = p.at ? new Date(p.at) : null;
           var age = dt ? now - dt.getTime() : Infinity;
@@ -135,6 +152,7 @@
 
       var anchorSel = cfg.anchor || '#ia-anchor';
       var staleHours = cfg.staleHours || STALE_DEFAULT;
+      var expectedPostos = cfg.expectedPostos || Object.keys(POSTO_NAMES);
 
       function setup() {
         var anchor = document.querySelector(anchorSel);
@@ -163,7 +181,7 @@
                 var r = await fetch(cfg.metaUrl, { cache: 'no-store' });
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 var data = await r.json();
-                renderMeta(panel, data, staleHours);
+                renderMeta(panel, data, staleHours, expectedPostos);
               } catch (e) {
                 renderFallback(panel, 'Metadata ETL não encontrado. O robô ainda não rodou ou o arquivo não foi publicado.');
               }
