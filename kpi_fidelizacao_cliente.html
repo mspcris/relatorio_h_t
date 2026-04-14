@@ -379,9 +379,13 @@
                     <div class="card-header bg-dark">
                         <h3 class="card-title mb-0"><i class="fas fa-chart-line mr-2"></i>Churn Operacional — Cancelamentos Reais</h3>
                     </div>
-                    <div class="card-body kpi" id="churnOperacionalCards"></div>
+                    <div class="card-body" id="churnOperacionalCards"></div>
                     <div class="card-footer text-muted" style="font-size:0.85rem">
-                        <strong>Fórmula:</strong> Cancelamentos do mês ÷ Contratos ativos no mês anterior × 100.
+                        <div style="background:#f0f4ff;border-radius:8px;padding:10px 14px;margin-bottom:8px;border-left:4px solid #5b9bd5;">
+                            <strong>O que e isso?</strong> Imagina que voce tem 100 amigos num grupo de WhatsApp.
+                            Se 3 sairem do grupo neste mes, o churn e 3%. Quanto menor, melhor!
+                            <br><strong>Conta:</strong> <code style="background:#e8eef7;padding:2px 6px;border-radius:3px;" title="Cancelamentos do mes dividido pelo total de contratos ativos no mes anterior, vezes 100">Cancelamentos do mes &divide; Contratos ativos (mes anterior) &times; 100</code>
+                        </div>
                         <strong>Fonte:</strong> Cad_Cliente (cancelamentos) e vw_fin_receita2 (contratos ativos).
                     </div>
                 </div>
@@ -389,12 +393,19 @@
                 <!-- RESUMO POR COHORT -->
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="card-title mb-0">Análise por Cohort — Retenção de Novos Clientes</h3>
+                        <h3 class="card-title mb-0">Analise por Cohort — Retencao de Novos Clientes <span id="statsMonthLabel" class="badge badge-info ml-2" style="font-size:0.8rem;"></span></h3>
                     </div>
                     <div class="card-body kpi" id="statsCards"></div>
                     <div class="card-footer text-muted" style="font-size:0.85rem">
-                        <strong>Diferença:</strong> O churn operacional (acima) mede cancelamentos reais sobre a base total.
-                        Os dados abaixo medem retenção de cada grupo de novos clientes ao longo do tempo (análise de coorte).
+                        <div style="background:#f0fff4;border-radius:8px;padding:10px 14px;margin-bottom:8px;border-left:4px solid #28a745;">
+                            <strong>O que e isso?</strong> Pense assim: um grupo de alunos novos entrou na escola no mesmo mes.
+                            Depois de 1, 3, 6 e 12 meses, quantos continuam estudando la?
+                            Se entraram 100 e depois de 3 meses restam 70, a retencao e 70% (e o churn e 30%, os que sairam).
+                            <br><strong>Retencao</strong> = <code style="background:#e8f5e9;padding:2px 6px;border-radius:3px;" title="Quantos clientes do grupo original continuam pagando apos X meses">% que ficou</code>
+                            &nbsp;|&nbsp; <strong>Churn</strong> = <code style="background:#fce4ec;padding:2px 6px;border-radius:3px;" title="100% menos a retencao = percentual que saiu">100% &minus; Retencao = % que saiu</code>
+                        </div>
+                        <strong>Diferenca com o Churn Operacional:</strong> O churn operacional (acima) mede cancelamentos sobre a base total.
+                        Aqui medimos apenas os clientes novos que entraram no mes selecionado — acompanhando eles ao longo do tempo.
                     </div>
                 </div>
 
@@ -403,14 +414,18 @@
                     <div class="col-lg-7">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Curva de Sobrevivência — Retenção Média por Mês (todos cohorts)</h3>
+                                <h3 class="card-title mb-0" id="titleSurvivor">Curva de Sobrevivencia — Retencao do Cohort</h3>
                             </div>
                             <div class="card-body" style="height:320px">
                                 <canvas id="chartSurvivor"></canvas>
                             </div>
                             <div class="card-footer rastro">
-                                Dos clientes que entraram num determinado mes, quantos % continuam pagando apos 1, 2, 3... 12 meses. Media de todos os cohorts. Uma curva estavel indica previsibilidade; queda abrupta no mes 1 sugere problema de onboarding.
-                                <br><b>Fonte:</b> fidelizacao_cliente.json &rarr; export_fidelizacao.py &rarr; Stored Procedure PC_Fin_Fidelizacao
+                                <div style="background:#fff8e1;border-radius:8px;padding:10px 14px;margin-bottom:8px;border-left:4px solid #ffc107;">
+                                    <strong>Como ler este grafico?</strong> A linha verde mostra quantos % dos clientes novos ainda estao pagando depois de 1, 2, 3... ate 12 meses.
+                                    A linha vermelha e o contrario: quantos % ja sairam. Se a linha verde cai muito rapido no comeco, significa que muitos clientes desistem logo — pode ser problema no atendimento inicial.
+                                    <br><strong>Conta:</strong> <code style="background:#fff3cd;padding:2px 6px;border-radius:3px;" title="Clientes que pagaram no mes X dividido pelo total que entrou, vezes 100">Clientes pagando no mes X &divide; Total que entrou &times; 100</code>
+                                </div>
+                                <b>Fonte:</b> fidelizacao_cliente.json &rarr; export_fidelizacao.py &rarr; Stored Procedure PC_Fin_Fidelizacao
                                 <button class="btn-rastro-sql" onclick="this.nextElementSibling.classList.toggle('show')">&#x25B6; ver SQL</button>
                                 <pre>EXEC PC_Fin_Fidelizacao @database = @ini
 -- Retorna: AnoAdmissao, MesAdmissao, QuantidadeAdmissao,
@@ -421,14 +436,18 @@
                     <div class="col-lg-5">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0">Churn Incremental Médio — % perdido a cada mês</h3>
+                                <h3 class="card-title mb-0" id="titleChurnInc">Churn Incremental — % perdido a cada mes</h3>
                             </div>
                             <div class="card-body" style="height:320px">
                                 <canvas id="chartChurnIncremental"></canvas>
                             </div>
                             <div class="card-footer rastro">
-                                Quanto % do cohort original foi perdido em cada intervalo. Ex: se 100 entraram e no mes 1 restaram 85, o churn incremental do mes 1 e 15%. Se no mes 2 restaram 78, o churn incremental do mes 2 e 7%. Mostra em qual momento os clientes mais saem.
-                                <br><b>Calculo:</b> Retencao[mes-1] - Retencao[mes] (como % do total original). Mesma fonte da curva de sobrevivencia.
+                                <div style="background:#fce4ec;border-radius:8px;padding:10px 14px;margin-bottom:8px;border-left:4px solid #dc3545;">
+                                    <strong>Como ler este grafico?</strong> Cada barra mostra quantos clientes a mais sairam naquele periodo.
+                                    Exemplo: se a barra "0 a 1m" e 15%, quer dizer que 15 de cada 100 clientes novos sairam no primeiro mes. Se a barra "1 a 2m" e 7%, mais 7 sairam no segundo mes.
+                                    Barras altas = momento critico onde mais gente desiste.
+                                    <br><strong>Conta:</strong> <code style="background:#fce4ec;padding:2px 6px;border-radius:3px;" title="Retencao do mes anterior menos retencao do mes atual">Retencao[mes anterior] &minus; Retencao[mes atual] = % que saiu naquele intervalo</code>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -439,52 +458,68 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0" id="title1m">Retenção em - referente adesão em -. 1 mês - Por posto.</h3>
+                                <h3 class="card-title mb-0" id="title1m">Retencao em - referente adesao em -. 1 mes - Por posto.</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart1m"></canvas>
                             </div>
                             <div class="card-footer rastro">
-                                Dos clientes que entraram no mes selecionado, quantos % pagaram a mensalidade do mes seguinte, em cada posto. Postos abaixo de 70% precisam de atencao no processo de boas-vindas e onboarding.
+                                <div style="background:#e3f2fd;border-radius:8px;padding:10px 14px;border-left:4px solid #17a2b8;">
+                                    <strong>O que mostra?</strong> Dos clientes novos que entraram no mes, quantos % pagaram a 1a mensalidade no mes seguinte, em cada posto.
+                                    <br>Postos com barra baixa (abaixo de 70%) podem ter problema no atendimento das primeiras semanas.
+                                    <br><strong>Conta:</strong> <code style="background:#e3f2fd;padding:2px 6px;border-radius:3px;" title="Clientes que pagaram no mes seguinte dividido pelo total que entrou naquele posto">Pagantes apos 1 mes &divide; Total admitidos &times; 100</code>
+                                </div>
                             </div>
                         </div>
                     </div>
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0" id="title3m">Retenção em - referente adesão em -. 3 meses - Por posto.</h3>
+                                <h3 class="card-title mb-0" id="title3m">Retencao em - referente adesao em -. 3 meses - Por posto.</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart3m"></canvas>
                             </div>
                             <div class="card-footer rastro">
-                                Dos que entraram no mes selecionado, quantos % ainda estavam pagando 3 meses depois. E o indicador mais importante para validar a qualidade da venda — clientes mal vendidos cancelam antes do 3o mes.
+                                <div style="background:#e3f2fd;border-radius:8px;padding:10px 14px;border-left:4px solid #17a2b8;">
+                                    <strong>O que mostra?</strong> Quantos % dos clientes novos ainda pagavam 3 meses depois, por posto.
+                                    Este e o indicador mais importante: se o cliente fica 3 meses, a venda foi boa. Se sai antes, pode ter sido mal vendido.
+                                    <br><strong>Conta:</strong> <code style="background:#e3f2fd;padding:2px 6px;border-radius:3px;">Pagantes apos 3 meses &divide; Total admitidos &times; 100</code>
+                                </div>
                             </div>
                         </div>
                     </div>
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0" id="title6m">Retenção em - referente adesão em -. 6 meses - Por posto.</h3>
+                                <h3 class="card-title mb-0" id="title6m">Retencao em - referente adesao em -. 6 meses - Por posto.</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart6m"></canvas>
                             </div>
                             <div class="card-footer rastro">
-                                Retencao apos 6 meses. Clientes que passam dos 6 meses tendem a ser fieis a longo prazo. Se ha queda significativa entre 3m e 6m, pode indicar problema no atendimento continuado.
+                                <div style="background:#e3f2fd;border-radius:8px;padding:10px 14px;border-left:4px solid #17a2b8;">
+                                    <strong>O que mostra?</strong> Retencao apos 6 meses. Quem passa dos 6 meses tende a ficar por muito tempo.
+                                    Se a barra cai muito entre 3m e 6m, o atendimento continuo pode estar falhando.
+                                    <br><strong>Conta:</strong> <code style="background:#e3f2fd;padding:2px 6px;border-radius:3px;">Pagantes apos 6 meses &divide; Total admitidos &times; 100</code>
+                                </div>
                             </div>
                         </div>
                     </div>
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0" id="title12m">Retenção em - referente adesão em -. 12 meses - Por posto.</h3>
+                                <h3 class="card-title mb-0" id="title12m">Retencao em - referente adesao em -. 12 meses - Por posto.</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart12m"></canvas>
                             </div>
                             <div class="card-footer rastro">
-                                Retencao apos 1 ano. E o indicador de fidelidade real. Postos com retencao 12m acima de 60% tem base de clientes solida. Abaixo de 40% indica churn estrutural.
+                                <div style="background:#e3f2fd;border-radius:8px;padding:10px 14px;border-left:4px solid #17a2b8;">
+                                    <strong>O que mostra?</strong> Retencao apos 1 ano inteiro. Este e o indicador de fidelidade real.
+                                    Postos acima de 60% = base solida de clientes fieis. Abaixo de 40% = muita gente saindo (churn estrutural).
+                                    <br><strong>Conta:</strong> <code style="background:#e3f2fd;padding:2px 6px;border-radius:3px;">Pagantes apos 12 meses &divide; Total admitidos &times; 100</code>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -499,8 +534,13 @@
                         <div class="text-muted text-center p-3">Carregando dados...</div>
                     </div>
                     <div class="card-footer rastro">
-                        Cada linha e um cohort (grupo de clientes que entraram no mesmo mes). As colunas mostram quantos desses clientes continuaram pagando apos 1, 3, 6 e 12 meses. QTD = numero absoluto de clientes retidos. Ret% = percentual de retencao. Churn% = percentual que saiu (100 - Ret%).
-                        <br><b>Fonte:</b> fidelizacao_cliente.json &rarr; export_fidelizacao.py &rarr; PC_Fin_Fidelizacao (Stored Procedure no SQL Server)
+                        <div style="background:#f3e5f5;border-radius:8px;padding:10px 14px;margin-bottom:8px;border-left:4px solid #9c27b0;">
+                            <strong>Como ler esta tabela?</strong> Cada linha e uma "turma" de clientes que entrou no mesmo mes.
+                            As colunas mostram quantos dessa turma continuaram pagando depois de 1, 3, 6 e 12 meses.
+                            <br><strong>QTD</strong> = numero de clientes que ficaram | <strong>Ret%</strong> = % que ficou (verde = bom) | <strong>Churn%</strong> = % que saiu (vermelho = ruim)
+                            <br><strong>Conta do Churn%:</strong> <code style="background:#f3e5f5;padding:2px 6px;border-radius:3px;">100% &minus; Ret% = Churn%</code>. Exemplo: se Ret% = 70%, entao Churn% = 30%.
+                        </div>
+                        <b>Fonte:</b> fidelizacao_cliente.json &rarr; export_fidelizacao.py &rarr; PC_Fin_Fidelizacao (Stored Procedure no SQL Server)
                         <button class="btn-rastro-sql" onclick="this.nextElementSibling.classList.toggle('show')">&#x25B6; ver SQL</button>
                         <pre>-- export_fidelizacao.py executa por posto:
 EXEC PC_Fin_Fidelizacao @database = @ini
@@ -852,24 +892,26 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             const container = el('churnOperacionalCards');
             if (!container) return;
             if (!growthData || !growthData.dados) {
-                container.innerHTML = '<p class="text-muted">Dados de growth não disponíveis</p>';
+                container.innerHTML = '<p class="text-muted">Dados de growth nao disponiveis</p>';
                 return;
             }
             const gd = growthData.dados;
             const postos = getSelectedPostos();
 
-            // Pegar o mês selecionado + 1 (o churn do mês seguinte ao cohort)
-            // selMonth é o mês de admissão do cohort. Para churn operacional, mostramos o mês atual ou os últimos meses
-            // Vamos mostrar os últimos 6 meses disponíveis
             const allMonths = Object.keys(gd).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
             const recentMonths = allMonths.slice(-6);
 
-            let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
-            html += '<thead><tr><th>Mês</th><th>Contratos (mês ant.)</th><th>Cancelamentos</th><th>Churn %</th><th>Tendência</th></tr></thead><tbody>';
+            let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0" style="font-size:0.9rem;">';
+            html += '<thead style="background:#343a40;color:#fff;"><tr>';
+            html += '<th style="padding:10px 14px;">Mes</th>';
+            html += '<th style="padding:10px 14px;text-align:right;">Contratos<br><small>(mes anterior)</small></th>';
+            html += '<th style="padding:10px 14px;text-align:right;">Cancelamentos</th>';
+            html += '<th style="padding:10px 14px;text-align:center;">Churn %</th>';
+            html += '<th style="padding:10px 14px;text-align:center;">Tendencia</th>';
+            html += '</tr></thead><tbody>';
 
             let prevChurn = null;
             for (const ym of recentMonths) {
-                // prevYm
                 const [y, m] = ym.split('-').map(Number);
                 const pm = m === 1 ? `${y-1}-12` : `${y}-${String(m-1).padStart(2,'0')}`;
 
@@ -887,23 +929,45 @@ EXEC PC_Fin_Fidelizacao @database = @ini
 
                 let trend = '';
                 if (prevChurn != null && churnPct != null) {
-                    if (churnPct < prevChurn) trend = '<span style="color:#28a745">▼</span>';
-                    else if (churnPct > prevChurn) trend = '<span style="color:#dc3545">▲</span>';
-                    else trend = '<span style="color:#6c757d">→</span>';
+                    if (churnPct < prevChurn) trend = '<span style="color:#28a745;font-size:1.1rem;" title="Churn diminuiu em relacao ao mes anterior">&#9660;</span>';
+                    else if (churnPct > prevChurn) trend = '<span style="color:#dc3545;font-size:1.1rem;" title="Churn aumentou em relacao ao mes anterior">&#9650;</span>';
+                    else trend = '<span style="color:#6c757d;" title="Churn igual ao mes anterior">&rarr;</span>';
                 }
 
+                const isSelected = ym === selMonth;
+                const rowStyle = isSelected
+                    ? 'background:#fff0f0;font-weight:700;border-left:4px solid #dc3545;'
+                    : '';
                 const fmtMes = formatMonth(ym);
-                html += `<tr><td>${fmtMes}</td><td>${base > 0 ? base.toLocaleString('pt-BR') : '-'}</td><td>${cancelamentos}</td><td class="${churnCls}">${churnStr}</td><td>${trend}</td></tr>`;
+                const mesLabel = isSelected ? `<span style="color:#dc3545;">${fmtMes} &#9668;</span>` : fmtMes;
+
+                html += `<tr style="${rowStyle}">`;
+                html += `<td style="padding:8px 14px;">${mesLabel}</td>`;
+                html += `<td style="padding:8px 14px;text-align:right;">${base > 0 ? base.toLocaleString('pt-BR') : '-'}</td>`;
+                html += `<td style="padding:8px 14px;text-align:right;">${cancelamentos.toLocaleString('pt-BR')}</td>`;
+                html += `<td style="padding:8px 14px;text-align:center;" class="${churnCls}" title="Formula: ${cancelamentos} cancelamentos / ${base > 0 ? base.toLocaleString('pt-BR') : '?'} contratos x 100 = ${churnStr}">${churnStr}</td>`;
+                html += `<td style="padding:8px 14px;text-align:center;">${trend}</td>`;
+                html += `</tr>`;
 
                 if (churnPct != null) prevChurn = churnPct;
             }
             html += '</tbody></table></div>';
+
+            // Se o mês selecionado não está nos últimos 6, avisar
+            if (!recentMonths.includes(selMonth)) {
+                const fmtSel = formatMonth(selMonth);
+                html += `<div class="text-muted mt-2" style="font-size:0.85rem;"><i class="fas fa-info-circle mr-1"></i>O mes selecionado (<strong>${fmtSel}</strong>) nao aparece nos ultimos 6 meses disponiveis. Os dados acima sao dos meses mais recentes.</div>`;
+            }
             container.innerHTML = html;
         }
 
         function renderStats() {
             const postos = getSelectedPostos();
             const rowData = allData[selMonth] || {};
+
+            // Atualizar label do mês no título
+            const lblMes = el('statsMonthLabel');
+            if (lblMes) lblMes.textContent = formatMonth(selMonth);
 
             let totalAdm = 0, total1m = 0, total3m = 0, total6m = 0, total12m = 0;
 
@@ -917,72 +981,48 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 total12m += poData.retencao_por_mes[12]?.qtd || 0;
             }
 
-            const ret1m = totalAdm > 0 ? Math.round((total1m / totalAdm) * 100) : 0;
-            const ret3m = totalAdm > 0 ? Math.round((total3m / totalAdm) * 100) : 0;
-            const ret6m = totalAdm > 0 ? Math.round((total6m / totalAdm) * 100) : 0;
-            const ret12m = totalAdm > 0 ? Math.round((total12m / totalAdm) * 100) : 0;
-
+            const has1  = postos.some(p => rowData[p]?.retencao_por_mes?.['1']  != null);
+            const has3  = postos.some(p => rowData[p]?.retencao_por_mes?.['3']  != null);
+            const has6  = postos.some(p => rowData[p]?.retencao_por_mes?.['6']  != null);
             const has12 = postos.some(p => rowData[p]?.retencao_por_mes?.['12'] != null);
 
-            const ret12mDisplay = (totalAdm > 0 && total12m === 0 && !has12) ? '-' : `${ret12m}%`;
-            const churn12mDisplay = (totalAdm > 0 && total12m === 0 && !has12) ? '-' : `${100 - ret12m}%`;
+            const ret1m  = totalAdm > 0 ? Math.round((total1m  / totalAdm) * 100) : 0;
+            const ret3m  = totalAdm > 0 ? Math.round((total3m  / totalAdm) * 100) : 0;
+            const ret6m  = totalAdm > 0 ? Math.round((total6m  / totalAdm) * 100) : 0;
+            const ret12m = totalAdm > 0 ? Math.round((total12m / totalAdm) * 100) : 0;
 
-            const html = `
-                <div class="card">
-                    <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #17a2b8;">${totalAdm}</div>
-                        <div style="font-size: 0.85rem; color: #666;">Total Admissões</div>
+            // Helper: mostra "-" se o período ainda não tem dados disponíveis
+            const disp = (pct, has) => (totalAdm > 0 && !has) ? '-' : `${pct}%`;
+            const dispChurn = (pct, has) => (totalAdm > 0 && !has) ? '-' : `${100 - pct}%`;
+
+            const cardHtml = (valor, label, cor, tooltip) => `
+                <div class="card" title="${tooltip}">
+                    <div class="card-body" style="cursor:help;">
+                        <div style="font-size: 1.5rem; font-weight: 600; color: ${cor};">${valor}</div>
+                        <div style="font-size: 0.85rem; color: #666;">${label}</div>
                     </div>
-                </div>
-                <div class="card">
-                    <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #28a745;">${ret1m}%</div>
-                        <div style="font-size: 0.85rem; color: #666;">Retenção 1m</div>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #dc3545;">${100 - ret1m}%</div>
-                        <div style="font-size: 0.85rem; color: #666;">Churn 1m</div>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #28a745;">${ret3m}%</div>
-                        <div style="font-size: 0.85rem; color: #666;">Retenção 3m</div>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #dc3545;">${100 - ret3m}%</div>
-                        <div style="font-size: 0.85rem; color: #666;">Churn 3m</div>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #28a745;">${ret6m}%</div>
-                        <div style="font-size: 0.85rem; color: #666;">Retenção 6m</div>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #dc3545;">${100 - ret6m}%</div>
-                        <div style="font-size: 0.85rem; color: #666;">Churn 6m</div>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #28a745;">${ret12mDisplay}</div>
-                        <div style="font-size: 0.85rem; color: #666;">Retenção 12m</div>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="card-body">
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #dc3545;">${churn12mDisplay}</div>
-                        <div style="font-size: 0.85rem; color: #666;">Churn 12m</div>
-                    </div>
-                </div>
-            `;
+                </div>`;
+
+            const html =
+                cardHtml(totalAdm, 'Total Admissoes', '#17a2b8',
+                    `Quantos clientes novos entraram em ${formatMonth(selMonth)}`) +
+                cardHtml(disp(ret1m, has1), 'Retencao 1m', '#28a745',
+                    `${total1m} de ${totalAdm} ainda pagando apos 1 mes = ${disp(ret1m, has1)}`) +
+                cardHtml(dispChurn(ret1m, has1), 'Churn 1m', '#dc3545',
+                    `Saiu no 1o mes: 100% - ${disp(ret1m, has1)} = ${dispChurn(ret1m, has1)}`) +
+                cardHtml(disp(ret3m, has3), 'Retencao 3m', '#28a745',
+                    has3 ? `${total3m} de ${totalAdm} ainda pagando apos 3 meses = ${ret3m}%` : 'Dados ainda nao disponiveis (cohort muito recente)') +
+                cardHtml(dispChurn(ret3m, has3), 'Churn 3m', '#dc3545',
+                    has3 ? `Saiu ate o 3o mes: 100% - ${ret3m}% = ${100-ret3m}%` : 'Dados ainda nao disponiveis (cohort muito recente)') +
+                cardHtml(disp(ret6m, has6), 'Retencao 6m', '#28a745',
+                    has6 ? `${total6m} de ${totalAdm} ainda pagando apos 6 meses = ${ret6m}%` : 'Dados ainda nao disponiveis (cohort muito recente)') +
+                cardHtml(dispChurn(ret6m, has6), 'Churn 6m', '#dc3545',
+                    has6 ? `Saiu ate o 6o mes: 100% - ${ret6m}% = ${100-ret6m}%` : 'Dados ainda nao disponiveis (cohort muito recente)') +
+                cardHtml(disp(ret12m, has12), 'Retencao 12m', '#28a745',
+                    has12 ? `${total12m} de ${totalAdm} ainda pagando apos 12 meses = ${ret12m}%` : 'Dados ainda nao disponiveis (cohort muito recente)') +
+                cardHtml(dispChurn(ret12m, has12), 'Churn 12m', '#dc3545',
+                    has12 ? `Saiu ate o 12o mes: 100% - ${ret12m}% = ${100-ret12m}%` : 'Dados ainda nao disponiveis (cohort muito recente)');
+
             el('statsCards').innerHTML = html;
         }
 
@@ -1103,24 +1143,24 @@ EXEC PC_Fin_Fidelizacao @database = @ini
         }
 
         function renderSurvivorCurve() {
-            // For each month 1-12, compute average retention % across all cohorts that have data at that month
             const postos = getSelectedPostos();
             const months = [1,2,3,4,5,6,7,8,9,10,11,12];
+            const row = allData[selMonth] || {};
+            const mesLabel = formatMonth(selMonth);
 
-            const retLabels = months.map(m => `${m}m`);
+            // Atualizar título
+            const titleEl = el('titleSurvivor');
+            if (titleEl) titleEl.textContent = `Curva de Sobrevivencia — Cohort de ${mesLabel}`;
+
+            // Dados do cohort selecionado
             const retData = months.map(m => {
-                let totalAdm = 0, totalRet = 0, cohortCount = 0;
-                for (const ym of Object.keys(allData).sort()) {
-                    const row = allData[ym];
-                    let adm = 0, ret = 0;
-                    for (const p of postos) {
-                        if (!row[p]) continue;
-                        const rData = row[p].retencao_por_mes?.[m];
-                        if (rData == null) continue;
-                        adm += row[p].admissoes || 0;
-                        ret += rData.qtd || 0;
-                    }
-                    if (adm > 0) { totalAdm += adm; totalRet += ret; cohortCount++; }
+                let totalAdm = 0, totalRet = 0;
+                for (const p of postos) {
+                    if (!row[p]) continue;
+                    const rData = row[p].retencao_por_mes?.[m];
+                    if (rData == null) continue;
+                    totalAdm += row[p].admissoes || 0;
+                    totalRet += rData.qtd || 0;
                 }
                 return totalAdm > 0 ? Math.round(totalRet / totalAdm * 1000) / 10 : null;
             });
@@ -1130,19 +1170,30 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             const ctx = el('chartSurvivor');
             if (!ctx) return;
             if (chartInstances['chartSurvivor']) chartInstances['chartSurvivor'].destroy();
+
+            // Se não tem nenhum dado, mostrar mensagem
+            if (retData.every(v => v == null)) {
+                const parent = ctx.parentElement;
+                parent.innerHTML = `<div class="d-flex align-items-center justify-content-center h-100 text-muted"><div class="text-center"><i class="fas fa-info-circle fa-2x mb-2"></i><br>Sem dados de retencao para o cohort de ${mesLabel}.</div></div>`;
+                parent.insertAdjacentHTML('beforeend', '<canvas id="chartSurvivor" style="display:none;"></canvas>');
+                return;
+            }
+            // Garantir canvas visivel
+            ctx.style.display = '';
+
             chartInstances['chartSurvivor'] = new Chart(ctx.getContext('2d'), {
                 type: 'line',
                 data: {
-                    labels: retLabels,
+                    labels: months.map(m => `${m}m`),
                     datasets: [
                         {
-                            label: 'Retenção %',
+                            label: 'Retencao %',
                             data: retData,
                             borderColor: 'rgba(40,167,69,1)',
                             backgroundColor: 'rgba(40,167,69,0.1)',
                             fill: true,
                             tension: 0.3,
-                            pointRadius: 4,
+                            pointRadius: 5,
                             spanGaps: false
                         },
                         {
@@ -1152,7 +1203,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                             backgroundColor: 'rgba(220,53,69,0.07)',
                             fill: true,
                             tension: 0.3,
-                            pointRadius: 4,
+                            pointRadius: 5,
                             spanGaps: false
                         }
                     ]
@@ -1161,7 +1212,20 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
-                    plugins: { legend: { position: 'top' } },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                afterBody: function(items) {
+                                    const idx = items[0]?.dataIndex;
+                                    if (idx == null) return '';
+                                    const ret = retData[idx];
+                                    if (ret == null) return '';
+                                    return `\nDe cada 100 que entraram, ${Math.round(ret)} ainda pagam apos ${idx+1} mes(es).`;
+                                }
+                            }
+                        }
+                    },
                     scales: {
                         y: { min: 0, max: 100, title: { display: true, text: '%' } }
                     }
@@ -1170,40 +1234,48 @@ EXEC PC_Fin_Fidelizacao @database = @ini
         }
 
         function renderChurnIncremental() {
-            // Shows average % of ORIGINAL cohort lost in each month interval
             const postos = getSelectedPostos();
             const months = [1,2,3,4,5,6,7,8,9,10,11,12];
+            const row = allData[selMonth] || {};
+            const mesLabel = formatMonth(selMonth);
 
-            // First compute average retention at each month
+            // Atualizar título
+            const titleEl = el('titleChurnInc');
+            if (titleEl) titleEl.textContent = `Churn Incremental — Cohort de ${mesLabel}`;
+
+            // Retencao do cohort selecionado
             const retAvg = months.map(m => {
                 let totalAdm = 0, totalRet = 0;
-                for (const ym of Object.keys(allData).sort()) {
-                    const row = allData[ym];
-                    let adm = 0, ret = 0;
-                    for (const p of postos) {
-                        if (!row[p]) continue;
-                        const rData = row[p].retencao_por_mes?.[m];
-                        if (rData == null) continue;
-                        adm += row[p].admissoes || 0;
-                        ret += rData.qtd || 0;
-                    }
-                    if (adm > 0) { totalAdm += adm; totalRet += ret; }
+                for (const p of postos) {
+                    if (!row[p]) continue;
+                    const rData = row[p].retencao_por_mes?.[m];
+                    if (rData == null) continue;
+                    totalAdm += row[p].admissoes || 0;
+                    totalRet += rData.qtd || 0;
                 }
                 return totalAdm > 0 ? totalRet / totalAdm * 100 : null;
             });
 
-            // Incremental churn = drop from previous period (as % of original cohort)
-            const prev = [100, ...retAvg.slice(0, -1)]; // month 0 = 100%
+            const prev = [100, ...retAvg.slice(0, -1)];
             const incremental = months.map((m, i) => {
                 if (retAvg[i] == null || prev[i] == null) return null;
                 return Math.round((prev[i] - retAvg[i]) * 10) / 10;
             });
 
-            const labels = months.map((m, i) => i === 0 ? `0→1m` : `${months[i-1]}→${m}m`);
+            const labels = months.map((m, i) => i === 0 ? `0\u21921m` : `${months[i-1]}\u2192${m}m`);
 
             const ctx = el('chartChurnIncremental');
             if (!ctx) return;
             if (chartInstances['chartChurnIncremental']) chartInstances['chartChurnIncremental'].destroy();
+
+            if (incremental.every(v => v == null)) {
+                const parent = ctx.parentElement;
+                parent.innerHTML = `<div class="d-flex align-items-center justify-content-center h-100 text-muted"><div class="text-center"><i class="fas fa-info-circle fa-2x mb-2"></i><br>Sem dados de churn incremental para o cohort de ${mesLabel}.</div></div>`;
+                parent.insertAdjacentHTML('beforeend', '<canvas id="chartChurnIncremental" style="display:none;"></canvas>');
+                return;
+            }
+            ctx.style.display = '';
+
             chartInstances['chartChurnIncremental'] = new Chart(ctx.getContext('2d'), {
                 type: 'bar',
                 data: {
@@ -1211,7 +1283,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                     datasets: [{
                         label: 'Churn incremental (% do cohort original)',
                         data: incremental,
-                        backgroundColor: incremental.map((v, i) => {
+                        backgroundColor: incremental.map(v => {
                             if (v == null) return 'rgba(200,200,200,0.5)';
                             const alpha = Math.min(0.9, 0.3 + v / 20);
                             return `rgba(220,53,69,${alpha})`;
@@ -1223,7 +1295,18 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                afterBody: function(items) {
+                                    const v = items[0]?.raw;
+                                    if (v == null) return '';
+                                    return `\nDe cada 100 clientes que entraram, ${v} sairam neste intervalo.`;
+                                }
+                            }
+                        }
+                    },
                     scales: {
                         y: { beginAtZero: true, title: { display: true, text: '% do cohort' } }
                     }
