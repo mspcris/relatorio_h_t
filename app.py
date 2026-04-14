@@ -70,6 +70,7 @@ _TEMPLATE_TO_PAGINA = {
     "kpi_receita_despesa.html":         "kpi_receita_despesa",
     "kpi_receita_despesa_rateio.html":  "kpi_receita_despesa_rateio",
     "kpi_consultas_status.html":        "kpi_consultas",
+    "kpi_egide.html":                   "kpi_egide",
     "kpi_notas_rps.html":               "kpi_notas_rps",
     "kpi_metas_vendas_mensalidades.html": "kpi_metas",
     "kpi_metas.html":                   "kpi_metas",
@@ -1186,6 +1187,9 @@ def r8(): return render_protected_page("kpi_vendas.html")
 @app.get('/kpi_fidelizacao_cliente')
 def r_fidelizacao(): return render_protected_page("kpi_fidelizacao_cliente.html")
 
+@app.get('/kpi_egide')
+def r_egide(): return render_protected_page("kpi_egide.html")
+
 @app.get('/medicos')
 def r9(): return render_protected_page("medicos.html")
 
@@ -1235,6 +1239,9 @@ def h6(): return render_protected_page("kpi_receita_despesa.html")
 
 @app.get('/kpi_fidelizacao_cliente.html')
 def h_fidelizacao(): return render_protected_page("kpi_fidelizacao_cliente.html")
+
+@app.get('/kpi_egide.html')
+def h_egide(): return render_protected_page("kpi_egide.html")
 
 @app.get('/kpi_v2.html')
 def h7(): return render_protected_page("kpi_v2.html")

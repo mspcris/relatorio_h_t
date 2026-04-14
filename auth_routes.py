@@ -142,6 +142,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "kpi_prescricao",            "label": "KPI Prescrições",             "group": "kpi"},
     {"key": "kpi_fidelizacao",           "label": "KPI Fidelização Churn",       "group": "kpi"},
     {"key": "kpi_consultas",             "label": "KPI Consultas (Status)",      "group": "kpi"},
+    {"key": "kpi_egide",                 "label": "KPI Égide Saúde",             "group": "kpi"},
     {"key": "kpi_notas_rps",             "label": "KPI Notas x RPS",             "group": "kpi"},
     {"key": "kpi_metas",                 "label": "KPI Metas (Mens/Vendas)",     "group": "kpi"},
     {"key": "kpi_governo",               "label": "KPI Índices Oficiais",        "group": "kpi"},
