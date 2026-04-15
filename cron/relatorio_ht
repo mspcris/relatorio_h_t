@@ -89,3 +89,6 @@ TZ=America/Sao_Paulo
 
 # Chat Dashboard (Camila.ai) — a cada 120 min (criado em 2026-04-10)
 0 */2 * * * root flock -n /opt/relatorio_h_t/locks/chat_dashboard.lock /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/export_chat_dashboard.py >>/var/log/relatorio_h_t/chat_dashboard.log 2>&1
+
+# Auditoria de acessos — limpa eventos > 15 dias, diariamente 03:15 (criado em 2026-04-15)
+15   3 * * * root flock -n /opt/relatorio_h_t/locks/page_access_cleanup.lock /opt/camim-auth/venv/bin/python /opt/relatorio_h_t/cleanup_page_access_log.py >>/var/log/relatorio_h_t/page_access_cleanup.log 2>&1

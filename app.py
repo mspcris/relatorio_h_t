@@ -432,7 +432,53 @@ def _page_db():
             last_hit  TEXT    NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS page_access_log (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts         TEXT    NOT NULL,
+            email      TEXT    NOT NULL,
+            path       TEXT    NOT NULL,
+            page_key   TEXT,
+            allowed    INTEGER NOT NULL,
+            reason     TEXT,
+            ip         TEXT,
+            user_agent TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_palog_ts      ON page_access_log(ts)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_palog_email   ON page_access_log(email)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_palog_allowed ON page_access_log(allowed)")
     return conn
+
+
+def _client_ip() -> str:
+    fwd = request.headers.get("X-Forwarded-For", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.remote_addr or ""
+
+
+def _log_access(email: str, path: str, page_key: str | None,
+                allowed: bool, reason: str) -> None:
+    """Registra um acesso (permitido ou negado) no page_access_log.
+    Retenção gerida pelo script cleanup_page_access_log.py via cron.
+    """
+    try:
+        ts = datetime.now().astimezone().isoformat(timespec="seconds")
+        ua = (request.headers.get("User-Agent") or "")[:300]
+        ip = _client_ip()[:100]
+        with _page_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO page_access_log
+                    (ts, email, path, page_key, allowed, reason, ip, user_agent)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (ts, (email or "")[:200], (path or "")[:500],
+                 page_key, 1 if allowed else 0, (reason or "")[:100], ip, ua),
+            )
+    except Exception as e:
+        _log.warning("falha ao gravar page_access_log: %s", e)
 
 
 def _route_paths() -> set[str]:
@@ -612,7 +658,17 @@ def track_page_hits():
                 (canonical, now),
             )
     except Exception:
-        return
+        pass
+
+    # Registro detalhado (por usuário) no log de auditoria.
+    # O page_key é resolvido mais precisamente em render_protected_page (templates);
+    # aqui usamos o mapa pelo path canônico como best-effort.
+    try:
+        page_key = _TEMPLATE_TO_PAGINA.get(canonical.lstrip("/")) \
+                   or _TEMPLATE_TO_PAGINA.get(canonical)
+        _log_access(email, canonical, page_key, allowed=True, reason="hit")
+    except Exception:
+        pass
 
 # ===============================
 # Funções auxiliares
@@ -781,6 +837,8 @@ def render_protected_page(page_name, **extra_vars):
         # Check page-level access
         page_key = _TEMPLATE_TO_PAGINA.get(page_name)
         if page_key and not all_pages and page_key not in paginas:
+            _log_access(email, request.path, page_key,
+                        allowed=False, reason="page_key_denied")
             return render_template(
                 "acesso_negado.html",
                 USER_EMAIL=email,
@@ -1304,6 +1362,171 @@ def api_pages_acessos():
     items.sort(key=lambda x: (x["hits"], x["title"]), reverse=True)
     total_hits = sum(x["hits"] for x in items)
     return jsonify({"ok": True, "total_hits": total_hits, "total_pages": len(items), "items": items})
+
+
+# ===============================
+# Admin — Auditoria de Acessos
+# ===============================
+
+def _is_admin_session() -> bool:
+    """Retorna True se o usuário logado é admin ativo."""
+    from auth_db import SessionLocal, get_user_by_email as _gue
+    email, _ = decode_user()
+    if not email:
+        return False
+    db = SessionLocal()
+    try:
+        u = _gue(db, email)
+        return bool(u and u.is_admin and u.ativo)
+    finally:
+        db.close()
+
+
+def _label_for_page_key(page_key: str | None) -> str:
+    if not page_key:
+        return ""
+    try:
+        from auth_routes import PAGINAS_DISPONIVEIS
+        for p in PAGINAS_DISPONIVEIS:
+            if p.get("key") == page_key:
+                return p.get("label") or page_key
+    except Exception:
+        pass
+    return page_key
+
+
+@app.get("/admin/api/auditoria")
+def admin_api_auditoria():
+    """Lista eventos do page_access_log com filtros.
+    Query params: email, page_key, allowed (0/1), since (ISO), until (ISO), limit (int).
+    """
+    if not _is_admin_session():
+        return jsonify({"erro": "Não autorizado"}), 403
+
+    email    = (request.args.get("email") or "").strip()
+    page_key = (request.args.get("page_key") or "").strip()
+    allowed  = request.args.get("allowed")
+    since    = (request.args.get("since") or "").strip()
+    until    = (request.args.get("until") or "").strip()
+    try:
+        limit = int(request.args.get("limit") or 500)
+    except ValueError:
+        limit = 500
+    limit = max(1, min(limit, 5000))
+
+    sql = ["SELECT id, ts, email, path, page_key, allowed, reason, ip, user_agent",
+           "FROM page_access_log WHERE 1=1"]
+    params: list = []
+    if email:
+        sql.append("AND email LIKE ?")
+        params.append(f"%{email}%")
+    if page_key:
+        sql.append("AND page_key = ?")
+        params.append(page_key)
+    if allowed in ("0", "1"):
+        sql.append("AND allowed = ?")
+        params.append(int(allowed))
+    if since:
+        sql.append("AND ts >= ?")
+        params.append(since)
+    if until:
+        sql.append("AND ts <= ?")
+        params.append(until)
+    sql.append("ORDER BY id DESC LIMIT ?")
+    params.append(limit)
+
+    try:
+        with _page_db() as conn:
+            rows = conn.execute(" ".join(sql), params).fetchall()
+    except Exception as e:
+        _log.warning("admin_api_auditoria: %s", e)
+        return jsonify({"erro": "falha ao consultar log"}), 500
+
+    items = []
+    for r in rows:
+        items.append({
+            "id":         r["id"],
+            "ts":         r["ts"],
+            "email":      r["email"],
+            "path":       r["path"],
+            "page_key":   r["page_key"],
+            "page_label": _label_for_page_key(r["page_key"]),
+            "allowed":    bool(r["allowed"]),
+            "reason":     r["reason"],
+            "ip":         r["ip"],
+            "user_agent": r["user_agent"],
+        })
+    return jsonify({"ok": True, "total": len(items), "items": items})
+
+
+@app.get("/admin/api/auditoria/resumo")
+def admin_api_auditoria_resumo():
+    """Resumo por usuário: total de acessos permitidos, negados e últimas tentativas.
+    Query: dias (default 7).
+    """
+    if not _is_admin_session():
+        return jsonify({"erro": "Não autorizado"}), 403
+
+    try:
+        dias = int(request.args.get("dias") or 7)
+    except ValueError:
+        dias = 7
+    dias = max(1, min(dias, 30))
+
+    desde = (datetime.now().astimezone() - timedelta(days=dias)).isoformat(timespec="seconds")
+
+    try:
+        with _page_db() as conn:
+            rows = conn.execute(
+                """
+                SELECT email,
+                       SUM(allowed)                         AS permitidos,
+                       SUM(CASE WHEN allowed=0 THEN 1 ELSE 0 END) AS negados,
+                       MAX(ts)                              AS ultimo
+                FROM page_access_log
+                WHERE ts >= ?
+                GROUP BY email
+                ORDER BY negados DESC, permitidos DESC
+                """,
+                (desde,),
+            ).fetchall()
+            negados_top = conn.execute(
+                """
+                SELECT email, page_key, COUNT(*) AS n, MAX(ts) AS ultimo
+                FROM page_access_log
+                WHERE allowed = 0 AND ts >= ?
+                GROUP BY email, page_key
+                ORDER BY n DESC
+                LIMIT 50
+                """,
+                (desde,),
+            ).fetchall()
+    except Exception as e:
+        _log.warning("admin_api_auditoria_resumo: %s", e)
+        return jsonify({"erro": "falha ao consultar log"}), 500
+
+    usuarios = [{
+        "email":      r["email"],
+        "permitidos": int(r["permitidos"] or 0),
+        "negados":    int(r["negados"] or 0),
+        "ultimo":     r["ultimo"],
+    } for r in rows]
+
+    acessos_negados = [{
+        "email":      r["email"],
+        "page_key":   r["page_key"],
+        "page_label": _label_for_page_key(r["page_key"]),
+        "tentativas": int(r["n"] or 0),
+        "ultimo":     r["ultimo"],
+    } for r in negados_top]
+
+    return jsonify({
+        "ok": True,
+        "dias": dias,
+        "desde": desde,
+        "usuarios": usuarios,
+        "acessos_negados": acessos_negados,
+    })
 
 
 # ===============================

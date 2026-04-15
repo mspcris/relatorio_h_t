@@ -134,6 +134,11 @@
             <i class="fas fa-gavel mr-1"></i>Regras Gerais
           </a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link" id="tab-auditoria-lnk" data-toggle="tab" href="#tab-auditoria" onclick="carregarAuditoria()">
+            <i class="fas fa-user-shield mr-1"></i>Auditoria de Acessos
+          </a>
+        </li>
       </ul>
 
       <div class="tab-content">
@@ -181,6 +186,129 @@
           </div>
           <div id="kpi-lista">
             <div class="text-center text-muted py-4">Carregando…</div>
+          </div>
+        </div>
+
+        <!-- ── Tab Auditoria de Acessos ─────────────────────────────────── -->
+        <div class="tab-pane fade" id="tab-auditoria">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h2 class="mb-0">Auditoria de Acessos</h2>
+              <small class="text-muted">
+                Log de cada acesso a páginas protegidas.
+                Retenção: 15 dias.
+                <b class="text-danger">Acessos negados</b> indicam tentativa de abrir página fora do escopo.
+              </small>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" onclick="carregarAuditoria()">
+              <i class="fas fa-sync mr-1"></i> Atualizar
+            </button>
+          </div>
+
+          <!-- Resumo: usuários com mais negados -->
+          <div class="card mb-3">
+            <div class="card-header bg-light">
+              <b>Resumo por usuário (últimos <span id="aud-dias-lbl">7</span> dias)</b>
+              <span class="float-right">
+                <select id="aud-dias" class="form-control form-control-sm d-inline-block" style="width:auto" onchange="carregarAuditoria()">
+                  <option value="1">últimas 24 h</option>
+                  <option value="3">últimos 3 dias</option>
+                  <option value="7" selected>últimos 7 dias</option>
+                  <option value="15">últimos 15 dias</option>
+                </select>
+              </span>
+            </div>
+            <div class="card-body p-0">
+              <table class="table table-sm table-hover mb-0">
+                <thead class="thead-light">
+                  <tr>
+                    <th>E-mail</th>
+                    <th class="text-right">Permitidos</th>
+                    <th class="text-right">Negados</th>
+                    <th>Último acesso</th>
+                  </tr>
+                </thead>
+                <tbody id="aud-resumo-body">
+                  <tr><td colspan="4" class="text-center text-muted py-3">Carregando…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Top acessos negados -->
+          <div class="card mb-3">
+            <div class="card-header bg-light">
+              <b class="text-danger"><i class="fas fa-exclamation-triangle mr-1"></i>Acessos negados (tentativas fora do escopo)</b>
+            </div>
+            <div class="card-body p-0">
+              <table class="table table-sm table-hover mb-0">
+                <thead class="thead-light">
+                  <tr>
+                    <th>E-mail</th>
+                    <th>Página bloqueada</th>
+                    <th class="text-right">Tentativas</th>
+                    <th>Última</th>
+                  </tr>
+                </thead>
+                <tbody id="aud-negados-body">
+                  <tr><td colspan="4" class="text-center text-muted py-3">Carregando…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Log detalhado com filtros -->
+          <div class="card">
+            <div class="card-header bg-light">
+              <b>Log detalhado</b>
+            </div>
+            <div class="card-body">
+              <div class="form-row">
+                <div class="form-group col-md-3">
+                  <label class="small">E-mail (contém)</label>
+                  <input type="text" id="aud-f-email" class="form-control form-control-sm" placeholder="ex: gerenciar">
+                </div>
+                <div class="form-group col-md-3">
+                  <label class="small">Status</label>
+                  <select id="aud-f-allowed" class="form-control form-control-sm">
+                    <option value="">todos</option>
+                    <option value="0">negados</option>
+                    <option value="1">permitidos</option>
+                  </select>
+                </div>
+                <div class="form-group col-md-2">
+                  <label class="small">Desde</label>
+                  <input type="date" id="aud-f-since" class="form-control form-control-sm">
+                </div>
+                <div class="form-group col-md-2">
+                  <label class="small">Até</label>
+                  <input type="date" id="aud-f-until" class="form-control form-control-sm">
+                </div>
+                <div class="form-group col-md-2 d-flex align-items-end">
+                  <button class="btn btn-primary btn-sm w-100" onclick="carregarAuditoriaLog()">
+                    <i class="fas fa-search mr-1"></i>Filtrar
+                  </button>
+                </div>
+              </div>
+              <div style="max-height:500px;overflow-y:auto">
+                <table class="table table-sm table-hover mb-0">
+                  <thead class="thead-light" style="position:sticky;top:0">
+                    <tr>
+                      <th style="width:140px">Quando</th>
+                      <th>E-mail</th>
+                      <th>Página</th>
+                      <th style="width:80px">Status</th>
+                      <th>Path</th>
+                      <th style="width:120px">IP</th>
+                    </tr>
+                  </thead>
+                  <tbody id="aud-log-body">
+                    <tr><td colspan="6" class="text-center text-muted py-3">Use os filtros e clique em Filtrar.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <small class="text-muted">Máximo 500 eventos por consulta. Para períodos maiores, filtre por e-mail ou status.</small>
+            </div>
           </div>
         </div>
 
@@ -777,6 +905,98 @@ async function salvarRegrasGerais() {
   } else {
     toast(data.erro || 'Erro ao salvar.', true);
   }
+}
+
+// ── Auditoria de Acessos ──────────────────────────────────────────────────────
+function fmtTs(s) {
+  if (!s) return '—';
+  try {
+    const d = new Date(s);
+    return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit',
+                                        hour:'2-digit', minute:'2-digit' });
+  } catch { return s; }
+}
+
+async function carregarAuditoria() {
+  const dias = document.getElementById('aud-dias').value || '7';
+  document.getElementById('aud-dias-lbl').textContent = dias;
+  const { ok, data } = await api('/admin/api/auditoria/resumo?dias=' + encodeURIComponent(dias));
+  if (!ok) {
+    document.getElementById('aud-resumo-body').innerHTML =
+      '<tr><td colspan="4" class="text-center text-danger py-3">Erro ao carregar resumo.</td></tr>';
+    return;
+  }
+  // Resumo por usuário
+  const usuarios = data.usuarios || [];
+  if (usuarios.length === 0) {
+    document.getElementById('aud-resumo-body').innerHTML =
+      '<tr><td colspan="4" class="text-center text-muted py-3">Nenhum acesso registrado no período.</td></tr>';
+  } else {
+    document.getElementById('aud-resumo-body').innerHTML = usuarios.map(u => `
+      <tr>
+        <td><code>${escHtml(u.email)}</code></td>
+        <td class="text-right">${u.permitidos}</td>
+        <td class="text-right ${u.negados > 0 ? 'text-danger font-weight-bold' : ''}">${u.negados}</td>
+        <td class="text-muted small">${fmtTs(u.ultimo)}</td>
+      </tr>
+    `).join('');
+  }
+  // Acessos negados
+  const negados = data.acessos_negados || [];
+  if (negados.length === 0) {
+    document.getElementById('aud-negados-body').innerHTML =
+      '<tr><td colspan="4" class="text-center text-muted py-3">Nenhum acesso negado no período — tudo dentro do escopo. 👍</td></tr>';
+  } else {
+    document.getElementById('aud-negados-body').innerHTML = negados.map(n => `
+      <tr>
+        <td><code>${escHtml(n.email)}</code></td>
+        <td>${escHtml(n.page_label)} <small class="text-muted">(${escHtml(n.page_key || '')})</small></td>
+        <td class="text-right text-danger font-weight-bold">${n.tentativas}</td>
+        <td class="text-muted small">${fmtTs(n.ultimo)}</td>
+      </tr>
+    `).join('');
+  }
+}
+
+async function carregarAuditoriaLog() {
+  const email   = document.getElementById('aud-f-email').value.trim();
+  const allowed = document.getElementById('aud-f-allowed').value;
+  const since   = document.getElementById('aud-f-since').value;
+  const until   = document.getElementById('aud-f-until').value;
+  const qs = new URLSearchParams();
+  if (email)   qs.set('email', email);
+  if (allowed !== '') qs.set('allowed', allowed);
+  if (since)   qs.set('since', since + 'T00:00:00');
+  if (until)   qs.set('until', until + 'T23:59:59');
+  qs.set('limit', '500');
+  document.getElementById('aud-log-body').innerHTML =
+    '<tr><td colspan="6" class="text-center text-muted py-3">Carregando…</td></tr>';
+  const { ok, data } = await api('/admin/api/auditoria?' + qs.toString());
+  if (!ok) {
+    document.getElementById('aud-log-body').innerHTML =
+      '<tr><td colspan="6" class="text-center text-danger py-3">Erro ao consultar.</td></tr>';
+    return;
+  }
+  const items = data.items || [];
+  if (items.length === 0) {
+    document.getElementById('aud-log-body').innerHTML =
+      '<tr><td colspan="6" class="text-center text-muted py-3">Nenhum evento encontrado.</td></tr>';
+    return;
+  }
+  document.getElementById('aud-log-body').innerHTML = items.map(it => `
+    <tr class="${it.allowed ? '' : 'table-danger'}">
+      <td class="small text-muted">${fmtTs(it.ts)}</td>
+      <td><code class="small">${escHtml(it.email)}</code></td>
+      <td class="small">${escHtml(it.page_label || '—')}</td>
+      <td class="text-center">
+        ${it.allowed
+          ? '<span class="badge badge-success">permitido</span>'
+          : '<span class="badge badge-danger" title="' + escHtml(it.reason || '') + '">negado</span>'}
+      </td>
+      <td class="small text-muted">${escHtml(it.path)}</td>
+      <td class="small text-muted">${escHtml(it.ip || '')}</td>
+    </tr>
+  `).join('');
 }
 </script>
 
