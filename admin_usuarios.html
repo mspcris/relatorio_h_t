@@ -50,6 +50,11 @@
     color: #888; letter-spacing: .05em;
   }
   .table td, .table th { vertical-align: middle; }
+  .th-sort { cursor: pointer; user-select: none; }
+  .th-sort:hover { background: #eef5ff; }
+  .sort-ind { margin-left: 4px; color: #6c757d; font-size: .75rem; }
+  .th-sort.sort-asc  .sort-ind::after { content: "▲"; color: #2e7d32; }
+  .th-sort.sort-desc .sort-ind::after { content: "▼"; color: #2e7d32; }
   #toast-wrap {
     position: fixed;
     bottom: 24px;
@@ -152,16 +157,33 @@
             </button>
           </div>
           <div class="card">
-            <div class="card-body p-0">
+            <div class="card-body p-2">
+              <div class="form-row align-items-center mb-2">
+                <div class="col-md-4">
+                  <input type="text" id="f-busca" class="form-control form-control-sm"
+                         placeholder="Filtrar por e-mail, nome ou posto…"
+                         oninput="renderTabela()">
+                </div>
+                <div class="col-md-3">
+                  <select id="f-ativo" class="form-control form-control-sm" onchange="renderTabela()">
+                    <option value="">Ativos e inativos</option>
+                    <option value="1" selected>Somente ativos</option>
+                    <option value="0">Somente inativos</option>
+                  </select>
+                </div>
+                <div class="col-md-5 text-right text-muted small">
+                  <span id="tbl-contador">—</span>
+                </div>
+              </div>
               <table class="table table-hover table-sm mb-0" id="tbl">
                 <thead class="thead-light">
                   <tr>
-                    <th>E-mail</th>
-                    <th>Nome</th>
-                    <th>Postos</th>
-                    <th style="width:80px">Admin</th>
-                    <th style="width:80px">Ativo</th>
-                    <th style="width:160px">Último Login</th>
+                    <th class="th-sort" data-sort="email">E-mail <span class="sort-ind"></span></th>
+                    <th class="th-sort" data-sort="nome">Nome <span class="sort-ind"></span></th>
+                    <th class="th-sort" data-sort="postos">Postos <span class="sort-ind"></span></th>
+                    <th class="th-sort text-center" style="width:80px" data-sort="is_admin">Admin <span class="sort-ind"></span></th>
+                    <th class="th-sort text-center" style="width:80px" data-sort="ativo">Ativo <span class="sort-ind"></span></th>
+                    <th class="th-sort" style="width:170px" data-sort="ultimo_login">Último Login <span class="sort-ind"></span></th>
                     <th style="width:180px">Ações</th>
                   </tr>
                 </thead>
@@ -533,13 +555,89 @@ function fmtDt(iso) {
     hour:'2-digit', minute:'2-digit', second:'2-digit' });
 }
 
+// Estado de ordenação e filtro
+let _sort = { field: 'ultimo_login', dir: 'desc' };
+
+function _cmp(a, b) {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;   // nulos sempre no fim
+  if (b == null) return -1;
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  return String(a).localeCompare(String(b), 'pt-BR', { sensitivity: 'base' });
+}
+
+function _valorParaOrdenar(u, field) {
+  switch (field) {
+    case 'email':        return (u.email || '').toLowerCase();
+    case 'nome':         return (u.nome  || '').toLowerCase();
+    case 'postos':       return (u.postos || []).join(',');
+    case 'is_admin':     return u.is_admin ? 1 : 0;
+    case 'ativo':        return u.ativo    ? 1 : 0;
+    case 'ultimo_login': return u.ultimo_login || null;
+    default:             return '';
+  }
+}
+
+function _usuariosFiltrados() {
+  const q      = (document.getElementById('f-busca')?.value || '').trim().toLowerCase();
+  const ativo  = document.getElementById('f-ativo')?.value;
+  let lista = _usuarios.slice();
+  if (ativo === '1') lista = lista.filter(u => u.ativo);
+  else if (ativo === '0') lista = lista.filter(u => !u.ativo);
+  if (q) {
+    lista = lista.filter(u =>
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.nome  || '').toLowerCase().includes(q) ||
+      (u.postos || []).some(p => p.toLowerCase().includes(q))
+    );
+  }
+  lista.sort((a, b) => {
+    const r = _cmp(_valorParaOrdenar(a, _sort.field), _valorParaOrdenar(b, _sort.field));
+    return _sort.dir === 'asc' ? r : -r;
+  });
+  return lista;
+}
+
+function _atualizarIndicadoresSort() {
+  document.querySelectorAll('#tbl th.th-sort').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.sort === _sort.field) {
+      th.classList.add(_sort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('#tbl th.th-sort').forEach(th => {
+    th.addEventListener('click', () => {
+      const f = th.dataset.sort;
+      if (_sort.field === f) _sort.dir = _sort.dir === 'asc' ? 'desc' : 'asc';
+      else { _sort.field = f; _sort.dir = (f === 'ultimo_login') ? 'desc' : 'asc'; }
+      renderTabela();
+    });
+  });
+});
+
 function renderTabela() {
   const tbody = document.getElementById('tbody');
+  const contador = document.getElementById('tbl-contador');
   if (!_usuarios.length) {
     tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Nenhum usuário cadastrado.</td></tr>';
+    if (contador) contador.textContent = '0 usuários';
     return;
   }
-  tbody.innerHTML = _usuarios.map(u => `
+  _atualizarIndicadoresSort();
+  const lista = _usuariosFiltrados();
+  if (contador) {
+    contador.textContent = lista.length === _usuarios.length
+      ? `${lista.length} usuário${lista.length === 1 ? '' : 's'}`
+      : `${lista.length} de ${_usuarios.length} usuário${_usuarios.length === 1 ? '' : 's'}`;
+  }
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Nenhum usuário encontrado com o filtro atual.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lista.map(u => `
     <tr>
       <td>${u.email}</td>
       <td>${u.nome || '<span class="text-muted">—</span>'}</td>
