@@ -927,12 +927,12 @@
           <div class="card-body">
             <div class="form-row">
               <div class="col-md-3 mb-2">
-                <label class="mb-0 small d-block">Comparar com</label>
-                <select id="selVarMesRef" class="form-control form-control-sm"></select>
-              </div>
-              <div class="col-md-3 mb-2">
                 <label class="mb-0 small d-block">Mês de referência</label>
                 <select id="selVarMesComp" class="form-control form-control-sm"></select>
+              </div>
+              <div class="col-md-3 mb-2">
+                <label class="mb-0 small d-block">Comparar com</label>
+                <select id="selVarMesRef" class="form-control form-control-sm"></select>
               </div>
               <div class="col-md-6 mb-2 d-flex align-items-end justify-content-md-end">
                 <div class="var-legend mini muted">
@@ -1143,7 +1143,8 @@
     <div class="expl-hint mb-3">
       <div class="title">Como usar</div>
       <div class="muted mini">
-        Selecione primeiro um <b>Plano principal</b>. Em seguida, escolha um <b>Plano</b> e depois um <b>Tipo</b>.
+        Selecione qualquer nível diretamente. Ao escolher um <b>Plano</b> ou <b>Tipo</b>,
+        os níveis superiores são preenchidos automaticamente com o plano principal/plano correspondentes.
         Cada nível mostra a evolução mês a mês no período filtrado.
       </div>
     </div>
@@ -1194,7 +1195,7 @@
           <div class="expl-title">Plano</div>
         </div>
         <div class="expl-actions">
-          <select id="selExplPlano" class="form-control form-control-sm" disabled></select>
+          <select id="selExplPlano" class="form-control form-control-sm"></select>
         </div>
       </div>
 
@@ -1232,7 +1233,7 @@
           <div class="expl-title">Tipo</div>
         </div>
         <div class="expl-actions">
-          <select id="selExplTipo" class="form-control form-control-sm" disabled></select>
+          <select id="selExplTipo" class="form-control form-control-sm"></select>
         </div>
       </div>
 
@@ -2845,9 +2846,9 @@ function listPlanoPrincipalOptions(mesesSelec) {
   return uniqueSorted(out);
 }
 
-function listPlanoOptions(mesesSelec, planoPrincipal) {
+function listPlanoOptions(mesesSelec) {
   const postos = postosSelecionados();
-  if (!DATA.despTipo || !postos.length || !planoPrincipal) return [];
+  if (!DATA.despTipo || !postos.length) return [];
 
   const out = [];
   mesesSelec.forEach(ym => {
@@ -2856,9 +2857,6 @@ function listPlanoOptions(mesesSelec, planoPrincipal) {
       const v = num(r.valorpago);
       if (!v) return;
       if (!considerarRetirada && isRetiradaTipo(r)) return;
-
-      const pp = normStr(r.PlanoPrincipal || r.planoprincipal, 'Sem classificação');
-      if (pp !== planoPrincipal) return;
 
       const pl = normStr(r.plano || r.Plano, 'Sem plano');
       out.push(pl);
@@ -2868,9 +2866,9 @@ function listPlanoOptions(mesesSelec, planoPrincipal) {
   return uniqueSorted(out);
 }
 
-function listTipoOptions(mesesSelec, planoPrincipal, plano) {
+function listTipoOptions(mesesSelec) {
   const postos = postosSelecionados();
-  if (!DATA.despTipo || !postos.length || !planoPrincipal || !plano) return [];
+  if (!DATA.despTipo || !postos.length) return [];
 
   const out = [];
   mesesSelec.forEach(ym => {
@@ -2880,17 +2878,39 @@ function listTipoOptions(mesesSelec, planoPrincipal, plano) {
       if (!v) return;
       if (!considerarRetirada && isRetiradaTipo(r)) return;
 
-      const pp = normStr(r.PlanoPrincipal || r.planoprincipal, 'Sem classificação');
-      const pl = normStr(r.plano || r.Plano, 'Sem plano');
-      if (pp !== planoPrincipal) return;
-      if (pl !== plano) return;
-
       const tp = normStr(r.tipo || r.Tipo, 'Sem classificação');
       out.push(tp);
     });
   });
 
   return uniqueSorted(out);
+}
+
+// Constrói mapas pai→filho para auto-preenchimento dos níveis superiores.
+// Se o mesmo nome aparecer em múltiplos pais, mantém a primeira ocorrência.
+function buildExplParentMaps(mesesSelec) {
+  const planoToPP = new Map();
+  const tipoToParents = new Map();
+  const postos = postosSelecionados();
+  if (!DATA.despTipo || !postos.length) return { planoToPP, tipoToParents };
+
+  mesesSelec.forEach(ym => {
+    const linhas = getLinhas(DATA.despTipo, ym, postos);
+    linhas.forEach(r => {
+      const v = num(r.valorpago);
+      if (!v) return;
+      if (!considerarRetirada && isRetiradaTipo(r)) return;
+
+      const pp = normStr(r.PlanoPrincipal || r.planoprincipal, 'Sem classificação');
+      const pl = normStr(r.plano || r.Plano, 'Sem plano');
+      const tp = normStr(r.tipo || r.Tipo, 'Sem classificação');
+
+      if (!planoToPP.has(pl)) planoToPP.set(pl, pp);
+      if (!tipoToParents.has(tp)) tipoToParents.set(tp, { pp, plano: pl });
+    });
+  });
+
+  return { planoToPP, tipoToParents };
 }
 
 function seriesDespesaPlanoPrincipal(mesesSelec, planoPrincipal) {
@@ -3026,14 +3046,17 @@ function wireExplorador() {
 
   if (selPP && !selPP.dataset.wired) {
     selPP.addEventListener('change', () => {
-      // Quando muda PP: habilita Plano, zera Tipo
-      if (selPlano) {
-        selPlano.disabled = !selPP.value;
-        selPlano.value = '';
-      }
-      if (selTipo) {
-        selTipo.disabled = true;
-        selTipo.value = '';
+      // Mudou PP: se o Plano/Tipo atuais não pertencem a este PP, limpa-os.
+      const mesesSelec = getMesesSelecionados();
+      const { planoToPP, tipoToParents } = buildExplParentMaps(mesesSelec);
+      if (selPP.value) {
+        if (selPlano && selPlano.value && planoToPP.get(selPlano.value) !== selPP.value) {
+          selPlano.value = '';
+        }
+        if (selTipo && selTipo.value) {
+          const pai = tipoToParents.get(selTipo.value);
+          if (!pai || pai.pp !== selPP.value) selTipo.value = '';
+        }
       }
       updateAll();
     });
@@ -3042,10 +3065,16 @@ function wireExplorador() {
 
   if (selPlano && !selPlano.dataset.wired) {
     selPlano.addEventListener('change', () => {
-      // Quando muda Plano: habilita Tipo
-      if (selTipo) {
-        selTipo.disabled = !selPlano.value;
-        selTipo.value = '';
+      // Mudou Plano: auto-preenche PP com o pai; se Tipo não pertence a este Plano, limpa-o.
+      const mesesSelec = getMesesSelecionados();
+      const { planoToPP, tipoToParents } = buildExplParentMaps(mesesSelec);
+      if (selPlano.value) {
+        const pp = planoToPP.get(selPlano.value);
+        if (pp && selPP) selPP.value = pp;
+        if (selTipo && selTipo.value) {
+          const pai = tipoToParents.get(selTipo.value);
+          if (!pai || pai.plano !== selPlano.value) selTipo.value = '';
+        }
       }
       updateAll();
     });
@@ -3053,7 +3082,19 @@ function wireExplorador() {
   }
 
   if (selTipo && !selTipo.dataset.wired) {
-    selTipo.addEventListener('change', updateAll);
+    selTipo.addEventListener('change', () => {
+      // Mudou Tipo: auto-preenche Plano e PP com os pais correspondentes.
+      const mesesSelec = getMesesSelecionados();
+      const { tipoToParents } = buildExplParentMaps(mesesSelec);
+      if (selTipo.value) {
+        const pai = tipoToParents.get(selTipo.value);
+        if (pai) {
+          if (selPP) selPP.value = pai.pp;
+          if (selPlano) selPlano.value = pai.plano;
+        }
+      }
+      updateAll();
+    });
     selTipo.dataset.wired = '1';
   }
 
@@ -3070,17 +3111,31 @@ function updateExploradorDespesas(mesesSelec) {
 
   if (!selPP || !DATA.despTipo) return;
 
-  // 1) opções de Plano Principal
+  // Todas as listas são independentes: sempre mostram TODOS os registros do período/postos.
   const curPP = selPP.value || '';
+  const curPlano = selPlano ? (selPlano.value || '') : '';
+  const curTipo = selTipo ? (selTipo.value || '') : '';
+
   const ppOptions = listPlanoPrincipalOptions(mesesSelec);
+  const planoOptions = listPlanoOptions(mesesSelec);
+  const tipoOptions = listTipoOptions(mesesSelec);
 
   buildSelectOptions(selPP, ppOptions, 'Selecione um plano principal…');
-
-  // tentar manter seleção se ainda existir
   if (curPP && ppOptions.includes(curPP)) selPP.value = curPP;
 
+  if (selPlano) {
+    buildSelectOptions(selPlano, planoOptions, 'Selecione um plano…');
+    if (curPlano && planoOptions.includes(curPlano)) selPlano.value = curPlano;
+  }
+
+  if (selTipo) {
+    buildSelectOptions(selTipo, tipoOptions, 'Selecione um tipo…');
+    if (curTipo && tipoOptions.includes(curTipo)) selTipo.value = curTipo;
+  }
+
   const chosenPP = selPP.value || '';
-  if (selPlano) selPlano.disabled = !chosenPP;
+  const chosenPlano = selPlano?.value || '';
+  const chosenTipo = selTipo?.value || '';
 
   // 1) chart + tabela PP
   if (chosenPP) {
@@ -3092,19 +3147,6 @@ function updateExploradorDespesas(mesesSelec) {
     renderExplorerTable('#tblExplPP', [], []);
   }
 
-  // 2) opções de Plano (dependente de PP)
-  if (selPlano) {
-    const curPlano = selPlano.value || '';
-    const planoOptions = listPlanoOptions(mesesSelec, chosenPP);
-
-    buildSelectOptions(selPlano, planoOptions, chosenPP ? 'Selecione um plano…' : 'Selecione um plano principal primeiro…');
-
-    if (curPlano && planoOptions.includes(curPlano)) selPlano.value = curPlano;
-  }
-
-  const chosenPlano = selPlano?.value || '';
-  if (selTipo) selTipo.disabled = !chosenPlano;
-
   // 2) chart + tabela Plano
   if (chosenPP && chosenPlano) {
     const s2 = seriesDespesaPlano(mesesSelec, chosenPP, chosenPlano);
@@ -3115,20 +3157,8 @@ function updateExploradorDespesas(mesesSelec) {
     renderExplorerTable('#tblExplPlano', [], []);
   }
 
-  // 3) opções de Tipo (dependente de PP + Plano)
-  if (selTipo) {
-    const curTipo = selTipo.value || '';
-    const tipoOptions = listTipoOptions(mesesSelec, chosenPP, chosenPlano);
-
-    buildSelectOptions(selTipo, tipoOptions, chosenPlano ? 'Selecione um tipo…' : 'Selecione um plano primeiro…');
-
-    if (curTipo && tipoOptions.includes(curTipo)) selTipo.value = curTipo;
-  }
-
-  const chosenTipo = selTipo?.value || '';
-
   // 3) chart + tabela Tipo
-  if (chosenPP && chosenPlano && chosenTipo && DATA.despTipo) {
+  if (chosenPP && chosenPlano && chosenTipo) {
     const s3 = seriesDespesaTipo(mesesSelec, chosenPP, chosenPlano, chosenTipo);
     updateExplorerChart(chartDespTipoTrend, s3.labels, s3.values, `Despesa — ${chosenTipo}`);
     renderExplorerTable('#tblExplTipo', mesesSelec, s3.values);
