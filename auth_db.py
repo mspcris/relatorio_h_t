@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 _BRT = timezone(timedelta(hours=-3))
 
 from sqlalchemy import (
-    create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, text
+    create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Float, text
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -119,6 +119,13 @@ class IAConversa(Base):
     pergunta   = Column(Text, nullable=False)
     resposta   = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # Uso e custo por chamada (preenchidos após a resposta do LLM)
+    provider         = Column(String(20),  nullable=True)   # groq | openai | anthropic
+    model            = Column(String(100), nullable=True)
+    prompt_tokens    = Column(Integer,     nullable=True)
+    completion_tokens = Column(Integer,    nullable=True)
+    total_tokens     = Column(Integer,     nullable=True)
+    cost_usd         = Column(Float,       nullable=True)
     user       = relationship("User", back_populates="ia_conversas")
 
 
@@ -229,6 +236,31 @@ def init_db():
             _conn.commit()
         except Exception:
             pass
+        # Migrations para ia_conversas: novas colunas de uso/custo
+        for _sql in [
+            "ALTER TABLE ia_conversas ADD COLUMN provider VARCHAR(20)",
+            "ALTER TABLE ia_conversas ADD COLUMN model VARCHAR(100)",
+            "ALTER TABLE ia_conversas ADD COLUMN prompt_tokens INTEGER",
+            "ALTER TABLE ia_conversas ADD COLUMN completion_tokens INTEGER",
+            "ALTER TABLE ia_conversas ADD COLUMN total_tokens INTEGER",
+            "ALTER TABLE ia_conversas ADD COLUMN cost_usd REAL",
+        ]:
+            try:
+                _conn.execute(text(_sql))
+                _conn.commit()
+            except Exception:
+                pass
+        # Índices para consultas analíticas
+        for _sql in [
+            "CREATE INDEX IF NOT EXISTS idx_iaconv_created ON ia_conversas(created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_iaconv_user    ON ia_conversas(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_iaconv_provider ON ia_conversas(provider)",
+        ]:
+            try:
+                _conn.execute(text(_sql))
+                _conn.commit()
+            except Exception:
+                pass
     db = SessionLocal()
     try:
         # KPIs conhecidos

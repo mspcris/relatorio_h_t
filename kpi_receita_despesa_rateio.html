@@ -3524,12 +3524,18 @@ function updateExploradorDespesas(mesesSelec) {
           const activeLinks = document.querySelectorAll('#postoTabs .nav-link.active[data-posto]');
           const postos = Array.from(activeLinks).map(a => a.dataset.posto).filter(p => p && p !== 'ALL');
           const incluirRetirada = document.getElementById('chkRetirada')?.checked || false;
+          // Converte MM/YYYY → YYYY-MM (formato esperado pelo context builder)
+          const toYm = v => {
+            if (!v) return '';
+            const m = String(v).match(/^(\d{2})\/(\d{4})$/);
+            return m ? `${m[2]}-${m[1]}` : v;
+          };
           return {
             prompt:           userQuery,
             kpi:              'receita_despesa_rateio',
             postos,
-            periodo_ini:      document.querySelector('#from2')?.value || '',
-            periodo_fim:      document.querySelector('#to2')?.value   || '',
+            periodo_ini:      toYm(document.querySelector('#from2')?.value),
+            periodo_fim:      toYm(document.querySelector('#to2')?.value),
             incluir_retirada: incluirRetirada,
           };
         }

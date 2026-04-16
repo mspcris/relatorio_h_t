@@ -25,6 +25,8 @@ class LLMClientOpenAI:
 
         self.client = OpenAI(api_key=api_key)
         self.last_finish_reason: Optional[str] = None
+        self.last_usage: dict = {}
+        self.last_model: Optional[str] = None
 
     def gerar_texto(
         self,
@@ -52,4 +54,14 @@ class LLMClientOpenAI:
         )
 
         self.last_finish_reason = getattr(resp.choices[0], "finish_reason", None)
+        usage = getattr(resp, "usage", None)
+        if usage is not None:
+            self.last_usage = {
+                "prompt_tokens":     getattr(usage, "prompt_tokens", None),
+                "completion_tokens": getattr(usage, "completion_tokens", None),
+                "total_tokens":      getattr(usage, "total_tokens", None),
+            }
+        else:
+            self.last_usage = {}
+        self.last_model = getattr(resp, "model", None) or self.config.model
         return resp.choices[0].message.content.strip()

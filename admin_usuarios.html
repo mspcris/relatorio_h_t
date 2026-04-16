@@ -144,6 +144,11 @@
             <i class="fas fa-user-shield mr-1"></i>Auditoria de Acessos
           </a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link" id="tab-ia-lnk" data-toggle="tab" href="#tab-ia" onclick="carregarIAResumo()">
+            <i class="fas fa-robot mr-1"></i>IA &amp; Custos
+          </a>
+        </li>
       </ul>
 
       <div class="tab-content">
@@ -364,6 +369,237 @@
           </div>
         </div>
 
+        <!-- ── Tab IA & Custos ──────────────────────────────────────────── -->
+        <div class="tab-pane fade" id="tab-ia">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h2 class="mb-0">Consumo da IA — tokens &amp; custo</h2>
+              <small class="text-muted">
+                Cada chamada à IA (Groq / OpenAI / Anthropic) é registrada com tokens gastos e custo estimado em USD.
+                Use o filtro de período para identificar picos e clicar em qualquer linha para ver as perguntas feitas.
+              </small>
+            </div>
+            <div>
+              <select id="ia-dias" class="form-control form-control-sm d-inline-block" style="width:auto" onchange="carregarIAResumo()">
+                <option value="1">últimas 24 h</option>
+                <option value="3">últimos 3 dias</option>
+                <option value="7" selected>últimos 7 dias</option>
+                <option value="15">últimos 15 dias</option>
+                <option value="30">últimos 30 dias</option>
+                <option value="60">últimos 60 dias</option>
+                <option value="90">últimos 90 dias</option>
+              </select>
+              <button class="btn btn-outline-secondary btn-sm ml-1" onclick="carregarIAResumo()">
+                <i class="fas fa-sync mr-1"></i>Atualizar
+              </button>
+            </div>
+          </div>
+
+          <!-- KPIs gerais -->
+          <div class="row">
+            <div class="col-md-3">
+              <div class="small-box bg-info">
+                <div class="inner">
+                  <h3 id="ia-total-custo">—</h3>
+                  <p>Custo total (USD)</p>
+                </div>
+                <div class="icon"><i class="fas fa-dollar-sign"></i></div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="small-box bg-success">
+                <div class="inner">
+                  <h3 id="ia-total-tokens">—</h3>
+                  <p>Tokens totais</p>
+                </div>
+                <div class="icon"><i class="fas fa-coins"></i></div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="small-box bg-warning">
+                <div class="inner">
+                  <h3 id="ia-total-conversas">—</h3>
+                  <p>Conversas</p>
+                </div>
+                <div class="icon"><i class="fas fa-comments"></i></div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="small-box bg-secondary">
+                <div class="inner">
+                  <h3 id="ia-total-usuarios">—</h3>
+                  <p>Usuários ativos</p>
+                </div>
+                <div class="icon"><i class="fas fa-users"></i></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <!-- Top usuários em custo -->
+            <div class="col-md-7">
+              <div class="card">
+                <div class="card-header bg-light">
+                  <b>Custo por usuário no período</b>
+                  <small class="text-muted ml-2">(clique no e-mail para ver conversas)</small>
+                </div>
+                <div class="card-body p-0" style="max-height:460px;overflow-y:auto">
+                  <table class="table table-sm table-hover mb-0">
+                    <thead class="thead-light" style="position:sticky;top:0">
+                      <tr>
+                        <th>E-mail</th>
+                        <th class="text-right">Conversas</th>
+                        <th class="text-right">Tokens</th>
+                        <th class="text-right">Custo (USD)</th>
+                        <th>Último uso</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ia-usuarios-body">
+                      <tr><td colspan="5" class="text-center text-muted py-3">Carregando…</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Picos usuário+dia -->
+            <div class="col-md-5">
+              <div class="card">
+                <div class="card-header bg-light">
+                  <b class="text-danger"><i class="fas fa-fire mr-1"></i>Maiores picos (usuário + dia)</b>
+                  <small class="text-muted d-block">Onde alguém estourou em um único dia</small>
+                </div>
+                <div class="card-body p-0" style="max-height:460px;overflow-y:auto">
+                  <table class="table table-sm table-hover mb-0">
+                    <thead class="thead-light" style="position:sticky;top:0">
+                      <tr>
+                        <th>E-mail</th>
+                        <th>Dia</th>
+                        <th class="text-right">Tokens</th>
+                        <th class="text-right">USD</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ia-picos-body">
+                      <tr><td colspan="4" class="text-center text-muted py-3">Carregando…</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row mt-3">
+            <!-- Série diária -->
+            <div class="col-md-7">
+              <div class="card">
+                <div class="card-header bg-light">
+                  <b>Consumo diário</b>
+                </div>
+                <div class="card-body p-0" style="max-height:360px;overflow-y:auto">
+                  <table class="table table-sm table-striped mb-0">
+                    <thead class="thead-light" style="position:sticky;top:0">
+                      <tr>
+                        <th>Dia</th>
+                        <th class="text-right">Conversas</th>
+                        <th class="text-right">Tokens</th>
+                        <th class="text-right">Custo (USD)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ia-diario-body">
+                      <tr><td colspan="4" class="text-center text-muted py-3">Carregando…</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Por provedor -->
+            <div class="col-md-5">
+              <div class="card">
+                <div class="card-header bg-light">
+                  <b>Por provedor</b>
+                </div>
+                <div class="card-body p-0" style="max-height:360px;overflow-y:auto">
+                  <table class="table table-sm table-striped mb-0">
+                    <thead class="thead-light" style="position:sticky;top:0">
+                      <tr>
+                        <th>Provedor</th>
+                        <th class="text-right">Conversas</th>
+                        <th class="text-right">Tokens</th>
+                        <th class="text-right">Custo (USD)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ia-provider-body">
+                      <tr><td colspan="4" class="text-center text-muted py-3">Carregando…</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Conversas filtradas -->
+          <div class="card mt-3">
+            <div class="card-header bg-light">
+              <b>Conversas — pergunta e resposta</b>
+            </div>
+            <div class="card-body">
+              <div class="form-row">
+                <div class="form-group col-md-3">
+                  <label class="small">E-mail (contém)</label>
+                  <input type="text" id="ia-f-email" class="form-control form-control-sm" placeholder="ex: cristiano">
+                </div>
+                <div class="form-group col-md-2">
+                  <label class="small">Provedor</label>
+                  <select id="ia-f-provider" class="form-control form-control-sm">
+                    <option value="">todos</option>
+                    <option value="openai">openai</option>
+                    <option value="anthropic">anthropic</option>
+                    <option value="groq">groq</option>
+                  </select>
+                </div>
+                <div class="form-group col-md-2">
+                  <label class="small">Dia específico</label>
+                  <input type="date" id="ia-f-dia" class="form-control form-control-sm">
+                </div>
+                <div class="form-group col-md-2">
+                  <label class="small">Desde</label>
+                  <input type="date" id="ia-f-since" class="form-control form-control-sm">
+                </div>
+                <div class="form-group col-md-2">
+                  <label class="small">Até</label>
+                  <input type="date" id="ia-f-until" class="form-control form-control-sm">
+                </div>
+                <div class="form-group col-md-1 d-flex align-items-end">
+                  <button class="btn btn-primary btn-sm w-100" onclick="carregarIAConversas()">
+                    <i class="fas fa-search"></i>
+                  </button>
+                </div>
+              </div>
+              <div style="max-height:500px;overflow-y:auto">
+                <table class="table table-sm table-hover mb-0">
+                  <thead class="thead-light" style="position:sticky;top:0">
+                    <tr>
+                      <th style="width:140px">Quando</th>
+                      <th>E-mail</th>
+                      <th>Página</th>
+                      <th>Pergunta</th>
+                      <th style="width:70px" class="text-right">Tokens</th>
+                      <th style="width:80px" class="text-right">USD</th>
+                      <th style="width:85px">Provider</th>
+                      <th style="width:50px"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="ia-conv-body">
+                    <tr><td colspan="8" class="text-center text-muted py-3">Use os filtros e clique em <i class="fas fa-search"></i>.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <small class="text-muted">Máximo 500 conversas por consulta. Para períodos longos, filtre por e-mail ou dia.</small>
+            </div>
+          </div>
+        </div>
+
       </div><!-- /tab-content -->
 
     </section>
@@ -501,6 +737,35 @@
             <tr><td colspan="3" class="text-center text-muted py-3">Carregando…</td></tr>
           </tbody>
         </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL CONVERSA IA ──────────────────────────────────────────────────── -->
+<div class="modal fade" id="modal-ia-conv" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Conversa com a IA — <span id="ia-conv-email-hdr"></span></h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="row small text-muted mb-2">
+          <div class="col-md-3"><b>Quando:</b> <span id="ia-conv-quando">—</span></div>
+          <div class="col-md-3"><b>Página:</b> <span id="ia-conv-pagina">—</span></div>
+          <div class="col-md-3"><b>Provedor/Model:</b> <span id="ia-conv-modelo">—</span></div>
+          <div class="col-md-3"><b>Tokens / USD:</b> <span id="ia-conv-metricas">—</span></div>
+        </div>
+        <label class="small font-weight-bold text-muted mb-1">Pergunta:</label>
+        <div id="ia-conv-pergunta" class="p-2 mb-3"
+             style="background:#f4f7f9;border-left:3px solid #2f6bb6;border-radius:4px;white-space:pre-wrap;font-size:.9rem"></div>
+        <label class="small font-weight-bold text-muted mb-1">Resposta:</label>
+        <div id="ia-conv-resposta" class="p-2"
+             style="background:#f8f9fa;border-left:3px solid #28a745;border-radius:4px;white-space:pre-wrap;font-size:.9rem;max-height:55vh;overflow-y:auto"></div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
@@ -1095,6 +1360,205 @@ async function carregarAuditoriaLog() {
       <td class="small text-muted">${escHtml(it.ip || '')}</td>
     </tr>
   `).join('');
+}
+
+// ── IA & Custos ──────────────────────────────────────────────────────────────
+function fmtUsd(v) {
+  if (v == null) return '—';
+  const n = Number(v);
+  if (!isFinite(n)) return '—';
+  if (n === 0)   return '$0.00';
+  if (n < 0.01)  return '$' + n.toFixed(4);
+  return '$' + n.toFixed(2);
+}
+
+function fmtInt(v) {
+  if (v == null) return '—';
+  try { return Number(v).toLocaleString('pt-BR'); }
+  catch { return String(v); }
+}
+
+function fmtDia(s) {
+  if (!s) return '—';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s));
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  try {
+    const d = new Date(s);
+    return d.toLocaleDateString('pt-BR');
+  } catch { return s; }
+}
+
+async function carregarIAResumo() {
+  const dias = document.getElementById('ia-dias').value || '7';
+  const bodies = ['ia-usuarios-body','ia-picos-body','ia-diario-body','ia-provider-body'];
+  bodies.forEach(id => {
+    document.getElementById(id).innerHTML =
+      '<tr><td colspan="5" class="text-center text-muted py-3">Carregando…</td></tr>';
+  });
+  const { ok, data } = await api('/admin/api/ia/resumo?dias=' + encodeURIComponent(dias));
+  if (!ok) {
+    bodies.forEach(id => {
+      document.getElementById(id).innerHTML =
+        '<tr><td colspan="5" class="text-center text-danger py-3">Erro ao carregar.</td></tr>';
+    });
+    return;
+  }
+
+  // KPIs topo
+  document.getElementById('ia-total-custo').textContent    = fmtUsd(data.totais?.custo_usd);
+  document.getElementById('ia-total-tokens').textContent   = fmtInt(data.totais?.tokens);
+  document.getElementById('ia-total-conversas').textContent = fmtInt(data.totais?.conversas);
+  document.getElementById('ia-total-usuarios').textContent = fmtInt((data.por_usuario || []).length);
+
+  // Por usuário
+  const usuarios = data.por_usuario || [];
+  if (!usuarios.length) {
+    document.getElementById('ia-usuarios-body').innerHTML =
+      '<tr><td colspan="5" class="text-center text-muted py-3">Nenhuma conversa no período.</td></tr>';
+  } else {
+    document.getElementById('ia-usuarios-body').innerHTML = usuarios.map(u => `
+      <tr>
+        <td><a href="javascript:void(0)" onclick="filtrarConvPorEmail('${escHtml(u.email)}')"><code>${escHtml(u.email)}</code></a></td>
+        <td class="text-right">${fmtInt(u.conversas)}</td>
+        <td class="text-right">${fmtInt(u.tokens)}</td>
+        <td class="text-right font-weight-bold">${fmtUsd(u.custo_usd)}</td>
+        <td class="small text-muted">${fmtTs(u.ultimo)}</td>
+      </tr>
+    `).join('');
+  }
+
+  // Picos usuário+dia
+  const picos = data.picos_usuario_dia || [];
+  if (!picos.length) {
+    document.getElementById('ia-picos-body').innerHTML =
+      '<tr><td colspan="4" class="text-center text-muted py-3">—</td></tr>';
+  } else {
+    document.getElementById('ia-picos-body').innerHTML = picos.map(p => `
+      <tr>
+        <td><a href="javascript:void(0)" onclick="filtrarConvPorUsuarioDia('${escHtml(p.email)}','${escHtml(p.dia)}')"><code>${escHtml(p.email)}</code></a></td>
+        <td class="small">${fmtDia(p.dia)}</td>
+        <td class="text-right">${fmtInt(p.tokens)}</td>
+        <td class="text-right font-weight-bold ${p.custo_usd > 1 ? 'text-danger' : ''}">${fmtUsd(p.custo_usd)}</td>
+      </tr>
+    `).join('');
+  }
+
+  // Diário
+  const diario = data.por_dia || [];
+  if (!diario.length) {
+    document.getElementById('ia-diario-body').innerHTML =
+      '<tr><td colspan="4" class="text-center text-muted py-3">—</td></tr>';
+  } else {
+    document.getElementById('ia-diario-body').innerHTML = diario.map(d => `
+      <tr>
+        <td>${fmtDia(d.dia)}</td>
+        <td class="text-right">${fmtInt(d.conversas)}</td>
+        <td class="text-right">${fmtInt(d.tokens)}</td>
+        <td class="text-right">${fmtUsd(d.custo_usd)}</td>
+      </tr>
+    `).join('');
+  }
+
+  // Provedor
+  const provs = data.por_provider || [];
+  if (!provs.length) {
+    document.getElementById('ia-provider-body').innerHTML =
+      '<tr><td colspan="4" class="text-center text-muted py-3">—</td></tr>';
+  } else {
+    document.getElementById('ia-provider-body').innerHTML = provs.map(p => `
+      <tr>
+        <td><code>${escHtml(p.provider)}</code></td>
+        <td class="text-right">${fmtInt(p.conversas)}</td>
+        <td class="text-right">${fmtInt(p.tokens)}</td>
+        <td class="text-right">${fmtUsd(p.custo_usd)}</td>
+      </tr>
+    `).join('');
+  }
+}
+
+function filtrarConvPorEmail(email) {
+  document.getElementById('ia-f-email').value = email;
+  document.getElementById('ia-f-dia').value = '';
+  carregarIAConversas();
+}
+
+function filtrarConvPorUsuarioDia(email, dia) {
+  document.getElementById('ia-f-email').value = email;
+  document.getElementById('ia-f-dia').value = dia;
+  document.getElementById('ia-f-since').value = '';
+  document.getElementById('ia-f-until').value = '';
+  carregarIAConversas();
+}
+
+async function carregarIAConversas() {
+  const email    = document.getElementById('ia-f-email').value.trim();
+  const provider = document.getElementById('ia-f-provider').value;
+  const dia      = document.getElementById('ia-f-dia').value;
+  const since    = document.getElementById('ia-f-since').value;
+  const until    = document.getElementById('ia-f-until').value;
+
+  const qs = new URLSearchParams();
+  if (email)    qs.set('email', email);
+  if (provider) qs.set('provider', provider);
+  if (dia)      qs.set('dia', dia);
+  if (since)    qs.set('since', since + 'T00:00:00');
+  if (until)    qs.set('until', until + 'T23:59:59');
+  qs.set('limit', '500');
+
+  document.getElementById('ia-conv-body').innerHTML =
+    '<tr><td colspan="8" class="text-center text-muted py-3">Carregando…</td></tr>';
+
+  const { ok, data } = await api('/admin/api/ia/conversas?' + qs.toString());
+  if (!ok) {
+    document.getElementById('ia-conv-body').innerHTML =
+      '<tr><td colspan="8" class="text-center text-danger py-3">Erro ao consultar.</td></tr>';
+    return;
+  }
+  const items = data.items || [];
+  if (!items.length) {
+    document.getElementById('ia-conv-body').innerHTML =
+      '<tr><td colspan="8" class="text-center text-muted py-3">Nenhuma conversa encontrada.</td></tr>';
+    return;
+  }
+  document.getElementById('ia-conv-body').innerHTML = items.map(it => {
+    const perguntaCurta = (it.pergunta || '').slice(0, 160);
+    return `
+      <tr>
+        <td class="small text-muted">${fmtTs(it.created_at)}</td>
+        <td><code class="small">${escHtml(it.email)}</code></td>
+        <td class="small text-muted">${escHtml(it.pagina || '—')}</td>
+        <td class="small" title="${escHtml(it.pergunta || '')}">${escHtml(perguntaCurta)}${(it.pergunta || '').length > 160 ? '…' : ''}</td>
+        <td class="text-right small">${fmtInt(it.total_tokens)}</td>
+        <td class="text-right small">${fmtUsd(it.cost_usd)}</td>
+        <td class="small text-muted"><code>${escHtml(it.provider || '')}</code></td>
+        <td>
+          <button class="btn btn-xs btn-outline-primary" title="Ver conversa completa" onclick="verIAConv(${it.id})">
+            <i class="fas fa-eye"></i>
+          </button>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+async function verIAConv(cid) {
+  document.getElementById('ia-conv-pergunta').textContent = 'Carregando…';
+  document.getElementById('ia-conv-resposta').textContent = '';
+  document.getElementById('ia-conv-email-hdr').textContent = '';
+  $('#modal-ia-conv').modal('show');
+
+  const { ok, data } = await api('/admin/api/ia/conversas/' + cid);
+  if (!ok) {
+    document.getElementById('ia-conv-pergunta').textContent = 'Erro ao carregar.';
+    return;
+  }
+  document.getElementById('ia-conv-email-hdr').textContent  = data.email || '';
+  document.getElementById('ia-conv-quando').textContent     = fmtTs(data.created_at);
+  document.getElementById('ia-conv-pagina').textContent     = data.pagina || '—';
+  document.getElementById('ia-conv-modelo').textContent     = `${data.provider || '—'} / ${data.model || '—'}`;
+  const metricas = `${fmtInt(data.total_tokens)} tokens · ${fmtUsd(data.cost_usd)}`;
+  document.getElementById('ia-conv-metricas').textContent   = metricas;
+  document.getElementById('ia-conv-pergunta').textContent   = data.pergunta || '—';
+  document.getElementById('ia-conv-resposta').textContent   = data.resposta || '—';
 }
 </script>
 

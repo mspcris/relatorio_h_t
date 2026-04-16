@@ -914,6 +914,18 @@ def ia_chat():
     except Exception as exc:
         return jsonify({"erro": f"{provider} indisponível: {exc}"}), 502
 
+    # ── Captura uso / custo da última chamada ────────────────────────────────
+    usage = getattr(llm_client, "last_usage", {}) or {}
+    model_used = getattr(llm_client, "last_model", None)
+    ptoks = usage.get("prompt_tokens")
+    ctoks = usage.get("completion_tokens")
+    ttoks = usage.get("total_tokens")
+    try:
+        from ia_pricing import estimar_custo_usd
+        cost = estimar_custo_usd(model_used, ptoks, ctoks)
+    except Exception:
+        cost = None
+
     # ── Persistir no SQLite ──────────────────────────────────────────────────
     db = SessionLocal()
     try:
@@ -924,6 +936,12 @@ def ia_chat():
                 pagina   = pagina_txt or None,
                 pergunta = pergunta_txt,
                 resposta = resposta_txt[:5000],
+                provider = provider,
+                model    = model_used,
+                prompt_tokens     = ptoks,
+                completion_tokens = ctoks,
+                total_tokens      = ttoks,
+                cost_usd = cost,
             ))
             db.commit()
     except Exception as exc:
@@ -1043,6 +1061,264 @@ def ia_saudacao():
         perguntas = [r.pergunta for r in top]
 
         return jsonify({"nome": nome, "perguntas_frequentes": perguntas})
+    finally:
+        db.close()
+
+
+# ── Admin: Monitoramento de uso e custo da IA ────────────────────────────────
+
+def _parse_iso_dt(s: str):
+    from datetime import datetime as _dt
+    if not s:
+        return None
+    try:
+        s = s.strip().replace("Z", "")
+        # aceita "YYYY-MM-DD" e "YYYY-MM-DDTHH:MM:SS"
+        if "T" in s:
+            return _dt.fromisoformat(s)
+        return _dt.fromisoformat(s + "T00:00:00")
+    except Exception:
+        return None
+
+
+@auth_bp.get("/admin/api/ia/resumo")
+def admin_ia_resumo():
+    """Resumo de uso da IA nos últimos N dias:
+       - total por usuário (tokens, custo, conversas)
+       - série temporal diária (tokens + custo)
+       - top N usuários com maior custo em um único dia
+    """
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+
+    from datetime import timedelta as _td
+
+    try:
+        dias = max(1, min(90, int(request.args.get("dias", 7))))
+    except Exception:
+        dias = 7
+
+    desde = datetime.utcnow() - _td(days=dias)
+
+    db = SessionLocal()
+    try:
+        # Por usuário
+        q_user = (
+            db.query(
+                User.id, User.email, User.nome,
+                func.count(IAConversa.id).label("conversas"),
+                func.coalesce(func.sum(IAConversa.total_tokens), 0).label("tokens"),
+                func.coalesce(func.sum(IAConversa.prompt_tokens), 0).label("prompt_tokens"),
+                func.coalesce(func.sum(IAConversa.completion_tokens), 0).label("completion_tokens"),
+                func.coalesce(func.sum(IAConversa.cost_usd), 0.0).label("custo_usd"),
+                func.max(IAConversa.created_at).label("ultimo"),
+            )
+            .join(IAConversa, IAConversa.user_id == User.id)
+            .filter(IAConversa.created_at >= desde)
+            .group_by(User.id)
+            .order_by(func.coalesce(func.sum(IAConversa.cost_usd), 0.0).desc())
+            .all()
+        )
+        por_usuario = [{
+            "user_id":           r.id,
+            "email":             r.email,
+            "nome":              r.nome or "",
+            "conversas":         int(r.conversas or 0),
+            "tokens":            int(r.tokens or 0),
+            "prompt_tokens":     int(r.prompt_tokens or 0),
+            "completion_tokens": int(r.completion_tokens or 0),
+            "custo_usd":         round(float(r.custo_usd or 0.0), 6),
+            "ultimo":            r.ultimo.isoformat() if r.ultimo else None,
+        } for r in q_user]
+
+        # Série diária
+        dia_expr = func.date(IAConversa.created_at)
+        q_dia = (
+            db.query(
+                dia_expr.label("dia"),
+                func.count(IAConversa.id).label("conversas"),
+                func.coalesce(func.sum(IAConversa.total_tokens), 0).label("tokens"),
+                func.coalesce(func.sum(IAConversa.cost_usd), 0.0).label("custo_usd"),
+            )
+            .filter(IAConversa.created_at >= desde)
+            .group_by(dia_expr)
+            .order_by(dia_expr)
+            .all()
+        )
+        por_dia = [{
+            "dia":       r.dia,
+            "conversas": int(r.conversas or 0),
+            "tokens":    int(r.tokens or 0),
+            "custo_usd": round(float(r.custo_usd or 0.0), 6),
+        } for r in q_dia]
+
+        # Picos: usuário+dia com maior custo (para detectar quem "estourou" em um único dia)
+        q_pico = (
+            db.query(
+                User.email,
+                dia_expr.label("dia"),
+                func.count(IAConversa.id).label("conversas"),
+                func.coalesce(func.sum(IAConversa.total_tokens), 0).label("tokens"),
+                func.coalesce(func.sum(IAConversa.cost_usd), 0.0).label("custo_usd"),
+            )
+            .join(IAConversa, IAConversa.user_id == User.id)
+            .filter(IAConversa.created_at >= desde)
+            .group_by(User.id, dia_expr)
+            .order_by(func.coalesce(func.sum(IAConversa.cost_usd), 0.0).desc())
+            .limit(20)
+            .all()
+        )
+        picos = [{
+            "email":     r.email,
+            "dia":       r.dia,
+            "conversas": int(r.conversas or 0),
+            "tokens":    int(r.tokens or 0),
+            "custo_usd": round(float(r.custo_usd or 0.0), 6),
+        } for r in q_pico]
+
+        # Por provedor
+        q_prov = (
+            db.query(
+                IAConversa.provider,
+                func.count(IAConversa.id).label("conversas"),
+                func.coalesce(func.sum(IAConversa.total_tokens), 0).label("tokens"),
+                func.coalesce(func.sum(IAConversa.cost_usd), 0.0).label("custo_usd"),
+            )
+            .filter(IAConversa.created_at >= desde)
+            .group_by(IAConversa.provider)
+            .order_by(func.coalesce(func.sum(IAConversa.cost_usd), 0.0).desc())
+            .all()
+        )
+        por_provider = [{
+            "provider":  r.provider or "—",
+            "conversas": int(r.conversas or 0),
+            "tokens":    int(r.tokens or 0),
+            "custo_usd": round(float(r.custo_usd or 0.0), 6),
+        } for r in q_prov]
+
+        # Totais do período
+        totais = {
+            "conversas": sum(u["conversas"] for u in por_usuario),
+            "tokens":    sum(u["tokens"]    for u in por_usuario),
+            "custo_usd": round(sum(u["custo_usd"] for u in por_usuario), 6),
+        }
+
+        return jsonify({
+            "dias":          dias,
+            "desde":         desde.isoformat(),
+            "totais":        totais,
+            "por_usuario":   por_usuario,
+            "por_dia":       por_dia,
+            "por_provider":  por_provider,
+            "picos_usuario_dia": picos,
+        })
+    finally:
+        db.close()
+
+
+@auth_bp.get("/admin/api/ia/conversas")
+def admin_ia_conversas():
+    """Lista detalhada de conversas IA com filtros (email, provider, dia, desde/ate).
+
+    Parâmetros:
+      - email     (contém, case-insensitive)
+      - provider  (groq/openai/anthropic)
+      - since     (ISO date/datetime — UTC)
+      - until     (ISO date/datetime — UTC)
+      - dia       (YYYY-MM-DD — atalho que força janela do dia inteiro)
+      - limit     (padrão 200, máx 1000)
+    """
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+
+    email_q  = (request.args.get("email")    or "").strip().lower()
+    provider = (request.args.get("provider") or "").strip().lower()
+    dia      = (request.args.get("dia")      or "").strip()
+    since    = _parse_iso_dt(request.args.get("since", ""))
+    until    = _parse_iso_dt(request.args.get("until", ""))
+
+    if dia:
+        d = _parse_iso_dt(dia)
+        if d is not None:
+            from datetime import timedelta as _td
+            since = d
+            until = d + _td(days=1)
+
+    try:
+        limit = max(1, min(1000, int(request.args.get("limit", 200))))
+    except Exception:
+        limit = 200
+
+    db = SessionLocal()
+    try:
+        q = (
+            db.query(IAConversa, User.email, User.nome)
+            .join(User, User.id == IAConversa.user_id)
+        )
+        if email_q:
+            q = q.filter(func.lower(User.email).like(f"%{email_q}%"))
+        if provider:
+            q = q.filter(IAConversa.provider == provider)
+        if since is not None:
+            q = q.filter(IAConversa.created_at >= since)
+        if until is not None:
+            q = q.filter(IAConversa.created_at < until)
+
+        q = q.order_by(IAConversa.created_at.desc()).limit(limit)
+        items = []
+        for conv, uemail, unome in q.all():
+            items.append({
+                "id":        conv.id,
+                "email":     uemail,
+                "nome":      unome or "",
+                "pagina":    conv.pagina or "",
+                "pergunta":  conv.pergunta or "",
+                "resposta":  conv.resposta or "",
+                "provider":  conv.provider or "",
+                "model":     conv.model or "",
+                "prompt_tokens":     conv.prompt_tokens,
+                "completion_tokens": conv.completion_tokens,
+                "total_tokens":      conv.total_tokens,
+                "cost_usd":          conv.cost_usd,
+                "created_at":        conv.created_at.isoformat() if conv.created_at else None,
+            })
+        return jsonify({"items": items, "count": len(items)})
+    finally:
+        db.close()
+
+
+@auth_bp.get("/admin/api/ia/conversas/<int:cid>")
+def admin_ia_conversa_detalhe(cid: int):
+    """Retorna uma conversa completa (pergunta/resposta sem corte)."""
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+
+    db = SessionLocal()
+    try:
+        row = (
+            db.query(IAConversa, User.email, User.nome)
+            .join(User, User.id == IAConversa.user_id)
+            .filter(IAConversa.id == cid)
+            .first()
+        )
+        if not row:
+            return jsonify({"erro": "Não encontrado"}), 404
+        conv, uemail, unome = row
+        return jsonify({
+            "id":        conv.id,
+            "email":     uemail,
+            "nome":      unome or "",
+            "pagina":    conv.pagina or "",
+            "pergunta":  conv.pergunta or "",
+            "resposta":  conv.resposta or "",
+            "provider":  conv.provider or "",
+            "model":     conv.model or "",
+            "prompt_tokens":     conv.prompt_tokens,
+            "completion_tokens": conv.completion_tokens,
+            "total_tokens":      conv.total_tokens,
+            "cost_usd":          conv.cost_usd,
+            "created_at":        conv.created_at.isoformat() if conv.created_at else None,
+        })
     finally:
         db.close()
 
