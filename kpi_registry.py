@@ -4,10 +4,223 @@ Permite descoberta automática e integração com sistemas externos (Manus, etc)
 """
 
 KPI_MANIFEST = {
-    "version": "1.0.0",
-    "last_updated": "2026-03-25",
+    "version": "1.1.0",
+    "last_updated": "2026-04-18",
     "base_url": "https://teste-ia.camim.com.br",
     "kpis": [
+        {
+            "id": "receita_despesa",
+            "title": "Receita x Despesa",
+            "description": (
+                "Dashboard financeiro consolidado de receita e despesa de todos os "
+                "postos. Permite análise por período (mês único, intervalo, "
+                "year-over-year), drilldown por plano principal / plano / tipo de "
+                "conta / serviço / forma de pagamento, ranking de postos por "
+                "variação, detecção de anomalias (média + desvio padrão) e "
+                "composição. Exclui automaticamente movimentações de RETIRADA / "
+                "CAMPINHO. Agregável por posto individual, grupo Altamiro, grupo "
+                "Couto ou todos os postos."
+            ),
+            "url": "/kpi_receita_despesa.html",
+            "route": "kpi_receita_despesa.html",
+            "category": "Financeiro",
+            "icon": "fa-scale-balanced",
+            "priority": "alta",
+            "keywords": [
+                "receita", "despesa", "financeiro", "lucro", "margem",
+                "custo", "gasto", "plano de contas", "plano principal",
+                "tipo de conta", "forma de pagamento", "serviço", "rateio",
+                "crescimento", "encolhimento", "year over year", "yoy",
+                "mes anterior", "mom", "variacao", "anomalia", "alerta",
+                "ranking", "drilldown", "composicao"
+            ],
+            "filters": {
+                "grupo": {
+                    "type": "single-select",
+                    "required": True,
+                    "description": (
+                        "ANTES de responder, SEMPRE perguntar ao usuário: "
+                        "'Todos os postos? Altamiro? Couto? Ou um posto "
+                        "específico?' Só prosseguir após resposta."
+                    ),
+                    "options": ["todos", "altamiro", "couto", "especifico"],
+                    "default": None,
+                    "groups": {
+                        "todos": ["A","B","C","D","G","I","J","M","N","P","R","X","Y"],
+                        "altamiro": ["A","B","G","I","N","R","X","Y"],
+                        "couto": ["C","D","J","M","P"]
+                    }
+                },
+                "postos": {
+                    "type": "multi-select",
+                    "required": False,
+                    "description": (
+                        "Lista específica de postos (usar quando grupo=especifico "
+                        "ou para sobrescrever o grupo). Aceita códigos A..Y "
+                        "separados por vírgula."
+                    ),
+                    "options": ["A","B","C","D","G","I","J","M","N","P","R","X","Y"]
+                },
+                "mes": {
+                    "type": "month",
+                    "required": False,
+                    "format": "YYYY-MM",
+                    "description": "Mês único de análise (ex: 2026-03)."
+                },
+                "mes_ini": {
+                    "type": "month",
+                    "required": False,
+                    "format": "YYYY-MM",
+                    "description": "Início do intervalo (alternativa a mes)."
+                },
+                "mes_fim": {
+                    "type": "month",
+                    "required": False,
+                    "format": "YYYY-MM",
+                    "description": "Fim do intervalo (alternativa a mes)."
+                },
+                "dimensao_receita": {
+                    "type": "single-select",
+                    "required": False,
+                    "options": ["tipo", "forma", "servico"],
+                    "default": "tipo",
+                    "description": (
+                        "Dimensão do drilldown de RECEITA: "
+                        "tipo (categoria da conta), forma (forma de pagamento), "
+                        "servico (tipo de serviço lançado)."
+                    )
+                },
+                "dimensao_despesa": {
+                    "type": "single-select",
+                    "required": False,
+                    "options": ["plano_principal", "plano", "tipo"],
+                    "default": "plano_principal",
+                    "description": (
+                        "Dimensão do drilldown de DESPESA: plano_principal "
+                        "(grupo contábil macro), plano (subconta), tipo "
+                        "(tipo específico da conta)."
+                    )
+                }
+            },
+            "metrics": [
+                {"name": "receita_total", "label": "Receita Total", "type": "currency"},
+                {"name": "despesa_total", "label": "Despesa Total", "type": "currency"},
+                {"name": "saldo", "label": "Saldo (Receita − Despesa)", "type": "currency"},
+                {"name": "margem", "label": "Margem %", "type": "percentage"},
+                {"name": "var_mom_receita", "label": "Variação MoM Receita", "type": "percentage"},
+                {"name": "var_mom_despesa", "label": "Variação MoM Despesa", "type": "percentage"},
+                {"name": "var_yoy_receita", "label": "Variação YoY Receita", "type": "percentage"},
+                {"name": "var_yoy_despesa", "label": "Variação YoY Despesa", "type": "percentage"}
+            ],
+            "data_source": (
+                "SQL Server (Fin_Receita + Fin_Despesa + Fin_Plano + "
+                "Fin_PlanoPrincipal + Fin_ContaTipo + Cad_ServicoTipo), "
+                "consolidado em 6 JSONs em /json_consolidado/fin_*.json"
+            ),
+            "json_files": [
+                "fin_receita_tipo.json",
+                "fin_receita_forma.json",
+                "fin_receita_lancamento.json",
+                "fin_despesa_planodeprincipal.json",
+                "fin_despesa_plano.json",
+                "fin_despesa_tipo.json"
+            ],
+            "refresh_frequency": "diária (madrugada)",
+            "retirada_rule": (
+                "Exclui automaticamente linhas cujo PlanoPrincipal, plano ou "
+                "tipo contenham 'RETIRADA' ou 'CAMPINHO' (mesma regra da página "
+                "original). Usar /api/receita_despesa/resumo?incluir_retirada=true "
+                "para trazê-las de volta."
+            ),
+            "api_endpoints": {
+                "data_receita_tipo":    "/json_consolidado/fin_receita_tipo.json",
+                "data_receita_forma":   "/json_consolidado/fin_receita_forma.json",
+                "data_receita_lanc":    "/json_consolidado/fin_receita_lancamento.json",
+                "data_despesa_pp":      "/json_consolidado/fin_despesa_planodeprincipal.json",
+                "data_despesa_plano":   "/json_consolidado/fin_despesa_plano.json",
+                "data_despesa_tipo":    "/json_consolidado/fin_despesa_tipo.json",
+                "metadata":             "/api/kpis/metadata/receita_despesa",
+                "contexto":             "/api/receita_despesa/contexto",
+                "resumo":               "/api/receita_despesa/resumo",
+                "serie":                "/api/receita_despesa/serie",
+                "crescimento":          "/api/receita_despesa/crescimento",
+                "ranking_postos":       "/api/receita_despesa/ranking_postos",
+                "composicao":           "/api/receita_despesa/composicao",
+                "drilldown_variacao":   "/api/receita_despesa/drilldown_variacao",
+                "posto_detalhe":        "/api/receita_despesa/posto_detalhe",
+                "alertas":              "/api/receita_despesa/alertas",
+                "analise_completa":     "/api/receita_despesa/analise_completa",
+                "pergunta_assistida":   "/api/receita_despesa/pergunta_assistida"
+            },
+            "examples": {
+                "contexto":
+                    "/api/receita_despesa/contexto",
+                "resumo_todos_mes":
+                    "/api/receita_despesa/resumo?grupo=todos&mes=2026-03",
+                "resumo_altamiro_intervalo":
+                    "/api/receita_despesa/resumo?grupo=altamiro&mes_ini=2026-01&mes_fim=2026-03",
+                "resumo_posto_especifico":
+                    "/api/receita_despesa/resumo?postos=A&mes=2026-03",
+                "serie_12m":
+                    "/api/receita_despesa/serie?grupo=todos&mes_ini=2025-04&mes_fim=2026-03",
+                "ranking_despesa_mom":
+                    "/api/receita_despesa/ranking_postos?metrica=despesa&base=mes_anterior&mes=2026-03",
+                "ranking_despesa_yoy":
+                    "/api/receita_despesa/ranking_postos?metrica=despesa&base=ano_anterior&mes=2026-03",
+                "composicao_despesa_pp":
+                    "/api/receita_despesa/composicao?tipo=despesa&dimensao=plano_principal&grupo=todos&mes=2026-03",
+                "composicao_receita_forma":
+                    "/api/receita_despesa/composicao?tipo=receita&dimensao=forma&grupo=todos&mes=2026-03",
+                "drilldown_despesa_posto":
+                    "/api/receita_despesa/drilldown_variacao?tipo=despesa&postos=A&mes=2026-03&base=mes_anterior",
+                "posto_detalhe":
+                    "/api/receita_despesa/posto_detalhe?posto=A&mes=2026-03",
+                "alertas":
+                    "/api/receita_despesa/alertas?grupo=todos&mes=2026-03&janela=6",
+                "analise_completa":
+                    "/api/receita_despesa/analise_completa?grupo=altamiro&mes=2026-03",
+                "pergunta_assistida":
+                    "/api/receita_despesa/pergunta_assistida?q=qual+posto+subiu+o+custo+em+marco&grupo=todos&mes=2026-03"
+            },
+            "perguntas_que_responde": [
+                "Qual posto aumentou o custo em março?",
+                "Qual tipo de conta subiu neste posto?",
+                "Estou crescendo ou encolhendo?",
+                "O posto A está encolhendo?",
+                "Altamiro cresceu mais que Couto no último trimestre?",
+                "Qual é a maior despesa da rede este mês?",
+                "Onde a margem está caindo?",
+                "Comparando março/2026 com março/2025, o que piorou?"
+            ],
+            "instrucoes_para_agente": {
+                "passo_1_perguntar_sempre": (
+                    "ANTES de responder qualquer pergunta de receita/despesa, "
+                    "SEMPRE perguntar: 'Você quer analisar todos os postos, "
+                    "o grupo Altamiro, o grupo Couto, ou um posto específico?'"
+                ),
+                "passo_2_perguntar_se_necessario": (
+                    "Se a pergunta do usuário não mencionar período, perguntar: "
+                    "'Qual mês ou intervalo você quer analisar?'"
+                ),
+                "passo_3_endpoint_inicial": (
+                    "Para pergunta livre em linguagem natural, chamar "
+                    "/api/receita_despesa/pergunta_assistida?q=<pergunta>... "
+                    "— ele roteia para o endpoint mais adequado."
+                ),
+                "passo_4_para_analise_profunda": (
+                    "Chamar /api/receita_despesa/analise_completa — retorna um "
+                    "pacote executivo pronto (resumo, ranking, composição, "
+                    "variações MoM/YoY e alertas) em uma única chamada."
+                )
+            },
+            "manus_prompt_template": (
+                "Usuário perguntou: '{pergunta}'. PRIMEIRO confirme se a análise é "
+                "para todos os postos, Altamiro, Couto ou posto específico. DEPOIS "
+                "confirme o período (mês ou intervalo). ENTÃO chame "
+                "/api/receita_despesa/pergunta_assistida ou /analise_completa com "
+                "os filtros escolhidos."
+            )
+        },
         {
             "id": "fidelizacao",
             "title": "Fidelização de Clientes",
