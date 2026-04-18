@@ -44,6 +44,31 @@ log = logging.getLogger(__name__)
 
 receita_despesa_bp = Blueprint("receita_despesa_api", __name__)
 
+
+# ============================================================
+# DEFENSE-IN-DEPTH AUTH
+# ----------------------------------------------------------------
+# O nginx já faz auth_request em /api/receita_despesa/*. Este hook
+# revalida dentro do Flask — se alguém bypassar o nginx (acesso direto
+# à porta 8020), ainda assim recebe 401 sem cookie nem X-Manus-Key.
+# ============================================================
+
+@receita_despesa_bp.before_request
+def _exigir_auth():
+    try:
+        from auth_routes import require_auth_or_key
+    except Exception as _e:  # pragma: no cover
+        log.error("receita_despesa: auth_routes indisponível (%s) — bloqueando", _e)
+        return jsonify({"ok": False, "error": "auth indisponível"}), 503
+    principal, _ = require_auth_or_key()
+    if not principal:
+        return jsonify({
+            "ok": False,
+            "error": "não autenticado",
+            "hint": "envie cookie de sessão válido OU header X-Manus-Key",
+        }), 401
+    return None
+
 # ============================================================
 # CONFIG
 # ============================================================

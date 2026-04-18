@@ -410,17 +410,21 @@ jobs:
 
 
       # ================================================================
-      # 7) Venv + .env
+      # 7) Venv + deps
       # ================================================================
-      - name: Venv + deps + .env
+      # O .env NÃO é tocado pelo deploy (desde 2026-04-18).
+      # /opt/relatorio_h_t/.env é gerenciado diretamente na VM — o segredo
+      # do GitHub ENV_FILE_B64 foi descontinuado porque sobrescrevia edições
+      # manuais na VM (ex.: MANUS_SERVICE_KEY, credenciais de postos novos).
+      # Bootstrap de VM nova passa a ser processo manual: copiar .env via scp.
+      # ================================================================
+      - name: Venv + deps
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
-          ENV_FILE_B64: ${{ secrets.ENV_FILE_B64 }}
         run: |
           set -euxo pipefail
-          DEST=/opt/relatorio_h_t
 
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" << 'EOF'
             set -euxo pipefail
@@ -439,12 +443,6 @@ jobs:
               python -m pip install -r requirements-dev.txt
             fi
           EOF
-
-          if [ -n "${ENV_FILE_B64:-}" ]; then
-            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "install -m 600 -D /dev/null '$DEST/.env'"
-            echo "$ENV_FILE_B64" | base64 -d | tr -d '\r' \
-              | ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "cat > '$DEST/.env'"
-          fi
 
       # ================================================================
       # 8) Sanidade final

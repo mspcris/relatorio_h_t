@@ -220,6 +220,33 @@ def decode_user():
         return None, None
 
 
+def _manus_key_ok() -> bool:
+    """Valida header X-Manus-Key contra env MANUS_SERVICE_KEY (ambos presentes e iguais)."""
+    expected = os.getenv("MANUS_SERVICE_KEY", "").strip()
+    if not expected:
+        return False
+    provided = (request.headers.get("X-Manus-Key") or "").strip()
+    if not provided:
+        return False
+    return secrets.compare_digest(provided, expected)
+
+
+def require_auth_or_key():
+    """
+    Valida cookie de sessão OU header X-Manus-Key.
+    Retorna (principal, postos):
+      - cookie válido  → (email, lista_postos)
+      - key válida      → ("manus@service", [])
+      - nenhum          → (None, None)
+    """
+    email, postos = decode_user()
+    if email:
+        return email, postos
+    if _manus_key_ok():
+        return "manus@service", []
+    return None, None
+
+
 def _get_current_user():
     """Retorna o objeto User da sessão atual, ou None."""
     c = request.cookies.get(_SESS_NAME)
@@ -452,14 +479,20 @@ def idcamim_callback():
 
 @auth_bp.get("/auth")
 def auth_check():
+    """
+    Usado pelo nginx via auth_request. Valida cookie de sessão OU X-Manus-Key.
+    Retorna 204 (OK) ou 401.
+    """
     c = request.cookies.get(_SESS_NAME)
-    if not c or _signer is None:
-        return ("", 401)
-    try:
-        _signer.unsign(c, max_age=_TTL_SECONDS + 3600)
-        return ("", 200)
-    except BadSignature:
-        return ("", 401)
+    if c and _signer is not None:
+        try:
+            _signer.unsign(c, max_age=_TTL_SECONDS + 3600)
+            return ("", 204)
+        except BadSignature:
+            pass
+    if _manus_key_ok():
+        return ("", 204)
+    return ("", 401)
 
 
 @auth_bp.get("/session/me")

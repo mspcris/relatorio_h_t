@@ -6,7 +6,16 @@
 > 3. Responde perguntas chamando `GET /api/receita_despesa/pergunta_assistida?q=...` ou `GET /api/receita_despesa/analise_completa`.
 
 Base URL: **https://teste-ia.camim.com.br**
-Todos os endpoints são **públicos** (sem login) — Manus não precisa de token.
+
+**Autenticação (obrigatória a partir de 2026-04-18):** todo request deve enviar o header
+`X-Manus-Key: <chave>` com a chave de serviço fornecida pelo CAMIM (variável
+`MANUS_SERVICE_KEY` no ambiente). Sem esse header, nginx devolve **401** em
+`/api/*` e em `/json_consolidado/*`. A chave só deve trafegar via HTTPS.
+
+```bash
+curl -H "X-Manus-Key: $MANUS_SERVICE_KEY" \
+  https://teste-ia.camim.com.br/api/kpis/manifest
+```
 
 ---
 
@@ -116,7 +125,7 @@ As linhas cujo PlanoPrincipal, plano ou tipo contêm `RETIRADA` ou `CAMPINHO` (q
 
 ## Dados de origem
 
-- 6 JSONs consolidados em `/var/www/json_consolidado/fin_*.json` (servidos publicamente)
+- 6 JSONs consolidados em `/var/www/json_consolidado/fin_*.json` (protegidos por `X-Manus-Key` ou cookie de sessão)
 - Gerados por `export_receita_despesa.py` (ETL do SQL Server de 13 postos)
 - Atualizados diariamente pela madrugada
 - Arquivos:
@@ -137,4 +146,4 @@ Configure o Manus para consultar, em ordem:
 2. `https://teste-ia.camim.com.br/api/receita_despesa/contexto` — contrato
 3. `https://teste-ia.camim.com.br/api/receita_despesa/pergunta_assistida?q={pergunta}` — roteador
 
-Não precisa de header de autenticação. Os endpoints aceitam apenas `GET`.
+Todas as chamadas devem incluir `X-Manus-Key: <chave>`. Os endpoints aceitam apenas `GET`.

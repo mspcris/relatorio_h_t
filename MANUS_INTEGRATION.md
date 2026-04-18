@@ -34,7 +34,14 @@ This decouples external systems from internal changes to URLs, data structure, o
 
 ## API Endpoints
 
-All endpoints return JSON. No authentication required for discovery endpoints (public catalog).
+All endpoints return JSON. **Authentication required (2026-04-18):** every request must
+include the header `X-Manus-Key: <key>` (the `MANUS_SERVICE_KEY` provisioned by CAMIM)
+or a valid session cookie. Unauthenticated calls return `401`.
+
+```bash
+curl -H "X-Manus-Key: $MANUS_SERVICE_KEY" \
+  https://teste-ia.camim.com.br/api/kpis/manifest
+```
 
 ### 1. Get Complete KPI Manifest
 

@@ -1554,20 +1554,39 @@ except ImportError:
         return []
 
 
+def _exigir_auth_api_kpis():
+    """Auth gate (defense-in-depth) para /api/kpis/*.
+    nginx já bloqueia sem cookie/chave, mas a rota também valida caso o
+    Flask seja exposto direto (porta 8020) ou o nginx seja reconfigurado.
+    """
+    try:
+        from auth_routes import require_auth_or_key
+    except Exception:
+        return jsonify({"ok": False, "error": "auth indisponível"}), 503
+    principal, _ = require_auth_or_key()
+    if not principal:
+        return jsonify({
+            "ok": False,
+            "error": "não autenticado",
+            "hint": "envie cookie de sessão válido OU header X-Manus-Key",
+        }), 401
+    return None
+
+
 @app.get("/api/kpis/manifest")
 def api_kpis_manifest():
-    """
-    Retorna o catálogo completo de KPIs com metadata para integração com sistemas externos.
-    Sem autenticação para facilitar descoberta automática.
-    """
+    """Retorna o catálogo completo de KPIs. Requer cookie de sessão ou X-Manus-Key."""
+    err = _exigir_auth_api_kpis()
+    if err is not None:
+        return err
     return jsonify(get_manifest())
 
 
 @app.get("/api/kpis/metadata/<kpi_id>")
 def api_kpis_metadata(kpi_id):
-    """
-    Retorna metadata de um KPI específico.
-    """
+    err = _exigir_auth_api_kpis()
+    if err is not None:
+        return err
     kpi = get_kpi_by_id(kpi_id)
     if not kpi:
         return jsonify({"ok": False, "error": f"KPI '{kpi_id}' não encontrado"}), 404
@@ -1576,35 +1595,29 @@ def api_kpis_metadata(kpi_id):
 
 @app.get("/api/kpis/category/<category>")
 def api_kpis_by_category(category):
-    """
-    Retorna todos os KPIs de uma categoria específica.
-    """
+    err = _exigir_auth_api_kpis()
+    if err is not None:
+        return err
     kpis = get_kpis_by_category(category)
     return jsonify({"ok": True, "category": category, "kpis": kpis})
 
 
 @app.get("/api/kpis/search")
 def api_kpis_search():
-    """
-    Busca KPIs por keywords ou título.
-    Query params: q=search_term
-    """
+    err = _exigir_auth_api_kpis()
+    if err is not None:
+        return err
     query = (request.args.get("q") or "").strip()
     if not query:
         return jsonify({"ok": False, "error": "Parâmetro 'q' é obrigatório"}), 400
-
     kpis = search_kpis(query)
     return jsonify({"ok": True, "query": query, "results": kpis})
 
 
 # ===============================
-# ROTAS PÚBLICAS (SEM LOGIN)
+# (removido 2026-04-18) ROTAS PÚBLICAS (SEM LOGIN)
+# kpi_prescricao_aberta descontinuado — todas as páginas agora exigem login.
 # ===============================
-
-@app.get("/kpi_prescricao_aberta.html")
-def kpi_prescricao_aberta():
-    return render_template("kpi_prescricao_aberta.html")
-
 
 # ===============================
 # ACL JSON direto
