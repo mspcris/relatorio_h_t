@@ -1,0 +1,334 @@
+openapi: 3.1.0
+info:
+  title: CAMIM — KPIs Receita x Despesa
+  description: |
+    API analítica dos KPIs financeiros da CAMIM.
+    Grupos de postos: altamiro (A,B,G,I,N,R,X,Y), couto (C,D,J,M,P), todos (13 postos).
+    Modo retirada: 0=operacional (exclui RETIRADA/CAMPINHO), 1=executivo.
+    Fluxo: 1) getReceitaDespesaContexto uma vez; 2) confirmar filtros com usuário;
+    3) analise_completa para perguntas amplas; 4) _multi endpoints pra top-N por posto.
+  version: "1.0.0"
+servers:
+  - url: https://teste-ia.camim.com.br
+components:
+  schemas: {}
+  securitySchemes:
+    ManusKey:
+      type: apiKey
+      in: header
+      name: X-Manus-Key
+security:
+  - ManusKey: []
+paths:
+  /api/kpis/manifest:
+    get:
+      operationId: getKpisManifest
+      summary: Lista todos os KPIs disponíveis na plataforma.
+      responses:
+        "200":
+          description: Manifesto de KPIs.
+
+  /api/receita_despesa/contexto:
+    get:
+      operationId: getReceitaDespesaContexto
+      summary: Descoberta — glossário, dimensões, grupos, período e endpoints.
+      description: Chamar UMA vez no começo. Devolve descrição, grupos de postos, dimensões, período disponível e perguntas-exemplo.
+      responses:
+        "200":
+          description: Pacote de descoberta.
+
+  /api/receita_despesa/resumo:
+    get:
+      operationId: getReceitaDespesaResumo
+      summary: Totais do período (receita, despesa, resultado, margem).
+      parameters:
+        - name: de
+          in: query
+          description: Início do intervalo YYYY-MM.
+          schema: { type: string }
+        - name: ate
+          in: query
+          description: Fim do intervalo YYYY-MM.
+          schema: { type: string }
+        - name: postos
+          in: query
+          description: "altamiro | couto | todos | CSV (ex A,B,C)."
+          schema: { type: string }
+        - name: retirada
+          in: query
+          description: "0=exclui retirada (default), 1=inclui."
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200":
+          description: Totais + série por_mes.
+
+  /api/receita_despesa/serie:
+    get:
+      operationId: getReceitaDespesaSerie
+      summary: Série temporal completa (todos os meses disponíveis).
+      parameters:
+        - name: postos
+          in: query
+          schema: { type: string }
+        - name: retirada
+          in: query
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200":
+          description: Série mensal.
+
+  /api/receita_despesa/crescimento:
+    get:
+      operationId: getReceitaDespesaCrescimento
+      summary: Série com MoM e YoY por métrica + tendência 3 meses.
+      parameters:
+        - name: postos
+          in: query
+          schema: { type: string }
+        - name: retirada
+          in: query
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200":
+          description: MoM, YoY, tendência.
+
+  /api/receita_despesa/ranking_postos:
+    get:
+      operationId: getRankingPostos
+      summary: Ranking de postos por métrica no mês.
+      parameters:
+        - name: mes
+          in: query
+          required: true
+          description: YYYY-MM.
+          schema: { type: string }
+        - name: metrica
+          in: query
+          schema: { type: string, enum: [receita, despesa, resultado, margem] }
+        - name: vs
+          in: query
+          description: Comparativo.
+          schema: { type: string, enum: [mes_anterior, ano_anterior] }
+        - name: grupo
+          in: query
+          schema: { type: string, enum: [todos, altamiro, couto] }
+        - name: retirada
+          in: query
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200":
+          description: Ranking por delta_abs.
+
+  /api/receita_despesa/composicao:
+    get:
+      operationId: getComposicao
+      summary: Composição AGREGADA de receita ou despesa no período.
+      description: Agrega todos os postos filtrados juntos. Para top-N POR posto, use /composicao_multi.
+      parameters:
+        - name: de
+          in: query
+          schema: { type: string }
+        - name: ate
+          in: query
+          schema: { type: string }
+        - name: postos
+          in: query
+          schema: { type: string }
+        - name: tipo
+          in: query
+          schema: { type: string, enum: [receita, despesa] }
+        - name: dimensao
+          in: query
+          description: "Receita: tipo|forma|servico. Despesa: plano_principal|plano|tipo."
+          schema: { type: string, enum: [tipo, forma, servico, plano_principal, plano] }
+        - name: retirada
+          in: query
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200":
+          description: Itens ordenados por valor.
+
+  /api/receita_despesa/composicao_multi:
+    get:
+      operationId: getComposicaoMulti
+      summary: Composição top-N SEGREGADA por posto (1 chamada — N postos).
+      description: |
+        Devolve por_posto com top-N em CADA posto. USE ISTO para
+        "top 5 despesas em cada posto do Altamiro".
+      parameters:
+        - name: de
+          in: query
+          schema: { type: string }
+        - name: ate
+          in: query
+          schema: { type: string }
+        - name: postos
+          in: query
+          schema: { type: string }
+        - name: tipo
+          in: query
+          schema: { type: string, enum: [receita, despesa] }
+        - name: dimensao
+          in: query
+          schema: { type: string, enum: [tipo, forma, servico, plano_principal, plano] }
+        - name: top
+          in: query
+          schema: { type: integer, default: 10 }
+        - name: retirada
+          in: query
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200":
+          description: Top-N por posto.
+
+  /api/receita_despesa/drilldown_variacao:
+    get:
+      operationId: getDrilldownVariacao
+      summary: Variação entre dois meses (agregada nos postos filtrados).
+      parameters:
+        - name: mes_ref
+          in: query
+          required: true
+          description: YYYY-MM mês de referência.
+          schema: { type: string }
+        - name: mes_comp
+          in: query
+          required: true
+          description: YYYY-MM mês de comparação.
+          schema: { type: string }
+        - name: postos
+          in: query
+          schema: { type: string }
+        - name: tipo
+          in: query
+          schema: { type: string, enum: [receita, despesa] }
+        - name: dimensao
+          in: query
+          schema: { type: string, enum: [tipo, forma, servico, plano_principal, plano] }
+        - name: retirada
+          in: query
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200":
+          description: Variações + top5 aumentou/diminuiu.
+
+  /api/receita_despesa/drilldown_variacao_multi:
+    get:
+      operationId: getDrilldownVariacaoMulti
+      summary: Variação top-N SEGREGADA por posto (1 chamada — N postos).
+      description: |
+        USE ISTO para "top N despesas que aumentaram em CADA posto do
+        Altamiro entre fev e mar". Devolve por_posto com top_aumentou
+        e top_diminuiu em cada posto.
+      parameters:
+        - name: mes_ref
+          in: query
+          required: true
+          schema: { type: string }
+        - name: mes_comp
+          in: query
+          required: true
+          schema: { type: string }
+        - name: postos
+          in: query
+          schema: { type: string }
+        - name: tipo
+          in: query
+          schema: { type: string, enum: [receita, despesa] }
+        - name: dimensao
+          in: query
+          schema: { type: string, enum: [tipo, forma, servico, plano_principal, plano] }
+        - name: top
+          in: query
+          schema: { type: integer, default: 5 }
+        - name: retirada
+          in: query
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200":
+          description: Top-N variações por posto.
+
+  /api/receita_despesa/posto_detalhe:
+    get:
+      operationId: getPostoDetalhe
+      summary: Detalhe completo de UM posto em UM mês (+ MoM, YoY, série 12m).
+      parameters:
+        - name: posto
+          in: query
+          required: true
+          description: Letra do posto (A..Y).
+          schema: { type: string }
+        - name: mes
+          in: query
+          required: true
+          description: YYYY-MM.
+          schema: { type: string }
+        - name: retirada
+          in: query
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200":
+          description: Dossiê do posto.
+
+  /api/receita_despesa/postos_info:
+    get:
+      operationId: getPostosInfo
+      summary: Nomes oficiais dos postos (letra -> nome).
+      responses:
+        "200":
+          description: Dicionário de postos.
+
+  /api/receita_despesa/alertas:
+    get:
+      operationId: getAlertas
+      summary: Alertas automáticos (despesa anômala, resultado negativo, YoY crítico).
+      parameters:
+        - name: postos
+          in: query
+          schema: { type: string }
+        - name: retirada
+          in: query
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200":
+          description: Lista de alertas do último mês.
+
+  /api/receita_despesa/analise_completa:
+    get:
+      operationId: getAnaliseCompleta
+      summary: Pacote executivo — resumo + ranking + composição + variações + alertas.
+      description: Responde ~80% das perguntas em UMA chamada. Para top-N por posto, prefira os _multi.
+      parameters:
+        - name: mes
+          in: query
+          required: true
+          description: YYYY-MM.
+          schema: { type: string }
+        - name: postos
+          in: query
+          schema: { type: string }
+        - name: grupo
+          in: query
+          description: Sobrescreve postos se informado.
+          schema: { type: string, enum: [todos, altamiro, couto] }
+        - name: retirada
+          in: query
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200":
+          description: Pacote consolidado.
+
+  /api/receita_despesa/pergunta_assistida:
+    get:
+      operationId: getPerguntaAssistida
+      summary: Roteador heurístico — texto livre, sugere endpoint.
+      description: Use só se não souber decidir qual endpoint chamar.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Pergunta em linguagem natural.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Sugestões de endpoint.
