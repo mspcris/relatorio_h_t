@@ -4,8 +4,8 @@ Permite descoberta automática e integração com sistemas externos (Manus, etc)
 """
 
 KPI_MANIFEST = {
-    "version": "1.1.0",
-    "last_updated": "2026-04-18",
+    "version": "1.2.0",
+    "last_updated": "2026-04-19",
     "base_url": "https://teste-ia.camim.com.br",
     "kpis": [
         {
@@ -603,6 +603,147 @@ KPI_MANIFEST = {
                 "group": "/kpi_consultas?postos=altamiro"
             },
             "manus_prompt_template": "Mostre o status de consultas. Analize consultas agendadas, realizadas, canceladas e taxa de realização por especialidade de {postos_desc}."
+        },
+        {
+            "id": "fin_despesas_raw",
+            "title": "Despesas Financeiras (registro a registro)",
+            "description": (
+                "Acesso row-level aos pagamentos de despesa de todos os 13 postos. "
+                "Replica incremental de vw_Fin_Despesa em Postgres RDS AWS, "
+                "atualizada a cada 2 horas. Permite listar cada despesa individual "
+                "com todos os campos (cliente, fornecedor, plano, conta, valor, "
+                "datas, forma, corretor, medico, descricao, comentario, etc.) e "
+                "tambem agregar por dimensao (conta, plano, fornecedor, mes, ...) "
+                "para identificar qual conta especifica aumentou em um periodo. "
+                "Filtros ETL fixos: [Valor pago] IS NOT NULL, idContaTipo <> 11, "
+                "Data de pagamento >= 2020-01-01."
+            ),
+            "url": None,
+            "route": None,
+            "category": "Financeiro",
+            "icon": "fa-receipt",
+            "priority": "alta",
+            "keywords": [
+                "despesa", "pagamento", "conta", "fornecedor", "plano",
+                "plano principal", "tipo de conta", "registro", "linha",
+                "detalhamento", "drilldown", "row level", "registro a registro",
+                "qual conta subiu", "qual conta aumentou", "qual fornecedor",
+                "pagamentos individuais", "transacoes", "detalhe da despesa",
+                "lancamento", "id_despesa"
+            ],
+            "filters": {
+                "grupo": {
+                    "type": "single-select",
+                    "required": False,
+                    "options": ["todos", "altamiro", "couto"],
+                    "groups": {
+                        "todos": ["A","B","C","D","G","I","J","M","N","P","R","X","Y"],
+                        "altamiro": ["A","B","G","I","N","R","X","Y"],
+                        "couto": ["C","D","J","M","P"]
+                    }
+                },
+                "postos": {
+                    "type": "multi-select",
+                    "required": False,
+                    "description": "CSV de postos (ex: 'A,B,C'). Sobrepoe grupo se ambos forem passados."
+                },
+                "data_ini": {"type": "date", "format": "YYYY-MM-DD"},
+                "data_fim": {"type": "date", "format": "YYYY-MM-DD"},
+                "mes":      {"type": "string", "format": "YYYY-MM", "description": "Atalho: data_pagamento naquele mes"},
+                "cliente":  {"type": "like"},
+                "tipo":     {"type": "like"},
+                "plano":    {"type": "like"},
+                "plano_principal": {"type": "like"},
+                "fornecedor": {"type": "like"},
+                "conta":    {"type": "like"},
+                "corretor": {"type": "like"},
+                "medico":   {"type": "like"},
+                "forma":    {"type": "like"},
+                "descricao": {"type": "like"},
+                "min_valor": {"type": "float"},
+                "max_valor": {"type": "float"},
+                "limit":    {"type": "int", "min": 1, "max": 500, "default": 100, "only": "/despesas"},
+                "order":    {
+                    "type": "enum",
+                    "options": ["data_pagamento_desc", "id_desc", "id_asc", "valor_desc"],
+                    "default": "data_pagamento_desc",
+                    "only": "/despesas"
+                },
+                "cursor":   {"type": "int", "description": "id_despesa do ultimo item da pagina anterior (usar junto com cursor_posto e order=id_desc|id_asc)"},
+                "cursor_posto": {"type": "string", "description": "posto do ultimo item da pagina anterior"},
+                "top":      {"type": "int", "min": 1, "max": 1000, "default": 100, "only": "/resumo"},
+                "group_by": {
+                    "type": "enum",
+                    "options": ["conta", "plano", "plano_principal", "tipo", "fornecedor", "corretor", "medico", "forma", "posto", "mes", "cliente"],
+                    "default": "conta",
+                    "only": "/resumo"
+                }
+            },
+            "data_source": "RDS AWS Postgres (relatorio_h_t.fin_despesa)",
+            "refresh_frequency": "a cada 2 horas (ETL incremental por idDespesa)",
+            "api_endpoints": {
+                "listar":  "/api/fin/despesas",
+                "resumo":  "/api/fin/despesas/resumo",
+                "meta":    "/api/fin/despesas/meta",
+                "metadata": "/api/kpis/metadata/fin_despesas_raw"
+            },
+            "examples": {
+                "meta":
+                    "/api/fin/despesas/meta",
+                "ultimos_100_todos_postos":
+                    "/api/fin/despesas?grupo=todos&order=data_pagamento_desc&limit=100",
+                "qual_conta_subiu_em_marco":
+                    "/api/fin/despesas/resumo?grupo=todos&mes=2026-03&group_by=conta&top=30",
+                "comparar_conta_fevereiro_vs_marco":
+                    "/api/fin/despesas/resumo?grupo=todos&mes=2026-03&group_by=conta — (e repetir com mes=2026-02 para comparar)",
+                "fornecedores_que_mais_receberam_num_posto":
+                    "/api/fin/despesas/resumo?postos=A&data_ini=2026-01-01&data_fim=2026-03-31&group_by=fornecedor&top=20",
+                "plano_principal_posto_A_Q1":
+                    "/api/fin/despesas/resumo?postos=A&data_ini=2026-01-01&data_fim=2026-03-31&group_by=plano_principal",
+                "detalhes_de_um_fornecedor":
+                    "/api/fin/despesas?fornecedor=NOME+DO+FORNECEDOR&order=data_pagamento_desc&limit=50",
+                "pagamentos_acima_10k":
+                    "/api/fin/despesas?min_valor=10000&order=valor_desc&limit=50",
+                "filtro_por_conta_especifica":
+                    "/api/fin/despesas?conta=ALUGUEL&order=data_pagamento_desc&limit=100"
+            },
+            "perguntas_que_responde": [
+                "Qual conta subiu em marco/2026?",
+                "Quais pagamentos especificos compoem o aumento dessa conta?",
+                "Quem foi o fornecedor da maior despesa do mes?",
+                "Me mostre todos os pagamentos ao fornecedor X no trimestre.",
+                "Quais foram as 10 maiores despesas do posto A em marco?",
+                "Quanto foi pago em aluguel ano passado?",
+                "Ha alguma despesa acima de R$ 50 mil recente?",
+                "Qual o detalhamento registro a registro do aumento em 'Material de escritorio'?"
+            ],
+            "instrucoes_para_agente": {
+                "passo_1_identificar_dimensao": (
+                    "Para pergunta do tipo 'qual X subiu', use /api/fin/despesas/resumo "
+                    "com group_by apropriado (conta, plano, fornecedor, ...) e compare "
+                    "dois meses (mes=YYYY-MM) lado a lado."
+                ),
+                "passo_2_drilldown_para_registros": (
+                    "Depois de identificar a conta/fornecedor/plano que aumentou, "
+                    "chamar /api/fin/despesas com os mesmos filtros (conta=..., "
+                    "fornecedor=..., mes=YYYY-MM) para listar os pagamentos "
+                    "individuais que explicam a variacao."
+                ),
+                "passo_3_paginacao": (
+                    "Se has_more=true no retorno, continuar com order=id_desc + "
+                    "cursor=<id_despesa> + cursor_posto=<posto> para paginar."
+                ),
+                "regra_de_postos": (
+                    "Se o usuario nao especificar, perguntar: 'Todos os postos, "
+                    "Altamiro, Couto ou posto especifico?'"
+                )
+            },
+            "manus_prompt_template": (
+                "Usuario perguntou: '{pergunta}'. PRIMEIRO chame "
+                "/api/fin/despesas/resumo com group_by adequado para identificar a "
+                "dimensao que variou. DEPOIS chame /api/fin/despesas com os filtros "
+                "daquela dimensao para trazer os pagamentos registro a registro."
+            )
         }
     ]
 }

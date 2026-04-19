@@ -56,6 +56,13 @@ except Exception as _e:
     import logging
     logging.getLogger(__name__).error("receita_despesa_bp não carregado: %s", _e)
 
+try:
+    from api_fin_despesas import fin_despesas_bp
+    app.register_blueprint(fin_despesas_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("fin_despesas_bp não carregado: %s", _e)
+
 PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
 
 # Mapeamento page_key → template para controle de acesso por página
