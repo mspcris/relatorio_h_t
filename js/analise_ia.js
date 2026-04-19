@@ -72,7 +72,9 @@
       '.aia-table th.num,.aia-table td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}',
       '.aia-table td{padding:4px 6px;border-bottom:1px solid #f3f4f6}',
       '.aia-table tr:last-child td{border-bottom:none}',
-      '.aia-table .grupo{color:#111827;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.aia-table .grupo{color:#111827;max-width:360px}',
+      '.aia-table .grupo .tipo{font-weight:600;color:#111827;display:block;line-height:1.25;word-break:break-word}',
+      '.aia-table .grupo .path{font-size:.68rem;color:#9ca3af;display:block;margin-top:1px;line-height:1.15;word-break:break-word}',
       '.aia-table .delta-up{color:#b91c1c;font-weight:600}',
       '.aia-table .delta-down{color:#047857;font-weight:600}',
       '.aia-empty{padding:10px;color:#9ca3af;font-size:.8rem;font-style:italic}',
@@ -366,9 +368,15 @@
       var delta = Number(i.delta_abs) || 0;
       var cls = delta > 0 ? 'delta-up' : (delta < 0 ? 'delta-down' : '');
       var sinal = delta > 0 ? '+' : '';
+      var partes = String(i.grupo || '').split(' / ');
+      var tipo = partes.length > 1 ? partes[partes.length - 1] : (partes[0] || '');
+      var path = partes.length > 1 ? partes.slice(0, -1).join(' › ') : '';
+      var grupoHtml =
+        '<span class="tipo">' + escapeHtml(tipo) + '</span>' +
+        (path ? '<span class="path">' + escapeHtml(path) + '</span>' : '');
       return (
         '<tr>' +
-          '<td class="grupo" title="' + escapeHtml(i.grupo || '') + '">' + escapeHtml(i.grupo || '') + '</td>' +
+          '<td class="grupo" title="' + escapeHtml(i.grupo || '') + '">' + grupoHtml + '</td>' +
           '<td class="num">' + fmtBRL(i.valor_mes_ref) + '</td>' +
           '<td class="num">' + fmtBRL(i.valor_mes_comp) + '</td>' +
           '<td class="num ' + cls + '">' + sinal + fmtBRL(delta) + '</td>' +
