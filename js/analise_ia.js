@@ -26,6 +26,13 @@
     mounted: false,
   };
 
+  // Estado de ordenação por tabela (key = letra + '-' + dir)
+  // col ∈ {'tipo','ref','comp','delta','pct'}
+  // order ∈ {'asc','desc'}
+  // Padrão: delta desc (maior variação em R$ primeiro, por magnitude).
+  var tabState = {};
+  var tabData = {};  // key → itens originais
+
   /* ═══════════════════ UI ═══════════════════ */
 
   function injectStyles() {
@@ -66,7 +73,11 @@
       '.aia-mini-title.up{color:#b91c1c}',
       '.aia-mini-title.down{color:#047857}',
       '.aia-table{width:100%;border-collapse:collapse;font-size:.82rem}',
-      '.aia-table th{text-align:left;padding:4px 6px;border-bottom:1px solid #e4e7eb;font-weight:600;color:#6b7280;font-size:.72rem;text-transform:uppercase}',
+      '.aia-table th{text-align:left;padding:4px 6px;border-bottom:1px solid #e4e7eb;font-weight:600;color:#6b7280;font-size:.72rem;text-transform:uppercase;cursor:pointer;user-select:none;white-space:nowrap}',
+      '.aia-table th:hover{color:#111827;background:#f8f9fb}',
+      '.aia-table th .arrow{display:inline-block;margin-left:3px;opacity:.55;font-size:.7em}',
+      '.aia-table th.active{color:#111827}',
+      '.aia-table th.active .arrow{opacity:1;color:#16a34a}',
       '.aia-table th.num,.aia-table td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}',
       '.aia-table td{padding:4px 6px;border-bottom:1px solid #f3f4f6}',
       '.aia-table tr:last-child td{border-bottom:none}',
@@ -306,18 +317,96 @@
     var lblRef = fmtMesLabel(mesRef);
     var lblComp = fmtMesLabel(mesComp);
 
+    // Limpa estado de dados (mantém estado de ordenação escolhida pelo usuário)
+    tabData = {};
+
     var html = letras.map(function (p) {
       return renderPostoCard(p, porPosto[p], lblRef, lblComp, top);
     }).join('');
 
     container.innerHTML = html;
 
-    // wire do toggle
+    // wire do toggle (clique só no header, não nos filhos interativos)
     container.querySelectorAll('.aia-posto-head').forEach(function (head) {
       head.addEventListener('click', function () {
         head.parentNode.classList.toggle('collapsed');
       });
     });
+
+    // wire ordenação via delegação (sobrevive a re-render do thead)
+    if (!container.dataset.sortWired) {
+      container.addEventListener('click', function (ev) {
+        var th = ev.target.closest('th[data-col]');
+        if (!th || !container.contains(th)) return;
+        var tbl = th.closest('table.aia-table');
+        if (!tbl) return;
+        ev.stopPropagation();
+        var key = tbl.dataset.key;
+        var col = th.dataset.col;
+        if (!key || !col) return;
+        var cur = tabState[key] || { col: 'delta', order: 'desc' };
+        if (cur.col === col) {
+          cur.order = cur.order === 'desc' ? 'asc' : 'desc';
+        } else {
+          cur.col = col;
+          cur.order = (col === 'tipo') ? 'asc' : 'desc';
+        }
+        tabState[key] = cur;
+        reRenderTabela(key);
+      });
+      container.dataset.sortWired = '1';
+    }
+  }
+
+  function reRenderTabela(key) {
+    var tbl = document.querySelector('table.aia-table[data-key="' + key + '"]');
+    if (!tbl) return;
+    var itens = tabData[key] || [];
+    var st = tabState[key] || { col: 'delta', order: 'desc' };
+    var sorted = sortItens(itens, st.col, st.order);
+    var thead = tbl.querySelector('thead');
+    var tbody = tbl.querySelector('tbody');
+    if (thead) thead.innerHTML = buildThead(tbl.dataset.lblRef, tbl.dataset.lblComp, st);
+    if (tbody) tbody.innerHTML = buildTbodyRows(sorted);
+  }
+
+  function sortItens(itens, col, order) {
+    var keyFn;
+    switch (col) {
+      case 'tipo':
+        keyFn = function (i) {
+          var partes = String(i.grupo || '').split(' / ');
+          return (partes[partes.length - 1] || '').toLowerCase();
+        };
+        break;
+      case 'ref':
+        keyFn = function (i) { return Number(i.valor_mes_ref) || 0; };
+        break;
+      case 'comp':
+        keyFn = function (i) { return Number(i.valor_mes_comp) || 0; };
+        break;
+      case 'delta':
+        keyFn = function (i) { return Math.abs(Number(i.delta_abs) || 0); };
+        break;
+      case 'pct':
+        keyFn = function (i) {
+          var v = i.delta_pct;
+          if (v === null || v === undefined || isNaN(v)) return -Infinity;
+          return Math.abs(Number(v));
+        };
+        break;
+      default:
+        keyFn = function (i) { return Math.abs(Number(i.delta_abs) || 0); };
+    }
+    var arr = itens.slice();
+    arr.sort(function (a, b) {
+      var ka = keyFn(a), kb = keyFn(b);
+      if (ka < kb) return -1;
+      if (ka > kb) return 1;
+      return 0;
+    });
+    if (order === 'desc') arr.reverse();
+    return arr;
   }
 
   function renderPostoCard(letra, dados, lblRef, lblComp, top) {
@@ -353,23 +442,61 @@
         '<div class="aia-posto-body">' +
           '<div>' +
             '<h6 class="aia-mini-title up">▲ Top ' + top + ' aumentos</h6>' +
-            renderTabelaItens(aum, lblRef, lblComp, 'up') +
+            renderTabelaItens(aum, lblRef, lblComp, letra, 'up') +
           '</div>' +
           '<div>' +
             '<h6 class="aia-mini-title down">▼ Top ' + top + ' reduções</h6>' +
-            renderTabelaItens(red, lblRef, lblComp, 'down') +
+            renderTabelaItens(red, lblRef, lblComp, letra, 'down') +
           '</div>' +
         '</div>' +
       '</div>'
     );
   }
 
-  function renderTabelaItens(itens, lblRef, lblComp, dir) {
+  function renderTabelaItens(itens, lblRef, lblComp, letra, dir) {
     if (!itens || !itens.length) {
       return '<div class="aia-empty">Sem itens.</div>';
     }
+    var key = letra + '-' + dir;
+    tabData[key] = itens;
+    var st = tabState[key] || { col: 'delta', order: 'desc' };
+    tabState[key] = st;
+    var sorted = sortItens(itens, st.col, st.order);
 
-    var rows = itens.map(function (i) {
+    return (
+      '<table class="aia-table" data-key="' + key + '"' +
+        ' data-lbl-ref="' + escapeHtml(lblRef) + '"' +
+        ' data-lbl-comp="' + escapeHtml(lblComp) + '">' +
+        '<thead>' + buildThead(lblRef, lblComp, st) + '</thead>' +
+        '<tbody>' + buildTbodyRows(sorted) + '</tbody>' +
+      '</table>'
+    );
+  }
+
+  function buildThead(lblRef, lblComp, st) {
+    function th(col, label, num) {
+      var active = (st.col === col);
+      var arrow = active ? (st.order === 'desc' ? '▼' : '▲') : '';
+      return (
+        '<th data-col="' + col + '"' + (num ? ' class="num' + (active ? ' active' : '') + '"' : (active ? ' class="active"' : '')) + '>' +
+          escapeHtml(label) +
+          (active ? ' <span class="arrow">' + arrow + '</span>' : '') +
+        '</th>'
+      );
+    }
+    return (
+      '<tr>' +
+        th('tipo', 'Tipo', false) +
+        th('ref',  lblRef, true) +
+        th('comp', lblComp, true) +
+        th('delta', 'Δ R$', true) +
+        th('pct',  'Δ %', true) +
+      '</tr>'
+    );
+  }
+
+  function buildTbodyRows(itens) {
+    return itens.map(function (i) {
       var delta = Number(i.delta_abs) || 0;
       var cls = delta > 0 ? 'delta-up' : (delta < 0 ? 'delta-down' : '');
       var sinal = delta > 0 ? '+' : '';
@@ -389,19 +516,6 @@
         '</tr>'
       );
     }).join('');
-
-    return (
-      '<table class="aia-table">' +
-        '<thead><tr>' +
-          '<th>Tipo</th>' +
-          '<th class="num">' + lblRef + '</th>' +
-          '<th class="num">' + lblComp + '</th>' +
-          '<th class="num">Δ R$</th>' +
-          '<th class="num">Δ %</th>' +
-        '</tr></thead>' +
-        '<tbody>' + rows + '</tbody>' +
-      '</table>'
-    );
   }
 
   function escapeHtml(s) {

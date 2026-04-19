@@ -1030,7 +1030,12 @@ def ep_drilldown_multi():
         if not variacoes:
             por_posto[p] = {"ok": False, "motivo": "sem dados no período"}
             continue
-        aumentou = [v for v in variacoes if (v.get("delta_abs") or 0) > 0][:top]
+        # Top N por magnitude do delta (maior variação em R$ primeiro)
+        aumentou = sorted(
+            [v for v in variacoes if (v.get("delta_abs") or 0) > 0],
+            key=lambda x: x["delta_abs"],
+            reverse=True,
+        )[:top]
         diminuiu = sorted(
             [v for v in variacoes if (v.get("delta_abs") or 0) < 0],
             key=lambda x: x["delta_abs"],
