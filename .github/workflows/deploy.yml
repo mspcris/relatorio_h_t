@@ -107,6 +107,20 @@ jobs:
             echo "WARN: postos_acl.json não encontrado"
           fi
 
+      - name: robots.txt -> /var/www
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          if [ -f "robots.txt" ]; then
+            rsync -lvz \
+              --omit-dir-times --no-perms --no-owner --no-group \
+              -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+              robots.txt "$SSH_USER@$SSH_HOST:/var/www/robots.txt"
+          fi
+
       # ================================================================
       # 2) HTML templates → /opt/camim-auth/templates
       # ================================================================
