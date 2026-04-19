@@ -380,17 +380,41 @@ if __name__ == "__main__":
     ns = ap.parse_args()
     any_run = False
 
+    # Importa ETLMeta de forma tolerante (fallback se executado fora do repo)
+    try:
+        import sys as _sys, os as _os
+        _here = _os.path.dirname(_os.path.abspath(__file__))
+        if _here not in _sys.path:
+            _sys.path.insert(0, _here)
+        from etl_meta import ETLMeta  # type: ignore
+        meta = ETLMeta("indicadores_etl", ns.out)
+    except Exception:
+        meta = None
+
+    def _run(tag, fn):
+        try:
+            fn(ns)
+            if meta:
+                meta.ok(tag)
+        except Exception as exc:
+            if meta:
+                meta.error(tag, exc)
+            raise
+
     if ns.ptax:
         any_run = True
-        run_ptax(ns)
+        _run("ptax", run_ptax)
     if ns.ipca:
         any_run = True
-        run_ipca(ns)
+        _run("ipca", run_ipca)
     if ns.igpm:
         any_run = True
-        run_igpm(ns)
+        _run("igpm", run_igpm)
     if ns.site:
         build_site(ns.out)
+
+    if meta and any_run:
+        meta.save()
 
     if not any_run and not ns.site:
         print("Nada a executar. Use --ptax, --ipca e/ou --igpm. -h para ajuda.")

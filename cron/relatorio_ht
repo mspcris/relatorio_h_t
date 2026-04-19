@@ -72,8 +72,8 @@ TZ=America/Sao_Paulo
 # Export growth — 1x/dia 03:00
 0    3 * * * root flock -n /opt/relatorio_h_t/locks/export_growth.lock     /opt/relatorio_h_t/export_growth.sh         >>/var/log/relatorio_h_t/export_growth.log 2>&1
 
-# Export notas RPS — 1x/dia 04:00
-0    4 * * * root flock -n /opt/relatorio_h_t/locks/export_notas_rps.lock  /opt/relatorio_h_t/export_notas_rps.sh      >>/var/log/relatorio_h_t/export_notas_rps.log 2>&1
+# Export notas RPS — de hora em hora (mudou em 2026-04-19 de 1x/dia -> */1h)
+0    * * * * root flock -n /opt/relatorio_h_t/locks/export_notas_rps.lock  /opt/relatorio_h_t/export_notas_rps.sh      >>/var/log/relatorio_h_t/export_notas_rps.log 2>&1
 
 # Export qualidade agenda — 1x/dia 05:00
 0    5 * * * root flock -n /opt/relatorio_h_t/locks/qualidade_agenda.lock  /opt/relatorio_h_t/export_qualidade_agenda.sh >>/var/log/relatorio_h_t/export_qualidade_agenda.log 2>&1
@@ -92,3 +92,9 @@ TZ=America/Sao_Paulo
 
 # Auditoria de acessos — limpa eventos > 15 dias, diariamente 03:15 (criado em 2026-04-15)
 15   3 * * * root flock -n /opt/relatorio_h_t/locks/page_access_cleanup.lock /opt/camim-auth/venv/bin/python /opt/relatorio_h_t/cleanup_page_access_log.py >>/var/log/relatorio_h_t/page_access_cleanup.log 2>&1
+
+# Liberty — 2x/dia (02:00 e 14:00) — criado em 2026-04-19
+0 2,14 * * * root flock -n /opt/relatorio_h_t/locks/export_liberty2.lock  /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/export_liberty2.py >>/var/log/relatorio_h_t/export_liberty2.log 2>&1
+
+# Indicadores oficiais (PTAX/IPCA/IGP-M) — diário 02:45 — criado em 2026-04-19
+45   2 * * * root flock -n /opt/relatorio_h_t/locks/indicadores_etl.lock  /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/indicadores_etl.py --ptax 2020-01-01 today --ipca 2020-01 thismonth --igpm 2020-01 thismonth --out /opt/relatorio_h_t/json_consolidado >>/var/log/relatorio_h_t/indicadores_etl.log 2>&1

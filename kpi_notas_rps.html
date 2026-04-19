@@ -63,13 +63,6 @@
     .reg-empty { text-align:center; color:#aaa; padding:30px; }
 
     /* ── Banner de status de conexão ── */
-    #connStatus { margin-bottom:10px; font-size:.85rem; display:none; padding:8px 12px; background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; }
-    #connStatus.show { display:block; }
-    #connStatus .conn-ok   { color:#28a745; }
-    #connStatus .conn-warn { color:#dc3545; font-weight:600; }
-    #connStatus .conn-item { display:inline-block; margin-right:14px; white-space:nowrap; }
-    #connStatus .etl-header { font-size:.85rem; font-weight:600; margin-bottom:4px; }
-    #btnETLStatus { display:inline-flex; align-items:center; gap:4px; font-size:.8rem; padding:2px 8px; border-radius:4px; }
   </style>
 
   <script>
@@ -483,61 +476,6 @@
     }
 
     // =========================
-    // Status de conexão por posto (lê metadata ETL + gerado_em dos JSONs)
-    // =========================
-    const POSTO_NAMES = {A:'Anchieta',B:'Bangu',C:'Campinho',D:'Del Castilho',G:'Campo Grande',I:'Nova Iguaçu',J:'Jacarepaguá',M:'Madureira',N:'Nilópolis',P:'Rio das Pedras',R:'Realengo',X:'X Campo Grande',Y:'Y Campo Grande'};
-    let _etlMeta = null;
-    async function loadETLMeta(){
-      if(_etlMeta) return _etlMeta;
-      try {
-        const r = await fetch('/json_notas_rps/_etl_meta_export_notas_rps.json',{cache:'no-store'});
-        if(r.ok) _etlMeta = await r.json();
-      } catch{}
-      return _etlMeta;
-    }
-    async function renderConnStatus(ym){
-      const wrap = el('#connStatus');
-      if(!wrap) return;
-      const postos = selectedPostosList();
-      const now = Date.now();
-      const STALE_MS = 3 * 60 * 60 * 1000;
-      const meta = await loadETLMeta();
-      let header = '<div class="etl-header">Status ETL <span style="color:#6b7280;font-weight:400;">(export_notas_rps.py)</span>';
-      if(meta?.finished_at){
-        const dt = new Date(meta.finished_at);
-        const age = now - dt.getTime();
-        const h = Math.floor(age/3600000);
-        const ageStr = h>=24 ? Math.floor(h/24)+'d '+(h%24)+'h' : h>0 ? h+'h '+Math.floor((age%3600000)/60000)+'min' : Math.floor(age/60000)+'min';
-        header += ` — última execução: ${dt.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})} (${ageStr} atrás)`;
-      }
-      header += '</div>';
-      const parts = [];
-      for(const p of postos){
-        const nome = POSTO_NAMES[p] ? ` (${POSTO_NAMES[p]})` : '';
-        const metaPosto = meta?.postos?.[p];
-        const payload = CACHE[ym]?.[p];
-        if(!payload){
-          const errMsg = metaPosto?.status==='error' ? ` — ${metaPosto.msg?.substring(0,80)||'erro'}` : '';
-          parts.push(`<span class="conn-item conn-warn">Posto ${p}${nome}: sem dados${errMsg}</span>`);
-          continue;
-        }
-        const gerado = payload.gerado_em;
-        if(!gerado) continue;
-        const dt = new Date(gerado);
-        const age = now - dt.getTime();
-        const fmt = dt.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
-        if(age > STALE_MS){
-          const horas = Math.floor(age / 3_600_000);
-          const label = horas >= 24 ? `${Math.floor(horas/24)}d ${horas%24}h` : `${horas}h`;
-          parts.push(`<span class="conn-item conn-warn">Posto ${p}${nome}: atualizado ${fmt} (${label} atrás — possível falha)</span>`);
-        } else {
-          parts.push(`<span class="conn-item conn-ok">Posto ${p}${nome}: atualizado ${fmt}</span>`);
-        }
-      }
-      wrap.innerHTML = header + parts.join('');
-    }
-
-    // =========================
     // UI
     // =========================
     function kpiCard(title, val, kind){
@@ -585,7 +523,6 @@
       const modoTxt = operadoraMode ? `Operadora: ${operadoraMode}` : `Grupo: ${selGrupo}`;
       const fmtData = s => s ? s.split('-').reverse().join('/') : '';
       el('#hdrSel').textContent = `${fmtData(dataIni)} a ${fmtData(dataFim)} • Postos: ${postoLabel} • ${modoTxt}`;
-      renderConnStatus(ym);
 
       const agg = aggAllSelected(ym);
 
@@ -1096,10 +1033,6 @@
       <div class="d-flex w-100 align-items-center">
         <span class="ml-2 font-weight-bold" id="hdrSel"></span>
         <div class="ml-auto">
-          <button id="btnETLStatus" class="btn btn-sm btn-outline-secondary" title="Status do ETL" onclick="document.getElementById('connStatus').classList.toggle('show')">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><ellipse cx="12" cy="6" rx="8" ry="3" opacity=".9"/><path d="M4 6v4c0 1.66 3.58 3 8 3s8-1.34 8-3V6" opacity=".7"/><path d="M4 10v4c0 1.66 3.58 3 8 3s8-1.34 8-3v-4" opacity=".5"/><circle cx="18" cy="18" r="5" fill="#fff" stroke="currentColor" stroke-width="1.5"/><path d="M18 15.5v1.2l.9.5m-.9-.2a1.5 1.5 0 1 0 1.5 1.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
-            <span class="d-none d-md-inline">ETL</span>
-          </button>
           <span id="ia-anchor"></span>
         </div>
       </div>
@@ -1107,7 +1040,6 @@
 
     <section class="content p-3">
       <div id="err" class="text-danger mb-2"></div>
-      <div id="connStatus"><div class="etl-header">Status ETL <span style="color:#6b7280;font-weight:400;">(export_notas_rps.py)</span></div></div>
 
       <div class="card">
         <div class="kpi-filter-panel">
@@ -1291,6 +1223,12 @@
   });
 </script>
 
+<script src="/js/etl_status.js"></script>
+<script>
+ETLStatus.init({
+  metaUrl: '/json_notas_rps/_etl_meta_export_notas_rps.json'
+});
+</script>
 <script src="/js/menu.js"></script>
 </body>
 </html>

@@ -40,13 +40,15 @@
     'export_consultas_mensal_json':   { py: 'export_consultas_mensal.py',      sh: 'export_consultas_mensal.sh',       cron_desc: 'diario as 02:00',             interval_min: 1440 },
     'export_growth':                  { py: 'export_growth.py',                sh: 'export_growth.sh',                 cron_desc: 'diario as 03:00',             interval_min: 1440 },
     'export_leads_analytics':         { py: 'export_leads_analytics_cache.py', sh: 'export_leads_analytics_cache.sh',  cron_desc: '2x/dia (03:30 e 12:30)',      interval_min: 540 },
-    'export_liberty2':                { py: 'export_liberty2.py',              sh: '(sem wrapper)',                    cron_desc: 'NAO AGENDADO — sem entrada no cron', interval_min: null },
+    'export_liberty2':                { py: 'export_liberty2.py',              sh: '(direto no cron)',                 cron_desc: 'a cada 12h (02:00 e 14:00)',  interval_min: 720 },
     'ctrlq_export_relatorio':         { py: 'ctrlq_export_relatorio.py',       sh: 'export_ctrlq_relatorio.sh',        cron_desc: 'a cada 15 min',               interval_min: 15 },
     'etl_higienizacao_snapshot':      { py: 'etl_higienizacao_snapshot.py',    sh: 'export_higienizacao.sh',           cron_desc: 'de hora em hora',             interval_min: 60 },
     'export_agenda_dia':              { py: 'export_agenda_dia.py',            sh: '(direto no cron)',                 cron_desc: 'de hora em hora, 07h–17h',    interval_min: 60 },
     'export_qualidade_agenda':        { py: 'export_qualidade_agenda.py',      sh: 'export_qualidade_agenda.sh',       cron_desc: 'diario as 05:00',             interval_min: 1440 },
     'export_vagas':                   { py: 'export_vagas.py',                 sh: '(sem wrapper)',                    cron_desc: 'NAO AGENDADO — sem entrada no cron', interval_min: null },
-    'export_notas_rps':               { py: 'export_notas_rps.py',             sh: 'export_notas_rps.sh',              cron_desc: 'diario as 04:00',             interval_min: 1440 }
+    'export_notas_rps':               { py: 'export_notas_rps.py',             sh: 'export_notas_rps.sh',              cron_desc: 'de hora em hora',             interval_min: 60 },
+    'export_fin_full_rateio':         { py: 'export_fin_full_rateio.py',       sh: 'export_fin_full_rateio.sh',        cron_desc: 'diario as 01:30',             interval_min: 1440 },
+    'indicadores_etl':                { py: 'indicadores_etl.py',              sh: '(direto no cron)',                 cron_desc: 'diario as 02:45',             interval_min: 1440 }
   };
 
   /* ── Nomes legiveis dos postos ── */
@@ -178,7 +180,11 @@
     });
   }
 
-  function renderPanel(panel, data, reg, result, expectedPostos, metaUrl) {
+  function renderPanel(panel, data, reg, result, expectedPostos, metaUrl, labels) {
+    labels = labels || {};
+    var itemsLabel = labels.itemsLabel || 'Postos:';
+    var itemPrefix = labels.itemPrefix || 'Posto ';
+    var nameMap    = labels.nameMap    || POSTO_NAMES;
     var now = Date.now();
     var finished = data && data.finished_at ? new Date(data.finished_at) : null;
     var postos = (data && data.postos) || {};
@@ -219,14 +225,17 @@
     }
     html += '</div>';
 
-    /* Lista por posto */
-    var keys = expectedPostos && expectedPostos.length > 0 ? expectedPostos.slice().sort() : Object.keys(postos).sort();
+    /* Lista por posto (ou "etapas" para ETLs sem postos) */
+    var keys;
+    if (expectedPostos && expectedPostos.length > 0) keys = expectedPostos.slice().sort();
+    else if (expectedPostos && expectedPostos.length === 0) keys = Object.keys(postos).sort();
+    else keys = Object.keys(postos).sort();
     if (keys.length > 0) {
-      html += '<div style="font-weight:600;margin-bottom:4px;font-size:.8rem;">Postos:</div>';
+      html += '<div style="font-weight:600;margin-bottom:4px;font-size:.8rem;">' + escapeHtml(itemsLabel) + '</div>';
       html += '<div style="display:flex;flex-wrap:wrap;gap:4px 16px;">';
       keys.forEach(function (k) {
         var p = postos[k];
-        var label = 'Posto ' + k + (POSTO_NAMES[k] ? ' (' + POSTO_NAMES[k] + ')' : '');
+        var label = itemPrefix + k + (nameMap[k] ? ' (' + nameMap[k] + ')' : '');
         if (!p) {
           html += '<span>' + pdot('gray') + escapeHtml(label) + ': <span style="color:#856404;">nao rodou na ultima execucao</span></span>';
           return;
@@ -258,7 +267,9 @@
       if (!cfg || !cfg.metaUrl) return;
 
       var anchorSel = cfg.anchor || '#ia-anchor';
-      var expectedPostos = cfg.expectedPostos || Object.keys(POSTO_NAMES);
+      // expectedPostos explicitamente [] → ETL sem postos (ex.: indicadores_etl)
+      var expectedPostos = (cfg.expectedPostos !== undefined) ? cfg.expectedPostos : Object.keys(POSTO_NAMES);
+      var labels = cfg.labels || (expectedPostos && expectedPostos.length === 0 ? { itemsLabel: 'Etapas:', itemPrefix: 'Etapa ', nameMap: {} } : null);
       var scriptName = scriptFromMetaUrl(cfg.metaUrl);
       var reg = REGISTRY[scriptName] || null;
 
@@ -310,7 +321,7 @@
           if (panel.style.display === 'none') {
             panel.style.display = 'block';
             if (data) {
-              renderPanel(panel, data, reg, result, expectedPostos, cfg.metaUrl);
+              renderPanel(panel, data, reg, result, expectedPostos, cfg.metaUrl, labels);
             } else if (result) {
               /* Sem data (ex: cron nao agendado, ou fetch falhou) */
               var c = COLORS[result.level];

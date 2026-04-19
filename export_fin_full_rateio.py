@@ -5,6 +5,7 @@ import os, re, glob, json, argparse
 import pandas as pd
 from datetime import date, datetime  # <-- inclui datetime
 from etl_meta import ETLMeta
+from sqlalchemy import text
 
 # Reuso de utilitários do pipeline legado
 from export_governanca import (
@@ -19,6 +20,28 @@ from export_governanca import (
     ensure_dir,
     make_engine,
 )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resolve placeholders {ENDERECO_EXPR} e {CE_JOIN} por-posto, pois a view
+# vw_Fin_DespesaRateio_tela nao tem a mesma forma em todos os postos:
+#   - Postos novos: tem coluna `endereco_letra` (letra do posto destino).
+#   - Posto A (antigo): NAO tem endereco_letra; tem apenas idEndereco + Endereco.
+# Solucao: probe das colunas e substituicao da expressao antes de executar.
+# ─────────────────────────────────────────────────────────────────────────────
+def detect_rateio_dialect(engine):
+    """Retorna ('dr.endereco_letra', '') se a view tem endereco_letra,
+    caso contrario ('ce_r.codigo', LEFT JOIN Cad_Endereco on dr.idEndereco)."""
+    with engine.connect() as c:
+        r = c.execute(text("SELECT TOP 0 * FROM vw_Fin_DespesaRateio_tela"))
+        cols = {str(k).lower() for k in r.keys()}
+    if 'endereco_letra' in cols:
+        return 'dr.endereco_letra', ''
+    return 'ce_r.codigo', 'LEFT JOIN Cad_Endereco ce_r ON ce_r.idEndereco = dr.idEndereco'
+
+
+def resolve_rateio_sql(sql_txt: str, endereco_expr: str, ce_join: str) -> str:
+    return sql_txt.replace('{ENDERECO_EXPR}', endereco_expr).replace('{CE_JOIN}', ce_join)
 
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
 
@@ -249,10 +272,18 @@ def run():
                 meta.error(posto, str(e))
                 continue
 
+            # Probe view columns once por posto; fallback seguro se view nao existir.
+            try:
+                endereco_expr, ce_join = detect_rateio_dialect(engine)
+            except Exception as e:
+                print(f"   [{posto}] ERRO probe view: {e}")
+                meta.error(posto, f"probe: {e}")
+                continue
+
             posto_ok = True
             for entry in sqls:
                 key = entry["key"]  # fin_receita_full ou fin_despesa_full
-                sql_txt = entry["sql"]
+                sql_txt = resolve_rateio_sql(entry["sql"], endereco_expr, ce_join)
                 out_path = target_csv_full_path(posto, ym, key)
 
                 if not args.force and os.path.exists(out_path):
