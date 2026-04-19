@@ -1,5 +1,5 @@
 /**
- * Análise de IA — painel com respostas pré-computadas para perguntas
+ * Comparativo Direto — painel com respostas pré-computadas para perguntas
  * recorrentes dos diretores. Não é LLM; é pandas/SQL com resposta direta.
  *
  * Uso (em kpi_receita_despesa.html):
@@ -102,8 +102,8 @@
     var btn = document.createElement('button');
     btn.id = 'btnAnaliseIA';
     btn.className = 'btn btn-sm btn-outline-secondary';
-    btn.title = 'Análise de IA';
-    btn.innerHTML = GEAR_ICON + ' <span class="d-none d-md-inline">Análise de IA</span>';
+    btn.title = 'Comparativo Direto';
+    btn.innerHTML = GEAR_ICON + ' <span class="d-none d-md-inline">Comparativo Direto</span>';
     btn.addEventListener('click', openPanel);
     return btn;
   }
@@ -112,9 +112,9 @@
     var ov = document.createElement('div');
     ov.id = 'aiaOverlay';
     ov.innerHTML =
-      '<div id="aiaPanel" role="dialog" aria-label="Análise de IA">' +
+      '<div id="aiaPanel" role="dialog" aria-label="Comparativo Direto">' +
         '<div id="aiaHeader">' +
-          '<h3>Análise de IA</h3>' +
+          '<h3>Comparativo Direto</h3>' +
           '<span class="sub">Respostas pré-computadas sobre os dados do KPI</span>' +
           '<button id="aiaClose" title="Fechar">✕</button>' +
         '</div>' +
