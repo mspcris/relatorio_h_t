@@ -303,13 +303,13 @@ def run_incremental_all_postos(postos=None, force_months=None):
                 meta.error(posto, str(e))
                 continue
 
+    meta.save()
+
 
 def parse_args():
     p = argparse.ArgumentParser(description="Export Notas Emitidas + RPS Pendentes (JSON) incremental desde 2026-01; força mês atual e anterior.")
     p.add_argument("--postos", default="", help="Opcional: subset de postos. Ex: ANX. Se vazio, usa lista padrão.")
     return p.parse_args()
-
-    meta.save()
 
 
 def main():
