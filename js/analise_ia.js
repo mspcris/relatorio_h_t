@@ -11,12 +11,10 @@
 (function () {
   'use strict';
 
-  var POSTO_NAMES = {
-    A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho',
-    G:'Campo Grande', I:'Nova Iguaçu', J:'Jacarepaguá', M:'Madureira',
-    N:'Nilópolis', P:'Rio das Pedras', R:'Realengo', X:'Xerém',
-    Y:'Campo Grande Y'
-  };
+  // Nomes dos postos: fonte única é cad_endereco.Descricao (DB da CAMIM),
+  // exposto pelo endpoint /api/receita_despesa/postos_info e também embutido
+  // na resposta de drilldown_variacao_multi. NÃO hardcodar aqui.
+  var POSTO_NAMES = {};
 
   var GEAR_ICON =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">' +
@@ -282,6 +280,13 @@
       })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || 'resposta inválida');
+        // Nomes oficiais vêm do endpoint (cad_endereco).
+        if (data.postos_info) {
+          Object.keys(data.postos_info).forEach(function (k) {
+            var v = data.postos_info[k];
+            if (v && v.nome) POSTO_NAMES[k] = v.nome;
+          });
+        }
         renderResultado(res, data, mesRef, mesComp, top);
       })
       .catch(function (err) {

@@ -136,6 +136,31 @@ def _resolve_postos(raw: str | None) -> list[str]:
     return [p.strip().upper() for p in raw.split(",") if p.strip()]
 
 
+def _load_postos_info() -> dict:
+    """Nomes oficiais dos postos, vindos de cad_endereco (via qualidade_agenda.json).
+
+    Fonte única de verdade: tabela cad_endereco (Codigo + Descricao).
+    export_qualidade_agenda.py gera qualidade_agenda.json com postos_info:
+    {letra: {letra, idEndereco, nome}}.
+    """
+    path = Path(JSON_DIR) / "qualidade_agenda.json"
+    try:
+        mtime = path.stat().st_mtime
+    except FileNotFoundError:
+        return {}
+    cached = _cache.get("__postos_info__")
+    if cached and cached[0] == mtime:
+        return cached[1]
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        info = data.get("postos_info") or {}
+    except (OSError, ValueError):
+        info = {}
+    _cache["__postos_info__"] = (mtime, info)
+    return info
+
+
 def _nome_grupo(postos: list[str]) -> str | None:
     """Retorna 'altamiro'/'couto'/'todos' se a lista corresponder a um grupo, senão None."""
     s = sorted(postos)
@@ -1030,7 +1055,18 @@ def ep_drilldown_multi():
             "top": top,
         },
         "por_posto": por_posto,
+        "postos_info": _load_postos_info(),
     })
+
+
+@receita_despesa_bp.get("/api/receita_despesa/postos_info")
+def ep_postos_info():
+    """Nomes oficiais dos postos (cad_endereco.Descricao).
+
+    Saída: {ok, postos_info: {letra: {letra, idEndereco, nome}}}.
+    """
+    info = _load_postos_info()
+    return jsonify({"ok": True, "postos_info": info, "n": len(info)})
 
 
 @receita_despesa_bp.get("/api/receita_despesa/composicao_multi")
