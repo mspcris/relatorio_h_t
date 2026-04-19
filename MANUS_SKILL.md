@@ -80,41 +80,74 @@ Nunca use `mes_ini` ou `mes_fim` — não existem.
 
 ---
 
-## 6. Variação "fevereiro → março" por posto — algoritmo correto
+## 6. Variação "fevereiro → março" por posto — USE O ENDPOINT BATCH
 
-Quando o usuário perguntar "qual X teve maior variação entre mês A e mês B, posto a posto":
+**PREFERIDO (1 chamada HTTP, dados segregados pelo servidor):**
 
-```python
-postos_altamiro = ["A", "B", "G", "I", "N", "R", "X", "Y"]
-resultado = {}
-
-for p in postos_altamiro:
-    url = (
-        f"{BASE}/api/receita_despesa/drilldown_variacao"
-        f"?tipo=despesa&dimensao=tipo&postos={p}"
-        f"&mes_ref=2026-03&mes_comp=2026-02"
-    )
-    r = requests.get(url, headers={"X-Manus-Key": KEY}, timeout=20)
-    if r.status_code != 200:
-        resultado[p] = {"erro": f"HTTP {r.status_code}"}
-        continue
-    data = r.json()
-    if not data.get("ok"):
-        resultado[p] = {"erro": data.get("error", "sem dados")}
-        continue
-    # top 5 por variação absoluta de despesa, decrescente
-    itens = sorted(
-        data["ranking"],
-        key=lambda x: abs(x.get("delta_valor", 0)),
-        reverse=True
-    )[:5]
-    resultado[p] = itens
+```
+GET /api/receita_despesa/drilldown_variacao_multi
+    ?tipo=despesa
+    &dimensao=tipo
+    &postos=altamiro           # grupo direto; pode também: todos|couto|A,B,G
+    &mes_ref=2026-03
+    &mes_comp=2026-02
+    &top=5
 ```
 
-**Regras de ouro deste loop:**
-1. **Uma chamada por posto.** Jamais chamar `postos=A,B,G,…` achando que vem segregado — essa forma agrega os postos na resposta.
-2. **Se `resultado[p]` for `erro`, DIGA "não recuperado" no relatório.** Não copie os números de outro posto. Não extrapole. Não preencha com médias.
-3. **Se 4 postos voltarem valores idênticos, algo está errado** — você chamou o grupo em vez do posto. Refaça.
+Resposta:
+```json
+{
+  "ok": true,
+  "filtros": {...},
+  "por_posto": {
+    "A": {"ok": true, "top_aumentou": [...5 itens...], "top_diminuiu": [...], "total_itens": N},
+    "B": {"ok": true, "top_aumentou": [...], ...},
+    "G": {"ok": false, "motivo": "sem dados no período"},
+    ...
+  }
+}
+```
+
+**Para composição (top-N itens) por posto em uma chamada:**
+
+```
+GET /api/receita_despesa/composicao_multi
+    ?tipo=despesa
+    &dimensao=tipo          # ou plano | plano_principal
+    &postos=altamiro
+    &de=2026-03&ate=2026-03
+    &top=10
+```
+
+Use esses dois `_multi` sempre que a pergunta for "posto a posto". Elimina o problema de falha SSL/timeout que acontece em loops longos no cliente.
+
+**Código típico:**
+```python
+import requests, certifi
+url = f"{BASE}/api/receita_despesa/drilldown_variacao_multi"
+params = {
+    "tipo": "despesa", "dimensao": "tipo",
+    "postos": "altamiro",
+    "mes_ref": "2026-03", "mes_comp": "2026-02",
+    "top": 5,
+}
+r = requests.get(url, params=params,
+                 headers={"X-Manus-Key": KEY},
+                 verify=certifi.where(), timeout=30)
+r.raise_for_status()
+por_posto = r.json()["por_posto"]
+for p, v in por_posto.items():
+    if not v["ok"]:
+        print(f"{p}: {v['motivo']}")
+    else:
+        print(p, [(i['grupo'], i['delta_abs']) for i in v['top_aumentou']])
+```
+
+**Regras de ouro:**
+1. **`_multi` é preferido.** Use o singular `/drilldown_variacao` só se precisar de um único posto.
+2. **Jamais** chame `postos=A,B,G,…` no endpoint singular achando que vem segregado — ele AGREGA (soma os postos). Só o `_multi` segrega.
+3. **Se `por_posto[X].ok == false`, reporte "não recuperado: {motivo}".** Não copie top de outro posto. Não invente.
+4. **Se dois postos voltarem valores idênticos no `_multi`,** reporte como curiosidade (pode ser coincidência real porque os dados vêm do mesmo servidor) — mas confira um com o endpoint singular `/drilldown_variacao?postos=A` e `/drilldown_variacao?postos=B` para validar. Nunca foi coincidência em produção.
 
 ---
 
@@ -131,6 +164,35 @@ Por padrão, linhas com `PlanoPrincipal = CAMPINHO` OU `Plano = RETIRADA` OU `Ti
 - **Nunca use o site HTML** como fallback. Se a API falhar, o site também vai falhar (ou estar desatualizado).
 - **Número em dinheiro sempre em real (R$)**; separador de decimais `,`; milhar `.` (padrão pt-BR).
 - **Não arredonde silenciosamente.** Se a API devolver `R$ 170.887,32`, mostre `R$ 170.887,32`.
+
+---
+
+## 8A. Se falhar SSL / timeout / HTTPS
+
+A API **funciona** sobre HTTPS válido (Let's Encrypt). Se você, Manus, estiver recebendo "Falha na conexão SSL", é no SEU ambiente — **não é o servidor**. Ordem de ação:
+
+1. **Retry 3x com backoff** (2s, 5s, 10s) antes de desistir.
+2. Se usar `requests` em Python: `import certifi; requests.get(url, verify=certifi.where(), timeout=20)`.
+3. Se ainda falhar: tente `httpx` ou `urllib.request` como fallback.
+4. **JAMAIS** use `verify=False` ou `curl -k`. É falso positivo e mascara problemas reais.
+5. **JAMAIS** caia pro site HTML / navegador / scraping.
+6. Se os 3 retries falharem em todos os fallbacks, reporte: "posto X: 3 tentativas com falha SSL no ambiente Manus — não recuperado." E siga pro próximo posto. **Não invente valor, não copie de outro posto, não repita top-5 de um posto com sucesso.**
+
+Exemplo de retry (Python):
+```python
+import time, requests, certifi
+def get_json(url, key, tentativas=3):
+    for i in range(tentativas):
+        try:
+            r = requests.get(url, headers={"X-Manus-Key": key},
+                             verify=certifi.where(), timeout=20)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            if i == tentativas - 1:
+                return {"ok": False, "erro_cliente": str(e)}
+            time.sleep(2 ** i * 2)  # 2s, 4s, 8s
+```
 
 ---
 

@@ -704,7 +704,9 @@ def ep_contexto():
             "crescimento": "/api/receita_despesa/crescimento?postos=...&retirada=0|1",
             "ranking_postos": "/api/receita_despesa/ranking_postos?mes=YYYY-MM&metrica=despesa|receita|resultado|margem&vs=mes_anterior|ano_anterior&grupo=todos|altamiro|couto&retirada=0|1",
             "composicao": "/api/receita_despesa/composicao?de=YYYY-MM&ate=YYYY-MM&postos=...&tipo=receita|despesa&dimensao=tipo|forma|servico|plano_principal|plano&retirada=0|1",
+            "composicao_multi": "/api/receita_despesa/composicao_multi?de=YYYY-MM&ate=YYYY-MM&postos=altamiro|couto|todos|A,B,C&tipo=receita|despesa&dimensao=...&top=10 — USE ISTO para composição segregada por posto em UMA chamada",
             "drilldown_variacao": "/api/receita_despesa/drilldown_variacao?mes_ref=YYYY-MM&mes_comp=YYYY-MM&postos=...&tipo=despesa|receita&dimensao=...&retirada=0|1",
+            "drilldown_variacao_multi": "/api/receita_despesa/drilldown_variacao_multi?mes_ref=YYYY-MM&mes_comp=YYYY-MM&postos=altamiro|couto|todos|A,B,C&tipo=...&dimensao=...&top=5 — USE ISTO para variação segregada por posto em UMA chamada",
             "posto_detalhe": "/api/receita_despesa/posto_detalhe?posto=A&mes=YYYY-MM&retirada=0|1",
             "alertas": "/api/receita_despesa/alertas?postos=...&retirada=0|1",
             "analise_completa": "/api/receita_despesa/analise_completa?mes=YYYY-MM&postos=...&retirada=0|1",
@@ -962,6 +964,127 @@ def ep_drilldown():
             [v for v in variacoes if v["delta_abs"] and v["delta_abs"] < 0],
             key=lambda x: x["delta_abs"],
         )[:5],
+    })
+
+
+@receita_despesa_bp.get("/api/receita_despesa/drilldown_variacao_multi")
+def ep_drilldown_multi():
+    """Variação por posto, segregada no servidor.
+    1 request HTTP → N postos. Resolve o problema de agentes externos que
+    falham por SSL/rate-limit ao iterar por posto do lado cliente, e evita
+    o erro de achar que postos=A,B,C segrega (não segrega: agrega).
+    """
+    mes_ref = request.args.get("mes_ref")
+    mes_comp = request.args.get("mes_comp")
+    if not mes_ref or not mes_comp:
+        return jsonify({"ok": False, "error": "mes_ref e mes_comp obrigatórios"}), 400
+
+    tipo = (request.args.get("tipo") or "despesa").lower()
+    if tipo not in ("receita", "despesa"):
+        return jsonify({"ok": False, "error": "tipo deve ser receita|despesa"}), 400
+
+    if tipo == "receita":
+        dim = (request.args.get("dimensao") or "tipo").lower()
+        if dim not in ("tipo", "forma", "servico"):
+            return jsonify({"ok": False, "error": "dimensao receita: tipo|forma|servico"}), 400
+    else:
+        dim = (request.args.get("dimensao") or "tipo").lower()
+        if dim not in ("plano_principal", "plano", "tipo"):
+            return jsonify({"ok": False, "error": "dimensao despesa: plano_principal|plano|tipo"}), 400
+
+    postos = _resolve_postos(request.args.get("postos"))
+    retirada = _truthy(request.args.get("retirada"))
+    try:
+        top = max(1, min(50, int(request.args.get("top") or 5)))
+    except (TypeError, ValueError):
+        top = 5
+
+    por_posto: dict[str, dict] = {}
+    for p in postos:
+        variacoes = calcular_variacao(mes_ref, mes_comp, [p], tipo, dim, retirada)
+        if not variacoes:
+            por_posto[p] = {"ok": False, "motivo": "sem dados no período"}
+            continue
+        aumentou = [v for v in variacoes if (v.get("delta_abs") or 0) > 0][:top]
+        diminuiu = sorted(
+            [v for v in variacoes if (v.get("delta_abs") or 0) < 0],
+            key=lambda x: x["delta_abs"],
+        )[:top]
+        por_posto[p] = {
+            "ok": True,
+            "top_aumentou": aumentou,
+            "top_diminuiu": diminuiu,
+            "total_itens": len(variacoes),
+        }
+
+    return jsonify({
+        "ok": True,
+        "filtros": {
+            "mes_ref": mes_ref,
+            "mes_comp": mes_comp,
+            "postos": postos,
+            "grupo_nome": _nome_grupo(postos),
+            "tipo": tipo,
+            "dimensao": dim,
+            "retirada": retirada,
+            "top": top,
+        },
+        "por_posto": por_posto,
+    })
+
+
+@receita_despesa_bp.get("/api/receita_despesa/composicao_multi")
+def ep_composicao_multi():
+    """Composição (top-N itens) por posto, segregada no servidor.
+    1 request HTTP → N postos. Mesma intenção do drilldown_multi.
+    """
+    f = _filtros_padrao_req()
+    if not f["ate"]:
+        f["ate"] = f["de"]
+    meses = _meses_em_intervalo(f["de"], f["ate"])
+    if not meses:
+        return jsonify({"ok": False, "error": "Nenhum mês disponível no intervalo informado"}), 400
+
+    tipo = (request.args.get("tipo") or "despesa").lower()
+    if tipo not in ("receita", "despesa"):
+        return jsonify({"ok": False, "error": "tipo deve ser receita|despesa"}), 400
+
+    if tipo == "receita":
+        dim = (request.args.get("dimensao") or "tipo").lower()
+        if dim not in ("tipo", "forma", "servico"):
+            return jsonify({"ok": False, "error": "dimensao receita: tipo|forma|servico"}), 400
+    else:
+        dim = (request.args.get("dimensao") or "plano_principal").lower()
+        if dim not in ("plano_principal", "plano", "tipo"):
+            return jsonify({"ok": False, "error": "dimensao despesa: plano_principal|plano|tipo"}), 400
+
+    try:
+        top = max(1, min(100, int(request.args.get("top") or 10)))
+    except (TypeError, ValueError):
+        top = 10
+
+    por_posto: dict[str, dict] = {}
+    for p in f["postos"]:
+        if tipo == "receita":
+            comp = composicao_receita(meses, [p], dim)
+        else:
+            comp = composicao_despesa(meses, [p], dim, f["retirada"])
+        itens = comp.get("itens") or []
+        if not itens:
+            por_posto[p] = {"ok": False, "motivo": "sem dados no período"}
+            continue
+        por_posto[p] = {
+            "ok": True,
+            "total": comp.get("total", 0.0),
+            "top": itens[:top],
+            "n_itens": len(itens),
+        }
+
+    return jsonify({
+        "ok": True,
+        "filtros": {**f, "tipo": tipo, "dimensao": dim, "top": top},
+        "periodo": {"mes_inicial": meses[0], "mes_final": meses[-1], "n_meses": len(meses)},
+        "por_posto": por_posto,
     })
 
 
