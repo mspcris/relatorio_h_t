@@ -208,13 +208,17 @@
     .f-btn.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
     .f-btn.primary:hover { background: #2563eb; }
 
-    /* Switch estilo toggle para "Mostrar cancelados" */
-    .f-switch {
+    /* Switch estilo toggle para "Mostrar cancelados".
+       Seletor escrito como label.f-switch para vencer ".f-field label" em
+       especificidade (senão o label herda display:block e quebra o layout). */
+    .f-field label.f-switch {
       display: flex; align-items: center; gap: 10px; height: 40px;
-      padding: 0 10px; border: 1px solid #d1d5db; border-radius: 6px;
+      padding: 0 12px; border: 1px solid #d1d5db; border-radius: 6px;
       background: #fff; cursor: pointer; user-select: none;
+      font-size: .92rem; font-weight: 500; color: var(--ink);
+      margin-bottom: 0;
     }
-    .f-switch input { display: none; }
+    .f-field label.f-switch input { display: none; width: auto; height: auto; padding: 0; border: 0; }
     .f-switch-slider {
       position: relative; width: 36px; height: 20px; background: #cbd5e1;
       border-radius: 999px; transition: background .15s; flex-shrink: 0;
@@ -224,9 +228,9 @@
       width: 16px; height: 16px; background: #fff; border-radius: 50%;
       transition: transform .15s;
     }
-    .f-switch input:checked + .f-switch-slider { background: #ef4444; }
-    .f-switch input:checked + .f-switch-slider::after { transform: translateX(16px); }
-    .f-switch-text { font-size: .82rem; color: #475569; font-weight: 600; white-space: nowrap; }
+    .f-field label.f-switch input:checked + .f-switch-slider { background: #ef4444; }
+    .f-field label.f-switch input:checked + .f-switch-slider::after { transform: translateX(16px); }
+    .f-switch-text { font-size: .86rem; color: #475569; font-weight: 600; white-space: nowrap; }
 
     /* Pills de convênios */
     .pills-row {
@@ -1366,16 +1370,30 @@ function render() {
       scales: { y: { beginAtZero:true } } }
   });
 
-  /* P2 drilldown: especialidades + clínicas (agregados a partir das séries mensais) */
-  const espRowsRaw = Array.isArray(DATA.p2_consultas.por_especialidade_mes)
-    ? filtMes(DATA.p2_consultas.por_especialidade_mes, de, ate)
-    : (DATA.p2_consultas.totais_especialidade || []);
-  const espRows = applyCanc(espRowsRaw, [
-    ['agendadas', 'agendadas_canc'],
-    ['pagas', 'pagas_canc'],
-    ['receita_paga', 'receita_paga_canc'],
-  ]);
-  const espAgg = groupAgg(espRows, ['especialidade'], ['agendadas','pagas','receita_paga']);
+  /* P2 drilldown: especialidades + clínicas.
+     IMPORTANTE: "agendadas" é agrupado pelo mês de AGENDAMENTO (da.date) e
+     "pagas/receita" pelo mês de PAGAMENTO (COALESCE paymentDate). Por isso
+     mergeamos duas séries pela chave "especialidade" (ou clínica), de modo
+     que a tabela bata com o card do topo e o gráfico mensal_pagamento. */
+  const espAgendRaw = filtMes(DATA.p2_consultas.por_especialidade_agendadas_mes || [], de, ate);
+  const espPagasRaw = filtMes(DATA.p2_consultas.por_especialidade_pagas_mes || [], de, ate);
+  const espAgend = groupAgg(
+    applyCanc(espAgendRaw, [['agendadas','agendadas_canc']]),
+    ['especialidade'], ['agendadas']
+  );
+  const espPagas = groupAgg(
+    applyCanc(espPagasRaw, [['pagas','pagas_canc'], ['receita_paga','receita_paga_canc']]),
+    ['especialidade'], ['pagas','receita_paga']
+  );
+  const espMap = new Map();
+  for (const r of espAgend) espMap.set(r.especialidade, { especialidade:r.especialidade, agendadas:r.agendadas||0, pagas:0, receita_paga:0 });
+  for (const r of espPagas) {
+    const prev = espMap.get(r.especialidade) || { especialidade:r.especialidade, agendadas:0, pagas:0, receita_paga:0 };
+    prev.pagas = r.pagas || 0;
+    prev.receita_paga = r.receita_paga || 0;
+    espMap.set(r.especialidade, prev);
+  }
+  const espAgg = Array.from(espMap.values());
   espAgg.forEach(r => r.ticket_medio = r.pagas > 0 ? r.receita_paga / r.pagas : 0);
   renderTabelaDrilldown({
     tableId: 'tblEspecialidade',
@@ -1396,15 +1414,27 @@ function render() {
       { filterBy:'scheduled', especialidade: r.especialidade }),
   });
 
-  const cliRowsRaw = Array.isArray(DATA.p2_consultas.por_clinica_mes)
-    ? filtMes(DATA.p2_consultas.por_clinica_mes, de, ate)
-    : (DATA.p2_consultas.totais_clinica || []);
-  const cliRows = applyCanc(cliRowsRaw, [
-    ['agendadas', 'agendadas_canc'],
-    ['pagas', 'pagas_canc'],
-    ['receita_paga', 'receita_paga_canc'],
-  ]);
-  const cliAgg = groupAgg(cliRows, ['clinica','cidade'], ['agendadas','pagas','receita_paga']);
+  const cliAgendRaw = filtMes(DATA.p2_consultas.por_clinica_agendadas_mes || [], de, ate);
+  const cliPagasRaw = filtMes(DATA.p2_consultas.por_clinica_pagas_mes || [], de, ate);
+  const cliAgend = groupAgg(
+    applyCanc(cliAgendRaw, [['agendadas','agendadas_canc']]),
+    ['clinica','cidade'], ['agendadas']
+  );
+  const cliPagas = groupAgg(
+    applyCanc(cliPagasRaw, [['pagas','pagas_canc'], ['receita_paga','receita_paga_canc']]),
+    ['clinica','cidade'], ['pagas','receita_paga']
+  );
+  const cliMap = new Map();
+  const cliKey = (r) => `${r.clinica}||${r.cidade}`;
+  for (const r of cliAgend) cliMap.set(cliKey(r), { clinica:r.clinica, cidade:r.cidade, agendadas:r.agendadas||0, pagas:0, receita_paga:0 });
+  for (const r of cliPagas) {
+    const k = cliKey(r);
+    const prev = cliMap.get(k) || { clinica:r.clinica, cidade:r.cidade, agendadas:0, pagas:0, receita_paga:0 };
+    prev.pagas = r.pagas || 0;
+    prev.receita_paga = r.receita_paga || 0;
+    cliMap.set(k, prev);
+  }
+  const cliAgg = Array.from(cliMap.values());
   cliAgg.forEach(r => r.ticket_medio = r.pagas > 0 ? r.receita_paga / r.pagas : 0);
   renderTabelaDrilldown({
     tableId: 'tblClinica',

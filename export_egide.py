@@ -219,24 +219,46 @@ def pergunta2_consultas(cur) -> dict:
         LEFT JOIN schedules s ON s.id = da.scheduleId
     """)[0]
 
-    # Drilldown por ESPECIALIDADE — traz tanto não-canceladas quanto canceladas
-    # (campos *_canc) para alimentar o switch global "Mostrar cancelados" no front.
-    # "agendadas"/"pagas"/"receita_paga" continuam sendo SEM cancelados (padrão).
-    por_especialidade_mes = _q(cur, f"""
+    # Drilldown por ESPECIALIDADE — SÉRIE DE AGENDADAS.
+    # Agrupa pelo mês de AGENDAMENTO (da.date). Só mede volume (agendadas /
+    # agendadas_canc). A série de PAGAS/RECEITA é separada logo abaixo, porque
+    # "o que foi agendado em Mar" e "o que foi pago em Mar" NÃO são o mesmo
+    # conjunto: uma consulta marcada em Fev e paga em Mar conta como 1 em Fev
+    # na coluna "agendadas" e 1 em Mar na coluna "pagas". Os dois mundos são
+    # mergeados no front pela chave "especialidade" dentro do período filtrado.
+    # Isso alinha a tabela com os cards do topo e o gráfico mensal_pagamento,
+    # que também usam data de pagamento para "pagas".
+    por_especialidade_agendadas_mes = _q(cur, f"""
         SELECT DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
                COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
                SUM(CASE WHEN da.canceledAt IS NULL THEN 1 ELSE 0 END) agendadas,
-               SUM(CASE WHEN da.canceledAt IS NULL AND da.paymentDate IS NOT NULL THEN 1 ELSE 0 END) pagas,
-               ROUND(SUM(CASE WHEN da.canceledAt IS NULL AND da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_paga,
-               SUM(CASE WHEN da.canceledAt IS NOT NULL THEN 1 ELSE 0 END) agendadas_canc,
-               SUM(CASE WHEN da.canceledAt IS NOT NULL AND da.paymentDate IS NOT NULL THEN 1 ELSE 0 END) pagas_canc,
-               ROUND(SUM(CASE WHEN da.canceledAt IS NOT NULL AND da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_paga_canc
+               SUM(CASE WHEN da.canceledAt IS NOT NULL THEN 1 ELSE 0 END) agendadas_canc
         FROM doctorappointments da
         LEFT JOIN specialties s ON s.id = da.specialtyId
         WHERE {BRT('da.`date`')} >= %s
         GROUP BY mes, especialidade
         HAVING agendadas > 0 OR agendadas_canc > 0
         ORDER BY mes, agendadas DESC
+    """, (f"{INICIO}-01",))
+
+    # Drilldown por ESPECIALIDADE — SÉRIE DE PAGAS/RECEITA.
+    # Agrupa pelo mês de PAGAMENTO (COALESCE da.paymentDate, o.paymentDate).
+    # Mesma regra do card "Consultas pagas" e do gráfico mensal_pagamento.
+    por_especialidade_pagas_mes = _q(cur, f"""
+        SELECT DATE_FORMAT({BRT('COALESCE(da.paymentDate, o.paymentDate)')},'%%Y-%%m') mes,
+               COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
+               SUM(CASE WHEN da.canceledAt IS NULL THEN 1 ELSE 0 END) pagas,
+               ROUND(SUM(CASE WHEN da.canceledAt IS NULL THEN COALESCE(NULLIF(da.total,0), o.total, 0) ELSE 0 END)/100.0, 2) receita_paga,
+               SUM(CASE WHEN da.canceledAt IS NOT NULL THEN 1 ELSE 0 END) pagas_canc,
+               ROUND(SUM(CASE WHEN da.canceledAt IS NOT NULL THEN COALESCE(NULLIF(da.total,0), o.total, 0) ELSE 0 END)/100.0, 2) receita_paga_canc
+        FROM doctorappointments da
+        LEFT JOIN specialties s ON s.id = da.specialtyId
+        LEFT JOIN orders o ON o.id = da.orderId
+        WHERE COALESCE(da.paymentDate, o.paymentDate) IS NOT NULL
+          AND {BRT('COALESCE(da.paymentDate, o.paymentDate)')} >= %s
+        GROUP BY mes, especialidade
+        HAVING pagas > 0 OR pagas_canc > 0
+        ORDER BY mes, pagas DESC
     """, (f"{INICIO}-01",))
 
     # Total histórico por especialidade (ranking global).
@@ -256,17 +278,13 @@ def pergunta2_consultas(cur) -> dict:
         ORDER BY agendadas DESC
     """)
 
-    # Drilldown por CLÍNICA.
-    por_clinica_mes = _q(cur, f"""
+    # Drilldown por CLÍNICA — SÉRIE DE AGENDADAS (mês de agendamento).
+    por_clinica_agendadas_mes = _q(cur, f"""
         SELECT DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
                COALESCE(c.name, '(sem clínica associada)') clinica,
                COALESCE(c.city, '—') cidade,
                SUM(CASE WHEN da.canceledAt IS NULL THEN 1 ELSE 0 END) agendadas,
-               SUM(CASE WHEN da.canceledAt IS NULL AND da.paymentDate IS NOT NULL THEN 1 ELSE 0 END) pagas,
-               ROUND(SUM(CASE WHEN da.canceledAt IS NULL AND da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_paga,
-               SUM(CASE WHEN da.canceledAt IS NOT NULL THEN 1 ELSE 0 END) agendadas_canc,
-               SUM(CASE WHEN da.canceledAt IS NOT NULL AND da.paymentDate IS NOT NULL THEN 1 ELSE 0 END) pagas_canc,
-               ROUND(SUM(CASE WHEN da.canceledAt IS NOT NULL AND da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_paga_canc
+               SUM(CASE WHEN da.canceledAt IS NOT NULL THEN 1 ELSE 0 END) agendadas_canc
         FROM doctorappointments da
         LEFT JOIN schedules sc ON sc.id = da.scheduleId
         LEFT JOIN clinic_doctor_specialties cds ON cds.id = sc.clinicDoctorSpecialtyId
@@ -277,6 +295,29 @@ def pergunta2_consultas(cur) -> dict:
         GROUP BY mes, clinica, cidade
         HAVING agendadas > 0 OR agendadas_canc > 0
         ORDER BY mes, agendadas DESC
+    """, (f"{INICIO}-01",))
+
+    # Drilldown por CLÍNICA — SÉRIE DE PAGAS/RECEITA (mês de pagamento).
+    por_clinica_pagas_mes = _q(cur, f"""
+        SELECT DATE_FORMAT({BRT('COALESCE(da.paymentDate, o.paymentDate)')},'%%Y-%%m') mes,
+               COALESCE(c.name, '(sem clínica associada)') clinica,
+               COALESCE(c.city, '—') cidade,
+               SUM(CASE WHEN da.canceledAt IS NULL THEN 1 ELSE 0 END) pagas,
+               ROUND(SUM(CASE WHEN da.canceledAt IS NULL THEN COALESCE(NULLIF(da.total,0), o.total, 0) ELSE 0 END)/100.0, 2) receita_paga,
+               SUM(CASE WHEN da.canceledAt IS NOT NULL THEN 1 ELSE 0 END) pagas_canc,
+               ROUND(SUM(CASE WHEN da.canceledAt IS NOT NULL THEN COALESCE(NULLIF(da.total,0), o.total, 0) ELSE 0 END)/100.0, 2) receita_paga_canc
+        FROM doctorappointments da
+        LEFT JOIN schedules sc ON sc.id = da.scheduleId
+        LEFT JOIN clinic_doctor_specialties cds ON cds.id = sc.clinicDoctorSpecialtyId
+        LEFT JOIN clinic_doctors cd ON cd.id = cds.clinicDoctorId
+        LEFT JOIN clinic_exams ce ON ce.id = sc.clinicExamId
+        LEFT JOIN clinics c ON c.id = COALESCE(cd.clinicId, ce.clinicId)
+        LEFT JOIN orders o ON o.id = da.orderId
+        WHERE COALESCE(da.paymentDate, o.paymentDate) IS NOT NULL
+          AND {BRT('COALESCE(da.paymentDate, o.paymentDate)')} >= %s
+        GROUP BY mes, clinica, cidade
+        HAVING pagas > 0 OR pagas_canc > 0
+        ORDER BY mes, pagas DESC
     """, (f"{INICIO}-01",))
 
     totais_clinica = _q(cur, """
@@ -305,9 +346,11 @@ def pergunta2_consultas(cur) -> dict:
         "mensal": mensal,
         "mensal_pagamento": mensal_pagamento,
         "totais_historico": {k: int(v or 0) for k, v in totais.items()},
-        "por_especialidade_mes": por_especialidade_mes,
+        "por_especialidade_agendadas_mes": por_especialidade_agendadas_mes,
+        "por_especialidade_pagas_mes": por_especialidade_pagas_mes,
         "totais_especialidade": totais_especialidade,
-        "por_clinica_mes": por_clinica_mes,
+        "por_clinica_agendadas_mes": por_clinica_agendadas_mes,
+        "por_clinica_pagas_mes": por_clinica_pagas_mes,
         "totais_clinica": totais_clinica,
     }
 
