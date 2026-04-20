@@ -1507,17 +1507,51 @@ function render() {
                  tooltip: { callbacks: { label: ctx => `${ctx.label}: ${cur(ctx.raw)}` } } } }
   });
 
-  const labels3 = p3m.map(r => r.mes);
+  /* "Receita mensal Particular × Convênio" — uma barra empilhada por mês com
+     uma série para Particular e UMA PARA CADA CONVÊNIO (Camim, Liberty,
+     Alamo, R21, Unimed, etc.) em vez de todos os convênios agrupados. */
+  const labels3 = Array.from(new Set(p3m.map(r => r.mes))).sort();
+  const p3ConvRowsRaw = filtConv(
+    filtMes(DATA.p5_receita_convenio.mensal_por_convenio || [], de, ate),
+    convsArr
+  );
+  const p3ConvRows = applyCanc(p3ConvRowsRaw, [
+    ['consultas', 'consultas_canc'],
+    ['receita',   'receita_canc'],
+  ]);
+  const p3ConvTot = new Map();
+  for (const r of p3ConvRows) {
+    const prev = p3ConvTot.get(r.convenio) || 0;
+    p3ConvTot.set(r.convenio, prev + Number(r.receita || 0));
+  }
+  const p3ConvOrdered = Array.from(p3ConvTot.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([c]) => c);
+  const p3ConvMap = {};
+  p3ConvOrdered.forEach(c => {
+    p3ConvMap[c] = Object.fromEntries(
+      p3ConvRows.filter(r => r.convenio === c).map(r => [r.mes, Number(r.receita || 0)])
+    );
+  });
+
+  const datasetsP3 = [
+    { label:'Particular',
+      data: labels3.map(m => {
+        const r = p3m.find(x => x.mes === m);
+        return r ? Number(r.receita_particular || 0) : 0;
+      }),
+      backgroundColor: PAL[1] },
+    ...p3ConvOrdered.map((c, i) => ({
+      label: c,
+      data: labels3.map(m => p3ConvMap[c][m] || 0),
+      backgroundColor: PAL[(i + 2) % PAL.length],
+    })),
+  ];
+
   destroy('p3_tr');
   charts.p3_tr = new Chart(document.getElementById('chP3_trend'), {
     type:'bar',
-    data: {
-      labels: labels3,
-      datasets: [
-        { label:'Receita Particular', data: p3m.map(r=>Number(r.receita_particular||0)), backgroundColor: PAL[1] },
-        { label:'Receita Convênio',   data: p3m.map(r=>Number(r.receita_convenio||0)),   backgroundColor: PAL[5] },
-      ]
-    },
+    data: { labels: labels3, datasets: datasetsP3 },
     options: { responsive:true, maintainAspectRatio:false,
       plugins: { legend:{position:'bottom'},
                  tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${cur(ctx.raw)}` } } },
