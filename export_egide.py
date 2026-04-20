@@ -228,14 +228,30 @@ def pergunta2_consultas(cur) -> dict:
     # mergeados no front pela chave "especialidade" dentro do período filtrado.
     # Isso alinha a tabela com os cards do topo e o gráfico mensal_pagamento,
     # que também usam data de pagamento para "pagas".
+    # IMPORTANTE: a tabela Top Especialidades mostra APENAS CONSULTAS. Exames
+    # (clinicExamId / examgroupscheduleId / da.examId) têm card próprio e vão
+    # para a tabela de Top Exames. O bucket "(Exame — sem especialidade)" que
+    # aparecia aqui misturava critérios e confundia a leitura.
+    IS_CONSULTA = (
+        "(sc.clinicDoctorSpecialtyId IS NOT NULL"
+        " OR (sc.id IS NULL AND da.specialtyId IS NOT NULL))"
+    )
+    IS_EXAME = (
+        "(sc.clinicExamId IS NOT NULL"
+        " OR sc.examgroupscheduleId IS NOT NULL"
+        " OR (sc.id IS NULL AND da.examId IS NOT NULL))"
+    )
+
     por_especialidade_agendadas_mes = _q(cur, f"""
         SELECT DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
-               COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
+               COALESCE(s.name, '(sem especialidade)') especialidade,
                SUM(CASE WHEN da.canceledAt IS NULL THEN 1 ELSE 0 END) agendadas,
                SUM(CASE WHEN da.canceledAt IS NOT NULL THEN 1 ELSE 0 END) agendadas_canc
         FROM doctorappointments da
+        LEFT JOIN schedules sc ON sc.id = da.scheduleId
         LEFT JOIN specialties s ON s.id = da.specialtyId
         WHERE {BRT('da.`date`')} >= %s
+          AND {IS_CONSULTA}
         GROUP BY mes, especialidade
         HAVING agendadas > 0 OR agendadas_canc > 0
         ORDER BY mes, agendadas DESC
@@ -246,33 +262,38 @@ def pergunta2_consultas(cur) -> dict:
     # Mesma regra do card "Consultas pagas" e do gráfico mensal_pagamento.
     por_especialidade_pagas_mes = _q(cur, f"""
         SELECT DATE_FORMAT({BRT('COALESCE(da.paymentDate, o.paymentDate)')},'%%Y-%%m') mes,
-               COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
+               COALESCE(s.name, '(sem especialidade)') especialidade,
                SUM(CASE WHEN da.canceledAt IS NULL THEN 1 ELSE 0 END) pagas,
                ROUND(SUM(CASE WHEN da.canceledAt IS NULL THEN COALESCE(NULLIF(da.total,0), o.total, 0) ELSE 0 END)/100.0, 2) receita_paga,
                SUM(CASE WHEN da.canceledAt IS NOT NULL THEN 1 ELSE 0 END) pagas_canc,
                ROUND(SUM(CASE WHEN da.canceledAt IS NOT NULL THEN COALESCE(NULLIF(da.total,0), o.total, 0) ELSE 0 END)/100.0, 2) receita_paga_canc
         FROM doctorappointments da
+        LEFT JOIN schedules sc ON sc.id = da.scheduleId
         LEFT JOIN specialties s ON s.id = da.specialtyId
         LEFT JOIN orders o ON o.id = da.orderId
         WHERE COALESCE(da.paymentDate, o.paymentDate) IS NOT NULL
           AND {BRT('COALESCE(da.paymentDate, o.paymentDate)')} >= %s
+          AND {IS_CONSULTA}
         GROUP BY mes, especialidade
         HAVING pagas > 0 OR pagas_canc > 0
         ORDER BY mes, pagas DESC
     """, (f"{INICIO}-01",))
 
-    # Total histórico por especialidade (ranking global).
-    totais_especialidade = _q(cur, """
-        SELECT COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
+    # Total histórico por especialidade (ranking global — só consultas).
+    totais_especialidade = _q(cur, f"""
+        SELECT COALESCE(s.name, '(sem especialidade)') especialidade,
                SUM(CASE WHEN da.canceledAt IS NULL THEN 1 ELSE 0 END) agendadas,
-               SUM(CASE WHEN da.canceledAt IS NULL AND da.paymentDate IS NOT NULL THEN 1 ELSE 0 END) pagas,
-               ROUND(SUM(CASE WHEN da.canceledAt IS NULL AND da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_paga,
-               ROUND(AVG(CASE WHEN da.canceledAt IS NULL AND da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) END)/100.0, 2) ticket_medio,
+               SUM(CASE WHEN da.canceledAt IS NULL AND COALESCE(da.paymentDate, o.paymentDate) IS NOT NULL THEN 1 ELSE 0 END) pagas,
+               ROUND(SUM(CASE WHEN da.canceledAt IS NULL AND COALESCE(da.paymentDate, o.paymentDate) IS NOT NULL THEN COALESCE(NULLIF(da.total,0), o.total, 0) ELSE 0 END)/100.0, 2) receita_paga,
+               ROUND(AVG(CASE WHEN da.canceledAt IS NULL AND COALESCE(da.paymentDate, o.paymentDate) IS NOT NULL THEN COALESCE(NULLIF(da.total,0), o.total, 0) END)/100.0, 2) ticket_medio,
                SUM(CASE WHEN da.canceledAt IS NOT NULL THEN 1 ELSE 0 END) agendadas_canc,
-               SUM(CASE WHEN da.canceledAt IS NOT NULL AND da.paymentDate IS NOT NULL THEN 1 ELSE 0 END) pagas_canc,
-               ROUND(SUM(CASE WHEN da.canceledAt IS NOT NULL AND da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_paga_canc
+               SUM(CASE WHEN da.canceledAt IS NOT NULL AND COALESCE(da.paymentDate, o.paymentDate) IS NOT NULL THEN 1 ELSE 0 END) pagas_canc,
+               ROUND(SUM(CASE WHEN da.canceledAt IS NOT NULL AND COALESCE(da.paymentDate, o.paymentDate) IS NOT NULL THEN COALESCE(NULLIF(da.total,0), o.total, 0) ELSE 0 END)/100.0, 2) receita_paga_canc
         FROM doctorappointments da
+        LEFT JOIN schedules sc ON sc.id = da.scheduleId
         LEFT JOIN specialties s ON s.id = da.specialtyId
+        LEFT JOIN orders o ON o.id = da.orderId
+        WHERE {IS_CONSULTA}
         GROUP BY especialidade
         HAVING agendadas > 0 OR agendadas_canc > 0
         ORDER BY agendadas DESC

@@ -1379,6 +1379,12 @@ def _egide_rows_where(metric: str, de: str, ate: str, include_canc: bool,
 
     fb = (filter_by or "paid").strip().lower()
     # Filtro em horário de Brasília (BRT = UTC-3); DB armazena em UTC.
+    # IMPORTANTE: usamos COALESCE(da.paymentDate, o.paymentDate) — não OR entre
+    # os dois — para garantir que cada registro entre em exatamente UM mês de
+    # pagamento. Com o OR anterior, se da.paymentDate caía num mês e
+    # o.paymentDate em outro, o mesmo registro aparecia em ambos os meses, e o
+    # total do card (ex.: "1.863 consultas pagas") ficava maior que o gráfico
+    # mensal_pagamento do ETL (1.803), que já usa COALESCE.
     if fb == "scheduled":
         clauses = [
             "(da.`date` IS NOT NULL"
@@ -1388,14 +1394,11 @@ def _egide_rows_where(metric: str, de: str, ate: str, include_canc: bool,
         params  = [de, ate_exc]
     else:
         clauses = [
-            "((da.paymentDate IS NOT NULL"
-            "  AND CONVERT_TZ(da.paymentDate, '+00:00', '-03:00') >= %s"
-            "  AND CONVERT_TZ(da.paymentDate, '+00:00', '-03:00') < %s)"
-            " OR (o.paymentDate IS NOT NULL"
-            "  AND CONVERT_TZ(o.paymentDate, '+00:00', '-03:00') >= %s"
-            "  AND CONVERT_TZ(o.paymentDate, '+00:00', '-03:00') < %s))"
+            "(COALESCE(da.paymentDate, o.paymentDate) IS NOT NULL"
+            " AND CONVERT_TZ(COALESCE(da.paymentDate, o.paymentDate), '+00:00', '-03:00') >= %s"
+            " AND CONVERT_TZ(COALESCE(da.paymentDate, o.paymentDate), '+00:00', '-03:00') < %s)"
         ]
-        params  = [de, ate_exc, de, ate_exc]
+        params  = [de, ate_exc]
 
     if not include_canc:
         clauses.append("da.canceledAt IS NULL")
