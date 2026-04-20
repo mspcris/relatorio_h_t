@@ -716,6 +716,59 @@
   </div>
 </div>
 
+<!-- ── MODAL TEMPO POR PÁGINA ─────────────────────────────────────────────── -->
+<div class="modal fade" id="modal-usage" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="usage-titulo">
+          <i class="far fa-clock mr-1"></i> Tempo por página
+        </h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex align-items-center mb-2" style="gap:12px;">
+          <label class="mb-0 small text-muted"><b>Janela:</b></label>
+          <select id="usage-dias" class="form-control form-control-sm" style="width:auto;">
+            <option value="7">Últimos 7 dias</option>
+            <option value="30" selected>Últimos 30 dias</option>
+            <option value="90">Últimos 90 dias</option>
+            <option value="365">Último ano</option>
+          </select>
+          <div id="usage-resumo" class="small text-muted ml-auto">—</div>
+        </div>
+        <div class="alert alert-info py-2 px-3 small mb-2">
+          <i class="fas fa-info-circle mr-1"></i>
+          Cada minuto de aba aberta (visível) conta como 1 minuto. Janela com a aba oculta não conta.
+          Pings começaram a ser registrados a partir de <b>20/04/2026</b>.
+        </div>
+        <div style="max-height:60vh; overflow:auto;">
+          <table class="table table-striped table-sm mb-0">
+            <thead class="thead-light" style="position:sticky; top:0;">
+              <tr>
+                <th>Página</th>
+                <th class="text-right" style="width:110px">Minutos</th>
+                <th class="text-right" style="width:110px">Horas</th>
+                <th style="width:160px">Primeiro ping</th>
+                <th style="width:160px">Último ping</th>
+              </tr>
+            </thead>
+            <tbody id="usage-tbody">
+              <tr><td colspan="5" class="text-center text-muted py-3">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" id="usage-export-csv">
+          <i class="fas fa-file-csv mr-1"></i> CSV
+        </button>
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── MODAL HISTÓRICO DE LOGINS ──────────────────────────────────────────── -->
 <div class="modal fade" id="modal-logins" tabindex="-1">
   <div class="modal-dialog modal-lg">
@@ -919,6 +972,9 @@ function renderTabela() {
         <button class="btn btn-xs btn-outline-secondary mr-1" title="Histórico de logins" onclick="verLogins(${u.id}, '${u.email}')">
           <i class="fas fa-history"></i>
         </button>
+        <button class="btn btn-xs btn-outline-success mr-1" title="Tempo por página" onclick="verUsage(${u.id}, '${u.email}')">
+          <i class="far fa-clock"></i>
+        </button>
         <button class="btn btn-xs btn-outline-info mr-1" title="Enviar link de reset" onclick="enviarReset(${u.id}, '${u.email}')">
           <i class="fas fa-key"></i>
         </button>
@@ -1108,6 +1164,90 @@ async function verLogins(id, email) {
       <td><code>${l.ip}</code></td>
     </tr>`).join('');
 }
+
+// ── Tempo por página ──────────────────────────────────────────────────────────
+const _USAGE_STATE = { uid: null, email: '', data: null };
+
+function fmtMinAsHora(m) {
+  m = Number(m || 0);
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (h === 0) return `${m} min`;
+  return r === 0 ? `${h}h` : `${h}h ${r}min`;
+}
+function fmtUtcLocal(ts) {
+  // ts = "YYYY-MM-DD HH:MM:00" (UTC)
+  if (!ts) return '—';
+  const d = new Date(ts.replace(' ', 'T') + 'Z');
+  if (isNaN(d)) return ts;
+  return d.toLocaleString('pt-BR', { dateStyle:'short', timeStyle:'short' });
+}
+
+async function verUsage(id, email) {
+  _USAGE_STATE.uid = id; _USAGE_STATE.email = email; _USAGE_STATE.data = null;
+  document.getElementById('usage-titulo').innerHTML =
+    `<i class="far fa-clock mr-1"></i> Tempo por página — ${email}`;
+  document.getElementById('usage-tbody').innerHTML =
+    '<tr><td colspan="5" class="text-center text-muted py-3">Carregando…</td></tr>';
+  document.getElementById('usage-resumo').textContent = '—';
+  $('#modal-usage').modal('show');
+  await carregarUsage();
+}
+
+async function carregarUsage() {
+  const dias = Number(document.getElementById('usage-dias').value || 30);
+  const { ok, data } = await api(`/admin/api/usuarios/${_USAGE_STATE.uid}/usage?days=${dias}`);
+  const tbody = document.getElementById('usage-tbody');
+  const resumo = document.getElementById('usage-resumo');
+  if (!ok) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-danger text-center py-3">${data.erro || 'Erro ao carregar.'}</td></tr>`;
+    resumo.textContent = '—';
+    _USAGE_STATE.data = null;
+    return;
+  }
+  _USAGE_STATE.data = data;
+  const paginas = data.paginas || [];
+  resumo.innerHTML = paginas.length
+    ? `<b>${paginas.length}</b> páginas · <b>${fmtMinAsHora(data.total_minutos)}</b> totais (${data.dias}d)`
+    : `Sem dados registrados nos últimos ${data.dias} dias.`;
+  if (!paginas.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sem atividade rastreada neste período.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = paginas.map(p => `
+    <tr>
+      <td><code>${p.page}</code></td>
+      <td class="text-right">${Number(p.minutos).toLocaleString('pt-BR')}</td>
+      <td class="text-right"><b>${fmtMinAsHora(p.minutos)}</b></td>
+      <td class="small text-muted">${fmtUtcLocal(p.primeiro)}</td>
+      <td class="small text-muted">${fmtUtcLocal(p.ultimo)}</td>
+    </tr>`).join('');
+}
+
+document.getElementById('usage-dias').addEventListener('change', () => {
+  if (_USAGE_STATE.uid) carregarUsage();
+});
+
+document.getElementById('usage-export-csv').addEventListener('click', () => {
+  const d = _USAGE_STATE.data;
+  if (!d || !d.paginas || !d.paginas.length) { toast('Nada para exportar.', true); return; }
+  const headers = ['pagina','minutos','horas','primeiro','ultimo'];
+  const lines = [headers.join(';')];
+  d.paginas.forEach(p => {
+    const h = Math.round((p.minutos / 60) * 100) / 100;
+    lines.push([p.page, p.minutos, String(h).replace('.', ','),
+                p.primeiro || '', p.ultimo || ''].map(v => {
+      const s = String(v).replace(/"/g,'""');
+      return /[;"\n]/.test(s) ? `"${s}"` : s;
+    }).join(';'));
+  });
+  const blob = new Blob(["\ufeff" + lines.join('\n')], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `tempo_paginas_${_USAGE_STATE.email.replace(/[^\w.-]/g,'_')}_${d.dias}d.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
 
 // ── Gerar senha forte ─────────────────────────────────────────────────────────
 document.getElementById('btn-gerar-senha').addEventListener('click', function () {
