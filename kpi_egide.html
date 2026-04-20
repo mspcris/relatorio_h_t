@@ -136,6 +136,12 @@
       text-align: center;
     }
     .chart-box canvas { max-height: 360px; }
+    .p2-vol-toggle {
+      border: 0; background: transparent; padding: 4px 10px;
+      font-size: .78rem; font-weight: 600; color: #64748b;
+      border-radius: 4px; cursor: pointer;
+    }
+    .p2-vol-toggle.on { background: #fff; color: #0f172a; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
     .chart-row {
       display: grid;
       grid-template-columns: 1fr;
@@ -651,7 +657,13 @@
 
         <div class="chart-row two">
           <div class="chart-box">
-            <div class="chart-title">Consultas × Exames (agendados) por mês</div>
+            <div class="chart-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <span id="chP2_volTitle">Consultas × Exames (pagos) por mês</span>
+              <span style="display:inline-flex;gap:4px;background:#f1f5f9;border-radius:6px;padding:2px;">
+                <button type="button" class="p2-vol-toggle" data-view="pagos" title="Pagos no mês">Pagos</button>
+                <button type="button" class="p2-vol-toggle" data-view="agendados" title="Agendados no mês">Agendados</button>
+              </span>
+            </div>
             <canvas id="chP2_vol"></canvas>
           </div>
           <div class="chart-box">
@@ -990,6 +1002,70 @@ let DATA = null;
 let charts = {};
 const destroy = (k) => { if (charts[k]) { charts[k].destroy(); delete charts[k]; } };
 
+// Estado do toggle do gráfico "Consultas × Exames" (Pagos por default para bater com o card)
+let P2_VOL_VIEW = 'pagos'; // 'pagos' | 'agendados'
+let _p2VolCtx = null;      // cache do último dataset pra re-render no toggle
+
+function renderP2Vol(ctx) {
+  if (ctx) _p2VolCtx = ctx;
+  if (!_p2VolCtx) return;
+  const { p2, p2pag } = _p2VolCtx;
+  const isPagos = (P2_VOL_VIEW === 'pagos');
+  const source  = isPagos ? p2pag : p2;
+  const labels  = source.map(r => r.mes);
+  const keyCons = isPagos ? 'consultas_pagas' : 'consultas';
+  const keyExam = isPagos ? 'exames_pagos'    : 'exames';
+  const titleEl = document.getElementById('chP2_volTitle');
+  if (titleEl) titleEl.textContent = isPagos
+    ? 'Consultas × Exames (pagos) por mês'
+    : 'Consultas × Exames (agendados) por mês';
+  document.querySelectorAll('.p2-vol-toggle').forEach(b => {
+    b.classList.toggle('on', b.dataset.view === (isPagos ? 'pagos' : 'agendados'));
+  });
+  destroy('p2_vol');
+  charts.p2_vol = new Chart(document.getElementById('chP2_vol'), {
+    type:'bar',
+    data: {
+      labels,
+      datasets: [
+        { label:'Consulta', data: source.map(r => Number(r[keyCons]||0)), backgroundColor: PAL[0] },
+        { label:'Exame',    data: source.map(r => Number(r[keyExam]||0)), backgroundColor: PAL[2] },
+      ]
+    },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend: { position:'bottom' },
+        tooltip: { callbacks: { footer: () => 'clique para ver registros' } }
+      },
+      onHover: (e, els) => { e.native && (e.native.target.style.cursor = els.length ? 'pointer' : 'default'); },
+      onClick: (evt, els) => {
+        if (!els || !els.length) return;
+        const el = els[0];
+        const mes = labels[el.index];
+        const isExame = el.datasetIndex === 1;
+        if (isPagos) {
+          const metric = isExame ? 'exames_pagos' : 'consultas_puras';
+          const titulo = `${isExame ? 'Exames' : 'Consultas'} pagos — ${fmtMesBR(mes)}`;
+          openDrill(metric, titulo, { mes, filterBy: 'paid' });
+        } else {
+          const metric = isExame ? 'exames' : 'consultas_puras';
+          const titulo = `${isExame ? 'Exames' : 'Consultas'} agendados — ${fmtMesBR(mes)}`;
+          openDrill(metric, titulo, { mes, filterBy: 'scheduled' });
+        }
+      },
+      scales: { x: { stacked:true }, y: { stacked:true, beginAtZero:true } } }
+  });
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.p2-vol-toggle');
+  if (!btn) return;
+  const v = btn.dataset.view === 'agendados' ? 'agendados' : 'pagos';
+  if (v === P2_VOL_VIEW) return;
+  P2_VOL_VIEW = v;
+  renderP2Vol();
+});
+
 function showError(msg) {
   document.getElementById('loadingMsg').style.display = 'none';
   const e = document.getElementById('errBox');
@@ -1200,34 +1276,8 @@ function render() {
 
   /* P2 --------------------------------------------------------------- */
   const p2 = filtMes(DATA.p2_consultas.mensal, de, ate);
-  const labels2 = p2.map(r => r.mes);
-  destroy('p2_vol');
-  charts.p2_vol = new Chart(document.getElementById('chP2_vol'), {
-    type:'bar',
-    data: {
-      labels: labels2,
-      datasets: [
-        { label:'Consulta', data: p2.map(r=>Number(r.consultas||0)), backgroundColor: PAL[0] },
-        { label:'Exame',    data: p2.map(r=>Number(r.exames||0)),    backgroundColor: PAL[2] },
-      ]
-    },
-    options: { responsive:true, maintainAspectRatio:false,
-      plugins: {
-        legend: { position:'bottom' },
-        tooltip: { callbacks: { footer: () => 'clique para ver registros' } }
-      },
-      onHover: (e, els) => { e.native && (e.native.target.style.cursor = els.length ? 'pointer' : 'default'); },
-      onClick: (evt, els) => {
-        if (!els || !els.length) return;
-        const el = els[0];
-        const mes = labels2[el.index];               // "YYYY-MM"
-        const isExame = el.datasetIndex === 1;
-        const metric = isExame ? 'exames' : 'consultas_puras';
-        const titulo = `${isExame ? 'Exames' : 'Consultas'} agendados — ${fmtMesBR(mes)}`;
-        openDrill(metric, titulo, { mes, filterBy: 'scheduled' });
-      },
-      scales: { x: { stacked:true }, y: { stacked:true, beginAtZero:true } } }
-  });
+  const p2pag = filtMes(DATA.p2_consultas.mensal_pagamento || [], de, ate);
+  renderP2Vol({ p2, p2pag, de, ate });
   destroy('p2_sta');
   charts.p2_sta = new Chart(document.getElementById('chP2_status'), {
     type:'line',

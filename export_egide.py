@@ -180,6 +180,29 @@ def pergunta2_consultas(cur) -> dict:
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01",))
 
+    # Série por DATA DE PAGAMENTO (casa com os cards "Consultas/Exames pagos" e "Arrecadação"):
+    # agrupa por mês BRT do paymentDate (da.paymentDate OU o.paymentDate), sem cancelados.
+    mensal_pagamento = _q(cur, f"""
+        SELECT DATE_FORMAT({BRT('COALESCE(da.paymentDate, o.paymentDate)')},'%%Y-%%m') mes,
+               COUNT(*) pagamentos,
+               SUM(CASE WHEN s.clinicDoctorSpecialtyId IS NOT NULL
+                             OR (s.id IS NULL AND da.specialtyId IS NOT NULL)
+                        THEN 1 ELSE 0 END) consultas_pagas,
+               SUM(CASE WHEN s.clinicExamId IS NOT NULL
+                             OR s.examgroupscheduleId IS NOT NULL
+                             OR (s.id IS NULL AND da.examId IS NOT NULL)
+                        THEN 1 ELSE 0 END) exames_pagos,
+               ROUND(SUM(COALESCE(NULLIF(da.total,0), o.total, 0))/100.0, 2) receita_paga
+        FROM doctorappointments da
+        LEFT JOIN schedules s ON s.id = da.scheduleId
+        LEFT JOIN orders    o ON o.id = da.orderId
+        WHERE da.canceledAt IS NULL
+          AND (o.id IS NULL OR o.cancelDate IS NULL)
+          AND COALESCE(da.paymentDate, o.paymentDate) IS NOT NULL
+          AND {BRT('COALESCE(da.paymentDate, o.paymentDate)')} >= %s
+        GROUP BY mes ORDER BY mes
+    """, (f"{INICIO}-01",))
+
     totais = _q(cur, """
         SELECT
             COUNT(*) total,
@@ -264,6 +287,7 @@ def pergunta2_consultas(cur) -> dict:
 
     return {
         "mensal": mensal,
+        "mensal_pagamento": mensal_pagamento,
         "totais_historico": {k: int(v or 0) for k, v in totais.items()},
         "por_especialidade_mes": por_especialidade_mes,
         "totais_especialidade": totais_especialidade,
