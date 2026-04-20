@@ -249,7 +249,8 @@ def pergunta2_consultas(cur) -> dict:
                SUM(CASE WHEN da.canceledAt IS NOT NULL THEN 1 ELSE 0 END) agendadas_canc
         FROM doctorappointments da
         LEFT JOIN schedules sc ON sc.id = da.scheduleId
-        LEFT JOIN specialties s ON s.id = da.specialtyId
+        LEFT JOIN clinic_doctor_specialties cds ON cds.id = sc.clinicDoctorSpecialtyId
+        LEFT JOIN specialties s ON s.id = COALESCE(da.specialtyId, cds.specialtyId)
         WHERE {BRT('da.`date`')} >= %s
           AND {IS_CONSULTA}
         GROUP BY mes, especialidade
@@ -269,7 +270,8 @@ def pergunta2_consultas(cur) -> dict:
                ROUND(SUM(CASE WHEN da.canceledAt IS NOT NULL THEN COALESCE(NULLIF(da.total,0), o.total, 0) ELSE 0 END)/100.0, 2) receita_paga_canc
         FROM doctorappointments da
         LEFT JOIN schedules sc ON sc.id = da.scheduleId
-        LEFT JOIN specialties s ON s.id = da.specialtyId
+        LEFT JOIN clinic_doctor_specialties cds ON cds.id = sc.clinicDoctorSpecialtyId
+        LEFT JOIN specialties s ON s.id = COALESCE(da.specialtyId, cds.specialtyId)
         LEFT JOIN orders o ON o.id = da.orderId
         WHERE COALESCE(da.paymentDate, o.paymentDate) IS NOT NULL
           AND {BRT('COALESCE(da.paymentDate, o.paymentDate)')} >= %s
@@ -291,7 +293,8 @@ def pergunta2_consultas(cur) -> dict:
                ROUND(SUM(CASE WHEN da.canceledAt IS NOT NULL AND COALESCE(da.paymentDate, o.paymentDate) IS NOT NULL THEN COALESCE(NULLIF(da.total,0), o.total, 0) ELSE 0 END)/100.0, 2) receita_paga_canc
         FROM doctorappointments da
         LEFT JOIN schedules sc ON sc.id = da.scheduleId
-        LEFT JOIN specialties s ON s.id = da.specialtyId
+        LEFT JOIN clinic_doctor_specialties cds ON cds.id = sc.clinicDoctorSpecialtyId
+        LEFT JOIN specialties s ON s.id = COALESCE(da.specialtyId, cds.specialtyId)
         LEFT JOIN orders o ON o.id = da.orderId
         WHERE {IS_CONSULTA}
         GROUP BY especialidade
@@ -671,7 +674,8 @@ def pergunta5_receita_convenio(cur) -> dict:
         LEFT JOIN orders o5 ON o5.id = da.orderId
         {conv_join}
         LEFT JOIN schedules sc5 ON sc5.id = da.scheduleId
-        LEFT JOIN specialties s ON s.id = da.specialtyId
+        LEFT JOIN clinic_doctor_specialties cds5 ON cds5.id = sc5.clinicDoctorSpecialtyId
+        LEFT JOIN specialties s ON s.id = COALESCE(da.specialtyId, cds5.specialtyId)
         WHERE COALESCE(da.paymentDate, o5.paymentDate) IS NOT NULL
           AND {IS_CONSULTA_P5}
         GROUP BY convenio, especialidade
@@ -713,7 +717,8 @@ def pergunta5_receita_convenio(cur) -> dict:
         LEFT JOIN orders o5 ON o5.id = da.orderId
         {conv_join}
         LEFT JOIN schedules sc5 ON sc5.id = da.scheduleId
-        LEFT JOIN specialties s ON s.id = da.specialtyId
+        LEFT JOIN clinic_doctor_specialties cds5 ON cds5.id = sc5.clinicDoctorSpecialtyId
+        LEFT JOIN specialties s ON s.id = COALESCE(da.specialtyId, cds5.specialtyId)
         WHERE COALESCE(da.paymentDate, o5.paymentDate) IS NOT NULL
           AND {BRT('COALESCE(da.paymentDate, o5.paymentDate)')} >= %s
           AND {IS_CONSULTA_P5}

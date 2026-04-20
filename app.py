@@ -1410,12 +1410,17 @@ def _egide_rows_where(metric: str, de: str, ate: str, include_canc: bool,
             "(s.clinicExamId IS NOT NULL OR s.examgroupscheduleId IS NOT NULL"
             " OR (s.id IS NULL AND da.examId IS NOT NULL))"
         )
-    elif m in ("consultas", "consultas_puras"):
+    elif m in ("consultas", "consultas_puras", "consultas_pagas"):
+        # Mesma regra de "consulta" usada pelo ETL mensal_pagamento (chart
+        # Consultas × Exames). Antes, 'consultas_pagas' caía no else e contava
+        # tudo que foi pago (inclusive registros sem specialty e sem exam, ~21
+        # por mês), inflando o card vs o gráfico.
         clauses.append(
             "(s.clinicDoctorSpecialtyId IS NOT NULL"
             " OR (s.id IS NULL AND da.specialtyId IS NOT NULL))"
         )
-    # "consultas_pagas" (default) e "arrecadado" não adicionam filtro
+    # "arrecadado" continua sem filtro: card total de pagamentos do período
+    # inclui consulta + exame + avulsos sem classificação.
 
     return clauses, params
 
