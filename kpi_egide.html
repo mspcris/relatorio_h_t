@@ -359,6 +359,11 @@
       padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 6px;
       font-size: .85rem; min-width: 160px;
     }
+    .drill-head .controls .drill-select {
+      padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 6px;
+      font-size: .82rem; background: #fff; color: var(--ink);
+      max-width: 180px;
+    }
     .drill-body {
       padding: 12px 18px; overflow: auto; flex: 1;
     }
@@ -910,7 +915,31 @@
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
           <input type="checkbox" id="drillIncCanc"> incluir cancelados
         </label>
-        <input type="search" id="drillSearch" placeholder="🔍 filtrar cliente, clínica, profissional…">
+        <select id="drillFltVinculo" class="drill-select" title="Vínculo">
+          <option value="">todos os vínculos</option>
+          <option value="particular">Particular</option>
+          <option value="convenio">Convênio</option>
+        </select>
+        <select id="drillFltTipo" class="drill-select" title="Tipo">
+          <option value="">todos os tipos</option>
+          <option value="consulta">Consulta</option>
+          <option value="exame">Exame</option>
+          <option value="outro">Outro</option>
+        </select>
+        <select id="drillFltConv" class="drill-select" title="Convênio">
+          <option value="">todos os convênios</option>
+        </select>
+        <select id="drillSort" class="drill-select" title="Ordenar">
+          <option value="data_pag_desc">Pago ↓ (mais recente)</option>
+          <option value="data_pag_asc">Pago ↑ (mais antigo)</option>
+          <option value="data_age_desc">Agendado ↓</option>
+          <option value="data_age_asc">Agendado ↑</option>
+          <option value="cliente_asc">Cliente A–Z</option>
+          <option value="cliente_desc">Cliente Z–A</option>
+          <option value="valor_desc">Valor ↓</option>
+          <option value="valor_asc">Valor ↑</option>
+        </select>
+        <input type="search" id="drillSearch" placeholder="🔍 cliente, clínica, pedido…">
         <button class="f-btn" id="drillExport" title="Exportar CSV"><i class="fas fa-file-csv"></i> CSV</button>
       </div>
     </div>
@@ -1020,9 +1049,15 @@ function popularDropdownsPeriodo(meses) {
     });
   });
 
-  // Default: últimos 24 meses (ou tudo se tiver menos)
-  const ult = meses[meses.length - 1];
-  const ini = meses[Math.max(0, meses.length - 24)];
+  // Default: últimos 3 meses COMPLETOS (exclui mês corrente)
+  // Ex: hoje = 2026-04-20 -> de=2026-01, ate=2026-03
+  const hoje = new Date();
+  const ymCorrente = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+  const completos = meses.filter(m => m < ymCorrente);
+  const ult = completos.length ? completos[completos.length - 1] : meses[meses.length - 1];
+  const ini = completos.length >= 3
+    ? completos[completos.length - 3]
+    : (completos[0] || meses[0]);
   if (ini) { selDeA.value = ini.slice(0,4); selDeM.value = ini.slice(5,7); }
   if (ult) { selAteA.value = ult.slice(0,4); selAteM.value = ult.slice(5,7); }
 }
@@ -1555,7 +1590,18 @@ const DRILL = {
   filterBy: 'paid',   // 'paid' | 'scheduled'
   deOv: null,         // override YYYY-MM-DD (para clique em barra de um mês)
   ateOv: null,
+  fltVinculo: '',     // '' | 'particular' | 'convenio'
+  fltTipo: '',        // '' | 'consulta' | 'exame' | 'outro'
+  fltConv: '',        // nome do convênio (ex: 'UNIMED') ou 'PARTICULAR' ou ''
+  sort: 'data_pag_desc',
 };
+
+function _parseDtBr(s) {
+  if (!s) return null;
+  const m = String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+  if (!m) return null;
+  return new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0)).getTime();
+}
 
 function openDrillModal() { document.getElementById('drillModal').classList.add('on'); }
 function closeDrillModal() { document.getElementById('drillModal').classList.remove('on'); }
@@ -1586,8 +1632,16 @@ async function openDrill(metric, title, opts) {
   } else {
     DRILL.deOv = null; DRILL.ateOv = null;
   }
+  DRILL.fltVinculo = '';
+  DRILL.fltTipo    = '';
+  DRILL.fltConv    = '';
+  DRILL.sort       = 'data_pag_desc';
   document.getElementById('drillTitle').textContent = DRILL.title;
   document.getElementById('drillSearch').value = '';
+  ['drillFltVinculo','drillFltTipo','drillFltConv'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const sEl = document.getElementById('drillSort'); if (sEl) sEl.value = DRILL.sort;
   document.getElementById('drillStats').textContent = 'carregando…';
   document.getElementById('drillBody').innerHTML =
     '<div class="drill-loading"><i class="fas fa-spinner fa-spin"></i> Carregando registros…</div>';
@@ -1612,6 +1666,7 @@ async function fetchDrillRows() {
     const j = await r.json();
     DRILL.rows = Array.isArray(j.rows) ? j.rows : [];
     DRILL.meta = j.meta || {};
+    _populateConvDropdown();
     renderDrillBody();
   } catch (e) {
     document.getElementById('drillBody').innerHTML =
@@ -1644,20 +1699,42 @@ function renderDrillBody() {
     (total > 0 ? `<span>ticket médio <b>${cur(tm)}</b></span>` : '') +
     (m.cancelados_incluidos ? `<span style="color:#b91c1c;"><b>inclui cancelados</b></span>` : '');
 
-  // Filtro texto (client side)
+  // Filtros (client side)
   const q = (DRILL.search || '').toLowerCase().trim();
-  let rows = DRILL.rows;
-  if (q) {
-    rows = rows.filter(r =>
-      String(r.cliente||'').toLowerCase().includes(q) ||
-      String(r.clinica||'').toLowerCase().includes(q) ||
-      String(r.profissional||'').toLowerCase().includes(q) ||
-      String(r.dependente||'').toLowerCase().includes(q) ||
-      String(r.item||'').toLowerCase().includes(q) ||
-      String(r.convenio||'').toLowerCase().includes(q) ||
-      String(r.pedido||'').toLowerCase().includes(q)
-    );
-  }
+  const fV = DRILL.fltVinculo || '';
+  const fT = DRILL.fltTipo    || '';
+  const fC = (DRILL.fltConv   || '').toLowerCase();
+  let rows = DRILL.rows.filter(r => {
+    if (fV && String(r.vinculo||'') !== fV) return false;
+    if (fT && String(r.tipo||'outro') !== fT) return false;
+    if (fC && String(r.convenio||'PARTICULAR').toLowerCase() !== fC) return false;
+    if (q) {
+      const hit =
+        String(r.cliente||'').toLowerCase().includes(q) ||
+        String(r.clinica||'').toLowerCase().includes(q) ||
+        String(r.profissional||'').toLowerCase().includes(q) ||
+        String(r.dependente||'').toLowerCase().includes(q) ||
+        String(r.item||'').toLowerCase().includes(q) ||
+        String(r.convenio||'').toLowerCase().includes(q) ||
+        String(r.pedido||'').toLowerCase().includes(q);
+      if (!hit) return false;
+    }
+    return true;
+  });
+  // Ordenação
+  const sort = DRILL.sort || 'data_pag_desc';
+  const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
+  const cmpBy = {
+    data_pag_desc: (a,b) => (_parseDtBr(b.data_pagamento)||0) - (_parseDtBr(a.data_pagamento)||0),
+    data_pag_asc:  (a,b) => (_parseDtBr(a.data_pagamento)||Infinity) - (_parseDtBr(b.data_pagamento)||Infinity),
+    data_age_desc: (a,b) => (_parseDtBr(b.data_agendada)||0) - (_parseDtBr(a.data_agendada)||0),
+    data_age_asc:  (a,b) => (_parseDtBr(a.data_agendada)||Infinity) - (_parseDtBr(b.data_agendada)||Infinity),
+    cliente_asc:   (a,b) => collator.compare(a.cliente||'', b.cliente||''),
+    cliente_desc:  (a,b) => collator.compare(b.cliente||'', a.cliente||''),
+    valor_desc:    (a,b) => Number(b.valor||0) - Number(a.valor||0),
+    valor_asc:     (a,b) => Number(a.valor||0) - Number(b.valor||0),
+  }[sort];
+  if (cmpBy) rows = rows.slice().sort(cmpBy);
 
   const body = document.getElementById('drillBody');
   if (!rows.length) {
@@ -1987,6 +2064,36 @@ document.getElementById('drillIncCanc').addEventListener('change', () => {
     t = setTimeout(() => { DRILL.search = e.target.value; renderDrillBody(); }, 180);
   });
 })();
+function _populateConvDropdown() {
+  const sel = document.getElementById('drillFltConv');
+  if (!sel) return;
+  const atual = DRILL.fltConv || '';
+  const vals = new Set();
+  (DRILL.rows || []).forEach(r => {
+    vals.add(String(r.convenio || 'PARTICULAR').toUpperCase());
+  });
+  const ordenados = Array.from(vals).sort((a,b) => {
+    if (a === 'PARTICULAR') return -1;
+    if (b === 'PARTICULAR') return 1;
+    return a.localeCompare(b, 'pt-BR');
+  });
+  sel.innerHTML = '<option value="">todos os convênios</option>'
+    + ordenados.map(v => `<option value="${v}">${v}</option>`).join('');
+  sel.value = ordenados.includes(atual.toUpperCase()) ? atual.toUpperCase() : '';
+  DRILL.fltConv = sel.value;
+}
+document.getElementById('drillFltVinculo').addEventListener('change', (e) => {
+  DRILL.fltVinculo = e.target.value; renderDrillBody();
+});
+document.getElementById('drillFltTipo').addEventListener('change', (e) => {
+  DRILL.fltTipo = e.target.value; renderDrillBody();
+});
+document.getElementById('drillFltConv').addEventListener('change', (e) => {
+  DRILL.fltConv = e.target.value; renderDrillBody();
+});
+document.getElementById('drillSort').addEventListener('change', (e) => {
+  DRILL.sort = e.target.value; renderDrillBody();
+});
 document.getElementById('drillExport').addEventListener('click', drillExportCSV);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.getElementById('drillModal').classList.contains('on')) closeDrillModal();

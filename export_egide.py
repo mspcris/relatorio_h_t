@@ -151,27 +151,43 @@ def pergunta1_clientes(cur) -> dict:
 
 def pergunta2_consultas(cur) -> dict:
     """Consultas + exames por mês usando doctorappointments.date + drilldowns."""
+    # Classificação consulta/exame alinhada ao drilldown (/api/egide/rows):
+    #   consulta = schedule.clinicDoctorSpecialtyId OU (sem schedule AND da.specialtyId)
+    #   exame    = schedule.clinicExamId/examgroupscheduleId OU (sem schedule AND da.examId)
+    #   outros   = sem schedule E sem specialtyId E sem examId (não somam em consultas/exames)
     mensal = _q(cur, f"""
-        SELECT DATE_FORMAT(`date`,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
                COUNT(*) agendadas,
-               SUM(CASE WHEN paymentDate     IS NOT NULL THEN 1 ELSE 0 END) pagas,
-               SUM(CASE WHEN confirmationDate IS NOT NULL THEN 1 ELSE 0 END) confirmadas,
-               SUM(CASE WHEN canceledAt      IS NOT NULL THEN 1 ELSE 0 END) canceladas,
-               SUM(CASE WHEN specialtyId     IS NOT NULL THEN 1 ELSE 0 END) consultas,
-               SUM(CASE WHEN specialtyId     IS NULL     THEN 1 ELSE 0 END) exames
-        FROM doctorappointments
-        WHERE `date` >= %s
+               SUM(CASE WHEN da.paymentDate     IS NOT NULL THEN 1 ELSE 0 END) pagas,
+               SUM(CASE WHEN da.confirmationDate IS NOT NULL THEN 1 ELSE 0 END) confirmadas,
+               SUM(CASE WHEN da.canceledAt      IS NOT NULL THEN 1 ELSE 0 END) canceladas,
+               SUM(CASE WHEN s.clinicDoctorSpecialtyId IS NOT NULL
+                             OR (s.id IS NULL AND da.specialtyId IS NOT NULL)
+                        THEN 1 ELSE 0 END) consultas,
+               SUM(CASE WHEN s.clinicExamId IS NOT NULL
+                             OR s.examgroupscheduleId IS NOT NULL
+                             OR (s.id IS NULL AND da.examId IS NOT NULL)
+                        THEN 1 ELSE 0 END) exames
+        FROM doctorappointments da
+        LEFT JOIN schedules s ON s.id = da.scheduleId
+        WHERE da.`date` >= %s
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01",))
 
     totais = _q(cur, """
         SELECT
             COUNT(*) total,
-            SUM(CASE WHEN paymentDate IS NOT NULL AND canceledAt IS NULL THEN 1 ELSE 0 END) pagas,
-            SUM(CASE WHEN canceledAt  IS NOT NULL THEN 1 ELSE 0 END) canceladas,
-            SUM(CASE WHEN specialtyId IS NOT NULL THEN 1 ELSE 0 END) consultas,
-            SUM(CASE WHEN specialtyId IS NULL     THEN 1 ELSE 0 END) exames
-        FROM doctorappointments
+            SUM(CASE WHEN da.paymentDate IS NOT NULL AND da.canceledAt IS NULL THEN 1 ELSE 0 END) pagas,
+            SUM(CASE WHEN da.canceledAt  IS NOT NULL THEN 1 ELSE 0 END) canceladas,
+            SUM(CASE WHEN s.clinicDoctorSpecialtyId IS NOT NULL
+                          OR (s.id IS NULL AND da.specialtyId IS NOT NULL)
+                     THEN 1 ELSE 0 END) consultas,
+            SUM(CASE WHEN s.clinicExamId IS NOT NULL
+                          OR s.examgroupscheduleId IS NOT NULL
+                          OR (s.id IS NULL AND da.examId IS NOT NULL)
+                     THEN 1 ELSE 0 END) exames
+        FROM doctorappointments da
+        LEFT JOIN schedules s ON s.id = da.scheduleId
     """)[0]
 
     # Drilldown por ESPECIALIDADE (agendadas não canceladas)
@@ -389,38 +405,40 @@ def pergunta4_receita_particular(cur) -> dict:
 
 def pergunta5_receita_convenio(cur) -> dict:
     """Arrecadação por convênio — empilhado por nome."""
+    # LEFT JOIN + COALESCE expõe atendimentos sem convênio como 'PARTICULAR',
+    # para que apareçam no filtro de convênios do frontend.
     mensal = _q(cur, f"""
         SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
-               i.name convenio,
+               COALESCE(i.name, 'PARTICULAR') convenio,
                COUNT(DISTINCT da.id) consultas,
                ROUND(SUM(IFNULL(da.total,0))/100.0, 2) receita
         FROM doctorappointments da
-        JOIN customer_insurances ci
+        LEFT JOIN customer_insurances ci
           ON ci.customerId  = da.customerId
          AND ci.isCurrent   = 1
          AND ci.created_at <= da.`date`
          AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
-        JOIN insurances i ON i.id = ci.insuranceId
+        LEFT JOIN insurances i ON i.id = ci.insuranceId
         WHERE da.canceledAt IS NULL
           AND da.`date` >= %s
-        GROUP BY mes, i.name
+        GROUP BY mes, convenio
         ORDER BY mes, receita DESC
     """, (f"{INICIO}-01",))
 
     totais_conv = _q(cur, """
-        SELECT i.name convenio,
+        SELECT COALESCE(i.name, 'PARTICULAR') convenio,
                COUNT(DISTINCT da.id) consultas,
                ROUND(SUM(IFNULL(da.total,0))/100.0, 2) receita,
                ROUND(AVG(IFNULL(da.total,0))/100.0, 2) ticket_medio
         FROM doctorappointments da
-        JOIN customer_insurances ci
+        LEFT JOIN customer_insurances ci
           ON ci.customerId  = da.customerId
          AND ci.isCurrent   = 1
          AND ci.created_at <= da.`date`
          AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
-        JOIN insurances i ON i.id = ci.insuranceId
+        LEFT JOIN insurances i ON i.id = ci.insuranceId
         WHERE da.canceledAt IS NULL
-        GROUP BY i.name
+        GROUP BY convenio
         ORDER BY receita DESC
     """)
 
@@ -435,83 +453,83 @@ def pergunta5_receita_convenio(cur) -> dict:
 
     # Drilldown: por convênio x especialidade (histórico)
     por_convenio_especialidade = _q(cur, """
-        SELECT i.name convenio,
+        SELECT COALESCE(i.name, 'PARTICULAR') convenio,
                COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
                COUNT(DISTINCT da.id) consultas,
                ROUND(SUM(IFNULL(da.total,0))/100.0, 2) receita
         FROM doctorappointments da
-        JOIN customer_insurances ci
+        LEFT JOIN customer_insurances ci
           ON ci.customerId  = da.customerId
          AND ci.isCurrent   = 1
          AND ci.created_at <= da.`date`
          AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
-        JOIN insurances i ON i.id = ci.insuranceId
+        LEFT JOIN insurances i ON i.id = ci.insuranceId
         LEFT JOIN specialties s ON s.id = da.specialtyId
         WHERE da.canceledAt IS NULL
-        GROUP BY i.name, especialidade
-        ORDER BY i.name, consultas DESC
+        GROUP BY convenio, especialidade
+        ORDER BY convenio, consultas DESC
     """)
 
     # Drilldown: por convênio x clínica (histórico)
     por_convenio_clinica = _q(cur, """
-        SELECT i.name convenio,
+        SELECT COALESCE(i.name, 'PARTICULAR') convenio,
                COALESCE(c.name, '(sem clínica associada)') clinica,
                COALESCE(c.city, '—') cidade,
                COUNT(DISTINCT da.id) consultas,
                ROUND(SUM(IFNULL(da.total,0))/100.0, 2) receita
         FROM doctorappointments da
-        JOIN customer_insurances ci
+        LEFT JOIN customer_insurances ci
           ON ci.customerId  = da.customerId
          AND ci.isCurrent   = 1
          AND ci.created_at <= da.`date`
          AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
-        JOIN insurances i ON i.id = ci.insuranceId
+        LEFT JOIN insurances i ON i.id = ci.insuranceId
         LEFT JOIN schedules sc ON sc.id = da.scheduleId
         LEFT JOIN clinic_doctor_specialties cds ON cds.id = sc.clinicDoctorSpecialtyId
         LEFT JOIN clinic_doctors cd ON cd.id = cds.clinicDoctorId
         LEFT JOIN clinic_exams ce ON ce.id = sc.clinicExamId
         LEFT JOIN clinics c ON c.id = COALESCE(cd.clinicId, ce.clinicId)
         WHERE da.canceledAt IS NULL
-        GROUP BY i.name, clinica, cidade
-        ORDER BY i.name, consultas DESC
+        GROUP BY convenio, clinica, cidade
+        ORDER BY convenio, consultas DESC
     """)
 
     # Drilldown mensal: por convênio x especialidade (permite filtrar por período no front)
     por_convenio_especialidade_mes = _q(cur, f"""
         SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
-               i.name convenio,
+               COALESCE(i.name, 'PARTICULAR') convenio,
                COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
                COUNT(DISTINCT da.id) consultas,
                ROUND(SUM(IFNULL(da.total,0))/100.0, 2) receita
         FROM doctorappointments da
-        JOIN customer_insurances ci
+        LEFT JOIN customer_insurances ci
           ON ci.customerId  = da.customerId
          AND ci.isCurrent   = 1
          AND ci.created_at <= da.`date`
          AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
-        JOIN insurances i ON i.id = ci.insuranceId
+        LEFT JOIN insurances i ON i.id = ci.insuranceId
         LEFT JOIN specialties s ON s.id = da.specialtyId
         WHERE da.canceledAt IS NULL
           AND da.`date` >= %s
-        GROUP BY mes, i.name, especialidade
-        ORDER BY mes, i.name, consultas DESC
+        GROUP BY mes, convenio, especialidade
+        ORDER BY mes, convenio, consultas DESC
     """, (f"{INICIO}-01",))
 
     # Drilldown mensal: por convênio x clínica (permite filtrar por período no front)
     por_convenio_clinica_mes = _q(cur, f"""
         SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
-               i.name convenio,
+               COALESCE(i.name, 'PARTICULAR') convenio,
                COALESCE(c.name, '(sem clínica associada)') clinica,
                COALESCE(c.city, '—') cidade,
                COUNT(DISTINCT da.id) consultas,
                ROUND(SUM(IFNULL(da.total,0))/100.0, 2) receita
         FROM doctorappointments da
-        JOIN customer_insurances ci
+        LEFT JOIN customer_insurances ci
           ON ci.customerId  = da.customerId
          AND ci.isCurrent   = 1
          AND ci.created_at <= da.`date`
          AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
-        JOIN insurances i ON i.id = ci.insuranceId
+        LEFT JOIN insurances i ON i.id = ci.insuranceId
         LEFT JOIN schedules sc ON sc.id = da.scheduleId
         LEFT JOIN clinic_doctor_specialties cds ON cds.id = sc.clinicDoctorSpecialtyId
         LEFT JOIN clinic_doctors cd ON cd.id = cds.clinicDoctorId
@@ -519,8 +537,8 @@ def pergunta5_receita_convenio(cur) -> dict:
         LEFT JOIN clinics c ON c.id = COALESCE(cd.clinicId, ce.clinicId)
         WHERE da.canceledAt IS NULL
           AND da.`date` >= %s
-        GROUP BY mes, i.name, clinica, cidade
-        ORDER BY mes, i.name, consultas DESC
+        GROUP BY mes, convenio, clinica, cidade
+        ORDER BY mes, convenio, consultas DESC
     """, (f"{INICIO}-01",))
 
     return {
