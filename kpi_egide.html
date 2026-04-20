@@ -207,6 +207,9 @@
     .f-btn:hover { background: #f3f4f6; }
     .f-btn.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
     .f-btn.primary:hover { background: #2563eb; }
+    .tipo-filtro-btn { flex: 1; padding: 10px 8px; font-size: .85rem; }
+    .tipo-filtro-btn.on { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 600; }
+    .tipo-filtro-btn.on:hover { background: #2563eb; }
 
     /* Switch estilo toggle para "Mostrar cancelados".
        Seletor escrito como label.f-switch para vencer ".f-field label" em
@@ -573,6 +576,13 @@
               <span class="f-switch-text" id="fMostrarCancText">Ocultos</span>
             </label>
           </div>
+          <div class="f-field" id="ff_tipo_filtro">
+            <label><i class="far fa-clock"></i> Filtrar por</label>
+            <div class="btn-group" role="group" aria-label="Tipo de filtro de per\u00edodo" style="display:flex;gap:4px;">
+              <button type="button" class="f-btn tipo-filtro-btn on" data-tipo="pagamento" title="Per\u00edodo aplica \u00e0 DATA DE PAGAMENTO">Pagamento</button>
+              <button type="button" class="f-btn tipo-filtro-btn"    data-tipo="agendamento" title="Per\u00edodo aplica \u00e0 DATA DO AGENDAMENTO">Agendamento</button>
+            </div>
+          </div>
           <div class="f-field">
             <label>&nbsp;</label>
             <button id="btnReset" class="f-btn primary">
@@ -666,17 +676,17 @@
         <!-- Cards KPI ao vivo (data de pagamento, cancelados fora por padrão) -->
         <div class="cards" id="p2LiveCards">
           <div class="card-kpi clickable" id="k_consultas_pagas" data-metric="consultas_puras" data-title="Consultas pagas">
-            <div class="label">Consultas pagas <span class="badge-parcial">CLIQUE</span></div>
+            <div class="label" id="k_cp_lbl">Consultas pagas <span class="badge-parcial">CLIQUE</span></div>
             <div class="value" id="k_cp_val">—</div>
             <div class="sub" id="k_cp_sub">por data de pagamento</div>
           </div>
           <div class="card-kpi orange clickable" id="k_exames_pagos" data-metric="exames" data-title="Exames pagos">
-            <div class="label">Exames pagos <span class="badge-parcial">CLIQUE</span></div>
+            <div class="label" id="k_ep_lbl">Exames pagos <span class="badge-parcial">CLIQUE</span></div>
             <div class="value" id="k_ep_val">—</div>
             <div class="sub" id="k_ep_sub">por data de pagamento</div>
           </div>
           <div class="card-kpi green clickable" id="k_arrecadado" data-metric="consultas_pagas" data-title="Arrecadação (consultas + exames pagos)">
-            <div class="label">Arrecadado <span class="badge-parcial">CLIQUE</span></div>
+            <div class="label" id="k_ar_lbl">Arrecadado <span class="badge-parcial">CLIQUE</span></div>
             <div class="value" id="k_ar_val">—</div>
             <div class="sub" id="k_ar_sub">soma consultas + exames</div>
           </div>
@@ -689,13 +699,7 @@
 
         <div class="chart-row two">
           <div class="chart-box">
-            <div class="chart-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-              <span id="chP2_volTitle">Consultas × Exames (pagos) por mês</span>
-              <span style="display:inline-flex;gap:4px;background:#f1f5f9;border-radius:6px;padding:2px;">
-                <button type="button" class="p2-vol-toggle" data-view="pagos" title="Pagos no mês">Pagos</button>
-                <button type="button" class="p2-vol-toggle" data-view="agendados" title="Agendados no mês">Agendados</button>
-              </span>
-            </div>
+            <div class="chart-title"><span id="chP2_volTitle">Consultas × Exames (pagos) por mês</span></div>
             <canvas id="chP2_vol"></canvas>
           </div>
           <div class="chart-box">
@@ -714,10 +718,12 @@
             <summary><i class="fas fa-lightbulb"></i> O que esta tabela mostra</summary>
             <div class="body">
               Para cada <b>especialidade</b> médica (cardiologia, dermato…):
-              quantas foram <b>agendadas</b> no período, quantas <b>pagas</b>,
-              a <b>receita paga</b> e o <b>ticket médio</b>. Só <b>consultas</b>
-              (exames têm card e tabela próprios mais abaixo). Clique no
-              cabeçalho para ordenar.
+              quantidade no período e, no modo <b>Pagamento</b>, a <b>receita
+              paga</b> e o <b>ticket médio</b>. As colunas mudam conforme o
+              toggle <i>Filtrar por</i> no alto (Pagamento = data de pagamento
+              → Pagas / Receita; Agendamento = data do agendamento → Agendadas).
+              Só <b>consultas</b> (exames têm card e tabela próprios mais
+              abaixo). Clique no cabeçalho para ordenar.
             </div>
           </details>
         </div>
@@ -749,10 +755,11 @@
           <details>
             <summary><i class="fas fa-lightbulb"></i> O que esta tabela mostra</summary>
             <div class="body">
-              Para cada <b>clínica credenciada</b>: cidade, quantas consultas/exames foram
-              agendadas e pagas no período, a receita paga e o ticket médio.
-              A linha "<i>sem clínica associada</i>" aparece quando o agendamento não tem
-              schedule vinculado a clínica (legado).
+              Para cada <b>clínica credenciada</b>: cidade, quantidade no
+              período e (no modo Pagamento) receita paga e ticket médio. As
+              colunas seguem o toggle <i>Filtrar por</i> no alto.
+              A linha "<i>sem clínica associada</i>" aparece quando o agendamento
+              não tem schedule vinculado a clínica (legado).
             </div>
           </details>
         </div>
@@ -1036,15 +1043,15 @@ let DATA = null;
 let charts = {};
 const destroy = (k) => { if (charts[k]) { charts[k].destroy(); delete charts[k]; } };
 
-// Estado do toggle do gráfico "Consultas × Exames" (Pagos por default para bater com o card)
-let P2_VOL_VIEW = 'pagos'; // 'pagos' | 'agendados'
-let _p2VolCtx = null;      // cache do último dataset pra re-render no toggle
+// O gráfico "Consultas × Exames" agora segue o toggle GLOBAL ST.tipoFiltro.
+// Mantemos a função sem estado local — a cada render, lê ST.tipoFiltro.
+let _p2VolCtx = null;      // cache do último dataset pra re-render
 
 function renderP2Vol(ctx) {
   if (ctx) _p2VolCtx = ctx;
   if (!_p2VolCtx) return;
   const { p2, p2pag } = _p2VolCtx;
-  const isPagos = (P2_VOL_VIEW === 'pagos');
+  const isPagos = (ST.tipoFiltro === 'pagamento');
   const source  = isPagos ? p2pag : p2;
   const labels  = source.map(r => r.mes);
   const keyCons = isPagos ? 'consultas_pagas' : 'consultas';
@@ -1053,9 +1060,6 @@ function renderP2Vol(ctx) {
   if (titleEl) titleEl.textContent = isPagos
     ? 'Consultas × Exames (pagos) por mês'
     : 'Consultas × Exames (agendados) por mês';
-  document.querySelectorAll('.p2-vol-toggle').forEach(b => {
-    b.classList.toggle('on', b.dataset.view === (isPagos ? 'pagos' : 'agendados'));
-  });
   destroy('p2_vol');
   charts.p2_vol = new Chart(document.getElementById('chP2_vol'), {
     type:'bar',
@@ -1090,15 +1094,6 @@ function renderP2Vol(ctx) {
       scales: { x: { stacked:true }, y: { stacked:true, beginAtZero:true } } }
   });
 }
-
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('.p2-vol-toggle');
-  if (!btn) return;
-  const v = btn.dataset.view === 'agendados' ? 'agendados' : 'pagos';
-  if (v === P2_VOL_VIEW) return;
-  P2_VOL_VIEW = v;
-  renderP2Vol();
-});
 
 function showError(msg) {
   document.getElementById('loadingMsg').style.display = 'none';
@@ -1144,6 +1139,9 @@ const ST = {
   sorts: {},       // per-tabela: { key, dir }
   search: { esp:'', cli:'', convEsp:'', convCli:'' },
   mostrarCanc: false,  // switch global: incluir cancelados nas métricas e tabelas
+  // 'pagamento' (default): período filtra por data de pagamento
+  // 'agendamento': período filtra por data do agendamento (da.date)
+  tipoFiltro: 'pagamento',
 };
 
 /* Soma valores *_canc nos campos base quando o switch está ativo. Recebe linhas
@@ -1373,89 +1371,116 @@ function render() {
   });
 
   /* P2 drilldown: especialidades + clínicas.
-     IMPORTANTE: "agendadas" é agrupado pelo mês de AGENDAMENTO (da.date) e
-     "pagas/receita" pelo mês de PAGAMENTO (COALESCE paymentDate). Por isso
-     mergeamos duas séries pela chave "especialidade" (ou clínica), de modo
-     que a tabela bata com o card do topo e o gráfico mensal_pagamento. */
-  const espAgendRaw = filtMes(DATA.p2_consultas.por_especialidade_agendadas_mes || [], de, ate);
-  const espPagasRaw = filtMes(DATA.p2_consultas.por_especialidade_pagas_mes || [], de, ate);
-  const espAgend = groupAgg(
-    applyCanc(espAgendRaw, [['agendadas','agendadas_canc']]),
-    ['especialidade'], ['agendadas']
-  );
-  const espPagas = groupAgg(
-    applyCanc(espPagasRaw, [['pagas','pagas_canc'], ['receita_paga','receita_paga_canc']]),
-    ['especialidade'], ['pagas','receita_paga']
-  );
-  const espMap = new Map();
-  for (const r of espAgend) espMap.set(r.especialidade, { especialidade:r.especialidade, agendadas:r.agendadas||0, pagas:0, receita_paga:0 });
-  for (const r of espPagas) {
-    const prev = espMap.get(r.especialidade) || { especialidade:r.especialidade, agendadas:0, pagas:0, receita_paga:0 };
-    prev.pagas = r.pagas || 0;
-    prev.receita_paga = r.receita_paga || 0;
-    espMap.set(r.especialidade, prev);
+     O toggle global ST.tipoFiltro decide qual eixo temporal valer para o período:
+      - 'pagamento': usa por_especialidade_pagas_mes (mês de pagamento) → mostra PAGAS / RECEITA / TICKET
+      - 'agendamento': usa por_especialidade_agendadas_mes (mês do da.date) → mostra AGENDADAS
+     Assim nenhuma linha mistura contagens de datasets de períodos distintos. */
+  const isPagos = (ST.tipoFiltro === 'pagamento');
+  const drillBy = isPagos ? 'paid' : 'scheduled';
+
+  // Esconder/mostrar <th> conforme modo
+  const _showTh = (tableId, colMap) => {
+    const tbl = document.getElementById(tableId);
+    if (!tbl) return;
+    tbl.querySelectorAll('thead th').forEach(th => {
+      const k = th.dataset.k;
+      if (k in colMap) th.style.display = colMap[k] ? '' : 'none';
+    });
+  };
+  _showTh('tblEspecialidade', {
+    especialidade: true,
+    agendadas: !isPagos,
+    pagas: isPagos, receita_paga: isPagos, ticket_medio: isPagos,
+  });
+  _showTh('tblClinica', {
+    clinica: true, cidade: true,
+    agendadas: !isPagos,
+    pagas: isPagos, receita_paga: isPagos, ticket_medio: isPagos,
+  });
+
+  let espAgg, espColunas, espDefaultSort;
+  if (isPagos) {
+    const espPagasRaw = filtMes(DATA.p2_consultas.por_especialidade_pagas_mes || [], de, ate);
+    espAgg = groupAgg(
+      applyCanc(espPagasRaw, [['pagas','pagas_canc'], ['receita_paga','receita_paga_canc']]),
+      ['especialidade'], ['pagas','receita_paga']
+    );
+    espAgg.forEach(r => r.ticket_medio = r.pagas > 0 ? r.receita_paga / r.pagas : 0);
+    espColunas = [
+      {k:'especialidade', fmt:v=>v},
+      {k:'pagas', num:true, fmt:v=>nf(v)},
+      {k:'receita_paga', num:true, fmt:v=>cur(v)},
+      {k:'ticket_medio', num:true, fmt:v=>cur(v)},
+    ];
+    espDefaultSort = { key:'pagas', dir:'desc' };
+  } else {
+    const espAgendRaw = filtMes(DATA.p2_consultas.por_especialidade_agendadas_mes || [], de, ate);
+    espAgg = groupAgg(
+      applyCanc(espAgendRaw, [['agendadas','agendadas_canc']]),
+      ['especialidade'], ['agendadas']
+    );
+    espColunas = [
+      {k:'especialidade', fmt:v=>v},
+      {k:'agendadas', num:true, fmt:v=>nf(v)},
+    ];
+    espDefaultSort = { key:'agendadas', dir:'desc' };
   }
-  const espAgg = Array.from(espMap.values());
-  espAgg.forEach(r => r.ticket_medio = r.pagas > 0 ? r.receita_paga / r.pagas : 0);
+  // Resetar sort state se mudou de modo (chave pode não existir mais)
+  if (ST.sorts.esp && !espColunas.some(c => c.k === ST.sorts.esp.key)) delete ST.sorts.esp;
   renderTabelaDrilldown({
     tableId: 'tblEspecialidade',
     rows: espAgg,
-    colunas: [
-      {k:'especialidade', fmt:v=>v},
-      {k:'agendadas', num:true, fmt:v=>nf(v)},
-      {k:'pagas', num:true, fmt:v=>nf(v)},
-      {k:'receita_paga', num:true, fmt:v=>cur(v)},
-      {k:'ticket_medio', num:true, fmt:v=>cur(v)},
-    ],
+    colunas: espColunas,
     filterKeys: ['especialidade'],
     search: ST.search.esp,
-    defaultSort: { key:'agendadas', dir:'desc' },
+    defaultSort: espDefaultSort,
     id:'esp',
     onRowClick: (r) => openDrill('consultas_pagas',
       `Registros de "${r.especialidade}" — ${fmtMesBR(de)} → ${fmtMesBR(ate)}`,
-      { filterBy:'scheduled', especialidade: r.especialidade }),
+      { filterBy: drillBy, especialidade: r.especialidade }),
   });
 
-  const cliAgendRaw = filtMes(DATA.p2_consultas.por_clinica_agendadas_mes || [], de, ate);
-  const cliPagasRaw = filtMes(DATA.p2_consultas.por_clinica_pagas_mes || [], de, ate);
-  const cliAgend = groupAgg(
-    applyCanc(cliAgendRaw, [['agendadas','agendadas_canc']]),
-    ['clinica','cidade'], ['agendadas']
-  );
-  const cliPagas = groupAgg(
-    applyCanc(cliPagasRaw, [['pagas','pagas_canc'], ['receita_paga','receita_paga_canc']]),
-    ['clinica','cidade'], ['pagas','receita_paga']
-  );
-  const cliMap = new Map();
-  const cliKey = (r) => `${r.clinica}||${r.cidade}`;
-  for (const r of cliAgend) cliMap.set(cliKey(r), { clinica:r.clinica, cidade:r.cidade, agendadas:r.agendadas||0, pagas:0, receita_paga:0 });
-  for (const r of cliPagas) {
-    const k = cliKey(r);
-    const prev = cliMap.get(k) || { clinica:r.clinica, cidade:r.cidade, agendadas:0, pagas:0, receita_paga:0 };
-    prev.pagas = r.pagas || 0;
-    prev.receita_paga = r.receita_paga || 0;
-    cliMap.set(k, prev);
-  }
-  const cliAgg = Array.from(cliMap.values());
-  cliAgg.forEach(r => r.ticket_medio = r.pagas > 0 ? r.receita_paga / r.pagas : 0);
-  renderTabelaDrilldown({
-    tableId: 'tblClinica',
-    rows: cliAgg,
-    colunas: [
+  let cliAgg, cliColunas, cliDefaultSort;
+  if (isPagos) {
+    const cliPagasRaw = filtMes(DATA.p2_consultas.por_clinica_pagas_mes || [], de, ate);
+    cliAgg = groupAgg(
+      applyCanc(cliPagasRaw, [['pagas','pagas_canc'], ['receita_paga','receita_paga_canc']]),
+      ['clinica','cidade'], ['pagas','receita_paga']
+    );
+    cliAgg.forEach(r => r.ticket_medio = r.pagas > 0 ? r.receita_paga / r.pagas : 0);
+    cliColunas = [
       {k:'clinica', fmt:v=>v},
       {k:'cidade', fmt:v=>v},
-      {k:'agendadas', num:true, fmt:v=>nf(v)},
       {k:'pagas', num:true, fmt:v=>nf(v)},
       {k:'receita_paga', num:true, fmt:v=>cur(v)},
       {k:'ticket_medio', num:true, fmt:v=>cur(v)},
-    ],
+    ];
+    cliDefaultSort = { key:'pagas', dir:'desc' };
+  } else {
+    const cliAgendRaw = filtMes(DATA.p2_consultas.por_clinica_agendadas_mes || [], de, ate);
+    cliAgg = groupAgg(
+      applyCanc(cliAgendRaw, [['agendadas','agendadas_canc']]),
+      ['clinica','cidade'], ['agendadas']
+    );
+    cliColunas = [
+      {k:'clinica', fmt:v=>v},
+      {k:'cidade', fmt:v=>v},
+      {k:'agendadas', num:true, fmt:v=>nf(v)},
+    ];
+    cliDefaultSort = { key:'agendadas', dir:'desc' };
+  }
+  if (ST.sorts.cli && !cliColunas.some(c => c.k === ST.sorts.cli.key)) delete ST.sorts.cli;
+  renderTabelaDrilldown({
+    tableId: 'tblClinica',
+    rows: cliAgg,
+    colunas: cliColunas,
     filterKeys: ['clinica','cidade'],
     search: ST.search.cli,
-    defaultSort: { key:'agendadas', dir:'desc' },
+    defaultSort: cliDefaultSort,
     id:'cli',
     onRowClick: (r) => openDrill('consultas_pagas',
       `Registros de "${r.clinica}" — ${fmtMesBR(de)} → ${fmtMesBR(ate)}`,
-      { filterBy:'scheduled', clinica: r.clinica }),
+      { filterBy: drillBy, clinica: r.clinica }),
   });
 
   /* P3 --------------------------------------------------------------- */
@@ -1731,16 +1756,23 @@ async function refreshEgideLiveCards() {
   const epSub = document.getElementById('k_ep_sub');
   const arSub = document.getElementById('k_ar_sub');
   const tkSub = document.getElementById('k_tk_sub');
+  // Labels dos cards (muda entre "pagas" / "agendadas" conforme toggle)
+  const cpLbl = document.getElementById('k_cp_lbl');
+  const epLbl = document.getElementById('k_ep_lbl');
+  const arLbl = document.getElementById('k_ar_lbl');
 
   [cpVal, epVal, arVal, tkVal].forEach(el => el.textContent = '…');
 
   if (_egideMetaCtl) _egideMetaCtl.abort();
   _egideMetaCtl = new AbortController();
 
+  const isAgend = (ST.tipoFiltro === 'agendamento');
+  const filterBy = isAgend ? 'scheduled' : 'paid';
+
   try {
-    // Limit=1 porque só queremos o meta agregado
     const canc = ST.mostrarCanc ? 1 : 0;
-    const url = `/api/egide/rows?metric=consultas_pagas&de=${de}&ate=${ate}&limit=1&cancelados=${canc}`;
+    const url = `/api/egide/rows?metric=consultas_pagas&de=${de}&ate=${ate}`
+              + `&limit=1&cancelados=${canc}&filter_by=${filterBy}`;
     const r = await fetch(url, { credentials:'same-origin', signal: _egideMetaCtl.signal });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
@@ -1755,10 +1787,18 @@ async function refreshEgideLiveCards() {
     arVal.textContent = cur(receita);
     tkVal.textContent = total > 0 ? cur(receita / total) : 'R$ —';
 
+    // Atualizar labels conforme tipo de filtro
+    if (cpLbl) cpLbl.firstChild.nodeValue = (isAgend ? 'Consultas agendadas ' : 'Consultas pagas ');
+    if (epLbl) epLbl.firstChild.nodeValue = (isAgend ? 'Exames agendados ' : 'Exames pagos ');
+    if (arLbl) arLbl.firstChild.nodeValue = (isAgend
+      ? 'Receita dos agendados '
+      : 'Arrecadação ');
+
     const subPer = `${fmtMesBR(de.slice(0,7))} → ${fmtMesBR(ate.slice(0,7))}`;
-    cpSub.textContent = subPer + ' · data de pagamento';
-    epSub.textContent = subPer + ' · data de pagamento';
-    arSub.textContent = `${nf(total)} pagamentos no período`;
+    const dimLbl = isAgend ? 'data do agendamento' : 'data de pagamento';
+    cpSub.textContent = subPer + ' · ' + dimLbl;
+    epSub.textContent = subPer + ' · ' + dimLbl;
+    arSub.textContent = `${nf(total)} ${isAgend ? 'agendamentos' : 'pagamentos'} no período`;
     tkSub.textContent = total > 0 ? `${cur(receita)} ÷ ${nf(total)}` : '—';
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -2201,6 +2241,21 @@ fMostrarCancEl.addEventListener('change', () => {
   ST.mostrarCanc = fMostrarCancEl.checked;
   fMostrarCancTextEl.textContent = ST.mostrarCanc ? 'Somados' : 'Ocultos';
   render();
+  refreshEgideLiveCards();
+});
+
+// Toggle global "Filtrar por: Pagamento | Agendamento"
+document.querySelectorAll('.tipo-filtro-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const t = btn.dataset.tipo === 'agendamento' ? 'agendamento' : 'pagamento';
+    if (t === ST.tipoFiltro) return;
+    ST.tipoFiltro = t;
+    document.querySelectorAll('.tipo-filtro-btn').forEach(b => {
+      b.classList.toggle('on', b.dataset.tipo === t);
+    });
+    render();
+    refreshEgideLiveCards();
+  });
 });
 
 document.getElementById('btnPickConv').addEventListener('click', openConvModal);
@@ -2224,11 +2279,16 @@ document.getElementById('btnReset').addEventListener('click', () => {
   ST.mostrarCanc = false;
   fMostrarCancEl.checked = false;
   fMostrarCancTextEl.textContent = 'Ocultos';
+  ST.tipoFiltro = 'pagamento';
+  document.querySelectorAll('.tipo-filtro-btn').forEach(b => {
+    b.classList.toggle('on', b.dataset.tipo === 'pagamento');
+  });
   ['qEspecialidade','qClinica','qConvEsp','qConvCli'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   renderPills();
   render();
+  refreshEgideLiveCards();
 });
 
 // Search inputs
