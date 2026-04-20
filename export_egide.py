@@ -576,20 +576,39 @@ def pergunta4_receita_particular(cur) -> dict:
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01",))
 
-    # --- VERSÃO POR AGENDAMENTO: mês = da.date ou o.date (data que o cliente
-    # marcou pra ser atendido). Receita aqui é VALOR CONTRATADO (não arrecadado).
-    # Cancelados ficam FORA da métrica padrão.
-    orders_agend = _q(cur, f"""
-        SELECT DATE_FORMAT({BRT('o.`date`')},'%%Y-%%m') mes,
+    # --- VERSÃO POR AGENDAMENTO. orders não tem coluna `date` — para:
+    #   - orderType='clinic'/'other' com doctorappointment vinculado: usa
+    #     da.`date` (data do atendimento clínico marcado).
+    #   - orderType='pharmacy' (venda de farmácia, sem agendamento): usa
+    #     o.created_at (momento da compra — não existe "agendar uma farmácia").
+    # Cancelados ficam FORA. Receita = valor contratado, não arrecadado.
+    orders_agend_clin = _q(cur, f"""
+        SELECT DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
                o.orderType,
                COUNT(*) qtde,
                ROUND(SUM(IFNULL(o.total,0))/100.0, 2) receita
         FROM orders o
+        JOIN doctorappointments da ON da.orderId = o.id
         WHERE o.cancelDate IS NULL
-          AND o.`date` IS NOT NULL
-          AND {BRT('o.`date`')} >= %s
+          AND da.canceledAt IS NULL
+          AND da.`date` IS NOT NULL
+          AND {BRT('da.`date`')} >= %s
         GROUP BY mes, o.orderType ORDER BY mes, o.orderType
     """, (f"{INICIO}-01",))
+
+    orders_agend_pharma = _q(cur, f"""
+        SELECT DATE_FORMAT({BRT('o.created_at')},'%%Y-%%m') mes,
+               o.orderType,
+               COUNT(*) qtde,
+               ROUND(SUM(IFNULL(o.total,0))/100.0, 2) receita
+        FROM orders o
+        WHERE o.orderType = 'pharmacy'
+          AND o.cancelDate IS NULL
+          AND {BRT('o.created_at')} >= %s
+        GROUP BY mes, o.orderType ORDER BY mes
+    """, (f"{INICIO}-01",))
+
+    orders_agend = list(orders_agend_clin) + list(orders_agend_pharma)
 
     appt_sem_order_agend = _q(cur, f"""
         SELECT DATE_FORMAT({BRT('`date`')},'%%Y-%%m') mes,
@@ -688,27 +707,28 @@ def pergunta4_receita_particular(cur) -> dict:
         ) x GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01", f"{INICIO}-01", f"{INICIO}-01"))
 
-    # Versão AGENDAMENTO: por o.`date` / da.`date`. Ignora cancelados.
+    # Versão AGENDAMENTO: pharmacy usa o.created_at; clinic via JOIN usa da.`date`. Ignora cancelados.
     consolidado_particular_agend = _q(cur, f"""
         SELECT mes, ROUND(SUM(receita),2) receita, SUM(qtde) qtde FROM (
-            SELECT DATE_FORMAT({BRT('o.`date`')},'%%Y-%%m') mes,
+            SELECT DATE_FORMAT({BRT('o.created_at')},'%%Y-%%m') mes,
                    COUNT(*) qtde, SUM(IFNULL(o.total,0))/100.0 receita
             FROM orders o
             WHERE o.orderType = 'pharmacy'
-              AND o.`date` IS NOT NULL AND o.cancelDate IS NULL
-              AND {BRT('o.`date`')} >= %s
+              AND o.cancelDate IS NULL
+              AND {BRT('o.created_at')} >= %s
             GROUP BY mes
             UNION ALL
-            SELECT DATE_FORMAT({BRT('o.`date`')},'%%Y-%%m') mes,
+            SELECT DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
                    COUNT(*) qtde, SUM(IFNULL(o.total,0))/100.0 receita
             FROM orders o
             JOIN doctorappointments da ON da.orderId = o.id
             {conv_join_p4}
             WHERE o.orderType = 'clinic'
-              AND o.`date` IS NOT NULL AND o.cancelDate IS NULL
+              AND o.cancelDate IS NULL
               AND da.canceledAt IS NULL
+              AND da.`date` IS NOT NULL
               AND {sem_conv}
-              AND {BRT('o.`date`')} >= %s
+              AND {BRT('da.`date`')} >= %s
             GROUP BY mes
             UNION ALL
             SELECT DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
@@ -717,6 +737,7 @@ def pergunta4_receita_particular(cur) -> dict:
             {conv_join_p4}
             WHERE da.canceledAt IS NULL
               AND da.orderId IS NULL AND da.total > 0
+              AND da.`date` IS NOT NULL
               AND {sem_conv}
               AND {BRT('da.`date`')} >= %s
             GROUP BY mes
