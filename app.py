@@ -1315,10 +1315,11 @@ SELECT
     ELSE 'outro'
   END                                  AS tipo,
   CASE
-    WHEN da.customerInsuranceId IS NOT NULL THEN 'convenio'
+    WHEN p_conv.id IS NOT NULL OR ci.id IS NOT NULL OR da.customerInsuranceId IS NOT NULL
+      THEN 'convenio'
     ELSE 'particular'
   END                                  AS vinculo,
-  COALESCE(ins.name, 'PARTICULAR')     AS convenio,
+  COALESCE(p_conv.name, ins.name, ins_direct.name, 'PARTICULAR') AS convenio,
   COALESCE(NULLIF(da.origin,''), 'app') AS origem,
   COALESCE(o.chargeType, '')           AS forma_pagamento,
   CASE WHEN da.canceledAt IS NOT NULL OR o.cancelDate IS NOT NULL THEN 1 ELSE 0 END AS cancelado
@@ -1335,7 +1336,14 @@ LEFT JOIN clinic_exams        ce2  ON ce2.id = s.clinicExamId
 LEFT JOIN exams               ex   ON ex.id  = COALESCE(da.examId, ce2.examId)
 LEFT JOIN examgroupschedules  egs  ON egs.id = s.examgroupscheduleId
 LEFT JOIN examgroups          eg   ON eg.id  = egs.examgroupId
-LEFT JOIN customer_insurances ci   ON ci.id  = da.customerInsuranceId
+LEFT JOIN partnerpeople       pp   ON pp.id  = da.partnerpeopleId
+LEFT JOIN partners            p_conv ON p_conv.id = pp.partnerId
+LEFT JOIN customer_insurances ci_direct ON ci_direct.id = da.customerInsuranceId
+LEFT JOIN insurances          ins_direct ON ins_direct.id = ci_direct.insuranceId
+LEFT JOIN customer_insurances ci   ON ci.customerId  = da.customerId
+                                  AND ci.isCurrent   = 1
+                                  AND ci.created_at <= da.`date`
+                                  AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
 LEFT JOIN insurances          ins  ON ins.id = ci.insuranceId
 LEFT JOIN clinics             c    ON c.id   = COALESCE(da.clinicId, o.clinicId, cdr.clinicId, ce2.clinicId)
 """
@@ -1423,7 +1431,9 @@ def _egide_apply_extra_filters(clauses: list, params: list, *,
         )
         params.append(especialidade)
     if convenio:
-        clauses.append("LOWER(COALESCE(ins.name, 'PARTICULAR')) = LOWER(%s)")
+        clauses.append(
+            "LOWER(COALESCE(p_conv.name, ins.name, ins_direct.name, 'PARTICULAR')) = LOWER(%s)"
+        )
         params.append(convenio)
 
 
@@ -1492,7 +1502,14 @@ def api_egide_rows():
             " LEFT JOIN exams               ex   ON ex.id  = COALESCE(da.examId, ce2.examId)"
             " LEFT JOIN examgroupschedules  egs  ON egs.id = s.examgroupscheduleId"
             " LEFT JOIN examgroups          eg   ON eg.id  = egs.examgroupId"
-            " LEFT JOIN customer_insurances ci   ON ci.id  = da.customerInsuranceId"
+            " LEFT JOIN partnerpeople       pp   ON pp.id  = da.partnerpeopleId"
+            " LEFT JOIN partners            p_conv ON p_conv.id = pp.partnerId"
+            " LEFT JOIN customer_insurances ci_direct ON ci_direct.id = da.customerInsuranceId"
+            " LEFT JOIN insurances          ins_direct ON ins_direct.id = ci_direct.insuranceId"
+            " LEFT JOIN customer_insurances ci   ON ci.customerId  = da.customerId"
+            "                                   AND ci.isCurrent   = 1"
+            "                                   AND ci.created_at <= da.`date`"
+            "                                   AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)"
             " LEFT JOIN insurances          ins  ON ins.id = ci.insuranceId"
             " LEFT JOIN clinics             c    ON c.id   = COALESCE(da.clinicId, o.clinicId, cdr.clinicId, ce2.clinicId)"
             " WHERE " + where_sql

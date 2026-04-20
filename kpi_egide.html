@@ -208,6 +208,26 @@
     .f-btn.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
     .f-btn.primary:hover { background: #2563eb; }
 
+    /* Switch estilo toggle para "Mostrar cancelados" */
+    .f-switch {
+      display: flex; align-items: center; gap: 10px; height: 40px;
+      padding: 0 10px; border: 1px solid #d1d5db; border-radius: 6px;
+      background: #fff; cursor: pointer; user-select: none;
+    }
+    .f-switch input { display: none; }
+    .f-switch-slider {
+      position: relative; width: 36px; height: 20px; background: #cbd5e1;
+      border-radius: 999px; transition: background .15s; flex-shrink: 0;
+    }
+    .f-switch-slider::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 16px; height: 16px; background: #fff; border-radius: 50%;
+      transition: transform .15s;
+    }
+    .f-switch input:checked + .f-switch-slider { background: #ef4444; }
+    .f-switch input:checked + .f-switch-slider::after { transform: translateX(16px); }
+    .f-switch-text { font-size: .82rem; color: #475569; font-weight: 600; white-space: nowrap; }
+
     /* Pills de convênios */
     .pills-row {
       display: flex; flex-wrap: wrap; gap: 6px;
@@ -540,6 +560,14 @@
             <button type="button" class="f-btn" id="btnPickConv">
               <i class="fas fa-list"></i> <span id="btnPickConvLabel">Todos</span>
             </button>
+          </div>
+          <div class="f-field">
+            <label><i class="fas fa-ban"></i> Cancelados</label>
+            <label class="f-switch" title="Quando ligado, soma os agendamentos e a receita de atendimentos que foram cancelados.">
+              <input type="checkbox" id="fMostrarCanc">
+              <span class="f-switch-slider"></span>
+              <span class="f-switch-text" id="fMostrarCancText">Ocultos</span>
+            </label>
           </div>
           <div class="f-field">
             <label>&nbsp;</label>
@@ -1109,7 +1137,25 @@ const ST = {
   convSel: null,   // Set com convênios selecionados (igual a convAll = "todos")
   sorts: {},       // per-tabela: { key, dir }
   search: { esp:'', cli:'', convEsp:'', convCli:'' },
+  mostrarCanc: false,  // switch global: incluir cancelados nas métricas e tabelas
 };
+
+/* Soma valores *_canc nos campos base quando o switch está ativo. Recebe linhas
+   com pares ("pagas"/"pagas_canc", "receita"/"receita_canc" etc.) e retorna
+   novas linhas ajustadas. Quando mostrarCanc=false, é idempotente (apenas clona). */
+function applyCanc(rows, pairs) {
+  if (!Array.isArray(rows)) return [];
+  const on = !!ST.mostrarCanc;
+  return rows.map(r => {
+    const out = { ...r };
+    for (const [base, canc] of pairs) {
+      const b = Number(r[base] || 0);
+      const c = Number(r[canc] || 0);
+      out[base] = on ? (b + c) : b;
+    }
+    return out;
+  });
+}
 
 /* ============================================================================
    Filtros de período — dropdowns MM + AAAA
@@ -1321,9 +1367,14 @@ function render() {
   });
 
   /* P2 drilldown: especialidades + clínicas (agregados a partir das séries mensais) */
-  const espRows = Array.isArray(DATA.p2_consultas.por_especialidade_mes)
+  const espRowsRaw = Array.isArray(DATA.p2_consultas.por_especialidade_mes)
     ? filtMes(DATA.p2_consultas.por_especialidade_mes, de, ate)
     : (DATA.p2_consultas.totais_especialidade || []);
+  const espRows = applyCanc(espRowsRaw, [
+    ['agendadas', 'agendadas_canc'],
+    ['pagas', 'pagas_canc'],
+    ['receita_paga', 'receita_paga_canc'],
+  ]);
   const espAgg = groupAgg(espRows, ['especialidade'], ['agendadas','pagas','receita_paga']);
   espAgg.forEach(r => r.ticket_medio = r.pagas > 0 ? r.receita_paga / r.pagas : 0);
   renderTabelaDrilldown({
@@ -1345,9 +1396,14 @@ function render() {
       { filterBy:'scheduled', especialidade: r.especialidade }),
   });
 
-  const cliRows = Array.isArray(DATA.p2_consultas.por_clinica_mes)
+  const cliRowsRaw = Array.isArray(DATA.p2_consultas.por_clinica_mes)
     ? filtMes(DATA.p2_consultas.por_clinica_mes, de, ate)
     : (DATA.p2_consultas.totais_clinica || []);
+  const cliRows = applyCanc(cliRowsRaw, [
+    ['agendadas', 'agendadas_canc'],
+    ['pagas', 'pagas_canc'],
+    ['receita_paga', 'receita_paga_canc'],
+  ]);
   const cliAgg = groupAgg(cliRows, ['clinica','cidade'], ['agendadas','pagas','receita_paga']);
   cliAgg.forEach(r => r.ticket_medio = r.pagas > 0 ? r.receita_paga / r.pagas : 0);
   renderTabelaDrilldown({
@@ -1373,29 +1429,48 @@ function render() {
   /* P3 --------------------------------------------------------------- */
   // Para P3 respeitar o período: somamos a partir do mensal (agregando) em vez
   // de usar totais_historico. Isso permite filtrar por período.
-  const p3m = filtMes(DATA.p3_particular_convenio.mensal, de, ate);
+  const p3mRaw = filtMes(DATA.p3_particular_convenio.mensal, de, ate);
+  const p3m = applyCanc(p3mRaw, [
+    ['consultas_particular', 'consultas_particular_canc'],
+    ['consultas_convenio',   'consultas_convenio_canc'],
+    ['receita_particular',   'receita_particular_canc'],
+    ['receita_convenio',     'receita_convenio_canc'],
+  ]);
   const sum = (arr, k) => arr.reduce((s,r)=>s+Number(r[k]||0), 0);
-  const split = {
-    consultas_particular: sum(p3m, 'consultas_particular'),
-    consultas_convenio:   sum(p3m, 'consultas_convenio'),
-    receita_particular:   sum(p3m, 'receita_particular'),
-    receita_convenio:     sum(p3m, 'receita_convenio'),
-  };
+
+  // Donuts: breakdown por NOME de convênio (Camim, Liberty, Alamo…) usando
+  // o cubo mensal de P5 (mesmos filtros do gráfico de arrecadação). Particular
+  // aparece como fatia "PARTICULAR".
+  const p3DonutBaseRaw = filtMes(DATA.p5_receita_convenio.mensal_por_convenio || [], de, ate);
+  const p3DonutBase = applyCanc(p3DonutBaseRaw, [
+    ['consultas', 'consultas_canc'],
+    ['receita',   'receita_canc'],
+  ]);
+  const p3Donut = groupAgg(p3DonutBase, ['convenio'], ['consultas','receita'])
+    .filter(r => r.consultas > 0 || r.receita > 0)
+    .sort((a,b) => b.receita - a.receita);
+  const donutLabels = p3Donut.map(r => r.convenio);
+  const donutCons   = p3Donut.map(r => Number(r.consultas || 0));
+  const donutRec    = p3Donut.map(r => Number(r.receita   || 0));
+  const donutColors = donutLabels.map((_, i) => PAL[i % PAL.length]);
+
   destroy('p3_vol');
   charts.p3_vol = new Chart(document.getElementById('chP3_vol'), {
     type:'doughnut',
     data: {
-      labels: ['Particular','Convênio'],
-      datasets: [{ data: [split.consultas_particular, split.consultas_convenio], backgroundColor:[PAL[0], PAL[4]] }]
+      labels: donutLabels,
+      datasets: [{ data: donutCons, backgroundColor: donutColors }]
     },
-    options: { responsive:true, maintainAspectRatio:false, plugins: { legend:{position:'bottom'} } }
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins: { legend:{position:'bottom'},
+                 tooltip: { callbacks: { label: ctx => `${ctx.label}: ${nf(ctx.raw)} consultas` } } } }
   });
   destroy('p3_rec');
   charts.p3_rec = new Chart(document.getElementById('chP3_rec'), {
     type:'doughnut',
     data: {
-      labels: ['Particular','Convênio'],
-      datasets: [{ data: [split.receita_particular, split.receita_convenio], backgroundColor:[PAL[1], PAL[5]] }]
+      labels: donutLabels,
+      datasets: [{ data: donutRec, backgroundColor: donutColors }]
     },
     options: { responsive:true, maintainAspectRatio:false,
       plugins: { legend: { position:'bottom' },
@@ -1485,6 +1560,10 @@ function render() {
 
   /* P5 --------------------------------------------------------------- */
   let p5rows = filtConv(filtMes(DATA.p5_receita_convenio.mensal_por_convenio, de, ate), convsArr);
+  p5rows = applyCanc(p5rows, [
+    ['consultas', 'consultas_canc'],
+    ['receita',   'receita_canc'],
+  ]);
   const labels5 = Array.from(new Set(p5rows.map(r=>r.mes))).sort();
   const conveniosSeries = Array.from(new Set(p5rows.map(r=>r.convenio)));
   const mapC = {};
@@ -1508,6 +1587,10 @@ function render() {
   // Tabela totais por convênio — agregada a partir do mensal (respeita período + convênios)
   let totConvBase = filtMes(DATA.p5_receita_convenio.mensal_por_convenio || [], de, ate);
   if (convsArr) totConvBase = totConvBase.filter(r => convsArr.has(r.convenio));
+  totConvBase = applyCanc(totConvBase, [
+    ['consultas', 'consultas_canc'],
+    ['receita',   'receita_canc'],
+  ]);
   const totConvAgg = groupAgg(totConvBase, ['convenio'], ['consultas','receita']);
   totConvAgg.forEach(r => r.ticket_medio = r.consultas > 0 ? r.receita / r.consultas : 0);
   renderTabelaDrilldown({
@@ -1534,6 +1617,10 @@ function render() {
     ? filtMes(convEspMesRaw, de, ate)
     : (DATA.p5_receita_convenio.por_convenio_especialidade || []);
   if (convsArr) convEspBase = convEspBase.filter(r => convsArr.has(r.convenio));
+  convEspBase = applyCanc(convEspBase, [
+    ['consultas', 'consultas_canc'],
+    ['receita',   'receita_canc'],
+  ]);
   const convEspAgg = groupAgg(convEspBase, ['convenio','especialidade'], ['consultas','receita']);
   renderTabelaDrilldown({
     tableId: 'tblConvEsp',
@@ -1559,6 +1646,10 @@ function render() {
     ? filtMes(convCliMesRaw, de, ate)
     : (DATA.p5_receita_convenio.por_convenio_clinica || []);
   if (convsArr) convCliBase = convCliBase.filter(r => convsArr.has(r.convenio));
+  convCliBase = applyCanc(convCliBase, [
+    ['consultas', 'consultas_canc'],
+    ['receita',   'receita_canc'],
+  ]);
   const convCliAgg = groupAgg(convCliBase, ['convenio','clinica','cidade'], ['consultas','receita']);
   renderTabelaDrilldown({
     tableId: 'tblConvCli',
@@ -1616,7 +1707,8 @@ async function refreshEgideLiveCards() {
 
   try {
     // Limit=1 porque só queremos o meta agregado
-    const url = `/api/egide/rows?metric=consultas_pagas&de=${de}&ate=${ate}&limit=1&cancelados=0`;
+    const canc = ST.mostrarCanc ? 1 : 0;
+    const url = `/api/egide/rows?metric=consultas_pagas&de=${de}&ate=${ate}&limit=1&cancelados=${canc}`;
     const r = await fetch(url, { credentials:'same-origin', signal: _egideMetaCtl.signal });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
@@ -2070,6 +2162,15 @@ fetch(JSON_URL, { credentials:'same-origin' })
 ['fDeMes','fDeAno','fAteMes','fAteAno'].forEach(id =>
   document.getElementById(id).addEventListener('change', render));
 
+// Switch global "Mostrar cancelados"
+const fMostrarCancEl = document.getElementById('fMostrarCanc');
+const fMostrarCancTextEl = document.getElementById('fMostrarCancText');
+fMostrarCancEl.addEventListener('change', () => {
+  ST.mostrarCanc = fMostrarCancEl.checked;
+  fMostrarCancTextEl.textContent = ST.mostrarCanc ? 'Somados' : 'Ocultos';
+  render();
+});
+
 document.getElementById('btnPickConv').addEventListener('click', openConvModal);
 document.getElementById('convCancel').addEventListener('click', closeConvModal);
 document.getElementById('convApply').addEventListener('click', applyConvModal);
@@ -2088,6 +2189,9 @@ document.getElementById('btnReset').addEventListener('click', () => {
   const meses = (DATA?.p1_clientes?.novos_por_mes || []).map(r => r.mes).sort();
   popularDropdownsPeriodo(meses);
   ST.search = { esp:'', cli:'', convEsp:'', convCli:'' };
+  ST.mostrarCanc = false;
+  fMostrarCancEl.checked = false;
+  fMostrarCancTextEl.textContent = 'Ocultos';
   ['qEspecialidade','qClinica','qConvEsp','qConvCli'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
