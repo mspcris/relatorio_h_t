@@ -125,6 +125,19 @@ def pergunta1_clientes(cur) -> dict:
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01", f"{INICIO}-01"))
 
+    # Base acumulada por mês (inclui pre-INICIO para bater com base_total)
+    base_acumulada = _q(cur, """
+        SELECT mes, novos,
+               SUM(novos) OVER (ORDER BY mes) acumulada
+        FROM (
+            SELECT DATE_FORMAT(created_at,'%%Y-%%m') mes, COUNT(*) novos
+            FROM customers
+            WHERE created_at IS NOT NULL
+            GROUP BY mes
+        ) t
+        ORDER BY mes
+    """)
+
     return {
         "base_total": int(base["total"] or 0),
         "base_ativos_cadastro": int(base["ativos_cadastro"] or 0),
@@ -132,6 +145,7 @@ def pergunta1_clientes(cur) -> dict:
         "ativos_orders_por_mes": ativos_orders,
         "ativos_consultas_por_mes": ativos_appts,
         "ativos_por_mes": ativos_qualquer,
+        "base_acumulada_por_mes": base_acumulada,
     }
 
 
@@ -462,12 +476,61 @@ def pergunta5_receita_convenio(cur) -> dict:
         ORDER BY i.name, consultas DESC
     """)
 
+    # Drilldown mensal: por convênio x especialidade (permite filtrar por período no front)
+    por_convenio_especialidade_mes = _q(cur, f"""
+        SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
+               i.name convenio,
+               COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
+               COUNT(DISTINCT da.id) consultas,
+               ROUND(SUM(IFNULL(da.total,0))/100.0, 2) receita
+        FROM doctorappointments da
+        JOIN customer_insurances ci
+          ON ci.customerId  = da.customerId
+         AND ci.isCurrent   = 1
+         AND ci.created_at <= da.`date`
+         AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
+        JOIN insurances i ON i.id = ci.insuranceId
+        LEFT JOIN specialties s ON s.id = da.specialtyId
+        WHERE da.canceledAt IS NULL
+          AND da.`date` >= %s
+        GROUP BY mes, i.name, especialidade
+        ORDER BY mes, i.name, consultas DESC
+    """, (f"{INICIO}-01",))
+
+    # Drilldown mensal: por convênio x clínica (permite filtrar por período no front)
+    por_convenio_clinica_mes = _q(cur, f"""
+        SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
+               i.name convenio,
+               COALESCE(c.name, '(sem clínica associada)') clinica,
+               COALESCE(c.city, '—') cidade,
+               COUNT(DISTINCT da.id) consultas,
+               ROUND(SUM(IFNULL(da.total,0))/100.0, 2) receita
+        FROM doctorappointments da
+        JOIN customer_insurances ci
+          ON ci.customerId  = da.customerId
+         AND ci.isCurrent   = 1
+         AND ci.created_at <= da.`date`
+         AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
+        JOIN insurances i ON i.id = ci.insuranceId
+        LEFT JOIN schedules sc ON sc.id = da.scheduleId
+        LEFT JOIN clinic_doctor_specialties cds ON cds.id = sc.clinicDoctorSpecialtyId
+        LEFT JOIN clinic_doctors cd ON cd.id = cds.clinicDoctorId
+        LEFT JOIN clinic_exams ce ON ce.id = sc.clinicExamId
+        LEFT JOIN clinics c ON c.id = COALESCE(cd.clinicId, ce.clinicId)
+        WHERE da.canceledAt IS NULL
+          AND da.`date` >= %s
+        GROUP BY mes, i.name, clinica, cidade
+        ORDER BY mes, i.name, consultas DESC
+    """, (f"{INICIO}-01",))
+
     return {
         "mensal_por_convenio": mensal,
         "totais_por_convenio": totais_conv,
         "convenios_cadastrados": convenios_cadastrados,
         "por_convenio_especialidade": por_convenio_especialidade,
         "por_convenio_clinica": por_convenio_clinica,
+        "por_convenio_especialidade_mes": por_convenio_especialidade_mes,
+        "por_convenio_clinica_mes": por_convenio_clinica_mes,
     }
 
 

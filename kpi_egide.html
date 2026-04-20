@@ -442,9 +442,9 @@
 
         <div class="cards">
           <div class="card-kpi">
-            <div class="label">Base total</div>
+            <div class="label">Base acumulada</div>
             <div class="value" id="k_base">—</div>
-            <div class="sub">cadastros desde 2021</div>
+            <div class="sub" id="k_base_sub">—</div>
           </div>
           <div class="card-kpi green">
             <div class="label">Novos no período <span class="badge-parcial">PARCIAL</span></div>
@@ -586,8 +586,7 @@
               (tabela <code>customer_insurances</code>).
               <div style="margin-top:6px;">
                 <span class="destaque">📊 O que você vai ver:</span>
-                a pizza é o <b>total histórico</b> — deixa claro que a maior parte da receita é particular.
-                Convênio ainda é fatia pequena.
+                a pizza soma o <b>período filtrado</b> — a fatia de convênio costuma ser pequena perto de particular.
               </div>
             </div>
           </details>
@@ -595,11 +594,11 @@
 
         <div class="chart-row two">
           <div class="chart-box">
-            <div class="chart-title">Consultas (histórico)</div>
+            <div class="chart-title">Consultas (no período)</div>
             <canvas id="chP3_vol"></canvas>
           </div>
           <div class="chart-box">
-            <div class="chart-title">Receita (histórico, R$)</div>
+            <div class="chart-title">Receita (R$, no período)</div>
             <canvas id="chP3_rec"></canvas>
           </div>
         </div>
@@ -662,7 +661,7 @@
           <canvas id="chP5"></canvas>
         </div>
 
-        <h3 class="section-title" style="font-size: 1rem;"><i class="fas fa-table"></i> Totais históricos por convênio</h3>
+        <h3 class="section-title" style="font-size: 1rem;"><i class="fas fa-table"></i> Totais por convênio</h3>
         <div class="explain gray">
           Para cada convênio: quantas consultas, receita total e ticket médio. Se o ticket médio de um convênio é muito diferente do outro, normalmente é porque ele cobre procedimentos mais baratos ou tem muitas promoções.
         </div>
@@ -686,7 +685,7 @@
           <span class="badge badge-secondary ml-2" style="font-size: .7rem;">drilldown</span>
         </h3>
         <div class="explain gray">
-          Cruza cada convênio com as especialidades atendidas. Obedece ao filtro de convênios.
+          Cruza cada convênio com as especialidades atendidas. Obedece aos filtros de período e convênios.
         </div>
         <div class="table-searchrow">
           <input type="text" id="qConvEsp" placeholder="🔍 Filtrar convênio ou especialidade…">
@@ -712,7 +711,7 @@
           <span class="badge badge-secondary ml-2" style="font-size: .7rem;">drilldown</span>
         </h3>
         <div class="explain gray">
-          Cruza cada convênio com as clínicas atendidas. Obedece ao filtro de convênios.
+          Cruza cada convênio com as clínicas atendidas. Obedece aos filtros de período e convênios.
         </div>
         <div class="table-searchrow">
           <input type="text" id="qConvCli" placeholder="🔍 Filtrar convênio, clínica ou cidade…">
@@ -792,6 +791,26 @@ function filtConv(arr, convs) {
   if (!arr) return arr || [];
   if (!convs || !convs.size || convs.size === 0) return arr;
   return arr.filter(r => convs.has(r.convenio));
+}
+function groupAgg(rows, groupKeys, sumKeys) {
+  const map = new Map();
+  for (const r of (rows || [])) {
+    const k = groupKeys.map(g => r[g] == null ? '' : String(r[g])).join('||');
+    if (!map.has(k)) {
+      const base = {};
+      groupKeys.forEach(g => base[g] = r[g]);
+      sumKeys.forEach(s => base[s] = 0);
+      map.set(k, base);
+    }
+    const o = map.get(k);
+    sumKeys.forEach(s => o[s] += Number(r[s] || 0));
+  }
+  return Array.from(map.values());
+}
+function fmtMesBR(mes) {
+  if (!mes || mes.length < 7) return mes || '—';
+  const [y, m] = mes.split('-');
+  return (MESES_PT_SHORT[Number(m)-1] || m) + '/' + y;
 }
 
 /* Estado global de filtros */
@@ -908,7 +927,25 @@ function render() {
   const convsArr = (ST.convAll && convSel.size === ST.convAll.size) ? null : convSel;
 
   /* P1 --------------------------------------------------------------- */
-  document.getElementById('k_base').textContent = nf(DATA.p1_clientes.base_total);
+  // Base acumulada até o mês final do filtro. Fallback: base_total (histórico).
+  const baseAcum = DATA.p1_clientes.base_acumulada_por_mes;
+  let baseVal, baseSub;
+  if (Array.isArray(baseAcum) && baseAcum.length) {
+    const corte = baseAcum.filter(r => r.mes <= ate);
+    if (corte.length) {
+      baseVal = Number(corte[corte.length - 1].acumulada || 0);
+      baseSub = 'cadastros até ' + fmtMesBR(corte[corte.length - 1].mes);
+    } else {
+      baseVal = 0;
+      baseSub = 'nenhum cadastro até ' + fmtMesBR(ate);
+    }
+  } else {
+    baseVal = Number(DATA.p1_clientes.base_total || 0);
+    baseSub = 'cadastros totais (série histórica)';
+  }
+  document.getElementById('k_base').textContent = nf(baseVal);
+  document.getElementById('k_base_sub').textContent = baseSub;
+
   const novosMes  = filtMes(DATA.p1_clientes.novos_por_mes, de, ate);
   const ativosMes = filtMes(DATA.p1_clientes.ativos_por_mes, de, ate);
 
@@ -974,10 +1011,15 @@ function render() {
       scales: { y: { beginAtZero:true } } }
   });
 
-  /* P2 drilldown: especialidades + clínicas (totais já no JSON) */
+  /* P2 drilldown: especialidades + clínicas (agregados a partir das séries mensais) */
+  const espRows = Array.isArray(DATA.p2_consultas.por_especialidade_mes)
+    ? filtMes(DATA.p2_consultas.por_especialidade_mes, de, ate)
+    : (DATA.p2_consultas.totais_especialidade || []);
+  const espAgg = groupAgg(espRows, ['especialidade'], ['agendadas','pagas','receita_paga']);
+  espAgg.forEach(r => r.ticket_medio = r.pagas > 0 ? r.receita_paga / r.pagas : 0);
   renderTabelaDrilldown({
     tableId: 'tblEspecialidade',
-    rows: (DATA.p2_consultas.totais_especialidade || []),
+    rows: espAgg,
     colunas: [
       {k:'especialidade', fmt:v=>v},
       {k:'agendadas', num:true, fmt:v=>nf(v)},
@@ -990,9 +1032,15 @@ function render() {
     defaultSort: { key:'agendadas', dir:'desc' },
     id:'esp',
   });
+
+  const cliRows = Array.isArray(DATA.p2_consultas.por_clinica_mes)
+    ? filtMes(DATA.p2_consultas.por_clinica_mes, de, ate)
+    : (DATA.p2_consultas.totais_clinica || []);
+  const cliAgg = groupAgg(cliRows, ['clinica','cidade'], ['agendadas','pagas','receita_paga']);
+  cliAgg.forEach(r => r.ticket_medio = r.pagas > 0 ? r.receita_paga / r.pagas : 0);
   renderTabelaDrilldown({
     tableId: 'tblClinica',
-    rows: (DATA.p2_consultas.totais_clinica || []),
+    rows: cliAgg,
     colunas: [
       {k:'clinica', fmt:v=>v},
       {k:'cidade', fmt:v=>v},
@@ -1142,12 +1190,14 @@ function render() {
       scales: { x:{ stacked:true }, y:{ stacked:true, beginAtZero:true, ticks: { callback: v => 'R$ '+(v).toLocaleString('pt-BR') } } } }
   });
 
-  // Tabela totais por convênio (histórico — não reduz por período, mas reduz por filtro de convênios)
-  let totConsHist = DATA.p5_receita_convenio.totais_por_convenio || [];
-  if (convsArr) totConsHist = totConsHist.filter(r => convsArr.has(r.convenio));
+  // Tabela totais por convênio — agregada a partir do mensal (respeita período + convênios)
+  let totConvBase = filtMes(DATA.p5_receita_convenio.mensal_por_convenio || [], de, ate);
+  if (convsArr) totConvBase = totConvBase.filter(r => convsArr.has(r.convenio));
+  const totConvAgg = groupAgg(totConvBase, ['convenio'], ['consultas','receita']);
+  totConvAgg.forEach(r => r.ticket_medio = r.consultas > 0 ? r.receita / r.consultas : 0);
   renderTabelaDrilldown({
     tableId: 'tblConv',
-    rows: totConsHist,
+    rows: totConvAgg,
     colunas: [
       {k:'convenio', fmt:v=>v},
       {k:'consultas', num:true, fmt:v=>nf(v)},
@@ -1160,12 +1210,16 @@ function render() {
     id:'totConv',
   });
 
-  // Drilldown convênio × especialidade
-  let convEsp = DATA.p5_receita_convenio.por_convenio_especialidade || [];
-  if (convsArr) convEsp = convEsp.filter(r => convsArr.has(r.convenio));
+  // Drilldown convênio × especialidade — agrega a partir do cubo mensal
+  const convEspMesRaw = DATA.p5_receita_convenio.por_convenio_especialidade_mes;
+  let convEspBase = Array.isArray(convEspMesRaw)
+    ? filtMes(convEspMesRaw, de, ate)
+    : (DATA.p5_receita_convenio.por_convenio_especialidade || []);
+  if (convsArr) convEspBase = convEspBase.filter(r => convsArr.has(r.convenio));
+  const convEspAgg = groupAgg(convEspBase, ['convenio','especialidade'], ['consultas','receita']);
   renderTabelaDrilldown({
     tableId: 'tblConvEsp',
-    rows: convEsp,
+    rows: convEspAgg,
     colunas: [
       {k:'convenio', fmt:v=>v},
       {k:'especialidade', fmt:v=>v},
@@ -1178,12 +1232,16 @@ function render() {
     id:'convEsp',
   });
 
-  // Drilldown convênio × clínica
-  let convCli = DATA.p5_receita_convenio.por_convenio_clinica || [];
-  if (convsArr) convCli = convCli.filter(r => convsArr.has(r.convenio));
+  // Drilldown convênio × clínica — agrega a partir do cubo mensal
+  const convCliMesRaw = DATA.p5_receita_convenio.por_convenio_clinica_mes;
+  let convCliBase = Array.isArray(convCliMesRaw)
+    ? filtMes(convCliMesRaw, de, ate)
+    : (DATA.p5_receita_convenio.por_convenio_clinica || []);
+  if (convsArr) convCliBase = convCliBase.filter(r => convsArr.has(r.convenio));
+  const convCliAgg = groupAgg(convCliBase, ['convenio','clinica','cidade'], ['consultas','receita']);
   renderTabelaDrilldown({
     tableId: 'tblConvCli',
-    rows: convCli,
+    rows: convCliAgg,
     colunas: [
       {k:'convenio', fmt:v=>v},
       {k:'clinica', fmt:v=>v},
