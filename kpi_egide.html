@@ -1277,6 +1277,7 @@ function render() {
   /* P2 --------------------------------------------------------------- */
   const p2 = filtMes(DATA.p2_consultas.mensal, de, ate);
   const p2pag = filtMes(DATA.p2_consultas.mensal_pagamento || [], de, ate);
+  const labels2 = p2.map(r => r.mes);
   renderP2Vol({ p2, p2pag, de, ate });
   destroy('p2_sta');
   charts.p2_sta = new Chart(document.getElementById('chP2_status'), {
@@ -2029,11 +2030,24 @@ fetch(JSON_URL, { credentials:'same-origin' })
   .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(j => {
     DATA = j;
-    // Info topo
+    // Info topo — ETL gerado_em em UTC (ISO). Converte pra BRT (UTC-3) pro usuário.
     if (DATA.meta) {
-      const dt = (DATA.meta.gerado_em || '').split('T')[0];
+      const raw = (DATA.meta.gerado_em || '').trim();
+      let carimbo = raw;
+      if (raw) {
+        const iso = raw.includes('T') ? (raw.endsWith('Z') || /[+\-]\d{2}:?\d{2}$/.test(raw) ? raw : raw + 'Z') : raw;
+        const d = new Date(iso);
+        if (!isNaN(d.getTime())) {
+          const fmt = new Intl.DateTimeFormat('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', hour12: false
+          });
+          carimbo = fmt.format(d).replace(',', ' às') + ' BRT';
+        }
+      }
       document.getElementById('jsonInfo').innerHTML =
-        `<i class="far fa-clock"></i> atualizado em ${dt} · desde ${DATA.meta.inicio_mes}`;
+        `<i class="far fa-clock"></i> ETL rodou em ${carimbo} · desde ${DATA.meta.inicio_mes}`;
     }
 
     // Popular convênios
