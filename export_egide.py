@@ -527,12 +527,13 @@ def pergunta5_receita_convenio(cur) -> dict:
 
     # Lista de convênios cadastrados (para montar filtro):
     # mistura nomes da tabela partners (fonte primária) + insurances (legado).
+    # "carteirinhas_ativas" = pessoas com vínculo naquele convênio.
     convenios_cadastrados = _q(cur, """
         SELECT name, SUM(carteirinhas_ativas) carteirinhas_ativas
         FROM (
             SELECT p.name,
-                   (SELECT COUNT(DISTINCT pp.customerId) FROM partnerpeople pp
-                    WHERE pp.partnerId = p.id) AS carteirinhas_ativas
+                   (SELECT COUNT(*) FROM partnerpeople pp
+                    WHERE pp.partnerId = p.id AND pp.deleted_at IS NULL) AS carteirinhas_ativas
             FROM partners p
             WHERE p.deleted_at IS NULL
             UNION ALL
