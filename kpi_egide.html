@@ -8,16 +8,16 @@
   <!-- KPI Metadata (Manus Integration) -->
   <meta name="kpi-id" content="egide" />
   <meta name="kpi-title" content="KPI Égide Saúde & Benefícios" />
-  <meta name="kpi-description" content="Dashboard do marketplace Égide: base de clientes, consultas/exames agendados e pagos, split particular vs convênio, arrecadação por contrato e por convênio." />
+  <meta name="kpi-description" content="Dashboard do marketplace Égide: base de clientes, consultas/exames agendados e pagos, split particular vs convênio, arrecadação por contrato e por convênio, drilldowns por clínica e especialidade." />
   <meta name="kpi-category" content="Égide" />
-  <meta name="kpi-keywords" content="egide, marketplace, convenio, consultas, exames, farmacia, particular" />
+  <meta name="kpi-keywords" content="egide, marketplace, convenio, consultas, exames, farmacia, particular, clinica, especialidade" />
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="/css/style2.css?v=20251114">
   <link rel="stylesheet" href="/css/style_kpi.css?v=20251114&force=1">
-  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
 
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -25,88 +25,291 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <style>
-    body { font-family: "Source Sans Pro", system-ui, sans-serif; font-size: 1rem; }
-    h1,h2,h3 { font-weight: 600; }
-    h2.section-title {
-      font-size: 1.25rem; margin-top: 24px; margin-bottom: 10px;
-      padding-bottom: 6px; border-bottom: 2px solid #e5e7eb;
+    /* ============================================================
+       Reset local — evita conflito com .info-box do AdminLTE.
+       Usamos .explain no lugar. Tudo é fluido / mobile-first.
+       ============================================================ */
+    :root {
+      --brand: #3b82f6;
+      --ok: #10b981;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+      --ink: #111827;
+      --soft: #6b7280;
+      --line: #e5e7eb;
+      --bg: #f8fafc;
+      --pill-bg: #eff6ff;
+      --pill-fg: #1d4ed8;
     }
 
-    /* Caixa de explicação visível na tela (12-anos friendly) */
-    .info-box {
+    body {
+      font-family: "Source Sans Pro", system-ui, -apple-system, sans-serif;
+      font-size: 1rem;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    h1, h2, h3 { font-weight: 600; }
+
+    .section-title {
+      font-size: 1.1rem;
+      margin: 22px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid var(--line);
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    /* ---------- Caixa explicativa (substitui .info-box) ---------- */
+    .explain {
       background: #fffbeb;
-      border-left: 4px solid #f59e0b;
+      border-left: 4px solid var(--warn);
       border-radius: 6px;
-      padding: 14px 18px;
-      margin: 0 0 16px 0;
+      padding: 12px 14px;
+      margin: 0 0 14px 0;
       font-size: .9rem;
       line-height: 1.55;
       color: #451a03;
     }
-    .info-box .info-title {
+    .explain .title {
       font-weight: 700; color: #92400e;
-      font-size: .98rem; margin-bottom: 6px;
+      margin-bottom: 6px;
       display: flex; align-items: center; gap: 6px;
     }
-    .info-box ul { margin: 6px 0 0 0; padding-left: 20px; }
-    .info-box li { margin-bottom: 3px; }
-    .info-box .destaque {
+    .explain ul { margin: 4px 0 0 0; padding-left: 18px; }
+    .explain li { margin-bottom: 2px; }
+    .explain .destaque {
       background: #fde68a; padding: 1px 5px;
       border-radius: 3px; font-weight: 600;
     }
-    .info-box.cinza {
-      background: #f8fafc; border-left-color: #64748b; color: #1e293b;
-    }
-    .info-box.cinza .info-title { color: #334155; }
-    .info-box.azul {
-      background: #eff6ff; border-left-color: #3b82f6; color: #1e3a8a;
-    }
-    .info-box.azul .info-title { color: #1d4ed8; }
-    .info-box.verde {
-      background: #ecfdf5; border-left-color: #10b981; color: #065f46;
-    }
-    .info-box.verde .info-title { color: #047857; }
-    .info-box.roxo {
-      background: #f5f3ff; border-left-color: #8b5cf6; color: #4c1d95;
-    }
-    .info-box.roxo .info-title { color: #6d28d9; }
+    .explain.gray  { background: #f1f5f9; border-left-color: #64748b; color: #1e293b; }
+    .explain.gray  .title { color: #334155; }
+    .explain.blue  { background: #eff6ff; border-left-color: var(--brand); color: #1e3a8a; }
+    .explain.blue  .title { color: #1d4ed8; }
+    .explain.green { background: #ecfdf5; border-left-color: var(--ok); color: #065f46; }
+    .explain.green .title { color: #047857; }
+    .explain.purple{ background: #f5f3ff; border-left-color: #8b5cf6; color: #4c1d95; }
+    .explain.purple .title { color: #6d28d9; }
 
-    /* Cards KPI (big numbers) */
-    .kpi-box {
+    .explain details > summary {
+      cursor: pointer; font-weight: 700;
+      display: flex; align-items: center; gap: 6px;
+      list-style: none;
+    }
+    .explain details > summary::after {
+      content: "▾"; margin-left: auto; transition: transform .2s;
+    }
+    .explain details[open] > summary::after { transform: rotate(180deg); }
+    .explain details .body { margin-top: 8px; }
+
+    /* ---------- KPI cards ---------- */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .card-kpi {
       background: #fff; border-radius: 10px;
-      border-left: 5px solid #3b82f6;
-      padding: 14px 16px; height: 100%;
+      border-left: 5px solid var(--brand);
+      padding: 12px 14px;
       box-shadow: 0 1px 2px rgba(0,0,0,.05);
+      min-width: 0;
     }
-    .kpi-box.green  { border-left-color: #10b981; }
-    .kpi-box.orange { border-left-color: #f59e0b; }
-    .kpi-box.purple { border-left-color: #8b5cf6; }
-    .kpi-box.red    { border-left-color: #ef4444; }
-    .kpi-box.teal   { border-left-color: #14b8a6; }
-    .kpi-box .label { font-size: .85rem; color:#6b7280; font-weight: 600; }
-    .kpi-box .value { font-size: 1.8rem; font-weight: 700; color:#111827; margin-top: 4px; line-height: 1.1; }
-    .kpi-box .sub   { font-size: .78rem; color:#6b7280; margin-top: 4px; }
+    .card-kpi.green  { border-left-color: var(--ok); }
+    .card-kpi.orange { border-left-color: var(--warn); }
+    .card-kpi.purple { border-left-color: #8b5cf6; }
+    .card-kpi.red    { border-left-color: var(--bad); }
+    .card-kpi.teal   { border-left-color: #14b8a6; }
+    .card-kpi .label { font-size: .8rem; color: var(--soft); font-weight: 600; }
+    .card-kpi .value { font-size: 1.7rem; font-weight: 700; margin-top: 4px; line-height: 1.1; }
+    .card-kpi .sub   { font-size: .75rem; color: var(--soft); margin-top: 4px; }
 
-    .chart-wrap { background:#fff; border:1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
-    .chart-wrap canvas { max-height: 360px; }
-
-    .filter-bar {
-      background: #fff; padding: 12px; border-radius: 8px;
-      border: 1px solid #e5e7eb; margin-bottom: 14px;
+    /* ---------- Chart box ---------- */
+    .chart-box {
+      background: #fff; border: 1px solid var(--line); border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+      position: relative;
+      min-height: 260px;
     }
-    .filter-bar label { font-weight: 600; font-size: .85rem; color:#374151; margin-bottom: 4px; }
-    .filter-bar .form-control, .filter-bar select { font-size: .9rem; }
+    .chart-box .chart-title {
+      font-weight: 600; font-size: .95rem; margin-bottom: 6px;
+      text-align: center;
+    }
+    .chart-box canvas { max-height: 360px; }
+    .chart-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 760px) {
+      .chart-row.two { grid-template-columns: 1fr 1fr; }
+    }
 
+    /* ---------- Filtros (pills + MM/AAAA) ---------- */
+    .filters {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 14px;
+      position: sticky; top: 0; z-index: 50;
+    }
+    .filters summary {
+      cursor: pointer;
+      font-weight: 700;
+      list-style: none;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .filters summary::after { content: "▾"; margin-left: auto; transition: transform .2s; }
+    .filters[open] summary::after { transform: rotate(180deg); }
+
+    .filters-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    @media (min-width: 760px) {
+      .filters-grid { grid-template-columns: repeat(5, 1fr); align-items: end; }
+    }
+    .f-field label {
+      display: block;
+      font-size: .78rem; font-weight: 600; color: #374151;
+      margin-bottom: 4px;
+    }
+    .f-field select,
+    .f-field input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: #fff; color: var(--ink);
+      font-size: .92rem; line-height: 1.2;
+      height: 40px;
+      min-height: 40px;
+    }
+    .f-date-pair {
+      display: grid; grid-template-columns: 2fr 1fr; gap: 6px;
+    }
+    .f-btn {
+      padding: 10px 12px;
+      border: 1px solid #d1d5db; background: #fff; border-radius: 6px;
+      font-size: .9rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      height: 40px;
+    }
+    .f-btn:hover { background: #f3f4f6; }
+    .f-btn.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+    .f-btn.primary:hover { background: #2563eb; }
+
+    /* Pills de convênios */
+    .pills-row {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      margin-top: 8px; align-items: center;
+    }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--pill-bg);
+      color: var(--pill-fg);
+      border: 1px solid #bfdbfe;
+      border-radius: 999px;
+      padding: 4px 6px 4px 12px;
+      font-size: .82rem;
+      font-weight: 600;
+    }
+    .pill .x {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 20px; height: 20px; border-radius: 999px;
+      background: #dbeafe; cursor: pointer;
+      font-size: .7rem;
+    }
+    .pill .x:hover { background: #bfdbfe; }
+    .pill.all { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+
+    /* Modal de picker */
+    .modal-back {
+      position: fixed; inset: 0; background: rgba(0,0,0,.4);
+      display: none; align-items: flex-end; justify-content: center;
+      z-index: 200;
+    }
+    .modal-back.on { display: flex; }
+    @media (min-width: 760px) { .modal-back { align-items: center; } }
+    .modal-card {
+      width: 100%; max-width: 420px; max-height: 80vh;
+      background: #fff; border-radius: 10px 10px 0 0;
+      padding: 16px; overflow: auto;
+      box-shadow: 0 -6px 24px rgba(0,0,0,.2);
+    }
+    @media (min-width: 760px) { .modal-card { border-radius: 10px; } }
+    .modal-card h3 { margin: 0 0 10px; font-size: 1rem; }
+    .modal-list label {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 4px; border-bottom: 1px solid #f1f5f9;
+      cursor: pointer;
+      font-size: .9rem;
+    }
+    .modal-list label:hover { background: #f9fafb; }
+    .modal-list input { width: 16px; height: 16px; }
+    .modal-foot {
+      display: flex; gap: 8px; justify-content: flex-end;
+      margin-top: 14px;
+    }
+
+    /* ---------- Tabela drilldown ---------- */
+    .table-drill {
+      width: 100%; font-size: .87rem;
+      background: #fff; border-radius: 8px; overflow: hidden;
+      border: 1px solid var(--line);
+      border-collapse: separate; border-spacing: 0;
+    }
+    .table-drill th, .table-drill td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+    }
+    .table-drill th {
+      background: #f9fafb;
+      font-weight: 600;
+      position: sticky; top: 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .table-drill th .sort { opacity: .4; margin-left: 4px; }
+    .table-drill th.sort-asc .sort,
+    .table-drill th.sort-desc .sort { opacity: 1; }
+    .table-drill td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .table-drill tbody tr:hover { background: #f9fafb; }
+    .table-drill-wrap {
+      max-height: 420px;
+      overflow: auto;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+    }
+    .table-drill-wrap .table-drill { border: none; }
+    .table-searchrow {
+      display: grid; grid-template-columns: 1fr auto; gap: 8px;
+      margin: 8px 0;
+    }
+    .table-searchrow input {
+      padding: 8px 10px; border: 1px solid #d1d5db;
+      border-radius: 6px; font-size: .9rem;
+    }
     .badge-parcial {
       background: #fef3c7; color: #92400e;
       font-weight: 600; font-size: .7rem;
       padding: 2px 6px; border-radius: 4px; margin-left: 6px;
+      display: inline-block;
     }
 
-    table.table-simple { width:100%; font-size: .85rem; }
-    table.table-simple th, table.table-simple td { padding: 6px 8px; border-bottom:1px solid #e5e7eb; }
-    table.table-simple th { background:#f9fafb; text-align:left; }
-    table.table-simple td.num { text-align:right; font-variant-numeric: tabular-nums; }
+    /* Sticky topbar mobile friendly */
+    .main-header {
+      position: sticky; top: 0; z-index: 60;
+    }
+
+    @media (max-width: 760px) {
+      .section-title { font-size: 1rem; }
+      .chart-box canvas { max-height: 300px; }
+    }
   </style>
 </head>
 
@@ -118,10 +321,10 @@
       <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a></li>
     </ul>
     <span class="ml-2 font-weight-bold d-flex align-items-center">
-      <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
-      <span class="ml-2">KPI Égide <span class="badge badge-info ml-1">Saúde & Benefícios</span></span>
-      <span id="jsonInfo" class="ml-3 text-muted" style="font-size:.8rem;"></span>
+      <img src="/images/Logo Camim-01_200px.png" height="28" alt="Logo Camim">
+      <span class="ml-2">KPI Égide <span class="badge badge-info ml-1">Saúde &amp; Benefícios</span></span>
     </span>
+    <span id="jsonInfo" class="ml-auto text-muted" style="font-size:.78rem;"></span>
   </nav>
 
   <aside class="main-sidebar sidebar-dark-primary elevation-4">
@@ -146,228 +349,386 @@
   </aside>
 
   <div class="content-wrapper">
-    <section class="content p-3">
+    <section class="content p-2 p-md-3">
 
-      <!-- CAIXA DE TOPO: COMO LER ESTA PÁGINA (12-anos friendly) -->
-      <div class="info-box cinza">
-        <div class="info-title"><i class="fas fa-book-open"></i> Como ler esta página (em uma respirada)</div>
-        Essa página mostra os números da <b>Égide Saúde &amp; Benefícios</b> — que é tipo um <b>"iFood da saúde"</b>:
-        <b>clínicas, médicos e farmácias</b> se cadastram, e os <b>clientes marcam consulta, exame ou compram remédio</b> pelo site/app.
-        A Égide é da CAMIM, mas tem <b>banco de dados separado</b> dos postos.
-        <ul>
-          <li><b>Consulta</b> = cliente vai num médico de uma especialidade (cardiologia, oftalmo…).</li>
-          <li><b>Exame</b> = ele vai fazer um exame (sangue, raio-X, ultra…) — ainda é agendamento, mas sem médico fixo.</li>
-          <li><b>Particular</b> = cliente pagou do próprio bolso (cartão, PIX, boleto).</li>
-          <li><b>Convênio</b> = o plano de saúde dele (Bradesco, Unimed, SulAmérica…) está cobrindo. Ele <b>não paga direto</b>; quem paga é o convênio.</li>
-        </ul>
-        <div style="margin-top:8px;">
-          <span class="destaque">⚠️ Dica pra não se confundir:</span>
-          Quando a gente fala <b>"receita"</b>, é <b>dinheiro que entrou</b>. Quando a gente fala <b>"consulta paga"</b>, é quando o cliente já quitou o valor (não só agendou).
-          Uma consulta <b>agendada</b> pode ser <b>cancelada</b> depois — por isso os números de <b>agendada</b> e <b>paga</b> são diferentes.
-        </div>
-        <div style="margin-top:8px; font-size:.82rem; color:#475569;">
-          Os dados começam em <b>janeiro/2023</b>. O mês em andamento aparece com <span class="badge-parcial">PARCIAL</span> porque ainda não fechou — é só uma prévia.
-        </div>
+      <!-- ================================================================= -->
+      <!-- COMO LER (colapsável)                                              -->
+      <!-- ================================================================= -->
+      <div class="explain gray">
+        <details open>
+          <summary><i class="fas fa-book-open"></i> Como ler esta página</summary>
+          <div class="body">
+            A <b>Égide Saúde &amp; Benefícios</b> é um <b>marketplace de saúde</b>: clínicas, médicos e farmácias se cadastram,
+            e clientes <b>marcam consulta, exame ou compram remédio</b> pelo site/app.
+            É da CAMIM, mas tem banco de dados separado.
+            <ul>
+              <li><b>Consulta</b> — cliente vai num médico de uma especialidade.</li>
+              <li><b>Exame</b> — cliente vai fazer um exame (sem médico fixo).</li>
+              <li><b>Particular</b> — cliente pagou do próprio bolso (cartão, PIX, boleto).</li>
+              <li><b>Convênio</b> — plano de saúde (Unimed, Bradesco…) cobre. Quem paga é o convênio, não o cliente.</li>
+            </ul>
+            <div style="margin-top:8px;">
+              <span class="destaque">⚠️ Pra não confundir:</span>
+              <b>Receita</b> = dinheiro que entrou. <b>Consulta paga</b> = cliente já quitou o valor (não só agendou).
+              Agendamento pode ser cancelado depois — por isso os números de <b>agendadas</b> e <b>pagas</b> são diferentes.
+            </div>
+            <div style="margin-top:8px; font-size:.82rem; color:#475569;">
+              Dados a partir de <b>janeiro/2023</b>. Mês em andamento aparece com <span class="badge-parcial">PARCIAL</span>.
+            </div>
+          </div>
+        </details>
       </div>
 
-      <!-- FILTROS -->
-      <div class="filter-bar">
-        <div class="row">
-          <div class="col-md-3 col-sm-6 mb-2">
-            <label><i class="far fa-calendar-alt mr-1"></i>De (mês)</label>
-            <input type="month" id="fDe" class="form-control">
+      <!-- ================================================================= -->
+      <!-- FILTROS                                                            -->
+      <!-- ================================================================= -->
+      <details class="filters" open id="filters">
+        <summary><i class="fas fa-filter"></i> Filtros</summary>
+        <div class="filters-grid">
+          <div class="f-field">
+            <label><i class="far fa-calendar-alt"></i> De</label>
+            <div class="f-date-pair">
+              <select id="fDeMes" aria-label="Mês inicial"></select>
+              <select id="fDeAno" aria-label="Ano inicial"></select>
+            </div>
           </div>
-          <div class="col-md-3 col-sm-6 mb-2">
-            <label><i class="far fa-calendar-alt mr-1"></i>Até (mês)</label>
-            <input type="month" id="fAte" class="form-control">
+          <div class="f-field">
+            <label><i class="far fa-calendar-alt"></i> Até</label>
+            <div class="f-date-pair">
+              <select id="fAteMes" aria-label="Mês final"></select>
+              <select id="fAteAno" aria-label="Ano final"></select>
+            </div>
           </div>
-          <div class="col-md-4 col-sm-12 mb-2">
-            <label><i class="fas fa-id-card mr-1"></i>Convênios (multi)</label>
-            <select id="fConv" multiple class="form-control" size="3" style="min-height:76px;"></select>
-            <small class="text-muted">Ctrl/Cmd + clique para selecionar vários. Vazio = todos.</small>
+          <div class="f-field" style="grid-column: span 2;">
+            <label><i class="fas fa-id-card"></i> Convênios</label>
+            <button type="button" class="f-btn" id="btnPickConv">
+              <i class="fas fa-list"></i> <span id="btnPickConvLabel">Todos</span>
+            </button>
           </div>
-          <div class="col-md-2 col-sm-12 mb-2 d-flex align-items-end">
-            <button id="btnReset" class="btn btn-outline-secondary btn-sm btn-block">
-              <i class="fas fa-undo mr-1"></i> Limpar filtros
+          <div class="f-field">
+            <label>&nbsp;</label>
+            <button id="btnReset" class="f-btn primary">
+              <i class="fas fa-undo"></i> Limpar
             </button>
           </div>
         </div>
-      </div>
+        <div class="pills-row" id="convPills"><span class="pill all">Todos os convênios</span></div>
+      </details>
 
       <div id="errBox" class="alert alert-danger py-2 px-3 mb-3" style="display:none;"></div>
       <div id="loadingMsg"><i class="fas fa-spinner fa-spin"></i> Carregando dashboard…</div>
 
       <div id="mainContent" style="display:none;">
 
-        <!-- ================================================================= -->
-        <!-- P1 — CLIENTES                                                      -->
-        <!-- ================================================================= -->
-        <h2 class="section-title"><i class="fas fa-users mr-1"></i> 1. Clientes por período</h2>
+        <!-- P1 — CLIENTES -->
+        <h2 class="section-title"><i class="fas fa-users"></i> 1. Clientes por período</h2>
 
-        <div class="info-box azul">
-          <div class="info-title"><i class="fas fa-lightbulb"></i> O que cada número significa</div>
-          <ul>
-            <li><b>Base total</b> = <b>todo mundo</b> que já se cadastrou na Égide desde o começo (mesmo quem nunca mais voltou).</li>
-            <li><b>Novos no mês</b> = quantas pessoas <b>se cadastraram pela primeira vez</b> naquele mês (conta abriu).</li>
-            <li><b>Ativos no mês</b> = quantas pessoas <b>usaram de verdade</b> a Égide naquele mês (pagaram uma consulta ou um pedido de farmácia).</li>
-          </ul>
-          <div style="margin-top:6px;">
-            <span class="destaque">💡 Comparação útil:</span>
-            Se os "novos" crescem mas os "ativos" ficam iguais, quer dizer que <b>chega gente nova mas os antigos somem</b>.
-            O ideal é os dois subindo juntos.
-          </div>
+        <div class="explain blue">
+          <details>
+            <summary><i class="fas fa-lightbulb"></i> O que cada número significa</summary>
+            <div class="body">
+              <ul>
+                <li><b>Base total</b> = todo mundo que se cadastrou na Égide (mesmo inativos).</li>
+                <li><b>Novos no mês</b> = quantas pessoas se cadastraram pela 1ª vez no mês.</li>
+                <li><b>Ativos no mês</b> = quantas usaram de verdade (pagaram uma consulta ou compra) no mês.</li>
+              </ul>
+              <div style="margin-top:6px;">
+                <span class="destaque">💡 Dica:</span>
+                Se "novos" sobem mas "ativos" ficam parados, chega gente mas os antigos somem.
+              </div>
+            </div>
+          </details>
         </div>
 
-        <div class="row mb-3">
-          <div class="col-md-3 col-sm-6 mb-2"><div class="kpi-box">
-            <div class="label">Base total (cadastro)</div>
+        <div class="cards">
+          <div class="card-kpi">
+            <div class="label">Base total</div>
             <div class="value" id="k_base">—</div>
-            <div class="sub">clientes cadastrados desde 2021</div>
-          </div></div>
-          <div class="col-md-3 col-sm-6 mb-2"><div class="kpi-box green">
-            <div class="label">Novos no mês atual <span class="badge-parcial">PARCIAL</span></div>
+            <div class="sub">cadastros desde 2021</div>
+          </div>
+          <div class="card-kpi green">
+            <div class="label">Novos no período <span class="badge-parcial">PARCIAL</span></div>
             <div class="value" id="k_novos">—</div>
             <div class="sub" id="k_novos_sub">—</div>
-          </div></div>
-          <div class="col-md-3 col-sm-6 mb-2"><div class="kpi-box orange">
-            <div class="label">Ativos no mês atual <span class="badge-parcial">PARCIAL</span></div>
+          </div>
+          <div class="card-kpi orange">
+            <div class="label">Ativos no período <span class="badge-parcial">PARCIAL</span></div>
             <div class="value" id="k_ativos">—</div>
             <div class="sub" id="k_ativos_sub">—</div>
-          </div></div>
-          <div class="col-md-3 col-sm-6 mb-2"><div class="kpi-box teal">
-            <div class="label">Média mensal de novos (12m)</div>
+          </div>
+          <div class="card-kpi teal">
+            <div class="label">Média mensal de novos</div>
             <div class="value" id="k_media_novos">—</div>
-            <div class="sub">referência pra ver picos e quedas</div>
-          </div></div>
-        </div>
-
-        <div class="chart-wrap"><canvas id="chP1"></canvas></div>
-
-        <!-- ================================================================= -->
-        <!-- P2 — CONSULTAS                                                     -->
-        <!-- ================================================================= -->
-        <h2 class="section-title"><i class="fas fa-stethoscope mr-1"></i> 2. Consultas e exames por período</h2>
-
-        <div class="info-box verde">
-          <div class="info-title"><i class="fas fa-lightbulb"></i> Como ler este gráfico</div>
-          Cada barra é um <b>mês</b>. A barra é dividida em dois:
-          <ul>
-            <li><b>Consulta</b> (azul) — quando o cliente vai <b>num médico de uma especialidade</b> (clínico, pediatra, cardiologista…).</li>
-            <li><b>Exame</b> (laranja) — quando o cliente vai fazer um <b>exame</b> (raio-X, sangue, ultrassom…). Não tem médico fixo, ele só faz o exame.</li>
-          </ul>
-          Logo abaixo mostra também quantas foram <b>pagas</b> e quantas foram <b>canceladas</b> — porque nem tudo que é agendado acontece de verdade.
-          <div style="margin-top:6px;">
-            <span class="destaque">⚠️ Dado importante:</span>
-            a taxa de <b>consultas pagas</b> subiu muito ao longo de 2025/2026 (de ~20% pra ~75%).
-            Isso provavelmente é porque a Égide passou a <b>cobrar antes</b> pra confirmar o agendamento.
+            <div class="sub">dentro do período filtrado</div>
           </div>
         </div>
 
-        <div class="chart-wrap mb-3"><canvas id="chP2_vol"></canvas></div>
-        <div class="chart-wrap"><canvas id="chP2_status"></canvas></div>
-
-        <!-- ================================================================= -->
-        <!-- P3 — PARTICULAR vs CONVÊNIO                                        -->
-        <!-- ================================================================= -->
-        <h2 class="section-title"><i class="fas fa-balance-scale mr-1"></i> 3. Particular vs Convênio</h2>
-
-        <div class="info-box roxo">
-          <div class="info-title"><i class="fas fa-lightbulb"></i> Qual a diferença?</div>
-          <ul>
-            <li><b>Particular</b> = cliente <b>pagou do próprio bolso</b> (cartão, PIX, boleto). A Égide recebe o dinheiro na hora.</li>
-            <li><b>Convênio</b> = o <b>plano de saúde</b> do cliente (Unimed, Bradesco, SulAmérica…) está cobrindo. A Égide cobra <b>depois</b>, do convênio, não do cliente.</li>
-          </ul>
-          <div style="margin-top:6px;">
-            Pra saber se uma consulta é de convênio, a gente checa se o cliente <b>tinha um convênio ativo naquele dia</b> (tabela <code>customer_insurances</code>).
-          </div>
-          <div style="margin-top:6px;">
-            <span class="destaque">📊 O que você vai ver:</span>
-            a pizza mostra o <b>total desde o começo</b> — e deixa na cara que a <b>maior parte da receita é particular</b>.
-            Convênio, por enquanto, é uma fatia pequena.
-          </div>
+        <div class="chart-box">
+          <div class="chart-title">Novos × Ativos por mês</div>
+          <canvas id="chP1"></canvas>
         </div>
 
-        <div class="row">
-          <div class="col-md-6 mb-3">
-            <div class="chart-wrap">
-              <h5 class="text-center">Consultas (histórico)</h5>
-              <canvas id="chP3_vol"></canvas>
+        <!-- P2 — CONSULTAS -->
+        <h2 class="section-title"><i class="fas fa-stethoscope"></i> 2. Consultas e exames por período</h2>
+
+        <div class="explain green">
+          <details>
+            <summary><i class="fas fa-lightbulb"></i> Como ler esses gráficos</summary>
+            <div class="body">
+              Cada barra é um mês. Dividida em:
+              <ul>
+                <li><b>Consulta</b> (azul) — cliente vai num médico de uma especialidade.</li>
+                <li><b>Exame</b> (laranja) — cliente vai fazer um exame, sem médico fixo.</li>
+              </ul>
+              Abaixo aparecem quantas foram <b>pagas</b> e quantas <b>canceladas</b>.
+              <div style="margin-top:6px;">
+                <span class="destaque">⚠️ Dado importante:</span>
+                a taxa de <b>consultas pagas</b> subiu muito em 2025/2026 (~20% → ~75%).
+                Provavelmente porque a Égide passou a cobrar antes pra confirmar.
+              </div>
             </div>
+          </details>
+        </div>
+
+        <div class="chart-row two">
+          <div class="chart-box">
+            <div class="chart-title">Consultas × Exames (agendados) por mês</div>
+            <canvas id="chP2_vol"></canvas>
           </div>
-          <div class="col-md-6 mb-3">
-            <div class="chart-wrap">
-              <h5 class="text-center">Receita (histórico, R$)</h5>
-              <canvas id="chP3_rec"></canvas>
+          <div class="chart-box">
+            <div class="chart-title">Status dos agendamentos por mês</div>
+            <canvas id="chP2_status"></canvas>
+          </div>
+        </div>
+
+        <!-- P2 Drilldown — Especialidades -->
+        <h3 class="section-title" style="font-size: 1rem;">
+          <i class="fas fa-user-md"></i> Top especialidades
+          <span class="badge badge-secondary ml-2" style="font-size: .7rem;">drilldown</span>
+        </h3>
+        <div class="explain gray">
+          <details>
+            <summary><i class="fas fa-lightbulb"></i> O que esta tabela mostra</summary>
+            <div class="body">
+              Para cada <b>especialidade</b> médica (cardiologia, dermato…) ou "<i>Exame — sem especialidade</i>":
+              quantas foram <b>agendadas</b> no período, quantas <b>pagas</b>,
+              a <b>receita paga</b> e o <b>ticket médio</b>. Clique no cabeçalho para ordenar.
             </div>
-          </div>
+          </details>
+        </div>
+        <div class="table-searchrow">
+          <input type="text" id="qEspecialidade" placeholder="🔍 Filtrar por nome…">
+          <button class="f-btn" id="btnExportEspecialidade"><i class="fas fa-file-csv"></i> CSV</button>
+        </div>
+        <div class="table-drill-wrap">
+          <table class="table-drill" id="tblEspecialidade">
+            <thead>
+              <tr>
+                <th data-k="especialidade">Especialidade<span class="sort">⇅</span></th>
+                <th data-k="agendadas" class="num">Agendadas<span class="sort">⇅</span></th>
+                <th data-k="pagas" class="num">Pagas<span class="sort">⇅</span></th>
+                <th data-k="receita_paga" class="num">Receita paga<span class="sort">⇅</span></th>
+                <th data-k="ticket_medio" class="num">Ticket médio<span class="sort">⇅</span></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
 
-        <div class="chart-wrap"><canvas id="chP3_trend"></canvas></div>
-
-        <!-- ================================================================= -->
-        <!-- P4 — RECEITA PARTICULAR                                            -->
-        <!-- ================================================================= -->
-        <h2 class="section-title"><i class="fas fa-hand-holding-usd mr-1"></i> 4. Arrecadação por contrato (Particular)</h2>
-
-        <div class="info-box azul">
-          <div class="info-title"><i class="fas fa-lightbulb"></i> O que é "arrecadação por contrato"?</div>
-          É o <b>dinheiro que a Égide recebe direto do cliente</b> (sem convênio no meio).
-          Vem de três caminhos:
-          <ul>
-            <li><b>Clínica</b> — cliente pagou uma consulta ou exame.</li>
-            <li><b>Farmácia</b> — cliente comprou remédio ou produto pelo app.</li>
-            <li><b>Outros</b> — outras vendas do marketplace (kits, cortesias, telemedicina avulsa).</li>
-          </ul>
-          <div style="margin-top:6px;">
-            <span class="destaque">💡 Leitura do gráfico:</span>
-            cada barra é um mês, empilhado pelos três caminhos. Dá pra ver se a <b>farmácia cresceu</b>, se a <b>clínica</b> está puxando, etc.
-          </div>
+        <!-- P2 Drilldown — Clínicas -->
+        <h3 class="section-title" style="font-size: 1rem;">
+          <i class="fas fa-hospital"></i> Top clínicas
+          <span class="badge badge-secondary ml-2" style="font-size: .7rem;">drilldown</span>
+        </h3>
+        <div class="explain gray">
+          <details>
+            <summary><i class="fas fa-lightbulb"></i> O que esta tabela mostra</summary>
+            <div class="body">
+              Para cada <b>clínica credenciada</b>: cidade, quantas consultas/exames foram
+              agendadas e pagas no período, a receita paga e o ticket médio.
+              A linha "<i>sem clínica associada</i>" aparece quando o agendamento não tem
+              schedule vinculado a clínica (legado).
+            </div>
+          </details>
+        </div>
+        <div class="table-searchrow">
+          <input type="text" id="qClinica" placeholder="🔍 Filtrar clínica ou cidade…">
+          <button class="f-btn" id="btnExportClinica"><i class="fas fa-file-csv"></i> CSV</button>
+        </div>
+        <div class="table-drill-wrap">
+          <table class="table-drill" id="tblClinica">
+            <thead>
+              <tr>
+                <th data-k="clinica">Clínica<span class="sort">⇅</span></th>
+                <th data-k="cidade">Cidade<span class="sort">⇅</span></th>
+                <th data-k="agendadas" class="num">Agendadas<span class="sort">⇅</span></th>
+                <th data-k="pagas" class="num">Pagas<span class="sort">⇅</span></th>
+                <th data-k="receita_paga" class="num">Receita paga<span class="sort">⇅</span></th>
+                <th data-k="ticket_medio" class="num">Ticket médio<span class="sort">⇅</span></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
 
-        <div class="chart-wrap mb-3"><canvas id="chP4"></canvas></div>
-        <div class="chart-wrap">
-          <h5 class="text-center">Total consolidado (particular)</h5>
+        <!-- P3 — PARTICULAR vs CONVÊNIO -->
+        <h2 class="section-title"><i class="fas fa-balance-scale"></i> 3. Particular vs Convênio</h2>
+
+        <div class="explain purple">
+          <details>
+            <summary><i class="fas fa-lightbulb"></i> Qual a diferença?</summary>
+            <div class="body">
+              <ul>
+                <li><b>Particular</b> — cliente pagou do bolso. Égide recebe na hora.</li>
+                <li><b>Convênio</b> — plano de saúde cobre. Égide cobra depois, do convênio.</li>
+              </ul>
+              Para saber se uma consulta é de convênio, checamos se o cliente tinha convênio <b>ativo na data</b>
+              (tabela <code>customer_insurances</code>).
+              <div style="margin-top:6px;">
+                <span class="destaque">📊 O que você vai ver:</span>
+                a pizza é o <b>total histórico</b> — deixa claro que a maior parte da receita é particular.
+                Convênio ainda é fatia pequena.
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="chart-row two">
+          <div class="chart-box">
+            <div class="chart-title">Consultas (histórico)</div>
+            <canvas id="chP3_vol"></canvas>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">Receita (histórico, R$)</div>
+            <canvas id="chP3_rec"></canvas>
+          </div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">Receita mensal Particular × Convênio (R$)</div>
+          <canvas id="chP3_trend"></canvas>
+        </div>
+
+        <!-- P4 — RECEITA PARTICULAR -->
+        <h2 class="section-title"><i class="fas fa-hand-holding-usd"></i> 4. Arrecadação por contrato (Particular)</h2>
+
+        <div class="explain blue">
+          <details>
+            <summary><i class="fas fa-lightbulb"></i> O que é "arrecadação por contrato"?</summary>
+            <div class="body">
+              É o dinheiro que a Égide recebe <b>direto do cliente</b>, sem convênio no meio.
+              Vem de dois canais:
+              <ul>
+                <li><b>Clínica</b> — cliente pagou uma consulta ou exame. Isso inclui:
+                  <ul>
+                    <li>pedidos do marketplace com <code>orderType=clinic</code>; e</li>
+                    <li>consultas pagas direto na tabela <code>doctorappointments</code> sem passar pelo fluxo de <code>orders</code> (fluxo alternativo; é receita real da Égide).</li>
+                  </ul>
+                </li>
+                <li><b>Farmácia</b> — cliente comprou remédio ou produto pelo app.</li>
+              </ul>
+              Se aparecer <b>Outros</b>, é porque surgiu um <code>orderType</code> novo além de clinic/pharmacy.
+              <div style="margin-top:6px;">
+                <span class="destaque">💡 Leitura:</span>
+                cada barra é um mês, empilhada pelos canais. Dá pra ver se a <b>farmácia cresceu</b>, se a <b>clínica</b> puxou, etc.
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="chart-box">
+          <div class="chart-title">Arrecadação Particular por canal (R$)</div>
+          <canvas id="chP4"></canvas>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">Total particular consolidado</div>
           <canvas id="chP4_total"></canvas>
         </div>
 
-        <!-- ================================================================= -->
-        <!-- P5 — RECEITA POR CONVÊNIO                                          -->
-        <!-- ================================================================= -->
-        <h2 class="section-title"><i class="fas fa-id-card mr-1"></i> 5. Arrecadação por Convênio</h2>
+        <!-- P5 — CONVÊNIOS -->
+        <h2 class="section-title"><i class="fas fa-id-card"></i> 5. Arrecadação por Convênio</h2>
 
-        <div class="info-box verde">
-          <div class="info-title"><i class="fas fa-lightbulb"></i> Como funciona esse gráfico</div>
-          Cada barra é um <b>mês</b>, e dentro dela aparecem <b>faixinhas coloridas</b>: uma cor por convênio
-          (Unimed, Bradesco, SulAmérica, Colaboradores OC, Égide Promocional, etc.).
-          <ul>
-            <li>Se a faixinha <b>aumenta de um mês pro outro</b>, aquele convênio está trazendo mais receita.</li>
-            <li>Se a faixinha <b>some</b>, aquele convênio parou de mandar cliente naquele mês.</li>
-            <li>Quanto <b>mais colorida</b> a barra estiver, mais convênios diferentes estão contribuindo.</li>
-          </ul>
-          <div style="margin-top:6px;">
-            <span class="destaque">📌 Importante:</span>
-            use o <b>filtro "Convênios" lá em cima</b> pra olhar só o(s) convênio(s) que te interessam.
-            Deixando vazio, aparecem todos.
-          </div>
+        <div class="explain green">
+          <details>
+            <summary><i class="fas fa-lightbulb"></i> Como ler</summary>
+            <div class="body">
+              Cada barra é um mês. Faixinhas = convênios. Se a faixa <b>aumenta</b>, aquele convênio está trazendo mais receita.
+              Se <b>some</b>, parou de mandar cliente. Use o filtro "Convênios" lá em cima pra focar em um ou mais.
+            </div>
+          </details>
         </div>
 
-        <div class="chart-wrap mb-3"><canvas id="chP5"></canvas></div>
-
-        <h5 class="mt-3 mb-2">Totais históricos por convênio</h5>
-        <div class="info-box cinza" style="font-size:.82rem;">
-          <div class="info-title"><i class="fas fa-table"></i> Tabela abaixo</div>
-          Mostra, pra cada convênio, <b>quantas consultas</b> aconteceram no total, <b>quanto dinheiro</b> deu
-          e qual foi o <b>ticket médio</b> (= quanto cada consulta custou em média). Se o ticket médio está muito diferente
-          entre dois convênios, pode ser que um deles só cobre consulta barata ou tem muitos atendimentos promocionais.
+        <div class="chart-box">
+          <div class="chart-title">Receita mensal por convênio (R$)</div>
+          <canvas id="chP5"></canvas>
         </div>
-        <div class="chart-wrap" style="overflow:auto;">
-          <table class="table-simple" id="tblConv">
-            <thead><tr>
-              <th>Convênio</th>
-              <th class="num">Consultas</th>
-              <th class="num">Receita (R$)</th>
-              <th class="num">Ticket médio (R$)</th>
-            </tr></thead>
+
+        <h3 class="section-title" style="font-size: 1rem;"><i class="fas fa-table"></i> Totais históricos por convênio</h3>
+        <div class="explain gray">
+          Para cada convênio: quantas consultas, receita total e ticket médio. Se o ticket médio de um convênio é muito diferente do outro, normalmente é porque ele cobre procedimentos mais baratos ou tem muitas promoções.
+        </div>
+        <div class="table-drill-wrap">
+          <table class="table-drill" id="tblConv">
+            <thead>
+              <tr>
+                <th data-k="convenio">Convênio<span class="sort">⇅</span></th>
+                <th data-k="consultas" class="num">Consultas<span class="sort">⇅</span></th>
+                <th data-k="receita" class="num">Receita<span class="sort">⇅</span></th>
+                <th data-k="ticket_medio" class="num">Ticket médio<span class="sort">⇅</span></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <!-- P5 drilldown convênio x especialidade -->
+        <h3 class="section-title" style="font-size: 1rem;">
+          <i class="fas fa-user-md"></i> Convênio × Especialidade
+          <span class="badge badge-secondary ml-2" style="font-size: .7rem;">drilldown</span>
+        </h3>
+        <div class="explain gray">
+          Cruza cada convênio com as especialidades atendidas. Obedece ao filtro de convênios.
+        </div>
+        <div class="table-searchrow">
+          <input type="text" id="qConvEsp" placeholder="🔍 Filtrar convênio ou especialidade…">
+          <button class="f-btn" id="btnExportConvEsp"><i class="fas fa-file-csv"></i> CSV</button>
+        </div>
+        <div class="table-drill-wrap">
+          <table class="table-drill" id="tblConvEsp">
+            <thead>
+              <tr>
+                <th data-k="convenio">Convênio<span class="sort">⇅</span></th>
+                <th data-k="especialidade">Especialidade<span class="sort">⇅</span></th>
+                <th data-k="consultas" class="num">Consultas<span class="sort">⇅</span></th>
+                <th data-k="receita" class="num">Receita<span class="sort">⇅</span></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <!-- P5 drilldown convênio x clínica -->
+        <h3 class="section-title" style="font-size: 1rem;">
+          <i class="fas fa-hospital"></i> Convênio × Clínica
+          <span class="badge badge-secondary ml-2" style="font-size: .7rem;">drilldown</span>
+        </h3>
+        <div class="explain gray">
+          Cruza cada convênio com as clínicas atendidas. Obedece ao filtro de convênios.
+        </div>
+        <div class="table-searchrow">
+          <input type="text" id="qConvCli" placeholder="🔍 Filtrar convênio, clínica ou cidade…">
+          <button class="f-btn" id="btnExportConvCli"><i class="fas fa-file-csv"></i> CSV</button>
+        </div>
+        <div class="table-drill-wrap">
+          <table class="table-drill" id="tblConvCli">
+            <thead>
+              <tr>
+                <th data-k="convenio">Convênio<span class="sort">⇅</span></th>
+                <th data-k="clinica">Clínica<span class="sort">⇅</span></th>
+                <th data-k="cidade">Cidade<span class="sort">⇅</span></th>
+                <th data-k="consultas" class="num">Consultas<span class="sort">⇅</span></th>
+                <th data-k="receita" class="num">Receita<span class="sort">⇅</span></th>
+              </tr>
+            </thead>
             <tbody></tbody>
           </table>
         </div>
@@ -378,11 +739,29 @@
   </div>
 </div>
 
+<!-- Modal de pick de convênios -->
+<div class="modal-back" id="convModal" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <h3>Escolher convênios</h3>
+    <div style="display:flex; gap:8px; margin-bottom:8px;">
+      <button class="f-btn" id="convSelAll"><i class="fas fa-check-double"></i> Todos</button>
+      <button class="f-btn" id="convSelNone"><i class="fas fa-times"></i> Nenhum</button>
+    </div>
+    <div class="modal-list" id="convList"></div>
+    <div class="modal-foot">
+      <button class="f-btn" id="convCancel">Cancelar</button>
+      <button class="f-btn primary" id="convApply">Aplicar</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// ============================================================================
-// Carregamento e helpers
-// ============================================================================
+/* ============================================================================
+   Helpers
+============================================================================ */
 const JSON_URL = '/json_consolidado/egide_kpi.json';
+const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const MESES_PT_SHORT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
 function nf(n, d=0) {
   if (n == null || isNaN(n)) return '—';
@@ -410,36 +789,137 @@ function filtMes(arr, de, ate) {
   return arr.filter(r => (!de || r.mes >= de) && (!ate || r.mes <= ate));
 }
 function filtConv(arr, convs) {
-  if (!arr) return [];
-  if (!convs || !convs.length) return arr;
-  const s = new Set(convs);
-  return arr.filter(r => s.has(r.convenio));
+  if (!arr) return arr || [];
+  if (!convs || !convs.size || convs.size === 0) return arr;
+  return arr.filter(r => convs.has(r.convenio));
 }
 
-// ============================================================================
-// Renderização
-// ============================================================================
+/* Estado global de filtros */
+const ST = {
+  convAll: null,   // Set com todos os convênios existentes
+  convSel: null,   // Set com convênios selecionados (igual a convAll = "todos")
+  sorts: {},       // per-tabela: { key, dir }
+  search: { esp:'', cli:'', convEsp:'', convCli:'' },
+};
+
+/* ============================================================================
+   Filtros de período — dropdowns MM + AAAA
+============================================================================ */
+function popularDropdownsPeriodo(meses) {
+  // meses = lista única ordenada YYYY-MM
+  const anos = Array.from(new Set(meses.map(m => m.slice(0,4)))).sort();
+  const selDeM = document.getElementById('fDeMes');
+  const selDeA = document.getElementById('fDeAno');
+  const selAteM = document.getElementById('fAteMes');
+  const selAteA = document.getElementById('fAteAno');
+
+  [selDeM, selAteM].forEach(sel => {
+    sel.innerHTML = '';
+    MESES_PT.forEach((nome, i) => {
+      const mm = String(i+1).padStart(2,'0');
+      const o = document.createElement('option');
+      o.value = mm; o.textContent = nome;
+      sel.appendChild(o);
+    });
+  });
+  [selDeA, selAteA].forEach(sel => {
+    sel.innerHTML = '';
+    anos.forEach(a => {
+      const o = document.createElement('option');
+      o.value = a; o.textContent = a;
+      sel.appendChild(o);
+    });
+  });
+
+  // Default: últimos 24 meses (ou tudo se tiver menos)
+  const ult = meses[meses.length - 1];
+  const ini = meses[Math.max(0, meses.length - 24)];
+  if (ini) { selDeA.value = ini.slice(0,4); selDeM.value = ini.slice(5,7); }
+  if (ult) { selAteA.value = ult.slice(0,4); selAteM.value = ult.slice(5,7); }
+}
+function getPeriodo() {
+  const de  = document.getElementById('fDeAno').value + '-' + document.getElementById('fDeMes').value;
+  const ate = document.getElementById('fAteAno').value + '-' + document.getElementById('fAteMes').value;
+  if (de > ate) return { de: ate, ate: de };
+  return { de, ate };
+}
+
+/* ============================================================================
+   Filtro de convênios (pills + modal)
+============================================================================ */
+function renderPills() {
+  const el = document.getElementById('convPills');
+  el.innerHTML = '';
+  if (!ST.convAll || ST.convSel.size === ST.convAll.size) {
+    const p = document.createElement('span');
+    p.className = 'pill all';
+    p.innerHTML = `<i class="fas fa-check"></i> Todos os ${ST.convAll ? ST.convAll.size : ''} convênios`;
+    el.appendChild(p);
+    document.getElementById('btnPickConvLabel').textContent = 'Todos';
+  } else {
+    document.getElementById('btnPickConvLabel').textContent = `${ST.convSel.size} de ${ST.convAll.size}`;
+    Array.from(ST.convSel).sort().forEach(c => {
+      const p = document.createElement('span');
+      p.className = 'pill';
+      p.innerHTML = `${c} <span class="x" title="remover">×</span>`;
+      p.querySelector('.x').addEventListener('click', () => {
+        ST.convSel.delete(c);
+        if (ST.convSel.size === 0) ST.convSel = new Set(ST.convAll);
+        renderPills(); render();
+      });
+      el.appendChild(p);
+    });
+  }
+}
+function openConvModal() {
+  const list = document.getElementById('convList');
+  list.innerHTML = '';
+  Array.from(ST.convAll).sort().forEach(c => {
+    const id = 'chk_' + btoa(c).replace(/[^a-z0-9]/gi,'');
+    const row = document.createElement('label');
+    row.innerHTML = `<input type="checkbox" id="${id}" ${ST.convSel.has(c) ? 'checked' : ''}><span>${c}</span>`;
+    list.appendChild(row);
+  });
+  document.getElementById('convModal').classList.add('on');
+}
+function closeConvModal() { document.getElementById('convModal').classList.remove('on'); }
+function applyConvModal() {
+  const ns = new Set();
+  document.querySelectorAll('#convList input[type=checkbox]').forEach(cb => {
+    if (cb.checked) {
+      const label = cb.parentElement.querySelector('span').textContent;
+      ns.add(label);
+    }
+  });
+  if (ns.size === 0) ST.convSel = new Set(ST.convAll);  // vazio = todos
+  else ST.convSel = ns;
+  closeConvModal();
+  renderPills();
+  render();
+}
+
+/* ============================================================================
+   Renderização principal
+============================================================================ */
 function render() {
   if (!DATA) return;
-  const de  = document.getElementById('fDe').value;
-  const ate = document.getElementById('fAte').value;
-  const convs = Array.from(document.getElementById('fConv').selectedOptions).map(o => o.value);
+  const { de, ate } = getPeriodo();
+  const convSel = ST.convSel;
+  const convsArr = (ST.convAll && convSel.size === ST.convAll.size) ? null : convSel;
 
-  // ── P1 ───────────────────────────────────────────────────────────────────
+  /* P1 --------------------------------------------------------------- */
   document.getElementById('k_base').textContent = nf(DATA.p1_clientes.base_total);
-
   const novosMes  = filtMes(DATA.p1_clientes.novos_por_mes, de, ate);
   const ativosMes = filtMes(DATA.p1_clientes.ativos_por_mes, de, ate);
-  const ultNovos  = novosMes[novosMes.length - 1];
-  const ultAtv    = ativosMes[ativosMes.length - 1];
-  document.getElementById('k_novos').textContent = ultNovos ? nf(ultNovos.novos) : '—';
-  document.getElementById('k_novos_sub').textContent = ultNovos ? `mês: ${ultNovos.mes}` : '';
-  document.getElementById('k_ativos').textContent = ultAtv ? nf(ultAtv.ativos) : '—';
-  document.getElementById('k_ativos_sub').textContent = ultAtv ? `mês: ${ultAtv.mes}` : '';
 
-  // média de novos nos últimos 12 meses (dentro do filtro)
-  const last12 = novosMes.slice(-12);
-  const medNovos = last12.length ? last12.reduce((s,r)=>s+Number(r.novos||0),0)/last12.length : 0;
+  const sumNovos  = novosMes.reduce((s,r)=>s + Number(r.novos||0), 0);
+  const sumAtivos = ativosMes.reduce((s,r)=>s + Number(r.ativos||0), 0);
+  document.getElementById('k_novos').textContent   = nf(sumNovos);
+  document.getElementById('k_novos_sub').textContent = novosMes.length ? `${novosMes[0].mes} → ${novosMes[novosMes.length-1].mes}` : '—';
+  document.getElementById('k_ativos').textContent  = nf(sumAtivos);
+  document.getElementById('k_ativos_sub').textContent = ativosMes.length ? `soma no período` : '—';
+
+  const medNovos = novosMes.length ? sumNovos / novosMes.length : 0;
   document.getElementById('k_media_novos').textContent = nf(Math.round(medNovos));
 
   const labels1 = Array.from(new Set([...novosMes.map(r=>r.mes), ...ativosMes.map(r=>r.mes)])).sort();
@@ -457,12 +937,11 @@ function render() {
       ]
     },
     options: { responsive:true, maintainAspectRatio:false,
-      plugins: { title: { display:true, text:'Novos vs Ativos por mês' }, legend: { position:'bottom' } },
-      scales: { y: { beginAtZero:true } }
-    }
+      plugins: { legend: { position:'bottom' } },
+      scales: { y: { beginAtZero:true } } }
   });
 
-  // ── P2 ───────────────────────────────────────────────────────────────────
+  /* P2 --------------------------------------------------------------- */
   const p2 = filtMes(DATA.p2_consultas.mensal, de, ate);
   const labels2 = p2.map(r => r.mes);
   destroy('p2_vol');
@@ -476,9 +955,8 @@ function render() {
       ]
     },
     options: { responsive:true, maintainAspectRatio:false,
-      plugins: { title: { display:true, text:'Consultas × Exames (agendados) por mês' }, legend: { position:'bottom' } },
-      scales: { x: { stacked:true }, y: { stacked:true, beginAtZero:true } }
-    }
+      plugins: { legend: { position:'bottom' } },
+      scales: { x: { stacked:true }, y: { stacked:true, beginAtZero:true } } }
   });
   destroy('p2_sta');
   charts.p2_sta = new Chart(document.getElementById('chP2_status'), {
@@ -492,19 +970,60 @@ function render() {
       ]
     },
     options: { responsive:true, maintainAspectRatio:false,
-      plugins: { title: { display:true, text:'Status dos agendamentos por mês' }, legend: { position:'bottom' } },
-      scales: { y: { beginAtZero:true } }
-    }
+      plugins: { legend: { position:'bottom' } },
+      scales: { y: { beginAtZero:true } } }
   });
 
-  // ── P3 ───────────────────────────────────────────────────────────────────
-  const split = DATA.p3_particular_convenio.totais_historico;
+  /* P2 drilldown: especialidades + clínicas (totais já no JSON) */
+  renderTabelaDrilldown({
+    tableId: 'tblEspecialidade',
+    rows: (DATA.p2_consultas.totais_especialidade || []),
+    colunas: [
+      {k:'especialidade', fmt:v=>v},
+      {k:'agendadas', num:true, fmt:v=>nf(v)},
+      {k:'pagas', num:true, fmt:v=>nf(v)},
+      {k:'receita_paga', num:true, fmt:v=>cur(v)},
+      {k:'ticket_medio', num:true, fmt:v=>cur(v)},
+    ],
+    filterKeys: ['especialidade'],
+    search: ST.search.esp,
+    defaultSort: { key:'agendadas', dir:'desc' },
+    id:'esp',
+  });
+  renderTabelaDrilldown({
+    tableId: 'tblClinica',
+    rows: (DATA.p2_consultas.totais_clinica || []),
+    colunas: [
+      {k:'clinica', fmt:v=>v},
+      {k:'cidade', fmt:v=>v},
+      {k:'agendadas', num:true, fmt:v=>nf(v)},
+      {k:'pagas', num:true, fmt:v=>nf(v)},
+      {k:'receita_paga', num:true, fmt:v=>cur(v)},
+      {k:'ticket_medio', num:true, fmt:v=>cur(v)},
+    ],
+    filterKeys: ['clinica','cidade'],
+    search: ST.search.cli,
+    defaultSort: { key:'agendadas', dir:'desc' },
+    id:'cli',
+  });
+
+  /* P3 --------------------------------------------------------------- */
+  // Para P3 respeitar o período: somamos a partir do mensal (agregando) em vez
+  // de usar totais_historico. Isso permite filtrar por período.
+  const p3m = filtMes(DATA.p3_particular_convenio.mensal, de, ate);
+  const sum = (arr, k) => arr.reduce((s,r)=>s+Number(r[k]||0), 0);
+  const split = {
+    consultas_particular: sum(p3m, 'consultas_particular'),
+    consultas_convenio:   sum(p3m, 'consultas_convenio'),
+    receita_particular:   sum(p3m, 'receita_particular'),
+    receita_convenio:     sum(p3m, 'receita_convenio'),
+  };
   destroy('p3_vol');
   charts.p3_vol = new Chart(document.getElementById('chP3_vol'), {
     type:'doughnut',
     data: {
       labels: ['Particular','Convênio'],
-      datasets: [{ data: [Number(split.consultas_particular||0), Number(split.consultas_convenio||0)], backgroundColor:[PAL[0], PAL[4]] }]
+      datasets: [{ data: [split.consultas_particular, split.consultas_convenio], backgroundColor:[PAL[0], PAL[4]] }]
     },
     options: { responsive:true, maintainAspectRatio:false, plugins: { legend:{position:'bottom'} } }
   });
@@ -513,17 +1032,13 @@ function render() {
     type:'doughnut',
     data: {
       labels: ['Particular','Convênio'],
-      datasets: [{ data: [Number(split.receita_particular||0), Number(split.receita_convenio||0)], backgroundColor:[PAL[1], PAL[5]] }]
+      datasets: [{ data: [split.receita_particular, split.receita_convenio], backgroundColor:[PAL[1], PAL[5]] }]
     },
     options: { responsive:true, maintainAspectRatio:false,
-      plugins: {
-        legend: { position:'bottom' },
-        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${cur(ctx.raw)}` } }
-      }
-    }
+      plugins: { legend: { position:'bottom' },
+                 tooltip: { callbacks: { label: ctx => `${ctx.label}: ${cur(ctx.raw)}` } } } }
   });
 
-  const p3m = filtMes(DATA.p3_particular_convenio.mensal, de, ate);
   const labels3 = p3m.map(r => r.mes);
   destroy('p3_tr');
   charts.p3_tr = new Chart(document.getElementById('chP3_trend'), {
@@ -536,42 +1051,59 @@ function render() {
       ]
     },
     options: { responsive:true, maintainAspectRatio:false,
-      plugins: { title: { display:true, text:'Receita mensal Particular × Convênio (R$)' }, legend:{position:'bottom'},
+      plugins: { legend:{position:'bottom'},
                  tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${cur(ctx.raw)}` } } },
-      scales: { x:{ stacked:true }, y:{ stacked:true, beginAtZero:true, ticks: { callback: v => 'R$ '+(v/1000).toFixed(0)+'k' } } }
-    }
+      scales: { x:{ stacked:true }, y:{ stacked:true, beginAtZero:true, ticks: { callback: v => 'R$ '+(v/1000).toFixed(0)+'k' } } } }
   });
 
-  // ── P4 ───────────────────────────────────────────────────────────────────
-  const p4rows = filtMes(DATA.p4_receita_particular.orders_por_tipo, de, ate);
-  const p4AptRows = filtMes(DATA.p4_receita_particular.appointments_sem_order, de, ate);
-  const labels4 = Array.from(new Set([
-    ...p4rows.map(r=>r.mes),
-    ...p4AptRows.map(r=>r.mes),
-  ])).sort();
-  const tipos = ['clinic','pharmacy','other','appointment'];
-  const mapByTipo = {};
-  tipos.forEach(t => mapByTipo[t] = Object.fromEntries(p4rows.filter(r=>r.orderType===t).map(r=>[r.mes, Number(r.receita||0)])));
-  const mapApt = Object.fromEntries(p4AptRows.map(r=>[r.mes, Number(r.receita||0)]));
+  /* P4 --------------------------------------------------------------- */
+  // Nova estrutura: serie_canal = [{mes, canal, qtde, receita}], canal ∈ {clinica, farmacia, outros}
+  // fallback para estrutura antiga (orders_por_tipo + appointments_sem_order)
+  let p4rows;
+  if (Array.isArray(DATA.p4_receita_particular.serie_canal)) {
+    p4rows = filtMes(DATA.p4_receita_particular.serie_canal, de, ate);
+  } else {
+    const legacyOrders = filtMes(DATA.p4_receita_particular.orders_por_tipo || [], de, ate);
+    const legacyAppt = filtMes(DATA.p4_receita_particular.appointments_sem_order || [], de, ate);
+    const tmp = new Map();
+    const acum = (mes, canal, rec) => {
+      const key = `${mes}|${canal}`;
+      if (!tmp.has(key)) tmp.set(key, { mes, canal, receita: 0 });
+      tmp.get(key).receita += Number(rec || 0);
+    };
+    legacyOrders.forEach(r => {
+      const c = r.orderType === 'clinic' ? 'clinica' :
+                r.orderType === 'pharmacy' ? 'farmacia' : 'outros';
+      acum(r.mes, c, r.receita);
+    });
+    legacyAppt.forEach(r => acum(r.mes, 'clinica', r.receita));
+    p4rows = Array.from(tmp.values()).sort((a,b)=>a.mes.localeCompare(b.mes));
+  }
+  const labels4 = Array.from(new Set(p4rows.map(r => r.mes))).sort();
+  const canais = ['clinica','farmacia','outros'];
+  const canalLabel = { clinica:'Clínica (consulta/exame)', farmacia:'Farmácia', outros:'Outros' };
+  const canalColor = { clinica: PAL[0], farmacia: PAL[1], outros: PAL[4] };
+  const mapByCanal = {};
+  canais.forEach(c => mapByCanal[c] = Object.fromEntries(p4rows.filter(r=>r.canal===c).map(r=>[r.mes, Number(r.receita||0)])));
 
   destroy('p4');
   charts.p4 = new Chart(document.getElementById('chP4'), {
     type:'bar',
     data: {
       labels: labels4,
-      datasets: [
-        { label:'Clínica',           data: labels4.map(m=>mapByTipo.clinic[m]||0),      backgroundColor: PAL[0] },
-        { label:'Farmácia',          data: labels4.map(m=>mapByTipo.pharmacy[m]||0),    backgroundColor: PAL[1] },
-        { label:'Outros',            data: labels4.map(m=>mapByTipo.other[m]||0),       backgroundColor: PAL[4] },
-        { label:'Legado',            data: labels4.map(m=>mapByTipo.appointment[m]||0), backgroundColor: PAL[6] },
-        { label:'Consultas s/ order',data: labels4.map(m=>mapApt[m]||0),                backgroundColor: PAL[8] },
-      ]
+      datasets: canais.filter(c => {
+        // só inclui dataset se tiver pelo menos 1 valor > 0 no período
+        return labels4.some(m => (mapByCanal[c][m] || 0) > 0);
+      }).map(c => ({
+        label: canalLabel[c],
+        data: labels4.map(m => mapByCanal[c][m] || 0),
+        backgroundColor: canalColor[c],
+      }))
     },
     options: { responsive:true, maintainAspectRatio:false,
-      plugins: { title: { display:true, text:'Arrecadação Particular por canal (R$)' }, legend:{position:'bottom'},
+      plugins: { legend:{position:'bottom'},
                  tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${cur(ctx.raw)}` } } },
-      scales: { x:{ stacked:true }, y:{ stacked:true, beginAtZero:true, ticks: { callback: v => 'R$ '+(v/1000).toFixed(0)+'k' } } }
-    }
+      scales: { x:{ stacked:true }, y:{ stacked:true, beginAtZero:true, ticks: { callback: v => 'R$ '+(v/1000).toFixed(0)+'k' } } } }
   });
 
   const p4tot = filtMes(DATA.p4_receita_particular.consolidado_mensal, de, ate);
@@ -585,12 +1117,11 @@ function render() {
     options: { responsive:true, maintainAspectRatio:false,
       plugins: { legend:{position:'bottom'},
                  tooltip: { callbacks: { label: ctx => cur(ctx.raw) } } },
-      scales: { y: { beginAtZero:true, ticks: { callback: v => 'R$ '+(v/1000).toFixed(0)+'k' } } }
-    }
+      scales: { y: { beginAtZero:true, ticks: { callback: v => 'R$ '+(v/1000).toFixed(0)+'k' } } } }
   });
 
-  // ── P5 ───────────────────────────────────────────────────────────────────
-  let p5rows = filtConv(filtMes(DATA.p5_receita_convenio.mensal_por_convenio, de, ate), convs);
+  /* P5 --------------------------------------------------------------- */
+  let p5rows = filtConv(filtMes(DATA.p5_receita_convenio.mensal_por_convenio, de, ate), convsArr);
   const labels5 = Array.from(new Set(p5rows.map(r=>r.mes))).sort();
   const conveniosSeries = Array.from(new Set(p5rows.map(r=>r.convenio)));
   const mapC = {};
@@ -606,77 +1137,235 @@ function render() {
     type:'bar',
     data: { labels: labels5, datasets: datasetsP5 },
     options: { responsive:true, maintainAspectRatio:false,
-      plugins: { title: { display:true, text:'Receita mensal por convênio (empilhado, R$)' }, legend:{position:'bottom'},
+      plugins: { legend:{position:'bottom'},
                  tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${cur(ctx.raw)}` } } },
-      scales: { x:{ stacked:true }, y:{ stacked:true, beginAtZero:true, ticks: { callback: v => 'R$ '+(v).toLocaleString('pt-BR') } } }
-    }
+      scales: { x:{ stacked:true }, y:{ stacked:true, beginAtZero:true, ticks: { callback: v => 'R$ '+(v).toLocaleString('pt-BR') } } } }
   });
 
-  // Tabela totais
-  const tbody = document.querySelector('#tblConv tbody');
-  tbody.innerHTML = '';
+  // Tabela totais por convênio (histórico — não reduz por período, mas reduz por filtro de convênios)
   let totConsHist = DATA.p5_receita_convenio.totais_por_convenio || [];
-  if (convs && convs.length) {
-    const s = new Set(convs);
-    totConsHist = totConsHist.filter(r => s.has(r.convenio));
-  }
-  totConsHist.forEach(r => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.convenio}</td>
-      <td class="num">${nf(r.consultas)}</td>
-      <td class="num">${cur(r.receita)}</td>
-      <td class="num">${cur(r.ticket_medio)}</td>`;
-    tbody.appendChild(tr);
+  if (convsArr) totConsHist = totConsHist.filter(r => convsArr.has(r.convenio));
+  renderTabelaDrilldown({
+    tableId: 'tblConv',
+    rows: totConsHist,
+    colunas: [
+      {k:'convenio', fmt:v=>v},
+      {k:'consultas', num:true, fmt:v=>nf(v)},
+      {k:'receita', num:true, fmt:v=>cur(v)},
+      {k:'ticket_medio', num:true, fmt:v=>cur(v)},
+    ],
+    filterKeys: ['convenio'],
+    search: '',
+    defaultSort: { key:'receita', dir:'desc' },
+    id:'totConv',
+  });
+
+  // Drilldown convênio × especialidade
+  let convEsp = DATA.p5_receita_convenio.por_convenio_especialidade || [];
+  if (convsArr) convEsp = convEsp.filter(r => convsArr.has(r.convenio));
+  renderTabelaDrilldown({
+    tableId: 'tblConvEsp',
+    rows: convEsp,
+    colunas: [
+      {k:'convenio', fmt:v=>v},
+      {k:'especialidade', fmt:v=>v},
+      {k:'consultas', num:true, fmt:v=>nf(v)},
+      {k:'receita', num:true, fmt:v=>cur(v)},
+    ],
+    filterKeys: ['convenio','especialidade'],
+    search: ST.search.convEsp,
+    defaultSort: { key:'consultas', dir:'desc' },
+    id:'convEsp',
+  });
+
+  // Drilldown convênio × clínica
+  let convCli = DATA.p5_receita_convenio.por_convenio_clinica || [];
+  if (convsArr) convCli = convCli.filter(r => convsArr.has(r.convenio));
+  renderTabelaDrilldown({
+    tableId: 'tblConvCli',
+    rows: convCli,
+    colunas: [
+      {k:'convenio', fmt:v=>v},
+      {k:'clinica', fmt:v=>v},
+      {k:'cidade', fmt:v=>v},
+      {k:'consultas', num:true, fmt:v=>nf(v)},
+      {k:'receita', num:true, fmt:v=>cur(v)},
+    ],
+    filterKeys: ['convenio','clinica','cidade'],
+    search: ST.search.convCli,
+    defaultSort: { key:'consultas', dir:'desc' },
+    id:'convCli',
   });
 }
 
-// ============================================================================
-// Bootstrap
-// ============================================================================
+/* ============================================================================
+   Tabela drilldown genérica (com sort + filtro texto + CSV)
+============================================================================ */
+function renderTabelaDrilldown({ tableId, rows, colunas, filterKeys, search, defaultSort, id }) {
+  const tbl = document.getElementById(tableId);
+  if (!tbl) return;
+  const tbody = tbl.querySelector('tbody');
+  const ths = tbl.querySelectorAll('thead th');
+
+  // sort state: primeiro acesso usa defaultSort
+  if (!ST.sorts[id]) ST.sorts[id] = { ...defaultSort };
+
+  // filtro texto
+  let data = Array.isArray(rows) ? rows.slice() : [];
+  const q = (search || '').toLowerCase().trim();
+  if (q) {
+    data = data.filter(r => filterKeys.some(k => String(r[k]||'').toLowerCase().includes(q)));
+  }
+
+  // sort
+  const { key, dir } = ST.sorts[id];
+  const mult = dir === 'asc' ? 1 : -1;
+  data.sort((a,b) => {
+    const va = a[key], vb = b[key];
+    const na = Number(va), nb = Number(vb);
+    if (!isNaN(na) && !isNaN(nb)) return (na - nb) * mult;
+    return String(va||'').localeCompare(String(vb||''), 'pt-BR') * mult;
+  });
+
+  // marcar th ativa
+  ths.forEach(th => {
+    th.classList.remove('sort-asc','sort-desc');
+    if (th.dataset.k === key) th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+  });
+
+  // render
+  tbody.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  data.forEach(r => {
+    const tr = document.createElement('tr');
+    colunas.forEach(col => {
+      const td = document.createElement('td');
+      if (col.num) td.classList.add('num');
+      td.textContent = col.fmt(r[col.k]);
+      tr.appendChild(td);
+    });
+    frag.appendChild(tr);
+  });
+  tbody.appendChild(frag);
+
+  // bind sort (uma vez só)
+  if (!tbl.dataset.sortBound) {
+    tbl.dataset.sortBound = '1';
+    ths.forEach(th => {
+      th.addEventListener('click', () => {
+        const k = th.dataset.k;
+        if (!k) return;
+        const cur = ST.sorts[id];
+        if (cur.key === k) cur.dir = cur.dir === 'asc' ? 'desc' : 'asc';
+        else { cur.key = k; cur.dir = 'desc'; }
+        render();
+      });
+    });
+  }
+
+  // guardar rows filtradas pra exportação
+  tbl._filtered = data;
+  tbl._columns = colunas;
+}
+
+function exportCSV(tableId, filename) {
+  const tbl = document.getElementById(tableId);
+  if (!tbl || !tbl._filtered) return;
+  const headers = tbl._columns.map(c => c.k);
+  const lines = [headers.join(';')];
+  tbl._filtered.forEach(r => {
+    lines.push(headers.map(h => {
+      const v = r[h];
+      if (v == null) return '';
+      const s = String(v).replace(/"/g, '""');
+      return /[;"\n]/.test(s) ? `"${s}"` : s;
+    }).join(';'));
+  });
+  const blob = new Blob(["\ufeff" + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ============================================================================
+   Bootstrap
+============================================================================ */
 fetch(JSON_URL, { credentials:'same-origin' })
   .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(j => {
     DATA = j;
-    // Info do JSON
+    // Info topo
     if (DATA.meta) {
-      document.getElementById('jsonInfo').textContent =
-        `atualizado em ${DATA.meta.gerado_em} · desde ${DATA.meta.inicio_mes}`;
+      const dt = (DATA.meta.gerado_em || '').split('T')[0];
+      document.getElementById('jsonInfo').innerHTML =
+        `<i class="far fa-clock"></i> atualizado em ${dt} · desde ${DATA.meta.inicio_mes}`;
     }
-    // Popular filtro convênios
-    const selC = document.getElementById('fConv');
-    (DATA.p5_receita_convenio.totais_por_convenio || []).forEach(c => {
-      const o = document.createElement('option');
-      o.value = c.convenio; o.textContent = c.convenio;
-      selC.appendChild(o);
-    });
-    // Pré-setar filtros de mês (últimos 24 meses)
+
+    // Popular convênios
+    const convBase = (DATA.p5_receita_convenio.totais_por_convenio || []).map(c => c.convenio);
+    ST.convAll = new Set(convBase);
+    ST.convSel = new Set(convBase);
+
+    // Popular dropdowns de período
     const meses = (DATA.p1_clientes.novos_por_mes || []).map(r => r.mes).sort();
-    if (meses.length) {
-      const ate = meses[meses.length - 1];
-      const de  = meses[Math.max(0, meses.length - 24)];
-      document.getElementById('fDe').value  = de;
-      document.getElementById('fAte').value = ate;
-    }
+    popularDropdownsPeriodo(meses);
+
     document.getElementById('loadingMsg').style.display = 'none';
     document.getElementById('mainContent').style.display = 'block';
+    renderPills();
     render();
   })
   .catch(err => showError('Falha ao carregar ' + JSON_URL + ' — ' + err.message));
 
-document.getElementById('fDe').addEventListener('change', render);
-document.getElementById('fAte').addEventListener('change', render);
-document.getElementById('fConv').addEventListener('change', render);
+// Handlers filtros
+['fDeMes','fDeAno','fAteMes','fAteAno'].forEach(id =>
+  document.getElementById(id).addEventListener('change', render));
+
+document.getElementById('btnPickConv').addEventListener('click', openConvModal);
+document.getElementById('convCancel').addEventListener('click', closeConvModal);
+document.getElementById('convApply').addEventListener('click', applyConvModal);
+document.getElementById('convSelAll').addEventListener('click', () => {
+  document.querySelectorAll('#convList input[type=checkbox]').forEach(cb => cb.checked = true);
+});
+document.getElementById('convSelNone').addEventListener('click', () => {
+  document.querySelectorAll('#convList input[type=checkbox]').forEach(cb => cb.checked = false);
+});
+document.getElementById('convModal').addEventListener('click', (e) => {
+  if (e.target.id === 'convModal') closeConvModal();
+});
+
 document.getElementById('btnReset').addEventListener('click', () => {
-  document.getElementById('fConv').selectedIndex = -1;
-  Array.from(document.getElementById('fConv').options).forEach(o => o.selected = false);
+  ST.convSel = new Set(ST.convAll);
   const meses = (DATA?.p1_clientes?.novos_por_mes || []).map(r => r.mes).sort();
-  if (meses.length) {
-    document.getElementById('fDe').value  = meses[Math.max(0, meses.length - 24)];
-    document.getElementById('fAte').value = meses[meses.length - 1];
-  }
+  popularDropdownsPeriodo(meses);
+  ST.search = { esp:'', cli:'', convEsp:'', convCli:'' };
+  ['qEspecialidade','qClinica','qConvEsp','qConvCli'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  renderPills();
   render();
 });
+
+// Search inputs
+const bindSearch = (inputId, stKey) => {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  let t; el.addEventListener('input', () => {
+    clearTimeout(t); t = setTimeout(() => { ST.search[stKey] = el.value; render(); }, 200);
+  });
+};
+bindSearch('qEspecialidade', 'esp');
+bindSearch('qClinica', 'cli');
+bindSearch('qConvEsp', 'convEsp');
+bindSearch('qConvCli', 'convCli');
+
+// Export buttons
+document.getElementById('btnExportEspecialidade').addEventListener('click', () => exportCSV('tblEspecialidade', 'egide_especialidades.csv'));
+document.getElementById('btnExportClinica').addEventListener('click', () => exportCSV('tblClinica', 'egide_clinicas.csv'));
+document.getElementById('btnExportConvEsp').addEventListener('click', () => exportCSV('tblConvEsp', 'egide_convenio_especialidade.csv'));
+document.getElementById('btnExportConvCli').addEventListener('click', () => exportCSV('tblConvCli', 'egide_convenio_clinica.csv'));
 </script>
 </body>
 </html>

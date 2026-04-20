@@ -101,3 +101,6 @@ TZ=America/Sao_Paulo
 
 # Fin_Despesa -> RDS AWS (relatorio_h_t.fin_despesa) — a cada 2h, incremental por idDespesa — criado em 2026-04-19
 0 */2 * * * root flock -n /opt/relatorio_h_t/locks/fin_despesa_pg.lock   /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/export_fin_despesa_pg.py >>/var/log/relatorio_h_t/fin_despesa_pg.log 2>&1
+
+# Égide — KPI Égide Saúde & Benefícios (MySQL 8.4.8 em RDS) — 2x/dia 04:15 e 16:15 — criado em 2026-04-19
+15 4,16 * * * root flock -n /opt/relatorio_h_t/locks/export_egide.lock   /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/export_egide.py >>/var/log/relatorio_h_t/export_egide.log 2>&1

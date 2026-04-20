@@ -136,7 +136,7 @@ def pergunta1_clientes(cur) -> dict:
 
 
 def pergunta2_consultas(cur) -> dict:
-    """Consultas + exames por mês usando doctorappointments.date."""
+    """Consultas + exames por mês usando doctorappointments.date + drilldowns."""
     mensal = _q(cur, f"""
         SELECT DATE_FORMAT(`date`,'%%Y-%%m') mes,
                COUNT(*) agendadas,
@@ -160,9 +160,79 @@ def pergunta2_consultas(cur) -> dict:
         FROM doctorappointments
     """)[0]
 
+    # Drilldown por ESPECIALIDADE (agendadas não canceladas)
+    por_especialidade_mes = _q(cur, f"""
+        SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
+               COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
+               COUNT(*) agendadas,
+               SUM(CASE WHEN da.paymentDate IS NOT NULL THEN 1 ELSE 0 END) pagas,
+               ROUND(SUM(CASE WHEN da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_paga
+        FROM doctorappointments da
+        LEFT JOIN specialties s ON s.id = da.specialtyId
+        WHERE da.`date` >= %s AND da.canceledAt IS NULL
+        GROUP BY mes, especialidade
+        ORDER BY mes, agendadas DESC
+    """, (f"{INICIO}-01",))
+
+    # Total histórico por especialidade (ranking global)
+    totais_especialidade = _q(cur, """
+        SELECT COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
+               COUNT(*) agendadas,
+               SUM(CASE WHEN da.paymentDate IS NOT NULL THEN 1 ELSE 0 END) pagas,
+               ROUND(SUM(CASE WHEN da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_paga,
+               ROUND(AVG(CASE WHEN da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) END)/100.0, 2) ticket_medio
+        FROM doctorappointments da
+        LEFT JOIN specialties s ON s.id = da.specialtyId
+        WHERE da.canceledAt IS NULL
+        GROUP BY especialidade
+        ORDER BY agendadas DESC
+    """)
+
+    # Drilldown por CLÍNICA (via schedule → clinic_doctor_specialties/clinic_exams → clinics)
+    por_clinica_mes = _q(cur, f"""
+        SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
+               COALESCE(c.name, '(sem clínica associada)') clinica,
+               COALESCE(c.city, '—') cidade,
+               COUNT(*) agendadas,
+               SUM(CASE WHEN da.paymentDate IS NOT NULL THEN 1 ELSE 0 END) pagas,
+               ROUND(SUM(CASE WHEN da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_paga
+        FROM doctorappointments da
+        LEFT JOIN schedules sc ON sc.id = da.scheduleId
+        LEFT JOIN clinic_doctor_specialties cds ON cds.id = sc.clinicDoctorSpecialtyId
+        LEFT JOIN clinic_doctors cd ON cd.id = cds.clinicDoctorId
+        LEFT JOIN clinic_exams ce ON ce.id = sc.clinicExamId
+        LEFT JOIN clinics c ON c.id = COALESCE(cd.clinicId, ce.clinicId)
+        WHERE da.`date` >= %s AND da.canceledAt IS NULL
+        GROUP BY mes, clinica, cidade
+        ORDER BY mes, agendadas DESC
+    """, (f"{INICIO}-01",))
+
+    totais_clinica = _q(cur, """
+        SELECT COALESCE(c.name, '(sem clínica associada)') clinica,
+               COALESCE(c.city, '—') cidade,
+               COALESCE(c.state, '—') estado,
+               COUNT(*) agendadas,
+               SUM(CASE WHEN da.paymentDate IS NOT NULL THEN 1 ELSE 0 END) pagas,
+               ROUND(SUM(CASE WHEN da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_paga,
+               ROUND(AVG(CASE WHEN da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) END)/100.0, 2) ticket_medio
+        FROM doctorappointments da
+        LEFT JOIN schedules sc ON sc.id = da.scheduleId
+        LEFT JOIN clinic_doctor_specialties cds ON cds.id = sc.clinicDoctorSpecialtyId
+        LEFT JOIN clinic_doctors cd ON cd.id = cds.clinicDoctorId
+        LEFT JOIN clinic_exams ce ON ce.id = sc.clinicExamId
+        LEFT JOIN clinics c ON c.id = COALESCE(cd.clinicId, ce.clinicId)
+        WHERE da.canceledAt IS NULL
+        GROUP BY clinica, cidade, estado
+        ORDER BY agendadas DESC
+    """)
+
     return {
         "mensal": mensal,
         "totais_historico": {k: int(v or 0) for k, v in totais.items()},
+        "por_especialidade_mes": por_especialidade_mes,
+        "totais_especialidade": totais_especialidade,
+        "por_clinica_mes": por_clinica_mes,
+        "totais_clinica": totais_clinica,
     }
 
 
@@ -215,7 +285,16 @@ def pergunta3_split(cur) -> dict:
 
 
 def pergunta4_receita_particular(cur) -> dict:
-    """Arrecadação por contrato (particular) — orders + appointments sem order."""
+    """Arrecadação por contrato (particular): Clínica + Farmácia.
+
+    Regras:
+      - 'Clínica' = orders.orderType='clinic' pagos + doctorappointments pagos
+        sem orderId (fluxo antigo, onde a consulta foi paga direto na tabela
+        doctorappointments sem criar um registro em orders).
+      - 'Farmácia' = orders.orderType='pharmacy' pagos.
+      - Demais orderTypes (ex: 'other') não aparecem nos dados hoje; se aparecerem,
+        vão como 'Outros' para não perder receita.
+    """
     orders = _q(cur, f"""
         SELECT DATE_FORMAT(paymentDate,'%%Y-%%m') mes,
                orderType,
@@ -241,6 +320,34 @@ def pergunta4_receita_particular(cur) -> dict:
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01",))
 
+    # Série unificada por canal lógico (3 categorias: clinica / farmacia / outros)
+    # "clinica" = orders.clinic + appointments sem order. É tudo consulta/exame pra
+    # quem usa o dashboard.
+    por_canal_mes = {}
+    def _acum(mes, canal, qtde, receita):
+        key = (mes, canal)
+        if key not in por_canal_mes:
+            por_canal_mes[key] = {"mes": mes, "canal": canal, "qtde": 0, "receita": 0.0}
+        por_canal_mes[key]["qtde"] += int(qtde or 0)
+        por_canal_mes[key]["receita"] += float(receita or 0)
+
+    for r in orders:
+        ot = (r.get("orderType") or "").lower()
+        if ot == "clinic":
+            canal = "clinica"
+        elif ot == "pharmacy":
+            canal = "farmacia"
+        else:
+            canal = "outros"
+        _acum(r["mes"], canal, r["qtde"], r["receita"])
+
+    for r in appt_sem_order:
+        _acum(r["mes"], "clinica", r["qtde"], r["receita"])
+
+    serie_canal = sorted(por_canal_mes.values(), key=lambda x: (x["mes"], x["canal"]))
+    for r in serie_canal:
+        r["receita"] = round(r["receita"], 2)
+
     consolidado = _q(cur, f"""
         SELECT mes, ROUND(SUM(receita),2) receita, SUM(qtde) qtde FROM (
             SELECT DATE_FORMAT(paymentDate,'%%Y-%%m') mes,
@@ -261,6 +368,7 @@ def pergunta4_receita_particular(cur) -> dict:
     return {
         "orders_por_tipo": orders,
         "appointments_sem_order": appt_sem_order,
+        "serie_canal": serie_canal,
         "consolidado_mensal": consolidado,
     }
 
@@ -311,10 +419,55 @@ def pergunta5_receita_convenio(cur) -> dict:
         ORDER BY name
     """)
 
+    # Drilldown: por convênio x especialidade (histórico)
+    por_convenio_especialidade = _q(cur, """
+        SELECT i.name convenio,
+               COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
+               COUNT(DISTINCT da.id) consultas,
+               ROUND(SUM(IFNULL(da.total,0))/100.0, 2) receita
+        FROM doctorappointments da
+        JOIN customer_insurances ci
+          ON ci.customerId  = da.customerId
+         AND ci.isCurrent   = 1
+         AND ci.created_at <= da.`date`
+         AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
+        JOIN insurances i ON i.id = ci.insuranceId
+        LEFT JOIN specialties s ON s.id = da.specialtyId
+        WHERE da.canceledAt IS NULL
+        GROUP BY i.name, especialidade
+        ORDER BY i.name, consultas DESC
+    """)
+
+    # Drilldown: por convênio x clínica (histórico)
+    por_convenio_clinica = _q(cur, """
+        SELECT i.name convenio,
+               COALESCE(c.name, '(sem clínica associada)') clinica,
+               COALESCE(c.city, '—') cidade,
+               COUNT(DISTINCT da.id) consultas,
+               ROUND(SUM(IFNULL(da.total,0))/100.0, 2) receita
+        FROM doctorappointments da
+        JOIN customer_insurances ci
+          ON ci.customerId  = da.customerId
+         AND ci.isCurrent   = 1
+         AND ci.created_at <= da.`date`
+         AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
+        JOIN insurances i ON i.id = ci.insuranceId
+        LEFT JOIN schedules sc ON sc.id = da.scheduleId
+        LEFT JOIN clinic_doctor_specialties cds ON cds.id = sc.clinicDoctorSpecialtyId
+        LEFT JOIN clinic_doctors cd ON cd.id = cds.clinicDoctorId
+        LEFT JOIN clinic_exams ce ON ce.id = sc.clinicExamId
+        LEFT JOIN clinics c ON c.id = COALESCE(cd.clinicId, ce.clinicId)
+        WHERE da.canceledAt IS NULL
+        GROUP BY i.name, clinica, cidade
+        ORDER BY i.name, consultas DESC
+    """)
+
     return {
         "mensal_por_convenio": mensal,
         "totais_por_convenio": totais_conv,
         "convenios_cadastrados": convenios_cadastrados,
+        "por_convenio_especialidade": por_convenio_especialidade,
+        "por_convenio_clinica": por_convenio_clinica,
     }
 
 
@@ -377,7 +530,7 @@ def main():
                 "Valores monetários vêm de total (centavos) e foram convertidos para R$ (÷100).",
                 "Definição de 'convênio': cliente com customer_insurances ATIVO na data da consulta.",
                 "Pergunta 2 usa doctorappointments.date (data da consulta), não created_at.",
-                "Pergunta 4 une orders pagos (farmácia + clínica) com appointments pagos sem order.",
+                "Pergunta 4: 'Clínica' = orders.clinic + appointments pagos sem orderId (fluxo antigo, onde a consulta foi paga direto na tabela doctorappointments, sem passar por orders). Tudo é consulta/exame.",
                 "Pergunta 5 considera apenas appointments não cancelados com convênio ativo.",
             ],
         },
