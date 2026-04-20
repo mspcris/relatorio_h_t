@@ -1293,11 +1293,12 @@ SELECT
   da.id                                AS appt_id,
   o.id                                 AS order_id,
   o.hash                               AS pedido,
-  DATE_FORMAT(da.`date`, '%%d/%%m/%%Y %%H:%%i') AS data_agendada,
+  DATE_FORMAT(CONVERT_TZ(da.`date`, '+00:00', '-03:00'), '%%d/%%m/%%Y %%H:%%i') AS data_agendada,
   DATE_FORMAT(
-    COALESCE(da.paymentDate, o.paymentDate), '%%d/%%m/%%Y %%H:%%i'
+    CONVERT_TZ(COALESCE(da.paymentDate, o.paymentDate), '+00:00', '-03:00'),
+    '%%d/%%m/%%Y %%H:%%i'
   )                                    AS data_pagamento,
-  DATE_FORMAT(da.created_at, '%%d/%%m/%%Y')     AS data_criacao,
+  DATE_FORMAT(CONVERT_TZ(da.created_at, '+00:00', '-03:00'), '%%d/%%m/%%Y') AS data_criacao,
   ROUND(COALESCE(NULLIF(da.total,0), o.total, 0) / 100.0, 2) AS valor,
   COALESCE(c.name, '(sem clínica)')    AS clinica,
   COALESCE(c.city, '—')                AS cidade,
@@ -1369,13 +1370,22 @@ def _egide_rows_where(metric: str, de: str, ate: str, include_canc: bool,
     ate_exc = (_dt.strptime(ate, "%Y-%m-%d") + _td(days=1)).strftime("%Y-%m-%d")
 
     fb = (filter_by or "paid").strip().lower()
+    # Filtro em horário de Brasília (BRT = UTC-3); DB armazena em UTC.
     if fb == "scheduled":
-        clauses = ["(da.`date` IS NOT NULL AND da.`date` >= %s AND da.`date` < %s)"]
+        clauses = [
+            "(da.`date` IS NOT NULL"
+            " AND CONVERT_TZ(da.`date`, '+00:00', '-03:00') >= %s"
+            " AND CONVERT_TZ(da.`date`, '+00:00', '-03:00') < %s)"
+        ]
         params  = [de, ate_exc]
     else:
         clauses = [
-            "((da.paymentDate IS NOT NULL AND da.paymentDate >= %s AND da.paymentDate < %s)"
-            " OR (o.paymentDate IS NOT NULL AND o.paymentDate >= %s AND o.paymentDate < %s))"
+            "((da.paymentDate IS NOT NULL"
+            "  AND CONVERT_TZ(da.paymentDate, '+00:00', '-03:00') >= %s"
+            "  AND CONVERT_TZ(da.paymentDate, '+00:00', '-03:00') < %s)"
+            " OR (o.paymentDate IS NOT NULL"
+            "  AND CONVERT_TZ(o.paymentDate, '+00:00', '-03:00') >= %s"
+            "  AND CONVERT_TZ(o.paymentDate, '+00:00', '-03:00') < %s))"
         ]
         params  = [de, ate_exc, de, ate_exc]
 

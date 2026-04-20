@@ -62,6 +62,12 @@ CONN_KW = dict(
 
 INICIO = os.getenv("EGIDE_INICIO_MES", "2023-01")
 
+# Banco armazena datas em UTC; KPI e filtros são em horário de Brasília (BRT).
+# Aplicamos CONVERT_TZ em toda coluna de data que aparece em DATE_FORMAT / WHERE.
+# Uso: BRT("da.`date`") -> "CONVERT_TZ(da.`date`, '+00:00', '-03:00')"
+def BRT(col: str) -> str:
+    return f"CONVERT_TZ({col}, '+00:00', '-03:00')"
+
 
 def _json_default(o: Any):
     if isinstance(o, (datetime, date)):
@@ -85,52 +91,52 @@ def pergunta1_clientes(cur) -> dict:
     """)[0]
 
     novos = _q(cur, f"""
-        SELECT DATE_FORMAT(created_at,'%%Y-%%m') mes, COUNT(*) novos
+        SELECT DATE_FORMAT({BRT('created_at')},'%%Y-%%m') mes, COUNT(*) novos
         FROM customers
-        WHERE created_at >= %s
+        WHERE {BRT('created_at')} >= %s
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01",))
 
     ativos_orders = _q(cur, f"""
-        SELECT DATE_FORMAT(paymentDate,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT({BRT('paymentDate')},'%%Y-%%m') mes,
                COUNT(DISTINCT customerId) ativos
         FROM orders
         WHERE paymentDate IS NOT NULL
-          AND paymentDate >= %s
+          AND {BRT('paymentDate')} >= %s
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01",))
 
     ativos_appts = _q(cur, f"""
-        SELECT DATE_FORMAT(`date`,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT({BRT('`date`')},'%%Y-%%m') mes,
                COUNT(DISTINCT customerId) ativos
         FROM doctorappointments
         WHERE customerId IS NOT NULL
           AND (paymentDate IS NOT NULL OR confirmationDate IS NOT NULL)
-          AND `date` >= %s
+          AND {BRT('`date`')} >= %s
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01",))
 
     ativos_qualquer = _q(cur, f"""
         SELECT mes, COUNT(DISTINCT customerId) ativos FROM (
-            SELECT DATE_FORMAT(paymentDate,'%%Y-%%m') mes, customerId
+            SELECT DATE_FORMAT({BRT('paymentDate')},'%%Y-%%m') mes, customerId
             FROM orders
-            WHERE paymentDate IS NOT NULL AND paymentDate >= %s
+            WHERE paymentDate IS NOT NULL AND {BRT('paymentDate')} >= %s
             UNION
-            SELECT DATE_FORMAT(`date`,'%%Y-%%m') mes, customerId
+            SELECT DATE_FORMAT({BRT('`date`')},'%%Y-%%m') mes, customerId
             FROM doctorappointments
             WHERE customerId IS NOT NULL
               AND (paymentDate IS NOT NULL OR confirmationDate IS NOT NULL)
-              AND `date` >= %s
+              AND {BRT('`date`')} >= %s
         ) u
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01", f"{INICIO}-01"))
 
     # Base acumulada por mês (inclui pre-INICIO para bater com base_total)
-    base_acumulada = _q(cur, """
+    base_acumulada = _q(cur, f"""
         SELECT mes, novos,
                SUM(novos) OVER (ORDER BY mes) acumulada
         FROM (
-            SELECT DATE_FORMAT(created_at,'%%Y-%%m') mes, COUNT(*) novos
+            SELECT DATE_FORMAT({BRT('created_at')},'%%Y-%%m') mes, COUNT(*) novos
             FROM customers
             WHERE created_at IS NOT NULL
             GROUP BY mes
@@ -156,7 +162,7 @@ def pergunta2_consultas(cur) -> dict:
     #   exame    = schedule.clinicExamId/examgroupscheduleId OU (sem schedule AND da.examId)
     #   outros   = sem schedule E sem specialtyId E sem examId (não somam em consultas/exames)
     mensal = _q(cur, f"""
-        SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
                COUNT(*) agendadas,
                SUM(CASE WHEN da.paymentDate     IS NOT NULL THEN 1 ELSE 0 END) pagas,
                SUM(CASE WHEN da.confirmationDate IS NOT NULL THEN 1 ELSE 0 END) confirmadas,
@@ -170,7 +176,7 @@ def pergunta2_consultas(cur) -> dict:
                         THEN 1 ELSE 0 END) exames
         FROM doctorappointments da
         LEFT JOIN schedules s ON s.id = da.scheduleId
-        WHERE da.`date` >= %s
+        WHERE {BRT('da.`date`')} >= %s
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01",))
 
@@ -192,14 +198,14 @@ def pergunta2_consultas(cur) -> dict:
 
     # Drilldown por ESPECIALIDADE (agendadas não canceladas)
     por_especialidade_mes = _q(cur, f"""
-        SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
                COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
                COUNT(*) agendadas,
                SUM(CASE WHEN da.paymentDate IS NOT NULL THEN 1 ELSE 0 END) pagas,
                ROUND(SUM(CASE WHEN da.paymentDate IS NOT NULL THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_paga
         FROM doctorappointments da
         LEFT JOIN specialties s ON s.id = da.specialtyId
-        WHERE da.`date` >= %s AND da.canceledAt IS NULL
+        WHERE {BRT('da.`date`')} >= %s AND da.canceledAt IS NULL
         GROUP BY mes, especialidade
         ORDER BY mes, agendadas DESC
     """, (f"{INICIO}-01",))
@@ -220,7 +226,7 @@ def pergunta2_consultas(cur) -> dict:
 
     # Drilldown por CLÍNICA (via schedule → clinic_doctor_specialties/clinic_exams → clinics)
     por_clinica_mes = _q(cur, f"""
-        SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
                COALESCE(c.name, '(sem clínica associada)') clinica,
                COALESCE(c.city, '—') cidade,
                COUNT(*) agendadas,
@@ -232,7 +238,7 @@ def pergunta2_consultas(cur) -> dict:
         LEFT JOIN clinic_doctors cd ON cd.id = cds.clinicDoctorId
         LEFT JOIN clinic_exams ce ON ce.id = sc.clinicExamId
         LEFT JOIN clinics c ON c.id = COALESCE(cd.clinicId, ce.clinicId)
-        WHERE da.`date` >= %s AND da.canceledAt IS NULL
+        WHERE {BRT('da.`date`')} >= %s AND da.canceledAt IS NULL
         GROUP BY mes, clinica, cidade
         ORDER BY mes, agendadas DESC
     """, (f"{INICIO}-01",))
@@ -270,7 +276,7 @@ def pergunta3_split(cur) -> dict:
     """Particular vs Convênio por mês: volume e receita, usando customer_insurances."""
     mensal = _q(cur, f"""
         SELECT
-            DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
+            DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
             SUM(CASE WHEN conv.cust IS NOT NULL THEN 1 ELSE 0 END) consultas_convenio,
             SUM(CASE WHEN conv.cust IS NULL     THEN 1 ELSE 0 END) consultas_particular,
             ROUND(SUM(CASE WHEN conv.cust IS NOT NULL THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_convenio,
@@ -285,7 +291,7 @@ def pergunta3_split(cur) -> dict:
          AND conv.created_at <= da.`date`
          AND (conv.deleted_at IS NULL OR conv.deleted_at > da.`date`)
         WHERE da.canceledAt IS NULL
-          AND da.`date` >= %s
+          AND {BRT('da.`date`')} >= %s
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01",))
 
@@ -326,19 +332,19 @@ def pergunta4_receita_particular(cur) -> dict:
         vão como 'Outros' para não perder receita.
     """
     orders = _q(cur, f"""
-        SELECT DATE_FORMAT(paymentDate,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT({BRT('paymentDate')},'%%Y-%%m') mes,
                orderType,
                COUNT(*) qtde,
                ROUND(SUM(IFNULL(total,0))/100.0, 2) receita
         FROM orders
         WHERE paymentDate IS NOT NULL
           AND cancelDate IS NULL
-          AND paymentDate >= %s
+          AND {BRT('paymentDate')} >= %s
         GROUP BY mes, orderType ORDER BY mes, orderType
     """, (f"{INICIO}-01",))
 
     appt_sem_order = _q(cur, f"""
-        SELECT DATE_FORMAT(paymentDate,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT({BRT('paymentDate')},'%%Y-%%m') mes,
                COUNT(*) qtde,
                ROUND(SUM(IFNULL(total,0))/100.0, 2) receita
         FROM doctorappointments
@@ -346,7 +352,7 @@ def pergunta4_receita_particular(cur) -> dict:
           AND canceledAt IS NULL
           AND orderId IS NULL
           AND total > 0
-          AND paymentDate >= %s
+          AND {BRT('paymentDate')} >= %s
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01",))
 
@@ -380,17 +386,17 @@ def pergunta4_receita_particular(cur) -> dict:
 
     consolidado = _q(cur, f"""
         SELECT mes, ROUND(SUM(receita),2) receita, SUM(qtde) qtde FROM (
-            SELECT DATE_FORMAT(paymentDate,'%%Y-%%m') mes,
+            SELECT DATE_FORMAT({BRT('paymentDate')},'%%Y-%%m') mes,
                    COUNT(*) qtde, SUM(IFNULL(total,0))/100.0 receita
             FROM orders
-            WHERE paymentDate IS NOT NULL AND cancelDate IS NULL AND paymentDate >= %s
+            WHERE paymentDate IS NOT NULL AND cancelDate IS NULL AND {BRT('paymentDate')} >= %s
             GROUP BY mes
             UNION ALL
-            SELECT DATE_FORMAT(paymentDate,'%%Y-%%m'),
+            SELECT DATE_FORMAT({BRT('paymentDate')},'%%Y-%%m'),
                    COUNT(*), SUM(IFNULL(total,0))/100.0
             FROM doctorappointments
             WHERE paymentDate IS NOT NULL AND canceledAt IS NULL AND orderId IS NULL
-              AND total > 0 AND paymentDate >= %s
+              AND total > 0 AND {BRT('paymentDate')} >= %s
             GROUP BY 1
         ) x GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01", f"{INICIO}-01"))
@@ -408,7 +414,7 @@ def pergunta5_receita_convenio(cur) -> dict:
     # LEFT JOIN + COALESCE expõe atendimentos sem convênio como 'PARTICULAR',
     # para que apareçam no filtro de convênios do frontend.
     mensal = _q(cur, f"""
-        SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
                COALESCE(i.name, 'PARTICULAR') convenio,
                COUNT(DISTINCT da.id) consultas,
                ROUND(SUM(IFNULL(da.total,0))/100.0, 2) receita
@@ -420,7 +426,7 @@ def pergunta5_receita_convenio(cur) -> dict:
          AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
         LEFT JOIN insurances i ON i.id = ci.insuranceId
         WHERE da.canceledAt IS NULL
-          AND da.`date` >= %s
+          AND {BRT('da.`date`')} >= %s
         GROUP BY mes, convenio
         ORDER BY mes, receita DESC
     """, (f"{INICIO}-01",))
@@ -496,7 +502,7 @@ def pergunta5_receita_convenio(cur) -> dict:
 
     # Drilldown mensal: por convênio x especialidade (permite filtrar por período no front)
     por_convenio_especialidade_mes = _q(cur, f"""
-        SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
                COALESCE(i.name, 'PARTICULAR') convenio,
                COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
                COUNT(DISTINCT da.id) consultas,
@@ -510,14 +516,14 @@ def pergunta5_receita_convenio(cur) -> dict:
         LEFT JOIN insurances i ON i.id = ci.insuranceId
         LEFT JOIN specialties s ON s.id = da.specialtyId
         WHERE da.canceledAt IS NULL
-          AND da.`date` >= %s
+          AND {BRT('da.`date`')} >= %s
         GROUP BY mes, convenio, especialidade
         ORDER BY mes, convenio, consultas DESC
     """, (f"{INICIO}-01",))
 
     # Drilldown mensal: por convênio x clínica (permite filtrar por período no front)
     por_convenio_clinica_mes = _q(cur, f"""
-        SELECT DATE_FORMAT(da.`date`,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT({BRT('da.`date`')},'%%Y-%%m') mes,
                COALESCE(i.name, 'PARTICULAR') convenio,
                COALESCE(c.name, '(sem clínica associada)') clinica,
                COALESCE(c.city, '—') cidade,
@@ -536,7 +542,7 @@ def pergunta5_receita_convenio(cur) -> dict:
         LEFT JOIN clinic_exams ce ON ce.id = sc.clinicExamId
         LEFT JOIN clinics c ON c.id = COALESCE(cd.clinicId, ce.clinicId)
         WHERE da.canceledAt IS NULL
-          AND da.`date` >= %s
+          AND {BRT('da.`date`')} >= %s
         GROUP BY mes, convenio, clinica, cidade
         ORDER BY mes, convenio, consultas DESC
     """, (f"{INICIO}-01",))
@@ -555,7 +561,7 @@ def pergunta5_receita_convenio(cur) -> dict:
 def visao_geral(cur) -> dict:
     """Pequenos números de topo (farmácia + clínica) para contexto."""
     farmacia = _q(cur, f"""
-        SELECT DATE_FORMAT(paymentDate,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT({BRT('paymentDate')},'%%Y-%%m') mes,
                COUNT(*) pedidos,
                COUNT(DISTINCT customerId) clientes,
                ROUND(SUM(IFNULL(total,0))/100.0, 2) receita
@@ -563,12 +569,12 @@ def visao_geral(cur) -> dict:
         WHERE orderType = 'pharmacy'
           AND paymentDate IS NOT NULL
           AND cancelDate IS NULL
-          AND paymentDate >= %s
+          AND {BRT('paymentDate')} >= %s
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01",))
 
     clinica = _q(cur, f"""
-        SELECT DATE_FORMAT(paymentDate,'%%Y-%%m') mes,
+        SELECT DATE_FORMAT({BRT('paymentDate')},'%%Y-%%m') mes,
                COUNT(*) pedidos,
                COUNT(DISTINCT customerId) clientes,
                ROUND(SUM(IFNULL(total,0))/100.0, 2) receita
@@ -576,7 +582,7 @@ def visao_geral(cur) -> dict:
         WHERE orderType = 'clinic'
           AND paymentDate IS NOT NULL
           AND cancelDate IS NULL
-          AND paymentDate >= %s
+          AND {BRT('paymentDate')} >= %s
         GROUP BY mes ORDER BY mes
     """, (f"{INICIO}-01",))
 
@@ -608,6 +614,7 @@ def main():
             "inicio_mes": INICIO,
             "fonte": "egide_production @ egide.cc0jc67g6tt1.sa-east-1.rds.amazonaws.com",
             "notas": [
+                "Fuso horário: banco armazena em UTC; este KPI exibe e agrupa em BRT (UTC-3) via CONVERT_TZ.",
                 "Valores monetários vêm de total (centavos) e foram convertidos para R$ (÷100).",
                 "Definição de 'convênio': cliente com customer_insurances ATIVO na data da consulta.",
                 "Pergunta 2 usa doctorappointments.date (data da consulta), não created_at.",

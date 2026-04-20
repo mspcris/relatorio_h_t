@@ -502,6 +502,9 @@
             <div style="margin-top:8px; font-size:.82rem; color:#475569;">
               Dados a partir de <b>janeiro/2023</b>. Mês em andamento aparece com <span class="badge-parcial">PARCIAL</span>.
             </div>
+            <div style="margin-top:8px; padding:8px 10px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:4px; font-size:.86rem; color:#78350f;">
+              <i class="fas fa-clock"></i> <b>Fuso horário:</b> o banco da Égide armazena datas em <b>UTC</b>; este KPI exibe e filtra em <b>horário de Brasília (UTC-3)</b>. Diferenças de até 3h em relação ao ERP da Égide (que mostra em outro fuso) são esperadas.
+            </div>
           </div>
         </details>
       </div>
@@ -920,6 +923,10 @@
       </div>
       <div class="stats" id="drillStats">—</div>
       <div class="controls">
+        <select id="drillFilterBy" class="drill-select" title="Critério da data (filtro do período)">
+          <option value="paid">Ver por data de pagamento</option>
+          <option value="scheduled">Ver por data de agendamento</option>
+        </select>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
           <input type="checkbox" id="drillIncCanc"> incluir cancelados
         </label>
@@ -1653,6 +1660,7 @@ async function openDrill(metric, title, opts) {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const sEl = document.getElementById('drillSort'); if (sEl) sEl.value = DRILL.sort;
+  const fbEl = document.getElementById('drillFilterBy'); if (fbEl) fbEl.value = DRILL.filterBy;
   document.getElementById('drillStats').textContent = 'carregando…';
   document.getElementById('drillBody').innerHTML =
     '<div class="drill-loading"><i class="fas fa-spinner fa-spin"></i> Carregando registros…</div>';
@@ -2150,6 +2158,16 @@ document.getElementById('drillFltConv').addEventListener('change', (e) => {
 });
 document.getElementById('drillSort').addEventListener('change', (e) => {
   DRILL.sort = e.target.value; DRILL.page = 1; renderDrillBody();
+});
+document.getElementById('drillFilterBy').addEventListener('change', (e) => {
+  const v = e.target.value === 'scheduled' ? 'scheduled' : 'paid';
+  DRILL.filterBy = v;
+  DRILL.sort = (v === 'scheduled') ? 'data_age_desc' : 'data_pag_desc';
+  const sEl = document.getElementById('drillSort'); if (sEl) sEl.value = DRILL.sort;
+  DRILL.page = 1;
+  document.getElementById('drillBody').innerHTML =
+    '<div class="drill-loading"><i class="fas fa-spinner fa-spin"></i> Recarregando…</div>';
+  fetchDrillRows();
 });
 document.getElementById('drillExport').addEventListener('click', drillExportCSV);
 document.addEventListener('keydown', (e) => {
