@@ -29,6 +29,7 @@
     { href: '/kpi_receita_despesa.html',           icon: 'fa-balance-scale',           label: 'KPI Receitas x Despesas' },
     { href: '/kpi_receita_despesa_rateio.html',    icon: 'fa-balance-scale',           label: 'KPI R x D com Rateio' },
     { href: '/growth.html',                        icon: 'fa-rocket',                  label: 'Growth Dashboard' },
+    { href: '/kpi_egide.html',                     icon: 'fa-heart-pulse',             label: 'KPI Égide Saúde' },
     { href: '/mais_servicos.html',                 icon: 'fa-th-large',                label: 'Mais Serviços' },
     { type: 'sep' },
     { href: '/admin', icon: 'fa-users-cog', label: 'Admin', adminOnly: true,
