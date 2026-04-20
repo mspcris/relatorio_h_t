@@ -1262,6 +1262,196 @@ def r_fidelizacao(): return render_protected_page("kpi_fidelizacao_cliente.html"
 @app.get('/kpi_egide')
 def r_egide(): return render_protected_page("kpi_egide.html")
 
+
+# ---- /api/egide/rows — drilldown ao vivo do MySQL da Égide ----
+
+_EGIDE_ROW_SQL_BASE = """
+SELECT
+  da.id                                AS appt_id,
+  o.id                                 AS order_id,
+  o.hash                               AS pedido,
+  DATE_FORMAT(da.`date`, '%%d/%%m/%%Y %%H:%%i') AS data_agendada,
+  DATE_FORMAT(
+    COALESCE(da.paymentDate, o.paymentDate), '%%d/%%m/%%Y %%H:%%i'
+  )                                    AS data_pagamento,
+  DATE_FORMAT(da.created_at, '%%d/%%m/%%Y')     AS data_criacao,
+  ROUND(COALESCE(NULLIF(da.total,0), o.total, 0) / 100.0, 2) AS valor,
+  COALESCE(c.name, '(sem clínica)')    AS clinica,
+  COALESCE(c.city, '—')                AS cidade,
+  UPPER(COALESCE(cu.name, '(sem nome)')) AS cliente,
+  cu.id                                AS cliente_id,
+  UPPER(COALESCE(cd.name, ''))         AS dependente,
+  UPPER(COALESCE(d.name, ''))          AS profissional,
+  COALESCE(sp.name, ex.name, eg.name, '')      AS item,
+  CASE
+    WHEN s.clinicDoctorSpecialtyId IS NOT NULL THEN 'consulta'
+    WHEN s.clinicExamId IS NOT NULL OR s.examgroupscheduleId IS NOT NULL THEN 'exame'
+    WHEN da.specialtyId IS NOT NULL THEN 'consulta'
+    WHEN da.examId IS NOT NULL THEN 'exame'
+    ELSE 'outro'
+  END                                  AS tipo,
+  CASE
+    WHEN da.customerInsuranceId IS NOT NULL THEN 'convenio'
+    ELSE 'particular'
+  END                                  AS vinculo,
+  COALESCE(ins.name, 'PARTICULAR')     AS convenio,
+  COALESCE(NULLIF(da.origin,''), 'app') AS origem,
+  COALESCE(o.chargeType, '')           AS forma_pagamento,
+  CASE WHEN da.canceledAt IS NOT NULL OR o.cancelDate IS NOT NULL THEN 1 ELSE 0 END AS cancelado
+FROM doctorappointments da
+LEFT JOIN orders              o    ON o.id   = da.orderId
+LEFT JOIN schedules           s    ON s.id   = da.scheduleId
+LEFT JOIN customers           cu   ON cu.id  = da.customerId
+LEFT JOIN customerdependents  cd   ON cd.id  = da.customerdependentId
+LEFT JOIN clinic_doctor_specialties cds2 ON cds2.id = s.clinicDoctorSpecialtyId
+LEFT JOIN clinic_doctors      cdr  ON cdr.id = cds2.clinicDoctorId
+LEFT JOIN doctors             d    ON d.id   = cdr.doctorId
+LEFT JOIN specialties         sp   ON sp.id  = COALESCE(da.specialtyId, cds2.specialtyId)
+LEFT JOIN clinic_exams        ce2  ON ce2.id = s.clinicExamId
+LEFT JOIN exams               ex   ON ex.id  = COALESCE(da.examId, ce2.examId)
+LEFT JOIN examgroupschedules  egs  ON egs.id = s.examgroupscheduleId
+LEFT JOIN examgroups          eg   ON eg.id  = egs.examgroupId
+LEFT JOIN customer_insurances ci   ON ci.id  = da.customerInsuranceId
+LEFT JOIN insurances          ins  ON ins.id = ci.insuranceId
+LEFT JOIN clinics             c    ON c.id   = COALESCE(da.clinicId, o.clinicId, cdr.clinicId, ce2.clinicId)
+"""
+
+
+def _egide_conn():
+    import pymysql, pymysql.cursors
+    return pymysql.connect(
+        host=os.environ.get("EGIDE_DB_HOST") or os.environ["DB_HOST"],
+        port=int(os.environ.get("EGIDE_DB_PORT") or os.environ["DB_PORT"]),
+        user=os.environ.get("EGIDE_DB_USER") or os.environ["DB_USER"],
+        password=os.environ.get("EGIDE_DB_PASSWORD") or os.environ["DB_PASSWORD"],
+        database=os.environ.get("EGIDE_DB_NAME") or os.environ["DB_NAME"],
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+        connect_timeout=15,
+        read_timeout=90,
+    )
+
+
+def _egide_rows_where(metric: str, de: str, ate: str, include_canc: bool) -> tuple[str, list]:
+    """Monta cláusula WHERE para o range de pagamento da Égide.
+
+    Base de 'Consultas Pagas': appts pagos via da.paymentDate OU order.paymentDate
+    dentro do range, com cancelDate do order NULL.
+    """
+    clauses = [
+        "((da.paymentDate IS NOT NULL AND da.paymentDate >= %s AND da.paymentDate < %s)"
+        " OR (o.paymentDate IS NOT NULL AND o.paymentDate >= %s AND o.paymentDate < %s))"
+    ]
+    # de/ate: ate é INCLUSIVO, então avançamos um dia para o < ate_+1
+    from datetime import datetime as _dt, timedelta as _td
+    ate_exc = (_dt.strptime(ate, "%Y-%m-%d") + _td(days=1)).strftime("%Y-%m-%d")
+    params = [de, ate_exc, de, ate_exc]
+
+    if not include_canc:
+        clauses.append("da.canceledAt IS NULL")
+        clauses.append("(o.id IS NULL OR o.cancelDate IS NULL)")
+
+    m = (metric or "").strip().lower()
+    if m in ("exames", "exames_pagos"):
+        clauses.append(
+            "(s.clinicExamId IS NOT NULL OR s.examgroupscheduleId IS NOT NULL"
+            " OR (s.id IS NULL AND da.examId IS NOT NULL))"
+        )
+    elif m in ("consultas", "consultas_puras"):
+        clauses.append(
+            "(s.clinicDoctorSpecialtyId IS NOT NULL"
+            " OR (s.id IS NULL AND da.specialtyId IS NOT NULL))"
+        )
+    # "consultas_pagas" (default) e "arrecadado" não adicionam filtro
+
+    return " AND ".join(clauses), params
+
+
+@app.get('/api/egide/rows')
+def api_egide_rows():
+    email, _ = decode_user()
+    if not email:
+        return jsonify({"erro": "Não autorizado"}), 401
+
+    metric = (request.args.get("metric") or "consultas_pagas").strip().lower()
+    de     = (request.args.get("de") or "").strip()
+    ate    = (request.args.get("ate") or "").strip()
+    include_canc = (request.args.get("cancelados", "0") in ("1", "true", "yes"))
+    try:
+        limit = max(1, min(int(request.args.get("limit", 500)), 5000))
+    except Exception:
+        limit = 500
+
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", de) or not re.match(r"^\d{4}-\d{2}-\d{2}$", ate):
+        return jsonify({"erro": "de/ate em formato YYYY-MM-DD"}), 400
+    if de > ate:
+        return jsonify({"erro": "de deve ser <= ate"}), 400
+
+    try:
+        where_sql, params = _egide_rows_where(metric, de, ate, include_canc)
+        sql = (
+            _EGIDE_ROW_SQL_BASE
+            + " WHERE " + where_sql
+            + " ORDER BY COALESCE(da.paymentDate, o.paymentDate) DESC, da.id DESC"
+            + " LIMIT %s"
+        )
+        params_full = list(params) + [limit]
+
+        conn = _egide_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, params_full)
+                rows = cur.fetchall()
+
+                # Contagens agregadas (mesmo WHERE, sem LIMIT)
+                cur.execute(
+                    "SELECT COUNT(*) AS total,"
+                    "       SUM(CASE WHEN s.clinicDoctorSpecialtyId IS NOT NULL"
+                    "                OR (s.id IS NULL AND da.specialtyId IS NOT NULL)"
+                    "                THEN 1 ELSE 0 END) AS consultas,"
+                    "       SUM(CASE WHEN s.clinicExamId IS NOT NULL"
+                    "                OR s.examgroupscheduleId IS NOT NULL"
+                    "                OR (s.id IS NULL AND da.examId IS NOT NULL)"
+                    "                THEN 1 ELSE 0 END) AS exames,"
+                    "       ROUND(SUM(COALESCE(NULLIF(da.total,0), o.total, 0))/100.0, 2) AS receita"
+                    " FROM doctorappointments da"
+                    " LEFT JOIN orders o ON o.id = da.orderId"
+                    " LEFT JOIN schedules s ON s.id = da.scheduleId"
+                    " WHERE " + where_sql,
+                    params,
+                )
+                tot = cur.fetchone() or {}
+        finally:
+            conn.close()
+
+        # Tipos Decimal -> float
+        def _clean(r):
+            out = {}
+            for k, v in r.items():
+                if hasattr(v, "quantize"):
+                    out[k] = float(v)
+                else:
+                    out[k] = v
+            return out
+
+        return jsonify({
+            "meta": {
+                "metric": metric,
+                "de": de, "ate": ate,
+                "cancelados_incluidos": include_canc,
+                "limit": limit,
+                "total_no_filtro": int(tot.get("total") or 0),
+                "consultas_no_filtro": int(tot.get("consultas") or 0),
+                "exames_no_filtro": int(tot.get("exames") or 0),
+                "receita_no_filtro": float(tot.get("receita") or 0),
+            },
+            "rows": [_clean(r) for r in rows],
+        })
+    except Exception as e:
+        _log.exception("Falha em /api/egide/rows")
+        return jsonify({"erro": f"falha ao consultar Égide: {e}"}), 500
+
+
 @app.get('/medicos')
 def r9(): return render_protected_page("medicos.html")
 

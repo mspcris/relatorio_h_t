@@ -306,9 +306,124 @@
       position: sticky; top: 0; z-index: 60;
     }
 
+    /* ---------- KPI cards clicáveis ---------- */
+    .card-kpi.clickable {
+      cursor: pointer;
+      transition: transform .12s ease, box-shadow .12s ease;
+      position: relative;
+    }
+    .card-kpi.clickable:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,.08);
+    }
+    .card-kpi.clickable::after {
+      content: "\f00e"; font-family: "Font Awesome 5 Free"; font-weight: 900;
+      position: absolute; top: 8px; right: 10px;
+      font-size: .75rem; color: var(--soft); opacity: .5;
+    }
+    .card-kpi.clickable:hover::after { opacity: 1; color: var(--brand); }
+
+    /* ---------- Modal de drilldown (registros) ---------- */
+    .drill-modal-card {
+      width: 100%; max-width: 920px; max-height: 92vh;
+      background: #fff; border-radius: 10px 10px 0 0;
+      padding: 0; overflow: hidden;
+      display: flex; flex-direction: column;
+      box-shadow: 0 -6px 24px rgba(0,0,0,.2);
+    }
+    @media (min-width: 760px) { .drill-modal-card { border-radius: 10px; } }
+
+    .drill-head {
+      padding: 14px 18px; border-bottom: 1px solid var(--line);
+      display: flex; flex-direction: column; gap: 8px;
+      background: #f8fafc;
+    }
+    .drill-head .top {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .drill-head h3 {
+      margin: 0; font-size: 1.05rem; color: var(--ink);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .drill-head .stats {
+      font-size: .82rem; color: var(--soft);
+      display: flex; flex-wrap: wrap; gap: 12px;
+    }
+    .drill-head .stats b { color: var(--ink); font-weight: 700; }
+    .drill-head .controls {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+      font-size: .85rem;
+    }
+    .drill-head .controls input[type=checkbox] { width: 16px; height: 16px; }
+    .drill-head .controls input[type=search] {
+      padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 6px;
+      font-size: .85rem; min-width: 160px;
+    }
+    .drill-body {
+      padding: 12px 18px; overflow: auto; flex: 1;
+    }
+    .drill-foot {
+      padding: 10px 18px; border-top: 1px solid var(--line);
+      display: flex; justify-content: space-between; align-items: center;
+      background: #f8fafc;
+      font-size: .8rem; color: var(--soft);
+    }
+
+    /* Card no estilo do painel Égide */
+    .drill-card {
+      border: 1px solid var(--line); border-radius: 8px;
+      padding: 10px 12px; margin-bottom: 10px;
+      background: #fff;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 12px;
+      font-size: .85rem;
+    }
+    .drill-card .dc-name {
+      font-weight: 700; color: var(--ink);
+      font-size: .95rem;
+    }
+    .drill-card .dc-name small {
+      font-weight: 400; color: var(--soft); font-size: .8rem; margin-left: 6px;
+    }
+    .drill-card .dc-right { text-align: right; }
+    .drill-card .dc-valor {
+      font-weight: 700; color: var(--ok); font-size: 1rem;
+    }
+    .drill-card .dc-meta {
+      color: var(--soft); font-size: .78rem;
+    }
+    .drill-card .dc-row {
+      grid-column: 1 / -1;
+      display: flex; flex-wrap: wrap; gap: 6px 16px;
+      color: var(--ink); font-size: .82rem;
+      padding-top: 4px; border-top: 1px dashed var(--line);
+    }
+    .drill-card .dc-row b { color: var(--soft); font-weight: 600; margin-right: 4px; }
+    .drill-card .dc-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: .72rem; font-weight: 700; letter-spacing: .3px;
+    }
+    .dc-badge.particular { background: #dbeafe; color: #1d4ed8; }
+    .dc-badge.convenio   { background: #dcfce7; color: #166534; }
+    .dc-badge.cancelado  { background: #fee2e2; color: #991b1b; }
+    .dc-badge.consulta   { background: #ede9fe; color: #5b21b6; }
+    .dc-badge.exame      { background: #fef3c7; color: #92400e; }
+    .dc-badge.outro      { background: #f3f4f6; color: #374151; }
+
+    .drill-empty {
+      padding: 40px 20px; text-align: center;
+      color: var(--soft); font-size: .9rem;
+    }
+    .drill-loading {
+      padding: 40px 20px; text-align: center; color: var(--soft);
+    }
+
     @media (max-width: 760px) {
       .section-title { font-size: 1rem; }
       .chart-box canvas { max-height: 300px; }
+      .drill-card { grid-template-columns: 1fr; }
+      .drill-card .dc-right { text-align: left; }
     }
   </style>
 </head>
@@ -485,8 +600,37 @@
                 a taxa de <b>consultas pagas</b> subiu muito em 2025/2026 (~20% → ~75%).
                 Provavelmente porque a Égide passou a cobrar antes pra confirmar.
               </div>
+              <div style="margin-top:6px;">
+                <span class="destaque">🔍 Clique nos cards:</span>
+                Os 4 cards abaixo são clicáveis. Clique em qualquer um para ver
+                <b>registro a registro</b> (cliente, pedido, valor, data, clínica…) e validar a informação.
+              </div>
             </div>
           </details>
+        </div>
+
+        <!-- Cards KPI ao vivo (data de pagamento, cancelados fora por padrão) -->
+        <div class="cards" id="p2LiveCards">
+          <div class="card-kpi clickable" id="k_consultas_pagas" data-metric="consultas_puras" data-title="Consultas pagas">
+            <div class="label">Consultas pagas <span class="badge-parcial">CLIQUE</span></div>
+            <div class="value" id="k_cp_val">—</div>
+            <div class="sub" id="k_cp_sub">por data de pagamento</div>
+          </div>
+          <div class="card-kpi orange clickable" id="k_exames_pagos" data-metric="exames" data-title="Exames pagos">
+            <div class="label">Exames pagos <span class="badge-parcial">CLIQUE</span></div>
+            <div class="value" id="k_ep_val">—</div>
+            <div class="sub" id="k_ep_sub">por data de pagamento</div>
+          </div>
+          <div class="card-kpi green clickable" id="k_arrecadado" data-metric="consultas_pagas" data-title="Arrecadação (consultas + exames pagos)">
+            <div class="label">Arrecadado <span class="badge-parcial">CLIQUE</span></div>
+            <div class="value" id="k_ar_val">—</div>
+            <div class="sub" id="k_ar_sub">soma consultas + exames</div>
+          </div>
+          <div class="card-kpi teal">
+            <div class="label">Ticket médio</div>
+            <div class="value" id="k_tk_val">—</div>
+            <div class="sub" id="k_tk_sub">arrecadado ÷ nº pagos</div>
+          </div>
         </div>
 
         <div class="chart-row two">
@@ -749,6 +893,33 @@
     <div class="modal-foot">
       <button class="f-btn" id="convCancel">Cancelar</button>
       <button class="f-btn primary" id="convApply">Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de drilldown — registros individuais (Égide) -->
+<div class="modal-back" id="drillModal" role="dialog" aria-modal="true">
+  <div class="drill-modal-card">
+    <div class="drill-head">
+      <div class="top">
+        <h3><i class="fas fa-list-ul"></i> <span id="drillTitle">Registros</span></h3>
+        <button class="f-btn" id="drillClose" title="Fechar"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="stats" id="drillStats">—</div>
+      <div class="controls">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="drillIncCanc"> incluir cancelados
+        </label>
+        <input type="search" id="drillSearch" placeholder="🔍 filtrar cliente, clínica, profissional…">
+        <button class="f-btn" id="drillExport" title="Exportar CSV"><i class="fas fa-file-csv"></i> CSV</button>
+      </div>
+    </div>
+    <div class="drill-body" id="drillBody">
+      <div class="drill-loading"><i class="fas fa-spinner fa-spin"></i> Carregando registros…</div>
+    </div>
+    <div class="drill-foot">
+      <span id="drillFootInfo">—</span>
+      <span style="color:#94a3b8;">Limite 500 registros por consulta. Use os filtros para refinar.</span>
     </div>
   </div>
 </div>
@@ -1253,6 +1424,225 @@ function render() {
     defaultSort: { key:'consultas', dir:'desc' },
     id:'convCli',
   });
+
+  // Live cards P2 (vem do /api/egide/rows — valores oficiais por paymentDate)
+  refreshEgideLiveCards();
+}
+
+/* ============================================================================
+   Cards KPI ao vivo da Égide (P2) — puxa contagens/receita do endpoint
+============================================================================ */
+function periodoIso() {
+  // retorna {de: 'YYYY-MM-01', ate: 'YYYY-MM-último_dia'}
+  const { de, ate } = getPeriodo();
+  const [y1, m1] = de.split('-').map(Number);
+  const [y2, m2] = ate.split('-').map(Number);
+  const deIso  = `${y1}-${String(m1).padStart(2,'0')}-01`;
+  const lastDay = new Date(y2, m2, 0).getDate();   // truque: dia 0 do mês seguinte
+  const ateIso = `${y2}-${String(m2).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  return { de: deIso, ate: ateIso };
+}
+
+let _egideMetaCtl = null;   // abort controller pra não empilhar requests
+async function refreshEgideLiveCards() {
+  const { de, ate } = periodoIso();
+  const cpVal = document.getElementById('k_cp_val');
+  const epVal = document.getElementById('k_ep_val');
+  const arVal = document.getElementById('k_ar_val');
+  const tkVal = document.getElementById('k_tk_val');
+  const cpSub = document.getElementById('k_cp_sub');
+  const epSub = document.getElementById('k_ep_sub');
+  const arSub = document.getElementById('k_ar_sub');
+  const tkSub = document.getElementById('k_tk_sub');
+
+  [cpVal, epVal, arVal, tkVal].forEach(el => el.textContent = '…');
+
+  if (_egideMetaCtl) _egideMetaCtl.abort();
+  _egideMetaCtl = new AbortController();
+
+  try {
+    // Limit=1 porque só queremos o meta agregado
+    const url = `/api/egide/rows?metric=consultas_pagas&de=${de}&ate=${ate}&limit=1&cancelados=0`;
+    const r = await fetch(url, { credentials:'same-origin', signal: _egideMetaCtl.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const m = j.meta || {};
+    const nConsult = Number(m.consultas_no_filtro || 0);
+    const nExames  = Number(m.exames_no_filtro || 0);
+    const receita  = Number(m.receita_no_filtro || 0);
+    const total    = Number(m.total_no_filtro || 0);
+
+    cpVal.textContent = nf(nConsult);
+    epVal.textContent = nf(nExames);
+    arVal.textContent = cur(receita);
+    tkVal.textContent = total > 0 ? cur(receita / total) : 'R$ —';
+
+    const subPer = `${fmtMesBR(de.slice(0,7))} → ${fmtMesBR(ate.slice(0,7))}`;
+    cpSub.textContent = subPer + ' · data de pagamento';
+    epSub.textContent = subPer + ' · data de pagamento';
+    arSub.textContent = `${nf(total)} pagamentos no período`;
+    tkSub.textContent = total > 0 ? `${cur(receita)} ÷ ${nf(total)}` : '—';
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    [cpVal, epVal, arVal, tkVal].forEach(el => el.textContent = '!');
+    [cpSub, epSub, arSub, tkSub].forEach(el => el.textContent = 'falha ao carregar');
+  }
+}
+
+/* ============================================================================
+   Modal de drilldown — registros individuais
+============================================================================ */
+const DRILL = {
+  metric: 'consultas_pagas',
+  title: 'Registros',
+  rows: [],
+  meta: null,
+  search: '',
+  incCanc: false,
+};
+
+function openDrillModal() { document.getElementById('drillModal').classList.add('on'); }
+function closeDrillModal() { document.getElementById('drillModal').classList.remove('on'); }
+
+async function openDrill(metric, title) {
+  DRILL.metric = metric;
+  DRILL.title = title || 'Registros';
+  DRILL.search = '';
+  DRILL.incCanc = document.getElementById('drillIncCanc').checked;
+  document.getElementById('drillTitle').textContent = title || 'Registros';
+  document.getElementById('drillSearch').value = '';
+  document.getElementById('drillStats').textContent = 'carregando…';
+  document.getElementById('drillBody').innerHTML =
+    '<div class="drill-loading"><i class="fas fa-spinner fa-spin"></i> Carregando registros…</div>';
+  openDrillModal();
+  await fetchDrillRows();
+}
+
+async function fetchDrillRows() {
+  const { de, ate } = periodoIso();
+  const canc = DRILL.incCanc ? 1 : 0;
+  const url = `/api/egide/rows?metric=${encodeURIComponent(DRILL.metric)}&de=${de}&ate=${ate}&limit=500&cancelados=${canc}`;
+  try {
+    const r = await fetch(url, { credentials:'same-origin' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    DRILL.rows = Array.isArray(j.rows) ? j.rows : [];
+    DRILL.meta = j.meta || {};
+    renderDrillBody();
+  } catch (e) {
+    document.getElementById('drillBody').innerHTML =
+      `<div class="drill-empty"><i class="fas fa-exclamation-triangle"></i> Falha ao consultar: ${e.message}</div>`;
+    document.getElementById('drillStats').textContent = '—';
+    document.getElementById('drillFootInfo').textContent = '—';
+  }
+}
+
+function renderDrillBody() {
+  const m = DRILL.meta || {};
+  const per = `${fmtMesBR((periodoIso().de).slice(0,7))} → ${fmtMesBR((periodoIso().ate).slice(0,7))}`;
+  const total = Number(m.total_no_filtro || 0);
+  const nC = Number(m.consultas_no_filtro || 0);
+  const nE = Number(m.exames_no_filtro || 0);
+  const rc = Number(m.receita_no_filtro || 0);
+  const tm = total > 0 ? (rc/total) : 0;
+
+  document.getElementById('drillStats').innerHTML =
+    `<span><i class="far fa-calendar-alt"></i> ${per}</span>` +
+    `<span><b>${nf(total)}</b> pagamentos</span>` +
+    `<span><b>${nf(nC)}</b> consultas</span>` +
+    `<span><b>${nf(nE)}</b> exames</span>` +
+    `<span><b>${cur(rc)}</b> arrecadado</span>` +
+    `<span>ticket médio <b>${cur(tm)}</b></span>` +
+    (m.cancelados_incluidos ? `<span style="color:#b91c1c;"><b>inclui cancelados</b></span>` : '');
+
+  // Filtro texto (client side)
+  const q = (DRILL.search || '').toLowerCase().trim();
+  let rows = DRILL.rows;
+  if (q) {
+    rows = rows.filter(r =>
+      String(r.cliente||'').toLowerCase().includes(q) ||
+      String(r.clinica||'').toLowerCase().includes(q) ||
+      String(r.profissional||'').toLowerCase().includes(q) ||
+      String(r.dependente||'').toLowerCase().includes(q) ||
+      String(r.item||'').toLowerCase().includes(q) ||
+      String(r.convenio||'').toLowerCase().includes(q) ||
+      String(r.pedido||'').toLowerCase().includes(q)
+    );
+  }
+
+  const body = document.getElementById('drillBody');
+  if (!rows.length) {
+    body.innerHTML = `<div class="drill-empty"><i class="far fa-folder-open"></i> Nenhum registro encontrado neste filtro.</div>`;
+    document.getElementById('drillFootInfo').textContent = `0 de ${nf(DRILL.rows.length)} registros`;
+    return;
+  }
+
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const frag = document.createDocumentFragment();
+  rows.forEach(r => {
+    const el = document.createElement('div');
+    el.className = 'drill-card';
+    const tipoBadge = `<span class="dc-badge ${r.tipo||'outro'}">${esc((r.tipo||'outro').toUpperCase())}</span>`;
+    const vincBadge = `<span class="dc-badge ${r.vinculo||'particular'}">${esc((r.vinculo||'particular').toUpperCase())}</span>`;
+    const cancBadge = r.cancelado ? `<span class="dc-badge cancelado">CANCELADO</span>` : '';
+    const depLine = r.dependente ? ` <small>(dep.: ${esc(r.dependente)})</small>` : '';
+
+    el.innerHTML = `
+      <div class="dc-name">
+        ${esc(r.cliente || '(sem nome)')}${depLine}
+        <div class="dc-meta">
+          ${esc(r.clinica || '—')}${r.cidade && r.cidade !== '—' ? ' · ' + esc(r.cidade) : ''}
+        </div>
+      </div>
+      <div class="dc-right">
+        <div class="dc-valor">${cur(Number(r.valor||0))}</div>
+        <div class="dc-meta">pago em <b>${esc(r.data_pagamento || '—')}</b></div>
+      </div>
+      <div class="dc-row">
+        ${tipoBadge} ${vincBadge} ${cancBadge}
+        <span><b>Item:</b> ${esc(r.item || '—')}</span>
+        ${r.profissional ? `<span><b>Profissional:</b> ${esc(r.profissional)}</span>` : ''}
+        <span><b>Convênio:</b> ${esc(r.convenio || 'PARTICULAR')}</span>
+        <span><b>Pedido:</b> ${esc(r.pedido || '—')} <small>(appt ${esc(r.appt_id)})</small></span>
+        ${r.forma_pagamento ? `<span><b>Forma:</b> ${esc(r.forma_pagamento)}</span>` : ''}
+        <span><b>Origem:</b> ${esc(r.origem || '—')}</span>
+        <span><b>Agendado:</b> ${esc(r.data_agendada || '—')}</span>
+      </div>
+    `;
+    frag.appendChild(el);
+  });
+  body.innerHTML = '';
+  body.appendChild(frag);
+
+  document.getElementById('drillFootInfo').textContent =
+    q ? `${nf(rows.length)} de ${nf(DRILL.rows.length)} registros (filtro texto)`
+      : `${nf(rows.length)} registros exibidos` +
+        (total > DRILL.rows.length ? ` (de ${nf(total)} totais — aumente o período para segmentar)` : '');
+}
+
+function drillExportCSV() {
+  if (!DRILL.rows || !DRILL.rows.length) return;
+  const headers = ['appt_id','order_id','pedido','cliente','dependente','cliente_id',
+    'clinica','cidade','profissional','item','tipo','vinculo','convenio',
+    'valor','data_pagamento','data_agendada','data_criacao','forma_pagamento','origem','cancelado'];
+  const lines = [headers.join(';')];
+  DRILL.rows.forEach(r => {
+    lines.push(headers.map(h => {
+      const v = r[h];
+      if (v == null) return '';
+      const s = String(v).replace(/"/g,'""');
+      return /[;"\n]/.test(s) ? `"${s}"` : s;
+    }).join(';'));
+  });
+  const blob = new Blob(["\ufeff" + lines.join('\n')], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const { de, ate } = periodoIso();
+  a.download = `egide_${DRILL.metric}_${de}_${ate}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 /* ============================================================================
@@ -1423,6 +1813,35 @@ document.getElementById('btnExportEspecialidade').addEventListener('click', () =
 document.getElementById('btnExportClinica').addEventListener('click', () => exportCSV('tblClinica', 'egide_clinicas.csv'));
 document.getElementById('btnExportConvEsp').addEventListener('click', () => exportCSV('tblConvEsp', 'egide_convenio_especialidade.csv'));
 document.getElementById('btnExportConvCli').addEventListener('click', () => exportCSV('tblConvCli', 'egide_convenio_clinica.csv'));
+
+// ===== Drilldown: handlers =====
+document.querySelectorAll('#p2LiveCards .card-kpi.clickable').forEach(card => {
+  card.addEventListener('click', () => {
+    openDrill(card.dataset.metric, card.dataset.title);
+  });
+});
+
+document.getElementById('drillClose').addEventListener('click', closeDrillModal);
+document.getElementById('drillModal').addEventListener('click', (e) => {
+  if (e.target.id === 'drillModal') closeDrillModal();
+});
+document.getElementById('drillIncCanc').addEventListener('change', () => {
+  DRILL.incCanc = document.getElementById('drillIncCanc').checked;
+  document.getElementById('drillBody').innerHTML =
+    '<div class="drill-loading"><i class="fas fa-spinner fa-spin"></i> Recarregando…</div>';
+  fetchDrillRows();
+});
+(() => {
+  let t;
+  document.getElementById('drillSearch').addEventListener('input', (e) => {
+    clearTimeout(t);
+    t = setTimeout(() => { DRILL.search = e.target.value; renderDrillBody(); }, 180);
+  });
+})();
+document.getElementById('drillExport').addEventListener('click', drillExportCSV);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('drillModal').classList.contains('on')) closeDrillModal();
+});
 </script>
 </body>
 </html>
