@@ -703,7 +703,7 @@
             <canvas id="chP2_vol"></canvas>
           </div>
           <div class="chart-box">
-            <div class="chart-title">Status dos agendamentos por mês</div>
+            <div class="chart-title"><span id="chP2_statusTitle">Status dos agendamentos por mês</span></div>
             <canvas id="chP2_status"></canvas>
           </div>
         </div>
@@ -1095,6 +1095,91 @@ function renderP2Vol(ctx) {
   });
 }
 
+// chP2_status — respeita ST.tipoFiltro:
+//   - agendamento: coorte dos agendados no mês (Agendadas/Pagas/Canceladas de p2.mensal)
+//   - pagamento:   composição dos pagamentos no mês (Consultas/Exames de p2.mensal_pagamento)
+let _p2StatusCtx = null;
+function renderP2Status(ctx) {
+  if (ctx) _p2StatusCtx = ctx;
+  if (!_p2StatusCtx) return;
+  const { p2, p2pag } = _p2StatusCtx;
+  const isPagos = (ST.tipoFiltro === 'pagamento');
+  const titleEl = document.getElementById('chP2_statusTitle');
+
+  destroy('p2_sta');
+  if (isPagos) {
+    if (titleEl) titleEl.textContent = 'Composição dos pagamentos por mês';
+    const labels = p2pag.map(r => r.mes);
+    charts.p2_sta = new Chart(document.getElementById('chP2_status'), {
+      type:'line',
+      data: {
+        labels,
+        datasets: [
+          { label:'Consultas pagas', data: p2pag.map(r=>Number(r.consultas_pagas||0)), borderColor: PAL[0], tension:.25 },
+          { label:'Exames pagos',    data: p2pag.map(r=>Number(r.exames_pagos||0)),    borderColor: PAL[2], tension:.25 },
+        ]
+      },
+      options: { responsive:true, maintainAspectRatio:false,
+        plugins: {
+          legend: { position:'bottom' },
+          tooltip: { callbacks: { footer: () => 'clique para ver registros' } }
+        },
+        onHover: (e, els) => { e.native && (e.native.target.style.cursor = els.length ? 'pointer' : 'default'); },
+        onClick: (evt, els) => {
+          if (!els || !els.length) return;
+          const el = els[0];
+          const mes = labels[el.index];
+          const isExame = el.datasetIndex === 1;
+          const metric = isExame ? 'exames_pagos' : 'consultas_puras';
+          const titulo = `${isExame ? 'Exames' : 'Consultas'} pagos — ${fmtMesBR(mes)}`;
+          openDrill(metric, titulo, { mes, filterBy: 'paid' });
+        },
+        scales: { y: { beginAtZero:true } } }
+    });
+    return;
+  }
+
+  // Modo agendamento: coorte dos agendados por mês
+  if (titleEl) titleEl.textContent = 'Status dos agendamentos por mês';
+  const labels = p2.map(r => r.mes);
+  charts.p2_sta = new Chart(document.getElementById('chP2_status'), {
+    type:'line',
+    data: {
+      labels,
+      datasets: [
+        { label:'Agendadas',  data: p2.map(r=>Number(r.agendadas||0)),  borderColor: PAL[0], tension:.25 },
+        { label:'Pagas',      data: p2.map(r=>Number(r.pagas||0)),      borderColor: PAL[1], tension:.25 },
+        { label:'Canceladas', data: p2.map(r=>Number(r.canceladas||0)), borderColor: PAL[3], tension:.25 },
+      ]
+    },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend: { position:'bottom' },
+        tooltip: { callbacks: { footer: () => 'clique para ver registros' } }
+      },
+      onHover: (e, els) => { e.native && (e.native.target.style.cursor = els.length ? 'pointer' : 'default'); },
+      onClick: (evt, els) => {
+        if (!els || !els.length) return;
+        const el = els[0];
+        const mes = labels[el.index];
+        const dsIdx = el.datasetIndex;
+        const inc = document.getElementById('drillIncCanc');
+        let metric = 'consultas_pagas', filterBy = 'scheduled', titulo = '';
+        if (dsIdx === 0) {
+          titulo = `Agendamentos — ${fmtMesBR(mes)}`;
+        } else if (dsIdx === 1) {
+          filterBy = 'paid';
+          titulo = `Pagamentos — ${fmtMesBR(mes)}`;
+        } else {
+          if (inc) inc.checked = true;
+          titulo = `Cancelamentos — ${fmtMesBR(mes)}`;
+        }
+        openDrill(metric, titulo, { mes, filterBy });
+      },
+      scales: { y: { beginAtZero:true } } }
+  });
+}
+
 function showError(msg) {
   document.getElementById('loadingMsg').style.display = 'none';
   const e = document.getElementById('errBox');
@@ -1327,48 +1412,8 @@ function render() {
   /* P2 --------------------------------------------------------------- */
   const p2 = filtMes(DATA.p2_consultas.mensal, de, ate);
   const p2pag = filtMes(DATA.p2_consultas.mensal_pagamento || [], de, ate);
-  const labels2 = p2.map(r => r.mes);
   renderP2Vol({ p2, p2pag, de, ate });
-  destroy('p2_sta');
-  charts.p2_sta = new Chart(document.getElementById('chP2_status'), {
-    type:'line',
-    data: {
-      labels: labels2,
-      datasets: [
-        { label:'Agendadas',  data: p2.map(r=>Number(r.agendadas||0)), borderColor: PAL[0], tension:.25 },
-        { label:'Pagas',      data: p2.map(r=>Number(r.pagas||0)),     borderColor: PAL[1], tension:.25 },
-        { label:'Canceladas', data: p2.map(r=>Number(r.canceladas||0)),borderColor: PAL[3], tension:.25 },
-      ]
-    },
-    options: { responsive:true, maintainAspectRatio:false,
-      plugins: {
-        legend: { position:'bottom' },
-        tooltip: { callbacks: { footer: () => 'clique para ver registros' } }
-      },
-      onHover: (e, els) => { e.native && (e.native.target.style.cursor = els.length ? 'pointer' : 'default'); },
-      onClick: (evt, els) => {
-        if (!els || !els.length) return;
-        const el = els[0];
-        const mes = labels2[el.index];
-        const dsIdx = el.datasetIndex;
-        // 0=Agendadas (scheduled, todos), 1=Pagas (paid, todos), 2=Canceladas (scheduled + cancelados)
-        let metric = 'consultas_pagas', filterBy = 'paid', titulo = '';
-        const inc = document.getElementById('drillIncCanc');
-        if (dsIdx === 0) {
-          filterBy = 'scheduled';
-          titulo = `Agendamentos — ${fmtMesBR(mes)}`;
-        } else if (dsIdx === 1) {
-          filterBy = 'paid';
-          titulo = `Pagamentos — ${fmtMesBR(mes)}`;
-        } else {
-          filterBy = 'scheduled';
-          if (inc) inc.checked = true;           // forçamos incluir cancelados
-          titulo = `Cancelamentos — ${fmtMesBR(mes)}`;
-        }
-        openDrill(metric, titulo, { mes, filterBy });
-      },
-      scales: { y: { beginAtZero:true } } }
-  });
+  renderP2Status({ p2, p2pag });
 
   /* P2 drilldown: especialidades + clínicas.
      O toggle global ST.tipoFiltro decide qual eixo temporal valer para o período:
@@ -1484,9 +1529,14 @@ function render() {
   });
 
   /* P3 --------------------------------------------------------------- */
-  // Para P3 respeitar o período: somamos a partir do mensal (agregando) em vez
-  // de usar totais_historico. Isso permite filtrar por período.
-  const p3mRaw = filtMes(DATA.p3_particular_convenio.mensal, de, ate);
+  // Toggle global manda em P3:
+  //   - 'pagamento': série mensal_pagamento (eixo = paymentDate, receita arrecadada)
+  //   - 'agendamento': série mensal (eixo = da.date, receita contratada)
+  const isPagosP3 = (ST.tipoFiltro === 'pagamento');
+  const p3SrcMensal = isPagosP3
+    ? (DATA.p3_particular_convenio.mensal_pagamento || DATA.p3_particular_convenio.mensal)
+    : DATA.p3_particular_convenio.mensal;
+  const p3mRaw = filtMes(p3SrcMensal, de, ate);
   const p3m = applyCanc(p3mRaw, [
     ['consultas_particular', 'consultas_particular_canc'],
     ['consultas_convenio',   'consultas_convenio_canc'],
@@ -1495,10 +1545,14 @@ function render() {
   ]);
   const sum = (arr, k) => arr.reduce((s,r)=>s+Number(r[k]||0), 0);
 
-  // Donuts: breakdown por NOME de convênio (Camim, Liberty, Alamo…) usando
-  // o cubo mensal de P5 (mesmos filtros do gráfico de arrecadação). Particular
-  // aparece como fatia "PARTICULAR".
-  const p3DonutBaseRaw = filtMes(DATA.p5_receita_convenio.mensal_por_convenio || [], de, ate);
+  // Donuts: breakdown por NOME de convênio. Também respeita o toggle — usa o
+  // cubo por pagamento (mensal_por_convenio) ou por agendamento
+  // (mensal_por_convenio_agendamento) conforme o tipo de filtro global.
+  const p3DonutSrc = isPagosP3
+    ? (DATA.p5_receita_convenio.mensal_por_convenio || [])
+    : (DATA.p5_receita_convenio.mensal_por_convenio_agendamento
+       || DATA.p5_receita_convenio.mensal_por_convenio || []);
+  const p3DonutBaseRaw = filtMes(p3DonutSrc, de, ate);
   const p3DonutBase = applyCanc(p3DonutBaseRaw, [
     ['consultas', 'consultas_canc'],
     ['receita',   'receita_canc'],
@@ -1535,14 +1589,15 @@ function render() {
   });
 
   const labels3 = p3m.map(r => r.mes);
+  const p3RecLbl = isPagosP3 ? 'Receita arrecadada' : 'Receita contratada';
   destroy('p3_tr');
   charts.p3_tr = new Chart(document.getElementById('chP3_trend'), {
     type:'bar',
     data: {
       labels: labels3,
       datasets: [
-        { label:'Receita Particular', data: p3m.map(r=>Number(r.receita_particular||0)), backgroundColor: PAL[1] },
-        { label:'Receita Convênio',   data: p3m.map(r=>Number(r.receita_convenio||0)),   backgroundColor: PAL[5] },
+        { label:`${p3RecLbl} · Particular`, data: p3m.map(r=>Number(r.receita_particular||0)), backgroundColor: PAL[1] },
+        { label:`${p3RecLbl} · Convênio`,   data: p3m.map(r=>Number(r.receita_convenio||0)),   backgroundColor: PAL[5] },
       ]
     },
     options: { responsive:true, maintainAspectRatio:false,
@@ -1554,9 +1609,14 @@ function render() {
   /* P4 --------------------------------------------------------------- */
   // Nova estrutura: serie_canal = [{mes, canal, qtde, receita}], canal ∈ {clinica, farmacia, outros}
   // fallback para estrutura antiga (orders_por_tipo + appointments_sem_order)
+  const isPagosP4 = (ST.tipoFiltro === 'pagamento');
+  const p4SerieSrc = isPagosP4
+    ? DATA.p4_receita_particular.serie_canal
+    : (DATA.p4_receita_particular.serie_canal_agendamento
+       || DATA.p4_receita_particular.serie_canal);
   let p4rows;
-  if (Array.isArray(DATA.p4_receita_particular.serie_canal)) {
-    p4rows = filtMes(DATA.p4_receita_particular.serie_canal, de, ate);
+  if (Array.isArray(p4SerieSrc)) {
+    p4rows = filtMes(p4SerieSrc, de, ate);
   } else {
     const legacyOrders = filtMes(DATA.p4_receita_particular.orders_por_tipo || [], de, ate);
     const legacyAppt = filtMes(DATA.p4_receita_particular.appointments_sem_order || [], de, ate);
@@ -1601,7 +1661,11 @@ function render() {
       scales: { x:{ stacked:true }, y:{ stacked:true, beginAtZero:true, ticks: { callback: v => 'R$ '+(v/1000).toFixed(0)+'k' } } } }
   });
 
-  const p4tot = filtMes(DATA.p4_receita_particular.consolidado_mensal, de, ate);
+  const p4totSrc = isPagosP4
+    ? DATA.p4_receita_particular.consolidado_mensal
+    : (DATA.p4_receita_particular.consolidado_mensal_agendamento
+       || DATA.p4_receita_particular.consolidado_mensal);
+  const p4tot = filtMes(p4totSrc, de, ate);
   destroy('p4_tot');
   charts.p4_tot = new Chart(document.getElementById('chP4_total'), {
     type:'line',
@@ -1616,7 +1680,12 @@ function render() {
   });
 
   /* P5 --------------------------------------------------------------- */
-  let p5rows = filtConv(filtMes(DATA.p5_receita_convenio.mensal_por_convenio, de, ate), convsArr);
+  const isPagosP5 = (ST.tipoFiltro === 'pagamento');
+  const p5MensalSrc = isPagosP5
+    ? DATA.p5_receita_convenio.mensal_por_convenio
+    : (DATA.p5_receita_convenio.mensal_por_convenio_agendamento
+       || DATA.p5_receita_convenio.mensal_por_convenio);
+  let p5rows = filtConv(filtMes(p5MensalSrc, de, ate), convsArr);
   p5rows = applyCanc(p5rows, [
     ['consultas', 'consultas_canc'],
     ['receita',   'receita_canc'],
@@ -1642,7 +1711,7 @@ function render() {
   });
 
   // Tabela totais por convênio — agregada a partir do mensal (respeita período + convênios)
-  let totConvBase = filtMes(DATA.p5_receita_convenio.mensal_por_convenio || [], de, ate);
+  let totConvBase = filtMes(p5MensalSrc || [], de, ate);
   if (convsArr) totConvBase = totConvBase.filter(r => convsArr.has(r.convenio));
   totConvBase = applyCanc(totConvBase, [
     ['consultas', 'consultas_canc'],
@@ -1669,7 +1738,10 @@ function render() {
   });
 
   // Drilldown convênio × especialidade — agrega a partir do cubo mensal
-  const convEspMesRaw = DATA.p5_receita_convenio.por_convenio_especialidade_mes;
+  const convEspMesRaw = isPagosP5
+    ? DATA.p5_receita_convenio.por_convenio_especialidade_mes
+    : (DATA.p5_receita_convenio.por_convenio_especialidade_mes_agendamento
+       || DATA.p5_receita_convenio.por_convenio_especialidade_mes);
   let convEspBase = Array.isArray(convEspMesRaw)
     ? filtMes(convEspMesRaw, de, ate)
     : (DATA.p5_receita_convenio.por_convenio_especialidade || []);
@@ -1698,7 +1770,10 @@ function render() {
   });
 
   // Drilldown convênio × clínica — agrega a partir do cubo mensal
-  const convCliMesRaw = DATA.p5_receita_convenio.por_convenio_clinica_mes;
+  const convCliMesRaw = isPagosP5
+    ? DATA.p5_receita_convenio.por_convenio_clinica_mes
+    : (DATA.p5_receita_convenio.por_convenio_clinica_mes_agendamento
+       || DATA.p5_receita_convenio.por_convenio_clinica_mes);
   let convCliBase = Array.isArray(convCliMesRaw)
     ? filtMes(convCliMesRaw, de, ate)
     : (DATA.p5_receita_convenio.por_convenio_clinica || []);
