@@ -1996,27 +1996,14 @@ function renderDrillBody() {
   if (DRILL.deOv && DRILL.ateOv) { deIso = DRILL.deOv; ateIso = DRILL.ateOv; }
   else { ({ de: deIso, ate: ateIso } = periodoIso()); }
   const per = `${fmtMesBR(deIso.slice(0,7))} → ${fmtMesBR(ateIso.slice(0,7))}`;
-  const total = Number(m.total_no_filtro || 0);
-  const nC = Number(m.consultas_no_filtro || 0);
-  const nE = Number(m.exames_no_filtro || 0);
-  const rc = Number(m.receita_no_filtro || 0);
-  const tm = total > 0 ? (rc/total) : 0;
   const fbLabel = (m.filter_by === 'scheduled') ? 'data de agendamento' : 'data de pagamento';
-
-  document.getElementById('drillStats').innerHTML =
-    `<span><i class="far fa-calendar-alt"></i> ${per} · ${fbLabel}</span>` +
-    `<span><b>${nf(total)}</b> registros</span>` +
-    `<span><b>${nf(nC)}</b> consultas</span>` +
-    `<span><b>${nf(nE)}</b> exames</span>` +
-    `<span><b>${cur(rc)}</b> valor total</span>` +
-    (total > 0 ? `<span>ticket médio <b>${cur(tm)}</b></span>` : '') +
-    (m.cancelados_incluidos ? `<span style="color:#b91c1c;"><b>inclui cancelados</b></span>` : '');
 
   // Filtros (client side)
   const q = (DRILL.search || '').toLowerCase().trim();
   const fV = DRILL.fltVinculo || '';
   const fT = DRILL.fltTipo    || '';
   const fC = (DRILL.fltConv   || '').toLowerCase();
+  const filtroAtivoStats = !!(q || fV || fT || fC);
   let rows = DRILL.rows.filter(r => {
     if (fV && String(r.vinculo||'') !== fV) return false;
     if (fT && String(r.tipo||'outro') !== fT) return false;
@@ -2034,6 +2021,33 @@ function renderDrillBody() {
     }
     return true;
   });
+
+  // Stats do header: reflete filtros client-side quando ativos; senão usa o agregado do servidor.
+  let total, nC, nE, rc;
+  if (filtroAtivoStats) {
+    total = rows.length;
+    nC = rows.reduce((s,r) => s + (String(r.tipo||'outro') === 'consulta' ? 1 : 0), 0);
+    nE = rows.reduce((s,r) => s + (String(r.tipo||'outro') === 'exame' ? 1 : 0), 0);
+    rc = rows.reduce((s,r) => s + Number(r.valor||0), 0);
+  } else {
+    total = Number(m.total_no_filtro || 0);
+    nC = Number(m.consultas_no_filtro || 0);
+    nE = Number(m.exames_no_filtro || 0);
+    rc = Number(m.receita_no_filtro || 0);
+  }
+  const tm = total > 0 ? (rc/total) : 0;
+  const filtroTag = filtroAtivoStats
+    ? `<span style="color:#2563eb;"><b>(filtro aplicado)</b></span>` : '';
+
+  document.getElementById('drillStats').innerHTML =
+    `<span><i class="far fa-calendar-alt"></i> ${per} · ${fbLabel}</span>` +
+    `<span><b>${nf(total)}</b> registros</span>` +
+    `<span><b>${nf(nC)}</b> consultas</span>` +
+    `<span><b>${nf(nE)}</b> exames</span>` +
+    `<span><b>${cur(rc)}</b> valor total</span>` +
+    (total > 0 ? `<span>ticket médio <b>${cur(tm)}</b></span>` : '') +
+    filtroTag +
+    (m.cancelados_incluidos ? `<span style="color:#b91c1c;"><b>inclui cancelados</b></span>` : '');
   // Ordenação
   const sort = DRILL.sort || 'data_pag_desc';
   const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
