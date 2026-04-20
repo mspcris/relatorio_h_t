@@ -1771,7 +1771,11 @@ async function refreshEgideLiveCards() {
 
   try {
     const canc = ST.mostrarCanc ? 1 : 0;
-    const url = `/api/egide/rows?metric=consultas_pagas&de=${de}&ate=${ate}`
+    // metric=arrecadado não aplica filtro IS_CONSULTA nem IS_EXAME no count_sql,
+    // retornando consultas_no_filtro, exames_no_filtro e receita_no_filtro do
+    // universo completo (pagos do período). Se usarmos consultas_pagas aqui,
+    // o where filtra só consultas e o card "Exames" recebe 0.
+    const url = `/api/egide/rows?metric=arrecadado&de=${de}&ate=${ate}`
               + `&limit=1&cancelados=${canc}&filter_by=${filterBy}`;
     const r = await fetch(url, { credentials:'same-origin', signal: _egideMetaCtl.signal });
     if (!r.ok) throw new Error('HTTP ' + r.status);
