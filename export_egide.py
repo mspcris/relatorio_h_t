@@ -503,28 +503,66 @@ def pergunta4_receita_particular(cur) -> dict:
     for r in serie_canal:
         r["receita"] = round(r["receita"], 2)
 
-    consolidado = _q(cur, f"""
+    # "Total particular consolidado" — FILTRA convênio. Antes esse gráfico
+    # somava tudo (inclusive convênio), por isso batia ~R$ 198k em Mar/2026
+    # enquanto a tabela Totais por convênio mostrava PARTICULAR = R$ 80.708,95.
+    # Agora soma:
+    #   - orders.orderType='pharmacy' (farmácia não passa convênio);
+    #   - orders.orderType='clinic' SE o appointment vinculado NÃO tem partner
+    #     nem customer_insurance ativo (= realmente particular);
+    #   - appointments sem order SE NÃO tem partner nem customer_insurance ativo.
+    # Regra de convênio é a mesma do P3/P5: partnerpeople→partners OU
+    # customer_insurances.isCurrent=1 com janela temporal.
+    conv_join_p4 = (
+        " LEFT JOIN partnerpeople pp ON pp.id = da.partnerpeopleId"
+        " LEFT JOIN partners p_conv  ON p_conv.id = pp.partnerId"
+        " LEFT JOIN customer_insurances ci4"
+        "   ON ci4.customerId  = da.customerId"
+        "  AND ci4.isCurrent   = 1"
+        "  AND ci4.created_at <= da.`date`"
+        "  AND (ci4.deleted_at IS NULL OR ci4.deleted_at > da.`date`)"
+    )
+    sem_conv = "(p_conv.id IS NULL AND ci4.id IS NULL)"
+
+    consolidado_particular = _q(cur, f"""
         SELECT mes, ROUND(SUM(receita),2) receita, SUM(qtde) qtde FROM (
-            SELECT DATE_FORMAT({BRT('paymentDate')},'%%Y-%%m') mes,
-                   COUNT(*) qtde, SUM(IFNULL(total,0))/100.0 receita
-            FROM orders
-            WHERE paymentDate IS NOT NULL AND cancelDate IS NULL AND {BRT('paymentDate')} >= %s
+            SELECT DATE_FORMAT({BRT('o.paymentDate')},'%%Y-%%m') mes,
+                   COUNT(*) qtde, SUM(IFNULL(o.total,0))/100.0 receita
+            FROM orders o
+            WHERE o.orderType = 'pharmacy'
+              AND o.paymentDate IS NOT NULL AND o.cancelDate IS NULL
+              AND {BRT('o.paymentDate')} >= %s
             GROUP BY mes
             UNION ALL
-            SELECT DATE_FORMAT({BRT('paymentDate')},'%%Y-%%m'),
-                   COUNT(*), SUM(IFNULL(total,0))/100.0
-            FROM doctorappointments
-            WHERE paymentDate IS NOT NULL AND canceledAt IS NULL AND orderId IS NULL
-              AND total > 0 AND {BRT('paymentDate')} >= %s
-            GROUP BY 1
+            SELECT DATE_FORMAT({BRT('o.paymentDate')},'%%Y-%%m') mes,
+                   COUNT(*) qtde, SUM(IFNULL(o.total,0))/100.0 receita
+            FROM orders o
+            JOIN doctorappointments da ON da.orderId = o.id
+            {conv_join_p4}
+            WHERE o.orderType = 'clinic'
+              AND o.paymentDate IS NOT NULL AND o.cancelDate IS NULL
+              AND da.canceledAt IS NULL
+              AND {sem_conv}
+              AND {BRT('o.paymentDate')} >= %s
+            GROUP BY mes
+            UNION ALL
+            SELECT DATE_FORMAT({BRT('da.paymentDate')},'%%Y-%%m') mes,
+                   COUNT(*) qtde, SUM(IFNULL(da.total,0))/100.0 receita
+            FROM doctorappointments da
+            {conv_join_p4}
+            WHERE da.paymentDate IS NOT NULL AND da.canceledAt IS NULL
+              AND da.orderId IS NULL AND da.total > 0
+              AND {sem_conv}
+              AND {BRT('da.paymentDate')} >= %s
+            GROUP BY mes
         ) x GROUP BY mes ORDER BY mes
-    """, (f"{INICIO}-01", f"{INICIO}-01"))
+    """, (f"{INICIO}-01", f"{INICIO}-01", f"{INICIO}-01"))
 
     return {
         "orders_por_tipo": orders,
         "appointments_sem_order": appt_sem_order,
         "serie_canal": serie_canal,
-        "consolidado_mensal": consolidado,
+        "consolidado_mensal": consolidado_particular,
     }
 
 
@@ -611,10 +649,20 @@ def pergunta5_receita_convenio(cur) -> dict:
         ORDER BY name
     """)
 
+    # IS_CONSULTA_P5: mesma regra do P2. A tabela Convênio × Especialidade
+    # passa a mostrar APENAS CONSULTAS. Antes, o bucket "(Exame — sem
+    # especialidade)" misturava exames reais com consultas sem specialtyId
+    # cadastrado — no ERP da Égide o Camim ficou com 1.144 nesse bucket
+    # enquanto o card de exames mostrava apenas 490 no mesmo mês.
+    IS_CONSULTA_P5 = (
+        "(sc5.clinicDoctorSpecialtyId IS NOT NULL"
+        " OR (sc5.id IS NULL AND da.specialtyId IS NOT NULL))"
+    )
+
     # Drilldown: por convênio x especialidade (histórico, base em pagamento).
     por_convenio_especialidade = _q(cur, f"""
         SELECT {conv_name} convenio,
-               COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
+               COALESCE(s.name, '(sem especialidade)') especialidade,
                SUM(CASE WHEN {paid} AND {not_canc} THEN 1 ELSE 0 END) consultas,
                ROUND(SUM(CASE WHEN {paid} AND {not_canc} THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita,
                SUM(CASE WHEN {paid} AND {is_canc} THEN 1 ELSE 0 END) consultas_canc,
@@ -622,8 +670,10 @@ def pergunta5_receita_convenio(cur) -> dict:
         FROM doctorappointments da
         LEFT JOIN orders o5 ON o5.id = da.orderId
         {conv_join}
+        LEFT JOIN schedules sc5 ON sc5.id = da.scheduleId
         LEFT JOIN specialties s ON s.id = da.specialtyId
         WHERE COALESCE(da.paymentDate, o5.paymentDate) IS NOT NULL
+          AND {IS_CONSULTA_P5}
         GROUP BY convenio, especialidade
         HAVING consultas > 0 OR consultas_canc > 0
         ORDER BY convenio, consultas DESC
@@ -654,7 +704,7 @@ def pergunta5_receita_convenio(cur) -> dict:
     por_convenio_especialidade_mes = _q(cur, f"""
         SELECT DATE_FORMAT({BRT('COALESCE(da.paymentDate, o5.paymentDate)')},'%%Y-%%m') mes,
                {conv_name} convenio,
-               COALESCE(s.name, '(Exame — sem especialidade)') especialidade,
+               COALESCE(s.name, '(sem especialidade)') especialidade,
                SUM(CASE WHEN {paid} AND {not_canc} THEN 1 ELSE 0 END) consultas,
                ROUND(SUM(CASE WHEN {paid} AND {not_canc} THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita,
                SUM(CASE WHEN {paid} AND {is_canc} THEN 1 ELSE 0 END) consultas_canc,
@@ -662,9 +712,11 @@ def pergunta5_receita_convenio(cur) -> dict:
         FROM doctorappointments da
         LEFT JOIN orders o5 ON o5.id = da.orderId
         {conv_join}
+        LEFT JOIN schedules sc5 ON sc5.id = da.scheduleId
         LEFT JOIN specialties s ON s.id = da.specialtyId
         WHERE COALESCE(da.paymentDate, o5.paymentDate) IS NOT NULL
           AND {BRT('COALESCE(da.paymentDate, o5.paymentDate)')} >= %s
+          AND {IS_CONSULTA_P5}
         GROUP BY mes, convenio, especialidade
         HAVING consultas > 0 OR consultas_canc > 0
         ORDER BY mes, convenio, consultas DESC
