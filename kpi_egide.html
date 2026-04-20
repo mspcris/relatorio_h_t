@@ -420,6 +420,14 @@
       padding: 40px 20px; text-align: center;
       color: var(--soft); font-size: .9rem;
     }
+    .drill-pager { display:flex; gap:6px; align-items:center; font-size:.78rem; color: var(--soft); }
+    .drill-pager button {
+      padding: 3px 9px; border: 1px solid var(--line); background:#fff;
+      border-radius: 6px; cursor: pointer; font-size: .78rem;
+      color: var(--ink);
+    }
+    .drill-pager button:disabled { opacity:.4; cursor:not-allowed; }
+    .drill-pager button:hover:not(:disabled) { background:#f1f5f9; }
     .drill-loading {
       padding: 40px 20px; text-align: center; color: var(--soft);
     }
@@ -948,7 +956,7 @@
     </div>
     <div class="drill-foot">
       <span id="drillFootInfo">—</span>
-      <span style="color:#94a3b8;">Limite 500 registros por consulta. Use os filtros para refinar.</span>
+      <span id="drillPager" class="drill-pager"></span>
     </div>
   </div>
 </div>
@@ -1594,6 +1602,8 @@ const DRILL = {
   fltTipo: '',        // '' | 'consulta' | 'exame' | 'outro'
   fltConv: '',        // nome do convênio (ex: 'UNIMED') ou 'PARTICULAR' ou ''
   sort: 'data_pag_desc',
+  page: 1,
+  pageSize: 200,
 };
 
 function _parseDtBr(s) {
@@ -1636,6 +1646,7 @@ async function openDrill(metric, title, opts) {
   DRILL.fltTipo    = '';
   DRILL.fltConv    = '';
   DRILL.sort       = 'data_pag_desc';
+  DRILL.page       = 1;
   document.getElementById('drillTitle').textContent = DRILL.title;
   document.getElementById('drillSearch').value = '';
   ['drillFltVinculo','drillFltTipo','drillFltConv'].forEach(id => {
@@ -1656,7 +1667,7 @@ async function fetchDrillRows() {
   const canc = DRILL.incCanc ? 1 : 0;
   const fb = DRILL.filterBy || 'paid';
   let url = `/api/egide/rows?metric=${encodeURIComponent(DRILL.metric)}`
-    + `&de=${de}&ate=${ate}&limit=5000&cancelados=${canc}&filter_by=${fb}`;
+    + `&de=${de}&ate=${ate}&limit=20000&cancelados=${canc}&filter_by=${fb}`;
   if (DRILL.clinica)       url += `&clinica=${encodeURIComponent(DRILL.clinica)}`;
   if (DRILL.especialidade) url += `&especialidade=${encodeURIComponent(DRILL.especialidade)}`;
   if (DRILL.convenio)      url += `&convenio=${encodeURIComponent(DRILL.convenio)}`;
@@ -1737,17 +1748,28 @@ function renderDrillBody() {
   if (cmpBy) rows = rows.slice().sort(cmpBy);
 
   const body = document.getElementById('drillBody');
+  const pagerEl = document.getElementById('drillPager');
   if (!rows.length) {
     body.innerHTML = `<div class="drill-empty"><i class="far fa-folder-open"></i> Nenhum registro encontrado neste filtro.</div>`;
     document.getElementById('drillFootInfo').textContent = `0 de ${nf(DRILL.rows.length)} registros`;
+    if (pagerEl) pagerEl.innerHTML = '';
     return;
   }
+
+  // Paginação client-side
+  const pageSize = DRILL.pageSize || 200;
+  const nPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  if (DRILL.page > nPages) DRILL.page = 1;
+  const page = DRILL.page || 1;
+  const ini = (page - 1) * pageSize;
+  const fim = Math.min(ini + pageSize, rows.length);
+  const pageRows = rows.slice(ini, fim);
 
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
   const frag = document.createDocumentFragment();
-  rows.forEach(r => {
+  pageRows.forEach(r => {
     const el = document.createElement('div');
     el.className = 'drill-card';
     const tipoBadge = `<span class="dc-badge ${r.tipo||'outro'}">${esc((r.tipo||'outro').toUpperCase())}</span>`;
@@ -1781,11 +1803,46 @@ function renderDrillBody() {
   });
   body.innerHTML = '';
   body.appendChild(frag);
+  body.scrollTop = 0;
 
+  const truncadoNoFetch = total > DRILL.rows.length;
+  const filtroAtivo = q || DRILL.fltVinculo || DRILL.fltTipo || DRILL.fltConv;
   document.getElementById('drillFootInfo').textContent =
-    q ? `${nf(rows.length)} de ${nf(DRILL.rows.length)} registros (filtro texto)`
-      : `${nf(rows.length)} registros exibidos` +
-        (total > DRILL.rows.length ? ` (de ${nf(total)} totais — aumente o período para segmentar)` : '');
+    filtroAtivo
+      ? `exibindo ${nf(ini+1)}–${nf(fim)} de ${nf(rows.length)} filtrados (base: ${nf(DRILL.rows.length)})`
+      : `exibindo ${nf(ini+1)}–${nf(fim)} de ${nf(rows.length)} registros`
+        + (truncadoNoFetch ? ` · atenção: servidor retornou ${nf(DRILL.rows.length)} de ${nf(total)} totais` : '');
+
+  if (pagerEl) {
+    if (nPages <= 1) {
+      pagerEl.innerHTML = '';
+    } else {
+      pagerEl.innerHTML = '';
+      const btnFirst = document.createElement('button');
+      btnFirst.textContent = '«'; btnFirst.title = 'Primeira';
+      btnFirst.disabled = (page <= 1);
+      btnFirst.onclick = () => { DRILL.page = 1; renderDrillBody(); };
+      const btnPrev = document.createElement('button');
+      btnPrev.textContent = '‹'; btnPrev.title = 'Anterior';
+      btnPrev.disabled = (page <= 1);
+      btnPrev.onclick = () => { DRILL.page = Math.max(1, page - 1); renderDrillBody(); };
+      const info = document.createElement('span');
+      info.textContent = ` pág ${page} de ${nPages} `;
+      const btnNext = document.createElement('button');
+      btnNext.textContent = '›'; btnNext.title = 'Próxima';
+      btnNext.disabled = (page >= nPages);
+      btnNext.onclick = () => { DRILL.page = Math.min(nPages, page + 1); renderDrillBody(); };
+      const btnLast = document.createElement('button');
+      btnLast.textContent = '»'; btnLast.title = 'Última';
+      btnLast.disabled = (page >= nPages);
+      btnLast.onclick = () => { DRILL.page = nPages; renderDrillBody(); };
+      pagerEl.appendChild(btnFirst);
+      pagerEl.appendChild(btnPrev);
+      pagerEl.appendChild(info);
+      pagerEl.appendChild(btnNext);
+      pagerEl.appendChild(btnLast);
+    }
+  }
 }
 
 function drillExportCSV() {
@@ -2061,7 +2118,7 @@ document.getElementById('drillIncCanc').addEventListener('change', () => {
   let t;
   document.getElementById('drillSearch').addEventListener('input', (e) => {
     clearTimeout(t);
-    t = setTimeout(() => { DRILL.search = e.target.value; renderDrillBody(); }, 180);
+    t = setTimeout(() => { DRILL.search = e.target.value; DRILL.page = 1; renderDrillBody(); }, 180);
   });
 })();
 function _populateConvDropdown() {
@@ -2083,16 +2140,16 @@ function _populateConvDropdown() {
   DRILL.fltConv = sel.value;
 }
 document.getElementById('drillFltVinculo').addEventListener('change', (e) => {
-  DRILL.fltVinculo = e.target.value; renderDrillBody();
+  DRILL.fltVinculo = e.target.value; DRILL.page = 1; renderDrillBody();
 });
 document.getElementById('drillFltTipo').addEventListener('change', (e) => {
-  DRILL.fltTipo = e.target.value; renderDrillBody();
+  DRILL.fltTipo = e.target.value; DRILL.page = 1; renderDrillBody();
 });
 document.getElementById('drillFltConv').addEventListener('change', (e) => {
-  DRILL.fltConv = e.target.value; renderDrillBody();
+  DRILL.fltConv = e.target.value; DRILL.page = 1; renderDrillBody();
 });
 document.getElementById('drillSort').addEventListener('change', (e) => {
-  DRILL.sort = e.target.value; renderDrillBody();
+  DRILL.sort = e.target.value; DRILL.page = 1; renderDrillBody();
 });
 document.getElementById('drillExport').addEventListener('click', drillExportCSV);
 document.addEventListener('keydown', (e) => {
