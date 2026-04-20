@@ -1162,7 +1162,20 @@ function render() {
       ]
     },
     options: { responsive:true, maintainAspectRatio:false,
-      plugins: { legend: { position:'bottom' } },
+      plugins: {
+        legend: { position:'bottom' },
+        tooltip: { callbacks: { footer: () => 'clique para ver registros' } }
+      },
+      onHover: (e, els) => { e.native && (e.native.target.style.cursor = els.length ? 'pointer' : 'default'); },
+      onClick: (evt, els) => {
+        if (!els || !els.length) return;
+        const el = els[0];
+        const mes = labels2[el.index];               // "YYYY-MM"
+        const isExame = el.datasetIndex === 1;
+        const metric = isExame ? 'exames' : 'consultas_puras';
+        const titulo = `${isExame ? 'Exames' : 'Consultas'} agendados — ${fmtMesBR(mes)}`;
+        openDrill(metric, titulo, { mes, filterBy: 'scheduled' });
+      },
       scales: { x: { stacked:true }, y: { stacked:true, beginAtZero:true } } }
   });
   destroy('p2_sta');
@@ -1177,7 +1190,32 @@ function render() {
       ]
     },
     options: { responsive:true, maintainAspectRatio:false,
-      plugins: { legend: { position:'bottom' } },
+      plugins: {
+        legend: { position:'bottom' },
+        tooltip: { callbacks: { footer: () => 'clique para ver registros' } }
+      },
+      onHover: (e, els) => { e.native && (e.native.target.style.cursor = els.length ? 'pointer' : 'default'); },
+      onClick: (evt, els) => {
+        if (!els || !els.length) return;
+        const el = els[0];
+        const mes = labels2[el.index];
+        const dsIdx = el.datasetIndex;
+        // 0=Agendadas (scheduled, todos), 1=Pagas (paid, todos), 2=Canceladas (scheduled + cancelados)
+        let metric = 'consultas_pagas', filterBy = 'paid', titulo = '';
+        const inc = document.getElementById('drillIncCanc');
+        if (dsIdx === 0) {
+          filterBy = 'scheduled';
+          titulo = `Agendamentos — ${fmtMesBR(mes)}`;
+        } else if (dsIdx === 1) {
+          filterBy = 'paid';
+          titulo = `Pagamentos — ${fmtMesBR(mes)}`;
+        } else {
+          filterBy = 'scheduled';
+          if (inc) inc.checked = true;           // forçamos incluir cancelados
+          titulo = `Cancelamentos — ${fmtMesBR(mes)}`;
+        }
+        openDrill(metric, titulo, { mes, filterBy });
+      },
       scales: { y: { beginAtZero:true } } }
   });
 
@@ -1201,6 +1239,9 @@ function render() {
     search: ST.search.esp,
     defaultSort: { key:'agendadas', dir:'desc' },
     id:'esp',
+    onRowClick: (r) => openDrill('consultas_pagas',
+      `Registros de "${r.especialidade}" — ${fmtMesBR(de)} → ${fmtMesBR(ate)}`,
+      { filterBy:'scheduled', especialidade: r.especialidade }),
   });
 
   const cliRows = Array.isArray(DATA.p2_consultas.por_clinica_mes)
@@ -1223,6 +1264,9 @@ function render() {
     search: ST.search.cli,
     defaultSort: { key:'agendadas', dir:'desc' },
     id:'cli',
+    onRowClick: (r) => openDrill('consultas_pagas',
+      `Registros de "${r.clinica}" — ${fmtMesBR(de)} → ${fmtMesBR(ate)}`,
+      { filterBy:'scheduled', clinica: r.clinica }),
   });
 
   /* P3 --------------------------------------------------------------- */
@@ -1378,6 +1422,9 @@ function render() {
     search: '',
     defaultSort: { key:'receita', dir:'desc' },
     id:'totConv',
+    onRowClick: (r) => openDrill('consultas_pagas',
+      `Registros do convênio "${r.convenio}" — ${fmtMesBR(de)} → ${fmtMesBR(ate)}`,
+      { filterBy:'scheduled', convenio: r.convenio }),
   });
 
   // Drilldown convênio × especialidade — agrega a partir do cubo mensal
@@ -1400,6 +1447,9 @@ function render() {
     search: ST.search.convEsp,
     defaultSort: { key:'consultas', dir:'desc' },
     id:'convEsp',
+    onRowClick: (r) => openDrill('consultas_pagas',
+      `${r.convenio} × ${r.especialidade} — ${fmtMesBR(de)} → ${fmtMesBR(ate)}`,
+      { filterBy:'scheduled', convenio: r.convenio, especialidade: r.especialidade }),
   });
 
   // Drilldown convênio × clínica — agrega a partir do cubo mensal
@@ -1423,6 +1473,9 @@ function render() {
     search: ST.search.convCli,
     defaultSort: { key:'consultas', dir:'desc' },
     id:'convCli',
+    onRowClick: (r) => openDrill('consultas_pagas',
+      `${r.convenio} × ${r.clinica} — ${fmtMesBR(de)} → ${fmtMesBR(ate)}`,
+      { filterBy:'scheduled', convenio: r.convenio, clinica: r.clinica }),
   });
 
   // Live cards P2 (vem do /api/egide/rows — valores oficiais por paymentDate)
@@ -1499,17 +1552,41 @@ const DRILL = {
   meta: null,
   search: '',
   incCanc: false,
+  filterBy: 'paid',   // 'paid' | 'scheduled'
+  deOv: null,         // override YYYY-MM-DD (para clique em barra de um mês)
+  ateOv: null,
 };
 
 function openDrillModal() { document.getElementById('drillModal').classList.add('on'); }
 function closeDrillModal() { document.getElementById('drillModal').classList.remove('on'); }
 
-async function openDrill(metric, title) {
-  DRILL.metric = metric;
-  DRILL.title = title || 'Registros';
-  DRILL.search = '';
-  DRILL.incCanc = document.getElementById('drillIncCanc').checked;
-  document.getElementById('drillTitle').textContent = title || 'Registros';
+// ultimoDiaIso('2025-02') -> '2025-02-28'
+function ultimoDiaIso(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const ld = new Date(y, m, 0).getDate();
+  return `${y}-${String(m).padStart(2,'0')}-${String(ld).padStart(2,'0')}`;
+}
+
+async function openDrill(metric, title, opts) {
+  opts = opts || {};
+  DRILL.metric   = metric;
+  DRILL.title    = title || 'Registros';
+  DRILL.search   = '';
+  DRILL.incCanc  = document.getElementById('drillIncCanc').checked;
+  DRILL.filterBy = opts.filterBy || 'paid';
+  DRILL.clinica       = opts.clinica       || null;
+  DRILL.especialidade = opts.especialidade || null;
+  DRILL.convenio      = opts.convenio      || null;
+  // Se vier "mes" (YYYY-MM), o range é o mês inteiro; senão usa os filtros globais
+  if (opts.mes) {
+    DRILL.deOv  = opts.mes + '-01';
+    DRILL.ateOv = ultimoDiaIso(opts.mes);
+  } else if (opts.de && opts.ate) {
+    DRILL.deOv = opts.de; DRILL.ateOv = opts.ate;
+  } else {
+    DRILL.deOv = null; DRILL.ateOv = null;
+  }
+  document.getElementById('drillTitle').textContent = DRILL.title;
   document.getElementById('drillSearch').value = '';
   document.getElementById('drillStats').textContent = 'carregando…';
   document.getElementById('drillBody').innerHTML =
@@ -1519,9 +1596,16 @@ async function openDrill(metric, title) {
 }
 
 async function fetchDrillRows() {
-  const { de, ate } = periodoIso();
+  let de, ate;
+  if (DRILL.deOv && DRILL.ateOv) { de = DRILL.deOv; ate = DRILL.ateOv; }
+  else { ({ de, ate } = periodoIso()); }
   const canc = DRILL.incCanc ? 1 : 0;
-  const url = `/api/egide/rows?metric=${encodeURIComponent(DRILL.metric)}&de=${de}&ate=${ate}&limit=500&cancelados=${canc}`;
+  const fb = DRILL.filterBy || 'paid';
+  let url = `/api/egide/rows?metric=${encodeURIComponent(DRILL.metric)}`
+    + `&de=${de}&ate=${ate}&limit=5000&cancelados=${canc}&filter_by=${fb}`;
+  if (DRILL.clinica)       url += `&clinica=${encodeURIComponent(DRILL.clinica)}`;
+  if (DRILL.especialidade) url += `&especialidade=${encodeURIComponent(DRILL.especialidade)}`;
+  if (DRILL.convenio)      url += `&convenio=${encodeURIComponent(DRILL.convenio)}`;
   try {
     const r = await fetch(url, { credentials:'same-origin' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -1539,20 +1623,25 @@ async function fetchDrillRows() {
 
 function renderDrillBody() {
   const m = DRILL.meta || {};
-  const per = `${fmtMesBR((periodoIso().de).slice(0,7))} → ${fmtMesBR((periodoIso().ate).slice(0,7))}`;
+  // Período do header: usa override se presente, senão o filtro global
+  let deIso, ateIso;
+  if (DRILL.deOv && DRILL.ateOv) { deIso = DRILL.deOv; ateIso = DRILL.ateOv; }
+  else { ({ de: deIso, ate: ateIso } = periodoIso()); }
+  const per = `${fmtMesBR(deIso.slice(0,7))} → ${fmtMesBR(ateIso.slice(0,7))}`;
   const total = Number(m.total_no_filtro || 0);
   const nC = Number(m.consultas_no_filtro || 0);
   const nE = Number(m.exames_no_filtro || 0);
   const rc = Number(m.receita_no_filtro || 0);
   const tm = total > 0 ? (rc/total) : 0;
+  const fbLabel = (m.filter_by === 'scheduled') ? 'data de agendamento' : 'data de pagamento';
 
   document.getElementById('drillStats').innerHTML =
-    `<span><i class="far fa-calendar-alt"></i> ${per}</span>` +
-    `<span><b>${nf(total)}</b> pagamentos</span>` +
+    `<span><i class="far fa-calendar-alt"></i> ${per} · ${fbLabel}</span>` +
+    `<span><b>${nf(total)}</b> registros</span>` +
     `<span><b>${nf(nC)}</b> consultas</span>` +
     `<span><b>${nf(nE)}</b> exames</span>` +
-    `<span><b>${cur(rc)}</b> arrecadado</span>` +
-    `<span>ticket médio <b>${cur(tm)}</b></span>` +
+    `<span><b>${cur(rc)}</b> valor total</span>` +
+    (total > 0 ? `<span>ticket médio <b>${cur(tm)}</b></span>` : '') +
     (m.cancelados_incluidos ? `<span style="color:#b91c1c;"><b>inclui cancelados</b></span>` : '');
 
   // Filtro texto (client side)
@@ -1648,7 +1737,7 @@ function drillExportCSV() {
 /* ============================================================================
    Tabela drilldown genérica (com sort + filtro texto + CSV)
 ============================================================================ */
-function renderTabelaDrilldown({ tableId, rows, colunas, filterKeys, search, defaultSort, id }) {
+function renderTabelaDrilldown({ tableId, rows, colunas, filterKeys, search, defaultSort, id, onRowClick }) {
   const tbl = document.getElementById(tableId);
   if (!tbl) return;
   const tbody = tbl.querySelector('tbody');
@@ -1691,6 +1780,11 @@ function renderTabelaDrilldown({ tableId, rows, colunas, filterKeys, search, def
       td.textContent = col.fmt(r[col.k]);
       tr.appendChild(td);
     });
+    if (typeof onRowClick === 'function') {
+      tr.style.cursor = 'pointer';
+      tr.title = 'clique para ver registros individuais';
+      tr.addEventListener('click', () => onRowClick(r));
+    }
     frag.appendChild(tr);
   });
   tbody.appendChild(frag);
@@ -1808,11 +1902,66 @@ bindSearch('qClinica', 'cli');
 bindSearch('qConvEsp', 'convEsp');
 bindSearch('qConvCli', 'convCli');
 
-// Export buttons
-document.getElementById('btnExportEspecialidade').addEventListener('click', () => exportCSV('tblEspecialidade', 'egide_especialidades.csv'));
-document.getElementById('btnExportClinica').addEventListener('click', () => exportCSV('tblClinica', 'egide_clinicas.csv'));
-document.getElementById('btnExportConvEsp').addEventListener('click', () => exportCSV('tblConvEsp', 'egide_convenio_especialidade.csv'));
-document.getElementById('btnExportConvCli').addEventListener('click', () => exportCSV('tblConvCli', 'egide_convenio_clinica.csv'));
+// Export buttons — baixam OS REGISTROS INDIVIDUAIS (linha a linha) que compõem
+// a agregação visível. Chamam o endpoint com limit alto e geram CSV. Isso inverte
+// o comportamento antigo (que duplicava a tabela já visível). Usa o mesmo período
+// dos filtros globais + filter_by=scheduled para capturar tudo do período.
+async function exportRowsCSV(filenamePrefix, extraParams) {
+  const { de, ate } = periodoIso();
+  const canc = document.getElementById('drillIncCanc')?.checked ? 1 : 0;
+  const qs = new URLSearchParams({
+    metric: 'consultas_pagas',
+    filter_by: 'scheduled',
+    de, ate, limit: '20000', cancelados: String(canc),
+    ...(extraParams || {}),
+  });
+  const btnIds = ['btnExportEspecialidade','btnExportClinica','btnExportConvEsp','btnExportConvCli'];
+  btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
+  try {
+    const r = await fetch(`/api/egide/rows?${qs.toString()}`, { credentials:'same-origin' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const rows = Array.isArray(j.rows) ? j.rows : [];
+    if (!rows.length) { alert('Nenhum registro encontrado para o período/filtro atual.'); return; }
+    const headers = ['appt_id','order_id','pedido','cliente','dependente','cliente_id',
+      'clinica','cidade','profissional','item','tipo','vinculo','convenio',
+      'valor','data_pagamento','data_agendada','data_criacao','forma_pagamento','origem','cancelado'];
+    const lines = [headers.join(';')];
+    rows.forEach(r => {
+      lines.push(headers.map(h => {
+        const v = r[h]; if (v == null) return '';
+        const s = String(v).replace(/"/g,'""');
+        return /[;"\n]/.test(s) ? `"${s}"` : s;
+      }).join(';'));
+    });
+    const blob = new Blob(["\ufeff" + lines.join('\n')], { type:'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${filenamePrefix}_${de}_${ate}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    const m = j.meta || {};
+    if (Number(m.total_no_filtro||0) > rows.length) {
+      setTimeout(() => alert(
+        `Baixados ${rows.length.toLocaleString('pt-BR')} registros (limite). ` +
+        `Existem ${Number(m.total_no_filtro).toLocaleString('pt-BR')} no total — ` +
+        `restrinja o período ou use o drilldown por clínica/especialidade para ver o resto.`
+      ), 100);
+    }
+  } catch (e) {
+    alert('Falha ao exportar: ' + e.message);
+  } finally {
+    btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = false; });
+  }
+}
+document.getElementById('btnExportEspecialidade').addEventListener('click',
+  () => exportRowsCSV('egide_registros_especialidades', {}));
+document.getElementById('btnExportClinica').addEventListener('click',
+  () => exportRowsCSV('egide_registros_clinicas', {}));
+document.getElementById('btnExportConvEsp').addEventListener('click',
+  () => exportRowsCSV('egide_registros_convenio_especialidade', {}));
+document.getElementById('btnExportConvCli').addEventListener('click',
+  () => exportRowsCSV('egide_registros_convenio_clinica', {}));
 
 // ===== Drilldown: handlers =====
 document.querySelectorAll('#p2LiveCards .card-kpi.clickable').forEach(card => {

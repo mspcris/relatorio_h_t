@@ -33,6 +33,7 @@ from sqlalchemy import func
 
 from auth_db import (
     SessionLocal, User, UserPosto, LoginHistory, IAConversa, KPIContexto, IAConfigGlobal,
+    PageUsagePing,
     get_user_by_email, get_user_by_id, init_db,
 )
 
@@ -781,6 +782,101 @@ def admin_logins(uid: int):
             "ip":         l.ip or "—",
             "created_at": l.created_at.isoformat(),
         } for l in logins])
+    finally:
+        db.close()
+
+
+# ── Tracking de tempo por página ───────────────────────────────────────────────
+
+def _normalize_page(raw: str) -> str:
+    """Normaliza path pra agrupar pings. Tira query string/hash, limita tamanho."""
+    if not raw:
+        return "/"
+    s = str(raw).split("?", 1)[0].split("#", 1)[0].strip()
+    if not s:
+        return "/"
+    if not s.startswith("/"):
+        s = "/" + s
+    return s[:200]
+
+
+@auth_bp.post("/api/usage/ping")
+def api_usage_ping():
+    """Registra 1 minuto de uso do usuário logado na página atual.
+
+    Body JSON: {"page": "/kpi_home.html"}. Silenciosamente ignora se o bucket do
+    minuto já foi inserido (constraint unique). Arredonda pra baixo ao minuto UTC.
+    """
+    from auth_db import get_user_by_email as _gue
+    email, _ = decode_user()
+    if not email:
+        return jsonify({"erro": "Não autorizado"}), 401
+
+    d = request.get_json(silent=True) or {}
+    page = _normalize_page(d.get("page") or request.referrer or "/")
+    bucket = datetime.utcnow().strftime("%Y-%m-%d %H:%M:00")
+
+    db = SessionLocal()
+    try:
+        u = _gue(db, email)
+        if not u:
+            return jsonify({"erro": "Usuário não encontrado"}), 401
+        try:
+            db.add(PageUsagePing(user_id=u.id, page=page, minute_bucket=bucket))
+            db.commit()
+            inserted = True
+        except Exception:
+            # Conflito no unique (user_id, page, minute_bucket) — ping repetido no mesmo minuto
+            db.rollback()
+            inserted = False
+        return jsonify({"ok": True, "inserted": inserted, "bucket": bucket, "page": page})
+    finally:
+        db.close()
+
+
+@auth_bp.get("/admin/api/usuarios/<int:uid>/usage")
+def admin_usage(uid: int):
+    """Tempo por página para um usuário. Query: ?days=30 (default 30, max 365)."""
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    try:
+        days = max(1, min(int(request.args.get("days", 30)), 365))
+    except Exception:
+        days = 30
+    corte = (datetime.utcnow() - __import__("datetime").timedelta(days=days)) \
+        .strftime("%Y-%m-%d %H:%M:00")
+
+    db = SessionLocal()
+    try:
+        # Minutos por página (cada bucket distinto = 1 minuto)
+        rows = (
+            db.query(
+                PageUsagePing.page,
+                func.count(PageUsagePing.minute_bucket).label("minutos"),
+                func.min(PageUsagePing.minute_bucket).label("primeiro"),
+                func.max(PageUsagePing.minute_bucket).label("ultimo"),
+            )
+            .filter(PageUsagePing.user_id == uid)
+            .filter(PageUsagePing.minute_bucket >= corte)
+            .group_by(PageUsagePing.page)
+            .all()
+        )
+        paginas = [{
+            "page": r.page,
+            "minutos": int(r.minutos or 0),
+            "primeiro": r.primeiro,
+            "ultimo": r.ultimo,
+        } for r in rows]
+        paginas.sort(key=lambda x: x["minutos"], reverse=True)
+
+        total_minutos = sum(p["minutos"] for p in paginas)
+        return jsonify({
+            "dias": days,
+            "corte_utc": corte,
+            "total_minutos": total_minutos,
+            "total_paginas": len(paginas),
+            "paginas": paginas,
+        })
     finally:
         db.close()
 

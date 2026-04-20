@@ -9,7 +9,8 @@ from datetime import datetime, timedelta, timezone
 _BRT = timezone(timedelta(hours=-3))
 
 from sqlalchemy import (
-    create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Float, text
+    create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Float, text,
+    UniqueConstraint, Index
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -108,6 +109,28 @@ class LoginHistory(Base):
     ip         = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     user       = relationship("User", back_populates="login_history")
+
+
+class PageUsagePing(Base):
+    """Pings de 1 minuto por usuário/página. Cada ping = 1 minuto arredondado para baixo.
+
+    Tempo por página = COUNT(DISTINCT minute_bucket) * 60s. UNIQUE(user, page, bucket)
+    evita contagem dupla se o navegador mandar 2 pings no mesmo minuto.
+    """
+    __tablename__ = "page_usage_pings"
+
+    id            = Column(Integer, primary_key=True)
+    user_id       = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                           nullable=False, index=True)
+    page          = Column(String(200), nullable=False)
+    # minuto arredondado para baixo: UTC, formato "YYYY-MM-DD HH:MM:00"
+    minute_bucket = Column(String(20), nullable=False)
+    created_at    = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "page", "minute_bucket", name="uq_ping_user_page_min"),
+        Index("ix_ping_user_bucket", "user_id", "minute_bucket"),
+    )
 
 
 class IAConversa(Base):

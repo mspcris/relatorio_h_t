@@ -832,8 +832,28 @@ def _sidebar_filter_script(paginas: list) -> str:
         f'}});'
         f'}}'
         f'if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",hide);else hide();'
-        f'}})();</script></body>'
+        f'}})();</script>'
     )
+
+
+# Tracker de tempo por página — ping a cada 60s enquanto a aba está visível.
+# Registrado no backend em buckets de 1 minuto (arredonda pra baixo); duplicatas
+# no mesmo minuto são ignoradas pela constraint UNIQUE.
+_USAGE_TRACKER_JS = (
+    '<script>(function(){'
+    'if(window.__camim_tracker)return;window.__camim_tracker=1;'
+    'var P=(location.pathname||"/")+(location.search||"");'
+    'function send(){'
+    'if(document.visibilityState==="hidden")return;'
+    'try{fetch("/api/usage/ping",{method:"POST",credentials:"same-origin",'
+    'headers:{"Content-Type":"application/json"},'
+    'body:JSON.stringify({page:P}),keepalive:true}).catch(function(){});}catch(e){}'
+    '}'
+    'send();'
+    'setInterval(send,60000);'
+    'document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible")send();});'
+    '})();</script>'
+)
 
 
 def render_protected_page(page_name, **extra_vars):
@@ -870,8 +890,11 @@ def render_protected_page(page_name, **extra_vars):
         USER_IS_ADMIN=is_admin,
         **extra_vars,
     )
-    if not all_pages:
-        html = html.replace('</body>', _sidebar_filter_script(paginas))
+    # Injetar tracker de tempo por página (sempre) + filtro de sidebar (se aplicável).
+    # Feito em 1 passagem para não duplicar replace de </body>.
+    inject = _USAGE_TRACKER_JS + (_sidebar_filter_script(paginas) if not all_pages else '')
+    if inject:
+        html = html.replace('</body>', inject + '</body>', 1)
     return html
 
 
@@ -1332,20 +1355,29 @@ def _egide_conn():
     )
 
 
-def _egide_rows_where(metric: str, de: str, ate: str, include_canc: bool) -> tuple[str, list]:
-    """Monta cláusula WHERE para o range de pagamento da Égide.
+def _egide_rows_where(metric: str, de: str, ate: str, include_canc: bool,
+                      filter_by: str = "paid") -> tuple[str, list]:
+    """Monta cláusula WHERE para a consulta de registros da Égide.
 
-    Base de 'Consultas Pagas': appts pagos via da.paymentDate OU order.paymentDate
-    dentro do range, com cancelDate do order NULL.
+    filter_by:
+      - "paid" (default): date range aplica em da.paymentDate OU o.paymentDate
+        (aparece em "Consultas Pagas" e "Arrecadação").
+      - "scheduled": date range aplica em da.date (data do agendamento).
+        Usado pelos gráficos de "Agendados por mês".
     """
-    clauses = [
-        "((da.paymentDate IS NOT NULL AND da.paymentDate >= %s AND da.paymentDate < %s)"
-        " OR (o.paymentDate IS NOT NULL AND o.paymentDate >= %s AND o.paymentDate < %s))"
-    ]
-    # de/ate: ate é INCLUSIVO, então avançamos um dia para o < ate_+1
     from datetime import datetime as _dt, timedelta as _td
     ate_exc = (_dt.strptime(ate, "%Y-%m-%d") + _td(days=1)).strftime("%Y-%m-%d")
-    params = [de, ate_exc, de, ate_exc]
+
+    fb = (filter_by or "paid").strip().lower()
+    if fb == "scheduled":
+        clauses = ["(da.`date` IS NOT NULL AND da.`date` >= %s AND da.`date` < %s)"]
+        params  = [de, ate_exc]
+    else:
+        clauses = [
+            "((da.paymentDate IS NOT NULL AND da.paymentDate >= %s AND da.paymentDate < %s)"
+            " OR (o.paymentDate IS NOT NULL AND o.paymentDate >= %s AND o.paymentDate < %s))"
+        ]
+        params  = [de, ate_exc, de, ate_exc]
 
     if not include_canc:
         clauses.append("da.canceledAt IS NULL")
@@ -1364,7 +1396,25 @@ def _egide_rows_where(metric: str, de: str, ate: str, include_canc: bool) -> tup
         )
     # "consultas_pagas" (default) e "arrecadado" não adicionam filtro
 
-    return " AND ".join(clauses), params
+    return clauses, params
+
+
+def _egide_apply_extra_filters(clauses: list, params: list, *,
+                               clinica: str = "", especialidade: str = "",
+                               convenio: str = "") -> None:
+    """Adiciona filtros opcionais (mutação in-place de clauses/params)."""
+    if clinica:
+        clauses.append("LOWER(c.name) = LOWER(%s)")
+        params.append(clinica)
+    if especialidade:
+        # combina specialty/exam/examgroup (mesma coluna "item" do SELECT)
+        clauses.append(
+            "LOWER(COALESCE(sp.name, ex.name, eg.name, '')) = LOWER(%s)"
+        )
+        params.append(especialidade)
+    if convenio:
+        clauses.append("LOWER(COALESCE(ins.name, 'PARTICULAR')) = LOWER(%s)")
+        params.append(convenio)
 
 
 @app.get('/api/egide/rows')
@@ -1377,8 +1427,14 @@ def api_egide_rows():
     de     = (request.args.get("de") or "").strip()
     ate    = (request.args.get("ate") or "").strip()
     include_canc = (request.args.get("cancelados", "0") in ("1", "true", "yes"))
+    filter_by = (request.args.get("filter_by") or "paid").strip().lower()
+    if filter_by not in ("paid", "scheduled"):
+        filter_by = "paid"
+    clinica_f      = (request.args.get("clinica") or "").strip()
+    especialidade_f = (request.args.get("especialidade") or "").strip()
+    convenio_f     = (request.args.get("convenio") or "").strip()
     try:
-        limit = max(1, min(int(request.args.get("limit", 500)), 5000))
+        limit = max(1, min(int(request.args.get("limit", 500)), 20000))
     except Exception:
         limit = 500
 
@@ -1388,14 +1444,49 @@ def api_egide_rows():
         return jsonify({"erro": "de deve ser <= ate"}), 400
 
     try:
-        where_sql, params = _egide_rows_where(metric, de, ate, include_canc)
+        clauses, params = _egide_rows_where(metric, de, ate, include_canc, filter_by)
+        # Filtros extra dependem dos JOINs: ok adicionar aqui pois a query base já faz JOIN
+        _egide_apply_extra_filters(clauses, params,
+                                   clinica=clinica_f,
+                                   especialidade=especialidade_f,
+                                   convenio=convenio_f)
+        where_sql = " AND ".join(clauses)
+        order_col = "da.`date`" if filter_by == "scheduled" else "COALESCE(da.paymentDate, o.paymentDate)"
         sql = (
             _EGIDE_ROW_SQL_BASE
             + " WHERE " + where_sql
-            + " ORDER BY COALESCE(da.paymentDate, o.paymentDate) DESC, da.id DESC"
+            + f" ORDER BY {order_col} DESC, da.id DESC"
             + " LIMIT %s"
         )
         params_full = list(params) + [limit]
+
+        # Para o COUNT agregado precisamos dos mesmos JOINs que os filtros extras referenciam
+        # (c.name, sp.name, ex.name, eg.name, ins.name). Reutilizamos o SELECT base.
+        count_sql = (
+            "SELECT COUNT(*) AS total,"
+            "       SUM(CASE WHEN s.clinicDoctorSpecialtyId IS NOT NULL"
+            "                OR (s.id IS NULL AND da.specialtyId IS NOT NULL)"
+            "                THEN 1 ELSE 0 END) AS consultas,"
+            "       SUM(CASE WHEN s.clinicExamId IS NOT NULL"
+            "                OR s.examgroupscheduleId IS NOT NULL"
+            "                OR (s.id IS NULL AND da.examId IS NOT NULL)"
+            "                THEN 1 ELSE 0 END) AS exames,"
+            "       ROUND(SUM(COALESCE(NULLIF(da.total,0), o.total, 0))/100.0, 2) AS receita"
+            " FROM doctorappointments da"
+            " LEFT JOIN orders              o    ON o.id   = da.orderId"
+            " LEFT JOIN schedules           s    ON s.id   = da.scheduleId"
+            " LEFT JOIN clinic_doctor_specialties cds2 ON cds2.id = s.clinicDoctorSpecialtyId"
+            " LEFT JOIN clinic_doctors      cdr  ON cdr.id = cds2.clinicDoctorId"
+            " LEFT JOIN specialties         sp   ON sp.id  = COALESCE(da.specialtyId, cds2.specialtyId)"
+            " LEFT JOIN clinic_exams        ce2  ON ce2.id = s.clinicExamId"
+            " LEFT JOIN exams               ex   ON ex.id  = COALESCE(da.examId, ce2.examId)"
+            " LEFT JOIN examgroupschedules  egs  ON egs.id = s.examgroupscheduleId"
+            " LEFT JOIN examgroups          eg   ON eg.id  = egs.examgroupId"
+            " LEFT JOIN customer_insurances ci   ON ci.id  = da.customerInsuranceId"
+            " LEFT JOIN insurances          ins  ON ins.id = ci.insuranceId"
+            " LEFT JOIN clinics             c    ON c.id   = COALESCE(da.clinicId, o.clinicId, cdr.clinicId, ce2.clinicId)"
+            " WHERE " + where_sql
+        )
 
         conn = _egide_conn()
         try:
@@ -1403,23 +1494,7 @@ def api_egide_rows():
                 cur.execute(sql, params_full)
                 rows = cur.fetchall()
 
-                # Contagens agregadas (mesmo WHERE, sem LIMIT)
-                cur.execute(
-                    "SELECT COUNT(*) AS total,"
-                    "       SUM(CASE WHEN s.clinicDoctorSpecialtyId IS NOT NULL"
-                    "                OR (s.id IS NULL AND da.specialtyId IS NOT NULL)"
-                    "                THEN 1 ELSE 0 END) AS consultas,"
-                    "       SUM(CASE WHEN s.clinicExamId IS NOT NULL"
-                    "                OR s.examgroupscheduleId IS NOT NULL"
-                    "                OR (s.id IS NULL AND da.examId IS NOT NULL)"
-                    "                THEN 1 ELSE 0 END) AS exames,"
-                    "       ROUND(SUM(COALESCE(NULLIF(da.total,0), o.total, 0))/100.0, 2) AS receita"
-                    " FROM doctorappointments da"
-                    " LEFT JOIN orders o ON o.id = da.orderId"
-                    " LEFT JOIN schedules s ON s.id = da.scheduleId"
-                    " WHERE " + where_sql,
-                    params,
-                )
+                cur.execute(count_sql, params)
                 tot = cur.fetchone() or {}
         finally:
             conn.close()
@@ -1437,8 +1512,12 @@ def api_egide_rows():
         return jsonify({
             "meta": {
                 "metric": metric,
+                "filter_by": filter_by,
                 "de": de, "ate": ate,
                 "cancelados_incluidos": include_canc,
+                "clinica": clinica_f or None,
+                "especialidade": especialidade_f or None,
+                "convenio": convenio_f or None,
                 "limit": limit,
                 "total_no_filtro": int(tot.get("total") or 0),
                 "consultas_no_filtro": int(tot.get("consultas") or 0),
