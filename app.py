@@ -1340,10 +1340,21 @@ LEFT JOIN partnerpeople       pp   ON pp.id  = da.partnerpeopleId
 LEFT JOIN partners            p_conv ON p_conv.id = pp.partnerId
 LEFT JOIN customer_insurances ci_direct ON ci_direct.id = da.customerInsuranceId
 LEFT JOIN insurances          ins_direct ON ins_direct.id = ci_direct.insuranceId
+-- ci: pega SOMENTE um customer_insurance por appointment (o de menor id entre os
+-- vigentes naquela data). Sem isso, clientes com 2+ seguros ativos geravam
+-- linhas duplicadas no drilldown e no COUNT do card (ex.: 1824 x 1803 em Mar/2026).
 LEFT JOIN customer_insurances ci   ON ci.customerId  = da.customerId
                                   AND ci.isCurrent   = 1
                                   AND ci.created_at <= da.`date`
                                   AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)
+                                  AND ci.id = (
+                                      SELECT MIN(ci2.id)
+                                      FROM customer_insurances ci2
+                                      WHERE ci2.customerId = da.customerId
+                                        AND ci2.isCurrent = 1
+                                        AND ci2.created_at <= da.`date`
+                                        AND (ci2.deleted_at IS NULL OR ci2.deleted_at > da.`date`)
+                                  )
 LEFT JOIN insurances          ins  ON ins.id = ci.insuranceId
 LEFT JOIN clinics             c    ON c.id   = COALESCE(da.clinicId, o.clinicId, cdr.clinicId, ce2.clinicId)
 """
@@ -1490,37 +1501,56 @@ def api_egide_rows():
 
         # Para o COUNT agregado precisamos dos mesmos JOINs que os filtros extras referenciam
         # (c.name, sp.name, ex.name, eg.name, ins.name). Reutilizamos o SELECT base.
+        # ATENÇÃO: o LEFT JOIN customer_insurances ci por (customerId + intervalo created_at/deleted_at)
+        # pode retornar MÚLTIPLAS linhas por appointment quando o mesmo cliente tem mais de um seguro
+        # vigente na data. Isso inflava o count_sql (ex.: 1824 no card vs 1803 no gráfico em Mar/2026).
+        # Envolvemos a query em subquery com GROUP BY da.id para garantir 1 linha por appointment.
         count_sql = (
             "SELECT COUNT(*) AS total,"
-            "       SUM(CASE WHEN s.clinicDoctorSpecialtyId IS NOT NULL"
-            "                OR (s.id IS NULL AND da.specialtyId IS NOT NULL)"
-            "                THEN 1 ELSE 0 END) AS consultas,"
-            "       SUM(CASE WHEN s.clinicExamId IS NOT NULL"
-            "                OR s.examgroupscheduleId IS NOT NULL"
-            "                OR (s.id IS NULL AND da.examId IS NOT NULL)"
-            "                THEN 1 ELSE 0 END) AS exames,"
-            "       ROUND(SUM(COALESCE(NULLIF(da.total,0), o.total, 0))/100.0, 2) AS receita"
-            " FROM doctorappointments da"
-            " LEFT JOIN orders              o    ON o.id   = da.orderId"
-            " LEFT JOIN schedules           s    ON s.id   = da.scheduleId"
-            " LEFT JOIN clinic_doctor_specialties cds2 ON cds2.id = s.clinicDoctorSpecialtyId"
-            " LEFT JOIN clinic_doctors      cdr  ON cdr.id = cds2.clinicDoctorId"
-            " LEFT JOIN specialties         sp   ON sp.id  = COALESCE(da.specialtyId, cds2.specialtyId)"
-            " LEFT JOIN clinic_exams        ce2  ON ce2.id = s.clinicExamId"
-            " LEFT JOIN exams               ex   ON ex.id  = COALESCE(da.examId, ce2.examId)"
-            " LEFT JOIN examgroupschedules  egs  ON egs.id = s.examgroupscheduleId"
-            " LEFT JOIN examgroups          eg   ON eg.id  = egs.examgroupId"
-            " LEFT JOIN partnerpeople       pp   ON pp.id  = da.partnerpeopleId"
-            " LEFT JOIN partners            p_conv ON p_conv.id = pp.partnerId"
-            " LEFT JOIN customer_insurances ci_direct ON ci_direct.id = da.customerInsuranceId"
-            " LEFT JOIN insurances          ins_direct ON ins_direct.id = ci_direct.insuranceId"
-            " LEFT JOIN customer_insurances ci   ON ci.customerId  = da.customerId"
-            "                                   AND ci.isCurrent   = 1"
-            "                                   AND ci.created_at <= da.`date`"
-            "                                   AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)"
-            " LEFT JOIN insurances          ins  ON ins.id = ci.insuranceId"
-            " LEFT JOIN clinics             c    ON c.id   = COALESCE(da.clinicId, o.clinicId, cdr.clinicId, ce2.clinicId)"
-            " WHERE " + where_sql
+            "       SUM(consulta_flag) AS consultas,"
+            "       SUM(exame_flag) AS exames,"
+            "       ROUND(SUM(total_val)/100.0, 2) AS receita"
+            " FROM ("
+            "   SELECT da.id AS _da_id,"
+            "          MAX(CASE WHEN s.clinicDoctorSpecialtyId IS NOT NULL"
+            "                        OR (s.id IS NULL AND da.specialtyId IS NOT NULL)"
+            "                   THEN 1 ELSE 0 END) AS consulta_flag,"
+            "          MAX(CASE WHEN s.clinicExamId IS NOT NULL"
+            "                        OR s.examgroupscheduleId IS NOT NULL"
+            "                        OR (s.id IS NULL AND da.examId IS NOT NULL)"
+            "                   THEN 1 ELSE 0 END) AS exame_flag,"
+            "          MAX(COALESCE(NULLIF(da.total,0), o.total, 0)) AS total_val"
+            "   FROM doctorappointments da"
+            "   LEFT JOIN orders              o    ON o.id   = da.orderId"
+            "   LEFT JOIN schedules           s    ON s.id   = da.scheduleId"
+            "   LEFT JOIN clinic_doctor_specialties cds2 ON cds2.id = s.clinicDoctorSpecialtyId"
+            "   LEFT JOIN clinic_doctors      cdr  ON cdr.id = cds2.clinicDoctorId"
+            "   LEFT JOIN specialties         sp   ON sp.id  = COALESCE(da.specialtyId, cds2.specialtyId)"
+            "   LEFT JOIN clinic_exams        ce2  ON ce2.id = s.clinicExamId"
+            "   LEFT JOIN exams               ex   ON ex.id  = COALESCE(da.examId, ce2.examId)"
+            "   LEFT JOIN examgroupschedules  egs  ON egs.id = s.examgroupscheduleId"
+            "   LEFT JOIN examgroups          eg   ON eg.id  = egs.examgroupId"
+            "   LEFT JOIN partnerpeople       pp   ON pp.id  = da.partnerpeopleId"
+            "   LEFT JOIN partners            p_conv ON p_conv.id = pp.partnerId"
+            "   LEFT JOIN customer_insurances ci_direct ON ci_direct.id = da.customerInsuranceId"
+            "   LEFT JOIN insurances          ins_direct ON ins_direct.id = ci_direct.insuranceId"
+            "   LEFT JOIN customer_insurances ci   ON ci.customerId  = da.customerId"
+            "                                     AND ci.isCurrent   = 1"
+            "                                     AND ci.created_at <= da.`date`"
+            "                                     AND (ci.deleted_at IS NULL OR ci.deleted_at > da.`date`)"
+            "                                     AND ci.id = ("
+            "                                         SELECT MIN(ci2.id)"
+            "                                         FROM customer_insurances ci2"
+            "                                         WHERE ci2.customerId = da.customerId"
+            "                                           AND ci2.isCurrent = 1"
+            "                                           AND ci2.created_at <= da.`date`"
+            "                                           AND (ci2.deleted_at IS NULL OR ci2.deleted_at > da.`date`)"
+            "                                     )"
+            "   LEFT JOIN insurances          ins  ON ins.id = ci.insuranceId"
+            "   LEFT JOIN clinics             c    ON c.id   = COALESCE(da.clinicId, o.clinicId, cdr.clinicId, ce2.clinicId)"
+            "   WHERE " + where_sql +
+            "   GROUP BY da.id"
+            " ) t"
         )
 
         conn = _egide_conn()

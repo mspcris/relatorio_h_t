@@ -450,6 +450,7 @@ def pergunta3_split(cur) -> dict:
     Expõe tanto métricas sem cancelados (consultas_*/receita_*) quanto cancelados
     (consultas_*_canc/receita_*_canc) para o switch "Mostrar cancelados" do front.
     """
+    # Dedupe ci3 para não duplicar appointments com 2+ seguros ativos.
     conv_join = (
         " LEFT JOIN partnerpeople pp ON pp.id = da.partnerpeopleId"
         " LEFT JOIN partners p_conv  ON p_conv.id = pp.partnerId"
@@ -458,11 +459,20 @@ def pergunta3_split(cur) -> dict:
         "  AND ci3.isCurrent   = 1"
         "  AND ci3.created_at <= da.`date`"
         "  AND (ci3.deleted_at IS NULL OR ci3.deleted_at > da.`date`)"
+        "  AND ci3.id = ("
+        "      SELECT MIN(ci3b.id) FROM customer_insurances ci3b"
+        "      WHERE ci3b.customerId = da.customerId"
+        "        AND ci3b.isCurrent = 1"
+        "        AND ci3b.created_at <= da.`date`"
+        "        AND (ci3b.deleted_at IS NULL OR ci3b.deleted_at > da.`date`)"
+        "  )"
         " LEFT JOIN insurances i3 ON i3.id = ci3.insuranceId"
     )
     conv_expr = "(p_conv.id IS NOT NULL OR i3.id IS NOT NULL)"
-    not_canc = "(da.canceledAt IS NULL)"
-    is_canc  = "(da.canceledAt IS NOT NULL)"
+    # Alinhado com P2/P5: cancelamento pode vir de da.canceledAt OU o.cancelDate.
+    # Precisa de LEFT JOIN orders o3 — adicionamos abaixo nas queries que usam.
+    not_canc = "(da.canceledAt IS NULL AND (o3.id IS NULL OR o3.cancelDate IS NULL))"
+    is_canc  = "(da.canceledAt IS NOT NULL OR o3.cancelDate IS NOT NULL)"
 
     mensal = _q(cur, f"""
         SELECT
@@ -476,6 +486,7 @@ def pergunta3_split(cur) -> dict:
             ROUND(SUM(CASE WHEN {is_canc} AND  {conv_expr} THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_convenio_canc,
             ROUND(SUM(CASE WHEN {is_canc} AND NOT {conv_expr} THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_particular_canc
         FROM doctorappointments da
+        LEFT JOIN orders o3 ON o3.id = da.orderId
         {conv_join}
         WHERE {BRT('da.`date`')} >= %s
         GROUP BY mes ORDER BY mes
@@ -492,6 +503,7 @@ def pergunta3_split(cur) -> dict:
             ROUND(SUM(CASE WHEN {is_canc} AND  {conv_expr} THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_convenio_canc,
             ROUND(SUM(CASE WHEN {is_canc} AND NOT {conv_expr} THEN IFNULL(da.total,0) ELSE 0 END)/100.0, 2) receita_particular_canc
         FROM doctorappointments da
+        LEFT JOIN orders o3 ON o3.id = da.orderId
         {conv_join}
     """)[0]
 
@@ -638,6 +650,8 @@ def pergunta5_receita_convenio(cur) -> dict:
       expostos em colunas *_canc para o switch "Mostrar cancelados".
     """
 
+    # Dedupe: cliente com 2+ seguros ativos na data duplicava o doctorappointment,
+    # inflando contagens. Escolhemos o ci5 de menor id por (customerId, data).
     conv_join = (
         " LEFT JOIN partnerpeople pp ON pp.id = da.partnerpeopleId"
         " LEFT JOIN partners p_conv  ON p_conv.id = pp.partnerId"
@@ -646,6 +660,13 @@ def pergunta5_receita_convenio(cur) -> dict:
         "  AND ci5.isCurrent   = 1"
         "  AND ci5.created_at <= da.`date`"
         "  AND (ci5.deleted_at IS NULL OR ci5.deleted_at > da.`date`)"
+        "  AND ci5.id = ("
+        "      SELECT MIN(ci5b.id) FROM customer_insurances ci5b"
+        "      WHERE ci5b.customerId = da.customerId"
+        "        AND ci5b.isCurrent = 1"
+        "        AND ci5b.created_at <= da.`date`"
+        "        AND (ci5b.deleted_at IS NULL OR ci5b.deleted_at > da.`date`)"
+        "  )"
         " LEFT JOIN insurances i5 ON i5.id = ci5.insuranceId"
     )
     # COALESCE: partners > insurances > 'PARTICULAR'
