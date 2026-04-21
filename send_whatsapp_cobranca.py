@@ -140,11 +140,11 @@ def buscar_faturas(cursor, campanha: dict) -> list[dict]:
                 telefonewhatsapp,
                 descricao        AS ref,
                 valordevido      AS valor,
-                datadevencimento AS venc,
+                datareferencia   AS venc,
                 diasdebito
             FROM {src}
             WHERE {where}{extra}
-            ORDER BY datadevencimento ASC
+            ORDER BY datareferencia ASC
         """
     cursor.execute(sql, params)
     cols = [c[0] for c in cursor.description]
