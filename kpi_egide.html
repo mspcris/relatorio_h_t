@@ -58,6 +58,33 @@
       display: flex; align-items: center; gap: 8px;
     }
 
+    /* Toggle pill Consultas/Exames por tabela */
+    .tipo-toggle {
+      display: inline-flex; gap: 0;
+      background: #f1f5f9;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px;
+      font-size: .8rem;
+      font-weight: 500;
+    }
+    .tipo-toggle .tt-opt {
+      padding: 4px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      color: #475569;
+      transition: all .15s ease;
+      user-select: none;
+      line-height: 1.2;
+    }
+    .tipo-toggle .tt-opt input { display: none; }
+    .tipo-toggle .tt-opt.active {
+      background: #2563eb;
+      color: #fff;
+      box-shadow: 0 1px 2px rgba(0,0,0,.12);
+    }
+    .tipo-toggle .tt-opt:hover:not(.active) { background: #e2e8f0; }
+
     /* ---------- Caixa explicativa (substitui .info-box) ---------- */
     .explain {
       background: #fffbeb;
@@ -708,22 +735,28 @@
           </div>
         </div>
 
-        <!-- P2 Drilldown — Especialidades -->
-        <h3 class="section-title" style="font-size: 1rem;">
-          <i class="fas fa-user-md"></i> Top especialidades
-          <span class="badge badge-secondary ml-2" style="font-size: .7rem;">drilldown</span>
+        <!-- P2 Drilldown — Especialidades / Exames (toggle) -->
+        <h3 class="section-title" style="font-size: 1rem; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span><i class="fas fa-user-md"></i> <span id="titEspExame">Top especialidades</span>
+          <span class="badge badge-secondary ml-2" style="font-size: .7rem;">drilldown</span></span>
+          <span class="tipo-toggle" role="tablist" aria-label="Tipo">
+            <label class="tt-opt active" data-val="consultas">
+              <input type="radio" name="espExameTipo" value="consultas" checked> Consultas
+            </label>
+            <label class="tt-opt" data-val="exames">
+              <input type="radio" name="espExameTipo" value="exames"> Exames
+            </label>
+          </span>
         </h3>
         <div class="explain gray">
           <details>
             <summary><i class="fas fa-lightbulb"></i> O que esta tabela mostra</summary>
             <div class="body">
-              Para cada <b>especialidade</b> médica (cardiologia, dermato…):
-              quantidade no período e, no modo <b>Pagamento</b>, a <b>receita
-              paga</b> e o <b>ticket médio</b>. As colunas mudam conforme o
-              toggle <i>Filtrar por</i> no alto (Pagamento = data de pagamento
-              → Pagas / Receita; Agendamento = data do agendamento → Agendadas).
-              Só <b>consultas</b> (exames têm card e tabela próprios mais
-              abaixo). Clique no cabeçalho para ordenar.
+              Para cada <b>especialidade</b> (cardiologia, dermato…) ou <b>exame</b>
+              (conforme o toggle acima): quantidade no período e, no modo <b>Pagamento</b>,
+              a <b>receita paga</b> e o <b>ticket médio</b>. As colunas seguem o toggle
+              <i>Filtrar por</i> no alto (Pagamento → Pagas / Receita / Ticket;
+              Agendamento → Agendadas). Clique no cabeçalho para ordenar.
             </div>
           </details>
         </div>
@@ -735,7 +768,7 @@
           <table class="table-drill" id="tblEspecialidade">
             <thead>
               <tr>
-                <th data-k="especialidade">Especialidade<span class="sort">⇅</span></th>
+                <th data-k="especialidade"><span id="thEspExameLabel">Especialidade</span><span class="sort">⇅</span></th>
                 <th data-k="agendadas" class="num">Agendadas<span class="sort">⇅</span></th>
                 <th data-k="pagas" class="num">Pagas<span class="sort">⇅</span></th>
                 <th data-k="receita_paga" class="num">Receita paga<span class="sort">⇅</span></th>
@@ -746,20 +779,27 @@
           </table>
         </div>
 
-        <!-- P2 Drilldown — Clínicas -->
-        <h3 class="section-title" style="font-size: 1rem;">
-          <i class="fas fa-hospital"></i> Top clínicas
-          <span class="badge badge-secondary ml-2" style="font-size: .7rem;">drilldown</span>
+        <!-- P2 Drilldown — Clínicas (toggle consultas/exames) -->
+        <h3 class="section-title" style="font-size: 1rem; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span><i class="fas fa-hospital"></i> <span id="titCliExame">Top clínicas — Consultas</span>
+          <span class="badge badge-secondary ml-2" style="font-size: .7rem;">drilldown</span></span>
+          <span class="tipo-toggle" role="tablist" aria-label="Tipo">
+            <label class="tt-opt active" data-val="consultas">
+              <input type="radio" name="cliExameTipo" value="consultas" checked> Consultas
+            </label>
+            <label class="tt-opt" data-val="exames">
+              <input type="radio" name="cliExameTipo" value="exames"> Exames
+            </label>
+          </span>
         </h3>
         <div class="explain gray">
           <details>
             <summary><i class="fas fa-lightbulb"></i> O que esta tabela mostra</summary>
             <div class="body">
               Para cada <b>clínica credenciada</b>: cidade, quantidade no
-              período e (no modo Pagamento) receita paga e ticket médio. As
-              colunas seguem o toggle <i>Filtrar por</i> no alto.
-              A linha "<i>sem clínica associada</i>" aparece quando o agendamento
-              não tem schedule vinculado a clínica (legado).
+              período e (no modo Pagamento) receita paga e ticket médio. O toggle
+              <b>Consultas / Exames</b> alterna o tipo. As colunas seguem o
+              toggle <i>Filtrar por</i> no alto.
             </div>
           </details>
         </div>
@@ -1227,6 +1267,9 @@ const ST = {
   // 'pagamento' (default): período filtra por data de pagamento
   // 'agendamento': período filtra por data do agendamento (da.date)
   tipoFiltro: 'pagamento',
+  // Toggle por tabela: 'consultas' (default) ou 'exames'
+  espTipo: 'consultas',
+  cliTipo: 'consultas',
 };
 
 /* Soma valores *_canc nos campos base quando o switch está ativo. Recebe linhas
@@ -1443,14 +1486,32 @@ function render() {
     pagas: isPagos, receita_paga: isPagos, ticket_medio: isPagos,
   });
 
+  // Top Especialidades / Exames (alterna conforme ST.espTipo)
+  const isExameEsp = (ST.espTipo === 'exames');
+  const titEsp = document.getElementById('titEspExame');
+  if (titEsp) titEsp.textContent = isExameEsp ? 'Top exames' : 'Top especialidades';
+  const thLblEsp = document.getElementById('thEspExameLabel');
+  if (thLblEsp) thLblEsp.textContent = isExameEsp ? 'Exame' : 'Especialidade';
+
+  const espDimKey = isExameEsp ? 'exame' : 'especialidade';
+  const espSrcPagas = isExameEsp
+    ? (DATA.p2_consultas.por_exame_pagas_mes || [])
+    : (DATA.p2_consultas.por_especialidade_pagas_mes || []);
+  const espSrcAgend = isExameEsp
+    ? (DATA.p2_consultas.por_exame_agendadas_mes || [])
+    : (DATA.p2_consultas.por_especialidade_agendadas_mes || []);
+  const espDrillMetric = isExameEsp ? 'exames' : 'consultas_pagas';
+
   let espAgg, espColunas, espDefaultSort;
   if (isPagos) {
-    const espPagasRaw = filtMes(DATA.p2_consultas.por_especialidade_pagas_mes || [], de, ate);
+    const espPagasRaw = filtMes(espSrcPagas, de, ate);
     espAgg = groupAgg(
       applyCanc(espPagasRaw, [['pagas','pagas_canc'], ['receita_paga','receita_paga_canc']]),
-      ['especialidade'], ['pagas','receita_paga']
+      [espDimKey], ['pagas','receita_paga']
     );
     espAgg.forEach(r => r.ticket_medio = r.pagas > 0 ? r.receita_paga / r.pagas : 0);
+    // Normaliza para a chave 'especialidade' usada pela tabela (th data-k)
+    if (isExameEsp) espAgg.forEach(r => { r.especialidade = r.exame; });
     espColunas = [
       {k:'especialidade', fmt:v=>v},
       {k:'pagas', num:true, fmt:v=>nf(v)},
@@ -1459,11 +1520,12 @@ function render() {
     ];
     espDefaultSort = { key:'pagas', dir:'desc' };
   } else {
-    const espAgendRaw = filtMes(DATA.p2_consultas.por_especialidade_agendadas_mes || [], de, ate);
+    const espAgendRaw = filtMes(espSrcAgend, de, ate);
     espAgg = groupAgg(
       applyCanc(espAgendRaw, [['agendadas','agendadas_canc']]),
-      ['especialidade'], ['agendadas']
+      [espDimKey], ['agendadas']
     );
+    if (isExameEsp) espAgg.forEach(r => { r.especialidade = r.exame; });
     espColunas = [
       {k:'especialidade', fmt:v=>v},
       {k:'agendadas', num:true, fmt:v=>nf(v)},
@@ -1480,14 +1542,27 @@ function render() {
     search: ST.search.esp,
     defaultSort: espDefaultSort,
     id:'esp',
-    onRowClick: (r) => openDrill('consultas_pagas',
+    onRowClick: (r) => openDrill(espDrillMetric,
       `Registros de "${r.especialidade}" — ${fmtMesBR(de)} → ${fmtMesBR(ate)}`,
       { filterBy: drillBy, especialidade: r.especialidade }),
   });
 
+  // Top Clínicas (alterna conforme ST.cliTipo)
+  const isExameCli = (ST.cliTipo === 'exames');
+  const titCli = document.getElementById('titCliExame');
+  if (titCli) titCli.textContent = isExameCli ? 'Top clínicas — Exames' : 'Top clínicas — Consultas';
+
+  const cliSrcPagas = isExameCli
+    ? (DATA.p2_consultas.por_clinica_pagas_mes_exames || [])
+    : (DATA.p2_consultas.por_clinica_pagas_mes_consultas || []);
+  const cliSrcAgend = isExameCli
+    ? (DATA.p2_consultas.por_clinica_agendadas_mes_exames || [])
+    : (DATA.p2_consultas.por_clinica_agendadas_mes_consultas || []);
+  const cliDrillMetric = isExameCli ? 'exames' : 'consultas_pagas';
+
   let cliAgg, cliColunas, cliDefaultSort;
   if (isPagos) {
-    const cliPagasRaw = filtMes(DATA.p2_consultas.por_clinica_pagas_mes || [], de, ate);
+    const cliPagasRaw = filtMes(cliSrcPagas, de, ate);
     cliAgg = groupAgg(
       applyCanc(cliPagasRaw, [['pagas','pagas_canc'], ['receita_paga','receita_paga_canc']]),
       ['clinica','cidade'], ['pagas','receita_paga']
@@ -1502,7 +1577,7 @@ function render() {
     ];
     cliDefaultSort = { key:'pagas', dir:'desc' };
   } else {
-    const cliAgendRaw = filtMes(DATA.p2_consultas.por_clinica_agendadas_mes || [], de, ate);
+    const cliAgendRaw = filtMes(cliSrcAgend, de, ate);
     cliAgg = groupAgg(
       applyCanc(cliAgendRaw, [['agendadas','agendadas_canc']]),
       ['clinica','cidade'], ['agendadas']
@@ -1523,7 +1598,7 @@ function render() {
     search: ST.search.cli,
     defaultSort: cliDefaultSort,
     id:'cli',
-    onRowClick: (r) => openDrill('consultas_pagas',
+    onRowClick: (r) => openDrill(cliDrillMetric,
       `Registros de "${r.clinica}" — ${fmtMesBR(de)} → ${fmtMesBR(ate)}`,
       { filterBy: drillBy, clinica: r.clinica }),
   });
@@ -2351,6 +2426,29 @@ document.querySelectorAll('.tipo-filtro-btn').forEach(btn => {
   });
 });
 
+// Toggle por tabela: Consultas / Exames (Top Especialidades + Top Clínicas)
+function _wireTipoToggle(radioName, stateKey) {
+  const radios = document.querySelectorAll(`input[name="${radioName}"]`);
+  radios.forEach(r => {
+    r.addEventListener('change', () => {
+      if (!r.checked) return;
+      const v = r.value === 'exames' ? 'exames' : 'consultas';
+      if (v === ST[stateKey]) return;
+      ST[stateKey] = v;
+      // marca visual do pill
+      r.closest('.tipo-toggle').querySelectorAll('.tt-opt').forEach(opt => {
+        opt.classList.toggle('active', opt.dataset.val === v);
+      });
+      // reset do sort (colunas podem mudar)
+      if (stateKey === 'espTipo') delete ST.sorts.esp;
+      if (stateKey === 'cliTipo') delete ST.sorts.cli;
+      render();
+    });
+  });
+}
+_wireTipoToggle('espExameTipo', 'espTipo');
+_wireTipoToggle('cliExameTipo', 'cliTipo');
+
 document.getElementById('btnPickConv').addEventListener('click', openConvModal);
 document.getElementById('convCancel').addEventListener('click', closeConvModal);
 document.getElementById('convApply').addEventListener('click', applyConvModal);
@@ -2375,6 +2473,17 @@ document.getElementById('btnReset').addEventListener('click', () => {
   ST.tipoFiltro = 'pagamento';
   document.querySelectorAll('.tipo-filtro-btn').forEach(b => {
     b.classList.toggle('on', b.dataset.tipo === 'pagamento');
+  });
+  ST.espTipo = 'consultas';
+  ST.cliTipo = 'consultas';
+  ['espExameTipo','cliExameTipo'].forEach(name => {
+    document.querySelectorAll(`input[name="${name}"]`).forEach(r => {
+      r.checked = (r.value === 'consultas');
+    });
+    document.querySelectorAll(`input[name="${name}"]`).forEach(r => {
+      const opt = r.closest('.tt-opt');
+      if (opt) opt.classList.toggle('active', r.value === 'consultas');
+    });
   });
   ['qEspecialidade','qClinica','qConvEsp','qConvCli'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
