@@ -7,6 +7,20 @@
  */
 (function () {
 
+  // ── Ícones SVG customizados (quando Font Awesome não tem equivalente) ──
+  var SVG_ICONS = {
+    // Logo Égide: escudo verde-azulado com cruz médica branca
+    egide:
+      '<svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"'
+      + ' width="1.125em" height="1.125em" aria-hidden="true"'
+      + ' style="vertical-align:-.125em;margin-right:.2rem">'
+      + '<path d="M12 2 L3.5 5 V11.5 C3.5 16.8 7.2 20.7 12 22 C16.8 20.7 20.5 16.8 20.5 11.5 V5 Z"'
+      +   ' fill="#2fa3a4"/>'
+      + '<path d="M10.5 7 H13.5 V11 H17 V14 H13.5 V18 H10.5 V14 H7 V11 H10.5 Z"'
+      +   ' fill="#ffffff"/>'
+      + '</svg>'
+  };
+
   // ── Lista canônica — única fonte de verdade ──────────────────────────
   var MENU = [
     { href: '/index.html',                         icon: 'fa-home',                    label: 'Home' },
@@ -29,7 +43,7 @@
     { href: '/kpi_receita_despesa.html',           icon: 'fa-balance-scale',           label: 'KPI Receitas x Despesas' },
     { href: '/kpi_receita_despesa_rateio.html',    icon: 'fa-balance-scale',           label: 'KPI R x D com Rateio' },
     { href: '/growth.html',                        icon: 'fa-rocket',                  label: 'Growth Dashboard' },
-    { href: '/kpi_egide.html',                     icon: 'fa-heart-pulse',             label: 'KPI Égide Saúde' },
+    { href: '/kpi_egide.html',                     iconSvg: 'egide',                   label: 'KPI Égide Saúde' },
     { href: '/mais_servicos.html',                 icon: 'fa-th-large',                label: 'Mais Serviços' },
     { type: 'sep' },
     { href: '/admin', icon: 'fa-users-cog', label: 'Admin', adminOnly: true,
@@ -67,9 +81,15 @@
         var active    = isActive(i.href) ? ' active' : '';
         var liStyle   = i.style     ? ' style="' + i.style + '"'     : '';
         var icoStyle  = i.iconStyle ? ' style="' + i.iconStyle + '"' : '';
+        var iconHTML;
+        if (i.iconSvg && SVG_ICONS[i.iconSvg]) {
+          iconHTML = SVG_ICONS[i.iconSvg];
+        } else {
+          iconHTML = '<i class="nav-icon fas ' + i.icon + '"' + icoStyle + '></i>';
+        }
         return '<li class="nav-item">'
           + '<a href="' + i.href + '" class="nav-link' + active + '"' + liStyle + '>'
-          + '<i class="nav-icon fas ' + i.icon + '"' + icoStyle + '></i>'
+          + iconHTML
           + '<p>' + i.label + '</p>'
           + '</a></li>';
       })
