@@ -170,11 +170,42 @@ def build_vendas_json():
         por_posto.setdefault(posto, {
             "valor_total": 0.0,
             "qtd_vendas": 0,
-            "ticket_medio": None
+            "ticket_medio": None,
+            "por_corretor": {},
+            "por_corretor_subcorretor": {}
         })
 
         por_posto[posto]["valor_total"] += v_total
         por_posto[posto]["qtd_vendas"]  += qtd
+
+        # Agregação por corretor / subcorretor dentro do posto
+        col_corr = cols_lower.get("corretor")
+        col_sub  = cols_lower.get("subcorretor")
+        valores_num = pd.to_numeric(df[col_valor], errors="coerce").fillna(0)
+
+        if col_corr:
+            corr_series = df[col_corr].fillna("(sem corretor)").astype(str).str.strip().replace("", "(sem corretor)")
+            por_corr = por_posto[posto]["por_corretor"]
+            for nome, grupo in valores_num.groupby(corr_series):
+                bucket = por_corr.setdefault(nome, {"valor_total": 0.0, "qtd_vendas": 0, "ticket_medio": None})
+                bucket["valor_total"] += float(grupo.sum())
+                bucket["qtd_vendas"]  += int(grupo.size)
+
+            if col_sub:
+                sub_series = df[col_sub].fillna("(sem subcorretor)").astype(str).str.strip().replace("", "(sem subcorretor)")
+                chave = corr_series + "||" + sub_series
+                por_pair = por_posto[posto]["por_corretor_subcorretor"]
+                for k, grupo in valores_num.groupby(chave):
+                    corr_nome, sub_nome = k.split("||", 1)
+                    bucket = por_pair.setdefault(k, {
+                        "corretor": corr_nome,
+                        "subcorretor": sub_nome,
+                        "valor_total": 0.0,
+                        "qtd_vendas": 0,
+                        "ticket_medio": None
+                    })
+                    bucket["valor_total"] += float(grupo.sum())
+                    bucket["qtd_vendas"]  += int(grupo.size)
 
     # pós-processamento
     for ym, info in agregados.items():
@@ -186,6 +217,21 @@ def build_vendas_json():
             if v["qtd_vendas"] > 0:
                 v["ticket_medio"] = round(v["valor_total"] / v["qtd_vendas"], 2)
             v["valor_total"] = round(v["valor_total"], 2)
+
+            for nome, c in v.get("por_corretor", {}).items():
+                if c["qtd_vendas"] > 0:
+                    c["ticket_medio"] = round(c["valor_total"] / c["qtd_vendas"], 2)
+                c["valor_total"] = round(c["valor_total"], 2)
+
+            pair_dict = v.get("por_corretor_subcorretor", {}) or {}
+            pair_list = []
+            for p in pair_dict.values():
+                if p["qtd_vendas"] > 0:
+                    p["ticket_medio"] = round(p["valor_total"] / p["qtd_vendas"], 2)
+                p["valor_total"] = round(p["valor_total"], 2)
+                pair_list.append(p)
+            pair_list.sort(key=lambda x: (-x["qtd_vendas"], -x["valor_total"]))
+            v["por_corretor_subcorretor"] = pair_list
 
     # ordena meses
     out = {}

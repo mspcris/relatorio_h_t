@@ -551,10 +551,55 @@
                     </div>
                 </div>
 
+                <!-- VENDAS POR CORRETOR / SUBCORRETOR -->
+                <div class="card">
+                    <div class="card-header d-flex align-items-center justify-content-between flex-wrap">
+                        <h3 class="card-title mb-0">Vendas por Corretor / Subcorretor</h3>
+                        <div class="mini muted">ranking por QTD de vendas no período selecionado</div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="row no-gutters">
+                            <div class="col-md-5 border-right">
+                                <div class="px-3 pt-2 pb-1"><b>Por Corretor</b></div>
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-sm mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Corretor</th>
+                                                <th class="text-right">Qtd</th>
+                                                <th class="text-right">Valor</th>
+                                                <th class="text-right">Ticket</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tblCorretor"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="col-md-7">
+                                <div class="px-3 pt-2 pb-1"><b>Por Corretor + Subcorretor</b></div>
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-sm mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Corretor</th>
+                                                <th>Subcorretor</th>
+                                                <th class="text-right">Qtd</th>
+                                                <th class="text-right">Valor</th>
+                                                <th class="text-right">Ticket</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tblCorretorSub"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- GRÁFICOS -->
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Evolução Mensal (Vendas)</h3>
+                        <h3 class="card-title mb-0">Evolução Mensal — Qtd de Vendas</h3>
                     </div>
                     <div class="card-body"><canvas id="chartValores"></canvas></div>
                 </div>
@@ -564,6 +609,13 @@
                         <h3 class="card-title mb-0">Qtd de Vendas e Ticket Médio</h3>
                     </div>
                     <div class="card-body"><canvas id="chartQtdTicket"></canvas></div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h3 class="card-title mb-0">Receita Mensal (secundário)</h3>
+                    </div>
+                    <div class="card-body"><canvas id="chartReceita"></canvas></div>
                 </div>
 
                 <div class="card chart-card">
@@ -616,7 +668,7 @@
 
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Pareto de Receita por Posto</h3>
+                        <h3 class="card-title mb-0">Pareto de Qtd de Vendas por Posto</h3>
                     </div>
                     <div class="card-body"><canvas id="chartPareto"></canvas></div>
                 </div>
@@ -877,7 +929,7 @@
         }
 
         // ====== Estado ======
-        let MESES = [], geral = {}, porPosto = {}, POSTOS = [];
+        let MESES = [], geral = {}, porPosto = {}, POSTOS = [], porPostoCorretor = {};
         let sel1 = 'ALL', sel2 = 'ALL';
 
         async function carregarPostosDoUsuario() {
@@ -1080,22 +1132,40 @@
             const receitaSerie = meses.map(m => aggMens(m, selection).valor || null);
             const mdd = maxDrawdown(receitaSerie);
 
+            // Métricas de QTD (foco principal)
+            const qtdMoms = rows.map(v => v.q_mom).filter(v => v != null);
+            const qtdMomMA = qtdMoms.length ? qtdMoms.reduce((a, b) => a + b, 0) / qtdMoms.length : null;
+            const qtdHit = qtdMoms.length ? (qtdMoms.filter(x => x > 0).length / qtdMoms.length) * 100 : null;
+            const qtdRunRate = meses.length ? (qtd / meses.length) * 12 : null;
+            let qtdCagr = null;
+            if (meses.length >= 2) {
+                const first = aggMens(meses[0], selection).qtd || 0;
+                const last = aggMens(meses.at(-1), selection).qtd || 0;
+                if (first > 0) qtdCagr = (Math.pow(last / first, 1 / (meses.length - 1)) - 1) * 100;
+            }
+
             box.innerHTML = '';
-            box.insertAdjacentHTML('beforeend', kpiCard('Receita total', receita, 'moeda'));
+            // Foco em QTD: cards principais
             box.insertAdjacentHTML('beforeend', kpiCard('Qtd total de vendas', qtd, 'moeda'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Qtd MoM (MA)', qtdMomMA, 'pct'));
+            box.insertAdjacentHTML('beforeend', kpiCard('CAGR qtd', qtdCagr, 'pct'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Run-rate qtd 12m', qtdRunRate, 'moeda'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Hit-rate qtd', qtdHit, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('Ticket ponderado', ticketPond, '2'));
+            // Receita (secundário)
+            box.insertAdjacentHTML('beforeend', kpiCard('Receita total', receita, 'moeda'));
             box.insertAdjacentHTML('beforeend', kpiCard('Perf. mensal (MA)', perfMA, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('Perf. mensal (MG)', perfMG, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('Perf. acumulada', perfAc, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('CAGR receita', cagr, 'pct'));
-            box.insertAdjacentHTML('beforeend', kpiCard('Run-rate 12m', runRate, 'moeda'));
-            box.insertAdjacentHTML('beforeend', kpiCard('Hit-rate crescimento', hit, 'pct'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Run-rate receita 12m', runRate, 'moeda'));
+            box.insertAdjacentHTML('beforeend', kpiCard('Hit-rate receita', hit, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('Volatilidade logret', volPct, 'pct'));
             box.insertAdjacentHTML('beforeend', kpiCard('Max Drawdown receita', mdd, 'pct'));
         }
 
         // ====== Gráficos ======
-        let chValores, chQtdTicket, chPerf, chVol, chYoY, chMix, chScatter, chPareto, chYoYPosto;
+        let chValores, chQtdTicket, chReceita, chPerf, chVol, chYoY, chMix, chScatter, chPareto, chYoYPosto;
 
         function initCharts() {
             const base = {
@@ -1110,6 +1180,11 @@
                 options: base
             });
             chQtdTicket = new Chart(document.getElementById('chartQtdTicket'), {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: base
+            });
+            chReceita = new Chart(document.getElementById('chartReceita'), {
                 type: 'line',
                 data: { labels: [], datasets: [] },
                 options: base
@@ -1179,8 +1254,9 @@
                     if (!allowed.has(p)) return;             // ignora posto não permitido
                     if (selection !== 'ALL' && !selection.has(p)) return;
 
-                    const v = num(row[p]?.mensalidade);
-                    map.set(p, (map.get(p) || 0) + v);
+                    // Foco em QTD de vendas (campo 'mensalidade_qtd' na normalização)
+                    const q = num(row[p]?.mensalidade_qtd);
+                    map.set(p, (map.get(p) || 0) + q);
                 });
             });
 
@@ -1198,17 +1274,29 @@
             const tag = labelSelec(selection);
             const rows = meses.map(m => aggMens(m, selection));
 
+            const qtdSerie = rows.map(v => v.qtd);
+            const mm3qtd = qtdSerie.map((_, i) => {
+                const s = qtdSerie.slice(Math.max(0, i - 2), i + 1).filter(x => x != null);
+                return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null;
+            });
+            chValores.data.labels = labels;
+            chValores.data.datasets = [
+                { label: `Qtd de vendas (${tag})`, data: qtdSerie, tension: .2 },
+                { label: 'Média móvel 3m', data: mm3qtd, tension: .2 }
+            ];
+            chValores.update();
+
             const receita = rows.map(v => v.valor);
             const mm3 = receita.map((_, i) => {
                 const s = receita.slice(Math.max(0, i - 2), i + 1).filter(x => x != null);
                 return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null;
             });
-            chValores.data.labels = labels;
-            chValores.data.datasets = [
-                { label: `Valor total (${tag})`, data: receita, tension: .2 },
+            chReceita.data.labels = labels;
+            chReceita.data.datasets = [
+                { label: `Receita (${tag})`, data: receita, tension: .2 },
                 { label: 'Média móvel 3m', data: mm3, tension: .2 }
             ];
-            chValores.update();
+            chReceita.update();
 
             chQtdTicket.data.labels = labels;
             chQtdTicket.data.datasets = [
@@ -1296,7 +1384,7 @@
             const shares = postoShares(meses, selection);
             chPareto.data.labels = shares.labels;
             chPareto.data.datasets = [{
-                label: 'Receita (período)',
+                label: 'Qtd de vendas (período)',
                 data: shares.valores
             }];
             chPareto.update();
@@ -1536,6 +1624,7 @@
 
                     const por = rec.por_posto || {};
                     const rowPosto = {};
+                    const rowCorr = {};
                     for (const [posto, pr] of Object.entries(por)) {
                         const v = num(pr.valor_total);
                         const q = num(pr.qtd_vendas);
@@ -1556,8 +1645,13 @@
                             mix_delta_receita_volume: null,
                             mix_delta_receita_interacao: null
                         };
+                        rowCorr[posto] = {
+                            por_corretor: pr.por_corretor || {},
+                            por_corretor_subcorretor: Array.isArray(pr.por_corretor_subcorretor) ? pr.por_corretor_subcorretor : []
+                        };
                     }
                     porPosto[ym] = rowPosto;
+                    porPostoCorretor[ym] = rowCorr;
                 }
 
                 // Métricas gerais
@@ -1699,6 +1793,7 @@
             const meses = mesesSel('#from2', '#to2');
             buildKPIs('#kpisSel2', meses, sel2);
             buildTable(meses, sel2);
+            buildCorretorTables(meses, sel2);
             updateCharts(meses, sel2);
             _atualizarBotoesGrupo();
         }
@@ -1957,6 +2052,100 @@
   <td class="text-right"><b>-</b></td>
   <td class="text-right" colspan="12"><b>-</b></td>
 </tr>`);
+        }
+
+        // ====== Ranking por Corretor / Subcorretor ======
+        function buildCorretorTables(meses, selection) {
+            const tbC = el('#tblCorretor');
+            const tbS = el('#tblCorretorSub');
+            if (!tbC || !tbS) return;
+
+            const postos = postosFromSelection(selection);
+            const setPostos = new Set(postos);
+
+            const corrAgg = new Map();       // nome -> {qtd, valor}
+            const pairAgg = new Map();       // "corr||sub" -> {corretor, subcorretor, qtd, valor}
+
+            meses.forEach(ym => {
+                const rowC = porPostoCorretor[ym] || {};
+                for (const [posto, bucket] of Object.entries(rowC)) {
+                    if (!setPostos.has(posto)) continue;
+
+                    const pc = bucket.por_corretor || {};
+                    for (const [nome, v] of Object.entries(pc)) {
+                        const cur = corrAgg.get(nome) || { qtd: 0, valor: 0 };
+                        cur.qtd   += num(v.qtd_vendas);
+                        cur.valor += num(v.valor_total);
+                        corrAgg.set(nome, cur);
+                    }
+
+                    const ps = bucket.por_corretor_subcorretor || [];
+                    for (const p of ps) {
+                        const k = p.corretor + '||' + p.subcorretor;
+                        const cur = pairAgg.get(k) || { corretor: p.corretor, subcorretor: p.subcorretor, qtd: 0, valor: 0 };
+                        cur.qtd   += num(p.qtd_vendas);
+                        cur.valor += num(p.valor_total);
+                        pairAgg.set(k, cur);
+                    }
+                }
+            });
+
+            const corrList = [...corrAgg.entries()]
+                .map(([nome, v]) => ({ nome, qtd: v.qtd, valor: v.valor, ticket: v.qtd ? v.valor / v.qtd : null }))
+                .sort((a, b) => b.qtd - a.qtd || b.valor - a.valor);
+
+            tbC.innerHTML = '';
+            if (!corrList.length) {
+                tbC.insertAdjacentHTML('beforeend', `<tr><td colspan="4" class="muted text-center">Sem vendas no período/posto selecionado.</td></tr>`);
+            } else {
+                let tQ = 0, tV = 0;
+                for (const r of corrList) {
+                    tQ += r.qtd; tV += r.valor;
+                    tbC.insertAdjacentHTML('beforeend', `
+<tr>
+  <td>${r.nome}</td>
+  <td class="text-right">${fmtInt.format(r.qtd)}</td>
+  <td class="text-right">${fmtInt.format(r.valor)}</td>
+  <td class="text-right">${r.ticket == null ? '-' : fmt2.format(r.ticket)}</td>
+</tr>`);
+                }
+                tbC.insertAdjacentHTML('beforeend', `
+<tr style="background:#f8f9fa">
+  <td><b>Total</b></td>
+  <td class="text-right"><b>${fmtInt.format(tQ)}</b></td>
+  <td class="text-right"><b>${fmtInt.format(tV)}</b></td>
+  <td class="text-right"><b>${tQ ? fmt2.format(tV / tQ) : '-'}</b></td>
+</tr>`);
+            }
+
+            const pairList = [...pairAgg.values()]
+                .map(p => ({ ...p, ticket: p.qtd ? p.valor / p.qtd : null }))
+                .sort((a, b) => b.qtd - a.qtd || b.valor - a.valor);
+
+            tbS.innerHTML = '';
+            if (!pairList.length) {
+                tbS.insertAdjacentHTML('beforeend', `<tr><td colspan="5" class="muted text-center">Sem vendas no período/posto selecionado.</td></tr>`);
+            } else {
+                let tQ = 0, tV = 0;
+                for (const r of pairList) {
+                    tQ += r.qtd; tV += r.valor;
+                    tbS.insertAdjacentHTML('beforeend', `
+<tr>
+  <td>${r.corretor}</td>
+  <td>${r.subcorretor}</td>
+  <td class="text-right">${fmtInt.format(r.qtd)}</td>
+  <td class="text-right">${fmtInt.format(r.valor)}</td>
+  <td class="text-right">${r.ticket == null ? '-' : fmt2.format(r.ticket)}</td>
+</tr>`);
+                }
+                tbS.insertAdjacentHTML('beforeend', `
+<tr style="background:#f8f9fa">
+  <td colspan="2"><b>Total</b></td>
+  <td class="text-right"><b>${fmtInt.format(tQ)}</b></td>
+  <td class="text-right"><b>${fmtInt.format(tV)}</b></td>
+  <td class="text-right"><b>${tQ ? fmt2.format(tV / tQ) : '-'}</b></td>
+</tr>`);
+            }
         }
     </script>
 
