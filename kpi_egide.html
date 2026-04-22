@@ -1443,8 +1443,9 @@ function render() {
     data: {
       labels: labels1,
       datasets: [
-        { label:'Novos clientes',   data: labels1.map(m=>mapNovos[m]||0), borderColor: PAL[1], backgroundColor: PAL[1]+'33', tension:.25, fill:true },
-        { label:'Clientes ativos',  data: labels1.map(m=>mapAtv[m]||0),   borderColor: PAL[2], backgroundColor: PAL[2]+'33', tension:.25, fill:true },
+        { label:'Novos clientes',         data: labels1.map(m=>mapNovos[m]||0),                              borderColor: PAL[1], backgroundColor: PAL[1]+'33', tension:.25, fill:true },
+        { label:'Clientes ativos',        data: labels1.map(m=>mapAtv[m]||0),                                borderColor: PAL[2], backgroundColor: PAL[2]+'33', tension:.25, fill:true },
+        { label:'Antigos ativos (ativos − novos)', data: labels1.map(m=>Math.max(0,(mapAtv[m]||0)-(mapNovos[m]||0))), borderColor: PAL[0], backgroundColor: PAL[0]+'22', tension:.25, fill:false, borderDash:[6,4] },
       ]
     },
     options: { responsive:true, maintainAspectRatio:false,
