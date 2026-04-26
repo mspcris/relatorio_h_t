@@ -71,17 +71,21 @@
     .filter-label { font-size:.78rem; font-weight:600; color:#4a5568; margin-bottom:2px; display:block; }
     .filter-date-input { width:140px; }
     @media (max-width: 768px) {
+      .kpi-filter-panel { padding: 10px; gap: 12px; }
+      .kpi-filter-row { gap: 10px; flex-direction: column; align-items: stretch; }
+      .kpi-filter-postos, .kpi-filter-actions { flex-direction: column; align-items: stretch; }
       .posto-groups { width: 100%; }
       .posto-groups .btn-group { width: 100%; display: flex; }
-      .posto-groups .btn { flex: 1; padding: 6px 8px; }
+      .posto-groups .btn { flex: 1; padding: 6px 8px; font-size: .82rem; }
+      .posto-tabs-inline { justify-content: center; }
       .posto-tabs-inline .nav-link { padding: 6px 10px; min-width: 40px; }
       .filter-sep-v { display: none; }
-      .filter-dates-row { width: 100%; }
-      .filter-dates-row > div { flex: 1; min-width: 130px; }
-      .filter-date-input { width: 100%; }
-      #selPop { width: 100% !important; }
-      .filter-btns-row { width: 100%; justify-content: stretch; }
-      .filter-btns-row .btn { flex: 1; }
+      .filter-dates-row { width: 100%; flex-direction: column; gap: 10px; }
+      .filter-dates-row > div { flex: 1 1 100%; min-width: 0; width: 100%; }
+      .filter-date-input { width: 100% !important; min-width: 0; box-sizing: border-box; }
+      #selPop { width: 100% !important; box-sizing: border-box; }
+      .filter-btns-row { width: 100%; justify-content: stretch; gap: 6px; }
+      .filter-btns-row .btn { flex: 1; padding: 8px 4px; font-size: .82rem; white-space: normal; }
     }
 
     /* KPI cards */
@@ -604,6 +608,9 @@
 <div id="loadingOverlay" class="loading-overlay">
   <div class="spinner-border spinner-lg text-primary" role="status"></div>
   <div class="loading-msg" id="loadingMsg">Carregando dados…</div>
+  <div style="font-size:.75rem; color:#64748b; max-width:280px; text-align:center; margin-top:6px">
+    O dataset tem ~25 MB. Pode levar de 10 a 60 segundos na primeira abertura, dependendo da sua internet.
+  </div>
 </div>
 
 <!-- Filtro de sidebar (page access) -->
@@ -679,11 +686,45 @@
   }
 
   async function carregar() {
-    showLoading('Carregando JSON do servidor…');
+    showLoading('Conectando ao servidor…');
     try {
       const r = await fetch(URL_JSON, { credentials: 'same-origin' });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      DATA = await r.json();
+
+      // Tenta ler tamanho total (pode vir do header content-length ou x-decompressed-content-length)
+      const totalHdr = r.headers.get('content-length');
+      const total = totalHdr ? parseInt(totalHdr, 10) : 0;
+
+      // Stream de leitura com progresso
+      const reader = r.body && r.body.getReader ? r.body.getReader() : null;
+      if (reader) {
+        const chunks = [];
+        let received = 0;
+        const t0 = Date.now();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          const mb = (received / (1024 * 1024)).toFixed(1);
+          const elapsed = (Date.now() - t0) / 1000;
+          const speed = received / elapsed / 1024;  // KB/s
+          const speedStr = speed > 1024 ? `${(speed/1024).toFixed(1)} MB/s` : `${speed.toFixed(0)} KB/s`;
+          if (total) {
+            const pct = Math.min(100, (received / total * 100));
+            showLoading(`Baixando dados… ${mb} MB (${pct.toFixed(0)}%) · ${speedStr}`);
+          } else {
+            showLoading(`Baixando dados… ${mb} MB · ${speedStr}`);
+          }
+        }
+        showLoading(`Processando ${(received / (1024*1024)).toFixed(1)} MB…`);
+        const blob = new Blob(chunks);
+        const text = await blob.text();
+        DATA = JSON.parse(text);
+      } else {
+        // fallback (browsers antigos)
+        DATA = await r.json();
+      }
     } catch (e) {
       hideLoading();
       alert('Falha ao carregar /json_consolidado/preagendamento.json — verifique se o ETL noturno rodou.\n' + e.message);
