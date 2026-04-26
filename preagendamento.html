@@ -225,9 +225,9 @@
               <div>
                 <label class="filter-label">Sub-população</label>
                 <select id="selPop" class="form-control form-control-sm" style="width:230px">
-                  <option value="todos" selected>Todos (sujeitos + isentos)</option>
+                  <option value="todos" selected>Todos (sujeitos à regra + isentos da regra)</option>
                   <option value="sujeitos">Apenas sujeitos à regra (≥6d antes)</option>
-                  <option value="isentos">Apenas isentos (&lt;6d antes)</option>
+                  <option value="isentos">Apenas isentos da regra (&lt;6d antes — sem janela viável)</option>
                 </select>
               </div>
             </div>
@@ -287,7 +287,7 @@
       <!-- Quebra do total (mostra de onde vem o N de cada gráfico) -->
       <div class="kpi-row" style="margin-top:-4px">
         <div class="kpi-card" style="border-left:3px solid #3b82f6"><div class="kpi-val" id="kSujeitos" style="font-size:1.2rem">—</div><div class="kpi-lbl">Sujeitos à regra (≥6d antes)</div></div>
-        <div class="kpi-card" style="border-left:3px solid #94a3b8"><div class="kpi-val" id="kIsentos"  style="font-size:1.2rem">—</div><div class="kpi-lbl">Isentos (&lt;6d antes)</div></div>
+        <div class="kpi-card" style="border-left:3px solid #94a3b8"><div class="kpi-val" id="kIsentos"  style="font-size:1.2rem">—</div><div class="kpi-lbl">Isentos da regra (lançamento &lt;6d antes da consulta)</div></div>
         <div class="kpi-card" style="border-left:3px solid #d97706"><div class="kpi-val" id="kQDesist" style="font-size:1.2rem">—</div><div class="kpi-lbl">Desistências (cancelaram)</div></div>
         <div class="kpi-card" style="border-left:3px solid #dc2626"><div class="kpi-val" id="kMedFaltou" style="font-size:1.2rem">—</div><div class="kpi-lbl">Médico faltou (excluído)</div></div>
         <div class="kpi-card" style="border-left:3px solid #6b7280"><div class="kpi-val" id="kPendentes" style="font-size:1.2rem">—</div><div class="kpi-lbl">Consultas futuras (pendentes)</div></div>
@@ -1032,7 +1032,7 @@
       nt ? nf/nt*100 : 0,
     ];
     const dataAbs = [cf, nf];
-    setBase('baseConfirmFalta', ct + nt, 'isentos, desistências, médico faltou e pendentes');
+    setBase('baseConfirmFalta', ct + nt, 'isentos da regra (<6d), desistências, médico faltou e pendentes');
     makeBar('chConfirmFalta', labels, [{
       label: '% falta', data: dataPct,
       backgroundColor: [COR_OK, COR_BAD],
@@ -1139,7 +1139,7 @@
       else                 histo['fora janela']++;
     });
     const baseHC = Object.values(histo).reduce((s,x)=>s+x,0);
-    setBase('baseHoraConf', baseHC, 'isentos, desistências e quem não confirmou');
+    setBase('baseHoraConf', baseHC, 'isentos da regra (<6d), desistências e quem não confirmou');
     makeBar('chHoraConf', Object.keys(histo), [{
       label: 'Confirmações',
       data: Object.values(histo),
@@ -1156,7 +1156,7 @@
     const cc   = ct - cf;
     const pctF = ct ? cf / ct * 100 : 0;
     const pctC = ct ? cc / ct * 100 : 0;
-    setBase('baseConfirmFaltou', ct, 'isentos, desistências, médico faltou, pendentes e quem NÃO confirmou');
+    setBase('baseConfirmFaltou', ct, 'isentos da regra (<6d), desistências, médico faltou, pendentes e quem NÃO confirmou');
     makeBar('chConfirmFaltou', [`Confirmou (n=${fmtNum(ct)})`], [
       { label: 'Compareceu', data: [cc], backgroundColor: COR_OK,  stack: 'a' },
       { label: 'Faltou',     data: [cf], backgroundColor: COR_BAD, stack: 'a' },
@@ -1187,7 +1187,7 @@
     const outro   = total - compar;
     const pctC    = total ? compar / total * 100 : 0;
     const pctO    = total ? outro  / total * 100 : 0;
-    setBase('baseNaoConfCompar', total, 'isentos, desistências, médico faltou, pendentes e quem CONFIRMOU');
+    setBase('baseNaoConfCompar', total, 'isentos da regra (<6d), desistências, médico faltou, pendentes e quem CONFIRMOU');
     makeBar('chNaoConfCompar', [`Não confirmou (n=${fmtNum(total)})`], [
       { label: 'Compareceu',   data: [compar], backgroundColor: COR_INFO, stack: 'a' },
       { label: 'Faltou/Outro', data: [outro],  backgroundColor: '#94a3b8', stack: 'a' },
@@ -1251,7 +1251,7 @@
     });
     horas.sort((a,b) => a - b);
     const mediana = horas.length ? horas[Math.floor(horas.length/2)] : 0;
-    setBase('basePushConf', horas.length, 'sem push enviado, sem confirmação, isentos e desistências');
+    setBase('basePushConf', horas.length, 'sem push enviado, sem confirmação, isentos da regra (<6d) e desistências');
     const buckets = ['0-1h','1-3h','3-6h','6-12h','12-24h','24-48h','48-72h','72h+'];
     const cnt = [0,0,0,0,0,0,0,0];
     horas.forEach(h => {
