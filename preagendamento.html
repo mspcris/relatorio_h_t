@@ -1109,9 +1109,20 @@
     ]);
   }
 
-  // ====== 10. Remanejamento de vagas ======
+  // ====== 10. Remanejamento de vagas (<5d) ======
+  // Só conta consultas cuja janela "<5 dias antes" já se abriu integralmente
+  // (hoje >= dataConsulta - 5d). Caso contrário ninguém poderia ter marcado
+  // ainda dentro dessa janela e geraria 0% artificial em meses futuros.
   function renderRemanejam(allConsultas, postosOk) {
-    const consultas = allConsultas.filter(c => postosOk.has(c.p) && !c.des);
+    const hoje = new Date();
+    const cutoffMs = hoje.getTime();
+    const consultas = allConsultas.filter(c => {
+      if (!postosOk.has(c.p) || c.des || !c.dc) return false;
+      const dcMs = new Date(c.dc + 'T00:00:00').getTime();
+      // Só considera se a janela "marcou em <5d" já é totalmente possível:
+      // hoje >= dataConsulta - 5d  ⇔  dcMs - cutoffMs <= 5*86400000
+      return (dcMs - cutoffMs) <= 5 * 86400000;
+    });
     const porMes = {};
     consultas.forEach(c => {
       const mes = (c.dc || '').slice(0, 7);
@@ -1122,8 +1133,8 @@
       porMes[mes].total++;
       if (dias < 5) porMes[mes].sub5++;
     });
-    const meses = Object.keys(porMes).sort();
-    const pct = meses.map(m => porMes[m].total ? porMes[m].sub5 / porMes[m].total * 100 : 0);
+    const meses = Object.keys(porMes).filter(m => porMes[m].total > 0).sort();
+    const pct = meses.map(m => porMes[m].sub5 / porMes[m].total * 100);
     const cores = meses.map(m => m < FASE_REGRA ? COR_PRE : (m < FASE_CANCEL ? COR_REGRA : COR_CANCEL));
     makeLine('chRemanejam', meses, [{
       label: '% pré-agendamentos com <5d',
