@@ -66,10 +66,11 @@
     .filter-date-input { width:140px; }
 
     /* KPI cards */
-    .kpi-row { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin: 12px 0; }
+    .kpi-row { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; margin: 12px 0; }
     .kpi-card { background:#fff; border-radius:10px; padding:14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
-    .kpi-card .kpi-val { font-size: 1.55rem; font-weight: 700; line-height: 1.1; }
+    .kpi-card .kpi-val { font-size: 1.45rem; font-weight: 700; line-height: 1.1; }
     .kpi-card .kpi-lbl { font-size: .78rem; color: #6c757d; margin-top: 4px; }
+    .kpi-card .kpi-base { font-size: .7rem; color: #94a3b8; margin-top: 4px; font-style: italic; }
     .kpi-card.success .kpi-val { color:#16a34a; }
     .kpi-card.danger  .kpi-val { color:#dc2626; }
     .kpi-card.warning .kpi-val { color:#d97706; }
@@ -241,14 +242,46 @@
 
       <!-- KPI cards -->
       <div class="kpi-row">
-        <div class="kpi-card"><div class="kpi-val" id="kTotal">—</div><div class="kpi-lbl">Pré-agendamentos no período (TOTAL)</div></div>
-        <div class="kpi-card success"><div class="kpi-val" id="kConfirm">—</div><div class="kpi-lbl">% confirmaram na janela 5-2d <small>(sobre sujeitos)</small></div></div>
-        <div class="kpi-card success"><div class="kpi-val" id="kCompar">—</div><div class="kpi-lbl">% compareceram <small>(válidos)</small></div></div>
-        <div class="kpi-card danger"><div class="kpi-val" id="kFaltas">—</div><div class="kpi-lbl">% faltas <small>(válidos)</small></div></div>
-        <div class="kpi-card info"><div class="kpi-val" id="kPagou">—</div><div class="kpi-lbl">% pagaram (ValorPago&gt;0)</div></div>
-        <div class="kpi-card warning"><div class="kpi-val" id="kDesist">—</div><div class="kpi-lbl">% desistências (cancelaram)</div></div>
-        <div class="kpi-card"><div class="kpi-val" id="kTicket">R$ —</div><div class="kpi-lbl">Ticket médio (de quem pagou)</div></div>
-        <div class="kpi-card"><div class="kpi-val" id="kPushed">—</div><div class="kpi-lbl">% receberam push <small>(sujeitos)</small></div></div>
+        <div class="kpi-card">
+          <div class="kpi-val" id="kTotal">—</div>
+          <div class="kpi-lbl">Pré-agendamentos no período (TOTAL)</div>
+          <div class="kpi-base">100% das consultas filtradas</div>
+        </div>
+        <div class="kpi-card success">
+          <div class="kpi-val" id="kConfirm">—</div>
+          <div class="kpi-lbl">% confirmaram na janela 5-2d</div>
+          <div class="kpi-base" id="bConfirm">Base: sujeitos à regra (≥6d)</div>
+        </div>
+        <div class="kpi-card success">
+          <div class="kpi-val" id="kCompar">—</div>
+          <div class="kpi-lbl">% compareceram</div>
+          <div class="kpi-base" id="bCompar">Base: válidos (sem desist./med-falt./pendentes)</div>
+        </div>
+        <div class="kpi-card danger">
+          <div class="kpi-val" id="kFaltas">—</div>
+          <div class="kpi-lbl">% faltas</div>
+          <div class="kpi-base" id="bFaltas">Base: válidos</div>
+        </div>
+        <div class="kpi-card info">
+          <div class="kpi-val" id="kPagou">—</div>
+          <div class="kpi-lbl">% pagaram (ValorPago&gt;0)</div>
+          <div class="kpi-base" id="bPagou">Base: válidos</div>
+        </div>
+        <div class="kpi-card warning">
+          <div class="kpi-val" id="kDesist">—</div>
+          <div class="kpi-lbl">% desistências (cancelaram)</div>
+          <div class="kpi-base" id="bDesist">Base: TOTAL no período</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-val" id="kTicket">R$ —</div>
+          <div class="kpi-lbl">Ticket médio (de quem pagou)</div>
+          <div class="kpi-base" id="bTicket">Base: pagantes</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-val" id="kPushed">—</div>
+          <div class="kpi-lbl">% receberam push</div>
+          <div class="kpi-base" id="bPushed">Base: sujeitos à regra (≥6d)</div>
+        </div>
       </div>
 
       <!-- Quebra do total (mostra de onde vem o N de cada gráfico) -->
@@ -866,23 +899,40 @@
     BASE_SUJEITOS = arr.filter(c => sujeitoARegra(c.dl, c.dc)).length;
     BASE_ISENTOS  = BASE_TOTAL - BASE_SUJEITOS;
 
-    const sujs    = sujeitos(semDesistencias(semMedicoFaltou(arr)));
-    const sujsValidos = sujs.filter(c => classificar(c) !== 'pendente');
-    const confs   = sujsValidos.filter(c => confirmouNaJanela(c.da, c.dc));
+    // Confirmação e push: usam SUJEITOS BRUTOS (4.112) como denominador.
+    // Mesmo desistentes receberam push e poderiam ter confirmado antes de desistir.
+    const sujsRaw = arr.filter(c => sujeitoARegra(c.dl, c.dc));
+    const confs   = sujsRaw.filter(c => confirmouNaJanela(c.da, c.dc));
+    const pushes  = sujsRaw.filter(c => !!c.dp);
+
+    // Comparecimento, falta, pagamento: base "válidos"
     const compr   = validos.filter(c => classificar(c) === 'compareceu');
     const falta   = validos.filter(c => classificar(c) === 'falta');
     const pagou   = validos.filter(c => c.vp > 0);
     const ticket  = pagou.length ? pagou.reduce((s,c)=>s+c.vp,0) / pagou.length : 0;
-    const pushes  = sujs.filter(c => !!c.dp);
 
-    $('#kTotal').textContent  = fmtNum(BASE_TOTAL);
-    $('#kConfirm').textContent = sujsValidos.length ? `${fmtPct(confs.length / sujsValidos.length)} (${fmtNum(confs.length)} de ${fmtNum(sujsValidos.length)})` : '—';
-    $('#kCompar').textContent  = validos.length ? `${fmtPct(compr.length / validos.length)} (${fmtNum(compr.length)})` : '—';
-    $('#kFaltas').textContent  = validos.length ? `${fmtPct(falta.length / validos.length)} (${fmtNum(falta.length)})` : '—';
-    $('#kPagou').textContent   = validos.length ? `${fmtPct(pagou.length / validos.length)} (${fmtNum(pagou.length)})` : '—';
-    $('#kDesist').textContent  = BASE_TOTAL ? `${fmtPct(BASE_DESIST / BASE_TOTAL)} (${fmtNum(BASE_DESIST)})` : '—';
+    $('#kTotal').textContent   = fmtNum(BASE_TOTAL);
+
+    $('#kConfirm').textContent = sujsRaw.length ? `${fmtPct(confs.length / sujsRaw.length)} (${fmtNum(confs.length)} de ${fmtNum(sujsRaw.length)})` : '—';
+    $('#bConfirm').textContent = `Base: ${fmtNum(sujsRaw.length)} sujeitos à regra (≥6d antes)`;
+
+    $('#kCompar').textContent  = validos.length ? `${fmtPct(compr.length / validos.length)} (${fmtNum(compr.length)} de ${fmtNum(validos.length)})` : '—';
+    $('#bCompar').textContent  = `Base: ${fmtNum(validos.length)} válidos (sem desist./med-falt./pendentes)`;
+
+    $('#kFaltas').textContent  = validos.length ? `${fmtPct(falta.length / validos.length)} (${fmtNum(falta.length)} de ${fmtNum(validos.length)})` : '—';
+    $('#bFaltas').textContent  = `Base: ${fmtNum(validos.length)} válidos`;
+
+    $('#kPagou').textContent   = validos.length ? `${fmtPct(pagou.length / validos.length)} (${fmtNum(pagou.length)} de ${fmtNum(validos.length)})` : '—';
+    $('#bPagou').textContent   = `Base: ${fmtNum(validos.length)} válidos`;
+
+    $('#kDesist').textContent  = BASE_TOTAL ? `${fmtPct(BASE_DESIST / BASE_TOTAL)} (${fmtNum(BASE_DESIST)} de ${fmtNum(BASE_TOTAL)})` : '—';
+    $('#bDesist').textContent  = `Base: ${fmtNum(BASE_TOTAL)} TOTAL no período`;
+
     $('#kTicket').textContent  = fmtMoney(ticket);
-    $('#kPushed').textContent  = sujs.length ? `${fmtPct(pushes.length / sujs.length)} (${fmtNum(pushes.length)})` : '—';
+    $('#bTicket').textContent  = `Base: ${fmtNum(pagou.length)} pagantes`;
+
+    $('#kPushed').textContent  = sujsRaw.length ? `${fmtPct(pushes.length / sujsRaw.length)} (${fmtNum(pushes.length)} de ${fmtNum(sujsRaw.length)})` : '—';
+    $('#bPushed').textContent  = `Base: ${fmtNum(sujsRaw.length)} sujeitos à regra (≥6d antes)`;
 
     // Quebra
     $('#kSujeitos').textContent  = BASE_TOTAL ? `${fmtNum(BASE_SUJEITOS)} (${fmtPct(BASE_SUJEITOS / BASE_TOTAL)})` : '—';
@@ -891,8 +941,6 @@
     $('#kMedFaltou').textContent = BASE_TOTAL ? `${fmtNum(BASE_MEDFALT)} (${fmtPct(BASE_MEDFALT / BASE_TOTAL)})`   : '—';
     $('#kPendentes').textContent = BASE_TOTAL ? `${fmtNum(BASE_PENDENTES)} (${fmtPct(BASE_PENDENTES / BASE_TOTAL)})` : '—';
     $('#kValidos').textContent   = BASE_TOTAL ? `${fmtNum(BASE_VALIDOS)} (${fmtPct(BASE_VALIDOS / BASE_TOTAL)})`   : '—';
-
-    // Atualiza subtítulos contextuais dos gráficos com a base
   }
 
   // Helper para atualizar a linha "Base: ..." de cada gráfico
