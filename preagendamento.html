@@ -98,7 +98,11 @@
     .section-title .icon { margin-right: 6px; color: #2563eb; }
 
     /* Tabela bruta */
-    #tblRaw th { position: sticky; top: 0; background: #1f2937; color:#fff; font-size: .8rem; white-space:nowrap; z-index:2; padding:6px 8px; }
+    #tblRaw th { position: sticky; top: 0; background: #1f2937; color:#fff; font-size: .8rem; white-space:nowrap; z-index:2; padding:6px 8px; user-select:none; }
+    #tblRaw th[data-sort] { cursor: pointer; }
+    #tblRaw th[data-sort]:hover { background: #374151; }
+    #tblRaw th .sort-ind { font-size: .7rem; margin-left: 4px; opacity: .85; }
+    #tblRaw th.sort-active { background: #2563eb; }
     #tblRaw td { font-size: .82rem; vertical-align:middle; white-space:nowrap; padding:5px 8px; }
     .table-container { max-height: 60vh; overflow:auto; border-radius:8px; box-shadow: 0 1px 3px rgba(0,0,0,.07); background:#fff; }
 
@@ -414,14 +418,30 @@
           </select>
         </div>
         <div class="table-container">
+          <div class="subtitle" style="margin-bottom:6px">
+            <i class="fas fa-info-circle mr-1"></i>Clique no cabeçalho para ordenar. <kbd>Shift</kbd> + clique adiciona ordem secundária.
+            <button id="btnSortClear" class="btn btn-sm btn-link p-0 ml-2" style="font-size:.78rem">Limpar ordenação</button>
+          </div>
           <table id="tblRaw" class="table table-striped table-sm mb-0">
             <thead>
               <tr>
-                <th>Posto</th><th>Talão</th><th>Matr.</th><th>Paciente</th>
-                <th>Médico</th><th>Especialidade</th><th>Canal</th>
-                <th>Lançado</th><th>Consulta</th><th>Hora</th><th>Antec(d)</th>
-                <th>Push</th><th>Conf. Janela</th><th>Conf. Chegada</th>
-                <th>Status</th><th>Desist.</th><th class="text-right">R$ Pago</th>
+                <th data-sort="p">Posto</th>
+                <th data-sort="tal">Talão</th>
+                <th data-sort="m">Matr.</th>
+                <th data-sort="pac">Paciente</th>
+                <th data-sort="med">Médico</th>
+                <th data-sort="esp">Especialidade</th>
+                <th data-sort="can">Canal</th>
+                <th data-sort="dl">Lançado</th>
+                <th data-sort="dc">Consulta</th>
+                <th data-sort="hc">Hora</th>
+                <th data-sort="dif">Antec(d)</th>
+                <th data-sort="dp">Push</th>
+                <th data-sort="da">Conf. Janela</th>
+                <th data-sort="df">Conf. Chegada</th>
+                <th data-sort="status">Status</th>
+                <th data-sort="des">Desist.</th>
+                <th data-sort="vp" class="text-right">R$ Pago</th>
               </tr>
             </thead>
             <tbody id="tblRawBody"></tbody>
@@ -582,6 +602,10 @@
     });
 
     $('#btnExportXlsx').addEventListener('click', exportarXlsx);
+
+    // Ordenação clicável dos cabeçalhos
+    wireSortHeaders();
+    pintarSortHeaders();
   }
 
   function pintarPostos() {
@@ -1435,6 +1459,98 @@
   }
 
   // ====== 17. Tabela bruta ======
+  // Estado de ordenação: array [{ campo, dir }, ...] na ordem de prioridade.
+  // Default: data da consulta DESC (mais recente primeiro).
+  let SORT_STATE = [{ campo: 'dc', dir: 'desc' }];
+
+  // Getters por campo (para tratar campos calculados como 'status')
+  const SORT_GETTERS = {
+    p:   c => c.p || '',
+    tal: c => c.tal || '',
+    m:   c => c.m || '',
+    pac: c => c.pac || '',
+    med: c => c.med || '',
+    esp: c => c.esp || '',
+    can: c => c.can || '',
+    dl:  c => c.dl || '',
+    dc:  c => c.dc || '',
+    hc:  c => c.hc || '',
+    dif: c => Number(c.dif) || 0,
+    dp:  c => c.dp || '',
+    da:  c => c.da || '',
+    df:  c => c.df || '',
+    des: c => Number(c.des) || 0,
+    vp:  c => Number(c.vp) || 0,
+    status: c => classificar(c),
+  };
+
+  function ordenar(arr) {
+    if (!SORT_STATE.length) return arr;
+    const ordenado = arr.slice();
+    ordenado.sort((a, b) => {
+      for (const s of SORT_STATE) {
+        const g = SORT_GETTERS[s.campo];
+        if (!g) continue;
+        const va = g(a), vb = g(b);
+        let cmp;
+        if (typeof va === 'number' && typeof vb === 'number') cmp = va - vb;
+        else cmp = String(va).localeCompare(String(vb), 'pt-BR', { numeric: true });
+        if (cmp !== 0) return s.dir === 'desc' ? -cmp : cmp;
+      }
+      return 0;
+    });
+    return ordenado;
+  }
+
+  function pintarSortHeaders() {
+    document.querySelectorAll('#tblRaw th[data-sort]').forEach(th => {
+      const campo = th.dataset.sort;
+      const idx = SORT_STATE.findIndex(s => s.campo === campo);
+      th.querySelectorAll('.sort-ind').forEach(e => e.remove());
+      th.classList.toggle('sort-active', idx >= 0);
+      if (idx >= 0) {
+        const s = SORT_STATE[idx];
+        const ind = document.createElement('span');
+        ind.className = 'sort-ind';
+        ind.textContent = (s.dir === 'asc' ? ' ▲' : ' ▼') + (SORT_STATE.length > 1 ? String(idx+1) : '');
+        th.appendChild(ind);
+      }
+    });
+  }
+
+  function wireSortHeaders() {
+    document.querySelectorAll('#tblRaw th[data-sort]').forEach(th => {
+      th.addEventListener('click', e => {
+        const campo = th.dataset.sort;
+        const idx = SORT_STATE.findIndex(s => s.campo === campo);
+        if (e.shiftKey) {
+          // multi-coluna: adiciona/inverte secundária
+          if (idx >= 0) {
+            if (SORT_STATE[idx].dir === 'asc') SORT_STATE[idx].dir = 'desc';
+            else SORT_STATE.splice(idx, 1);  // 3º clique remove
+          } else {
+            SORT_STATE.push({ campo, dir: 'asc' });
+          }
+        } else {
+          // single: substitui ou alterna direção
+          if (idx === 0 && SORT_STATE.length === 1) {
+            SORT_STATE[0].dir = SORT_STATE[0].dir === 'asc' ? 'desc' : 'asc';
+          } else {
+            SORT_STATE = [{ campo, dir: 'asc' }];
+          }
+        }
+        pintarSortHeaders();
+        renderTabela(dadosFiltrados);
+      });
+    });
+    const btnClear = document.getElementById('btnSortClear');
+    if (btnClear) btnClear.addEventListener('click', () => {
+      SORT_STATE = [{ campo: 'dc', dir: 'desc' }];
+      pintarSortHeaders();
+      renderTabela(dadosFiltrados);
+    });
+  }
+
   function renderTabela(arr) {
     const search = ($('#rawSearch').value || '').toUpperCase().trim();
     const fStat  = $('#rawStatus').value;
@@ -1460,9 +1576,12 @@
       return true;
     });
 
+    // Aplica ordenação ANTES do limite de 5000 (relevante: top-5000 da ordenação)
+    const ordenadoFull = ordenar(filtrado);
+
     // Limita a 5000 linhas para performance
     const limite = 5000;
-    const visiveis = filtrado.slice(0, limite);
+    const visiveis = ordenadoFull.slice(0, limite);
     $('#tblCount').textContent = filtrado.length.toLocaleString('pt-BR') + (filtrado.length > limite ? ` (mostrando ${limite})` : '');
 
     const body = $('#tblRawBody');
