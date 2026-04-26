@@ -1,10 +1,12 @@
 -- ============================================================
--- Pré-Agendamento — query base por posto
+-- Pre-Agendamento - query base por posto
 -- Usada por export_preagendamento.py (ETL noturno)
--- Janela: :dt_ini (DD/MM/YYYY) até :dt_fim (DD/MM/YYYY) exclusivo
+-- Parametros bind: dt_ini e dt_fim (ambos DD/MM/YYYY, fim exclusivo)
+-- IMPORTANTE: nao usar dois pontos antes dos nomes dos parametros nos
+-- comentarios - o SQLAlchemy detecta e tenta bindar de novo.
 --
--- Mantém ambas populações (desistência 0 e 1) — front filtra.
--- READ UNCOMMITTED para reduzir tempo (dados analíticos, não transacionais).
+-- Mantem ambas populacoes (desistencia 0 e 1) - front filtra.
+-- READ UNCOMMITTED para reduzir tempo (dados analiticos, nao transacionais).
 -- ============================================================
 SET NOCOUNT ON;
 SET DATEFORMAT dmy;
