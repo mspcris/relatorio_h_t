@@ -631,26 +631,29 @@
   }
 
   // ====== Categorização ======
-  // Usuário definiu:
-  // - Médico Faltou → EXCLUIR
-  // - Atendido / Aguardando → compareceu
-  // - Faltou / Ausente → falta
-  // - Não Atendido: falta SE > 1h após DataConsulta+HoraPrevista; senão pendente
-  // - Default desconhecido → falta
+  // Regra:
+  //  - Médico Faltou → EXCLUIR (não conta na análise)
+  //  - Atendido / Aguardando → compareceu
+  //  - Faltou / Ausente → falta
+  //  - Não Atendido / outros → falta SE já passou +1h da hora prevista; senão PENDENTE
+  // Consultas futuras (ainda não chegou DataConsulta+Hora+1h) NUNCA são falta —
+  // mesmo se o status vier vazio ou desconhecido, são pendentes.
   function categorizarAtendido(at, dataConsulta, horaConsulta) {
-    if (!at) return 'pendente';
-    const a = at.toString().toLowerCase().trim();
+    const a = (at || '').toString().toLowerCase().trim();
+    // "Médico Faltou" e "Atendido"/"Aguardando" valem em qualquer momento
     if (a.startsWith('médico faltou') || a.startsWith('medico faltou')) return 'medico_faltou';
     if (a === 'atendido' || a === 'aguardando') return 'compareceu';
-    if (a === 'faltou' || a === 'ausente') return 'falta';
-    if (a === 'não atendido' || a === 'nao atendido') {
-      try {
-        const ts = new Date(`${dataConsulta}T${horaConsulta || '00:00'}:00`);
-        const agora = new Date();
-        if ((agora - ts) > 3600 * 1000) return 'falta';
-        return 'pendente';
-      } catch { return 'pendente'; }
-    }
+
+    // Para os demais (Faltou / Ausente / Não Atendido / vazio / outros),
+    // só conta como falta APÓS +1h da hora prevista. Antes disso = pendente.
+    let jaPassou = false;
+    try {
+      const ts = new Date(`${dataConsulta}T${horaConsulta || '00:00'}:00`);
+      const agora = new Date();
+      jaPassou = (agora - ts) > 3600 * 1000;
+    } catch { jaPassou = false; }
+
+    if (!jaPassou) return 'pendente';
     return 'falta';
   }
 
@@ -839,8 +842,9 @@
       porMes[mes].total++;
       if (status === 'falta') porMes[mes].falta++;
     });
-    const meses = Object.keys(porMes).sort();
-    const pct   = meses.map(m => porMes[m].total ? porMes[m].falta / porMes[m].total * 100 : 0);
+    // Só meses com pelo menos 1 consulta já realizada (drop futuros/incompletos sem dado)
+    const meses = Object.keys(porMes).filter(m => porMes[m].total > 0).sort();
+    const pct   = meses.map(m => porMes[m].falta / porMes[m].total * 100);
     const cores = meses.map(m => m < FASE_REGRA ? COR_PRE : (m < FASE_CANCEL ? COR_REGRA : COR_CANCEL));
 
     makeLine('chFaltaMensal', meses, [{
