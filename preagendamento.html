@@ -79,6 +79,9 @@
     .chart-card { background:#fff; border-radius:10px; padding:14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.07); margin-bottom:12px; }
     .chart-card h3 { font-size: 1rem; margin-bottom: 8px; }
     .chart-card .subtitle { font-size:.8rem; color:#6c757d; margin-bottom: 8px; }
+    .chart-info { background:#f8fafc; border-left: 3px solid #3b82f6; padding: 6px 10px; margin: 4px 0 10px; border-radius: 4px; font-size: .78rem; color: #334155; line-height: 1.45; }
+    .chart-info b { color: #1e40af; }
+    .chart-info .base { color: #475569; font-weight: 600; display: block; margin-top: 2px; }
     .chart-wrap { position:relative; height: 300px; }
     .chart-wrap-sm { position:relative; height: 220px; }
     .chart-wrap-lg { position:relative; height: 380px; }
@@ -238,14 +241,24 @@
 
       <!-- KPI cards -->
       <div class="kpi-row">
-        <div class="kpi-card"><div class="kpi-val" id="kTotal">—</div><div class="kpi-lbl">Pré-agendamentos no período</div></div>
-        <div class="kpi-card success"><div class="kpi-val" id="kConfirm">—</div><div class="kpi-lbl">% confirmaram na janela 5-2d</div></div>
-        <div class="kpi-card success"><div class="kpi-val" id="kCompar">—</div><div class="kpi-lbl">% compareceram</div></div>
-        <div class="kpi-card danger"><div class="kpi-val" id="kFaltas">—</div><div class="kpi-lbl">% faltas</div></div>
+        <div class="kpi-card"><div class="kpi-val" id="kTotal">—</div><div class="kpi-lbl">Pré-agendamentos no período (TOTAL)</div></div>
+        <div class="kpi-card success"><div class="kpi-val" id="kConfirm">—</div><div class="kpi-lbl">% confirmaram na janela 5-2d <small>(sobre sujeitos)</small></div></div>
+        <div class="kpi-card success"><div class="kpi-val" id="kCompar">—</div><div class="kpi-lbl">% compareceram <small>(válidos)</small></div></div>
+        <div class="kpi-card danger"><div class="kpi-val" id="kFaltas">—</div><div class="kpi-lbl">% faltas <small>(válidos)</small></div></div>
         <div class="kpi-card info"><div class="kpi-val" id="kPagou">—</div><div class="kpi-lbl">% pagaram (ValorPago&gt;0)</div></div>
         <div class="kpi-card warning"><div class="kpi-val" id="kDesist">—</div><div class="kpi-lbl">% desistências (cancelaram)</div></div>
         <div class="kpi-card"><div class="kpi-val" id="kTicket">R$ —</div><div class="kpi-lbl">Ticket médio (de quem pagou)</div></div>
-        <div class="kpi-card"><div class="kpi-val" id="kPushed">—</div><div class="kpi-lbl">% receberam push</div></div>
+        <div class="kpi-card"><div class="kpi-val" id="kPushed">—</div><div class="kpi-lbl">% receberam push <small>(sujeitos)</small></div></div>
+      </div>
+
+      <!-- Quebra do total (mostra de onde vem o N de cada gráfico) -->
+      <div class="kpi-row" style="margin-top:-4px">
+        <div class="kpi-card" style="border-left:3px solid #3b82f6"><div class="kpi-val" id="kSujeitos" style="font-size:1.2rem">—</div><div class="kpi-lbl">Sujeitos à regra (≥6d antes)</div></div>
+        <div class="kpi-card" style="border-left:3px solid #94a3b8"><div class="kpi-val" id="kIsentos"  style="font-size:1.2rem">—</div><div class="kpi-lbl">Isentos (&lt;6d antes)</div></div>
+        <div class="kpi-card" style="border-left:3px solid #d97706"><div class="kpi-val" id="kQDesist" style="font-size:1.2rem">—</div><div class="kpi-lbl">Desistências (cancelaram)</div></div>
+        <div class="kpi-card" style="border-left:3px solid #dc2626"><div class="kpi-val" id="kMedFaltou" style="font-size:1.2rem">—</div><div class="kpi-lbl">Médico faltou (excluído)</div></div>
+        <div class="kpi-card" style="border-left:3px solid #6b7280"><div class="kpi-val" id="kPendentes" style="font-size:1.2rem">—</div><div class="kpi-lbl">Consultas futuras (pendentes)</div></div>
+        <div class="kpi-card" style="border-left:3px solid #16a34a"><div class="kpi-val" id="kValidos" style="font-size:1.2rem">—</div><div class="kpi-lbl">Base "válidos" (sem desist./med-falt./pendentes)</div></div>
       </div>
 
       <!-- ──────────── SEÇÃO 1: A REGRA ESTÁ FUNCIONANDO? ──────────── -->
@@ -254,16 +267,17 @@
       <div class="grid-2">
         <div class="chart-card">
           <h3>Confirmou × Não confirmou — taxa de falta</h3>
-          <div class="subtitle">Apenas sujeitos à regra (lançamento ≥ 5d antes). Mostra se confirmar reduz falta.</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> compara a % de falta de quem confirmou na janela 5-2d com quem não confirmou. Se confirmar reduz falta, a barra verde fica menor que a vermelha.
+            <span class="base" id="baseConfirmFalta">Base: —</span>
+          </div>
           <div class="chart-wrap"><canvas id="chConfirmFalta"></canvas></div>
         </div>
         <div class="chart-card">
           <h3>Série mensal — falta antes × durante × pós-cancelamento</h3>
-          <div class="subtitle">% falta por mês. Linhas verticais marcam as 3 fases da regra.</div>
-          <div class="fase-legend">
-            <span><span class="swatch" style="background:#94a3b8"></span>Pré-regra (até 12/2025)</span>
-            <span><span class="swatch" style="background:#3b82f6"></span>Regra ativa (jan-abr/2026)</span>
-            <span><span class="swatch" style="background:#dc2626"></span>Cancelamento (mai/2026+)</span>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> evolução mensal da % de falta. Cor do ponto = fase: cinza pré-regra · azul regra ativa · vermelho cancelamento. Esperamos a curva descer após jan/2026.
+            <span class="base" id="baseFaltaMensal">Base: —</span>
           </div>
           <div class="chart-wrap"><canvas id="chFaltaMensal"></canvas></div>
         </div>
@@ -272,12 +286,18 @@
       <div class="grid-2">
         <div class="chart-card">
           <h3>% falta por faixa de antecedência</h3>
-          <div class="subtitle">Dias entre lançamento e consulta. Quem agenda mais longe falta mais?</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> agrupa as consultas pela distância (em dias) entre lançamento e consulta. Mostra a % de falta de cada faixa. "0-5d (isento)" são os clientes fora da regra.
+            <span class="base" id="baseFaltaAntec">Base: —</span>
+          </div>
           <div class="chart-wrap"><canvas id="chFaltaAntec"></canvas></div>
         </div>
         <div class="chart-card">
           <h3>Distribuição da hora da confirmação na janela</h3>
-          <div class="subtitle">Quantos dias antes da consulta o cliente confirma? (apenas confirmados)</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> dentre os clientes que confirmaram, quantos dias antes da consulta confirmaram? "5d" = primeiro dia da janela; "2d" = último dia; "fora janela" = confirmou cedo demais ou tarde demais.
+            <span class="base" id="baseHoraConf">Base: —</span>
+          </div>
           <div class="chart-wrap"><canvas id="chHoraConf"></canvas></div>
         </div>
       </div>
@@ -288,17 +308,26 @@
       <div class="grid-3">
         <div class="chart-card">
           <h3>Confirmou + Faltou</h3>
-          <div class="subtitle">% confirmou na janela e mesmo assim faltou (credibilidade da confirmação)</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> dos clientes que confirmaram a presença, quantos compareceram (verde) e quantos faltaram mesmo assim (vermelho). Falta alta aqui = confirmação sem credibilidade.
+            <span class="base" id="baseConfirmFaltou">Base: —</span>
+          </div>
           <div class="chart-wrap-sm"><canvas id="chConfirmFaltou"></canvas></div>
         </div>
         <div class="chart-card">
           <h3>Não confirmou + Compareceu</h3>
-          <div class="subtitle">% que ignorou o pedido de confirmação mas apareceu</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> dos clientes que NÃO confirmaram, quantos compareceram (azul) e quantos faltaram (cinza). Compareceu alto = clientes que viriam mesmo sem regra → cancelar esses agendamentos pode ser perda de receita.
+            <span class="base" id="baseNaoConfCompar">Base: —</span>
+          </div>
           <div class="chart-wrap-sm"><canvas id="chNaoConfCompar"></canvas></div>
         </div>
         <div class="chart-card">
           <h3>% falta por canal de agendamento</h3>
-          <div class="subtitle">Onde a marcação foi feita: Web/App × ASU (central) × F6 (lançamento direto). Mostra falta + ticket no comparativo abaixo.</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> taxa de falta agrupada por onde o agendamento foi feito (Web/App × ASU × F6). Canal com mais falta indica problema operacional ou perfil de cliente diferente.
+            <span class="base" id="baseCanalFaltaTopo">Base: —</span>
+          </div>
           <div class="chart-wrap-sm"><canvas id="chCanalFaltaTopo"></canvas></div>
         </div>
       </div>
@@ -306,12 +335,18 @@
       <div class="grid-2">
         <div class="chart-card">
           <h3>Tempo entre push enviado e confirmação</h3>
-          <div class="subtitle">Cliente confirma logo? ou só na véspera? (mediana e histograma em horas)</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> distribuição em horas do tempo decorrido entre o push de confirmação e a confirmação do cliente. Concentração nas primeiras horas = push eficaz; concentração em 24h+ = cliente confirma só perto.
+            <span class="base" id="basePushConf">Base: —</span>
+          </div>
           <div class="chart-wrap"><canvas id="chPushConf"></canvas></div>
         </div>
         <div class="chart-card">
           <h3>Mediana de dias agendamento → consulta</h3>
-          <div class="subtitle">Pagantes × Não pagantes</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> compara a antecedência média/mediana de quem PAGOU vs quem NÃO PAGOU a consulta. Pagantes geralmente têm planejamento mais próximo da data.
+            <span class="base" id="baseMedianaPagou">Base: —</span>
+          </div>
           <div class="chart-wrap"><canvas id="chMedianaPagou"></canvas></div>
         </div>
       </div>
@@ -322,19 +357,28 @@
       <div class="grid-2">
         <div class="chart-card">
           <h3>% de vagas que rotacionaram</h3>
-          <div class="subtitle">Vaga = (posto, médico, dia, hora, nº consulta). Rotacionou = teve &ge;1 desistência antes do cliente ativo final.</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> uma vaga é o conjunto (posto + médico + dia + hora + nº consulta). Rotacionou = teve pelo menos 1 desistência antes do cliente final ocupar. Mais rotação = regra liberando vagas para outros pacientes.
+            <span class="base" id="baseVagaRotacao">Base: —</span>
+          </div>
           <div class="chart-wrap"><canvas id="chVagaRotacao"></canvas></div>
         </div>
         <div class="chart-card">
           <h3>Distribuição de tentativas por vaga</h3>
-          <div class="subtitle">Quantos clientes passaram por uma mesma vaga (1 = primeira vez; 2 = teve 1 desistência; etc.)</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> quantos clientes passaram pela MESMA vaga. "1" = vaga ocupada de primeira; "2" = teve 1 desistência antes; "5+" = vaga muito disputada. Esperamos crescimento das barras 2+ após a regra.
+            <span class="base" id="baseVagaTentativas">Base: —</span>
+          </div>
           <div class="chart-wrap"><canvas id="chVagaTentativas"></canvas></div>
         </div>
       </div>
 
       <div class="chart-card">
         <h3>% pré-agendamentos com &lt;5 dias de antecedência (proxy antigo)</h3>
-        <div class="subtitle">Mantido por compatibilidade com o tracking inicial. O gráfico de cima é a métrica precisa.</div>
+        <div class="chart-info">
+          <b>📖 Como ler:</b> métrica indireta — % de consultas marcadas com menos de 5d de antecedência (provável remarcação após desistência). Serve só como sanity-check; o gráfico "% de vagas rotacionaram" é o dado preciso.
+          <span class="base" id="baseRemanejam">Base: —</span>
+        </div>
         <div class="chart-wrap"><canvas id="chRemanejam"></canvas></div>
       </div>
 
@@ -344,12 +388,18 @@
       <div class="grid-2">
         <div class="chart-card">
           <h3>Série mensal de desistências</h3>
-          <div class="subtitle">% desistência sobre o total de pré-agendamentos. Crescimento = clientes cancelando antes em vez de faltar.</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> % de pré-agendamentos que viraram desistência (cliente cancelou antes do dia). Curva subindo após jan/2026 é BOM: significa que clientes estão cancelando em vez de faltar.
+            <span class="base" id="baseDesistMensal">Base: —</span>
+          </div>
           <div class="chart-wrap"><canvas id="chDesistMensal"></canvas></div>
         </div>
         <div class="chart-card">
           <h3>Top 15 médicos por número absoluto de desistências</h3>
-          <div class="subtitle">Quanto mais desistências, mais vagas que ficam livres para outros</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> ranking de médicos pela quantidade absoluta de desistências (clientes que cancelaram). Tooltip mostra também o % sobre o total de agendamentos do médico.
+            <span class="base" id="baseDesistMedicos">Base: —</span>
+          </div>
           <div class="chart-wrap"><canvas id="chDesistMedicos"></canvas></div>
         </div>
       </div>
@@ -360,25 +410,37 @@
       <div class="grid-2">
         <div class="chart-card">
           <h3>Top 10 especialidades por taxa de falta</h3>
-          <div class="subtitle">Mínimo 30 consultas para entrar no ranking</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> ranking de especialidades com a maior % de falta. Mostra onde a regra de confirmação tem mais impacto potencial. Mínimo 30 consultas para entrar (corta ruído).
+            <span class="base" id="baseEspFalta">Base: —</span>
+          </div>
           <div class="chart-wrap"><canvas id="chEspFalta"></canvas></div>
         </div>
         <div class="chart-card">
           <h3>Top 15 médicos por taxa de falta</h3>
-          <div class="subtitle">Mínimo 30 consultas. Pode ser sintoma de problema operacional do médico.</div>
+          <div class="chart-info">
+            <b>📖 Como ler:</b> ranking de médicos com a maior % de falta entre seus pacientes. Pode indicar perfil de público, dia/horário ruim, ou problema operacional. Mínimo 30 consultas.
+            <span class="base" id="baseMedFalta">Base: —</span>
+          </div>
           <div class="chart-wrap"><canvas id="chMedFalta"></canvas></div>
         </div>
       </div>
 
       <div class="chart-card">
         <h3>Heatmap dia-da-semana × hora — onde concentra a falta</h3>
-        <div class="subtitle">Cor mais intensa = maior % de falta. Indica horários problemáticos.</div>
+        <div class="chart-info">
+          <b>📖 Como ler:</b> cada célula é um dia da semana × hora do dia. Cor mais vermelha = maior % de falta. Cinza = menos de 5 consultas (sem dado confiável). Indica horários problemáticos para focar a regra.
+          <span class="base" id="baseHeatmap">Base: —</span>
+        </div>
         <div id="heatmapWrap" style="margin-top:8px"></div>
       </div>
 
       <div class="chart-card">
-        <h3>Comparativo por canal — falta, confirmação e ValorPago</h3>
-        <div class="subtitle">Web/App × ASU × F6: ticket médio e taxa de falta de cada canal</div>
+        <h3>Comparativo por canal — falta e ValorPago</h3>
+        <div class="chart-info">
+          <b>📖 Como ler:</b> compara os 3 canais de agendamento (Web/App, ASU, F6). Barra vermelha = % de falta (eixo esquerdo). Barra azul = ticket médio em R$ pago por canal (eixo direito). Tooltip dá os números absolutos.
+          <span class="base" id="baseCanalGeral">Base: —</span>
+        </div>
         <div class="chart-wrap"><canvas id="chCanalGeral"></canvas></div>
       </div>
 
@@ -788,27 +850,58 @@
   function semMedicoFaltou(arr) { return arr.filter(c => classificar(c) !== 'medico_faltou'); }
 
   // ====== KPIs ======
-  function renderKPIs(arr) {
-    const validos = semDesistencias(semMedicoFaltou(arr));
-    const total   = arr.length;
-    const desist  = arr.filter(c => c.des).length;
+  // Disponíveis no escopo para serem usadas em subtítulos dos gráficos.
+  let BASE_TOTAL = 0, BASE_SUJEITOS = 0, BASE_ISENTOS = 0,
+      BASE_DESIST = 0, BASE_MEDFALT = 0, BASE_PENDENTES = 0, BASE_VALIDOS = 0;
 
-    const sujs    = sujeitos(validos);
-    const confs   = sujs.filter(c => confirmouNaJanela(c.da, c.dc));
+  function renderKPIs(arr) {
+    BASE_TOTAL    = arr.length;
+    BASE_DESIST   = arr.filter(c => c.des).length;
+    BASE_MEDFALT  = arr.filter(c => !c.des && classificar(c) === 'medico_faltou').length;
+    BASE_PENDENTES= arr.filter(c => !c.des && classificar(c) === 'pendente').length;
+    const validos = semDesistencias(semMedicoFaltou(arr)).filter(c => classificar(c) !== 'pendente');
+    BASE_VALIDOS  = validos.length;
+
+    // Sujeitos × isentos sobre o total (não só válidos), para refletir filtro lá em cima
+    BASE_SUJEITOS = arr.filter(c => sujeitoARegra(c.dl, c.dc)).length;
+    BASE_ISENTOS  = BASE_TOTAL - BASE_SUJEITOS;
+
+    const sujs    = sujeitos(semDesistencias(semMedicoFaltou(arr)));
+    const sujsValidos = sujs.filter(c => classificar(c) !== 'pendente');
+    const confs   = sujsValidos.filter(c => confirmouNaJanela(c.da, c.dc));
     const compr   = validos.filter(c => classificar(c) === 'compareceu');
     const falta   = validos.filter(c => classificar(c) === 'falta');
     const pagou   = validos.filter(c => c.vp > 0);
     const ticket  = pagou.length ? pagou.reduce((s,c)=>s+c.vp,0) / pagou.length : 0;
     const pushes  = sujs.filter(c => !!c.dp);
 
-    $('#kTotal').textContent  = fmtNum(total);
-    $('#kConfirm').textContent = sujs.length ? fmtPct(confs.length / sujs.length) : '—';
-    $('#kCompar').textContent  = validos.length ? fmtPct(compr.length / validos.length) : '—';
-    $('#kFaltas').textContent  = validos.length ? fmtPct(falta.length / validos.length) : '—';
-    $('#kPagou').textContent   = validos.length ? fmtPct(pagou.length / validos.length) : '—';
-    $('#kDesist').textContent  = total ? fmtPct(desist / total) : '—';
+    $('#kTotal').textContent  = fmtNum(BASE_TOTAL);
+    $('#kConfirm').textContent = sujsValidos.length ? `${fmtPct(confs.length / sujsValidos.length)} (${fmtNum(confs.length)} de ${fmtNum(sujsValidos.length)})` : '—';
+    $('#kCompar').textContent  = validos.length ? `${fmtPct(compr.length / validos.length)} (${fmtNum(compr.length)})` : '—';
+    $('#kFaltas').textContent  = validos.length ? `${fmtPct(falta.length / validos.length)} (${fmtNum(falta.length)})` : '—';
+    $('#kPagou').textContent   = validos.length ? `${fmtPct(pagou.length / validos.length)} (${fmtNum(pagou.length)})` : '—';
+    $('#kDesist').textContent  = BASE_TOTAL ? `${fmtPct(BASE_DESIST / BASE_TOTAL)} (${fmtNum(BASE_DESIST)})` : '—';
     $('#kTicket').textContent  = fmtMoney(ticket);
-    $('#kPushed').textContent  = sujs.length ? fmtPct(pushes.length / sujs.length) : '—';
+    $('#kPushed').textContent  = sujs.length ? `${fmtPct(pushes.length / sujs.length)} (${fmtNum(pushes.length)})` : '—';
+
+    // Quebra
+    $('#kSujeitos').textContent  = BASE_TOTAL ? `${fmtNum(BASE_SUJEITOS)} (${fmtPct(BASE_SUJEITOS / BASE_TOTAL)})` : '—';
+    $('#kIsentos').textContent   = BASE_TOTAL ? `${fmtNum(BASE_ISENTOS)} (${fmtPct(BASE_ISENTOS / BASE_TOTAL)})`   : '—';
+    $('#kQDesist').textContent   = BASE_TOTAL ? `${fmtNum(BASE_DESIST)} (${fmtPct(BASE_DESIST / BASE_TOTAL)})`     : '—';
+    $('#kMedFaltou').textContent = BASE_TOTAL ? `${fmtNum(BASE_MEDFALT)} (${fmtPct(BASE_MEDFALT / BASE_TOTAL)})`   : '—';
+    $('#kPendentes').textContent = BASE_TOTAL ? `${fmtNum(BASE_PENDENTES)} (${fmtPct(BASE_PENDENTES / BASE_TOTAL)})` : '—';
+    $('#kValidos').textContent   = BASE_TOTAL ? `${fmtNum(BASE_VALIDOS)} (${fmtPct(BASE_VALIDOS / BASE_TOTAL)})`   : '—';
+
+    // Atualiza subtítulos contextuais dos gráficos com a base
+  }
+
+  // Helper para atualizar a linha "Base: ..." de cada gráfico
+  function setBase(id, base, exclusoes) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    let txt = `🎯 Base: ${fmtNum(base)} consulta(s)`;
+    if (exclusoes) txt += ` · excluído: ${exclusoes}`;
+    el.textContent = txt;
   }
 
   // ====== Charts helpers ======
@@ -891,6 +984,7 @@
       nt ? nf/nt*100 : 0,
     ];
     const dataAbs = [cf, nf];
+    setBase('baseConfirmFalta', ct + nt, 'isentos, desistências, médico faltou e pendentes');
     makeBar('chConfirmFalta', labels, [{
       label: '% falta', data: dataPct,
       backgroundColor: [COR_OK, COR_BAD],
@@ -925,6 +1019,8 @@
     });
     // Só meses com pelo menos 1 consulta já realizada (drop futuros/incompletos sem dado)
     const meses = Object.keys(porMes).filter(m => porMes[m].total > 0).sort();
+    const baseN = meses.reduce((s, m) => s + porMes[m].total, 0);
+    setBase('baseFaltaMensal', baseN, 'desistências, médico faltou, pendentes e meses sem dado válido');
     const pct   = meses.map(m => porMes[m].falta / porMes[m].total * 100);
     const cores = meses.map(m => m < FASE_REGRA ? COR_PRE : (m < FASE_CANCEL ? COR_REGRA : COR_CANCEL));
 
@@ -962,6 +1058,7 @@
     const pct = buckets.map(b => totais[b].total ? totais[b].falta / totais[b].total * 100 : 0);
     const cnt = buckets.map(b => totais[b].total);
     const fal = buckets.map(b => totais[b].falta);
+    setBase('baseFaltaAntec', cnt.reduce((s,x)=>s+x,0), 'desistências, médico faltou e pendentes');
     makeBar('chFaltaAntec', buckets, [{
       label: '% falta', data: pct,
       backgroundColor: COR_BAD,
@@ -993,6 +1090,8 @@
       else if (dias === 2) histo['2d']++;
       else                 histo['fora janela']++;
     });
+    const baseHC = Object.values(histo).reduce((s,x)=>s+x,0);
+    setBase('baseHoraConf', baseHC, 'isentos, desistências e quem não confirmou');
     makeBar('chHoraConf', Object.keys(histo), [{
       label: 'Confirmações',
       data: Object.values(histo),
@@ -1002,17 +1101,30 @@
 
   // ====== 5. Confirmou + Faltou ======
   function renderConfirmFaltou(arr) {
-    const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr)));
+    const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr))).filter(c => classificar(c) !== 'pendente');
     const conf = sujs.filter(c => confirmouNaJanela(c.da, c.dc));
     const ct   = conf.length;
     const cf   = conf.filter(c => classificar(c) === 'falta').length;
-    const pct  = ct ? cf / ct * 100 : 0;
-    makeBar('chConfirmFaltou', ['Confirmou'], [
-      { label: 'Compareceu', data: [ct - cf], backgroundColor: COR_OK, stack: 'a' },
-      { label: 'Faltou',     data: [cf],      backgroundColor: COR_BAD, stack: 'a' },
+    const cc   = ct - cf;
+    const pctF = ct ? cf / ct * 100 : 0;
+    const pctC = ct ? cc / ct * 100 : 0;
+    setBase('baseConfirmFaltou', ct, 'isentos, desistências, médico faltou, pendentes e quem NÃO confirmou');
+    makeBar('chConfirmFaltou', [`Confirmou (n=${fmtNum(ct)})`], [
+      { label: 'Compareceu', data: [cc], backgroundColor: COR_OK,  stack: 'a' },
+      { label: 'Faltou',     data: [cf], backgroundColor: COR_BAD, stack: 'a' },
     ], {
-      plugins: { legend: { display: true, position: 'bottom' },
-        tooltip: { callbacks: { footer: () => `Falta dentre confirmados: ${pct.toFixed(1)}%` } } },
+      plugins: {
+        legend: { display: true, position: 'bottom' },
+        tooltip: { callbacks: {
+          label: ctx => {
+            const v = ctx.parsed.x;
+            const lbl = ctx.dataset.label;
+            const p = lbl === 'Compareceu' ? pctC : pctF;
+            return `${lbl}: ${fmtNum(v)}  ·  ${p.toFixed(1)}% dos confirmados`;
+          },
+          footer: () => `Total confirmados: ${fmtNum(ct)} · Falta dentre confirmados: ${pctF.toFixed(1)}%`,
+        }},
+      },
       indexAxis: 'y',
       scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } },
     });
@@ -1020,17 +1132,30 @@
 
   // ====== 6. Não confirmou + Compareceu ======
   function renderNaoConfCompar(arr) {
-    const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr)));
+    const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr))).filter(c => classificar(c) !== 'pendente');
     const naoConf = sujs.filter(c => !confirmouNaJanela(c.da, c.dc));
     const total   = naoConf.length;
     const compar  = naoConf.filter(c => classificar(c) === 'compareceu').length;
-    const pct     = total ? compar / total * 100 : 0;
-    makeBar('chNaoConfCompar', ['Não confirmou'], [
-      { label: 'Compareceu', data: [compar],         backgroundColor: COR_INFO, stack: 'a' },
-      { label: 'Faltou/Outro', data: [total - compar], backgroundColor: '#94a3b8', stack: 'a' },
+    const outro   = total - compar;
+    const pctC    = total ? compar / total * 100 : 0;
+    const pctO    = total ? outro  / total * 100 : 0;
+    setBase('baseNaoConfCompar', total, 'isentos, desistências, médico faltou, pendentes e quem CONFIRMOU');
+    makeBar('chNaoConfCompar', [`Não confirmou (n=${fmtNum(total)})`], [
+      { label: 'Compareceu',   data: [compar], backgroundColor: COR_INFO, stack: 'a' },
+      { label: 'Faltou/Outro', data: [outro],  backgroundColor: '#94a3b8', stack: 'a' },
     ], {
-      plugins: { legend: { display: true, position: 'bottom' },
-        tooltip: { callbacks: { footer: () => `Compareceu sem confirmar: ${pct.toFixed(1)}%` } } },
+      plugins: {
+        legend: { display: true, position: 'bottom' },
+        tooltip: { callbacks: {
+          label: ctx => {
+            const v = ctx.parsed.x;
+            const lbl = ctx.dataset.label;
+            const p = lbl === 'Compareceu' ? pctC : pctO;
+            return `${lbl}: ${fmtNum(v)}  ·  ${p.toFixed(1)}% dos não-confirmados`;
+          },
+          footer: () => `Total não-confirmados: ${fmtNum(total)} · Compareceu sem confirmar: ${pctC.toFixed(1)}%`,
+        }},
+      },
       indexAxis: 'y',
       scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } },
     });
@@ -1051,6 +1176,7 @@
     const pct = ['WEB','ASU','F6'].map(k => por[k].tot ? por[k].falta / por[k].tot * 100 : 0);
     const tot = ['WEB','ASU','F6'].map(k => por[k].tot);
     const faltas = ['WEB','ASU','F6'].map(k => por[k].falta);
+    setBase('baseCanalFaltaTopo', tot.reduce((s,x)=>s+x,0), 'desistências, médico faltou e pendentes');
     makeBar('chCanalFaltaTopo', labels, [{
       label: '% falta', data: pct,
       backgroundColor: [COR_BAD, '#fb7185', '#fbbf24'],
@@ -1077,6 +1203,7 @@
     });
     horas.sort((a,b) => a - b);
     const mediana = horas.length ? horas[Math.floor(horas.length/2)] : 0;
+    setBase('basePushConf', horas.length, 'sem push enviado, sem confirmação, isentos e desistências');
     const buckets = ['0-1h','1-3h','3-6h','6-12h','12-24h','24-48h','48-72h','72h+'];
     const cnt = [0,0,0,0,0,0,0,0];
     horas.forEach(h => {
@@ -1102,6 +1229,7 @@
     function mean(xs) { if (!xs.length) return 0; return xs.reduce((s,x)=>s+x,0) / xs.length; }
     const pagou = validos.filter(c => c.vp > 0).map(c => antecedencia(c.dl, c.dc)).filter(d => d !== null);
     const naoPagou = validos.filter(c => c.vp === 0).map(c => antecedencia(c.dl, c.dc)).filter(d => d !== null);
+    setBase('baseMedianaPagou', pagou.length + naoPagou.length, 'desistências, médico faltou e pendentes');
     const labels = ['Pagantes', 'Não pagantes'];
     makeBar('chMedianaPagou', labels, [
       { label: 'Mediana (dias)', data: [median([...pagou]), median([...naoPagou])], backgroundColor: COR_INFO },
@@ -1136,6 +1264,8 @@
     const meses = Object.keys(porMes).filter(m => porMes[m].total > 0).sort();
     const pct = meses.map(m => porMes[m].sub5 / porMes[m].total * 100);
     const cores = meses.map(m => m < FASE_REGRA ? COR_PRE : (m < FASE_CANCEL ? COR_REGRA : COR_CANCEL));
+    const baseR = meses.reduce((s,m)=> s + porMes[m].total, 0);
+    setBase('baseRemanejam', baseR, 'desistências e consultas cuja janela <5d ainda não abriu');
     makeLine('chRemanejam', meses, [{
       label: '% pré-agendamentos com <5d',
       data: pct,
@@ -1179,6 +1309,7 @@
     });
     const pct = total ? rot / total * 100 : 0;
     const naoRot = total - rot;
+    setBase('baseVagaRotacao', total, 'consultas sem identificador completo (médico, data, hora ou nº)');
     makeBar('chVagaRotacao', ['Não rotacionou', 'Rotacionou (≥1 desist.)'],
       [{
         label: 'Vagas',
@@ -1217,6 +1348,7 @@
     const total = Object.values(histo).reduce((s,x) => s+x, 0);
     const labels = Object.keys(histo);
     const dados  = Object.values(histo);
+    setBase('baseVagaTentativas', total, 'consultas sem identificador completo de vaga');
     makeBar('chVagaTentativas', labels, [{
       label: 'Vagas',
       data: dados,
@@ -1251,6 +1383,8 @@
     const meses = Object.keys(porMes).sort();
     const pct = meses.map(m => porMes[m].total ? porMes[m].des / porMes[m].total * 100 : 0);
     const cores = meses.map(m => m < FASE_REGRA ? COR_PRE : (m < FASE_CANCEL ? COR_REGRA : COR_CANCEL));
+    const baseDM = meses.reduce((s,m) => s + porMes[m].total, 0);
+    setBase('baseDesistMensal', baseDM, 'nenhuma — usa total bruto');
     makeLine('chDesistMensal', meses, [{
       label: '% desistência',
       data: pct,
@@ -1279,6 +1413,8 @@
       .map(([med, v]) => ({ med, total: v.total, des: v.des, pct: v.des / v.total * 100 }))
       .sort((a,b) => b.des - a.des)
       .slice(0, 15);
+    const baseDmed = top.reduce((s,x) => s + x.total, 0);
+    setBase('baseDesistMedicos', baseDmed, 'médicos com menos de 30 agendamentos no período');
     makeBar('chDesistMedicos', top.map(x => x.med), [{
       label: 'Desistências (qtd)',
       data: top.map(x => x.des),
@@ -1309,6 +1445,8 @@
       .map(([esp, v]) => ({ esp, total: v.total, pct: v.falta / v.total * 100 }))
       .sort((a,b) => b.pct - a.pct)
       .slice(0, 10);
+    const baseEsp = top.reduce((s,x) => s + x.total, 0);
+    setBase('baseEspFalta', baseEsp, 'desistências, médico faltou, pendentes e especialidades com <30 consultas');
     makeBar('chEspFalta', top.map(x => x.esp), [{
       label: '% falta',
       data: top.map(x => x.pct),
@@ -1341,6 +1479,8 @@
       .map(([med, v]) => ({ med, total: v.total, pct: v.falta / v.total * 100 }))
       .sort((a,b) => b.pct - a.pct)
       .slice(0, 15);
+    const baseMed = top.reduce((s,x) => s + x.total, 0);
+    setBase('baseMedFalta', baseMed, 'desistências, médico faltou, pendentes e médicos com <30 consultas');
     makeBar('chMedFalta', top.map(x => x.med), [{
       label: '% falta',
       data: top.map(x => x.pct),
@@ -1359,6 +1499,7 @@
   // ====== 15. Heatmap dia-da-semana × hora ======
   function renderHeatmap(arr) {
     const validos = semDesistencias(semMedicoFaltou(arr));
+    let baseHM = 0;
     const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
     const grid = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => ({ total: 0, falta: 0 })));
     validos.forEach(c => {
@@ -1369,8 +1510,10 @@
       const dow = dt.getDay();
       const h   = dt.getHours();
       grid[dow][h].total++;
+      baseHM++;
       if (status === 'falta') grid[dow][h].falta++;
     });
+    setBase('baseHeatmap', baseHM, 'desistências, médico faltou, pendentes e células com <5 consultas');
 
     let maxPct = 0;
     grid.forEach(row => row.forEach(cell => {
@@ -1437,6 +1580,7 @@
     const labels = ['Web/App','ASU','F6'];
     const keys   = ['WEB','ASU','F6'];
     const tot    = keys.map(k => por[k].tot);
+    setBase('baseCanalGeral', tot.reduce((s,x)=>s+x,0), 'desistências, médico faltou e pendentes');
     const fal    = keys.map(k => por[k].falta);
     const pgo    = keys.map(k => por[k].pago);
     const pctF   = keys.map((k,i) => tot[i] ? fal[i] / tot[i] * 100 : 0);
