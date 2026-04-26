@@ -32,6 +32,7 @@ SELECT
     l.ValorPago                                                       AS valor_pago,
     l.idCliente                                                       AS id_cliente,
     l.codigo                                                          AS talao,
+    l.consulta                                                        AS nro_consulta,
     f3.desistencia                                                    AS desistencia
 FROM cad_lancamento                          l   WITH (NOLOCK)
 JOIN Cad_LancamentoServico                   ls  WITH (NOLOCK)  ON ls.idLancamento = l.idLancamento

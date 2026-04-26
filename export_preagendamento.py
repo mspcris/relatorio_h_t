@@ -244,6 +244,7 @@ def transformar(rows, posto):
             "vp":  _to_float(r.get("valor_pago")),
             "tal": _str(r.get("talao")),
             "ic":  r.get("id_cliente"),
+            "nc":  _str(r.get("nro_consulta")),  # número da ordem de atendimento — junto com (p, med, dc, hc) define a "vaga"
         })
     return out
 

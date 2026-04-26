@@ -216,10 +216,10 @@
               </div>
               <div>
                 <label class="filter-label">Sub-população</label>
-                <select id="selPop" class="form-control form-control-sm" style="width:200px">
+                <select id="selPop" class="form-control form-control-sm" style="width:230px">
                   <option value="todos" selected>Todos (sujeitos + isentos)</option>
-                  <option value="sujeitos">Apenas sujeitos à regra (≥5d)</option>
-                  <option value="isentos">Apenas isentos (&lt;5d antes)</option>
+                  <option value="sujeitos">Apenas sujeitos à regra (≥6d antes)</option>
+                  <option value="isentos">Apenas isentos (&lt;6d antes)</option>
                 </select>
               </div>
             </div>
@@ -293,9 +293,9 @@
           <div class="chart-wrap-sm"><canvas id="chNaoConfCompar"></canvas></div>
         </div>
         <div class="chart-card">
-          <h3>% confirmação por canal</h3>
-          <div class="subtitle">Web/App × ASU (central) × F6 (lançamento direto)</div>
-          <div class="chart-wrap-sm"><canvas id="chCanalConf"></canvas></div>
+          <h3>% falta por canal de agendamento</h3>
+          <div class="subtitle">Onde a marcação foi feita: Web/App × ASU (central) × F6 (lançamento direto). Mostra falta + ticket no comparativo abaixo.</div>
+          <div class="chart-wrap-sm"><canvas id="chCanalFaltaTopo"></canvas></div>
         </div>
       </div>
 
@@ -313,11 +313,24 @@
       </div>
 
       <!-- ──────────── SEÇÃO 3: ROTATIVIDADE DE VAGAS ──────────── -->
-      <div class="section-title"><i class="fas fa-sync-alt icon"></i>Rotatividade de vagas (efeito esperado)</div>
+      <div class="section-title"><i class="fas fa-sync-alt icon"></i>Rotatividade de vagas (dado real)</div>
+
+      <div class="grid-2">
+        <div class="chart-card">
+          <h3>% de vagas que rotacionaram</h3>
+          <div class="subtitle">Vaga = (posto, médico, dia, hora, nº consulta). Rotacionou = teve &ge;1 desistência antes do cliente ativo final.</div>
+          <div class="chart-wrap"><canvas id="chVagaRotacao"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Distribuição de tentativas por vaga</h3>
+          <div class="subtitle">Quantos clientes passaram por uma mesma vaga (1 = primeira vez; 2 = teve 1 desistência; etc.)</div>
+          <div class="chart-wrap"><canvas id="chVagaTentativas"></canvas></div>
+        </div>
+      </div>
 
       <div class="chart-card">
-        <h3>% de pré-agendamentos com &lt;5 dias de antecedência (vagas remanejadas)</h3>
-        <div class="subtitle">Vagas que provavelmente vieram de cancelamento e foram preenchidas em &lt;5d. Esperamos crescer com a regra ativa.</div>
+        <h3>% pré-agendamentos com &lt;5 dias de antecedência (proxy antigo)</h3>
+        <div class="subtitle">Mantido por compatibilidade com o tracking inicial. O gráfico de cima é a métrica precisa.</div>
         <div class="chart-wrap"><canvas id="chRemanejam"></canvas></div>
       </div>
 
@@ -657,13 +670,16 @@
     return 'falta';
   }
 
+  // Sujeito à regra = lançamento com 6+ dias de antecedência.
+  // Quem marca com 5 dias está exatamente na borda da janela (5-2d) e não
+  // tem ciclo viável de push+confirmação → tratado como isento.
   function sujeitoARegra(dl, dc) {
     if (!dl || !dc) return false;
     if (dc < FASE_REGRA) return false;
     const a = new Date(dl + 'T00:00:00');
     const b = new Date(dc + 'T00:00:00');
     const dias = (b - a) / 86400000;
-    return dias >= 5;
+    return dias >= 6;
   }
 
   function confirmouNaJanela(da, dc) {
@@ -685,10 +701,11 @@
     return Math.round((b - a) / 86400000);
   }
 
+  // Faixas alinhadas à regra: isentos = 0-5d (sem janela viável), demais = sujeitos
   function faixaAntec(dias) {
     if (dias === null || dias === undefined) return 'sem dado';
-    if (dias <= 4)   return '0-4 d';
-    if (dias <= 10)  return '5-10 d';
+    if (dias <= 5)   return '0-5 d (isento)';
+    if (dias <= 10)  return '6-10 d';
     if (dias <= 20)  return '11-20 d';
     if (dias <= 30)  return '21-30 d';
     return '30+ d';
@@ -721,10 +738,12 @@
     renderHoraConf(dadosFiltrados);
     renderConfirmFaltou(dadosFiltrados);
     renderNaoConfCompar(dadosFiltrados);
-    renderCanalConf(dadosFiltrados);
+    renderCanalFaltaTopo(dadosFiltrados);
     renderPushConf(dadosFiltrados);
     renderMedianaPagou(dadosFiltrados);
     renderRemanejam(DATA.consultas, postosOk);
+    renderVagaRotacao(dadosFiltrados);
+    renderVagaTentativas(dadosFiltrados);
     renderDesistMensal(DATA.consultas, postosOk);
     renderDesistMedicos(dadosFiltrados);
     renderEspFalta(dadosFiltrados);
@@ -769,6 +788,37 @@
   }
 
   // ====== Charts helpers ======
+  // Plugin global para labels nos extremos das barras.
+  // Usa dataset.labels (array paralelo aos dados) como texto a desenhar.
+  const BarValueLabelsPlugin = {
+    id: 'barValueLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      chart.data.datasets.forEach((ds, dsIdx) => {
+        const meta = chart.getDatasetMeta(dsIdx);
+        if (!meta || meta.hidden || !ds._labels) return;
+        ctx.save();
+        ctx.font = 'bold 11px "Source Sans Pro", sans-serif';
+        ctx.fillStyle = '#1f2937';
+        meta.data.forEach((el, i) => {
+          const txt = ds._labels[i];
+          if (!txt) return;
+          if (chart.options.indexAxis === 'y') {
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(txt, el.x + 6, el.y);
+          } else {
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(txt, el.x, el.y - 4);
+          }
+        });
+        ctx.restore();
+      });
+    }
+  };
+  Chart.register(BarValueLabelsPlugin);
+
   function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
   function makeBar(canvasId, labels, datasets, opts={}) {
     destroyChart(canvasId);
@@ -778,6 +828,7 @@
       data: { labels, datasets },
       options: Object.assign({
         responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 20, right: 60 } },
         plugins: { legend: { display: datasets.length > 1 } },
         scales: { y: { beginAtZero: true } },
       }, opts)
@@ -810,17 +861,23 @@
       else      { nt++; if (status === 'falta') nf++; }
     });
     const labels = ['Confirmou na janela', 'Não confirmou'];
+    const totais = [ct, nt];
     const dataPct = [
       ct ? cf/ct*100 : 0,
       nt ? nf/nt*100 : 0,
     ];
+    const dataAbs = [cf, nf];
     makeBar('chConfirmFalta', labels, [{
       label: '% falta', data: dataPct,
       backgroundColor: [COR_OK, COR_BAD],
+      _labels: dataPct.map((p, i) => `${p.toFixed(1)}%  ·  ${fmtNum(dataAbs[i])} de ${fmtNum(totais[i])}`),
     }], {
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}% falta` } },
+        tooltip: { callbacks: {
+          label: c => `${c.parsed.y.toFixed(1)}% falta`,
+          afterLabel: c => `${fmtNum(dataAbs[c.dataIndex])} faltas de ${fmtNum(totais[c.dataIndex])} (sujeitos à regra)`,
+        }},
       },
       scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
     });
@@ -868,7 +925,7 @@
   // ====== 3. % falta por faixa antecedência ======
   function renderFaltaAntec(arr) {
     const validos = semDesistencias(semMedicoFaltou(arr));
-    const buckets = ['0-4 d', '5-10 d', '11-20 d', '21-30 d', '30+ d'];
+    const buckets = ['0-5 d (isento)', '6-10 d', '11-20 d', '21-30 d', '30+ d'];
     const totais = Object.fromEntries(buckets.map(b => [b, { total: 0, falta: 0 }]));
     validos.forEach(c => {
       const status = classificar(c);
@@ -880,14 +937,17 @@
     });
     const pct = buckets.map(b => totais[b].total ? totais[b].falta / totais[b].total * 100 : 0);
     const cnt = buckets.map(b => totais[b].total);
+    const fal = buckets.map(b => totais[b].falta);
     makeBar('chFaltaAntec', buckets, [{
       label: '% falta', data: pct,
       backgroundColor: COR_BAD,
+      _labels: pct.map((p, i) => cnt[i] ? `${p.toFixed(1)}% · ${fmtNum(fal[i])}/${fmtNum(cnt[i])}` : ''),
     }], {
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: {
-          label: c => `${c.parsed.y.toFixed(1)}% falta (n=${cnt[c.dataIndex]})`,
+          label: c => `${c.parsed.y.toFixed(1)}% falta`,
+          afterLabel: c => `${fmtNum(fal[c.dataIndex])} faltas de ${fmtNum(cnt[c.dataIndex])} consultas`,
         }},
       },
       scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
@@ -952,27 +1012,31 @@
     });
   }
 
-  // ====== 7. % confirmação por canal ======
-  function renderCanalConf(arr) {
-    const sujs = semDesistencias(sujeitos(arr));
-    const por = { WEB: { tot: 0, conf: 0 }, ASU: { tot: 0, conf: 0 }, F6: { tot: 0, conf: 0 } };
-    sujs.forEach(c => {
+  // ====== 7. % falta por canal de agendamento (todos os clientes válidos) ======
+  function renderCanalFaltaTopo(arr) {
+    const validos = semDesistencias(semMedicoFaltou(arr));
+    const por = { WEB: { tot: 0, falta: 0 }, ASU: { tot: 0, falta: 0 }, F6: { tot: 0, falta: 0 } };
+    validos.forEach(c => {
+      const status = classificar(c);
+      if (status === 'pendente') return;
       const x = por[c.can] || por.F6;
       x.tot++;
-      if (confirmouNaJanela(c.da, c.dc)) x.conf++;
+      if (status === 'falta') x.falta++;
     });
     const labels = ['Web/App', 'ASU (central)', 'F6 (lançamento)'];
-    const pct = ['WEB','ASU','F6'].map(k => por[k].tot ? por[k].conf / por[k].tot * 100 : 0);
+    const pct = ['WEB','ASU','F6'].map(k => por[k].tot ? por[k].falta / por[k].tot * 100 : 0);
     const tot = ['WEB','ASU','F6'].map(k => por[k].tot);
-    makeBar('chCanalConf', labels, [{
-      label: '% confirmação', data: pct,
-      backgroundColor: [COR_OK, COR_INFO, COR_WARN],
+    const faltas = ['WEB','ASU','F6'].map(k => por[k].falta);
+    makeBar('chCanalFaltaTopo', labels, [{
+      label: '% falta', data: pct,
+      backgroundColor: [COR_BAD, '#fb7185', '#fbbf24'],
+      _labels: pct.map((p, i) => `${p.toFixed(1)}% · ${fmtNum(faltas[i])} de ${fmtNum(tot[i])}`),
     }], {
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}% (n=${tot[c.dataIndex]})` } },
+        tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}% falta · ${fmtNum(faltas[c.dataIndex])} faltas em ${fmtNum(tot[c.dataIndex])} consultas` } },
       },
-      scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
     });
   }
 
@@ -1048,6 +1112,93 @@
     }], {
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}%` } } },
       scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
+    });
+  }
+
+  // ====== 10b. Rotatividade real — vaga = (posto, médico, dia, hora, nº consulta) ======
+  // Para cada vaga única, conta quantos clientes passaram (1 = só o ativo final;
+  // 2+ = teve N-1 desistência(s) antes). "Rotacionou" = qtd > 1.
+  function _vagaKey(c) {
+    return `${c.p}|${c.med || ''}|${c.dc || ''}|${c.hc || ''}|${c.nc || ''}`;
+  }
+  function _construirVagas(arr) {
+    const vagas = new Map();
+    arr.forEach(c => {
+      if (!c.dc || !c.med || !c.nc) return;  // sem identificador suficiente
+      const k = _vagaKey(c);
+      if (!vagas.has(k)) vagas.set(k, { tentativas: 0, desistencias: 0, ativos: 0, ultima: null });
+      const v = vagas.get(k);
+      v.tentativas++;
+      if (c.des) v.desistencias++;
+      else { v.ativos++; v.ultima = c; }
+    });
+    return vagas;
+  }
+
+  function renderVagaRotacao(arr) {
+    const vagas = _construirVagas(arr);
+    let total = 0, rot = 0;
+    vagas.forEach(v => {
+      total++;
+      if (v.tentativas > 1) rot++;
+    });
+    const pct = total ? rot / total * 100 : 0;
+    const naoRot = total - rot;
+    makeBar('chVagaRotacao', ['Não rotacionou', 'Rotacionou (≥1 desist.)'],
+      [{
+        label: 'Vagas',
+        data: [naoRot, rot],
+        backgroundColor: [COR_PRE, COR_OK],
+        _labels: [
+          `${(total ? naoRot/total*100 : 0).toFixed(1)}% · ${fmtNum(naoRot)}`,
+          `${pct.toFixed(1)}% · ${fmtNum(rot)}`,
+        ],
+      }],
+      {
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: `Total de vagas: ${fmtNum(total)} · Rotação: ${pct.toFixed(1)}%`, font: { size: 13 } },
+          tooltip: { callbacks: {
+            label: c => `${fmtNum(c.parsed.y)} vagas`,
+            afterLabel: c => total ? `${(c.parsed.y/total*100).toFixed(1)}% do total de vagas` : '',
+          }},
+        },
+        scales: { y: { beginAtZero: true } },
+      }
+    );
+  }
+
+  function renderVagaTentativas(arr) {
+    const vagas = _construirVagas(arr);
+    const histo = { '1': 0, '2': 0, '3': 0, '4': 0, '5+': 0 };
+    vagas.forEach(v => {
+      const t = v.tentativas;
+      if (t === 1) histo['1']++;
+      else if (t === 2) histo['2']++;
+      else if (t === 3) histo['3']++;
+      else if (t === 4) histo['4']++;
+      else histo['5+']++;
+    });
+    const total = Object.values(histo).reduce((s,x) => s+x, 0);
+    const labels = Object.keys(histo);
+    const dados  = Object.values(histo);
+    makeBar('chVagaTentativas', labels, [{
+      label: 'Vagas',
+      data: dados,
+      backgroundColor: ['#94a3b8','#60a5fa','#3b82f6','#1d4ed8','#1e3a8a'],
+      _labels: dados.map(d => total ? `${(d/total*100).toFixed(1)}% · ${fmtNum(d)}` : ''),
+    }], {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: c => `${fmtNum(c.parsed.y)} vagas`,
+          afterLabel: c => total ? `${(c.parsed.y/total*100).toFixed(1)}% do total` : '',
+        }},
+      },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: 'Qtd vagas' } },
+        x: { title: { display: true, text: 'Nº de clientes que passaram pela vaga (1 = sem rotação)' } },
+      },
     });
   }
 
@@ -1127,11 +1278,12 @@
       label: '% falta',
       data: top.map(x => x.pct),
       backgroundColor: COR_BAD,
+      _labels: top.map(x => `${x.pct.toFixed(1)}% · ${fmtNum(x.total)}`),
     }], {
       indexAxis: 'y',
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { afterLabel: c => `n = ${top[c.dataIndex].total}` } },
+        tooltip: { callbacks: { afterLabel: c => `n = ${fmtNum(top[c.dataIndex].total)}` } },
       },
       scales: { x: { ticks: { callback: v => v + '%' } } },
     });
@@ -1158,11 +1310,12 @@
       label: '% falta',
       data: top.map(x => x.pct),
       backgroundColor: COR_BAD,
+      _labels: top.map(x => `${x.pct.toFixed(1)}% · ${fmtNum(x.total)}`),
     }], {
       indexAxis: 'y',
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { afterLabel: c => `n = ${top[c.dataIndex].total}` } },
+        tooltip: { callbacks: { afterLabel: c => `n = ${fmtNum(top[c.dataIndex].total)}` } },
       },
       scales: { x: { ticks: { callback: v => v + '%' } } },
     });
@@ -1247,12 +1400,33 @@
       if (c.vp > 0) { x.pago++; x.pgValor += c.vp; }
     });
     const labels = ['Web/App','ASU','F6'];
-    const pctF   = ['WEB','ASU','F6'].map(k => por[k].tot ? por[k].falta / por[k].tot * 100 : 0);
-    const ticket = ['WEB','ASU','F6'].map(k => por[k].pago ? por[k].pgValor / por[k].pago : 0);
+    const keys   = ['WEB','ASU','F6'];
+    const tot    = keys.map(k => por[k].tot);
+    const fal    = keys.map(k => por[k].falta);
+    const pgo    = keys.map(k => por[k].pago);
+    const pctF   = keys.map((k,i) => tot[i] ? fal[i] / tot[i] * 100 : 0);
+    const ticket = keys.map(k => por[k].pago ? por[k].pgValor / por[k].pago : 0);
     makeBar('chCanalGeral', labels, [
-      { label: '% falta',          data: pctF,   backgroundColor: COR_BAD,  yAxisID: 'y' },
-      { label: 'Ticket médio (R$)', data: ticket, backgroundColor: COR_INFO, yAxisID: 'y2' },
+      {
+        label: '% falta', data: pctF, backgroundColor: COR_BAD, yAxisID: 'y',
+        _labels: pctF.map((p, i) => `${p.toFixed(1)}% · ${fmtNum(fal[i])}/${fmtNum(tot[i])}`),
+      },
+      {
+        label: 'Ticket médio (R$)', data: ticket, backgroundColor: COR_INFO, yAxisID: 'y2',
+        _labels: ticket.map((t, i) => pgo[i] ? `${fmtMoney(t)} · ${fmtNum(pgo[i])} pag.` : ''),
+      },
     ], {
+      plugins: {
+        tooltip: { callbacks: {
+          label: ctx => {
+            const i = ctx.dataIndex;
+            if (ctx.datasetIndex === 0) {
+              return `${pctF[i].toFixed(1)}% falta — ${fmtNum(fal[i])} faltas em ${fmtNum(tot[i])} consultas`;
+            }
+            return `Ticket médio: ${fmtMoney(ticket[i])} (de ${fmtNum(pgo[i])} pagantes)`;
+          },
+        }},
+      },
       scales: {
         y:  { beginAtZero: true, position: 'left',  title: { display: true, text: '% falta' }, ticks: { callback: v => v + '%' } },
         y2: { beginAtZero: true, position: 'right', title: { display: true, text: 'R$' }, grid: { drawOnChartArea: false } },
