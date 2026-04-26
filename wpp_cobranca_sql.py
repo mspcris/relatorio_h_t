@@ -172,10 +172,11 @@ SOURCE_CLIENTES = """
                    AND f5.idplano IS NOT NULL                          THEN 'camim'
               ELSE 'outro'
           END AS tipo_cliente
-        -- Situação efetiva: clube usa situacaoclube, demais usam situação
+        -- Situação efetiva: cancelados ANS sempre 'Cancelado';
+        -- clube usa situacaoclube; demais usam situação.
         , CASE
-              WHEN f5.Matricula > 999999 AND f5.idplano IS NOT NULL
-                   THEN vcc.SituaçãoClube
+              WHEN vcc.canceladoans = 1                                 THEN 'Cancelado'
+              WHEN f5.Matricula > 999999 AND f5.idplano IS NOT NULL     THEN vcc.SituaçãoClube
               ELSE f5.situação
           END AS situacao_efetiva
         -- Tipo de plano
