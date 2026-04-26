@@ -47,7 +47,8 @@
     'export_qualidade_agenda':        { py: 'export_qualidade_agenda.py',      sh: 'export_qualidade_agenda.sh',       cron_desc: 'diario as 05:00',             interval_min: 1440 },
     'export_vagas':                   { py: 'export_vagas.py',                 sh: '(sem wrapper)',                    cron_desc: 'NAO AGENDADO — sem entrada no cron', interval_min: null },
     'export_notas_rps':               { py: 'export_notas_rps.py',             sh: 'export_notas_rps.sh',              cron_desc: 'de hora em hora',             interval_min: 60 },
-    'indicadores_etl':                { py: 'indicadores_etl.py',              sh: '(direto no cron)',                 cron_desc: 'diario as 02:45',             interval_min: 1440 }
+    'indicadores_etl':                { py: 'indicadores_etl.py',              sh: '(direto no cron)',                 cron_desc: 'diario as 02:45',             interval_min: 1440 },
+    'export_preagendamento':          { py: 'export_preagendamento.py',        sh: 'export_preagendamento.sh',         cron_desc: 'diario as 02:30',             interval_min: 1440 }
   };
 
   /* ── Nomes legiveis dos postos ── */
