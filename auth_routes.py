@@ -175,6 +175,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "camila_crm",               "label": "Camila.ai CRM",               "group": "mais"},
     {"key": "crm",                      "label": "CRM",                         "group": "mais"},
     {"key": "agenda_dia",                "label": "Agenda do Dia (F3)",          "group": "mais"},
+    {"key": "preagendamento",            "label": "Dashboard Pré-Agendamento",   "group": "mais"},
 ]
 
 # ── Estado inicializado por init_auth() ───────────────────────────────────────

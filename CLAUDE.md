@@ -156,6 +156,45 @@ O SQL Server da CAMIM tem `SET DATEFORMAT dmy` em todas as views.
 
 ---
 
+## Dashboard Pré-Agendamento — regra de confirmação 5-2 dias
+
+Adicionado em **2026-04-26**. Mede o impacto da regra de confirmação obrigatória.
+
+**Linha do tempo:**
+- Pré-2026-01: sem regra (baseline)
+- 2026-01-01 → 2026-04-30: regra ativa, push enviado, mas SEM cancelamento
+- 2026-05-01+: cancelamento automático de quem não confirma (previsto)
+
+**Regras de negócio chave:**
+- Janela de confirmação rígida: 5 a 2 dias antes da consulta
+- 1 push por pré-agendamento (campo `DataHoraNotificacaoPreAgendamento`)
+- Confirmação registrada em `DataConfirmacaoAgendamentoConsulta` (app OU central)
+- Cliente que marca consulta com `<5 dias` de antecedência é isento (não dá tempo de janela)
+- Movimento esperado: clientes desistem na janela → vagas liberadas → outros pegam em <5d (rotatividade saudável, não fuga da regra)
+
+**Categorização do campo `Atendido`:**
+- `Médico Faltou` → EXCLUI da análise (não conta)
+- `Atendido` / `Aguardando` → compareceu
+- `Faltou` / `Ausente` → falta
+- `Não Atendido` → falta SE >1h após `DataConsulta + HoraPrevistaConsulta`; senão pendente
+- Outros → fallback "falta"
+
+**Canal de marcação:**
+- `MarcadoViaWeb=1` → WEB (App Camim ou Égide)
+- `MarcadoViaAgendaUnificada=1` → ASU (central de atendimento)
+- `CtrlF6=1` ou todos zero/null → F6 (lançamento direto pelo posto)
+
+**Arquitetura:**
+- ETL: `export_preagendamento.py` + `export_preagendamento.sh` + `sql/preagendamento.sql`
+- Cron: 1x/dia às 02:30 — regenera JSON inteiro do zero (não é incremental)
+- Janela coletada: 12 meses passado + 90 dias futuro
+- Saída: `json_consolidado/preagendamento.json` (~50-80MB; sob gzip nginx ~10-15MB)
+- Frontend: `preagendamento.html` carrega 1 vez e processa em JS (Chart.js)
+- Inclui ambas populações (desistência 0 e 1) — frontend filtra
+- View `vw_Cad_LancamentoProntuarioComDesistencia` é pesada: query usa `READ UNCOMMITTED` + `NOLOCK` para acelerar
+
+---
+
 ## Regras de desenvolvimento
 
 - Cada KPI é independente — nunca compartilha cálculos entre páginas

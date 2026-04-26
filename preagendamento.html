@@ -1,0 +1,1371 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>CAMIM — Dashboard Pré-Agendamento</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- KPI Metadata -->
+  <meta name="kpi-id" content="preagendamento" />
+  <meta name="kpi-title" content="Dashboard Pré-Agendamento" />
+  <meta name="kpi-description" content="Análise de pré-agendamentos, confirmações na janela 5-2 dias, faltas e desistências." />
+  <meta name="kpi-category" content="Operacional" />
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&family=Inter:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="/css/style2.css?v=20260426">
+  <link rel="stylesheet" href="/css/style_kpi.css?v=20260426">
+  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <!-- JS BASE -->
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- Sessão -->
+  <script>
+    fetch("/session/me", { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(d => { window.USER_EMAIL = d.email; window.USER_POSTOS = d.postos || []; })
+      .catch(() => { window.USER_EMAIL = null; window.USER_POSTOS = []; });
+  </script>
+
+  <style>
+    html { font-size: 16px; }
+    body {
+      font-size: 1rem;
+      -webkit-font-smoothing: antialiased;
+      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    body.text-sm { font-size: 1rem; }
+    h1,h2,h3 { margin: 0 0 .5rem; font-weight: 600; line-height: 1.25; }
+    h1 { font-size: 1.6rem; } h2 { font-size: 1.25rem; } h3 { font-size: 1.05rem; }
+
+    /* Banner */
+    .pa-banner {
+      background: linear-gradient(135deg, #14213d 0%, #1e3a5f 50%, #0f2b40 100%);
+      border-radius: 12px; padding: 18px 22px; margin-bottom: 12px;
+      color: #e0f0ff; position: relative; overflow: hidden;
+    }
+    .pa-banner h1 { color:#fff; }
+    .pa-banner p  { color:#a8c4dd; margin: 4px 0 0; font-size: .9rem; }
+    .pa-banner .geradoEm { position:absolute; top:10px; right:14px; font-size:.78rem; color:#a8c4dd; }
+
+    /* Filtros */
+    .posto-groups .btn { font-size: .85rem; padding: 4px 12px; border: 1px solid #cbd5e0; background:#fff; color:#2d3748; border-radius: 6px; }
+    .posto-groups .btn.active { background:#28a745; border-color:#28a745; color:#fff; }
+    .posto-tabs-inline { display:flex; gap:4px; flex-wrap:wrap; padding:0; margin:0; list-style:none; }
+    .posto-tabs-inline .nav-link { padding: 4px 10px; font-size:.85rem; border-radius:6px; background:#f1f3f5; color:#2d3748; border:1px solid transparent; }
+    .posto-tabs-inline .nav-link.active { background:#28a745; color:#fff; }
+    .filter-label { font-size:.78rem; font-weight:600; color:#4a5568; margin-bottom:2px; display:block; }
+    .filter-date-input { width:140px; }
+
+    /* KPI cards */
+    .kpi-row { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin: 12px 0; }
+    .kpi-card { background:#fff; border-radius:10px; padding:14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+    .kpi-card .kpi-val { font-size: 1.55rem; font-weight: 700; line-height: 1.1; }
+    .kpi-card .kpi-lbl { font-size: .78rem; color: #6c757d; margin-top: 4px; }
+    .kpi-card.success .kpi-val { color:#16a34a; }
+    .kpi-card.danger  .kpi-val { color:#dc2626; }
+    .kpi-card.warning .kpi-val { color:#d97706; }
+    .kpi-card.info    .kpi-val { color:#0891b2; }
+
+    /* Charts */
+    .chart-card { background:#fff; border-radius:10px; padding:14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.07); margin-bottom:12px; }
+    .chart-card h3 { font-size: 1rem; margin-bottom: 8px; }
+    .chart-card .subtitle { font-size:.8rem; color:#6c757d; margin-bottom: 8px; }
+    .chart-wrap { position:relative; height: 300px; }
+    .chart-wrap-sm { position:relative; height: 220px; }
+    .chart-wrap-lg { position:relative; height: 380px; }
+
+    .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .grid-3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; }
+    @media (max-width: 992px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    /* Seções */
+    .section-title {
+      font-size: 1.05rem; font-weight: 700; color: #14213d;
+      margin: 18px 4px 8px; padding-bottom: 4px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .section-title .icon { margin-right: 6px; color: #2563eb; }
+
+    /* Tabela bruta */
+    #tblRaw th { position: sticky; top: 0; background: #1f2937; color:#fff; font-size: .8rem; white-space:nowrap; z-index:2; padding:6px 8px; }
+    #tblRaw td { font-size: .82rem; vertical-align:middle; white-space:nowrap; padding:5px 8px; }
+    .table-container { max-height: 60vh; overflow:auto; border-radius:8px; box-shadow: 0 1px 3px rgba(0,0,0,.07); background:#fff; }
+
+    .badge { font-size:.72rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+    .badge-ok    { background:#dcfce7; color:#15803d; }
+    .badge-bad   { background:#fee2e2; color:#b91c1c; }
+    .badge-warn  { background:#fef3c7; color:#92400e; }
+    .badge-info  { background:#dbeafe; color:#1d4ed8; }
+    .badge-mute  { background:#e5e7eb; color:#4b5563; }
+
+    /* Loading */
+    .loading-overlay { display:none; position:fixed; inset:0; background: rgba(255,255,255,.8); z-index:9999; align-items:center; justify-content:center; flex-direction:column; gap:10px; }
+    .loading-overlay.active { display:flex; }
+    .spinner-lg { width:48px; height:48px; }
+    .loading-msg { font-size:.9rem; color:#374151; }
+
+    /* Heatmap */
+    .heatmap-container { display:grid; grid-template-columns: 60px repeat(24, 1fr); gap:2px; font-size:.7rem; }
+    .heatmap-cell { height: 22px; border-radius: 2px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:600; font-size:.7rem; }
+    .heatmap-label { display:flex; align-items:center; justify-content:flex-end; padding-right:6px; color:#475569; font-weight:600; font-size:.75rem; }
+
+    /* Fase markers */
+    .fase-legend { display:flex; gap:14px; flex-wrap:wrap; font-size:.78rem; margin: 4px 0 8px; color:#475569; }
+    .fase-legend .swatch { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:middle; }
+
+    /* Aviso "fase atual" */
+    .fase-banner {
+      background: #fff7ed; border-left: 4px solid #ea580c; padding: 10px 14px;
+      border-radius: 6px; margin-bottom: 10px; font-size: .88rem; color: #7c2d12;
+    }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini text-sm">
+<div class="wrapper">
+
+  <!-- NAVBAR -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" height="28" alt="Logo Camim">
+      <span class="ml-2">Quem tem saúde é mais feliz!</span>
+    </span>
+  </nav>
+
+  <!-- SIDEBAR -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a></li>
+          <li class="nav-item"><a href="monitorarrobos.html" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Monitorar Robôs</p></a></li>
+          {% if USER_IS_ADMIN %}
+          <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+          {% endif %}
+          <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i class="nav-icon fas fa-book-open"></i><p>Leia-me</p></a></li>
+          <li class="nav-item"><a href="agenda_dia.html" class="nav-link"><i class="nav-icon fas fa-calendar-check"></i><p>Agenda do Dia</p></a></li>
+          <li class="nav-item"><a href="/preagendamento" class="nav-link active"><i class="nav-icon fas fa-clipboard-check"></i><p>Pré-Agendamento</p></a></li>
+          <li class="nav-item"><a href="/qualidade_agenda" class="nav-link"><i class="nav-icon fas fa-calendar-check"></i><p>Qualidade da Agenda</p></a></li>
+          <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+          <li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline">
+              <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                <i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p>
+              </button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="content-wrapper">
+    <section class="content p-3 stack">
+
+      <!-- Banner -->
+      <div class="pa-banner">
+        <h1><i class="fas fa-clipboard-check mr-2"></i>Dashboard Pré-Agendamento</h1>
+        <p>Análise de confirmação de consultas na janela de 5 a 2 dias antes da data — falta, comparecimento, desistência</p>
+        <span class="geradoEm" id="geradoEm"></span>
+      </div>
+
+      <!-- Aviso de fase -->
+      <div class="fase-banner" id="faseBanner" style="display:none">
+        <i class="fas fa-info-circle mr-2"></i><span id="faseTexto"></span>
+      </div>
+
+      <!-- Filtros -->
+      <div class="card">
+        <div class="kpi-filter-panel">
+          <div class="kpi-filter-row kpi-filter-postos">
+            <div class="posto-groups">
+              <div class="btn-group">
+                <button id="btnGrupoTodos" class="btn active">Todos</button>
+                <button id="btnGrupoAltamiro" class="btn" title="A B G I N R X Y">Altamiro</button>
+                <button id="btnGrupoCouto" class="btn" title="C D J M P">Couto</button>
+              </div>
+            </div>
+            <div class="filter-sep-v"></div>
+            <ul id="postoTabs" class="nav nav-pills posto-tabs-inline"></ul>
+          </div>
+          <div class="kpi-filter-row kpi-filter-actions">
+            <div class="filter-dates-row">
+              <div>
+                <label class="filter-label">De (data da consulta)</label>
+                <input id="dtIni" type="date" class="form-control form-control-sm filter-date-input">
+              </div>
+              <div>
+                <label class="filter-label">Até</label>
+                <input id="dtFim" type="date" class="form-control form-control-sm filter-date-input">
+              </div>
+              <div>
+                <label class="filter-label">Sub-população</label>
+                <select id="selPop" class="form-control form-control-sm" style="width:200px">
+                  <option value="todos" selected>Todos (sujeitos + isentos)</option>
+                  <option value="sujeitos">Apenas sujeitos à regra (≥5d)</option>
+                  <option value="isentos">Apenas isentos (&lt;5d antes)</option>
+                </select>
+              </div>
+            </div>
+            <div class="filter-btns-row">
+              <button id="btnFiltrar" class="btn btn-sm btn-primary"><i class="fas fa-search mr-1"></i>Filtrar</button>
+              <button id="btnReset"   class="btn btn-sm btn-outline-secondary">Reset</button>
+              <button id="btnMesAtual" class="btn btn-sm btn-outline-info">Mês atual (até ontem)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI cards -->
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-val" id="kTotal">—</div><div class="kpi-lbl">Pré-agendamentos no período</div></div>
+        <div class="kpi-card success"><div class="kpi-val" id="kConfirm">—</div><div class="kpi-lbl">% confirmaram na janela 5-2d</div></div>
+        <div class="kpi-card success"><div class="kpi-val" id="kCompar">—</div><div class="kpi-lbl">% compareceram</div></div>
+        <div class="kpi-card danger"><div class="kpi-val" id="kFaltas">—</div><div class="kpi-lbl">% faltas</div></div>
+        <div class="kpi-card info"><div class="kpi-val" id="kPagou">—</div><div class="kpi-lbl">% pagaram (ValorPago&gt;0)</div></div>
+        <div class="kpi-card warning"><div class="kpi-val" id="kDesist">—</div><div class="kpi-lbl">% desistências (cancelaram)</div></div>
+        <div class="kpi-card"><div class="kpi-val" id="kTicket">R$ —</div><div class="kpi-lbl">Ticket médio (de quem pagou)</div></div>
+        <div class="kpi-card"><div class="kpi-val" id="kPushed">—</div><div class="kpi-lbl">% receberam push</div></div>
+      </div>
+
+      <!-- ──────────── SEÇÃO 1: A REGRA ESTÁ FUNCIONANDO? ──────────── -->
+      <div class="section-title"><i class="fas fa-bullseye icon"></i>A regra está funcionando?</div>
+
+      <div class="grid-2">
+        <div class="chart-card">
+          <h3>Confirmou × Não confirmou — taxa de falta</h3>
+          <div class="subtitle">Apenas sujeitos à regra (lançamento ≥ 5d antes). Mostra se confirmar reduz falta.</div>
+          <div class="chart-wrap"><canvas id="chConfirmFalta"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Série mensal — falta antes × durante × pós-cancelamento</h3>
+          <div class="subtitle">% falta por mês. Linhas verticais marcam as 3 fases da regra.</div>
+          <div class="fase-legend">
+            <span><span class="swatch" style="background:#94a3b8"></span>Pré-regra (até 12/2025)</span>
+            <span><span class="swatch" style="background:#3b82f6"></span>Regra ativa (jan-abr/2026)</span>
+            <span><span class="swatch" style="background:#dc2626"></span>Cancelamento (mai/2026+)</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chFaltaMensal"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="chart-card">
+          <h3>% falta por faixa de antecedência</h3>
+          <div class="subtitle">Dias entre lançamento e consulta. Quem agenda mais longe falta mais?</div>
+          <div class="chart-wrap"><canvas id="chFaltaAntec"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Distribuição da hora da confirmação na janela</h3>
+          <div class="subtitle">Quantos dias antes da consulta o cliente confirma? (apenas confirmados)</div>
+          <div class="chart-wrap"><canvas id="chHoraConf"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ──────────── SEÇÃO 2: COMPORTAMENTO DO CLIENTE ──────────── -->
+      <div class="section-title"><i class="fas fa-user-check icon"></i>Comportamento do cliente</div>
+
+      <div class="grid-3">
+        <div class="chart-card">
+          <h3>Confirmou + Faltou</h3>
+          <div class="subtitle">% confirmou na janela e mesmo assim faltou (credibilidade da confirmação)</div>
+          <div class="chart-wrap-sm"><canvas id="chConfirmFaltou"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Não confirmou + Compareceu</h3>
+          <div class="subtitle">% que ignorou o pedido de confirmação mas apareceu</div>
+          <div class="chart-wrap-sm"><canvas id="chNaoConfCompar"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>% confirmação por canal</h3>
+          <div class="subtitle">Web/App × ASU (central) × F6 (lançamento direto)</div>
+          <div class="chart-wrap-sm"><canvas id="chCanalConf"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="chart-card">
+          <h3>Tempo entre push enviado e confirmação</h3>
+          <div class="subtitle">Cliente confirma logo? ou só na véspera? (mediana e histograma em horas)</div>
+          <div class="chart-wrap"><canvas id="chPushConf"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Mediana de dias agendamento → consulta</h3>
+          <div class="subtitle">Pagantes × Não pagantes</div>
+          <div class="chart-wrap"><canvas id="chMedianaPagou"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ──────────── SEÇÃO 3: ROTATIVIDADE DE VAGAS ──────────── -->
+      <div class="section-title"><i class="fas fa-sync-alt icon"></i>Rotatividade de vagas (efeito esperado)</div>
+
+      <div class="chart-card">
+        <h3>% de pré-agendamentos com &lt;5 dias de antecedência (vagas remanejadas)</h3>
+        <div class="subtitle">Vagas que provavelmente vieram de cancelamento e foram preenchidas em &lt;5d. Esperamos crescer com a regra ativa.</div>
+        <div class="chart-wrap"><canvas id="chRemanejam"></canvas></div>
+      </div>
+
+      <!-- ──────────── SEÇÃO 4: DESISTÊNCIAS ──────────── -->
+      <div class="section-title"><i class="fas fa-times-circle icon"></i>Desistências (o outro lado da moeda)</div>
+
+      <div class="grid-2">
+        <div class="chart-card">
+          <h3>Série mensal de desistências</h3>
+          <div class="subtitle">% desistência sobre o total de pré-agendamentos. Crescimento = clientes cancelando antes em vez de faltar.</div>
+          <div class="chart-wrap"><canvas id="chDesistMensal"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Top 15 médicos por número absoluto de desistências</h3>
+          <div class="subtitle">Quanto mais desistências, mais vagas que ficam livres para outros</div>
+          <div class="chart-wrap"><canvas id="chDesistMedicos"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ──────────── SEÇÃO 5: OPERAÇÃO ──────────── -->
+      <div class="section-title"><i class="fas fa-stethoscope icon"></i>Operação — onde concentra a falta</div>
+
+      <div class="grid-2">
+        <div class="chart-card">
+          <h3>Top 10 especialidades por taxa de falta</h3>
+          <div class="subtitle">Mínimo 30 consultas para entrar no ranking</div>
+          <div class="chart-wrap"><canvas id="chEspFalta"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Top 15 médicos por taxa de falta</h3>
+          <div class="subtitle">Mínimo 30 consultas. Pode ser sintoma de problema operacional do médico.</div>
+          <div class="chart-wrap"><canvas id="chMedFalta"></canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <h3>Heatmap dia-da-semana × hora — onde concentra a falta</h3>
+        <div class="subtitle">Cor mais intensa = maior % de falta. Indica horários problemáticos.</div>
+        <div id="heatmapWrap" style="margin-top:8px"></div>
+      </div>
+
+      <div class="chart-card">
+        <h3>Comparativo por canal — falta, confirmação e ValorPago</h3>
+        <div class="subtitle">Web/App × ASU × F6: ticket médio e taxa de falta de cada canal</div>
+        <div class="chart-wrap"><canvas id="chCanalGeral"></canvas></div>
+      </div>
+
+      <!-- ──────────── SEÇÃO 6: AUDITORIA ──────────── -->
+      <div class="section-title"><i class="fas fa-table icon"></i>Auditoria — detalhe linha-a-linha</div>
+
+      <div class="chart-card">
+        <h3>Tabela bruta filtrável <button id="btnExportXlsx" class="btn btn-sm btn-outline-success ml-2"><i class="fas fa-file-excel mr-1"></i>Excel</button></h3>
+        <div class="subtitle">
+          <span id="tblCount">0</span> linhas · filtros aplicáveis: posto, data, médico, status, canal, confirmou, faltou, desistência
+        </div>
+        <div class="filter-dates-row" style="margin: 8px 0;">
+          <input id="rawSearch"     class="form-control form-control-sm" placeholder="Paciente / matrícula / médico / talão" style="width: 260px;">
+          <select id="rawStatus"    class="form-control form-control-sm" style="width: 170px;">
+            <option value="">Status (todos)</option>
+            <option value="compareceu">Compareceu</option>
+            <option value="falta">Faltou</option>
+            <option value="pendente">Pendente</option>
+            <option value="medico_faltou">Médico faltou</option>
+          </select>
+          <select id="rawConf" class="form-control form-control-sm" style="width: 170px;">
+            <option value="">Confirmou? (todos)</option>
+            <option value="sim">Sim — na janela 5-2d</option>
+            <option value="fora">Confirmou fora da janela</option>
+            <option value="nao">Não confirmou</option>
+          </select>
+          <select id="rawDes" class="form-control form-control-sm" style="width: 160px;">
+            <option value="">Desistência (todos)</option>
+            <option value="0">Apenas não desistentes</option>
+            <option value="1">Apenas desistentes</option>
+          </select>
+          <select id="rawCanal" class="form-control form-control-sm" style="width: 160px;">
+            <option value="">Canal (todos)</option>
+            <option value="WEB">Web/App</option>
+            <option value="ASU">ASU (central)</option>
+            <option value="F6">F6 (lançamento)</option>
+          </select>
+        </div>
+        <div class="table-container">
+          <table id="tblRaw" class="table table-striped table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Posto</th><th>Talão</th><th>Matr.</th><th>Paciente</th>
+                <th>Médico</th><th>Especialidade</th><th>Canal</th>
+                <th>Lançado</th><th>Consulta</th><th>Hora</th><th>Antec(d)</th>
+                <th>Push</th><th>Conf. Janela</th><th>Conf. Chegada</th>
+                <th>Status</th><th>Desist.</th><th class="text-right">R$ Pago</th>
+              </tr>
+            </thead>
+            <tbody id="tblRawBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+  </div>
+</div>
+
+<!-- Loading -->
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="spinner-border spinner-lg text-primary" role="status"></div>
+  <div class="loading-msg" id="loadingMsg">Carregando dados…</div>
+</div>
+
+<!-- Filtro de sidebar (page access) -->
+<script>
+{# placeholder do filtro injetado por render_protected_page #}
+</script>
+
+<!-- Lógica do dashboard -->
+<script>
+(() => {
+  // ====== Constantes ======
+  const URL_JSON = '/json_consolidado/preagendamento.json';
+  const POSTOS_TODOS = ['A','B','C','D','G','I','J','M','N','P','R','X','Y'];
+  const GRUPOS = {
+    altamiro: ['A','B','G','I','N','R','X','Y'],
+    couto:    ['C','D','J','M','P'],
+  };
+  const FASE_REGRA   = '2026-01-01';
+  const FASE_CANCEL  = '2026-05-01';
+  const COR_PRE      = '#94a3b8';
+  const COR_REGRA    = '#3b82f6';
+  const COR_CANCEL   = '#dc2626';
+  const COR_OK       = '#16a34a';
+  const COR_BAD      = '#dc2626';
+  const COR_INFO     = '#0891b2';
+  const COR_WARN     = '#d97706';
+
+  // ====== Estado ======
+  let DATA = null;          // payload completo
+  let POSTOS = [];          // postos disponíveis ao usuário
+  let selPostos = 'ALL';    // 'ALL' ou Set
+  let dadosFiltrados = [];  // após aplicar filtros
+  const charts = {};
+
+  // ====== Helpers ======
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => Array.from(document.querySelectorAll(sel));
+  const fmtPct = (v, dec=1) => (v*100).toFixed(dec).replace('.', ',') + '%';
+  const fmtNum = v => (v ?? 0).toLocaleString('pt-BR');
+  const fmtMoney = v => 'R$ ' + (v ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtDate = iso => { if (!iso) return ''; const [y,m,d] = iso.slice(0,10).split('-'); return `${d}/${m}/${y}`; };
+  const fmtDateTime = iso => { if (!iso) return ''; const dt = iso.slice(0,16); const [d,h] = dt.split(' '); if (!h) return fmtDate(d); return `${fmtDate(d)} ${h}`; };
+
+  function showLoading(msg='Carregando dados…') { $('#loadingMsg').textContent = msg; $('#loadingOverlay').classList.add('active'); }
+  function hideLoading() { $('#loadingOverlay').classList.remove('active'); }
+
+  function toIsoDate(d) {
+    return d.toISOString().slice(0,10);
+  }
+  function ontem() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return toIsoDate(d);
+  }
+  function primeiroDiaMesAtual() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+  }
+
+  // ====== Carregamento inicial ======
+  async function carregarPostosUsuario() {
+    try {
+      const r = await fetch('/session/me', { credentials: 'same-origin' });
+      const d = await r.json();
+      return Array.isArray(d.postos) && d.postos.length ? d.postos : POSTOS_TODOS;
+    } catch { return POSTOS_TODOS; }
+  }
+
+  async function carregar() {
+    showLoading('Carregando JSON do servidor…');
+    try {
+      const r = await fetch(URL_JSON, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      DATA = await r.json();
+    } catch (e) {
+      hideLoading();
+      alert('Falha ao carregar /json_consolidado/preagendamento.json — verifique se o ETL noturno rodou.\n' + e.message);
+      throw e;
+    }
+
+    const postosUsuario = await carregarPostosUsuario();
+    POSTOS = POSTOS_TODOS.filter(p => postosUsuario.includes(p));
+    if (!POSTOS.length) {
+      hideLoading();
+      $('#kTotal').textContent = '—';
+      alert('Sem acesso a postos. Solicite permissão ao administrador.');
+      return;
+    }
+
+    construirFiltros();
+    aplicarDefaults();
+    aplicarFiltros();
+    hideLoading();
+  }
+
+  function construirFiltros() {
+    // Postos
+    const ul = $('#postoTabs');
+    ul.innerHTML = '';
+    POSTOS.forEach(p => {
+      const li = document.createElement('li');
+      li.className = 'nav-item';
+      li.innerHTML = `<a data-posto="${p}" class="nav-link" href="#">${p}</a>`;
+      ul.appendChild(li);
+    });
+    ul.addEventListener('click', e => {
+      const a = e.target.closest('.nav-link'); if (!a) return;
+      e.preventDefault();
+      const p = a.dataset.posto;
+      let s = selPostos === 'ALL' ? new Set() : new Set(selPostos);
+      if (s.has(p)) s.delete(p); else s.add(p);
+      if (s.size === 0 || s.size === POSTOS.length) selPostos = 'ALL';
+      else selPostos = s;
+      pintarPostos();
+      pintarBotoesGrupo();
+    });
+
+    $('#btnGrupoTodos').addEventListener('click', () => { selPostos = 'ALL'; pintarPostos(); pintarBotoesGrupo(); });
+    $('#btnGrupoAltamiro').addEventListener('click', () => {
+      selPostos = new Set(GRUPOS.altamiro.filter(p => POSTOS.includes(p)));
+      pintarPostos(); pintarBotoesGrupo();
+    });
+    $('#btnGrupoCouto').addEventListener('click', () => {
+      selPostos = new Set(GRUPOS.couto.filter(p => POSTOS.includes(p)));
+      pintarPostos(); pintarBotoesGrupo();
+    });
+
+    $('#btnFiltrar').addEventListener('click', aplicarFiltros);
+    $('#btnReset').addEventListener('click', () => { aplicarDefaults(); aplicarFiltros(); });
+    $('#btnMesAtual').addEventListener('click', () => { aplicarDefaults(); aplicarFiltros(); });
+
+    // Tabela bruta — filtros locais
+    ['#rawSearch','#rawStatus','#rawConf','#rawDes','#rawCanal'].forEach(s => {
+      const el = $(s);
+      const ev = el.tagName === 'INPUT' ? 'input' : 'change';
+      el.addEventListener(ev, () => renderTabela(dadosFiltrados));
+    });
+
+    $('#btnExportXlsx').addEventListener('click', exportarXlsx);
+  }
+
+  function pintarPostos() {
+    $$('#postoTabs .nav-link').forEach(a => {
+      const ativo = (selPostos === 'ALL') || selPostos.has(a.dataset.posto);
+      a.classList.toggle('active', ativo);
+    });
+  }
+  function pintarBotoesGrupo() {
+    const isAll  = selPostos === 'ALL';
+    const isAlt  = !isAll && setEq(selPostos, new Set(GRUPOS.altamiro.filter(p => POSTOS.includes(p))));
+    const isCou  = !isAll && setEq(selPostos, new Set(GRUPOS.couto.filter(p => POSTOS.includes(p))));
+    $('#btnGrupoTodos').classList.toggle('active', isAll);
+    $('#btnGrupoAltamiro').classList.toggle('active', isAlt);
+    $('#btnGrupoCouto').classList.toggle('active', isCou);
+  }
+  function setEq(a, b) {
+    if (!a || !b) return false;
+    if (a === 'ALL' || b === 'ALL') return false;
+    if (a.size !== b.size) return false;
+    for (const x of a) if (!b.has(x)) return false;
+    return true;
+  }
+
+  function aplicarDefaults() {
+    selPostos = 'ALL';
+    $('#dtIni').value = primeiroDiaMesAtual();
+    $('#dtFim').value = ontem();
+    $('#selPop').value = 'todos';
+    $('#rawSearch').value = '';
+    $('#rawStatus').value = '';
+    $('#rawConf').value = '';
+    $('#rawDes').value = '';
+    $('#rawCanal').value = '';
+    pintarPostos();
+    pintarBotoesGrupo();
+    atualizarBannerFase();
+  }
+
+  function atualizarBannerFase() {
+    const dtIni = $('#dtIni').value;
+    const dtFim = $('#dtFim').value;
+    const ban = $('#faseBanner');
+    const txt = $('#faseTexto');
+    if (!dtIni || !dtFim) { ban.style.display='none'; return; }
+
+    let msg = '';
+    if (dtFim < FASE_REGRA) msg = 'Período pré-regra: confirmação não era exigida (referência histórica).';
+    else if (dtIni < FASE_REGRA && dtFim >= FASE_REGRA) msg = 'Período abrange início da regra (jan/26). Compare com cuidado.';
+    else if (dtIni >= FASE_CANCEL) msg = 'Período integralmente em fase de CANCELAMENTO (mai/26+).';
+    else if (dtIni >= FASE_REGRA && dtFim < FASE_CANCEL) msg = 'Período em fase de REGRA ATIVA sem cancelamento (jan-abr/26).';
+    else if (dtIni < FASE_CANCEL && dtFim >= FASE_CANCEL) msg = 'Período abrange início do cancelamento (mai/26).';
+
+    if (msg) { txt.textContent = msg; ban.style.display='block'; }
+    else ban.style.display='none';
+
+    if (DATA && DATA.meta && DATA.meta.gerado_em) {
+      $('#geradoEm').textContent = 'Dados gerados em ' + new Date(DATA.meta.gerado_em).toLocaleString('pt-BR');
+    }
+  }
+
+  // ====== Categorização ======
+  // Usuário definiu:
+  // - Médico Faltou → EXCLUIR
+  // - Atendido / Aguardando → compareceu
+  // - Faltou / Ausente → falta
+  // - Não Atendido: falta SE > 1h após DataConsulta+HoraPrevista; senão pendente
+  // - Default desconhecido → falta
+  function categorizarAtendido(at, dataConsulta, horaConsulta) {
+    if (!at) return 'pendente';
+    const a = at.toString().toLowerCase().trim();
+    if (a.startsWith('médico faltou') || a.startsWith('medico faltou')) return 'medico_faltou';
+    if (a === 'atendido' || a === 'aguardando') return 'compareceu';
+    if (a === 'faltou' || a === 'ausente') return 'falta';
+    if (a === 'não atendido' || a === 'nao atendido') {
+      try {
+        const ts = new Date(`${dataConsulta}T${horaConsulta || '00:00'}:00`);
+        const agora = new Date();
+        if ((agora - ts) > 3600 * 1000) return 'falta';
+        return 'pendente';
+      } catch { return 'pendente'; }
+    }
+    return 'falta';
+  }
+
+  function sujeitoARegra(dl, dc) {
+    if (!dl || !dc) return false;
+    if (dc < FASE_REGRA) return false;
+    const a = new Date(dl + 'T00:00:00');
+    const b = new Date(dc + 'T00:00:00');
+    const dias = (b - a) / 86400000;
+    return dias >= 5;
+  }
+
+  function confirmouNaJanela(da, dc) {
+    if (!da || !dc) return false;
+    const a = new Date(da.slice(0,10) + 'T00:00:00');
+    const b = new Date(dc + 'T00:00:00');
+    const dias = (b - a) / 86400000;
+    return dias >= 2 && dias <= 5;
+  }
+  function confirmouForaJanela(da, dc) {
+    if (!da || !dc) return false;
+    return !confirmouNaJanela(da, dc);
+  }
+
+  function antecedencia(dl, dc) {
+    if (!dl || !dc) return null;
+    const a = new Date(dl + 'T00:00:00');
+    const b = new Date(dc + 'T00:00:00');
+    return Math.round((b - a) / 86400000);
+  }
+
+  function faixaAntec(dias) {
+    if (dias === null || dias === undefined) return 'sem dado';
+    if (dias <= 4)   return '0-4 d';
+    if (dias <= 10)  return '5-10 d';
+    if (dias <= 20)  return '11-20 d';
+    if (dias <= 30)  return '21-30 d';
+    return '30+ d';
+  }
+
+  // ====== Aplicar filtros ======
+  function aplicarFiltros() {
+    if (!DATA) return;
+    atualizarBannerFase();
+    const dtIni = $('#dtIni').value;
+    const dtFim = $('#dtFim').value;
+    const pop   = $('#selPop').value;
+    const postosOk = (selPostos === 'ALL') ? new Set(POSTOS) : selPostos;
+
+    dadosFiltrados = (DATA.consultas || []).filter(c => {
+      if (!postosOk.has(c.p)) return false;
+      if (dtIni && c.dc < dtIni) return false;
+      if (dtFim && c.dc > dtFim) return false;
+      // Sub-população
+      const sj = sujeitoARegra(c.dl, c.dc);
+      if (pop === 'sujeitos' && !sj) return false;
+      if (pop === 'isentos'  &&  sj) return false;
+      return true;
+    });
+
+    renderKPIs(dadosFiltrados);
+    renderConfirmFalta(dadosFiltrados);
+    renderFaltaMensal(DATA.consultas, postosOk);  // série usa janela completa
+    renderFaltaAntec(dadosFiltrados);
+    renderHoraConf(dadosFiltrados);
+    renderConfirmFaltou(dadosFiltrados);
+    renderNaoConfCompar(dadosFiltrados);
+    renderCanalConf(dadosFiltrados);
+    renderPushConf(dadosFiltrados);
+    renderMedianaPagou(dadosFiltrados);
+    renderRemanejam(DATA.consultas, postosOk);
+    renderDesistMensal(DATA.consultas, postosOk);
+    renderDesistMedicos(dadosFiltrados);
+    renderEspFalta(dadosFiltrados);
+    renderMedFalta(dadosFiltrados);
+    renderHeatmap(dadosFiltrados);
+    renderCanalGeral(dadosFiltrados);
+    renderTabela(dadosFiltrados);
+  }
+
+  // ====== Métricas auxiliares ======
+  function classificar(c) {
+    return categorizarAtendido(c.at, c.dc, c.hc);
+  }
+  function sujeitos(arr) {
+    return arr.filter(c => sujeitoARegra(c.dl, c.dc));
+  }
+  function semDesistencias(arr) { return arr.filter(c => !c.des); }
+  function semMedicoFaltou(arr) { return arr.filter(c => classificar(c) !== 'medico_faltou'); }
+
+  // ====== KPIs ======
+  function renderKPIs(arr) {
+    const validos = semDesistencias(semMedicoFaltou(arr));
+    const total   = arr.length;
+    const desist  = arr.filter(c => c.des).length;
+
+    const sujs    = sujeitos(validos);
+    const confs   = sujs.filter(c => confirmouNaJanela(c.da, c.dc));
+    const compr   = validos.filter(c => classificar(c) === 'compareceu');
+    const falta   = validos.filter(c => classificar(c) === 'falta');
+    const pagou   = validos.filter(c => c.vp > 0);
+    const ticket  = pagou.length ? pagou.reduce((s,c)=>s+c.vp,0) / pagou.length : 0;
+    const pushes  = sujs.filter(c => !!c.dp);
+
+    $('#kTotal').textContent  = fmtNum(total);
+    $('#kConfirm').textContent = sujs.length ? fmtPct(confs.length / sujs.length) : '—';
+    $('#kCompar').textContent  = validos.length ? fmtPct(compr.length / validos.length) : '—';
+    $('#kFaltas').textContent  = validos.length ? fmtPct(falta.length / validos.length) : '—';
+    $('#kPagou').textContent   = validos.length ? fmtPct(pagou.length / validos.length) : '—';
+    $('#kDesist').textContent  = total ? fmtPct(desist / total) : '—';
+    $('#kTicket').textContent  = fmtMoney(ticket);
+    $('#kPushed').textContent  = sujs.length ? fmtPct(pushes.length / sujs.length) : '—';
+  }
+
+  // ====== Charts helpers ======
+  function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+  function makeBar(canvasId, labels, datasets, opts={}) {
+    destroyChart(canvasId);
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    charts[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets },
+      options: Object.assign({
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: datasets.length > 1 } },
+        scales: { y: { beginAtZero: true } },
+      }, opts)
+    });
+    return charts[canvasId];
+  }
+  function makeLine(canvasId, labels, datasets, opts={}) {
+    destroyChart(canvasId);
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    charts[canvasId] = new Chart(ctx, {
+      type: 'line', data: { labels, datasets },
+      options: Object.assign({
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: datasets.length > 1 } },
+        scales: { y: { beginAtZero: true } },
+      }, opts)
+    });
+    return charts[canvasId];
+  }
+
+  // ====== 1. Confirmou × Não confirmou (sujeitos à regra) ======
+  function renderConfirmFalta(arr) {
+    const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr)));
+    let cf = 0, ct = 0, nf = 0, nt = 0;
+    sujs.forEach(c => {
+      const conf = confirmouNaJanela(c.da, c.dc);
+      const status = classificar(c);
+      if (status === 'pendente') return;
+      if (conf) { ct++; if (status === 'falta') cf++; }
+      else      { nt++; if (status === 'falta') nf++; }
+    });
+    const labels = ['Confirmou na janela', 'Não confirmou'];
+    const dataPct = [
+      ct ? cf/ct*100 : 0,
+      nt ? nf/nt*100 : 0,
+    ];
+    makeBar('chConfirmFalta', labels, [{
+      label: '% falta', data: dataPct,
+      backgroundColor: [COR_OK, COR_BAD],
+    }], {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}% falta` } },
+      },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
+    });
+  }
+
+  // ====== 2. Série mensal de falta com fases ======
+  function renderFaltaMensal(allConsultas, postosOk) {
+    const consultas = allConsultas.filter(c => postosOk.has(c.p));
+    const validos = semDesistencias(semMedicoFaltou(sujeitos(consultas).concat(consultas.filter(c => !sujeitoARegra(c.dl, c.dc)))));
+    // Agrupa por mês
+    const porMes = {};
+    consultas.forEach(c => {
+      if (c.des) return;
+      const status = classificar(c);
+      if (status === 'medico_faltou' || status === 'pendente') return;
+      const mes = (c.dc || '').slice(0, 7);
+      if (!mes) return;
+      if (!porMes[mes]) porMes[mes] = { total: 0, falta: 0 };
+      porMes[mes].total++;
+      if (status === 'falta') porMes[mes].falta++;
+    });
+    const meses = Object.keys(porMes).sort();
+    const pct   = meses.map(m => porMes[m].total ? porMes[m].falta / porMes[m].total * 100 : 0);
+    const cores = meses.map(m => m < FASE_REGRA ? COR_PRE : (m < FASE_CANCEL ? COR_REGRA : COR_CANCEL));
+
+    makeLine('chFaltaMensal', meses, [{
+      label: '% falta',
+      data: pct,
+      borderColor: '#374151',
+      backgroundColor: '#37415130',
+      pointBackgroundColor: cores,
+      pointBorderColor: cores,
+      pointRadius: 5,
+      tension: 0.25,
+    }], {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}% falta` } },
+      },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
+    });
+  }
+
+  // ====== 3. % falta por faixa antecedência ======
+  function renderFaltaAntec(arr) {
+    const validos = semDesistencias(semMedicoFaltou(arr));
+    const buckets = ['0-4 d', '5-10 d', '11-20 d', '21-30 d', '30+ d'];
+    const totais = Object.fromEntries(buckets.map(b => [b, { total: 0, falta: 0 }]));
+    validos.forEach(c => {
+      const status = classificar(c);
+      if (status === 'pendente') return;
+      const f = faixaAntec(antecedencia(c.dl, c.dc));
+      if (!totais[f]) return;
+      totais[f].total++;
+      if (status === 'falta') totais[f].falta++;
+    });
+    const pct = buckets.map(b => totais[b].total ? totais[b].falta / totais[b].total * 100 : 0);
+    const cnt = buckets.map(b => totais[b].total);
+    makeBar('chFaltaAntec', buckets, [{
+      label: '% falta', data: pct,
+      backgroundColor: COR_BAD,
+    }], {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: c => `${c.parsed.y.toFixed(1)}% falta (n=${cnt[c.dataIndex]})`,
+        }},
+      },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
+    });
+  }
+
+  // ====== 4. Hora da confirmação ======
+  function renderHoraConf(arr) {
+    const sujs = semDesistencias(sujeitos(arr));
+    const histo = { '5d': 0, '4d': 0, '3d': 0, '2d': 0, 'fora janela': 0 };
+    sujs.forEach(c => {
+      if (!c.da) return;
+      const a = new Date(c.da.slice(0,10) + 'T00:00:00');
+      const b = new Date(c.dc + 'T00:00:00');
+      const dias = (b - a) / 86400000;
+      if      (dias === 5) histo['5d']++;
+      else if (dias === 4) histo['4d']++;
+      else if (dias === 3) histo['3d']++;
+      else if (dias === 2) histo['2d']++;
+      else                 histo['fora janela']++;
+    });
+    makeBar('chHoraConf', Object.keys(histo), [{
+      label: 'Confirmações',
+      data: Object.values(histo),
+      backgroundColor: ['#16a34a','#22c55e','#84cc16','#facc15','#94a3b8'],
+    }], { plugins: { legend: { display: false } } });
+  }
+
+  // ====== 5. Confirmou + Faltou ======
+  function renderConfirmFaltou(arr) {
+    const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr)));
+    const conf = sujs.filter(c => confirmouNaJanela(c.da, c.dc));
+    const ct   = conf.length;
+    const cf   = conf.filter(c => classificar(c) === 'falta').length;
+    const pct  = ct ? cf / ct * 100 : 0;
+    makeBar('chConfirmFaltou', ['Confirmou'], [
+      { label: 'Compareceu', data: [ct - cf], backgroundColor: COR_OK, stack: 'a' },
+      { label: 'Faltou',     data: [cf],      backgroundColor: COR_BAD, stack: 'a' },
+    ], {
+      plugins: { legend: { display: true, position: 'bottom' },
+        tooltip: { callbacks: { footer: () => `Falta dentre confirmados: ${pct.toFixed(1)}%` } } },
+      indexAxis: 'y',
+      scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } },
+    });
+  }
+
+  // ====== 6. Não confirmou + Compareceu ======
+  function renderNaoConfCompar(arr) {
+    const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr)));
+    const naoConf = sujs.filter(c => !confirmouNaJanela(c.da, c.dc));
+    const total   = naoConf.length;
+    const compar  = naoConf.filter(c => classificar(c) === 'compareceu').length;
+    const pct     = total ? compar / total * 100 : 0;
+    makeBar('chNaoConfCompar', ['Não confirmou'], [
+      { label: 'Compareceu', data: [compar],         backgroundColor: COR_INFO, stack: 'a' },
+      { label: 'Faltou/Outro', data: [total - compar], backgroundColor: '#94a3b8', stack: 'a' },
+    ], {
+      plugins: { legend: { display: true, position: 'bottom' },
+        tooltip: { callbacks: { footer: () => `Compareceu sem confirmar: ${pct.toFixed(1)}%` } } },
+      indexAxis: 'y',
+      scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } },
+    });
+  }
+
+  // ====== 7. % confirmação por canal ======
+  function renderCanalConf(arr) {
+    const sujs = semDesistencias(sujeitos(arr));
+    const por = { WEB: { tot: 0, conf: 0 }, ASU: { tot: 0, conf: 0 }, F6: { tot: 0, conf: 0 } };
+    sujs.forEach(c => {
+      const x = por[c.can] || por.F6;
+      x.tot++;
+      if (confirmouNaJanela(c.da, c.dc)) x.conf++;
+    });
+    const labels = ['Web/App', 'ASU (central)', 'F6 (lançamento)'];
+    const pct = ['WEB','ASU','F6'].map(k => por[k].tot ? por[k].conf / por[k].tot * 100 : 0);
+    const tot = ['WEB','ASU','F6'].map(k => por[k].tot);
+    makeBar('chCanalConf', labels, [{
+      label: '% confirmação', data: pct,
+      backgroundColor: [COR_OK, COR_INFO, COR_WARN],
+    }], {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}% (n=${tot[c.dataIndex]})` } },
+      },
+      scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } },
+    });
+  }
+
+  // ====== 8. Tempo push → confirmação ======
+  function renderPushConf(arr) {
+    const sujs = semDesistencias(sujeitos(arr));
+    const horas = [];
+    sujs.forEach(c => {
+      if (!c.dp || !c.da) return;
+      const a = new Date(c.dp.replace(' ','T'));
+      const b = new Date(c.da.replace(' ','T'));
+      const h = (b - a) / 3600000;
+      if (h >= 0 && h <= 240) horas.push(h);
+    });
+    horas.sort((a,b) => a - b);
+    const mediana = horas.length ? horas[Math.floor(horas.length/2)] : 0;
+    const buckets = ['0-1h','1-3h','3-6h','6-12h','12-24h','24-48h','48-72h','72h+'];
+    const cnt = [0,0,0,0,0,0,0,0];
+    horas.forEach(h => {
+      if      (h < 1)   cnt[0]++;
+      else if (h < 3)   cnt[1]++;
+      else if (h < 6)   cnt[2]++;
+      else if (h < 12)  cnt[3]++;
+      else if (h < 24)  cnt[4]++;
+      else if (h < 48)  cnt[5]++;
+      else if (h < 72)  cnt[6]++;
+      else              cnt[7]++;
+    });
+    makeBar('chPushConf', buckets, [{
+      label: `Confirmações (mediana ${mediana.toFixed(1)}h)`,
+      data: cnt, backgroundColor: COR_INFO,
+    }]);
+  }
+
+  // ====== 9. Mediana de dias agendamento → consulta ======
+  function renderMedianaPagou(arr) {
+    const validos = semDesistencias(semMedicoFaltou(arr));
+    function median(xs) { if (!xs.length) return 0; xs.sort((a,b)=>a-b); return xs[Math.floor(xs.length/2)]; }
+    function mean(xs) { if (!xs.length) return 0; return xs.reduce((s,x)=>s+x,0) / xs.length; }
+    const pagou = validos.filter(c => c.vp > 0).map(c => antecedencia(c.dl, c.dc)).filter(d => d !== null);
+    const naoPagou = validos.filter(c => c.vp === 0).map(c => antecedencia(c.dl, c.dc)).filter(d => d !== null);
+    const labels = ['Pagantes', 'Não pagantes'];
+    makeBar('chMedianaPagou', labels, [
+      { label: 'Mediana (dias)', data: [median([...pagou]), median([...naoPagou])], backgroundColor: COR_INFO },
+      { label: 'Média (dias)',   data: [mean(pagou), mean(naoPagou)], backgroundColor: COR_WARN },
+    ]);
+  }
+
+  // ====== 10. Remanejamento de vagas ======
+  function renderRemanejam(allConsultas, postosOk) {
+    const consultas = allConsultas.filter(c => postosOk.has(c.p) && !c.des);
+    const porMes = {};
+    consultas.forEach(c => {
+      const mes = (c.dc || '').slice(0, 7);
+      if (!mes) return;
+      const dias = antecedencia(c.dl, c.dc);
+      if (dias === null) return;
+      if (!porMes[mes]) porMes[mes] = { total: 0, sub5: 0 };
+      porMes[mes].total++;
+      if (dias < 5) porMes[mes].sub5++;
+    });
+    const meses = Object.keys(porMes).sort();
+    const pct = meses.map(m => porMes[m].total ? porMes[m].sub5 / porMes[m].total * 100 : 0);
+    const cores = meses.map(m => m < FASE_REGRA ? COR_PRE : (m < FASE_CANCEL ? COR_REGRA : COR_CANCEL));
+    makeLine('chRemanejam', meses, [{
+      label: '% pré-agendamentos com <5d',
+      data: pct,
+      borderColor: '#7c3aed',
+      backgroundColor: '#7c3aed30',
+      pointBackgroundColor: cores,
+      pointRadius: 5,
+      tension: 0.25,
+    }], {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}%` } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
+    });
+  }
+
+  // ====== 11. Desistências mensais ======
+  function renderDesistMensal(allConsultas, postosOk) {
+    const consultas = allConsultas.filter(c => postosOk.has(c.p));
+    const porMes = {};
+    consultas.forEach(c => {
+      const mes = (c.dc || '').slice(0, 7);
+      if (!mes) return;
+      if (!porMes[mes]) porMes[mes] = { total: 0, des: 0 };
+      porMes[mes].total++;
+      if (c.des) porMes[mes].des++;
+    });
+    const meses = Object.keys(porMes).sort();
+    const pct = meses.map(m => porMes[m].total ? porMes[m].des / porMes[m].total * 100 : 0);
+    const cores = meses.map(m => m < FASE_REGRA ? COR_PRE : (m < FASE_CANCEL ? COR_REGRA : COR_CANCEL));
+    makeLine('chDesistMensal', meses, [{
+      label: '% desistência',
+      data: pct,
+      borderColor: COR_WARN,
+      backgroundColor: '#d9770630',
+      pointBackgroundColor: cores,
+      pointRadius: 5,
+      tension: 0.25,
+    }], {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}%` } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
+    });
+  }
+
+  // ====== 12. Top médicos por desistência ======
+  function renderDesistMedicos(arr) {
+    const por = {};
+    arr.forEach(c => {
+      if (!c.med) return;
+      if (!por[c.med]) por[c.med] = { total: 0, des: 0 };
+      por[c.med].total++;
+      if (c.des) por[c.med].des++;
+    });
+    const top = Object.entries(por)
+      .filter(([_, v]) => v.total >= 30)
+      .map(([med, v]) => ({ med, total: v.total, des: v.des, pct: v.des / v.total * 100 }))
+      .sort((a,b) => b.des - a.des)
+      .slice(0, 15);
+    makeBar('chDesistMedicos', top.map(x => x.med), [{
+      label: 'Desistências (qtd)',
+      data: top.map(x => x.des),
+      backgroundColor: COR_WARN,
+    }], {
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { afterLabel: c => `${top[c.dataIndex].pct.toFixed(1)}% sobre ${top[c.dataIndex].total} agendamentos` } },
+      },
+    });
+  }
+
+  // ====== 13. Top especialidades por falta ======
+  function renderEspFalta(arr) {
+    const validos = semDesistencias(semMedicoFaltou(arr));
+    const por = {};
+    validos.forEach(c => {
+      const e = c.esp || '(sem)';
+      if (!por[e]) por[e] = { total: 0, falta: 0 };
+      const status = classificar(c);
+      if (status === 'pendente') return;
+      por[e].total++;
+      if (status === 'falta') por[e].falta++;
+    });
+    const top = Object.entries(por)
+      .filter(([_, v]) => v.total >= 30)
+      .map(([esp, v]) => ({ esp, total: v.total, pct: v.falta / v.total * 100 }))
+      .sort((a,b) => b.pct - a.pct)
+      .slice(0, 10);
+    makeBar('chEspFalta', top.map(x => x.esp), [{
+      label: '% falta',
+      data: top.map(x => x.pct),
+      backgroundColor: COR_BAD,
+    }], {
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { afterLabel: c => `n = ${top[c.dataIndex].total}` } },
+      },
+      scales: { x: { ticks: { callback: v => v + '%' } } },
+    });
+  }
+
+  // ====== 14. Top médicos por falta ======
+  function renderMedFalta(arr) {
+    const validos = semDesistencias(semMedicoFaltou(arr));
+    const por = {};
+    validos.forEach(c => {
+      const m = c.med || '(sem)';
+      if (!por[m]) por[m] = { total: 0, falta: 0 };
+      const status = classificar(c);
+      if (status === 'pendente') return;
+      por[m].total++;
+      if (status === 'falta') por[m].falta++;
+    });
+    const top = Object.entries(por)
+      .filter(([_, v]) => v.total >= 30)
+      .map(([med, v]) => ({ med, total: v.total, pct: v.falta / v.total * 100 }))
+      .sort((a,b) => b.pct - a.pct)
+      .slice(0, 15);
+    makeBar('chMedFalta', top.map(x => x.med), [{
+      label: '% falta',
+      data: top.map(x => x.pct),
+      backgroundColor: COR_BAD,
+    }], {
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { afterLabel: c => `n = ${top[c.dataIndex].total}` } },
+      },
+      scales: { x: { ticks: { callback: v => v + '%' } } },
+    });
+  }
+
+  // ====== 15. Heatmap dia-da-semana × hora ======
+  function renderHeatmap(arr) {
+    const validos = semDesistencias(semMedicoFaltou(arr));
+    const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    const grid = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => ({ total: 0, falta: 0 })));
+    validos.forEach(c => {
+      if (!c.dc || !c.hc) return;
+      const status = classificar(c);
+      if (status === 'pendente') return;
+      const dt = new Date(c.dc + 'T' + c.hc + ':00');
+      const dow = dt.getDay();
+      const h   = dt.getHours();
+      grid[dow][h].total++;
+      if (status === 'falta') grid[dow][h].falta++;
+    });
+
+    let maxPct = 0;
+    grid.forEach(row => row.forEach(cell => {
+      if (cell.total >= 5) {
+        const pct = cell.falta / cell.total;
+        if (pct > maxPct) maxPct = pct;
+      }
+    }));
+
+    const wrap = $('#heatmapWrap');
+    wrap.innerHTML = '';
+    const gridDiv = document.createElement('div');
+    gridDiv.className = 'heatmap-container';
+    // Header
+    gridDiv.appendChild(div('heatmap-label', ''));
+    for (let h = 0; h < 24; h++) {
+      gridDiv.appendChild(div('heatmap-label', String(h).padStart(2,'0')));
+    }
+    // Linhas
+    for (let d = 0; d < 7; d++) {
+      gridDiv.appendChild(div('heatmap-label', dias[d]));
+      for (let h = 0; h < 24; h++) {
+        const cell = grid[d][h];
+        const el = document.createElement('div');
+        el.className = 'heatmap-cell';
+        if (cell.total < 5) {
+          el.style.background = '#f1f5f9';
+          el.title = `${dias[d]} ${h}h — n=${cell.total} (insuficiente)`;
+          el.textContent = '';
+        } else {
+          const pct = cell.falta / cell.total;
+          const intens = maxPct ? pct / maxPct : 0;
+          el.style.background = `rgba(220, 38, 38, ${0.15 + 0.75 * intens})`;
+          el.title = `${dias[d]} ${h}h — ${(pct*100).toFixed(0)}% falta (n=${cell.total})`;
+          el.textContent = pct >= 0.20 ? Math.round(pct*100) + '%' : '';
+          if (pct < 0.5) el.style.color = '#1f2937';
+        }
+        gridDiv.appendChild(el);
+      }
+    }
+    wrap.appendChild(gridDiv);
+  }
+  function div(cls, text) {
+    const el = document.createElement('div');
+    el.className = cls;
+    el.textContent = text;
+    return el;
+  }
+
+  // ====== 16. Comparativo geral por canal ======
+  function renderCanalGeral(arr) {
+    const validos = semDesistencias(semMedicoFaltou(arr));
+    const por = { WEB: { tot: 0, falta: 0, pago: 0, pgValor: 0 },
+                  ASU: { tot: 0, falta: 0, pago: 0, pgValor: 0 },
+                  F6:  { tot: 0, falta: 0, pago: 0, pgValor: 0 } };
+    validos.forEach(c => {
+      const x = por[c.can] || por.F6;
+      const status = classificar(c);
+      if (status === 'pendente') return;
+      x.tot++;
+      if (status === 'falta') x.falta++;
+      if (c.vp > 0) { x.pago++; x.pgValor += c.vp; }
+    });
+    const labels = ['Web/App','ASU','F6'];
+    const pctF   = ['WEB','ASU','F6'].map(k => por[k].tot ? por[k].falta / por[k].tot * 100 : 0);
+    const ticket = ['WEB','ASU','F6'].map(k => por[k].pago ? por[k].pgValor / por[k].pago : 0);
+    makeBar('chCanalGeral', labels, [
+      { label: '% falta',          data: pctF,   backgroundColor: COR_BAD,  yAxisID: 'y' },
+      { label: 'Ticket médio (R$)', data: ticket, backgroundColor: COR_INFO, yAxisID: 'y2' },
+    ], {
+      scales: {
+        y:  { beginAtZero: true, position: 'left',  title: { display: true, text: '% falta' }, ticks: { callback: v => v + '%' } },
+        y2: { beginAtZero: true, position: 'right', title: { display: true, text: 'R$' }, grid: { drawOnChartArea: false } },
+      },
+    });
+  }
+
+  // ====== 17. Tabela bruta ======
+  function renderTabela(arr) {
+    const search = ($('#rawSearch').value || '').toUpperCase().trim();
+    const fStat  = $('#rawStatus').value;
+    const fConf  = $('#rawConf').value;
+    const fDes   = $('#rawDes').value;
+    const fCanal = $('#rawCanal').value;
+
+    const filtrado = arr.filter(c => {
+      if (fCanal && c.can !== fCanal) return false;
+      if (fDes && String(c.des) !== fDes) return false;
+      if (fStat) {
+        if (classificar(c) !== fStat) return false;
+      }
+      if (fConf) {
+        if (fConf === 'sim'  && !confirmouNaJanela(c.da, c.dc)) return false;
+        if (fConf === 'fora' && (!c.da || confirmouNaJanela(c.da, c.dc))) return false;
+        if (fConf === 'nao'  && c.da) return false;
+      }
+      if (search) {
+        const blob = `${c.pac||''} ${c.m||''} ${c.med||''} ${c.tal||''}`.toUpperCase();
+        if (!blob.includes(search)) return false;
+      }
+      return true;
+    });
+
+    // Limita a 5000 linhas para performance
+    const limite = 5000;
+    const visiveis = filtrado.slice(0, limite);
+    $('#tblCount').textContent = filtrado.length.toLocaleString('pt-BR') + (filtrado.length > limite ? ` (mostrando ${limite})` : '');
+
+    const body = $('#tblRawBody');
+    const html = visiveis.map(c => {
+      const status = classificar(c);
+      const badge = {
+        compareceu:    'badge-ok',
+        falta:         'badge-bad',
+        pendente:      'badge-mute',
+        medico_faltou: 'badge-warn',
+      }[status] || 'badge-mute';
+      const stTxt = { compareceu:'Compareceu', falta:'Faltou', pendente:'Pendente', medico_faltou:'Médico faltou' }[status] || status;
+
+      let confLabel = 'Não';
+      let confCls   = 'badge-mute';
+      if (c.da) {
+        if (confirmouNaJanela(c.da, c.dc)) { confLabel = 'Sim (5-2d)'; confCls = 'badge-ok'; }
+        else                                { confLabel = 'Fora janela'; confCls = 'badge-warn'; }
+      }
+      const desBadge = c.des ? '<span class="badge badge-bad">Sim</span>' : '';
+
+      return `<tr>
+        <td>${c.p}</td>
+        <td>${c.tal||''}</td>
+        <td>${c.m||''}</td>
+        <td>${c.pac||''}</td>
+        <td>${c.med||''}</td>
+        <td>${c.esp||''}</td>
+        <td>${c.can}</td>
+        <td>${fmtDate(c.dl)}</td>
+        <td>${fmtDate(c.dc)}</td>
+        <td>${c.hc||''}</td>
+        <td class="text-right">${c.dif||''}</td>
+        <td>${fmtDateTime(c.dp)}</td>
+        <td><span class="badge ${confCls}">${confLabel}</span><br><small>${fmtDateTime(c.da)}</small></td>
+        <td>${fmtDateTime(c.df)}</td>
+        <td><span class="badge ${badge}">${stTxt}</span></td>
+        <td>${desBadge}</td>
+        <td class="text-right">${c.vp ? fmtMoney(c.vp) : ''}</td>
+      </tr>`;
+    }).join('');
+    body.innerHTML = html;
+  }
+
+  // ====== Export Excel (CSV UTF-8 BOM compatível com Excel) ======
+  function exportarXlsx() {
+    const search = ($('#rawSearch').value || '').toUpperCase().trim();
+    const fStat  = $('#rawStatus').value;
+    const fConf  = $('#rawConf').value;
+    const fDes   = $('#rawDes').value;
+    const fCanal = $('#rawCanal').value;
+    const filtrado = dadosFiltrados.filter(c => {
+      if (fCanal && c.can !== fCanal) return false;
+      if (fDes && String(c.des) !== fDes) return false;
+      if (fStat && classificar(c) !== fStat) return false;
+      if (fConf === 'sim'  && !confirmouNaJanela(c.da, c.dc)) return false;
+      if (fConf === 'fora' && (!c.da || confirmouNaJanela(c.da, c.dc))) return false;
+      if (fConf === 'nao'  && c.da) return false;
+      if (search) {
+        const blob = `${c.pac||''} ${c.m||''} ${c.med||''} ${c.tal||''}`.toUpperCase();
+        if (!blob.includes(search)) return false;
+      }
+      return true;
+    });
+
+    const headers = ['Posto','Talão','Matrícula','Paciente','Médico','Especialidade','Canal',
+      'Data Lançamento','Data Consulta','Hora','Antecedência (d)','Push',
+      'Confirmação Janela','Confirmação Chegada','Status','Desistência','Valor Pago'];
+    const rows = filtrado.map(c => [
+      c.p, c.tal||'', c.m||'', c.pac||'', c.med||'', c.esp||'', c.can,
+      c.dl||'', c.dc||'', c.hc||'', c.dif||'',
+      c.dp||'', c.da||'', c.df||'',
+      classificar(c), c.des ? 'Sim' : 'Não',
+      (c.vp || 0).toFixed(2).replace('.', ','),
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `preagendamento_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ====== Boot ======
+  document.addEventListener('DOMContentLoaded', carregar);
+})();
+</script>
+</body>
+</html>

@@ -111,6 +111,9 @@ _TEMPLATE_TO_PAGINA = {
     "higienizacao":                     "higienizacao",
     "agenda_dia.html":                  "agenda_dia",
     "agenda_dia":                       "agenda_dia",
+    "preagendamento.html":              "preagendamento",
+    "preagendamento":                   "preagendamento",
+    "/preagendamento":                  "preagendamento",
     # Itens de mais_servicos.html (internos)
     "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
     "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",
@@ -1190,6 +1193,11 @@ def h_qualidade_agenda():
 @app.get('/agenda_dia.html')
 def h_agenda_dia():
     return render_protected_page("agenda_dia.html")
+
+@app.get('/preagendamento')
+@app.get('/preagendamento.html')
+def h_preagendamento():
+    return render_protected_page("preagendamento.html")
 
 @app.get('/higienizacao.html')
 def h_higienizacao():

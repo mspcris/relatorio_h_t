@@ -104,3 +104,7 @@ TZ=America/Sao_Paulo
 
 # Égide — KPI Égide Saúde & Benefícios (MySQL 8.4.8 em RDS) — 2x/dia 04:15 e 16:15 — criado em 2026-04-19
 15 4,16 * * * root flock -n /opt/relatorio_h_t/locks/export_egide.lock   /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/export_egide.py >>/var/log/relatorio_h_t/export_egide.log 2>&1
+
+# Pré-Agendamento — Dashboard da regra de confirmação 5-2 dias — 1x/dia 02:30 — criado em 2026-04-26
+# Regenera o JSON inteiro (12 meses passado + 90 dias futuro) varrendo os 13 postos em paralelo.
+30   2 * * * root flock -n /opt/relatorio_h_t/locks/preagendamento.lock  /opt/relatorio_h_t/export_preagendamento.sh >>/var/log/relatorio_h_t/preagendamento.log 2>&1
