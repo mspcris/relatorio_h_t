@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Admin · Regras de Auditoria — CAMIM</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+  <style>
+    body { padding:20px; font-family:system-ui,-apple-system,sans-serif; }
+    .container { max-width:1180px; }
+    table { font-size:13px; }
+    .params-cell { font-family:Menlo,Consolas,monospace; font-size:12px;
+                   white-space:pre-wrap; max-width:380px; }
+    .scope-cell { font-family:Menlo,Consolas,monospace; font-size:11px; color:#555; }
+    .row-inactive { color:#aaa; }
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.5); display:none;
+                 align-items:center; justify-content:center; z-index:9999; }
+    .modal-bg.show { display:flex; }
+    .modal-card { background:#fff; padding:20px; border-radius:8px; width:96%; max-width:680px;
+                   max-height:92vh; overflow-y:auto; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h3 class="mb-1">Regras de Auditoria Financeira</h3>
+  <p class="text-muted">Configura como o motor detecta discrepâncias. Mudanças entram em vigor no próximo run do cron (03:00).</p>
+
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <a href="/kpi_receita_despesa.html" class="btn btn-sm btn-outline-secondary">← KPI Receita x Despesa</a>
+    <button class="btn btn-sm btn-primary" id="btnNova">+ Nova regra</button>
+  </div>
+
+  <table class="table table-sm table-bordered table-hover bg-white">
+    <thead class="thead-light">
+      <tr>
+        <th>#</th><th>Nome</th><th>Tipo</th><th>Parâmetros</th>
+        <th>Postos</th><th>Tipos</th><th>Ativa</th><th>Obs</th><th></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<div class="modal-bg" id="modalRegra">
+  <div class="modal-card">
+    <h5 id="modalTitulo">Nova regra</h5>
+    <form id="formRegra" onsubmit="return false">
+      <input type="hidden" id="rid">
+      <div class="form-group">
+        <label>Nome</label>
+        <input type="text" class="form-control form-control-sm" id="rnome" maxlength="120" required>
+      </div>
+      <div class="form-group">
+        <label>Tipo</label>
+        <select class="form-control form-control-sm" id="rtipo" required>
+          <option value="mm_pct">mm_pct — média móvel + %</option>
+          <option value="zscore_robusto">zscore_robusto — desvio robusto</option>
+          <option value="gap_temporal">gap_temporal — conta sem lançamento</option>
+          <option value="fornecedor_novo">fornecedor_novo</option>
+          <option value="nao_recorrente_pct">nao_recorrente_pct — % do total do posto</option>
+          <option value="benford_mad">benford_mad — limites do semáforo</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Parâmetros (JSON)</label>
+        <textarea class="form-control form-control-sm" id="rparams" rows="3" style="font-family:monospace">{}</textarea>
+        <small class="form-text text-muted" id="rparams_hint"></small>
+      </div>
+      <div class="form-row">
+        <div class="form-group col-md-6">
+          <label>Escopo postos</label>
+          <input type="text" class="form-control form-control-sm" id="rpostos" value="*"
+                  placeholder="* | A,B,X | !A,X">
+        </div>
+        <div class="form-group col-md-6">
+          <label>Escopo tipos (id_conta_tipo)</label>
+          <input type="text" class="form-control form-control-sm" id="rtipos" value="*"
+                  placeholder="* | 12,34 | !12">
+        </div>
+      </div>
+      <div class="form-group form-check">
+        <input type="checkbox" class="form-check-input" id="rativa" checked>
+        <label class="form-check-label" for="rativa">Ativa</label>
+      </div>
+      <div class="form-group">
+        <label>Observação</label>
+        <textarea class="form-control form-control-sm" id="robs" rows="2" maxlength="1000"></textarea>
+      </div>
+      <div class="d-flex justify-content-end" style="gap:8px">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalRegra').classList.remove('show')">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="btnSalvar">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const HINTS = {
+  mm_pct:             '{"janela": 12, "pct": 10}  — janela em meses, pct = limite em %',
+  zscore_robusto:     '{"threshold": 3.0}         — convencional ≥ 3',
+  gap_temporal:       '{"meses_vazios": 1}        — meses sem lançamento p/ alertar',
+  fornecedor_novo:    '{}                         — sem parâmetros',
+  nao_recorrente_pct: '{"pct_posto": 1.0}         — % do total do posto no mês',
+  benford_mad:        '{"amarelo": 0.012, "vermelho": 0.022} — limiares do semáforo',
+};
+
+function el(s){ return document.querySelector(s); }
+el("#rtipo").addEventListener("change", ()=>{
+  el("#rparams_hint").textContent = HINTS[el("#rtipo").value] || "";
+});
+el("#rtipo").dispatchEvent(new Event("change"));
+
+async function carregar(){
+  const r = await fetch("/api/auditoria/regras", { credentials:"same-origin" });
+  if (!r.ok) {
+    el("#tbody").innerHTML = `<tr><td colspan="9" class="text-danger">Sem permissão (HTTP ${r.status})</td></tr>`;
+    return;
+  }
+  const d = await r.json();
+  el("#tbody").innerHTML = (d.regras||[]).map(rg=>`
+    <tr class="${rg.ativa?'':'row-inactive'}">
+      <td>${rg.id}</td>
+      <td>${escape(rg.nome||"")}</td>
+      <td><code>${escape(rg.tipo)}</code></td>
+      <td class="params-cell">${escape(JSON.stringify(rg.parametros))}</td>
+      <td class="scope-cell">${escape(rg.escopo_postos)}</td>
+      <td class="scope-cell">${escape(rg.escopo_tipos)}</td>
+      <td>${rg.ativa?"✅":"❌"}</td>
+      <td style="font-size:11px;max-width:240px">${escape(rg.observacao||"")}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm btn-outline-secondary" data-edit="${rg.id}">Editar</button>
+        <button class="btn btn-sm btn-outline-warning"  data-toggle="${rg.id}">Toggle</button>
+        <button class="btn btn-sm btn-outline-danger"   data-delete="${rg.id}">×</button>
+      </td>
+    </tr>
+  `).join("");
+  document.querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click", ()=>editar(b.dataset.edit)));
+  document.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click", async ()=>{
+    await fetch(`/api/auditoria/regras/${b.dataset.toggle}/toggle`, {method:"POST", credentials:"same-origin"});
+    carregar();
+  }));
+  document.querySelectorAll("[data-delete]").forEach(b=>b.addEventListener("click", async ()=>{
+    if (!confirm("Excluir regra " + b.dataset.delete + "?")) return;
+    await fetch(`/api/auditoria/regras/${b.dataset.delete}/delete`, {method:"POST", credentials:"same-origin"});
+    carregar();
+  }));
+  // armazena pra editar
+  window.__regras = d.regras;
+}
+
+function escape(s){ return String(s==null?"":s).replace(/[&<>"]/g, c=>(
+  {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+el("#btnNova").addEventListener("click", ()=>{
+  el("#modalTitulo").textContent = "Nova regra";
+  el("#rid").value=""; el("#rnome").value=""; el("#rtipo").value="mm_pct";
+  el("#rparams").value='{"janela": 12, "pct": 10}';
+  el("#rpostos").value="*"; el("#rtipos").value="*";
+  el("#rativa").checked=true; el("#robs").value="";
+  el("#rtipo").dispatchEvent(new Event("change"));
+  el("#modalRegra").classList.add("show");
+});
+
+function editar(id){
+  const r = (window.__regras||[]).find(x=>String(x.id)===String(id));
+  if (!r) return;
+  el("#modalTitulo").textContent = "Editar regra #" + r.id;
+  el("#rid").value=r.id; el("#rnome").value=r.nome||"";
+  el("#rtipo").value=r.tipo;
+  el("#rparams").value=JSON.stringify(r.parametros||{}, null, 2);
+  el("#rpostos").value=r.escopo_postos||"*";
+  el("#rtipos").value=r.escopo_tipos||"*";
+  el("#rativa").checked=!!r.ativa;
+  el("#robs").value=r.observacao||"";
+  el("#rtipo").dispatchEvent(new Event("change"));
+  el("#modalRegra").classList.add("show");
+}
+
+el("#formRegra").addEventListener("submit", async ()=>{
+  let parametros;
+  try { parametros = JSON.parse(el("#rparams").value || "{}"); }
+  catch (e) { alert("JSON inválido em parâmetros: " + e.message); return; }
+
+  const body = {
+    id: el("#rid").value || null,
+    nome: el("#rnome").value.trim(),
+    tipo: el("#rtipo").value,
+    parametros,
+    escopo_postos: el("#rpostos").value.trim() || "*",
+    escopo_tipos:  el("#rtipos").value.trim()  || "*",
+    ativa: el("#rativa").checked,
+    observacao: el("#robs").value.trim(),
+  };
+  const r = await fetch("/api/auditoria/regras", {
+    method:"POST", credentials:"same-origin",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) { alert("Falha (HTTP " + r.status + ")"); return; }
+  el("#modalRegra").classList.remove("show");
+  carregar();
+});
+
+carregar();
+</script>
+</body></html>

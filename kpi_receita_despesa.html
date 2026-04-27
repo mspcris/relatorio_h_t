@@ -853,6 +853,13 @@
                 Quando desligado, RETIRADA / CAMPINHO não entram na despesa.
               </span>
             </div>
+            <button type="button" id="btnBenford" class="btn btn-sm mr-2 audit-btn" title="Conformidade com a Lei de Benford">
+              <span class="audit-dot" id="benfordDot"></span>
+              <span>Benford</span>
+            </button>
+            <button type="button" id="btnAuditoria" class="btn btn-sm btn-outline-warning mr-2" title="Discrepâncias detectadas">
+              ⚠ Auditoria <span class="badge badge-light" id="auditBadge">…</span>
+            </button>
             <span id="ia-anchor"></span>
           </div>
         </div>
@@ -3480,6 +3487,371 @@ ETLStatus.init({
 AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
 </script>
 <script src="/js/menu.js"></script>
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+<!-- AUDITORIA FINANCEIRA — Benford + Discrepâncias                          -->
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+<style>
+  .audit-btn { background:#eee; border:1px solid #bbb; padding:4px 10px; }
+  .audit-dot { display:inline-block; width:10px; height:10px; border-radius:50%;
+                margin-right:6px; vertical-align:middle; background:#bbb; }
+  .audit-dot.verde    { background:#28a745; box-shadow:0 0 0 2px rgba(40,167,69,.2); }
+  .audit-dot.amarelo  { background:#ffc107; box-shadow:0 0 0 2px rgba(255,193,7,.2); }
+  .audit-dot.vermelho { background:#dc3545; box-shadow:0 0 0 2px rgba(220,53,69,.25); }
+  .audit-dot.cinza    { background:#999; }
+  .audit-modal-bg {
+    position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999;
+    display:none; align-items:center; justify-content:center;
+  }
+  .audit-modal-bg.show { display:flex; }
+  .audit-modal {
+    background:#fff; border-radius:8px; width:96%; max-width:1240px;
+    max-height:92vh; display:flex; flex-direction:column; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.4);
+  }
+  .audit-modal header {
+    padding:12px 18px; border-bottom:1px solid #ddd; display:flex;
+    align-items:center; justify-content:space-between;
+  }
+  .audit-modal header h5 { margin:0; }
+  .audit-modal .body { padding:12px 18px; overflow-y:auto; flex:1; }
+  .audit-modal .close-x { background:none; border:none; font-size:24px; cursor:pointer; }
+  .audit-tabs { display:flex; gap:4px; flex-wrap:wrap; margin:8px 0 12px;
+                border-bottom:1px solid #e0e0e0; padding-bottom:4px; }
+  .audit-tabs button { background:#f5f5f5; border:1px solid #ddd; border-radius:4px 4px 0 0;
+                       padding:4px 10px; cursor:pointer; font-size:13px; }
+  .audit-tabs button.active { background:#2f6bb6; color:#fff; border-color:#2f6bb6; }
+  .audit-tabs .post-cor-verde    { box-shadow:inset 0 -3px 0 #28a745; }
+  .audit-tabs .post-cor-amarelo  { box-shadow:inset 0 -3px 0 #ffc107; }
+  .audit-tabs .post-cor-vermelho { box-shadow:inset 0 -3px 0 #dc3545; }
+  .audit-tabs .post-cor-cinza    { box-shadow:inset 0 -3px 0 #999; }
+  .audit-table { width:100%; font-size:13px; border-collapse:collapse; }
+  .audit-table th, .audit-table td { padding:6px 8px; border-bottom:1px solid #eee; }
+  .audit-table tbody tr:hover { background:#fafafa; }
+  .audit-pill { display:inline-block; padding:1px 8px; border-radius:10px;
+                background:#eee; font-size:11px; }
+  .audit-pill.severe { background:#fdecea; color:#a02a37; }
+  .audit-pill.warn   { background:#fff8e1; color:#7a5d00; }
+  .audit-evid { font-size:11px; color:#666; }
+  .audit-empty { text-align:center; color:#888; padding:24px; }
+  .audit-llm-text { font-size:12px; color:#444; font-style:italic; padding-top:2px; }
+  .audit-charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:900px) { .audit-charts-grid { grid-template-columns:1fr; } }
+  .scores-grid {
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(80px,1fr));
+    gap:6px; margin-bottom:14px;
+  }
+  .score-cell {
+    text-align:center; padding:6px 4px; border-radius:5px; font-size:13px;
+    border:1px solid #eee; cursor:pointer;
+  }
+  .score-cell .p { font-weight:bold; }
+  .score-cell .v { font-size:11px; color:#666; }
+</style>
+
+<!-- Modal Benford -->
+<div class="audit-modal-bg" id="benfordModal">
+  <div class="audit-modal">
+    <header>
+      <h5>Lei de Benford — Conformidade dos Valores</h5>
+      <button class="close-x" data-close="benfordModal">×</button>
+    </header>
+    <div class="body">
+      <div class="audit-tabs" id="benfordTabs"></div>
+      <div class="audit-charts-grid">
+        <div>
+          <h6>Saídas (despesas) <span id="benfordSaidasMad" class="text-muted"></span></h6>
+          <canvas id="benfordSaidasChart" height="190"></canvas>
+        </div>
+        <div>
+          <h6>Entradas (receitas) <span id="benfordEntradasMad" class="text-muted"></span></h6>
+          <canvas id="benfordEntradasChart" height="190"></canvas>
+        </div>
+      </div>
+      <p class="text-muted mt-3" style="font-size:12px">
+        MAD &lt; 0,012 verde · &lt; 0,022 amarelo · ≥ 0,022 vermelho · n&lt;80 cinza (amostra insuficiente).
+        Cor do botão = pior MAD entre os 13 postos (saídas).
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Auditoria (discrepâncias) -->
+<div class="audit-modal-bg" id="auditoriaModal">
+  <div class="audit-modal">
+    <header>
+      <h5>Auditoria — Discrepâncias detectadas</h5>
+      <button class="close-x" data-close="auditoriaModal">×</button>
+    </header>
+    <div class="body">
+      <div class="scores-grid" id="scoresGrid"></div>
+      <div class="audit-tabs" id="auditAbas"></div>
+      <div id="auditLista"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const PAINEL_URL = "/api/auditoria/painel";
+  let painel = null;
+  let postoAtivoBenford = "rede";
+  let abaAtiva = "todas";
+
+  function el(sel){ return document.querySelector(sel); }
+  function escapeHtml(s){ return (s==null?"":String(s)).replace(/[&<>'"]/g, c=>(
+    {"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
+  function fmtBR(v){
+    if (v == null) return "—";
+    return Number(v).toLocaleString("pt-BR", {style:"currency", currency:"BRL"});
+  }
+  function fmtMes(s){ return s ? s : "—"; }
+
+  function abrir(modalId){ el("#" + modalId).classList.add("show"); }
+  function fechar(modalId){ el("#" + modalId).classList.remove("show"); }
+  document.addEventListener("click", (e)=>{
+    const closeId = e.target.getAttribute && e.target.getAttribute("data-close");
+    if (closeId) fechar(closeId);
+    if (e.target.classList && e.target.classList.contains("audit-modal-bg")) {
+      e.target.classList.remove("show");
+    }
+  });
+
+  async function carregarPainel(){
+    try {
+      const r = await fetch(PAINEL_URL, { credentials:"same-origin" });
+      if (!r.ok) {
+        if (r.status === 503) { setBotoes("cinza", "—"); return; }
+        throw new Error("HTTP " + r.status);
+      }
+      painel = await r.json();
+      atualizarBotoes();
+    } catch (e) {
+      console.warn("auditoria: falha ao carregar painel", e);
+      setBotoes("cinza", "?");
+    }
+  }
+
+  function setBotoes(corBenford, badgeAudit){
+    const dot = el("#benfordDot");
+    if (dot) {
+      dot.classList.remove("verde","amarelo","vermelho","cinza");
+      dot.classList.add(corBenford);
+    }
+    const badge = el("#auditBadge");
+    if (badge) badge.textContent = badgeAudit;
+  }
+
+  function atualizarBotoes(){
+    if (!painel) return;
+    const cor = (painel.benford && painel.benford.cor_botao) || "cinza";
+    const abertas = (painel.totais && painel.totais.abertas) ?? 0;
+    setBotoes(cor, String(abertas));
+  }
+
+  // ── Benford ────────────────────────────────────────────────────────
+  let chartSaidas = null, chartEntradas = null;
+  function renderBenford(){
+    if (!painel || !painel.benford) return;
+    const tabs = el("#benfordTabs");
+    if (!tabs) return;
+    const postos = Object.keys(painel.benford.por_posto || {}).sort();
+    const opcoes = [["rede","Rede"]].concat(postos.map(p=>[p, "Posto " + p]));
+    tabs.innerHTML = opcoes.map(([k,lab])=>{
+      const corClass = k === "rede" ? ""
+        : "post-cor-" + (painel.benford.por_posto[k]?.saidas?.cor || "cinza");
+      const ativo = k === postoAtivoBenford ? "active" : "";
+      return `<button data-aba="${k}" class="${ativo} ${corClass}">${escapeHtml(lab)}</button>`;
+    }).join("");
+    tabs.querySelectorAll("button").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        postoAtivoBenford = b.dataset.aba;
+        renderBenford();
+      });
+    });
+    drawBenfordChart();
+  }
+  function drawBenfordChart(){
+    const dados = postoAtivoBenford === "rede"
+      ? painel.benford.rede
+      : painel.benford.por_posto[postoAtivoBenford];
+    if (!dados) return;
+    const ctxS = el("#benfordSaidasChart").getContext("2d");
+    const ctxE = el("#benfordEntradasChart").getContext("2d");
+    const labels = ["1","2","3","4","5","6","7","8","9"];
+    function setMad(elemId, b){
+      const e = el(elemId);
+      if (!e) return;
+      if (!b || !b.n) { e.textContent = "(sem dados)"; return; }
+      e.textContent = `· MAD ${b.mad ?? "—"} · n=${b.n} · ${b.cor}`;
+    }
+    setMad("#benfordSaidasMad",   dados.saidas);
+    setMad("#benfordEntradasMad", dados.entradas);
+
+    function build(ctx, b){
+      if (!b) b = {observado:[0,0,0,0,0,0,0,0,0], esperado:[0,0,0,0,0,0,0,0,0]};
+      return {
+        type:"bar",
+        data: {
+          labels,
+          datasets: [
+            { label:"Observado", data: (b.observado||[]).map(v=>v*100),
+              backgroundColor:"rgba(47,107,182,.7)" },
+            { label:"Benford esperado", data: (b.esperado||[]).map(v=>v*100),
+              type:"line", borderColor:"#dc3545", borderWidth:2, fill:false, tension:0.2 },
+          ],
+        },
+        options: {
+          plugins: { legend: { position:"bottom" } },
+          scales: {
+            y: { ticks: { callback: v=>v+"%" }, beginAtZero:true },
+          },
+        },
+      };
+    }
+    if (chartSaidas)   chartSaidas.destroy();
+    if (chartEntradas) chartEntradas.destroy();
+    chartSaidas   = new Chart(ctxS, build(dados.saidas));
+    chartEntradas = new Chart(ctxE, build(dados.entradas));
+  }
+  el("#btnBenford").addEventListener("click", ()=>{
+    if (!painel) { alert("Painel ainda carregando…"); return; }
+    abrir("benfordModal");
+    renderBenford();
+  });
+
+  // ── Auditoria (discrepâncias) ─────────────────────────────────────
+  function abasDisponiveis(){
+    if (!painel) return [];
+    const conta = {};
+    (painel.anomalias||[]).forEach(a=>{
+      if (a.verificado) return;
+      const t = a.regra_tipo;
+      conta[t] = (conta[t]||0) + 1;
+    });
+    const ordem = ["mm_pct","zscore_robusto","fornecedor_novo","gap_temporal","nao_recorrente_pct"];
+    const labels = {
+      mm_pct: "Médias móveis", zscore_robusto: "Z-score robusto",
+      fornecedor_novo: "Fornecedor novo", gap_temporal: "Gap mensal",
+      nao_recorrente_pct: "Não-recorrentes",
+    };
+    const total = Object.values(conta).reduce((a,b)=>a+b,0);
+    const verifs = (painel.anomalias||[]).filter(a=>a.verificado).length;
+    const out = [["todas", `Todas (${total})`]];
+    ordem.forEach(k=>{ if (conta[k]) out.push([k, `${labels[k]} (${conta[k]})`]); });
+    out.push(["verificadas", `Verificadas (${verifs})`]);
+    return out;
+  }
+
+  function renderScoresGrid(){
+    const grid = el("#scoresGrid");
+    if (!grid) return;
+    const sc = (painel && painel.scores_postos) || {};
+    grid.innerHTML = Object.entries(sc).sort().map(([p,v])=>{
+      const cor = v >= 90 ? "#d4edda" : v >= 75 ? "#fff3cd"
+                : v >= 50 ? "#f8d7da" : "#f5c6cb";
+      return `<div class="score-cell" style="background:${cor}" title="Posto ${p}: score ${v}">
+        <div class="p">${escapeHtml(p)}</div><div class="v">${v}/100</div>
+      </div>`;
+    }).join("") || "<div class='audit-empty'>sem dados</div>";
+  }
+
+  function renderLista(){
+    if (!painel) return;
+    const ul = el("#auditLista");
+    if (!ul) return;
+    const todas = painel.anomalias || [];
+    let filtradas;
+    if (abaAtiva === "todas") {
+      filtradas = todas.filter(a=>!a.verificado);
+    } else if (abaAtiva === "verificadas") {
+      filtradas = todas.filter(a=>a.verificado);
+    } else {
+      filtradas = todas.filter(a=>a.regra_tipo === abaAtiva && !a.verificado);
+    }
+    if (!filtradas.length) {
+      ul.innerHTML = `<div class="audit-empty">Nenhum item nesta aba.</div>`;
+      return;
+    }
+    const linhas = filtradas.map(a=>{
+      const evid = formatarEvidencia(a);
+      const llm  = a.llm_resumo
+        ? `<div class="audit-llm-text">🤖 ${escapeHtml(a.llm_resumo)}</div>`
+        : "";
+      const acao = a.verificado
+        ? `<span class="audit-pill">✓ ${escapeHtml(a.verificado_por||"?")}</span>`
+        : `<button class="btn btn-sm btn-outline-success btn-verificar"
+                    data-chave="${escapeHtml(a.chave)}">Verificar</button>`;
+      return `
+        <tr>
+          <td><span class="audit-pill">${escapeHtml(a.posto||"?")}</span></td>
+          <td>${escapeHtml(a.tipo_label||"#"+a.id_conta_tipo)}<br>
+              <span class="audit-evid">${evid}${llm}</span></td>
+          <td class="text-right">${fmtBR(a.valor_atual)}</td>
+          <td>${fmtMes(a.mes_ref)}</td>
+          <td><span class="audit-pill ${a.regra_tipo==='zscore_robusto'?'severe':'warn'}">
+              ${escapeHtml(a.regra_nome||a.regra_tipo)}</span></td>
+          <td>${acao}</td>
+        </tr>`;
+    });
+    ul.innerHTML = `
+      <table class="audit-table">
+        <thead><tr><th>Posto</th><th>Conta</th><th class="text-right">Valor</th>
+          <th>Mês</th><th>Regra</th><th></th></tr></thead>
+        <tbody>${linhas.join("")}</tbody>
+      </table>`;
+    ul.querySelectorAll(".btn-verificar").forEach(b=>{
+      b.addEventListener("click", async ()=>{
+        const obs = prompt("Observação (opcional):") || "";
+        const r = await fetch("/api/auditoria/verificar", {
+          method:"POST", credentials:"same-origin",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ chave: b.dataset.chave, observacao: obs }),
+        });
+        if (r.ok) { await carregarPainel(); renderAuditoria(); }
+        else      { alert("Falha ao verificar (" + r.status + ")"); }
+      });
+    });
+  }
+
+  function formatarEvidencia(a){
+    const e = a.evidencia || {};
+    const parts = [];
+    Object.keys(e).forEach(k=>{
+      const v = e[k];
+      if (typeof v === "number") parts.push(`${k}=${v.toLocaleString("pt-BR")}`);
+      else if (Array.isArray(v))  parts.push(`${k}=${v.slice(0,3).join(",")}${v.length>3?"…":""}`);
+      else                        parts.push(`${k}=${escapeHtml(String(v)).slice(0,40)}`);
+    });
+    return parts.join(" · ");
+  }
+
+  function renderAuditoria(){
+    const tabs = el("#auditAbas");
+    if (!tabs) return;
+    const opcoes = abasDisponiveis();
+    tabs.innerHTML = opcoes.map(([k,lab])=>
+      `<button data-aba="${k}" class="${k===abaAtiva?'active':''}">${escapeHtml(lab)}</button>`
+    ).join("");
+    tabs.querySelectorAll("button").forEach(b=>{
+      b.addEventListener("click", ()=>{ abaAtiva = b.dataset.aba; renderLista();
+        tabs.querySelectorAll("button").forEach(x=>x.classList.toggle("active", x===b)); });
+    });
+    renderScoresGrid();
+    renderLista();
+  }
+
+  el("#btnAuditoria").addEventListener("click", ()=>{
+    if (!painel) { alert("Painel ainda carregando…"); return; }
+    abrir("auditoriaModal");
+    renderAuditoria();
+  });
+
+  // refresh inicial + a cada 5 min
+  carregarPainel();
+  setInterval(carregarPainel, 5*60*1000);
+})();
+</script>
 </body>
 
 </html>

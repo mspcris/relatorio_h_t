@@ -230,6 +230,81 @@ _KPI_DEFAULTS = [
 ]
 
 
+class RegraAnomalia(Base):
+    """Regras configuráveis do detector de auditoria financeira.
+
+    Tipos suportados (parametros_json):
+      mm_pct                 {"janela": 12, "pct": 10}
+      zscore_robusto         {"threshold": 3.0}
+      gap_temporal           {"meses_vazios": 1}
+      fornecedor_novo        {}
+      nao_recorrente_pct     {"pct_posto": 1.0}
+      benford_mad            {"amarelo": 0.012, "vermelho": 0.022}
+
+    escopo_postos / escopo_tipos:
+      "*"        = aplica a todos
+      "A,B,X"    = aplica só a esses
+      "!A,X"     = aplica a todos exceto esses
+    """
+    __tablename__ = "regras_anomalia"
+
+    id              = Column(Integer, primary_key=True)
+    nome            = Column(String(120), nullable=False)
+    tipo            = Column(String(40), nullable=False, index=True)
+    parametros_json = Column(Text, nullable=False, default="{}")
+    escopo_postos   = Column(String(120), nullable=False, default="*")
+    escopo_tipos    = Column(String(255), nullable=False, default="*")
+    ativa           = Column(Boolean,  nullable=False, default=True, index=True)
+    criado_por      = Column(String(120))
+    criado_em       = Column(DateTime, default=lambda: datetime.now(_BRT))
+    atualizado_em   = Column(DateTime, default=lambda: datetime.now(_BRT),
+                              onupdate=lambda: datetime.now(_BRT))
+    observacao      = Column(Text, default="")
+
+
+class AnomaliaVerificacao(Base):
+    """Registro de itens da lista de auditoria já vistos por um adm.
+
+    chave_anomalia = sha1 estável de (posto, id_conta_tipo, mes_ref, regra_id, evidencia_extra).
+    Item verificado some da lista até nova evidência aparecer (nova chave).
+    """
+    __tablename__ = "anomalia_verificacao"
+
+    chave_anomalia  = Column(String(64), primary_key=True)
+    posto           = Column(String(2),  nullable=False, index=True)
+    id_conta_tipo   = Column(Integer,    nullable=True, index=True)
+    mes_ref         = Column(String(7),  nullable=True)            # "2026-04"
+    regra_id        = Column(Integer,    nullable=True)
+    verificado_por  = Column(String(120), nullable=False)
+    verificado_em   = Column(DateTime,    nullable=False,
+                              default=lambda: datetime.now(_BRT))
+    observacao      = Column(Text, default="")
+
+
+_REGRAS_AUDITORIA_DEFAULT = [
+    # nome, tipo, parametros_json, observacao
+    ("MM12 — variação > 10%",      "mm_pct",
+        '{"janela": 12, "pct": 10}',  "Saída acima da média móvel 12m em mais de 10%."),
+    ("MM6 — variação > 10%",       "mm_pct",
+        '{"janela": 6,  "pct": 10}',  "Saída acima da média móvel 6m em mais de 10%."),
+    ("MM3 — variação > 10%",       "mm_pct",
+        '{"janela": 3,  "pct": 10}',  "Saída acima da média móvel 3m em mais de 10%."),
+    ("MM24 — variação > 10%",      "mm_pct",
+        '{"janela": 24, "pct": 10}',  "Saída acima da média móvel 24m em mais de 10%."),
+    ("Z-score robusto > 3",        "zscore_robusto",
+        '{"threshold": 3.0}',         "Outlier estatístico contra mediana/MAD da própria conta."),
+    ("Gap temporal — 1 mês",       "gap_temporal",
+        '{"meses_vazios": 1}',        "Conta regular sem lançamento neste mês."),
+    ("Fornecedor novo no tipo",    "fornecedor_novo",
+        '{}',                         "Lançamento com fornecedor inédito naquele tipo de conta do posto."),
+    ("Não-recorrente — 1% do posto","nao_recorrente_pct",
+        '{"pct_posto": 1.0}',         "Lançamento isolado >= 1% do total do posto no mês."),
+    ("Benford — MAD",              "benford_mad",
+        '{"amarelo": 0.012, "vermelho": 0.022}',
+                                      "Cor do botão Benford derivada do MAD por posto."),
+]
+
+
 def init_db():
     Base.metadata.create_all(engine)
     # Migration: add all_pages column to existing users (safe if already exists)
@@ -293,6 +368,14 @@ def init_db():
         # Regras gerais — seed com valor padrão se ainda não existe
         if not db.query(IAConfigGlobal).filter_by(chave="regras_gerais").first():
             db.add(IAConfigGlobal(chave="regras_gerais", valor=_REGRAS_GERAIS_DEFAULT))
+        # Regras de auditoria financeira — seed só se a tabela está vazia
+        if db.query(RegraAnomalia).count() == 0:
+            for nome, tipo, params, obs in _REGRAS_AUDITORIA_DEFAULT:
+                db.add(RegraAnomalia(
+                    nome=nome, tipo=tipo, parametros_json=params,
+                    escopo_postos="*", escopo_tipos="*", ativa=True,
+                    criado_por="system", observacao=obs,
+                ))
         db.commit()
     except Exception:
         db.rollback()

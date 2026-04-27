@@ -83,6 +83,7 @@ _TEMPLATE_TO_PAGINA = {
     "kpi_liberty.html":                 "kpi_liberty",
     "kpi_receita_despesa.html":         "kpi_receita_despesa",
     "kpi_receita_despesa_rateio.html":  "kpi_receita_despesa_rateio",
+    "admin_auditoria.html":             "admin_auditoria",
     "kpi_consultas_status.html":        "kpi_consultas",
     "kpi_egide.html":                   "kpi_egide",
     "kpi_notas_rps.html":               "kpi_notas_rps",

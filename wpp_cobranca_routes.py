@@ -259,17 +259,48 @@ def api_cache_refresh_status():
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+_INDICADORES_PAINEL_JSON = os.environ.get(
+    "INDICADORES_PAINEL_JSON",
+    "/opt/relatorio_h_t/json_consolidado/indicadores_painel.json",
+)
+
+
 @wpp_bp.get("/api/indicadores")
 def api_indicadores():
-    """Retorna último envio accepted por campanha ativa e posto (para painel de indicadores)."""
+    """Lê WPP do JSON pré-agregado por export_indicadores_painel.py (cron */5 min).
+
+    Antes agregava ao vivo varrendo `envios` por (campanha × posto), o que travava
+    o worker do gunicorn junto com os outros endpoints de indicadores.
+    """
+    from datetime import date as _date, datetime as _datetime
     email, _ = _check_auth()
     if not email:
         return jsonify({"error": "unauthorized"}), 401
+
     try:
-        dados = db.indicadores_wpp()
-        return jsonify({"campanhas": dados})
+        with open(_INDICADORES_PAINEL_JSON, "r", encoding="utf-8") as fh:
+            painel = json.load(fh)
+    except FileNotFoundError:
+        return jsonify({"erro": "indicadores_painel.json ainda não gerado"}), 503
     except Exception as e:
         return jsonify({"erro": str(e)[:200]}), 500
+
+    campanhas = painel.get("indicadores", {}).get("wpp", []) or []
+    hoje = _date.today()
+
+    out = []
+    for camp in campanhas:
+        postos_dados = {}
+        for posto, d in (camp.get("postos") or {}).items():
+            ultimo = d.get("ultimo_envio")
+            try:
+                dias = (hoje - _datetime.fromisoformat(str(ultimo)).date()).days if ultimo else 999
+            except Exception:
+                dias = 999
+            postos_dados[posto] = {"dias": dias, "ultimo_envio": ultimo}
+        out.append({"id": camp.get("id"), "nome": camp.get("nome"), "postos": postos_dados})
+
+    return jsonify({"campanhas": out})
 
 
 # ---------------------------------------------------------------------------

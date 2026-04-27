@@ -108,3 +108,21 @@ TZ=America/Sao_Paulo
 # Pré-Agendamento — Dashboard da regra de confirmação 5-2 dias — 1x/dia 02:30 — criado em 2026-04-26
 # Regenera o JSON inteiro (12 meses passado + 90 dias futuro) varrendo os 13 postos em paralelo.
 30   2 * * * root flock -n /opt/relatorio_h_t/locks/preagendamento.lock  /opt/relatorio_h_t/export_preagendamento.sh >>/var/log/relatorio_h_t/preagendamento.log 2>&1
+
+# Painel monitorarrobos — pré-agrega push/email/tef/wpp num único JSON — */5 min — criado em 2026-04-26
+# Substitui a agregação ao vivo no Flask (que estava timing out a 73s na tabela ind_email de 268k linhas).
+*/5  * * * * root flock -n /opt/relatorio_h_t/locks/indicadores_painel.lock /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/export_indicadores_painel.py >>/var/log/relatorio_h_t/indicadores_painel.log 2>&1
+
+# Receita PG — espelha fin_despesa_pg para Auditoria Financeira — a cada 2h — criado em 2026-04-26
+# Pré-requisito: aplicar uma vez sql_camim_fin/fin_receita_pg_ddl.sql no RDS.
+0 */2 * * * root flock -n /opt/relatorio_h_t/locks/fin_receita_pg.lock   /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/export_fin_receita_pg.py >>/var/log/relatorio_h_t/fin_receita_pg.log 2>&1
+
+# Auditoria Financeira — motor de discrepâncias + Benford — 1×/dia 03:00 — criado em 2026-04-26
+0    3 * * * root flock -n /opt/relatorio_h_t/locks/auditoria_financeira.lock /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/export_auditoria_financeira.py >>/var/log/relatorio_h_t/auditoria_financeira.log 2>&1
+
+# Auditoria — LLM camada 1 (local Ollama) — a cada 60 min — criado em 2026-04-26
+# Enriquece anomalias com 1-2 linhas de explicação. Custo zero, dados não saem da VM.
+20   * * * * root flock -n /opt/relatorio_h_t/locks/auditoria_llm_local.lock /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/auditoria_llm_local.py >>/var/log/relatorio_h_t/auditoria_llm_local.log 2>&1
+
+# Auditoria — LLM camada 2 (Claude Sonnet) — relatório executivo 1×/dia 06:00 — criado em 2026-04-26
+0    6 * * * root flock -n /opt/relatorio_h_t/locks/auditoria_llm_rel.lock /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/auditoria_llm_relatorio.py >>/var/log/relatorio_h_t/auditoria_llm_relatorio.log 2>&1

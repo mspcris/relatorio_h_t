@@ -18,6 +18,7 @@ Rotas:
   POST /admin/api/usuarios/<id>/reset   ← envia e-mail de reset
 """
 
+import json
 import os
 import secrets
 import smtplib
@@ -33,7 +34,7 @@ from sqlalchemy import func
 
 from auth_db import (
     SessionLocal, User, UserPosto, LoginHistory, IAConversa, KPIContexto, IAConfigGlobal,
-    PageUsagePing,
+    PageUsagePing, RegraAnomalia, AnomaliaVerificacao,
     get_user_by_email, get_user_by_id, init_db,
 )
 
@@ -150,6 +151,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "kpi_liberty",               "label": "KPI CAMIM Liberty",           "group": "kpi"},
     {"key": "kpi_receita_despesa",       "label": "KPI Receitas x Despesas",     "group": "kpi"},
     {"key": "kpi_receita_despesa_rateio","label": "KPI R x D com Rateio",        "group": "kpi"},
+    {"key": "admin_auditoria",           "label": "Admin · Regras de Auditoria", "group": "kpi"},
     {"key": "growth",                    "label": "Growth Dashboard",            "group": "kpi"},
     {"key": "mais_servicos",             "label": "Mais Serviços",               "group": "kpi"},
     {"key": "trello_harvest",            "label": "Trello Harvest",              "group": "kpi"},
@@ -1455,6 +1457,27 @@ def admin_ia_conversa_detalhe(cid: int):
 
 # ── Indicadores: Push de Cobrança ───────────────────────────────────────────
 
+INDICADORES_PAINEL_JSON = os.environ.get(
+    "INDICADORES_PAINEL_JSON",
+    "/opt/relatorio_h_t/json_consolidado/indicadores_painel.json",
+)
+
+
+def _load_indicadores_painel() -> dict:
+    """Lê o JSON pré-agregado por export_indicadores_painel.py (cron */5 min)."""
+    with open(INDICADORES_PAINEL_JSON, "r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _calc_dias(ultimo_str: str | None, hoje: date) -> int:
+    if not ultimo_str:
+        return 999
+    try:
+        return (hoje - datetime.fromisoformat(str(ultimo_str)).date()).days
+    except Exception:
+        return 999
+
+
 @auth_bp.get("/api/indicadores/push")
 def indicadores_push():
     """Retorna último envio de push por posto, para o painel de indicadores."""
@@ -1462,134 +1485,62 @@ def indicadores_push():
     if not email:
         return ("", 401)
 
-    push_db = os.environ.get("PUSH_LOG_DB", "/opt/push_clientes/push_log.db")
-    hoje = date.today()
-
     try:
-        conn = sqlite3.connect(f"file:{push_db}?mode=ro", uri=True)
-
-        # Descobre o nome da tabela dinamicamente
-        tables = [r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()]
-        tabela = next(
-            (t for t in tables if "push" in t.lower() or "log" in t.lower()),
-            tables[0] if tables else None,
-        )
-        if not tabela:
-            conn.close()
-            return jsonify({"erro": "Nenhuma tabela encontrada em push_log.db"}), 500
-
-        # Descobre colunas dinamicamente
-        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({tabela})").fetchall()]
-        col_data  = next((c for c in cols if any(k in c.lower() for k in ("data", "hora", "created", "time", "sent"))), None)
-        col_posto = next((c for c in cols if "posto" in c.lower()), None)
-        col_modo  = next((c for c in cols if "modo" in c.lower()), None)
-
-        if not col_data or not col_posto:
-            conn.close()
-            return jsonify({"erro": f"Colunas não encontradas. Disponíveis: {cols}"}), 500
-
-        where = f"WHERE {col_modo} = 'producao'" if col_modo else ""
-        rows = conn.execute(f"""
-            SELECT {col_posto} AS posto,
-                   MAX({col_data}) AS ultimo_envio,
-                   COUNT(*) AS total_dia
-            FROM {tabela}
-            {where}
-            GROUP BY {col_posto}
-        """).fetchall()
-        conn.close()
-
-        result = {}
-        for posto_raw, ultimo_str, total in rows:
-            posto = str(posto_raw).strip().upper() if posto_raw else None
-            if not posto:
-                continue
-            if user_postos and posto not in user_postos:
-                continue
-            try:
-                ultimo_dt = datetime.fromisoformat(str(ultimo_str)).date()
-                dias = (hoje - ultimo_dt).days
-            except Exception:
-                dias = 999
-            result[posto] = {
-                "ultimo_envio": ultimo_str,
-                "dias": dias,
-            }
-
-        return jsonify(result)
-
+        painel = _load_indicadores_painel()
+    except FileNotFoundError:
+        return jsonify({"erro": "indicadores_painel.json ainda não gerado"}), 503
     except Exception as exc:
         return jsonify({"erro": str(exc)}), 500
+
+    push = painel.get("indicadores", {}).get("push", {}) or {}
+    hoje = date.today()
+    result = {}
+    for posto, item in push.items():
+        if user_postos and posto not in user_postos:
+            continue
+        ultimo = item.get("ultimo_envio")
+        result[posto] = {
+            "ultimo_envio": ultimo,
+            "dias":         _calc_dias(ultimo, hoje),
+        }
+    return jsonify(result)
 
 
 # ── Indicadores: Email de Cobrança ───────────────────────────────────────────
 
 @auth_bp.get("/api/indicadores/email")
 def indicadores_email():
-    """Retorna último envio de email por (posto, categoria) a partir do camim_kpi.db."""
+    """Retorna último envio de email por (posto, categoria) a partir do JSON pré-agregado."""
     email_usr, user_postos = decode_user()
     if not email_usr:
         return ("", 401)
 
-    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
-    hoje   = date.today()
-
     try:
-        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
-
-        rows = conn.execute("""
-            SELECT posto,
-                   titulo_categoria,
-                   MAX(datahora)  AS ultimo_envio,
-                   COUNT(CASE WHEN DATE(datahora) = DATE('now','localtime') THEN 1 END) AS total
-            FROM ind_email
-            WHERE titulo_categoria = 'Boleto'
-            GROUP BY posto, titulo_categoria
-            ORDER BY posto, titulo_categoria
-        """).fetchall()
-
-        sync_row = conn.execute("""
-            SELECT synced_at, total_records, status, mensagem
-            FROM   ind_sync_log
-            WHERE  indicador = 'email'
-            ORDER BY id DESC LIMIT 1
-        """).fetchone()
-
-        conn.close()
-
-        dados = {}
-        for posto, categoria, ultimo_str, total in rows:
-            posto = (posto or "").strip().upper()
-            if user_postos and posto not in user_postos:
-                continue
-            try:
-                ultimo_dt = datetime.fromisoformat(str(ultimo_str)).date()
-                dias = (hoje - ultimo_dt).days
-            except Exception:
-                dias = 999
-            chave = f"{posto}|Boleto"
-            dados[chave] = {
-                "posto":         posto,
-                "categoria":     "Boleto",
-                "ultimo_envio":  ultimo_str,
-                "dias":          dias,
-                "total":         total,
-            }
-
-        return jsonify({
-            "dados": dados,
-            "sync":  {
-                "synced_at":     sync_row[0] if sync_row else None,
-                "total_records": sync_row[1] if sync_row else 0,
-                "status":        sync_row[2] if sync_row else None,
-                "mensagem":      sync_row[3] if sync_row else None,
-            },
-        })
-
+        painel = _load_indicadores_painel()
+    except FileNotFoundError:
+        return jsonify({"erro": "indicadores_painel.json ainda não gerado"}), 503
     except Exception as exc:
         return jsonify({"erro": str(exc)}), 500
+
+    bloco = painel.get("indicadores", {}).get("email", {}) or {}
+    raw   = bloco.get("data", {}) or {}
+    sync  = bloco.get("sync", {}) or {}
+    hoje  = date.today()
+
+    dados = {}
+    for chave, item in raw.items():
+        posto = (item.get("posto") or "").strip().upper()
+        if user_postos and posto not in user_postos:
+            continue
+        ultimo = item.get("ultimo_envio")
+        dados[chave] = {
+            "posto":        posto,
+            "categoria":    item.get("categoria") or "Boleto",
+            "ultimo_envio": ultimo,
+            "dias":         _calc_dias(ultimo, hoje),
+            "total":        item.get("total", 0),
+        }
+    return jsonify({"dados": dados, "sync": sync})
 
 
 # ── Email Clientes: helpers ───────────────────────────────────────────────────
@@ -1964,63 +1915,35 @@ def _tef_ensure_table(kpi_db: str) -> None:
 
 @auth_bp.get("/api/indicadores/tef")
 def indicadores_tef():
-    """Último registro por posto para o painel de indicadores."""
+    """Último registro por posto para o painel de indicadores (lê JSON pré-agregado)."""
     email_usr, user_postos = decode_user()
     if not email_usr:
         return ("", 401)
 
-    kpi_db = os.environ.get("KPI_DB_PATH", "/opt/relatorio_h_t/camim_kpi.db")
-    hoje   = date.today()
-
     try:
-        _tef_ensure_table(kpi_db)
-        conn = sqlite3.connect(f"file:{kpi_db}?mode=ro", uri=True)
-
-        rows = conn.execute("""
-            SELECT posto, MAX(datahora) AS ultimo, COUNT(*) AS total
-            FROM ind_tef
-            GROUP BY posto
-            ORDER BY posto
-        """).fetchall()
-
-        sync_row = conn.execute("""
-            SELECT synced_at, total_records, status, mensagem
-            FROM   ind_sync_log
-            WHERE  indicador = 'tef'
-            ORDER BY id DESC LIMIT 1
-        """).fetchone()
-
-        conn.close()
-
-        dados = {}
-        for posto, ultimo_str, total in rows:
-            posto = (posto or "").strip().upper()
-            if user_postos and posto not in user_postos:
-                continue
-            try:
-                ultimo_dt = datetime.fromisoformat(str(ultimo_str)).date()
-                dias = (hoje - ultimo_dt).days
-            except Exception:
-                dias = 999
-            dados[posto] = {
-                "posto":       posto,
-                "ultimo_tef":  ultimo_str,
-                "dias":        dias,
-                "total":       total,
-            }
-
-        return jsonify({
-            "dados": dados,
-            "sync": {
-                "synced_at":     sync_row[0] if sync_row else None,
-                "total_records": sync_row[1] if sync_row else 0,
-                "status":        sync_row[2] if sync_row else None,
-                "mensagem":      sync_row[3] if sync_row else None,
-            },
-        })
-
+        painel = _load_indicadores_painel()
+    except FileNotFoundError:
+        return jsonify({"erro": "indicadores_painel.json ainda não gerado"}), 503
     except Exception as exc:
         return jsonify({"erro": str(exc)}), 500
+
+    bloco = painel.get("indicadores", {}).get("tef", {}) or {}
+    raw   = bloco.get("data", {}) or {}
+    sync  = bloco.get("sync", {}) or {}
+    hoje  = date.today()
+
+    dados = {}
+    for posto, item in raw.items():
+        if user_postos and posto not in user_postos:
+            continue
+        ultimo = item.get("ultimo_tef")
+        dados[posto] = {
+            "posto":      posto,
+            "ultimo_tef": ultimo,
+            "dias":       _calc_dias(ultimo, hoje),
+            "total":      item.get("total", 0),
+        }
+    return jsonify({"dados": dados, "sync": sync})
 
 
 @auth_bp.get("/api/tef/dashboard")
@@ -2428,3 +2351,208 @@ def chat_avaliacoes_api():
 
     except Exception as exc:
         return jsonify({"erro": str(exc)}), 500
+
+
+# ── Auditoria Financeira ────────────────────────────────────────────────────
+
+AUDITORIA_JSON = os.environ.get(
+    "AUDITORIA_FINANCEIRA_JSON",
+    "/opt/relatorio_h_t/json_consolidado/auditoria_financeira.json",
+)
+
+
+def _load_auditoria() -> dict:
+    with open(AUDITORIA_JSON, "r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _filtra_por_postos(items, user_postos, key="posto"):
+    if not user_postos:
+        return items
+    return [i for i in items if i.get(key) in user_postos]
+
+
+@auth_bp.get("/api/auditoria/painel")
+def auditoria_painel():
+    """JSON pré-agregado por export_auditoria_financeira.py (cron 03:00).
+
+    Filtra anomalias e scores pelos postos do usuário; Benford é entregue
+    inteiro (a UI decide qual aba/posto exibir).
+    """
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    try:
+        data = _load_auditoria()
+    except FileNotFoundError:
+        return jsonify({"erro": "auditoria_financeira.json ainda não gerado"}), 503
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 500
+
+    anomalias = _filtra_por_postos(data.get("anomalias", []), user_postos)
+    scores = data.get("scores_postos", {}) or {}
+    if user_postos:
+        scores = {p: v for p, v in scores.items() if p in user_postos}
+
+    benford = data.get("benford", {}) or {}
+    if user_postos:
+        per = benford.get("por_posto") or {}
+        benford = {
+            **benford,
+            "por_posto": {p: v for p, v in per.items() if p in user_postos},
+        }
+
+    return jsonify({
+        "generated_at":  data.get("generated_at"),
+        "janela_meses":  data.get("janela_meses"),
+        "benford":       benford,
+        "anomalias":     anomalias,
+        "scores_postos": scores,
+        "tipos_label":   data.get("tipos_label", {}),
+        "totais": {
+            "anomalias":   len(anomalias),
+            "abertas":     sum(1 for a in anomalias if not a.get("verificado")),
+            "verificadas": sum(1 for a in anomalias if a.get("verificado")),
+        },
+    })
+
+
+@auth_bp.post("/api/auditoria/verificar")
+def auditoria_verificar():
+    """Marca uma anomalia como verificada. Body JSON:
+       {"chave": "<sha1>", "observacao": "..."}
+    """
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+
+    payload = request.get_json(silent=True) or {}
+    chave = (payload.get("chave") or "").strip()
+    if not chave:
+        return jsonify({"erro": "chave obrigatória"}), 400
+
+    # busca o item no JSON pra extrair posto/id_conta_tipo/mes_ref/regra_id
+    try:
+        data = _load_auditoria()
+    except Exception as exc:
+        return jsonify({"erro": str(exc)}), 503
+
+    item = next((a for a in data.get("anomalias", []) if a.get("chave") == chave), None)
+    if not item:
+        return jsonify({"erro": "anomalia não encontrada"}), 404
+    if user_postos and item["posto"] not in user_postos:
+        return jsonify({"erro": "fora do escopo do usuário"}), 403
+
+    db = SessionLocal()
+    try:
+        existing = db.query(AnomaliaVerificacao).filter_by(chave_anomalia=chave).first()
+        if existing:
+            existing.verificado_por = email_usr
+            existing.verificado_em  = datetime.now()
+            existing.observacao     = (payload.get("observacao") or "")[:1000]
+        else:
+            db.add(AnomaliaVerificacao(
+                chave_anomalia=chave,
+                posto=item["posto"],
+                id_conta_tipo=item.get("id_conta_tipo"),
+                mes_ref=item.get("mes_ref"),
+                regra_id=item.get("regra_id"),
+                verificado_por=email_usr,
+                verificado_em=datetime.now(),
+                observacao=(payload.get("observacao") or "")[:1000],
+            ))
+        db.commit()
+        return jsonify({"ok": True})
+    except Exception as exc:
+        db.rollback()
+        return jsonify({"erro": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@auth_bp.get("/api/auditoria/regras")
+def auditoria_regras_list():
+    if not _require_admin():
+        return ("", 403)
+    db = SessionLocal()
+    try:
+        rows = db.query(RegraAnomalia).order_by(RegraAnomalia.id).all()
+        return jsonify({"regras": [{
+            "id": r.id, "nome": r.nome, "tipo": r.tipo,
+            "parametros": json.loads(r.parametros_json or "{}"),
+            "escopo_postos": r.escopo_postos, "escopo_tipos": r.escopo_tipos,
+            "ativa": bool(r.ativa),
+            "criado_por": r.criado_por,
+            "criado_em":  r.criado_em.isoformat() if r.criado_em else None,
+            "observacao": r.observacao or "",
+        } for r in rows]})
+    finally:
+        db.close()
+
+
+@auth_bp.post("/api/auditoria/regras")
+def auditoria_regras_save():
+    """Cria nova regra ou edita uma existente (body com id opcional)."""
+    adm = _require_admin()
+    if not adm:
+        return ("", 403)
+    payload = request.get_json(silent=True) or {}
+
+    db = SessionLocal()
+    try:
+        rid = payload.get("id")
+        if rid:
+            r = db.query(RegraAnomalia).filter_by(id=rid).first()
+            if not r:
+                return jsonify({"erro": "regra não encontrada"}), 404
+        else:
+            r = RegraAnomalia(criado_por=adm.email)
+            db.add(r)
+
+        r.nome           = (payload.get("nome") or "").strip()[:120]
+        r.tipo           = (payload.get("tipo") or "").strip()[:40]
+        r.parametros_json = json.dumps(payload.get("parametros") or {})
+        r.escopo_postos  = (payload.get("escopo_postos") or "*").strip()[:120]
+        r.escopo_tipos   = (payload.get("escopo_tipos")  or "*").strip()[:255]
+        r.ativa          = bool(payload.get("ativa", True))
+        r.observacao     = (payload.get("observacao") or "")[:1000]
+        db.commit()
+        return jsonify({"ok": True, "id": r.id})
+    except Exception as exc:
+        db.rollback()
+        return jsonify({"erro": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@auth_bp.post("/api/auditoria/regras/<int:rid>/toggle")
+def auditoria_regras_toggle(rid: int):
+    if not _require_admin():
+        return ("", 403)
+    db = SessionLocal()
+    try:
+        r = db.query(RegraAnomalia).filter_by(id=rid).first()
+        if not r:
+            return jsonify({"erro": "regra não encontrada"}), 404
+        r.ativa = not r.ativa
+        db.commit()
+        return jsonify({"ok": True, "ativa": bool(r.ativa)})
+    finally:
+        db.close()
+
+
+@auth_bp.post("/api/auditoria/regras/<int:rid>/delete")
+def auditoria_regras_delete(rid: int):
+    if not _require_admin():
+        return ("", 403)
+    db = SessionLocal()
+    try:
+        r = db.query(RegraAnomalia).filter_by(id=rid).first()
+        if not r:
+            return jsonify({"erro": "regra não encontrada"}), 404
+        db.delete(r)
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
