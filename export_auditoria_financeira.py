@@ -277,23 +277,57 @@ def _mm(serie_mes: Dict[str, float], mes_ref: str, janela: int) -> Optional[floa
     return sum(valores) / len(valores)
 
 
-def _zscore_robusto(serie_mes: Dict[str, float], mes_ref: str) -> Optional[float]:
-    """Score robusto contra mediana e MAD da própria série (excluindo mes_ref)."""
+def _historico_lista(serie_mes: Dict[str, float], n: int = 12, mes_ref: str = None) -> List[dict]:
+    """Últimos `n` meses (incluindo mes_ref se informado, contando pra trás).
+    Retorna lista [{mes:'2026-04', valor:1234.56}, ...] ordenada cronologicamente.
+    Se um mês não tem lançamento, valor=0.
+    """
+    base = mes_ref or max(serie_mes.keys()) if serie_mes else date.today().strftime("%Y-%m")
+    if base is None:
+        return []
+    ano, m = map(int, base.split("-"))
+    out = []
+    for i in range(n - 1, -1, -1):
+        ar, mr = ano, m - i
+        while mr <= 0:
+            mr += 12
+            ar -= 1
+        k = f"{ar:04d}-{mr:02d}"
+        out.append({"mes": k, "valor": round(serie_mes.get(k, 0.0), 2)})
+    return out
+
+
+def _stats_classico(serie_mes: Dict[str, float], mes_ref: str) -> Optional[dict]:
+    """Calcula média e desvio-padrão da série excluindo mes_ref."""
     if mes_ref not in serie_mes:
         return None
-    valor = serie_mes[mes_ref]
     historicos = [v for k, v in serie_mes.items() if k != mes_ref]
     if len(historicos) < 3:
         return None
-    mediana = statistics.median(historicos)
-    desvios = [abs(v - mediana) for v in historicos]
-    mad = statistics.median(desvios)
-    if mad == 0:
-        return None  # série constante; usa mm_pct
-    return abs(valor - mediana) / (1.4826 * mad)
+    media  = sum(historicos) / len(historicos)
+    desvio = statistics.pstdev(historicos)
+    valor  = serie_mes[mes_ref]
+    return {"valor": valor, "media": media, "desvio": desvio,
+            "n": len(historicos)}
+
+
+def _zscore_classico(serie_mes: Dict[str, float], mes_ref: str) -> Optional[float]:
+    """Z-score clássico contra média e desvio-padrão (excluindo mes_ref).
+
+    Substitui a versão com mediana/MAD: em séries financeiras de variabilidade
+    natural alta (ex: tributos proporcionais à receita), MAD ficava baixíssima
+    e gerava centenas de falsos positivos.
+    """
+    s = _stats_classico(serie_mes, mes_ref)
+    if not s or s["desvio"] == 0:
+        return None
+    return abs(s["valor"] - s["media"]) / s["desvio"]
 
 
 def _aplica_regra_mm_pct(serie_mes, posto, ict, regra) -> List[dict]:
+    """Mantida pra compatibilidade — mas a dedup acontece em gerar_anomalias()
+    pra que mm3+mm6+mm12+mm24 que dispararem juntos virem UMA linha só.
+    """
     out = []
     janela = int(regra["parametros"].get("janela", 12))
     pct_lim = float(regra["parametros"].get("pct", 10))
@@ -308,10 +342,11 @@ def _aplica_regra_mm_pct(serie_mes, posto, ict, regra) -> List[dict]:
                 "mes_ref": mes_ref, "valor_atual": round(valor, 2),
                 "regra_id": regra["id"], "regra_nome": regra["nome"],
                 "regra_tipo": regra["tipo"],
+                "_janela": janela,                # usado pra dedup downstream
                 "evidencia": {
-                    f"mm{janela}": round(mm, 2),
-                    "delta_pct": round(delta_pct, 1),
-                    "limite_pct": pct_lim,
+                    f"mm{janela}":  round(mm, 2),
+                    "delta_pct":    round(delta_pct, 1),
+                    "limite_pct":   pct_lim,
                 },
             })
     return out
@@ -319,23 +354,68 @@ def _aplica_regra_mm_pct(serie_mes, posto, ict, regra) -> List[dict]:
 
 def _aplica_regra_zscore(serie_mes, posto, ict, regra) -> List[dict]:
     out = []
-    threshold = float(regra["parametros"].get("threshold", 3.0))
+    threshold = float(regra["parametros"].get("threshold", 4.0))
     for mes_ref in list(serie_mes.keys()):
-        z = _zscore_robusto(serie_mes, mes_ref)
-        if z is not None and z >= threshold:
-            mediana = statistics.median([v for k, v in serie_mes.items() if k != mes_ref])
+        s = _stats_classico(serie_mes, mes_ref)
+        if not s or s["desvio"] == 0:
+            continue
+        z = abs(s["valor"] - s["media"]) / s["desvio"]
+        if z >= threshold:
             out.append({
                 "posto": posto, "id_conta_tipo": ict,
-                "mes_ref": mes_ref, "valor_atual": round(serie_mes[mes_ref], 2),
+                "mes_ref": mes_ref, "valor_atual": round(s["valor"], 2),
                 "regra_id": regra["id"], "regra_nome": regra["nome"],
                 "regra_tipo": regra["tipo"],
                 "evidencia": {
-                    "zscore": round(z, 2),
-                    "mediana": round(mediana, 2),
+                    "zscore":    round(z, 2),
+                    "media":     round(s["media"], 2),
+                    "desvio":    round(s["desvio"], 2),
                     "threshold": threshold,
+                    "n_hist":    s["n"],
                 },
             })
     return out
+
+
+def _dedup_mm_pct(items: List[dict]) -> List[dict]:
+    """Agrupa anomalias mm_pct por (posto, id_conta_tipo, mes_ref).
+
+    Cada lançamento que ultrapassa 10% costuma disparar 4 mm (mm3,mm6,mm12,mm24)
+    em separado. Isso inflava a lista 4x. Aqui combinamos numa única entrada
+    com a lista de janelas que dispararam.
+    """
+    by_key: Dict[Tuple[str,int,str], dict] = {}
+    for it in items:
+        if it.get("regra_tipo") != "mm_pct":
+            continue
+        key = (it["posto"], it["id_conta_tipo"], it["mes_ref"])
+        janela = it.get("_janela", 0)
+        if key not in by_key:
+            base = dict(it)
+            base["evidencia"] = {
+                "janelas":    [janela] if janela else [],
+                "delta_pct":  it["evidencia"].get("delta_pct"),
+                "limite_pct": it["evidencia"].get("limite_pct"),
+                "valores_mm": {f"mm{janela}": it["evidencia"].get(f"mm{janela}")} if janela else {},
+            }
+            base.pop("_janela", None)
+            by_key[key] = base
+        else:
+            base = by_key[key]
+            ev = base["evidencia"]
+            if janela and janela not in ev["janelas"]:
+                ev["janelas"].append(janela)
+            for k, v in it["evidencia"].items():
+                if k.startswith("mm") and k not in ev["valores_mm"]:
+                    ev["valores_mm"][k] = v
+            # delta_pct fica do mais recente (mm3 costuma ser o maior)
+            if it["evidencia"].get("delta_pct", 0) > ev.get("delta_pct", 0):
+                ev["delta_pct"] = it["evidencia"]["delta_pct"]
+    # ordena janelas asc pra ficar bonito na UI
+    for v in by_key.values():
+        v["evidencia"]["janelas"].sort()
+    nao_mm = [it for it in items if it.get("regra_tipo") != "mm_pct"]
+    return list(by_key.values()) + nao_mm
 
 
 def _aplica_regra_gap(serie_mes, posto, ict, regra) -> List[dict]:
@@ -489,10 +569,15 @@ def gerar_anomalias(despesas, regras) -> List[dict]:
             if regra["tipo"] == "mm_pct":
                 out.extend(_aplica_regra_mm_pct(serie_mes, posto, ict, regra))
             elif regra["tipo"] == "zscore_robusto":
+                # Mantém o nome do tipo no DB pra não quebrar regras existentes,
+                # mas o cálculo agora é clássico (média/std). Mediana/MAD foi
+                # descartada — gerava muitos falsos positivos em séries com
+                # variabilidade natural alta (tributos, comissões).
                 out.extend(_aplica_regra_zscore(serie_mes, posto, ict, regra))
             elif regra["tipo"] == "gap_temporal":
                 out.extend(_aplica_regra_gap(serie_mes, posto, ict, regra))
-    return out
+    # Dedup: agrupa mm_pct (mm3+mm6+mm12+mm24) numa só linha por (posto,conta,mês).
+    return _dedup_mm_pct(out)
 
 
 def calcular_score_postos(anomalias: List[dict], serie) -> Dict[str, int]:
@@ -573,6 +658,7 @@ def main() -> int:
 
         # ── Anomalias (saídas) ─────────────────────────────────────────
         anomalias_raw = gerar_anomalias(despesas, regras)
+        serie_for_hist = _series_mensal(despesas)
 
         # carrega labels mais recentes de id_conta_tipo → texto
         tipos_label: Dict[int, str] = {}
@@ -581,7 +667,7 @@ def main() -> int:
             if ict:
                 tipos_label[int(ict)] = lan.get("tipo_label") or f"#{ict}"
 
-        # enriquece com chave + status de verificação
+        # enriquece com chave + status de verificação + histórico 12m + média/desvio
         anomalias = []
         for a in anomalias_raw:
             chave = _hash_chave(
@@ -596,6 +682,17 @@ def main() -> int:
             a["verificado_por"]  = v["verificado_por"]   if v else None
             a["verificado_em"]   = str(v["verificado_em"]) if v else None
             a["observacao"]      = v["observacao"]       if v else ""
+
+            # Histórico 12m (incluindo mes_ref) + estatísticas clássicas
+            chave_serie = (a["posto"], int(a["id_conta_tipo"]))
+            ser = serie_for_hist.get(chave_serie, {})
+            a["historico_12m"] = _historico_lista(ser, n=12, mes_ref=a["mes_ref"])
+            stats = _stats_classico(ser, a["mes_ref"])
+            if stats:
+                a["media_hist"]  = round(stats["media"], 2)
+                a["desvio_hist"] = round(stats["desvio"], 2)
+                a["n_hist"]      = stats["n"]
+
             anomalias.append(a)
 
         # ordena por severidade (regra_tipo) + valor desc

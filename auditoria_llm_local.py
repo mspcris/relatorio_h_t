@@ -49,23 +49,53 @@ TIMEOUT        = int(os.environ.get("OLLAMA_TIMEOUT", "60"))
 MAX_ITENS      = int(os.environ.get("LLM_LOCAL_MAX", "200"))
 
 
+def _fmt_brl(v) -> str:
+    try:
+        return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        return str(v)
+
+
 def _prompt_para_anomalia(a: dict) -> str:
     e = a.get("evidencia", {}) or {}
     evid_lines = "\n".join(f"  - {k}: {v}" for k, v in e.items())
-    valor = f"R$ {float(a.get('valor_atual') or 0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"""Você é um auditor financeiro. Em PT-BR, escreva 1 ou 2 frases curtas
-explicando a anomalia abaixo. Não use bullets, não use markdown, apenas texto
-direto. Foque no fato e na evidência. Não invente nada além do dado.
+    valor = _fmt_brl(a.get("valor_atual"))
+
+    # Histórico mês-a-mês (até 12 meses) — peso enorme pra qualidade da análise
+    hist_lines = []
+    for h in (a.get("historico_12m") or []):
+        marker = " ← este mês" if h["mes"] == a.get("mes_ref") else ""
+        hist_lines.append(f"  {h['mes']}: {_fmt_brl(h['valor'])}{marker}")
+    hist_block = "\n".join(hist_lines) if hist_lines else "  (sem histórico)"
+
+    media  = a.get("media_hist")
+    desvio = a.get("desvio_hist")
+    nh     = a.get("n_hist")
+    stats_line = (
+        f"Média histórica: {_fmt_brl(media)} | desvio padrão: {_fmt_brl(desvio)} | n={nh}"
+        if media is not None else "Sem estatística histórica suficiente."
+    )
+
+    return f"""Você é um auditor financeiro analisando uma anomalia em uma rede
+de clínicas médicas. Em PT-BR, escreva 2 a 4 frases analíticas explicando o
+caso. Use os dados abaixo. Não use markdown nem bullets, só texto corrido.
+Considere a tendência do histórico: a conta vinha estável, subindo, oscilando?
+Quando relevante, comente o quão fora da norma o valor está em desvios padrão.
+Não invente nada que não esteja no dado.
 
 Posto: {a.get('posto')}
-Tipo de conta: {a.get('tipo_label')}
-Mês de referência: {a.get('mes_ref')}
-Valor lançado: {valor}
+Conta: {a.get('tipo_label')}
+Mês: {a.get('mes_ref')}
+Valor neste mês: {valor}
+{stats_line}
 Regra disparada: {a.get('regra_nome')}
 Evidência:
 {evid_lines}
 
-Resposta:"""
+Histórico (12 meses até o mês de referência):
+{hist_block}
+
+Análise:"""
 
 
 def _chama_ollama(prompt: str) -> str:

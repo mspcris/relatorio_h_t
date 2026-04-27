@@ -3538,6 +3538,39 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
   .audit-charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   @media (max-width:900px) { .audit-charts-grid { grid-template-columns:1fr; } }
   .audit-chart-box { position:relative; height:240px; width:100%; }
+  /* drawer de detalhe */
+  .audit-drawer-bg {
+    position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:10000;
+    display:none; justify-content:flex-end;
+  }
+  .audit-drawer-bg.show { display:flex; }
+  .audit-drawer {
+    background:#fff; width:min(640px, 96vw); height:100vh; overflow-y:auto;
+    box-shadow:-12px 0 40px rgba(0,0,0,.25); padding:18px 22px;
+    animation:slideIn .15s ease-out;
+  }
+  @keyframes slideIn { from{transform:translateX(40px); opacity:.5;} to{transform:none; opacity:1;} }
+  .audit-drawer h5 { margin:0 0 4px 0; font-size:18px; }
+  .audit-drawer .lbl { color:#666; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+  .audit-drawer .val { font-weight:600; }
+  .audit-drawer .stat-grid {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+    gap:8px; margin:12px 0; padding:10px; background:#f8f9fa; border-radius:6px;
+  }
+  .audit-drawer .stat-grid > div { font-size:13px; }
+  .audit-drawer .hist-table { width:100%; font-size:12px; margin-top:8px; }
+  .audit-drawer .hist-table th, .audit-drawer .hist-table td { padding:4px 8px; }
+  .audit-drawer .hist-table tbody tr:nth-child(odd) { background:#fafafa; }
+  .audit-drawer .hist-table .ref-row { background:#fff3cd !important; font-weight:600; }
+  .audit-drawer .llm-block {
+    background:#e7f3ff; border-left:3px solid #2f6bb6; padding:10px 12px;
+    margin:14px 0; border-radius:0 4px 4px 0; font-size:13px; line-height:1.45;
+  }
+  .audit-drawer .close-x {
+    background:none; border:none; font-size:26px; cursor:pointer; float:right;
+    color:#555; line-height:1;
+  }
+  .sparkline-box { position:relative; height:140px; margin:12px 0; }
   .scores-grid {
     display:grid; grid-template-columns:repeat(auto-fill,minmax(80px,1fr));
     gap:6px; margin-bottom:14px;
@@ -3575,6 +3608,11 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
       </p>
     </div>
   </div>
+</div>
+
+<!-- Drawer Detalhe da anomalia -->
+<div class="audit-drawer-bg" id="auditDrawer">
+  <div class="audit-drawer" id="auditDrawerBody"></div>
 </div>
 
 <!-- Modal Auditoria (discrepâncias) -->
@@ -3814,6 +3852,9 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
     }).join("") || "<div class='audit-empty'>sem dados nos postos selecionados</div>";
   }
 
+  // Cache do índice de anomalias por chave (pra montar detalhe rápido)
+  let _anomMap = {};
+
   function renderLista(){
     if (!painel) return;
     const ul = el("#auditLista");
@@ -3827,24 +3868,24 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
     } else {
       filtradas = base.filter(a=>a.regra_tipo === abaAtiva && !a.verificado);
     }
+    _anomMap = {};
+    filtradas.forEach(a => { _anomMap[a.chave] = a; });
+
     if (!filtradas.length) {
       ul.innerHTML = `<div class="audit-empty">Nenhum item nesta aba.</div>`;
       return;
     }
     const linhas = filtradas.map(a=>{
       const evid = formatarEvidencia(a);
-      const llm  = a.llm_resumo
-        ? `<div class="audit-llm-text">🤖 ${escapeHtml(a.llm_resumo)}</div>`
-        : "";
       const acao = a.verificado
         ? `<span class="audit-pill">✓ ${escapeHtml(a.verificado_por||"?")}</span>`
         : `<button class="btn btn-sm btn-outline-success btn-verificar"
                     data-chave="${escapeHtml(a.chave)}">Verificar</button>`;
       return `
-        <tr>
+        <tr class="audit-row" data-chave="${escapeHtml(a.chave)}" style="cursor:pointer">
           <td><span class="audit-pill">${escapeHtml(a.posto||"?")}</span></td>
           <td>${escapeHtml(a.tipo_label||"#"+a.id_conta_tipo)}<br>
-              <span class="audit-evid">${evid}${llm}</span></td>
+              <span class="audit-evid">${evid}</span></td>
           <td class="text-right">${fmtBR(a.valor_atual)}</td>
           <td>${fmtMes(a.mes_ref)}</td>
           <td><span class="audit-pill ${a.regra_tipo==='zscore_robusto'?'severe':'warn'}">
@@ -3858,8 +3899,17 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
           <th>Mês</th><th>Regra</th><th></th></tr></thead>
         <tbody>${linhas.join("")}</tbody>
       </table>`;
+
+    // click na linha (qualquer célula menos botão Verificar) abre o drawer
+    ul.querySelectorAll(".audit-row").forEach(tr => {
+      tr.addEventListener("click", (ev) => {
+        if (ev.target.closest(".btn-verificar")) return;
+        abrirDetalhe(tr.dataset.chave);
+      });
+    });
     ul.querySelectorAll(".btn-verificar").forEach(b=>{
-      b.addEventListener("click", async ()=>{
+      b.addEventListener("click", async (ev)=>{
+        ev.stopPropagation();
         const obs = prompt("Observação (opcional):") || "";
         const r = await fetch("/api/auditoria/verificar", {
           method:"POST", credentials:"same-origin",
@@ -3903,6 +3953,126 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
     if (!painel) { alert("Painel ainda carregando…"); return; }
     abrir("auditoriaModal");
     renderAuditoria();
+  });
+
+  // ── Drawer de detalhe da anomalia ─────────────────────────────────────
+  let _drawerChart = null;
+
+  function abrirDetalhe(chave){
+    const a = _anomMap[chave];
+    if (!a) return;
+
+    const hist = a.historico_12m || [];
+    const evid = a.evidencia || {};
+    const evidLine = Object.entries(evid).map(([k,v])=>{
+      let s;
+      if (Array.isArray(v))      s = v.join(", ");
+      else if (typeof v === "object" && v !== null)
+        s = Object.entries(v).map(([kk,vv])=>`${kk}=${vv}`).join(", ");
+      else s = String(v);
+      return `<div><span class="lbl">${escapeHtml(k)}</span><br><span class="val">${escapeHtml(s)}</span></div>`;
+    }).join("");
+
+    const stats = (a.media_hist != null) ? `
+      <div class="stat-grid">
+        <div><span class="lbl">Média histórica</span><br><span class="val">${fmtBR(a.media_hist)}</span></div>
+        <div><span class="lbl">Desvio padrão</span><br><span class="val">${fmtBR(a.desvio_hist)}</span></div>
+        <div><span class="lbl">N (meses)</span><br><span class="val">${a.n_hist||0}</span></div>
+        <div><span class="lbl">Valor neste mês</span><br><span class="val">${fmtBR(a.valor_atual)}</span></div>
+      </div>` : `<div class="stat-grid"><div><span class="lbl">Sem estatísticas históricas</span></div></div>`;
+
+    const histRows = hist.map(h=>{
+      const isRef = h.mes === a.mes_ref;
+      return `<tr class="${isRef?'ref-row':''}"><td>${h.mes}</td><td class="text-right">${fmtBR(h.valor)}</td></tr>`;
+    }).join("");
+
+    const llm = a.llm_resumo
+      ? `<div class="llm-block"><strong>🤖 Análise LLM</strong><br>${escapeHtml(a.llm_resumo)}</div>`
+      : `<div class="llm-block">⏳ Aguardando análise do LLM (próximo ciclo de 1 h).</div>`;
+
+    const acao = a.verificado
+      ? `<div style="margin:14px 0;color:#2a7a2a">✓ Verificado por <b>${escapeHtml(a.verificado_por)}</b> em ${escapeHtml(a.verificado_em||"")}<br><i>${escapeHtml(a.observacao||"")}</i></div>`
+      : `<button class="btn btn-success btn-block" id="drawerBtnVerificar">Marcar como verificado</button>`;
+
+    const body = el("#auditDrawerBody");
+    body.innerHTML = `
+      <button class="close-x" id="drawerClose">×</button>
+      <div class="lbl">Posto</div>
+      <h5>${escapeHtml(a.posto)} · ${escapeHtml(a.tipo_label||"#"+a.id_conta_tipo)}</h5>
+      <div class="lbl" style="margin-top:8px">Mês de referência</div>
+      <div class="val">${escapeHtml(a.mes_ref)}</div>
+      <div class="lbl" style="margin-top:8px">Regra disparada</div>
+      <div class="val"><span class="audit-pill ${a.regra_tipo==='zscore_robusto'?'severe':'warn'}">${escapeHtml(a.regra_nome)}</span></div>
+      ${stats}
+      <div class="sparkline-box"><canvas id="drawerSpark"></canvas></div>
+      ${llm}
+      <div class="lbl">Evidência da regra</div>
+      <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">${evidLine}</div>
+      <div class="lbl" style="margin-top:14px">Histórico 12 meses (linha destacada = mês desta anomalia)</div>
+      <table class="hist-table">
+        <thead><tr><th>Mês</th><th class="text-right">Valor</th></tr></thead>
+        <tbody>${histRows}</tbody>
+      </table>
+      <div style="margin-top:18px">${acao}</div>
+    `;
+
+    // sparkline
+    const ctx = el("#drawerSpark").getContext("2d");
+    if (_drawerChart) { _drawerChart.destroy(); _drawerChart = null; }
+    _drawerChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: hist.map(h=>h.mes),
+        datasets: [
+          { label:"Lançamento", data: hist.map(h=>h.valor),
+            borderColor:"#2f6bb6", backgroundColor:"rgba(47,107,182,.1)",
+            fill:true, tension:.25,
+            pointBackgroundColor: hist.map(h=>h.mes===a.mes_ref?"#dc3545":"#2f6bb6"),
+            pointRadius:           hist.map(h=>h.mes===a.mes_ref?6:3),
+          },
+          ...(a.media_hist != null ? [{
+            label:"Média histórica", data: hist.map(()=>a.media_hist),
+            borderColor:"#888", borderDash:[5,4], pointRadius:0, fill:false,
+          }] : []),
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display:true, position:"bottom" } },
+        scales: {
+          y: { beginAtZero: false,
+                ticks: { callback: v => "R$ " + Number(v).toLocaleString("pt-BR",{maximumFractionDigits:0}) } },
+        },
+      },
+    });
+
+    el("#drawerClose").addEventListener("click", fecharDetalhe);
+    if (!a.verificado) {
+      el("#drawerBtnVerificar").addEventListener("click", async ()=>{
+        const obs = prompt("Observação (opcional):") || "";
+        const r = await fetch("/api/auditoria/verificar", {
+          method:"POST", credentials:"same-origin",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ chave: a.chave, observacao: obs }),
+        });
+        if (r.ok) {
+          fecharDetalhe();
+          await carregarPainel();
+          renderAuditoria();
+        } else alert("Falha ao verificar (" + r.status + ")");
+      });
+    }
+    el("#auditDrawer").classList.add("show");
+  }
+
+  function fecharDetalhe(){
+    el("#auditDrawer").classList.remove("show");
+    if (_drawerChart) { _drawerChart.destroy(); _drawerChart = null; }
+  }
+
+  // clique fora do drawer fecha
+  el("#auditDrawer").addEventListener("click", (e)=>{
+    if (e.target.id === "auditDrawer") fecharDetalhe();
   });
 
   // refresh inicial + a cada 5 min
