@@ -3755,15 +3755,17 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
   });
 
   // ── Auditoria (discrepâncias) ─────────────────────────────────────
-  // Lê o filtro de postos da página principal. Retorna Set ou null (= todos).
+  // Lê o filtro de postos da página principal direto do DOM (a função
+  // postosSelecionados() está em outro escopo IIFE e não é acessível aqui).
+  // Retorna Set com postos ativos, ou null quando "Todos" está selecionado.
   function _postosAtivos(){
-    try {
-      if (typeof postosSelecionados === "function") {
-        const arr = postosSelecionados();
-        if (Array.isArray(arr) && arr.length) return new Set(arr);
-      }
-    } catch (e) { /* ignore */ }
-    return null;
+    const links = document.querySelectorAll('#postoTabs .nav-link.active[data-posto]');
+    const postos = [];
+    links.forEach(a => {
+      const p = a.dataset.posto;
+      if (p && p !== 'ALL') postos.push(p);
+    });
+    return postos.length ? new Set(postos) : null;
   }
 
   // Aplica filtro de posto + verificado/aba — base comum a abas e lista.
