@@ -31,11 +31,22 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
+# Carrega .env (cron roda com env limpo)
+try:
+    from dotenv import load_dotenv
+    for _cand in ("/etc/camim-auth.env", "/opt/relatorio_h_t/.env",
+                  os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")):
+        if os.path.exists(_cand):
+            load_dotenv(_cand, override=False)
+except ImportError:
+    pass
+
 JSON_PATH = "/opt/relatorio_h_t/json_consolidado/auditoria_financeira.json"
-OLLAMA_URL   = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
-TIMEOUT      = int(os.environ.get("OLLAMA_TIMEOUT", "60"))
-MAX_ITENS    = int(os.environ.get("LLM_LOCAL_MAX", "200"))
+OLLAMA_URL     = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+OLLAMA_MODEL   = os.environ.get("OLLAMA_MODEL", "gemma3:4b")
+OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "")
+TIMEOUT        = int(os.environ.get("OLLAMA_TIMEOUT", "60"))
+MAX_ITENS      = int(os.environ.get("LLM_LOCAL_MAX", "200"))
 
 
 def _prompt_para_anomalia(a: dict) -> str:
@@ -64,9 +75,12 @@ def _chama_ollama(prompt: str) -> str:
         "stream": False,
         "options": {"temperature": 0.2, "num_predict": 120},
     }).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if OLLAMA_API_KEY:
+        headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
     req = urllib.request.Request(
         f"{OLLAMA_URL}/api/generate",
-        data=body, headers={"Content-Type": "application/json"},
+        data=body, headers=headers,
     )
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
         data = json.loads(resp.read().decode("utf-8"))
