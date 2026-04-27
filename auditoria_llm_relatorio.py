@@ -8,8 +8,8 @@ um relatório executivo em markdown analisando padrões sistêmicos:
   - concentração de anomalias por posto / plano_principal
   - itens de maior severidade
 
-Tech:  Claude Sonnet 4.6 via SDK Anthropic (já plugado no auth via
-       llm_client_anthropic.py / .env do auth).
+Tech:  OpenAI via SDK (llm_client_openai.py). Modelo configurável por env
+       OPENAI_AUDITORIA_MODEL (default: gpt-5-mini). Custo típico < R$0,30/dia.
 Cron:  0 6 * * *  (após o motor das 03:00)
 
 Saída:
@@ -134,24 +134,29 @@ def main() -> int:
     briefing = _construir_briefing(data)
 
     try:
-        from llm_client_anthropic import LLMClientAnthropic
+        from llm_client_openai import LLMClientOpenAI, LLMConfig
     except Exception as exc:
-        print(f"[err] não consegui importar llm_client_anthropic: {exc}",
+        print(f"[err] não consegui importar llm_client_openai: {exc}",
               file=sys.stderr)
         return 1
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("[err] ANTHROPIC_API_KEY ausente; nada a fazer", file=sys.stderr)
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("[err] OPENAI_API_KEY ausente; nada a fazer", file=sys.stderr)
         return 1
 
-    cli = LLMClientAnthropic()
+    # Modelo configurável; default gpt-5-mini (sobrescreve OPENAI_MODEL global
+    # do client pra não interferir com outros usos da chave OpenAI).
+    modelo = os.environ.get("OPENAI_AUDITORIA_MODEL", "gpt-5-mini")
+    # max_tokens alto: gpt-5-mini e o-series gastam parte (às vezes a maior)
+    # com "thinking interno" antes de emitir resposta. 2000 era curto demais.
+    cli = LLMClientOpenAI(LLMConfig(model=modelo, temperature=0.3, max_tokens=8000))
     print(f"[call] modelo={cli.config.model}  briefing={len(briefing)} chars")
     t0 = time.time()
     relatorio = cli.gerar_texto(
         prompt=briefing,
         system_prompt=SYSTEM_PROMPT,
         temperature=0.3,
-        max_tokens=2000,
+        max_tokens=8000,
     )
     elapsed = time.time() - t0
 

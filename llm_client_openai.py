@@ -46,12 +46,19 @@ class LLMClientOpenAI:
         temp = temperature or self.config.temperature
         mtok = max_tokens or self.config.max_tokens
 
-        resp = self.client.chat.completions.create(
-            model=self.config.model,
-            messages=messages,
-            temperature=temp,
-            max_tokens=mtok
-        )
+        # Modelos de raciocínio (gpt-5*, o1*, o3*) usam max_completion_tokens
+        # e ignoram temperature. API rejeita os params antigos.
+        m = self.config.model.lower()
+        is_reasoning = m.startswith(("gpt-5", "o1", "o3", "o4"))
+
+        kwargs = {"model": self.config.model, "messages": messages}
+        if is_reasoning:
+            kwargs["max_completion_tokens"] = mtok
+        else:
+            kwargs["max_tokens"]  = mtok
+            kwargs["temperature"] = temp
+
+        resp = self.client.chat.completions.create(**kwargs)
 
         self.last_finish_reason = getattr(resp.choices[0], "finish_reason", None)
         usage = getattr(resp, "usage", None)
