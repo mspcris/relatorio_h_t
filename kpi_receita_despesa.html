@@ -3645,10 +3645,33 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
 
   function atualizarBotoes(){
     if (!painel) return;
-    const cor = (painel.benford && painel.benford.cor_botao) || "cinza";
-    const abertas = (painel.totais && painel.totais.abertas) ?? 0;
+    // Cor do botão Benford = pior cor entre os postos selecionados (ou rede inteira)
+    const fp = _postosAtivos();
+    let cor = (painel.benford && painel.benford.cor_botao) || "cinza";
+    if (fp && painel.benford && painel.benford.por_posto) {
+      const ordem = {verde:0, amarelo:1, vermelho:2, cinza:-1};
+      const cores = [...fp]
+        .map(p => painel.benford.por_posto[p]?.saidas?.cor)
+        .filter(c => c && c !== "cinza");
+      cor = cores.length ? cores.reduce((a,b) => ordem[a] >= ordem[b] ? a : b) : "cinza";
+    }
+    // Badge = anomalias abertas dentro do filtro de posto ativo
+    const abertas = _filtrarAnomalias().filter(a => !a.verificado).length;
     setBotoes(cor, String(abertas));
   }
+
+  // Re-renderiza badge + lista quando o filtro de posto da página principal muda
+  document.addEventListener("click", (e) => {
+    const t = e.target;
+    if (!t) return;
+    const dentroPostos = t.closest && (t.closest("#postoTabs") || t.id?.startsWith("btnGrupo"));
+    if (!dentroPostos) return;
+    setTimeout(() => {
+      atualizarBotoes();
+      const modalAudit = el("#auditoriaModal");
+      if (modalAudit && modalAudit.classList.contains("show")) renderAuditoria();
+    }, 60);
+  });
 
   // ── Benford ────────────────────────────────────────────────────────
   let chartSaidas = null, chartEntradas = null;
@@ -3732,10 +3755,29 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
   });
 
   // ── Auditoria (discrepâncias) ─────────────────────────────────────
+  // Lê o filtro de postos da página principal. Retorna Set ou null (= todos).
+  function _postosAtivos(){
+    try {
+      if (typeof postosSelecionados === "function") {
+        const arr = postosSelecionados();
+        if (Array.isArray(arr) && arr.length) return new Set(arr);
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  // Aplica filtro de posto + verificado/aba — base comum a abas e lista.
+  function _filtrarAnomalias(){
+    const todas = (painel && painel.anomalias) || [];
+    const fp = _postosAtivos();
+    return fp ? todas.filter(a => fp.has(a.posto)) : todas;
+  }
+
   function abasDisponiveis(){
     if (!painel) return [];
+    const base = _filtrarAnomalias();
     const conta = {};
-    (painel.anomalias||[]).forEach(a=>{
+    base.forEach(a=>{
       if (a.verificado) return;
       const t = a.regra_tipo;
       conta[t] = (conta[t]||0) + 1;
@@ -3747,7 +3789,7 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
       nao_recorrente_pct: "Não-recorrentes",
     };
     const total = Object.values(conta).reduce((a,b)=>a+b,0);
-    const verifs = (painel.anomalias||[]).filter(a=>a.verificado).length;
+    const verifs = base.filter(a=>a.verificado).length;
     const out = [["todas", `Todas (${total})`]];
     ordem.forEach(k=>{ if (conta[k]) out.push([k, `${labels[k]} (${conta[k]})`]); });
     out.push(["verificadas", `Verificadas (${verifs})`]);
@@ -3758,27 +3800,30 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
     const grid = el("#scoresGrid");
     if (!grid) return;
     const sc = (painel && painel.scores_postos) || {};
-    grid.innerHTML = Object.entries(sc).sort().map(([p,v])=>{
+    const fp = _postosAtivos();
+    let entries = Object.entries(sc).sort();
+    if (fp) entries = entries.filter(([p]) => fp.has(p));
+    grid.innerHTML = entries.map(([p,v])=>{
       const cor = v >= 90 ? "#d4edda" : v >= 75 ? "#fff3cd"
                 : v >= 50 ? "#f8d7da" : "#f5c6cb";
       return `<div class="score-cell" style="background:${cor}" title="Posto ${p}: score ${v}">
         <div class="p">${escapeHtml(p)}</div><div class="v">${v}/100</div>
       </div>`;
-    }).join("") || "<div class='audit-empty'>sem dados</div>";
+    }).join("") || "<div class='audit-empty'>sem dados nos postos selecionados</div>";
   }
 
   function renderLista(){
     if (!painel) return;
     const ul = el("#auditLista");
     if (!ul) return;
-    const todas = painel.anomalias || [];
+    const base = _filtrarAnomalias();
     let filtradas;
     if (abaAtiva === "todas") {
-      filtradas = todas.filter(a=>!a.verificado);
+      filtradas = base.filter(a=>!a.verificado);
     } else if (abaAtiva === "verificadas") {
-      filtradas = todas.filter(a=>a.verificado);
+      filtradas = base.filter(a=>a.verificado);
     } else {
-      filtradas = todas.filter(a=>a.regra_tipo === abaAtiva && !a.verificado);
+      filtradas = base.filter(a=>a.regra_tipo === abaAtiva && !a.verificado);
     }
     if (!filtradas.length) {
       ul.innerHTML = `<div class="audit-empty">Nenhum item nesta aba.</div>`;
