@@ -190,6 +190,25 @@
                      value="{{ campanha.template if campanha else 'notificacao_de_fatura' }}"
                      placeholder="Nome do template">
             </div>
+
+            <!-- Campo condicional: URL da imagem do HEADER (apenas para templates com header IMAGE) -->
+            <div id="header-image-block" class="mt-2" style="display:none">
+              <label class="font-weight-bold" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:#6c757d">
+                URL da imagem do header
+                <span class="text-danger" id="header-image-required" style="display:none">*</span>
+              </label>
+              <input type="url" name="header_image_url" id="header_image_url" class="form-control"
+                     placeholder="https://www.camim.com.br/wp-content/uploads/...jpg"
+                     value="{{ campanha.header_image_url if campanha and campanha.header_image_url else '' }}">
+              <small class="form-text text-muted">
+                Este template tem header de imagem. Cole a URL pública da imagem que será enviada.
+                Cada mensagem incluirá esta imagem no topo.
+              </small>
+              <div id="header-image-preview" class="mt-2" style="display:none">
+                <img id="header-image-thumb" src="" alt="preview"
+                     style="max-width:240px;max-height:120px;border:1px solid #ddd;border-radius:4px">
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -838,7 +857,38 @@ function mostrarPreview() {
       ? '<small class="text-muted mr-1">Parâmetros:</small>' + t.params.map(p => `<span class="badge badge-info">${p}</span>`).join(' ')
       : '';
   }
+  _toggleHeaderImageBlock(t);
 }
+
+function _toggleHeaderImageBlock(t) {
+  const block = document.getElementById('header-image-block');
+  const req   = document.getElementById('header-image-required');
+  const inp   = document.getElementById('header_image_url');
+  if (!block) return;
+  const precisa = t && (t.header_type === 'IMAGE' || t.header_type === 'VIDEO' || t.header_type === 'DOCUMENT');
+  block.style.display = precisa ? 'block' : 'none';
+  if (req) req.style.display = precisa ? 'inline' : 'none';
+  if (inp) inp.required = !!precisa;
+  _atualizarThumb();
+}
+
+function _atualizarThumb() {
+  const inp = document.getElementById('header_image_url');
+  const box = document.getElementById('header-image-preview');
+  const img = document.getElementById('header-image-thumb');
+  if (!inp || !box || !img) return;
+  const url = (inp.value || '').trim();
+  if (url && /^https?:\/\//i.test(url)) {
+    img.src = url;
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+document.addEventListener('input', (e)=>{
+  if (e.target && e.target.id === 'header_image_url') _atualizarThumb();
+});
 
 // ── Selects dinâmicos ─────────────────────────────────────────────────────────
 const CAMPOS_SEL     = ['operadora','cobrador','corretor','bairro','rua'];

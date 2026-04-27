@@ -277,16 +277,25 @@ def enviar_via_chat(telefone: str, nome: str, template: str, params: dict,
         return f"erro_chat:{str(e)[:100]}", None
 
 
-def enviar_via_meta(telefone: str, template: str, params: dict) -> tuple[str, str | None]:
-    """Envia template diretamente pela API Meta/WhatsApp Business."""
-    # Monta o body no formato esperado pela API: {BODY: {param1: val1, ...}}
+def enviar_via_meta(telefone: str, template: str, params: dict,
+                     header_image_url: str | None = None) -> tuple[str, str | None]:
+    """Envia template diretamente pela API Meta/WhatsApp Business.
+
+    Quando o template tem HEADER do tipo IMAGE, a wrapper API exige o campo
+    `data.HEADER.imageUrl` (mesmo que a imagem seja "fixa" no template
+    aprovado — a Meta exige ser passada por mensagem). Se header_image_url
+    não vier, ainda assim mandamos `HEADER: {}` (a wrapper retorna 400/500
+    indicando isso pra ficar visível no log e na lista de não-enviados).
+    """
+    data_field = {"BODY": params}
+    if header_image_url:
+        data_field["HEADER"] = {"imageUrl": header_image_url}
+
     payload = {
         "template": template,
         "people": [{
             "phone": telefone,
-            "data": {
-                "BODY": params,
-            },
+            "data":  data_field,
         }],
     }
     try:
@@ -315,7 +324,8 @@ def enviar(telefone: str, nome: str, template: str, params: dict,
            dry_run: bool, queue_id: str | None = None,
            from_user_id: str | None = None,
            usar_chat: bool = True,
-           usar_meta: bool = False) -> tuple[str, str | None]:
+           usar_meta: bool = False,
+           header_image_url: str | None = None) -> tuple[str, str | None]:
     if dry_run:
         return "dry_run", None
 
@@ -331,7 +341,8 @@ def enviar(telefone: str, nome: str, template: str, params: dict,
             log.warning("  enviar_via_chat falhou: %s", s)
 
     if usar_meta:
-        s, w = enviar_via_meta(telefone, template, params)
+        s, w = enviar_via_meta(telefone, template, params,
+                               header_image_url=header_image_url)
         if wamid_final is None:
             wamid_final = w
         # Meta tem prioridade no status final
@@ -398,6 +409,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
     from_user_id = campanha.get("from_user_id") or None
     usar_chat    = bool(campanha.get("enviar_chat", 1))
     usar_meta    = bool(campanha.get("enviar_meta", 0))
+    header_url   = campanha.get("header_image_url") or None
 
     if not postos:
         log.warning(f"  [{campanha['nome']}] Nenhum posto configurado.")
@@ -469,7 +481,8 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
             nome_cliente = str(fatura.get("nome") or "")
             status, wamid = enviar(telefone, nome_cliente, template, params, dry_run,
                                    queue_id=queue_id, from_user_id=from_user_id,
-                                   usar_chat=usar_chat, usar_meta=usar_meta)
+                                   usar_chat=usar_chat, usar_meta=usar_meta,
+                                   header_image_url=header_url)
             telefones_rodada.add(telefone)
 
             nivel = logging.INFO if "erro" not in status else logging.WARNING

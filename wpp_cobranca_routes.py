@@ -378,25 +378,38 @@ def api_templates():
     if not email:
         return jsonify({"error": "unauthorized"}), 401
     templates = _fetch_templates()
-    # Retorna apenas name + preview text (primeiro BODY)
     result = []
     for t in templates:
-        body_text = ""
+        body_text  = ""
+        params     = []
+        header_type = None     # None | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT"
+        header_handle_preview = None
         for comp in t.get("components", []):
-            if comp.get("type") == "BODY":
+            ctype = comp.get("type")
+            if ctype == "BODY":
                 body_text = comp.get("text", "")
-                break
-        params = []
-        for comp in t.get("components", []):
-            if comp.get("type") == "BODY":
                 for p in comp.get("example", {}).get("body_text_named_params", []):
                     params.append(p.get("param_name"))
+            elif ctype == "HEADER":
+                fmt = (comp.get("format") or "").upper()
+                if fmt:
+                    header_type = fmt
+                else:
+                    ex = comp.get("example") or {}
+                    if "header_handle" in ex:
+                        header_type = "IMAGE"
+                    elif comp.get("text"):
+                        header_type = "TEXT"
+                hh = (comp.get("example") or {}).get("header_handle") or []
+                if hh: header_handle_preview = hh[0]
         result.append({
-            "name": t["name"],
-            "status": t.get("status", ""),
+            "name":     t["name"],
+            "status":   t.get("status", ""),
             "language": t.get("language", ""),
-            "preview": body_text[:120],
-            "params": params,
+            "preview":  body_text[:120],
+            "params":   params,
+            "header_type":            header_type,            # "IMAGE" pra exigir imageUrl
+            "header_handle_preview":  header_handle_preview,  # URL Meta (só preview)
         })
     return jsonify({"templates": result})
 
@@ -854,6 +867,7 @@ def _form_to_dict(form) -> dict:
         "from_user_id":       form.get("from_user_id") or "cmg8cum8g0519jbbm6r9l93f7",
         "enviar_chat":        "1" in form.getlist("enviar_chat"),
         "enviar_meta":        "1" in form.getlist("enviar_meta"),
+        "header_image_url":   (form.get("header_image_url") or "").strip() or None,
     }
 
 
