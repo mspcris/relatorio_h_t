@@ -1576,12 +1576,19 @@
   function renderVagaRotacao(arr) {
     const vagas = _construirVagas(arr);
     let total = 0, rot = 0;
+    let desistEmRot = 0, desistEmNaoRot = 0;     // desistências, separadas por tipo de vaga
+    let consultasEmVagas = 0;                     // soma das tentativas (consultas que entraram no agrupamento)
     vagas.forEach(v => {
       total++;
-      if (v.tentativas > 1) rot++;
+      consultasEmVagas += v.tentativas;
+      if (v.tentativas > 1) { rot++; desistEmRot += v.desistencias; }
+      else                  { desistEmNaoRot += v.desistencias; }
     });
     const pct = total ? rot / total * 100 : 0;
     const naoRot = total - rot;
+    const consultasSemId = arr.length - consultasEmVagas;
+    const desistTotal = arr.filter(c => c.des).length;
+    const desistSemId = desistTotal - desistEmRot - desistEmNaoRot;
     setBase('baseVagaRotacao', total, 'consultas sem identificador completo (médico, data, hora ou nº)');
     makeBar('chVagaRotacao', ['Não rotacionou', 'Rotacionou (≥1 desist.)'],
       [{
@@ -1596,7 +1603,11 @@
       {
         plugins: {
           legend: { display: false },
-          title: { display: true, text: `Total de vagas: ${fmtNum(total)} · Rotação: ${pct.toFixed(1)}%`, font: { size: 13 } },
+          title: { display: true, text: [
+            `Total de vagas: ${fmtNum(total)} · Rotação: ${pct.toFixed(1)}%`,
+            `Consultas: ${fmtNum(arr.length)} = ${fmtNum(consultasEmVagas)} em vagas + ${fmtNum(consultasSemId)} sem identificador`,
+            `Desistências: ${fmtNum(desistTotal)} = ${fmtNum(desistEmRot)} em vagas reocupadas + ${fmtNum(desistEmNaoRot)} em vagas que ficaram vazias + ${fmtNum(desistSemId)} sem identificador`,
+          ], font: { size: 12 }, padding: { top: 4, bottom: 8 } },
           tooltip: { callbacks: {
             label: c => `${fmtNum(c.parsed.y)} vagas`,
             afterLabel: c => total ? `${(c.parsed.y/total*100).toFixed(1)}% do total de vagas` : '',
