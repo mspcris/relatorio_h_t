@@ -1339,7 +1339,15 @@
       label: 'Confirmações',
       data: Object.values(histo),
       backgroundColor: ['#16a34a','#22c55e','#84cc16','#facc15','#94a3b8'],
-    }], { plugins: { legend: { display: false } } });
+    }], {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: c => `${fmtNum(c.parsed.y)} confirmações`,
+          afterLabel: c => baseHC ? `${(c.parsed.y/baseHC*100).toFixed(1)}% do total (${fmtNum(baseHC)})` : '',
+        }},
+      },
+    });
   }
 
   // ====== 5. Confirmou + Faltou ======
@@ -1477,10 +1485,18 @@
       else if (h < 72)  cnt[6]++;
       else              cnt[7]++;
     });
+    const baseP = horas.length;
     makeBar('chPushConf', buckets, [{
       label: `Confirmações (mediana ${mediana.toFixed(1)}h)`,
       data: cnt, backgroundColor: COR_INFO,
-    }]);
+    }], {
+      plugins: {
+        tooltip: { callbacks: {
+          label: c => `${fmtNum(c.parsed.y)} confirmações`,
+          afterLabel: c => baseP ? `${(c.parsed.y/baseP*100).toFixed(1)}% do total (${fmtNum(baseP)})` : '',
+        }},
+      },
+    });
   }
 
   // ====== 9. Mediana de dias agendamento → consulta ======
@@ -1723,7 +1739,10 @@
       indexAxis: 'y',
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { afterLabel: c => `${top[c.dataIndex].pct.toFixed(1)}% sobre ${top[c.dataIndex].total} agendamentos` } },
+        tooltip: { callbacks: {
+          label: c => `${fmtNum(top[c.dataIndex].des)} desistências`,
+          afterLabel: c => `${top[c.dataIndex].pct.toFixed(1)}% de ${fmtNum(top[c.dataIndex].total)} agendamentos`,
+        }},
       },
     });
   }
@@ -1742,7 +1761,7 @@
     });
     const top = Object.entries(por)
       .filter(([_, v]) => v.total >= 30)
-      .map(([esp, v]) => ({ esp, total: v.total, pct: v.falta / v.total * 100 }))
+      .map(([esp, v]) => ({ esp, total: v.total, falta: v.falta, pct: v.falta / v.total * 100 }))
       .sort((a,b) => b.pct - a.pct)
       .slice(0, 10);
     const baseEsp = top.reduce((s,x) => s + x.total, 0);
@@ -1751,12 +1770,15 @@
       label: '% falta',
       data: top.map(x => x.pct),
       backgroundColor: COR_BAD,
-      _labels: top.map(x => `${x.pct.toFixed(1)}% · ${fmtNum(x.total)}`),
+      _labels: top.map(x => `${x.pct.toFixed(1)}% · ${fmtNum(x.falta)} de ${fmtNum(x.total)}`),
     }], {
       indexAxis: 'y',
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { afterLabel: c => `n = ${fmtNum(top[c.dataIndex].total)}` } },
+        tooltip: { callbacks: {
+          label: c => `${top[c.dataIndex].pct.toFixed(1)}% falta`,
+          afterLabel: c => `${fmtNum(top[c.dataIndex].falta)} faltas de ${fmtNum(top[c.dataIndex].total)} consultas`,
+        }},
       },
       scales: { x: { ticks: { callback: v => v + '%' } } },
     });
@@ -1776,7 +1798,7 @@
     });
     const top = Object.entries(por)
       .filter(([_, v]) => v.total >= 30)
-      .map(([med, v]) => ({ med, total: v.total, pct: v.falta / v.total * 100 }))
+      .map(([med, v]) => ({ med, total: v.total, falta: v.falta, pct: v.falta / v.total * 100 }))
       .sort((a,b) => b.pct - a.pct)
       .slice(0, 15);
     const baseMed = top.reduce((s,x) => s + x.total, 0);
@@ -1785,12 +1807,15 @@
       label: '% falta',
       data: top.map(x => x.pct),
       backgroundColor: COR_BAD,
-      _labels: top.map(x => `${x.pct.toFixed(1)}% · ${fmtNum(x.total)}`),
+      _labels: top.map(x => `${x.pct.toFixed(1)}% · ${fmtNum(x.falta)} de ${fmtNum(x.total)}`),
     }], {
       indexAxis: 'y',
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { afterLabel: c => `n = ${fmtNum(top[c.dataIndex].total)}` } },
+        tooltip: { callbacks: {
+          label: c => `${top[c.dataIndex].pct.toFixed(1)}% falta`,
+          afterLabel: c => `${fmtNum(top[c.dataIndex].falta)} faltas de ${fmtNum(top[c.dataIndex].total)} consultas`,
+        }},
       },
       scales: { x: { ticks: { callback: v => v + '%' } } },
     });
