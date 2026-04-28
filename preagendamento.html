@@ -1653,11 +1653,22 @@
       porMes[mes].total++;
       if (c.des) porMes[mes].des++;
     });
-    const meses = Object.keys(porMes).sort();
+    // Descarta meses inteiramente no futuro (primeiro dia > hoje). Esses meses
+    // ainda estão recebendo marcações, então qualquer % é parcial e ruidosa.
+    const hojeMs = Date.now();
+    const primeiroDiaMs = mes => {
+      const [y, m] = mes.split('-').map(Number);
+      return new Date(y, m - 1, 1).getTime();
+    };
+    const meses = Object.keys(porMes)
+      .filter(m => primeiroDiaMs(m) <= hojeMs)
+      .sort();
     const pct = meses.map(m => porMes[m].total ? porMes[m].des / porMes[m].total * 100 : 0);
     const cores = meses.map(m => m < FASE_REGRA ? COR_PRE : (m < FASE_CANCEL ? COR_REGRA : COR_CANCEL));
+    const totMes = meses.map(m => porMes[m].total);
+    const desMes = meses.map(m => porMes[m].des);
     const baseDM = meses.reduce((s,m) => s + porMes[m].total, 0);
-    setBase('baseDesistMensal', baseDM, 'nenhuma — usa total bruto');
+    setBase('baseDesistMensal', baseDM, 'meses inteiramente no futuro (ainda recebendo marcações)');
     makeLine('chDesistMensal', meses, [{
       label: '% desistência',
       data: pct,
@@ -1667,7 +1678,12 @@
       pointRadius: 5,
       tension: 0.25,
     }], {
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}%` } } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: c => `${c.parsed.y.toFixed(1)}% · ${fmtNum(desMes[c.dataIndex])} de ${fmtNum(totMes[c.dataIndex])}`,
+        }},
+      },
       scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
     });
   }
