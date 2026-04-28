@@ -193,6 +193,47 @@
       .fase-legend { font-size: .7rem; gap: 8px; }
       h1 { font-size: 1.2rem; } h2 { font-size: 1.05rem; } h3 { font-size: .95rem; }
     }
+
+    /* Auditoria: drilldown modal */
+    .auditavel { cursor: pointer; transition: transform .08s ease, box-shadow .08s ease; }
+    .auditavel:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,.12); }
+    .auditavel::after {
+      content: '\f002'; font-family: 'Font Awesome 5 Free'; font-weight: 900;
+      position: absolute; top: 6px; right: 8px; font-size: .65rem; color: #94a3b8; opacity: .7;
+    }
+    .kpi-card.auditavel, .chart-card.auditavel { position: relative; }
+    .audit-modal { position: fixed; inset: 0; z-index: 9999; display: none; align-items: center; justify-content: center; }
+    .audit-modal.open { display: flex; }
+    .audit-overlay { position: absolute; inset: 0; background: rgba(15,23,42,.55); }
+    .audit-box {
+      position: relative; background: #fff; border-radius: 10px; width: 95vw; max-width: 1300px;
+      max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,.3);
+    }
+    .audit-head { padding: 14px 18px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 12px; }
+    .audit-head h3 { margin: 0; font-size: 1.05rem; }
+    .audit-head .audit-count { color: #6c757d; font-size: .85rem; margin-top: 2px; }
+    .audit-close {
+      margin-left: auto; background: transparent; border: 0; font-size: 1.6rem; line-height: 1;
+      color: #6c757d; cursor: pointer; padding: 0 4px;
+    }
+    .audit-close:hover { color: #dc2626; }
+    .audit-desc { padding: 8px 18px 0; color: #475569; font-size: .82rem; font-style: italic; }
+    .audit-toolbar { padding: 10px 18px; display: flex; gap: 10px; align-items: center; }
+    .audit-toolbar input { flex: 1; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: .9rem; }
+    .audit-body { flex: 1; overflow: auto; padding: 0 18px 18px; }
+    .audit-body table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .audit-body thead th {
+      position: sticky; top: 0; background: #f8fafc; padding: 8px 6px; font-weight: 600;
+      border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap;
+    }
+    .audit-body tbody td { padding: 6px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    .audit-body tbody tr:hover { background: #f8fafc; }
+    .audit-body .text-right { text-align: right; }
+    .audit-body .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: .7rem; font-weight: 600; }
+    .audit-body .badge-ok { background: #dcfce7; color: #166534; }
+    .audit-body .badge-bad { background: #fee2e2; color: #991b1b; }
+    .audit-body .badge-warn { background: #fef3c7; color: #854d0e; }
+    .audit-body .badge-mute { background: #f1f5f9; color: #475569; }
   </style>
 </head>
 
@@ -1051,6 +1092,41 @@
     $('#bPendentes').textContent = `${fmtNum(pendSuj)} nos sujeitos · ${fmtNum(pendIse)} nos isentos`;
     $('#kValidos').textContent   = BASE_TOTAL ? `${fmtNum(BASE_VALIDOS)} (${fmtPct(BASE_VALIDOS / BASE_TOTAL)})`   : '—';
     $('#bValidos').textContent   = `${fmtNum(sujValidos)} sujeitos + ${fmtNum(iseValidos)} isentos`;
+
+    // Bind audit (drilldown) em cada cartão — mostra os registros reais ao clicar
+    const sujsArr    = arr.filter(c => sujeitoARegra(c.dl, c.dc));
+    const isenArr    = arr.filter(c => !sujeitoARegra(c.dl, c.dc));
+    const desistArr  = arr.filter(c => c.des);
+    const medfaltArr = arr.filter(c => !c.des && classificar(c) === 'medico_faltou');
+    const pendArr    = arr.filter(c => !c.des && classificar(c) === 'pendente');
+    bindAuditCard('kTotal',    `Pré-agendamentos no período (${fmtNum(arr.length)})`, arr,
+      'Todos os registros do período filtrado, sem nenhuma exclusão.');
+    bindAuditCard('kConfirm',  `Confirmaram na janela 5-2d (${fmtNum(confs.length)} de ${fmtNum(sujsRaw.length)})`, confs,
+      'Sujeitos à regra (≥6d) que registraram confirmação dentro do prazo 5-2 dias antes da consulta.');
+    bindAuditCard('kCompar',   `Compareceram (${fmtNum(compr.length)} de ${fmtNum(validos.length)})`, compr,
+      'Válidos cujo status final foi Atendido/Aguardando.');
+    bindAuditCard('kFaltas',   `Faltas (${fmtNum(falta.length)} de ${fmtNum(validos.length)})`, falta,
+      'Válidos cujo status final foi falta (após +1h da hora prevista).');
+    bindAuditCard('kPagou',    `Pagaram (${fmtNum(pagou.length)} de ${fmtNum(validos.length)})`, pagou,
+      'Válidos com ValorPago > 0.');
+    bindAuditCard('kDesist',   `Desistências (${fmtNum(desistArr.length)} de ${fmtNum(arr.length)})`, desistArr,
+      'Pré-agendamentos com flag de desistência (cliente cancelou antes do dia).');
+    bindAuditCard('kTicket',   `Pagantes para cálculo do ticket médio (${fmtNum(pagou.length)})`, pagou,
+      'Subset de "pagaram"; a média de ValorPago dá o ticket médio.');
+    bindAuditCard('kPushed',   `Receberam push (${fmtNum(pushes.length)} de ${fmtNum(sujsRaw.length)})`, pushes,
+      'Sujeitos à regra (≥6d) com DataHoraNotificacaoPreAgendamento preenchida.');
+    bindAuditCard('kSujeitos', `Sujeitos à regra ≥6d (${fmtNum(sujsArr.length)})`, sujsArr,
+      'Pré-agendamentos lançados com 6 ou mais dias de antecedência. São os obrigados a confirmar.');
+    bindAuditCard('kIsentos',  `Isentos da regra <6d (${fmtNum(isenArr.length)})`, isenArr,
+      'Pré-agendamentos lançados com menos de 6 dias de antecedência. A regra de confirmação não se aplica.');
+    bindAuditCard('kQDesist',  `Desistências (${fmtNum(desistArr.length)})`, desistArr,
+      'Mesmo conjunto do cartão "% desistências" — registros com flag de cancelamento.');
+    bindAuditCard('kMedFaltou',`Médico faltou (${fmtNum(medfaltArr.length)})`, medfaltArr,
+      'Status "Médico Faltou" — excluído das análises porque a culpa não é do paciente.');
+    bindAuditCard('kPendentes',`Consultas futuras / pendentes (${fmtNum(pendArr.length)})`, pendArr,
+      'Ainda não passou +1h da DataConsulta + HoraPrevista. Não dá pra classificar como faltou ou compareceu.');
+    bindAuditCard('kValidos',  `Base "válidos" (${fmtNum(validos.length)})`, validos,
+      'Sem desistências, sem médico faltou, sem pendentes. Base das porcentagens % compareceram / % faltas / % pagaram.');
   }
 
   // Helper para atualizar a linha "Base: ..." de cada gráfico
@@ -1126,22 +1202,20 @@
 
   // ====== 1. Confirmou × Não confirmou (sujeitos à regra) ======
   function renderConfirmFalta(arr) {
-    const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr)));
-    let cf = 0, ct = 0, nf = 0, nt = 0;
-    sujs.forEach(c => {
-      const conf = confirmouNaJanela(c.da, c.dc);
-      const status = classificar(c);
-      if (status === 'pendente') return;
-      if (conf) { ct++; if (status === 'falta') cf++; }
-      else      { nt++; if (status === 'falta') nf++; }
-    });
-    const labels = ['Confirmou na janela', 'Não confirmou'];
-    const totais = [ct, nt];
-    const dataPct = [
-      ct ? cf/ct*100 : 0,
-      nt ? nf/nt*100 : 0,
-    ];
+    const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr))).filter(c => classificar(c) !== 'pendente');
+    const confArr   = sujs.filter(c => confirmouNaJanela(c.da, c.dc));
+    const naoArr    = sujs.filter(c => !confirmouNaJanela(c.da, c.dc));
+    const ct = confArr.length, nt = naoArr.length;
+    const cf = confArr.filter(c => classificar(c) === 'falta').length;
+    const nf = naoArr.filter(c => classificar(c) === 'falta').length;
+    const labels  = ['Confirmou na janela', 'Não confirmou'];
+    const totais  = [ct, nt];
+    const dataPct = [ ct ? cf/ct*100 : 0, nt ? nf/nt*100 : 0 ];
     const dataAbs = [cf, nf];
+    const auditArr = [
+      { titulo: `Confirmaram na janela 5-2d (${fmtNum(ct)})`, regs: confArr, desc: `Sujeitos à regra que confirmaram entre 5 e 2 dias antes da consulta. ${fmtNum(cf)} faltaram (${dataPct[0].toFixed(1)}%).` },
+      { titulo: `Não confirmaram na janela (${fmtNum(nt)})`, regs: naoArr, desc: `Sujeitos à regra que não confirmaram dentro da janela 5-2d (inclui quem confirmou fora dela e quem nunca confirmou). ${fmtNum(nf)} faltaram (${dataPct[1].toFixed(1)}%).` },
+    ];
     setBase('baseConfirmFalta', ct + nt, 'isentos da regra (<6d), desistências, médico faltou e pendentes');
     makeBar('chConfirmFalta', labels, [{
       label: '% falta', data: dataPct,
@@ -1156,7 +1230,13 @@
         }},
       },
       scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
+      onClick: (e, els) => {
+        if (!els.length) return;
+        const a = auditArr[els[0].index];
+        if (a) auditarRender(a.titulo, a.regs, a.desc);
+      },
     });
+    document.getElementById('chConfirmFalta').style.cursor = 'pointer';
   }
 
   // ====== 2. Série mensal de falta com fases ======
@@ -1266,9 +1346,9 @@
   function renderConfirmFaltou(arr) {
     const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr))).filter(c => classificar(c) !== 'pendente');
     const conf = sujs.filter(c => !!c.da);
-    const ct   = conf.length;
-    const cf   = conf.filter(c => classificar(c) === 'falta').length;
-    const cc   = ct - cf;
+    const comparArr = conf.filter(c => classificar(c) === 'compareceu');
+    const faltaArr  = conf.filter(c => classificar(c) === 'falta');
+    const ct = conf.length, cc = comparArr.length, cf = faltaArr.length;
     const pctF = ct ? cf / ct * 100 : 0;
     const pctC = ct ? cc / ct * 100 : 0;
     setBase('baseConfirmFaltou', ct, 'isentos da regra (<6d), desistências, médico faltou, pendentes e quem NÃO confirmou');
@@ -1290,16 +1370,25 @@
       },
       indexAxis: 'y',
       scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } },
+      onClick: (e, els) => {
+        if (!els.length) return;
+        const ds = els[0].datasetIndex;
+        if (ds === 0) auditarRender(`Confirmou + Compareceu (${fmtNum(cc)})`, comparArr,
+          `Sujeitos à regra que confirmaram (qualquer momento) e compareceram. ${pctC.toFixed(1)}% dos confirmados.`);
+        else          auditarRender(`Confirmou + Faltou (${fmtNum(cf)})`, faltaArr,
+          `Sujeitos à regra que confirmaram (qualquer momento) e mesmo assim faltaram. ${pctF.toFixed(1)}% dos confirmados — confirmação sem credibilidade.`);
+      },
     });
+    document.getElementById('chConfirmFaltou').style.cursor = 'pointer';
   }
 
   // ====== 6. Não confirmou + Compareceu ======
   function renderNaoConfCompar(arr) {
     const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr))).filter(c => classificar(c) !== 'pendente');
-    const naoConf = sujs.filter(c => !c.da);
-    const total   = naoConf.length;
-    const compar  = naoConf.filter(c => classificar(c) === 'compareceu').length;
-    const falta   = total - compar;
+    const naoConf  = sujs.filter(c => !c.da);
+    const comparArr= naoConf.filter(c => classificar(c) === 'compareceu');
+    const faltaArr = naoConf.filter(c => classificar(c) === 'falta');
+    const total = naoConf.length, compar = comparArr.length, falta = faltaArr.length;
     const pctC    = total ? compar / total * 100 : 0;
     const pctF    = total ? falta  / total * 100 : 0;
     setBase('baseNaoConfCompar', total, 'isentos da regra (<6d), desistências, médico faltou, pendentes e quem CONFIRMOU');
@@ -1321,7 +1410,16 @@
       },
       indexAxis: 'y',
       scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } },
+      onClick: (e, els) => {
+        if (!els.length) return;
+        const ds = els[0].datasetIndex;
+        if (ds === 0) auditarRender(`Não confirmou + Compareceu (${fmtNum(compar)})`, comparArr,
+          `Sujeitos à regra que NUNCA confirmaram, mas compareceram. ${pctC.toFixed(1)}% dos não-confirmados — viriam mesmo sem regra.`);
+        else          auditarRender(`Não confirmou + Faltou (${fmtNum(falta)})`, faltaArr,
+          `Sujeitos à regra que nunca confirmaram e faltaram. ${pctF.toFixed(1)}% dos não-confirmados.`);
+      },
     });
+    document.getElementById('chNaoConfCompar').style.cursor = 'pointer';
   }
 
   // ====== 7. % falta por canal de agendamento (todos os clientes válidos) ======
@@ -1985,9 +2083,151 @@
     URL.revokeObjectURL(url);
   }
 
+  // ====== Auditoria: drilldown (modal com registros reais) ======
+  let AUDIT_REGS  = [];
+  let AUDIT_TITLE = '';
+
+  function auditarRender(titulo, registros, descricao) {
+    AUDIT_TITLE = titulo;
+    AUDIT_REGS  = (registros || []).slice();
+    $('#auditTitle').textContent = titulo;
+    $('#auditDesc').textContent  = descricao || '';
+    $('#auditSearch').value = '';
+    auditarPintarCorpo();
+    $('#auditModal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => $('#auditSearch').focus(), 30);
+  }
+
+  function auditarPintarCorpo() {
+    const search = ($('#auditSearch').value || '').toUpperCase().trim();
+    const filtrado = search
+      ? AUDIT_REGS.filter(c => `${c.pac||''} ${c.m||''} ${c.med||''} ${c.tal||''}`.toUpperCase().includes(search))
+      : AUDIT_REGS;
+    const limite = 5000;
+    const visiveis = filtrado.slice(0, limite);
+    $('#auditCount').textContent = `${fmtNum(filtrado.length)} registro(s)` +
+      (filtrado.length > limite ? ` · mostrando ${fmtNum(limite)}` : '') +
+      (search ? ` (de ${fmtNum(AUDIT_REGS.length)} sem filtro)` : '');
+
+    const html = visiveis.map(c => {
+      const status = classificar(c);
+      const badgeCls = { compareceu:'badge-ok', falta:'badge-bad', pendente:'badge-mute', medico_faltou:'badge-warn' }[status] || 'badge-mute';
+      const stTxt    = { compareceu:'Compareceu', falta:'Faltou', pendente:'Pendente', medico_faltou:'Médico faltou' }[status] || status;
+      let confLabel = 'Não', confCls = 'badge-mute';
+      if (c.da) {
+        if (confirmouNaJanela(c.da, c.dc)) { confLabel = 'Sim (5-2d)'; confCls = 'badge-ok'; }
+        else                                { confLabel = 'Fora janela'; confCls = 'badge-warn'; }
+      }
+      const desBadge = c.des ? '<span class="badge badge-bad">Sim</span>' : '';
+      return `<tr>
+        <td>${c.p||''}</td>
+        <td>${c.tal||''}</td>
+        <td>${c.m||''}</td>
+        <td>${c.pac||''}</td>
+        <td>${c.med||''}</td>
+        <td>${c.esp||''}</td>
+        <td>${c.can||''}</td>
+        <td>${fmtDate(c.dl)}</td>
+        <td>${fmtDate(c.dc)}</td>
+        <td>${c.hc||''}</td>
+        <td class="text-right">${c.dif||''}</td>
+        <td>${fmtDateTime(c.dp)}</td>
+        <td><span class="badge ${confCls}">${confLabel}</span><br><small>${fmtDateTime(c.da)||''}</small></td>
+        <td><span class="badge ${badgeCls}">${stTxt}</span></td>
+        <td>${desBadge}</td>
+        <td class="text-right">${c.vp ? fmtMoney(c.vp) : ''}</td>
+      </tr>`;
+    }).join('');
+    $('#auditBody').innerHTML = html || `<tr><td colspan="16" style="padding:20px;text-align:center;color:#94a3b8">Nenhum registro nesta seleção.</td></tr>`;
+  }
+
+  function auditarFechar() {
+    $('#auditModal').classList.remove('open');
+    document.body.style.overflow = '';
+    AUDIT_REGS = [];
+  }
+
+  function auditarExportar() {
+    const search = ($('#auditSearch').value || '').toUpperCase().trim();
+    const filtrado = search
+      ? AUDIT_REGS.filter(c => `${c.pac||''} ${c.m||''} ${c.med||''} ${c.tal||''}`.toUpperCase().includes(search))
+      : AUDIT_REGS;
+    const headers = ['Posto','Talão','Matrícula','Paciente','Médico','Especialidade','Canal',
+      'Data Lançamento','Data Consulta','Hora','Antecedência (d)','Push',
+      'Confirmação App','Status','Desistência','Valor Pago'];
+    const rows = filtrado.map(c => [
+      c.p||'', c.tal||'', c.m||'', c.pac||'', c.med||'', c.esp||'', c.can||'',
+      c.dl||'', c.dc||'', c.hc||'', c.dif||'',
+      c.dp||'', c.da||'',
+      classificar(c), c.des ? 'Sim' : 'Não',
+      (c.vp || 0).toFixed(2).replace('.', ','),
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const slug = (AUDIT_TITLE || 'auditoria').replace(/[^a-z0-9]+/gi,'_').slice(0,50).toLowerCase();
+    a.href = url;
+    a.download = `auditoria_${slug}_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function bindAuditCard(valId, titulo, registros, descricao) {
+    const val = document.getElementById(valId);
+    if (!val) return;
+    const card = val.closest('.kpi-card');
+    if (!card) return;
+    card.classList.add('auditavel');
+    card.onclick = () => auditarRender(titulo, registros, descricao);
+  }
+
+  // wireup uma única vez
+  document.addEventListener('DOMContentLoaded', () => {
+    $('#auditClose').addEventListener('click', auditarFechar);
+    $('#auditOverlay').addEventListener('click', auditarFechar);
+    $('#auditExport').addEventListener('click', auditarExportar);
+    $('#auditSearch').addEventListener('input', auditarPintarCorpo);
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && $('#auditModal').classList.contains('open')) auditarFechar();
+    });
+  });
+
   // ====== Boot ======
   document.addEventListener('DOMContentLoaded', carregar);
 })();
 </script>
+
+<!-- ====== Modal de auditoria (drilldown) ====== -->
+<div id="auditModal" class="audit-modal" role="dialog" aria-modal="true">
+  <div class="audit-overlay" id="auditOverlay"></div>
+  <div class="audit-box">
+    <div class="audit-head">
+      <div>
+        <h3 id="auditTitle">—</h3>
+        <div class="audit-count" id="auditCount">0 registro(s)</div>
+      </div>
+      <button class="audit-close" id="auditClose" aria-label="Fechar">×</button>
+    </div>
+    <div class="audit-desc" id="auditDesc"></div>
+    <div class="audit-toolbar">
+      <input type="text" id="auditSearch" placeholder="Buscar paciente, médico, matrícula, talão..." />
+      <button class="btn btn-sm btn-outline-success" id="auditExport"><i class="fas fa-file-excel mr-1"></i>Excel</button>
+    </div>
+    <div class="audit-body">
+      <table>
+        <thead><tr>
+          <th>Posto</th><th>Talão</th><th>Matrícula</th><th>Paciente</th>
+          <th>Médico</th><th>Especialidade</th><th>Canal</th>
+          <th>Lançamento</th><th>Consulta</th><th>Hora</th><th class="text-right">Ant. (d)</th>
+          <th>Push</th><th>Confirmação</th>
+          <th>Status</th><th>Desist.</th><th class="text-right">Valor Pago</th>
+        </tr></thead>
+        <tbody id="auditBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 </body>
 </html>
