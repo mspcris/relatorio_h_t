@@ -1499,18 +1499,14 @@
   }
 
   // ====== 10. Remanejamento de vagas (<5d) ======
-  // Só conta consultas cuja janela "<5 dias antes" já se abriu integralmente
-  // (hoje >= dataConsulta - 5d). Caso contrário ninguém poderia ter marcado
-  // ainda dentro dessa janela e geraria 0% artificial em meses futuros.
+  // Só inclui meses cujo ÚLTIMO DIA já está dentro da janela <5d (último dia ≤ hoje+5d).
+  // Caso contrário, mostra um pedaço pequeno do mês e gera % artificialmente baixa.
   function renderRemanejam(allConsultas, postosOk) {
     const hoje = new Date();
     const cutoffMs = hoje.getTime();
     const consultas = allConsultas.filter(c => {
       if (!postosOk.has(c.p) || c.des || !c.dc) return false;
-      const dcMs = new Date(c.dc + 'T00:00:00').getTime();
-      // Só considera se a janela "marcou em <5d" já é totalmente possível:
-      // hoje >= dataConsulta - 5d  ⇔  dcMs - cutoffMs <= 5*86400000
-      return (dcMs - cutoffMs) <= 5 * 86400000;
+      return true;
     });
     const porMes = {};
     consultas.forEach(c => {
@@ -1522,11 +1518,22 @@
       porMes[mes].total++;
       if (dias < 5) porMes[mes].sub5++;
     });
-    const meses = Object.keys(porMes).filter(m => porMes[m].total > 0).sort();
+    // Filtra meses: ÚLTIMO DIA do mês precisa estar dentro de hoje+5d para a janela
+    // estar completa. Se não, o mês é descartado (fica visível só meses comparáveis).
+    const ultimoDiaMs = mes => {
+      const [y, m] = mes.split('-').map(Number);
+      return new Date(y, m, 0, 23, 59, 59).getTime(); // dia 0 do mês seguinte = último do atual
+    };
+    const meses = Object.keys(porMes)
+      .filter(m => porMes[m].total > 0 && (ultimoDiaMs(m) - cutoffMs) <= 5 * 86400000)
+      .sort();
     const pct = meses.map(m => porMes[m].sub5 / porMes[m].total * 100);
     const cores = meses.map(m => m < FASE_REGRA ? COR_PRE : (m < FASE_CANCEL ? COR_REGRA : COR_CANCEL));
     const baseR = meses.reduce((s,m)=> s + porMes[m].total, 0);
-    setBase('baseRemanejam', baseR, 'desistências e consultas cuja janela <5d ainda não abriu');
+    const sub5T = meses.reduce((s,m)=> s + porMes[m].sub5,  0);
+    const totalMes = meses.map(m => porMes[m].total);
+    const sub5Mes  = meses.map(m => porMes[m].sub5);
+    setBase('baseRemanejam', baseR, 'desistências e meses cujo último dia ainda não está dentro da janela <5d');
     makeLine('chRemanejam', meses, [{
       label: '% pré-agendamentos com <5d',
       data: pct,
@@ -1536,7 +1543,12 @@
       pointRadius: 5,
       tension: 0.25,
     }], {
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}%` } } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: c => `${c.parsed.y.toFixed(1)}% · ${fmtNum(sub5Mes[c.dataIndex])} de ${fmtNum(totalMes[c.dataIndex])}`,
+        }},
+      },
       scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
     });
   }
