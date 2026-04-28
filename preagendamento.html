@@ -342,12 +342,12 @@
 
       <!-- Quebra do total (mostra de onde vem o N de cada gráfico) -->
       <div class="kpi-row" style="margin-top:-4px">
-        <div class="kpi-card" style="border-left:3px solid #3b82f6" title="Pessoas que marcaram a consulta com 6 dias ou mais de antecedência. São essas que precisam confirmar — dá tempo de mandar o aviso e esperar a resposta."><div class="kpi-val" id="kSujeitos" style="font-size:1.2rem">—</div><div class="kpi-lbl">Sujeitos à regra (≥6d antes)</div></div>
-        <div class="kpi-card" style="border-left:3px solid #94a3b8" title="Pessoas que marcaram em cima da hora (faltando menos de 6 dias para a consulta). A regra de confirmação não vale para elas porque não dá tempo de pedir e esperar a resposta."><div class="kpi-val" id="kIsentos"  style="font-size:1.2rem">—</div><div class="kpi-lbl">Isentos da regra (lançamento &lt;6d antes da consulta)</div></div>
-        <div class="kpi-card" style="border-left:3px solid #d97706" title="Quantas pessoas avisaram antes do dia que não viriam mais. Isso não é falta — é cancelamento avisado, e até libera a vaga para outra pessoa."><div class="kpi-val" id="kQDesist" style="font-size:1.2rem">—</div><div class="kpi-lbl">Desistências (cancelaram)</div></div>
-        <div class="kpi-card" style="border-left:3px solid #dc2626" title="Foi o médico que não pôde atender — a culpa não é da pessoa. A gente tira essas consultas da conta para não ficar injusto com o paciente."><div class="kpi-val" id="kMedFaltou" style="font-size:1.2rem">—</div><div class="kpi-lbl">Médico faltou (excluído)</div></div>
-        <div class="kpi-card" style="border-left:3px solid #6b7280" title="Consultas que ainda não aconteceram — vão acontecer no futuro. Como a gente não sabe se a pessoa vai ou não, deixa de fora da conta até chegar o dia."><div class="kpi-val" id="kPendentes" style="font-size:1.2rem">—</div><div class="kpi-lbl">Consultas futuras (pendentes)</div></div>
-        <div class="kpi-card" style="border-left:3px solid #16a34a" title="Consultas que dá para contar de verdade: tiramos as canceladas, as do futuro e as em que o médico faltou. Sobra quem foi ou quem faltou — essas servem para calcular as porcentagens."><div class="kpi-val" id="kValidos" style="font-size:1.2rem">—</div><div class="kpi-lbl">Base "válidos" (sem desist./med-falt./pendentes)</div></div>
+        <div class="kpi-card" style="border-left:3px solid #3b82f6" title="Pessoas que marcaram a consulta com 6 dias ou mais de antecedência. São essas que precisam confirmar — dá tempo de mandar o aviso e esperar a resposta."><div class="kpi-val" id="kSujeitos" style="font-size:1.2rem">—</div><div class="kpi-lbl">Sujeitos à regra (≥6d antes)</div><div class="kpi-base" id="bSujeitos">—</div></div>
+        <div class="kpi-card" style="border-left:3px solid #94a3b8" title="Pessoas que marcaram em cima da hora (faltando menos de 6 dias para a consulta). A regra de confirmação não vale para elas porque não dá tempo de pedir e esperar a resposta."><div class="kpi-val" id="kIsentos"  style="font-size:1.2rem">—</div><div class="kpi-lbl">Isentos da regra (lançamento &lt;6d antes da consulta)</div><div class="kpi-base" id="bIsentos">—</div></div>
+        <div class="kpi-card" style="border-left:3px solid #d97706" title="Quantas pessoas avisaram antes do dia que não viriam mais. Isso não é falta — é cancelamento avisado, e até libera a vaga para outra pessoa."><div class="kpi-val" id="kQDesist" style="font-size:1.2rem">—</div><div class="kpi-lbl">Desistências (cancelaram)</div><div class="kpi-base" id="bQDesist">—</div></div>
+        <div class="kpi-card" style="border-left:3px solid #dc2626" title="Foi o médico que não pôde atender — a culpa não é da pessoa. A gente tira essas consultas da conta para não ficar injusto com o paciente."><div class="kpi-val" id="kMedFaltou" style="font-size:1.2rem">—</div><div class="kpi-lbl">Médico faltou (excluído)</div><div class="kpi-base" id="bMedFaltou">—</div></div>
+        <div class="kpi-card" style="border-left:3px solid #6b7280" title="Consultas que ainda não aconteceram — vão acontecer no futuro. Como a gente não sabe se a pessoa vai ou não, deixa de fora da conta até chegar o dia."><div class="kpi-val" id="kPendentes" style="font-size:1.2rem">—</div><div class="kpi-lbl">Consultas futuras (pendentes)</div><div class="kpi-base" id="bPendentes">—</div></div>
+        <div class="kpi-card" style="border-left:3px solid #16a34a" title="Consultas que dá para contar de verdade: tiramos as canceladas, as do futuro e as em que o médico faltou. Sobra quem foi ou quem faltou — essas servem para calcular as porcentagens."><div class="kpi-val" id="kValidos" style="font-size:1.2rem">—</div><div class="kpi-lbl">Base "válidos" (sem desist./med-falt./pendentes)</div><div class="kpi-base" id="bValidos">—</div></div>
       </div>
 
       <!-- ──────────── SEÇÃO 1: A REGRA ESTÁ FUNCIONANDO? ──────────── -->
@@ -1027,13 +1027,30 @@
     $('#kPushed').textContent  = sujsRaw.length ? `${fmtPct(pushes.length / sujsRaw.length)} (${fmtNum(pushes.length)} de ${fmtNum(sujsRaw.length)})` : '—';
     $('#bPushed').textContent  = `Base: ${fmtNum(sujsRaw.length)} sujeitos à regra (≥6d antes)`;
 
-    // Quebra
+    // Quebra: contagens internas (sujeitos vs isentos) — pra deixar a ponte 5.437 → 3.661 explícita
+    const desistSuj  = arr.filter(c =>  c.des && sujeitoARegra(c.dl, c.dc)).length;
+    const desistIse  = BASE_DESIST - desistSuj;
+    const medfaltSuj = arr.filter(c => !c.des && classificar(c) === 'medico_faltou' && sujeitoARegra(c.dl, c.dc)).length;
+    const medfaltIse = BASE_MEDFALT - medfaltSuj;
+    const pendSuj    = arr.filter(c => !c.des && classificar(c) === 'pendente' && sujeitoARegra(c.dl, c.dc)).length;
+    const pendIse    = BASE_PENDENTES - pendSuj;
+    const sujExcl    = desistSuj + medfaltSuj + pendSuj;
+    const iseExcl    = desistIse + medfaltIse + pendIse;
+    const sujValidos = BASE_SUJEITOS - sujExcl;
+    const iseValidos = BASE_ISENTOS  - iseExcl;
+
     $('#kSujeitos').textContent  = BASE_TOTAL ? `${fmtNum(BASE_SUJEITOS)} (${fmtPct(BASE_SUJEITOS / BASE_TOTAL)})` : '—';
+    $('#bSujeitos').textContent  = `${fmtNum(sujValidos)} válidos + ${fmtNum(sujExcl)} desist./med-falt./pend.`;
     $('#kIsentos').textContent   = BASE_TOTAL ? `${fmtNum(BASE_ISENTOS)} (${fmtPct(BASE_ISENTOS / BASE_TOTAL)})`   : '—';
+    $('#bIsentos').textContent   = `${fmtNum(iseValidos)} válidos + ${fmtNum(iseExcl)} desist./med-falt./pend.`;
     $('#kQDesist').textContent   = BASE_TOTAL ? `${fmtNum(BASE_DESIST)} (${fmtPct(BASE_DESIST / BASE_TOTAL)})`     : '—';
+    $('#bQDesist').textContent   = `${fmtNum(desistSuj)} nos sujeitos · ${fmtNum(desistIse)} nos isentos`;
     $('#kMedFaltou').textContent = BASE_TOTAL ? `${fmtNum(BASE_MEDFALT)} (${fmtPct(BASE_MEDFALT / BASE_TOTAL)})`   : '—';
+    $('#bMedFaltou').textContent = `${fmtNum(medfaltSuj)} nos sujeitos · ${fmtNum(medfaltIse)} nos isentos`;
     $('#kPendentes').textContent = BASE_TOTAL ? `${fmtNum(BASE_PENDENTES)} (${fmtPct(BASE_PENDENTES / BASE_TOTAL)})` : '—';
+    $('#bPendentes').textContent = `${fmtNum(pendSuj)} nos sujeitos · ${fmtNum(pendIse)} nos isentos`;
     $('#kValidos').textContent   = BASE_TOTAL ? `${fmtNum(BASE_VALIDOS)} (${fmtPct(BASE_VALIDOS / BASE_TOTAL)})`   : '—';
+    $('#bValidos').textContent   = `${fmtNum(sujValidos)} sujeitos + ${fmtNum(iseValidos)} isentos`;
   }
 
   // Helper para atualizar a linha "Base: ..." de cada gráfico
