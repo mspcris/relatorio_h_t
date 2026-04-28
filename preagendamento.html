@@ -1163,6 +1163,8 @@
     const baseN = meses.reduce((s, m) => s + porMes[m].total, 0);
     setBase('baseFaltaMensal', baseN, 'desistências, médico faltou, pendentes e meses sem dado válido');
     const pct   = meses.map(m => porMes[m].falta / porMes[m].total * 100);
+    const totaisMes = meses.map(m => porMes[m].total);
+    const faltasMes = meses.map(m => porMes[m].falta);
     const cores = meses.map(m => m < FASE_REGRA ? COR_PRE : (m < FASE_CANCEL ? COR_REGRA : COR_CANCEL));
 
     makeLine('chFaltaMensal', meses, [{
@@ -1177,7 +1179,10 @@
     }], {
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}% falta` } },
+        tooltip: { callbacks: {
+          label: c => `${c.parsed.y.toFixed(1)}% falta`,
+          afterLabel: c => `${fmtNum(faltasMes[c.dataIndex])} faltas de ${fmtNum(totaisMes[c.dataIndex])} consultas`,
+        }},
       },
       scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
     });
