@@ -1265,7 +1265,7 @@
   // ====== 5. Confirmou + Faltou ======
   function renderConfirmFaltou(arr) {
     const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr))).filter(c => classificar(c) !== 'pendente');
-    const conf = sujs.filter(c => confirmouNaJanela(c.da, c.dc));
+    const conf = sujs.filter(c => !!c.da);
     const ct   = conf.length;
     const cf   = conf.filter(c => classificar(c) === 'falta').length;
     const cc   = ct - cf;
@@ -1296,16 +1296,16 @@
   // ====== 6. Não confirmou + Compareceu ======
   function renderNaoConfCompar(arr) {
     const sujs = semDesistencias(semMedicoFaltou(sujeitos(arr))).filter(c => classificar(c) !== 'pendente');
-    const naoConf = sujs.filter(c => !confirmouNaJanela(c.da, c.dc));
+    const naoConf = sujs.filter(c => !c.da);
     const total   = naoConf.length;
     const compar  = naoConf.filter(c => classificar(c) === 'compareceu').length;
-    const outro   = total - compar;
+    const falta   = total - compar;
     const pctC    = total ? compar / total * 100 : 0;
-    const pctO    = total ? outro  / total * 100 : 0;
+    const pctF    = total ? falta  / total * 100 : 0;
     setBase('baseNaoConfCompar', total, 'isentos da regra (<6d), desistências, médico faltou, pendentes e quem CONFIRMOU');
     makeBar('chNaoConfCompar', [`Não confirmou (n=${fmtNum(total)})`], [
-      { label: 'Compareceu',   data: [compar], backgroundColor: COR_INFO, stack: 'a' },
-      { label: 'Faltou/Outro', data: [outro],  backgroundColor: '#94a3b8', stack: 'a' },
+      { label: 'Compareceu', data: [compar], backgroundColor: COR_INFO, stack: 'a' },
+      { label: 'Faltou',     data: [falta],  backgroundColor: COR_BAD,  stack: 'a' },
     ], {
       plugins: {
         legend: { display: true, position: 'bottom' },
@@ -1313,7 +1313,7 @@
           label: ctx => {
             const v = ctx.parsed.x;
             const lbl = ctx.dataset.label;
-            const p = lbl === 'Compareceu' ? pctC : pctO;
+            const p = lbl === 'Compareceu' ? pctC : pctF;
             return `${lbl}: ${fmtNum(v)}  ·  ${p.toFixed(1)}% dos não-confirmados`;
           },
           footer: () => `Total não-confirmados: ${fmtNum(total)} · Compareceu sem confirmar: ${pctC.toFixed(1)}%`,
