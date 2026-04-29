@@ -56,6 +56,11 @@ PAGES_FILE = INDEX_DIR / "pages.json"
 SUMMARIES_FILE = INDEX_DIR / "summaries.json"
 EMBEDDINGS_FILE = INDEX_DIR / "embeddings.json"
 
+# Diretório onde os HTMLs vivem. Local: igual ao script (ROOT).
+# Na VM o script roda em /opt/relatorio_h_t/ mas os HTMLs ficam em
+# /opt/camim-auth/templates/ — exporte HTML_DIR pra apontar pra lá.
+HTML_DIR = Path(os.getenv("HTML_DIR", str(ROOT)))
+
 SUMMARY_MODEL = os.getenv("SEARCH_SUMMARY_MODEL", "gpt-4o-mini")
 EMBED_MODEL = os.getenv("SEARCH_EMBED_MODEL", "text-embedding-3-small")
 
@@ -98,7 +103,7 @@ def _load_pages() -> list[dict[str, Any]]:
 
 
 def _summarize_internal(client: OpenAI, page: dict[str, Any]) -> dict[str, Any]:
-    html_path = ROOT / page["html_file"]
+    html_path = HTML_DIR / page["html_file"]
     if not html_path.exists():
         raise FileNotFoundError(f"HTML não encontrado: {html_path}")
     raw = html_path.read_text(encoding="utf-8", errors="ignore")
@@ -172,7 +177,7 @@ def _html_hash(page: dict[str, Any]) -> str:
     if page["type"] == "external":
         s = (page.get("description", "") + "|" + ",".join(page.get("keywords", []))).encode()
     else:
-        path = ROOT / page["html_file"]
+        path = HTML_DIR / page["html_file"]
         if not path.exists():
             return ""
         s = path.read_bytes()
