@@ -129,6 +129,7 @@ _TEMPLATE_TO_PAGINA = {
     "https://camila1.ia.camim.com.br/":                 "wpp_campanhas",
     "https://atendimento.camilaia.camim.com.br/crm":    "camila_crm",
     "https://crm.camim.com.br/":                        "crm",
+    "https://central.camim.com.br/":                    "central",
 }
 
 _MENU_RESOURCES_CACHE = None
