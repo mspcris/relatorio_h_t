@@ -110,6 +110,7 @@ _TEMPLATE_TO_PAGINA = {
     "qualidade_agenda":                 "qualidade_agenda",
     "higienizacao.html":                "higienizacao",
     "higienizacao":                     "higienizacao",
+    "/higienizacao":                    "higienizacao",
     "agenda_dia.html":                  "agenda_dia",
     "agenda_dia":                       "agenda_dia",
     "preagendamento.html":              "preagendamento",
