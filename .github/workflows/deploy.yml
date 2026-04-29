@@ -332,6 +332,27 @@ jobs:
           done
 
       # ================================================================
+      # 5A) search_index → /opt/camim-auth e /opt/relatorio_h_t
+      # ================================================================
+      - name: search_index -> /opt/camim-auth e /opt/relatorio_h_t
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          if [ -d search_index ]; then
+            for DEST in /opt/camim-auth/search_index /opt/relatorio_h_t/search_index; do
+              ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
+              rsync -lvz \
+                --omit-dir-times --no-perms --no-owner --no-group \
+                -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+                search_index/pages.json search_index/summaries.json \
+                "$SSH_USER@$SSH_HOST:$DEST/"
+            done
+          fi
+
+      # ================================================================
       # 5B) Deps novas no venv de /opt/camim-auth
       # ================================================================
       - name: pip install werkzeug no venv camim-auth
