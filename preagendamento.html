@@ -503,15 +503,6 @@
         </div>
       </div>
 
-      <div class="chart-card">
-        <h3>% pré-agendamentos com &lt;5 dias de antecedência (proxy antigo)</h3>
-        <div class="chart-info">
-          <b>📖 Como ler:</b> métrica indireta — % de consultas marcadas com menos de 5d de antecedência (provável remarcação após desistência). Serve só como sanity-check; o gráfico "% de vagas rotacionaram" é o dado preciso.
-          <span class="base" id="baseRemanejam">Base: —</span>
-        </div>
-        <div class="chart-wrap"><canvas id="chRemanejam"></canvas></div>
-      </div>
-
       <!-- ──────────── SEÇÃO 4: DESISTÊNCIAS ──────────── -->
       <div class="section-title"><i class="fas fa-times-circle icon"></i>Desistências (o outro lado da moeda)</div>
 
@@ -942,6 +933,12 @@
     const dias = (b - a) / 86400000;
     return dias >= 2 && dias <= 5;
   }
+  function diasConfAntes(da, dc) {
+    if (!da || !dc) return null;
+    const a = new Date(da.slice(0,10) + 'T00:00:00');
+    const b = new Date(dc + 'T00:00:00');
+    return Math.round((b - a) / 86400000);
+  }
   function confirmouForaJanela(da, dc) {
     if (!da || !dc) return false;
     return !confirmouNaJanela(da, dc);
@@ -994,7 +991,6 @@
     renderCanalFaltaTopo(dadosFiltrados);
     renderPushConf(dadosFiltrados);
     renderMedianaPagou(dadosFiltrados);
-    renderRemanejam(DATA.consultas, postosOk);
     renderVagaRotacao(dadosFiltrados);
     renderVagaTentativas(dadosFiltrados);
     renderDesistMensal(DATA.consultas, postosOk);
@@ -1514,62 +1510,7 @@
     ]);
   }
 
-  // ====== 10. Remanejamento de vagas (<5d) ======
-  // Só inclui meses cujo ÚLTIMO DIA já está dentro da janela <5d (último dia ≤ hoje+5d).
-  // Caso contrário, mostra um pedaço pequeno do mês e gera % artificialmente baixa.
-  function renderRemanejam(allConsultas, postosOk) {
-    const hoje = new Date();
-    const cutoffMs = hoje.getTime();
-    const consultas = allConsultas.filter(c => {
-      if (!postosOk.has(c.p) || c.des || !c.dc) return false;
-      return true;
-    });
-    const porMes = {};
-    consultas.forEach(c => {
-      const mes = (c.dc || '').slice(0, 7);
-      if (!mes) return;
-      const dias = antecedencia(c.dl, c.dc);
-      if (dias === null) return;
-      if (!porMes[mes]) porMes[mes] = { total: 0, sub5: 0 };
-      porMes[mes].total++;
-      if (dias < 5) porMes[mes].sub5++;
-    });
-    // Filtra meses: ÚLTIMO DIA do mês precisa estar dentro de hoje+5d para a janela
-    // estar completa. Se não, o mês é descartado (fica visível só meses comparáveis).
-    const ultimoDiaMs = mes => {
-      const [y, m] = mes.split('-').map(Number);
-      return new Date(y, m, 0, 23, 59, 59).getTime(); // dia 0 do mês seguinte = último do atual
-    };
-    const meses = Object.keys(porMes)
-      .filter(m => porMes[m].total > 0 && (ultimoDiaMs(m) - cutoffMs) <= 5 * 86400000)
-      .sort();
-    const pct = meses.map(m => porMes[m].sub5 / porMes[m].total * 100);
-    const cores = meses.map(m => m < FASE_REGRA ? COR_PRE : (m < FASE_CANCEL ? COR_REGRA : COR_CANCEL));
-    const baseR = meses.reduce((s,m)=> s + porMes[m].total, 0);
-    const sub5T = meses.reduce((s,m)=> s + porMes[m].sub5,  0);
-    const totalMes = meses.map(m => porMes[m].total);
-    const sub5Mes  = meses.map(m => porMes[m].sub5);
-    setBase('baseRemanejam', baseR, 'desistências e meses cujo último dia ainda não está dentro da janela <5d');
-    makeLine('chRemanejam', meses, [{
-      label: '% pré-agendamentos com <5d',
-      data: pct,
-      borderColor: '#7c3aed',
-      backgroundColor: '#7c3aed30',
-      pointBackgroundColor: cores,
-      pointRadius: 5,
-      tension: 0.25,
-    }], {
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: {
-          label: c => `${c.parsed.y.toFixed(1)}% · ${fmtNum(sub5Mes[c.dataIndex])} de ${fmtNum(totalMes[c.dataIndex])}`,
-        }},
-      },
-      scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } },
-    });
-  }
-
-  // ====== 10b. Rotatividade real — vaga = (posto, médico, dia, hora, nº consulta) ======
+  // ====== 10. Rotatividade real — vaga = (posto, médico, dia, hora, nº consulta) ======
   // Para cada vaga única, conta quantos clientes passaram (1 = só o ativo final;
   // 2+ = teve N-1 desistência(s) antes). "Rotacionou" = qtd > 1.
   function _vagaKey(c) {
@@ -2078,8 +2019,10 @@
       let confLabel = 'Não';
       let confCls   = 'badge-mute';
       if (c.da) {
-        if (confirmouNaJanela(c.da, c.dc)) { confLabel = 'Sim (5-2d)'; confCls = 'badge-ok'; }
-        else                                { confLabel = 'Fora janela'; confCls = 'badge-warn'; }
+        const dconf = diasConfAntes(c.da, c.dc);
+        const sufDias = dconf != null ? ` · ${dconf}d` : '';
+        if (confirmouNaJanela(c.da, c.dc)) { confLabel = `Sim${sufDias}`; confCls = 'badge-ok'; }
+        else                                { confLabel = `Fora${sufDias}`; confCls = 'badge-warn'; }
       }
       const desBadge = c.des ? '<span class="badge badge-bad">Sim</span>' : '';
 
@@ -2129,14 +2072,17 @@
 
     const headers = ['Posto','Talão','Matrícula','Paciente','Médico','Especialidade','Canal',
       'Data Lançamento','Data Consulta','Hora','Antecedência (d)','Push',
-      'Confirmação Janela','Confirmação Chegada','Status','Desistência','Valor Pago'];
-    const rows = filtrado.map(c => [
-      c.p, c.tal||'', c.m||'', c.pac||'', c.med||'', c.esp||'', c.can,
-      c.dl||'', c.dc||'', c.hc||'', c.dif||'',
-      c.dp||'', c.da||'', c.df||'',
-      classificar(c), c.des ? 'Sim' : 'Não',
-      (c.vp || 0).toFixed(2).replace('.', ','),
-    ]);
+      'Confirmação Janela','Antec. Confirmação (d)','Confirmação Chegada','Status','Desistência','Valor Pago'];
+    const rows = filtrado.map(c => {
+      const dconf = diasConfAntes(c.da, c.dc);
+      return [
+        c.p, c.tal||'', c.m||'', c.pac||'', c.med||'', c.esp||'', c.can,
+        c.dl||'', c.dc||'', c.hc||'', c.dif||'',
+        c.dp||'', c.da||'', dconf != null ? dconf : '', c.df||'',
+        classificar(c), c.des ? 'Sim' : 'Não',
+        (c.vp || 0).toFixed(2).replace('.', ','),
+      ];
+    });
     const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\r\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -2180,8 +2126,10 @@
       const stTxt    = { compareceu:'Compareceu', falta:'Faltou', pendente:'Pendente', medico_faltou:'Médico faltou' }[status] || status;
       let confLabel = 'Não', confCls = 'badge-mute';
       if (c.da) {
-        if (confirmouNaJanela(c.da, c.dc)) { confLabel = 'Sim (5-2d)'; confCls = 'badge-ok'; }
-        else                                { confLabel = 'Fora janela'; confCls = 'badge-warn'; }
+        const dconf = diasConfAntes(c.da, c.dc);
+        const sufDias = dconf != null ? ` · ${dconf}d` : '';
+        if (confirmouNaJanela(c.da, c.dc)) { confLabel = `Sim${sufDias}`; confCls = 'badge-ok'; }
+        else                                { confLabel = `Fora${sufDias}`; confCls = 'badge-warn'; }
       }
       const desBadge = c.des ? '<span class="badge badge-bad">Sim</span>' : '';
       return `<tr>
