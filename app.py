@@ -111,6 +111,9 @@ _TEMPLATE_TO_PAGINA = {
     "higienizacao.html":                "higienizacao",
     "higienizacao":                     "higienizacao",
     "/higienizacao":                    "higienizacao",
+    "leiame.html":                      "leiame",
+    "leiame":                           "leiame",
+    "/leiame":                          "leiame",
     "agenda_dia.html":                  "agenda_dia",
     "agenda_dia":                       "agenda_dia",
     "preagendamento.html":              "preagendamento",
@@ -912,6 +915,10 @@ def render_protected_page(page_name, **extra_vars):
 def r_mais_servicos():
     return render_protected_page("mais_servicos.html")
 
+@app.get('/leiame')
+def r_leiame():
+    return render_protected_page("leiame.html")
+
 @app.get('/email_clientes')
 def r_email_clientes():
     return render_protected_page("email_clientes_dashboard.html")
@@ -1260,7 +1267,11 @@ def r_rateio():
 
 @app.get('/')
 def home():
-    return render_protected_page("kpi_home.html")
+    return render_protected_page("index.html")
+
+@app.get('/index.html')
+def home_html():
+    return render_protected_page("index.html")
 
 @app.get('/alimentacao')
 def r1(): return render_protected_page("alimentacao.html")
@@ -2546,6 +2557,173 @@ def api_agenda_dia():
         "total": len(pacientes),
         "pacientes": pacientes,
         "gerado_em": payload.get("meta", {}).get("gerado_em", ""),
+    })
+
+
+# ===============================
+# Busca semântica da home
+# ===============================
+
+import math
+from functools import lru_cache
+
+_SEARCH_INDEX_PATH = os.path.join(os.path.dirname(__file__), "search_index", "embeddings.json")
+_SEARCH_INDEX_CACHE: dict | None = None
+_SEARCH_INDEX_MTIME: float = 0.0
+
+
+def _load_search_index():
+    """Carrega search_index/embeddings.json com cache invalidado por mtime."""
+    global _SEARCH_INDEX_CACHE, _SEARCH_INDEX_MTIME
+    try:
+        mtime = os.path.getmtime(_SEARCH_INDEX_PATH)
+    except OSError:
+        return {"model": None, "pages": []}
+    if _SEARCH_INDEX_CACHE is None or mtime != _SEARCH_INDEX_MTIME:
+        with open(_SEARCH_INDEX_PATH, "r", encoding="utf-8") as f:
+            _SEARCH_INDEX_CACHE = json.load(f)
+        _SEARCH_INDEX_MTIME = mtime
+    return _SEARCH_INDEX_CACHE
+
+
+def _cosine(a, b):
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = na = nb = 0.0
+    for x, y in zip(a, b):
+        dot += x * y
+        na  += x * x
+        nb  += y * y
+    if na <= 0 or nb <= 0:
+        return 0.0
+    return dot / (math.sqrt(na) * math.sqrt(nb))
+
+
+@lru_cache(maxsize=512)
+def _embed_query(q: str, model: str) -> tuple:
+    from openai import OpenAI
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    resp = client.embeddings.create(model=model, input=q)
+    return tuple(resp.data[0].embedding)
+
+
+def _user_paginas_permitidas(email: str) -> set | None:
+    """Retorna set de page_keys permitidas, ou None se o usuário pode tudo."""
+    from auth_db import SessionLocal, get_user_by_email as _gue
+    db = SessionLocal()
+    try:
+        u = _gue(db, email)
+        all_pages = bool(u.all_pages) if u and hasattr(u, "all_pages") else True
+        if all_pages:
+            return None
+        return set(u.lista_paginas() or [])
+    finally:
+        db.close()
+
+
+@app.get("/api/search/suggest")
+def api_search_suggest():
+    """Autocomplete instantâneo por substring em title/keywords. Sem chamada à OpenAI."""
+    email, _ = decode_user()
+    if not email:
+        return jsonify({"ok": False, "error": "não autenticado"}), 401
+
+    q = (request.args.get("q") or "").strip().lower()
+    if len(q) < 2:
+        return jsonify({"ok": True, "query": q, "results": []})
+
+    limit = max(1, min(int(request.args.get("limit") or 8), 20))
+    idx = _load_search_index()
+    if not idx.get("pages"):
+        return jsonify({"ok": True, "query": q, "results": []})
+
+    permitidas = _user_paginas_permitidas(email)
+    out = []
+    for page in idx["pages"]:
+        if permitidas is not None and page["key"] not in permitidas:
+            continue
+        title = (page.get("title") or "").lower()
+        kws = " ".join(page.get("keywords") or []).lower()
+        summary = (page.get("summary") or "").lower()
+        score = 0.0
+        if title.startswith(q):
+            score = 4.0
+        elif q in title:
+            score = 3.0
+        elif any(kw.startswith(q) for kw in (page.get("keywords") or [])):
+            score = 2.5
+        elif q in kws:
+            score = 2.0
+        elif q in summary:
+            score = 1.0
+        if score > 0:
+            out.append({
+                "key": page["key"],
+                "title": page["title"],
+                "url": page["url"],
+                "type": page["type"],
+                "score": score,
+            })
+    out.sort(key=lambda x: x["score"], reverse=True)
+    return jsonify({"ok": True, "query": q, "results": out[:limit]})
+
+
+@app.get("/api/search")
+def api_search():
+    """Busca semântica via embeddings OpenAI + cosine similarity."""
+    email, _ = decode_user()
+    if not email:
+        return jsonify({"ok": False, "error": "não autenticado"}), 401
+
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify({"ok": True, "query": q, "results": []})
+
+    limit = max(1, min(int(request.args.get("limit") or 5), 20))
+    idx = _load_search_index()
+    if not idx.get("pages"):
+        return jsonify({
+            "ok": False,
+            "error": "índice ainda não construído — rode build_search_index.py summarize && embed",
+            "results": [],
+        }), 503
+
+    permitidas = _user_paginas_permitidas(email)
+    model = idx.get("model") or "text-embedding-3-small"
+
+    try:
+        q_emb = _embed_query(q, model)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"falha ao embeddar query: {e}"}), 500
+
+    scored = []
+    for page in idx["pages"]:
+        if permitidas is not None and page["key"] not in permitidas:
+            continue
+        s = _cosine(q_emb, page["embedding"])
+        scored.append({
+            "key": page["key"],
+            "title": page["title"],
+            "url": page["url"],
+            "type": page["type"],
+            "summary": page.get("summary", ""),
+            "score": round(s, 4),
+        })
+    scored.sort(key=lambda x: x["score"], reverse=True)
+
+    # Decisão de "alta confiança": gap entre 1º e 2º + score absoluto
+    top = scored[:limit]
+    redirect_url = None
+    if len(top) >= 1 and top[0]["score"] >= 0.62:
+        gap = top[0]["score"] - (top[1]["score"] if len(top) > 1 else 0)
+        if top[0]["score"] >= 0.78 or gap >= 0.10:
+            redirect_url = top[0]["url"]
+
+    return jsonify({
+        "ok": True,
+        "query": q,
+        "results": top,
+        "redirect_url": redirect_url,
     })
 
 
