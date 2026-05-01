@@ -482,6 +482,13 @@ def api_insert_especialidade():
     descricao = (data.get("descricao") or "").strip()
     if len(descricao) > 400:
         descricao = descricao[:400]
+    # Vagas do dia (preenche admin; em branco → NULL = sem limite definido).
+    # NÃO confundir com Quantidadeweb/QuantidadeMaximaweb (sempre NULL: bloqueia
+    # marcação pelo site Camim, correto para plantonista temporário).
+    vagas_min = data.get("vagas_min")
+    vagas_max = data.get("vagas_max")
+    vagas_min = int(vagas_min) if vagas_min not in (None, "") else None
+    vagas_max = int(vagas_max) if vagas_max not in (None, "") else None
 
     # Mapeia dia da semana → colunas
     # Python weekday: Mon=0, Tue=1, ..., Sun=6
@@ -491,16 +498,6 @@ def api_insert_especialidade():
     col_sufixo = DIAS_COL[py_wd]  # ex: 'Sabado'
     # data_fim_exibicao = data_plantao + 7 dias
     data_fim_exib = d + timedelta(days=7)
-
-    # Capacidade do dia: estima a quantidade de vagas a partir do horário e almoço.
-    # 1 vaga = 15 min (regra de produtividade típica do CAMIM). Subtrai almoço.
-    def _to_min(s: str) -> int:
-        h, m = s.split(":")
-        return int(h) * 60 + int(m)
-    minutos_total = _to_min(hora_fim) - _to_min(hora_ini)
-    if almoco:
-        minutos_total -= max(0, _to_min(almoco_fim) - _to_min(almoco_ini))
-    quantidade_dia = max(1, minutos_total // 15) if minutos_total > 0 else 1
 
     base_cols = [
         "idmedico", "Especialidade", "Visibility",
@@ -518,7 +515,8 @@ def api_insert_especialidade():
         f"{col_sufixo}Almoco", f"{col_sufixo}Almocoinicio", f"{col_sufixo}Almocofim",
         f"ValorCusto{col_sufixo}",
         f"{col_sufixo}Quantidade", f"{col_sufixo}QuantidadeMaxima",
-        f"{col_sufixo}Quantidadeweb", f"{col_sufixo}QuantidadeMaximaweb",
+        # NÃO incluímos <dia>Quantidadeweb/QuantidadeMaximaweb: NULL bloqueia
+        # marcação via site Camim (correto para plantonista temporário).
     ]
 
     # OrdemChegada do dia escolhido = 1 (plantonista marca por ordem de chegada).
@@ -547,8 +545,7 @@ def api_insert_especialidade():
         almoco_ini if almoco else None,
         almoco_fim if almoco else None,
         valor_medico,
-        quantidade_dia, quantidade_dia,
-        quantidade_dia, quantidade_dia,
+        vagas_min, vagas_max,
     ]
 
     placeholders = ",".join("?" * len(base_cols))
