@@ -39,11 +39,14 @@ ID_TABELA_CAD_MEDICO_FALTA = 50  # de Sis_HistoricoTabela
 ID_COMANDO_INCLUSAO = 1
 ID_COMANDO_EXCLUSAO = 3
 
-# Defaults da campanha "Falta de Médico" no whatsapp_cobranca.db
-WPP_TEMPLATE_FALTA = "notificacao_de_falta_do_medico"
-WPP_MODO_ENVIO_FALTA = "falta_medico"  # cron ignora — usado só como log
+# Identificadores da campanha "Falta de Médico" no whatsapp_cobranca.db.
+# IMPORTANTE: template, from_user_id e queue_id são SEMPRE lidos da campanha
+# (não hardcoded e não do .env) — admin altera pelo painel sem mexer no código.
+WPP_MODO_ENVIO_FALTA = "falta_medico"  # cron de cobrança ignora esse modo
 WPP_CAMPANHA_NOME = "Falta de Médico (avisos automáticos)"
-WPP_FROM_USER_DEFAULT = "cmg8cum8g0519jbbm6r9l93f7"  # mesmo usado em Cobrança
+# Defaults usados apenas se a campanha precisar ser criada pela primeira vez
+WPP_TEMPLATE_DEFAULT_AO_CRIAR = "notificaao_de_falta_do_medico"
+WPP_FROM_USER_DEFAULT_AO_CRIAR = "cmg8cum8g0519jbbm6r9l93f7"
 
 
 # Mapeia letra do posto → idEndereco e descrição (puxado de cad_endereco em runtime)
@@ -75,41 +78,52 @@ def _limpar_telefone(raw: str | None) -> str | None:
     return digs
 
 
-def _get_or_create_campanha_falta_medico() -> int:
-    """Garante que existe a campanha de log para faltas. Retorna campanha_id."""
+def _get_or_create_campanha_falta_medico() -> dict:
+    """Garante a campanha de log para faltas. Retorna dict com config viva
+    (template, from_user_id, queue_id, enviar_chat, enviar_meta) — admin
+    pode alterar via painel sem mexer no código.
+    """
     import sqlite3
     db_path = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
     with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute(
-            "SELECT id FROM campanhas WHERE modo_envio = ? LIMIT 1",
+            "SELECT * FROM campanhas WHERE modo_envio = ? LIMIT 1",
             (WPP_MODO_ENVIO_FALTA,),
         )
         row = cur.fetchone()
-        if row:
-            return int(row[0])
-        # Cria nova campanha — filtros vazios, modo_envio especial faz cron ignorar
-        from datetime import datetime as _dt
-        agora = _dt.now().isoformat(timespec="seconds")
-        cur.execute(
-            """INSERT INTO campanhas
-                  (nome, template, postos, dias_atraso_min, dias_atraso_max,
-                   incluir_cancelados, sem_email, sexo, idade_min, idade_max,
-                   nao_recorrente, hora_inicio, hora_fim, dias_semana,
-                   intervalo_dias, ativa, created_at, updated_at,
-                   modo_envio, dias_ref_min, dias_ref_max,
-                   from_user_id, enviar_chat, enviar_meta)
-               VALUES (?, ?, '[]', 0, NULL,
-                       0, 0, NULL, NULL, NULL,
-                       0, '00:00', '23:59', '0,1,2,3,4,5,6',
-                       1, 1, ?, ?,
-                       ?, 0, NULL,
-                       ?, 1, 1)""",
-            (WPP_CAMPANHA_NOME, WPP_TEMPLATE_FALTA, agora, agora,
-             WPP_MODO_ENVIO_FALTA, WPP_FROM_USER_DEFAULT),
-        )
-        conn.commit()
-        return int(cur.lastrowid)
+        if not row:
+            from datetime import datetime as _dt
+            agora = _dt.now().isoformat(timespec="seconds")
+            cur.execute(
+                """INSERT INTO campanhas
+                      (nome, template, postos, dias_atraso_min, dias_atraso_max,
+                       incluir_cancelados, sem_email, sexo, idade_min, idade_max,
+                       nao_recorrente, hora_inicio, hora_fim, dias_semana,
+                       intervalo_dias, ativa, created_at, updated_at,
+                       modo_envio, dias_ref_min, dias_ref_max,
+                       from_user_id, enviar_chat, enviar_meta, queue_id)
+                   VALUES (?, ?, '[]', 0, NULL,
+                           0, 0, NULL, NULL, NULL,
+                           0, '00:00', '23:59', '0,1,2,3,4,5,6',
+                           1, 1, ?, ?,
+                           ?, 0, NULL,
+                           ?, 1, 1, NULL)""",
+                (WPP_CAMPANHA_NOME, WPP_TEMPLATE_DEFAULT_AO_CRIAR, agora, agora,
+                 WPP_MODO_ENVIO_FALTA, WPP_FROM_USER_DEFAULT_AO_CRIAR),
+            )
+            conn.commit()
+            cur.execute("SELECT * FROM campanhas WHERE id = ?", (cur.lastrowid,))
+            row = cur.fetchone()
+        return {
+            "id": int(row["id"]),
+            "template": row["template"],
+            "from_user_id": row["from_user_id"] or None,
+            "queue_id": row["queue_id"] or None,  # NULL = sem fila → Camila atende
+            "enviar_chat": bool(row["enviar_chat"]),
+            "enviar_meta": bool(row["enviar_meta"]),
+        }
 
 
 def _registrar_envio_log(campanha_id: int, posto: str, telefone: str,
@@ -538,8 +552,15 @@ def api_enviar_wpp():
             )
             agendamentos = cur.fetchall()
 
-        # Garante a campanha de log (idempotente)
-        campanha_id = _get_or_create_campanha_falta_medico()
+        # Garante a campanha (idempotente). Toda config (template/from_user/queue_id/
+        # enviar_chat/enviar_meta) vem dela — admin pode alterar via painel sem código.
+        camp = _get_or_create_campanha_falta_medico()
+        campanha_id = camp["id"]
+        wpp_template = camp["template"]
+        wpp_from_user = camp["from_user_id"]
+        wpp_queue_id = camp["queue_id"]
+        wpp_usar_chat = camp["enviar_chat"]
+        wpp_usar_meta = camp["enviar_meta"]
 
         # 6) Para cada paciente: busca NomeSocial + TelefoneWhatsApp em cad_cliente OU cad_clientedependente,
         #    monta params, dispara, registra
@@ -572,12 +593,12 @@ def api_enviar_wpp():
                 if not tel_limpo:
                     sem_telefone.append({"paciente": nome_paciente})
                     _registrar_envio_log(
-                        campanha_id, posto, "", nome_paciente, WPP_TEMPLATE_FALTA,
+                        campanha_id, posto, "", nome_paciente, wpp_template,
                         "erro:sem_telefone", None,
                         ref_extra=f"falta {id_falta}",
                     )
                     continue
-                # 5 parâmetros do template (na ordem que o template espera)
+                # 6 parâmetros do template (chave igual ao Meta)
                 params = {
                     "paciente": nome_paciente,
                     "Médico": nome_medico_raw,
@@ -589,16 +610,16 @@ def api_enviar_wpp():
                 status, wamid = send_mod.enviar(
                     telefone=tel_limpo,
                     nome=nome_paciente,
-                    template=WPP_TEMPLATE_FALTA,
+                    template=wpp_template,
                     params=params,
                     dry_run=False,
-                    queue_id=os.getenv("WAPP_QUEUE_ID"),
-                    from_user_id=WPP_FROM_USER_DEFAULT,
-                    usar_chat=True,
-                    usar_meta=True,
+                    queue_id=wpp_queue_id,           # da campanha (NULL = Camila atende)
+                    from_user_id=wpp_from_user,      # da campanha
+                    usar_chat=wpp_usar_chat,         # da campanha
+                    usar_meta=wpp_usar_meta,         # da campanha
                 )
                 _registrar_envio_log(
-                    campanha_id, posto, tel_limpo, nome_paciente, WPP_TEMPLATE_FALTA,
+                    campanha_id, posto, tel_limpo, nome_paciente, wpp_template,
                     status, wamid, ref_extra=f"falta {id_falta}",
                 )
                 if "erro" in (status or ""):
