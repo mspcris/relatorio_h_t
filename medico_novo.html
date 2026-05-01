@@ -388,8 +388,8 @@
           <div class="row form-row">
             <div class="col-md-6 mb-2">
               <label>Usuário (login) *</label>
-              <input id="u_usuario" type="text" class="form-control" maxlength="40" />
-              <div id="u_usuario_msg" class="small-help">Gerado a partir do nome. Pode editar se já existir.</div>
+              <input id="u_usuario" type="text" class="form-control text-uppercase" maxlength="40" style="text-transform:uppercase" />
+              <div id="u_usuario_msg" class="small-help">Gerado a partir do nome + sufixo do posto (ex.: <code>CRISTIANOSS.A</code>). Pode editar se já existir; o sufixo do posto é re-aplicado no save.</div>
             </div>
             <div class="col-md-6 mb-2">
               <label>Nome (display)</label>
@@ -809,7 +809,8 @@
       const norm = (state.nome || "")
         .normalize("NFKD").replace(/[̀-ͯ]/g, "")
         .replace(/[^A-Za-z\s]/g, "").toLowerCase().trim().split(/\s+/);
-      const login = norm.length === 1 ? norm[0] : (norm[0] + norm.slice(1).map(p => p[0]).join(""));
+      const base = norm.length === 1 ? norm[0] : (norm[0] + norm.slice(1).map(p => p[0]).join(""));
+      const login = (base + "." + (state.posto || "")).toUpperCase();
       $("#u_usuario").value = login;
       checkUsuario();
       unlock("#step3");
@@ -819,8 +820,9 @@
   // ---------- Etapa 3: sis_usuario ----------
   let usuarioCheckTimer = null;
   function checkUsuario() {
-    const v = $("#u_usuario").value.trim();
     const inp = $("#u_usuario");
+    inp.value = inp.value.toUpperCase();
+    const v = inp.value.trim();
     inp.classList.remove("input-error", "input-ok");
     if (!v) { $("#u_usuario_msg").textContent = "Login obrigatório."; return; }
     fetch(`/api/medico_novo/check_usuario?posto=${encodeURIComponent(state.posto)}&usuario=${encodeURIComponent(v)}&nome=${encodeURIComponent(state.nome || "")}`,

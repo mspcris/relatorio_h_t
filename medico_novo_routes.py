@@ -165,16 +165,21 @@ def _valida_cpf(cpf: str) -> bool:
     return d2 == nums[10]
 
 
-def _gerar_login(nome_completo: str) -> str:
-    """'Cristiano Silva Souza' → 'cristianocss'"""
+def _gerar_login(nome_completo: str, posto: str = "") -> str:
+    """'Cristiano Silva Souza' + 'A' → 'CRISTIANOSS.A' (caixa alta + sufixo do posto).
+
+    Regra confirmada em 2026-05-01: Usuario gravado SEMPRE em caixa alta no
+    sis_usuario, com sufixo `.<letra_do_posto>` (também maiúsculo).
+    """
     nome = _strip_accents((nome_completo or "").strip())
     nome = re.sub(r"[^A-Za-z\s]", "", nome).lower()
     parts = [p for p in nome.split() if p]
     if not parts:
         return ""
-    if len(parts) == 1:
-        return parts[0]
-    return parts[0] + "".join(p[0] for p in parts[1:])
+    base = parts[0] if len(parts) == 1 else (parts[0] + "".join(p[0] for p in parts[1:]))
+    suf = (posto or "").strip().upper()[:1]
+    out = f"{base}.{suf}" if suf else base
+    return out.upper()
 
 
 def _fetch_id_endereco(con: pyodbc.Connection) -> int:
@@ -591,8 +596,8 @@ def api_check_usuario():
     if erro:
         return jsonify({"error": erro}), 400
     nome = request.args.get("nome", "")
-    usuario = request.args.get("usuario", "").strip()
-    sugerido = _gerar_login(nome) if nome else None
+    usuario = request.args.get("usuario", "").strip().upper()
+    sugerido = _gerar_login(nome, posto) if nome else None
     if not usuario:
         usuario = sugerido or ""
     if not usuario:
@@ -670,9 +675,14 @@ def api_insert_usuario():
 
     idmedico = data.get("idmedico")
     nome = (data.get("nome") or "").strip()
-    usuario = (data.get("usuario") or "").strip()
+    usuario = (data.get("usuario") or "").strip().upper()
     if not (idmedico and nome and usuario):
         return jsonify({"error": "idmedico, nome e usuario obrigatórios"}), 400
+    # Garante o sufixo `.<POSTO>` mesmo se o admin editou o login
+    suf_posto = f".{posto.upper()}"
+    if not usuario.endswith(suf_posto):
+        # Remove qualquer sufixo `.<X>` existente e adiciona o do posto correto
+        usuario = re.sub(r"\.[A-Z0-9]$", "", usuario) + suf_posto
 
     senha_plain = f"{random.randint(0, 99999):05d}"
 
