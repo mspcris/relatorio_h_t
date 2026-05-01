@@ -356,6 +356,12 @@ def api_insert():
     observacao = (data.get("observacao") or "").strip() or None
     clinica_fechou = 1 if data.get("clinica_fechou") else 0
     medico_fechou = 1 if data.get("medico_fechou") else 0
+    # XOR obrigatório: exatamente um dos dois (nem 0, nem 2)
+    if (clinica_fechou + medico_fechou) != 1:
+        return jsonify({
+            "error": "Marque exatamente UM responsável: 'Clínica fechou a agenda' OU 'Médico fechou a agenda' (não os dois, e não nenhum).",
+            "campo": "responsavel_fechamento",
+        }), 400
 
     # Timestamps: passar objeto datetime para evitar bug de SET DATEFORMAT dmy em parâmetros
     h_ini = datetime.strptime(hora_ini, "%H:%M").time()

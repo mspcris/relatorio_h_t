@@ -232,6 +232,9 @@
               <textarea id="f_obs" class="form-control" rows="2" maxlength="2000"></textarea>
             </div>
 
+            <div class="col-md-12 mb-1">
+              <small class="text-muted">Marque <strong>exatamente um</strong> responsável pelo fechamento da agenda <span class="text-danger">*</span></small>
+            </div>
             <div class="col-md-3 mb-2">
               <div class="form-check">
                 <input class="form-check-input" type="checkbox" id="f_clinica_fechou" />
@@ -506,6 +509,14 @@
     if (!id_motivo) { $("#msgFalta").textContent = "Escolha um motivo."; return; }
     const data = $("#f_data").value;
     if (!data) { $("#msgFalta").textContent = "Escolha a data."; return; }
+    // XOR obrigatório: exatamente um dos dois responsáveis (nem 0, nem 2)
+    const cFech = $("#f_clinica_fechou").checked;
+    const mFech = $("#f_medico_fechou").checked;
+    if (cFech === mFech) {
+      $("#msgFalta").textContent = "Marque EXATAMENTE UM responsável pelo fechamento: 'Clínica fechou a agenda' OU 'Médico fechou a agenda'.";
+      $("#f_clinica_fechou").focus();
+      return;
+    }
     const parcial = $("#f_tipo").value === "parcial";
     const payload = {
       posto: state.posto,
