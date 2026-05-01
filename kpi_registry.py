@@ -6,7 +6,7 @@ Permite descoberta automática e integração com sistemas externos (Manus, etc)
 KPI_MANIFEST = {
     "version": "1.2.0",
     "last_updated": "2026-04-19",
-    "base_url": "https://teste-ia.camim.com.br",
+    "base_url": "https://kpi.camim.com.br",
     "kpis": [
         {
             "id": "receita_despesa",

@@ -283,7 +283,7 @@ def _require_admin():
 
 
 def _enviar_reset(email_destino: str, token: str) -> bool:
-    base = os.environ.get("APP_BASE_URL", "https://teste-ia.camim.com.br")
+    base = os.environ.get("APP_BASE_URL", "https://kpi.camim.com.br")
     link = f"{base}/auth/reset/{token}"
 
     msg = MIMEMultipart("alternative")
@@ -378,7 +378,7 @@ _IDCAMIM_CLIENT_ID   = os.environ.get("IDCAMIM_CLIENT_ID", "")
 _IDCAMIM_CLIENT_SECRET = os.environ.get("IDCAMIM_CLIENT_SECRET", "")
 _IDCAMIM_REDIRECT_URI = os.environ.get(
     "IDCAMIM_REDIRECT_URI",
-    "https://teste-ia.camim.com.br/auth/idcamim/callback",
+    "https://kpi.camim.com.br/auth/idcamim/callback",
 )
 
 # estado OAuth armazenado em memória (processo único; suficiente para esse caso)

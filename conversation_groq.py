@@ -5,7 +5,7 @@ const app = express();
 app.use(express.json());
 
 // habilite CORS só se o domínio for diferente
-app.use(cors({ origin: ['https://teste-ia.camim.com.br'] }));
+app.use(cors({ origin: ['https://kpi.camim.com.br', 'https://teste-ia.camim.com.br'] }));
 
 app.post('/api/ia-kpi', async (req, res) => {
   const { query, page_ctx } = req.body;

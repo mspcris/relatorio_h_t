@@ -26,7 +26,7 @@ app = FastAPI(title="IA-Groq-Pipeline-MultiAgentes-FULL")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://teste-ia.camim.com.br"],
+    allow_origins=["https://kpi.camim.com.br", "https://teste-ia.camim.com.br"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],

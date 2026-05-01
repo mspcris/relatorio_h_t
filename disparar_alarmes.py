@@ -46,7 +46,7 @@ EMAIL_USER     = os.getenv('ALARM_EMAIL_USER',     '')
 EMAIL_PASSWORD = os.getenv('ALARM_EMAIL_PASSWORD', '')
 EMAIL_FROM     = os.getenv('ALARM_EMAIL_FROM',     '') or EMAIL_USER
 
-APP_URL = os.getenv('APP_BASE_URL', 'https://teste-ia.camim.com.br')
+APP_URL = os.getenv('APP_BASE_URL', 'https://kpi.camim.com.br')
 
 # ── Coleta de status dos serviços ─────────────────────────────────────────────
 

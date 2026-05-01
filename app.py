@@ -1049,7 +1049,7 @@ def api_retirar_data_fim():
                 INSERT INTO Sis_Historico
                     (id, idTabela, idComando, idUsuario, DataHora, Detalhe, Computador)
                 VALUES
-                    (:id_esp, :id_tabela, :id_comando, :id_usuario, GETDATE(), :detalhe, 'teste-ia.camim.com.br')
+                    (:id_esp, :id_tabela, :id_comando, :id_usuario, GETDATE(), :detalhe, 'kpi.camim.com.br')
             """), {
                 "id_esp": id_esp,
                 "id_tabela": _ID_TABELA_CAD_ESPECIALIDADE,
@@ -1135,7 +1135,7 @@ def api_prorrogar_agenda():
                 INSERT INTO Sis_Historico
                     (id, idTabela, idComando, idUsuario, DataHora, Detalhe, Computador)
                 VALUES
-                    (:id_esp, :id_tabela, :id_comando, :id_usuario, GETDATE(), :detalhe, 'teste-ia.camim.com.br')
+                    (:id_esp, :id_tabela, :id_comando, :id_usuario, GETDATE(), :detalhe, 'kpi.camim.com.br')
             """), {
                 "id_esp": id_esp,
                 "id_tabela": _ID_TABELA_CAD_ESPECIALIDADE,

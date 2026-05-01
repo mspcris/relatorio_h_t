@@ -10,7 +10,8 @@
 Sistema de dashboards KPI da CAMIM (rede de clínicas médicas).
 Dados vêm de um banco SQL Server via pyodbc, são transformados em JSON por scripts Python e consumidos por páginas HTML/JS estáticas.
 
-Domínio público: **teste-ia.camim.com.br**
+Domínio público (canônico): **kpi.camim.com.br**
+Domínio antigo: `teste-ia.camim.com.br` continua respondendo, mas faz **301 redirect** para `kpi.camim.com.br` (migração 2026-05-01)
 
 ---
 
@@ -18,7 +19,7 @@ Domínio público: **teste-ia.camim.com.br**
 
 | Serviço systemd | Diretório | Porta | Domínio | Função |
 |---|---|---|---|---|
-| `camim-auth.service` | `/opt/camim-auth/` | 8020 | `teste-ia.camim.com.br` | Flask: autenticação, admin de usuários, KPIs, proxy de IA OpenAI |
+| `camim-auth.service` | `/opt/camim-auth/` | 8020 | `kpi.camim.com.br` (e `teste-ia.camim.com.br` via 301) | Flask: autenticação, admin de usuários, KPIs, proxy de IA OpenAI |
 | `wpp-campanhas.service` | `/opt/relatorio_h_t/wpp-campanhas/` | 8023 | `camila1.ia.camim.com.br` | Flask: plataforma WhatsApp Campanhas (auth via IDCAMIM OIDC) |
 | `ia-groq.service` | `/opt/ia-groq/` | — | — | Flask: análise IA com Groq |
 | nginx | `/var/www/` | 80/443 | — | Serve arquivos estáticos + proxy reverso para os Flask apps |
