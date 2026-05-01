@@ -7,8 +7,12 @@ Página em /medico_falta. Permite:
       * INSERT em Cad_MedicoFalta — a vw_Cad_LancamentoProntuarioComDesistencia
         já reflete a falta nos atendimentos via JOIN, sem UPDATE manual
       * Auditoria em Sis_Historico (idTabela=50)
-      * Opcional: enviar WhatsApp `notificacao_de_falta_do_medico` aos pacientes
-        afetados (template Meta) — pendente, quando user passar a API
+  - Enviar template `notificacao_de_falta_do_medico` aos pacientes via:
+      * api-chat (registra conversa no Camila.ai chat) E Meta API (envia mensagem)
+      * Reusa send_whatsapp_cobranca.enviar() do projeto wpp-cobrança
+      * Registra cada envio em whatsapp_cobranca.db.envios (campanha_id da
+        campanha "Falta de Médico", criada idempotentemente com modo_envio
+        'falta_medico' — assim o cron de cobrança ignora)
 """
 
 from __future__ import annotations
@@ -34,6 +38,97 @@ medico_falta_bp = Blueprint("medico_falta_bp", __name__)
 ID_TABELA_CAD_MEDICO_FALTA = 50  # de Sis_HistoricoTabela
 ID_COMANDO_INCLUSAO = 1
 ID_COMANDO_EXCLUSAO = 3
+
+# Defaults da campanha "Falta de Médico" no whatsapp_cobranca.db
+WPP_TEMPLATE_FALTA = "notificacao_de_falta_do_medico"
+WPP_MODO_ENVIO_FALTA = "falta_medico"  # cron ignora — usado só como log
+WPP_CAMPANHA_NOME = "Falta de Médico (avisos automáticos)"
+WPP_FROM_USER_DEFAULT = "cmg8cum8g0519jbbm6r9l93f7"  # mesmo usado em Cobrança
+
+
+# Mapeia letra do posto → idEndereco e descrição (puxado de cad_endereco em runtime)
+def _posto_endereco(con: pyodbc.Connection, letra: str) -> tuple[int | None, str]:
+    cur = con.cursor()
+    cur.execute(
+        "SELECT TOP 1 idEndereco, descricao FROM cad_endereco "
+        "WHERE codigo = ? AND AtendimentoAtivoPosto = 1",
+        letra.strip().upper(),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None, ""
+    return int(row[0]), (row[1] or "").strip()
+
+
+def _limpar_telefone(raw: str | None) -> str | None:
+    """Reproduz a regra de limpeza de telefone do send_whatsapp_cobranca."""
+    if not raw:
+        return None
+    digs = re.sub(r"\D", "", str(raw))
+    # Pega o último número válido (campo costuma ter vários separados)
+    if not digs:
+        return None
+    if len(digs) < 10:
+        return None
+    if not digs.startswith("55"):
+        digs = "55" + digs
+    return digs
+
+
+def _get_or_create_campanha_falta_medico() -> int:
+    """Garante que existe a campanha de log para faltas. Retorna campanha_id."""
+    import sqlite3
+    db_path = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
+    with sqlite3.connect(db_path) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id FROM campanhas WHERE modo_envio = ? LIMIT 1",
+            (WPP_MODO_ENVIO_FALTA,),
+        )
+        row = cur.fetchone()
+        if row:
+            return int(row[0])
+        # Cria nova campanha — filtros vazios, modo_envio especial faz cron ignorar
+        from datetime import datetime as _dt
+        agora = _dt.now().isoformat(timespec="seconds")
+        cur.execute(
+            """INSERT INTO campanhas
+                  (nome, template, postos, dias_atraso_min, dias_atraso_max,
+                   incluir_cancelados, sem_email, sexo, idade_min, idade_max,
+                   nao_recorrente, hora_inicio, hora_fim, dias_semana,
+                   intervalo_dias, ativa, created_at, updated_at,
+                   modo_envio, dias_ref_min, dias_ref_max,
+                   from_user_id, enviar_chat, enviar_meta)
+               VALUES (?, ?, '[]', 0, NULL,
+                       0, 0, NULL, NULL, NULL,
+                       0, '00:00', '23:59', '0,1,2,3,4,5,6',
+                       1, 1, ?, ?,
+                       ?, 0, NULL,
+                       ?, 1, 1)""",
+            (WPP_CAMPANHA_NOME, WPP_TEMPLATE_FALTA, agora, agora,
+             WPP_MODO_ENVIO_FALTA, WPP_FROM_USER_DEFAULT),
+        )
+        conn.commit()
+        return int(cur.lastrowid)
+
+
+def _registrar_envio_log(campanha_id: int, posto: str, telefone: str,
+                          paciente: str, template: str, status: str,
+                          wamid: str | None, ref_extra: str = "") -> None:
+    """Insere em whatsapp_cobranca.db.envios — adapta o pattern existente."""
+    import sqlite3
+    db_path = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
+    with sqlite3.connect(db_path) as conn:
+        from datetime import datetime as _dt
+        conn.execute(
+            """INSERT INTO envios
+                  (campanha_id, posto, telefone, idreceita, matricula, nome,
+                   ref, valor, venc, dias_atraso, template, status, wamid, enviado_em)
+               VALUES (?, ?, ?, '', '', ?, ?, '', '', NULL, ?, ?, ?, ?)""",
+            (campanha_id, posto, telefone, paciente, ref_extra,
+             template, status, wamid, _dt.now().isoformat(timespec="seconds")),
+        )
+        conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -350,4 +445,179 @@ def api_insert():
         })
     except Exception as e:
         logger.exception("INSERT Cad_MedicoFalta falhou no posto %s", posto)
+        return jsonify({"error": str(e)[:400]}), 500
+
+
+@medico_falta_bp.post("/api/medico_falta/enviar_wpp")
+def api_enviar_wpp():
+    """Dispara o template `notificacao_de_falta_do_medico` aos pacientes afetados.
+    Lê dados de cad_cliente / cad_clientedependente (NomeSocial > Nome,
+    TelefoneWhatsApp), monta os 5 params do template e chama enviar() do
+    send_whatsapp_cobranca (chat + Meta). Registra cada envio em envios.
+
+    Body JSON: { posto, id_falta }
+    """
+    email, postos, login_campinho = _check_admin()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    if not login_campinho:
+        return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo": True}), 403
+
+    data = request.get_json(silent=True) or {}
+    posto = (data.get("posto") or "").strip().upper()
+    erro = _require_posto_in_acl(posto, postos)
+    if erro:
+        return jsonify({"error": erro}), 400
+    try:
+        id_falta = int(data.get("id_falta") or 0)
+    except (TypeError, ValueError):
+        id_falta = 0
+    if not id_falta:
+        return jsonify({"error": "id_falta obrigatório"}), 400
+
+    try:
+        # Reusa função de envio do projeto wpp-cobrança
+        import importlib
+        send_mod = importlib.import_module("send_whatsapp_cobranca")
+    except Exception as e:
+        logger.exception("falha ao importar send_whatsapp_cobranca")
+        return jsonify({"error": f"módulo de envio indisponível: {e}"}), 500
+
+    try:
+        with _conn_for_posto(posto) as con:
+            id_usuario_op = _resolver_idusuario_no_posto(con, login_campinho)
+            if not id_usuario_op:
+                return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo_posto": True}), 403
+
+            # 1) Dados da falta
+            cur = con.cursor()
+            cur.execute(
+                """SELECT mf.idMedico, m.Nome AS NomeMedico, mf.DataFalta,
+                          mf.DataHora, mf.DatahoraFim,
+                          mf.MedicoFechouAgenda, mf.ClinicaFechouAgenda,
+                          mfm.Motivo, mf.Observacao
+                     FROM Cad_MedicoFalta mf
+                     LEFT JOIN cad_medico m ON m.idmedico = mf.idMedico
+                     LEFT JOIN vw_Cad_MedicoFaltaMotivo mfm ON mfm.idMedicoFaltaMotivo = mf.idMedicoFaltaMotivo
+                    WHERE mf.idFalta = ?""",
+                id_falta,
+            )
+            f = cur.fetchone()
+            if not f:
+                return jsonify({"error": f"falta idFalta={id_falta} não existe no posto {posto}"}), 404
+            idmedico, nome_medico_raw, data_falta = f[0], (f[1] or "").strip(), f[2]
+            dh_ini, dh_fim = f[3], f[4]
+            medico_fechou, clinica_fechou = bool(f[5]), bool(f[6])
+            motivo_label = (f[7] or "").strip() or "—"
+
+            # 2) Posto: descrição
+            id_endereco_posto, posto_descricao = _posto_endereco(con, posto)
+
+            # 3) "Médico ou Clínica?" — bit que estiver marcado define a string
+            # Se nenhum marcado, default = "Médico"
+            medico_ou_clinica = "Clínica" if clinica_fechou and not medico_fechou else "Médico"
+
+            # 4) Data formatada para o template
+            data_str = data_falta.strftime("%d/%m/%Y") if data_falta else ""
+
+            # 5) Lista pacientes afetados no intervalo
+            cur.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
+            d_str = data_falta.strftime("%d/%m/%Y")
+            d_next = (data_falta + timedelta(days=1)).strftime("%d/%m/%Y")
+            hi = dh_ini.strftime("%H:%M") if dh_ini else "00:00"
+            hf = dh_fim.strftime("%H:%M") if dh_fim else "23:59"
+            cur.execute(
+                """SELECT idLancamentoServico, idCliente, idDependente, Paciente,
+                          HoraPrevistaConsulta, TelefoneResidencial, Especialidade
+                     FROM vw_Cad_LancamentoProntuarioComDesistencia WITH (NOLOCK)
+                     WHERE idMedico = ?
+                       AND DataConsulta >= ? AND DataConsulta <  ?
+                       AND Desistencia = 0
+                       AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?""",
+                idmedico, d_str, d_next, hi, hf,
+            )
+            agendamentos = cur.fetchall()
+
+        # Garante a campanha de log (idempotente)
+        campanha_id = _get_or_create_campanha_falta_medico()
+
+        # 6) Para cada paciente: busca NomeSocial + TelefoneWhatsApp em cad_cliente OU cad_clientedependente,
+        #    monta params, dispara, registra
+        with _conn_for_posto(posto) as con:
+            cur = con.cursor()
+            enviados, falhados, sem_telefone = [], [], []
+            for ag in agendamentos:
+                _ils, idcli, iddep, paciente_view, hora, tel_view, especialidade = ag
+                # Resolve dados do cliente/dep
+                if iddep and int(iddep) > 0:
+                    cur.execute(
+                        "SELECT TOP 1 NomeSocial, Nome, TelefoneWhatsApp, TelefoneCelular "
+                        "FROM cad_clientedependente WHERE idCliente = ? AND idDependente = ?",
+                        int(idcli), int(iddep),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT TOP 1 NomeSocial, Nome, TelefoneWhatsApp, TelefoneCelular "
+                        "FROM cad_cliente WHERE idCliente = ?",
+                        int(idcli),
+                    )
+                cli = cur.fetchone()
+                if not cli:
+                    falhados.append({"paciente": paciente_view, "erro": "cliente não encontrado"})
+                    continue
+                nome_social, nome_pad, tel_wpp, tel_cel = cli
+                nome_paciente = (nome_social or nome_pad or paciente_view or "").strip()
+                # Primeiro tenta TelefoneWhatsApp (campo dedicado); cai pra Celular se vazio
+                tel_limpo = _limpar_telefone(tel_wpp) or _limpar_telefone(tel_cel)
+                if not tel_limpo:
+                    sem_telefone.append({"paciente": nome_paciente})
+                    _registrar_envio_log(
+                        campanha_id, posto, "", nome_paciente, WPP_TEMPLATE_FALTA,
+                        "erro:sem_telefone", None,
+                        ref_extra=f"falta {id_falta}",
+                    )
+                    continue
+                # 5 parâmetros do template (na ordem que o template espera)
+                params = {
+                    "paciente": nome_paciente,
+                    "Médico": nome_medico_raw,
+                    "data_consulta": data_str,
+                    "posto": posto_descricao,
+                    "medico_clinica": medico_ou_clinica,
+                    "motivo": motivo_label,
+                }
+                status, wamid = send_mod.enviar(
+                    telefone=tel_limpo,
+                    nome=nome_paciente,
+                    template=WPP_TEMPLATE_FALTA,
+                    params=params,
+                    dry_run=False,
+                    queue_id=os.getenv("WAPP_QUEUE_ID"),
+                    from_user_id=WPP_FROM_USER_DEFAULT,
+                    usar_chat=True,
+                    usar_meta=True,
+                )
+                _registrar_envio_log(
+                    campanha_id, posto, tel_limpo, nome_paciente, WPP_TEMPLATE_FALTA,
+                    status, wamid, ref_extra=f"falta {id_falta}",
+                )
+                if "erro" in (status or ""):
+                    falhados.append({"paciente": nome_paciente, "telefone": tel_limpo, "erro": status})
+                else:
+                    enviados.append({"paciente": nome_paciente, "telefone": tel_limpo, "status": status, "wamid": wamid})
+
+        return jsonify({
+            "ok": True,
+            "id_falta": id_falta,
+            "campanha_id": campanha_id,
+            "total": len(agendamentos),
+            "enviados": len(enviados),
+            "falhados": len(falhados),
+            "sem_telefone": len(sem_telefone),
+            "detalhes_enviados": enviados,
+            "detalhes_falhados": falhados,
+            "detalhes_sem_telefone": sem_telefone,
+        })
+    except Exception as e:
+        logger.exception("enviar_wpp falhou (id_falta=%s)", id_falta)
         return jsonify({"error": str(e)[:400]}), 500

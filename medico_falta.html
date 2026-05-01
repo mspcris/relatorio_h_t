@@ -510,17 +510,49 @@
       $("#r_id").textContent = d.id_falta;
       $("#r_qtd").textContent = d.qtd_pacientes_afetados;
       const wppArea = $("#wppArea");
-      if ($("#f_wpp").checked && d.agendamentos && d.agendamentos.length) {
-        wppArea.innerHTML = `
-          <div class="alert alert-warning">
-            <strong>WhatsApp:</strong> envio do template <code>notificacao_de_falta_do_medico</code> ainda não está plugado nesse fluxo (o usuário ainda vai mandar a API).
-            Os ${d.agendamentos.length} pacientes afetados estão registrados no banco — quando a API for integrada, o disparo será automático.
-          </div>`;
-      } else {
-        wppArea.innerHTML = '<div class="alert alert-info">WhatsApp não solicitado.</div>';
-      }
       done("#stepFalta");
       unlock("#stepFinal");
+
+      if (!$("#f_wpp").checked || !d.agendamentos || !d.agendamentos.length) {
+        wppArea.innerHTML = '<div class="alert alert-info">WhatsApp não solicitado (ou sem pacientes afetados).</div>';
+        return;
+      }
+      wppArea.innerHTML = `<div class="alert alert-info"><i class="fas fa-spinner fa-spin mr-1"></i>Disparando ${d.agendamentos.length} mensagens (api-chat + Meta API)…</div>`;
+      // Dispara WhatsApp
+      fetch("/api/medico_falta/enviar_wpp", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({posto: state.posto, id_falta: d.id_falta}),
+      }).then(r => r.json()).then(w => {
+        if (w.error) {
+          wppArea.innerHTML = `<div class="alert alert-danger"><strong>Erro no envio WhatsApp:</strong> ${w.error}<br>A falta foi gravada no banco normalmente.</div>`;
+          return;
+        }
+        let html = `
+          <div class="alert alert-success">
+            <strong>WhatsApp disparado.</strong>
+            ${w.enviados} enviados · ${w.falhados} falhas · ${w.sem_telefone} sem telefone.
+            <small>(campanha id=${w.campanha_id} no painel <a href="https://camila1.ia.camim.com.br/wpp" target="_blank">camila1.ia.camim.com.br/wpp</a>)</small>
+          </div>`;
+        if (w.detalhes_falhados && w.detalhes_falhados.length) {
+          html += '<details class="mb-2"><summary class="text-danger"><strong>Falhas (' + w.detalhes_falhados.length + ')</strong></summary><ul class="list-group mt-2">';
+          w.detalhes_falhados.forEach(x => {
+            html += `<li class="list-group-item py-1"><strong>${x.paciente}</strong> ${x.telefone||""} — <span class="text-danger">${x.erro}</span></li>`;
+          });
+          html += '</ul></details>';
+        }
+        if (w.detalhes_sem_telefone && w.detalhes_sem_telefone.length) {
+          html += '<details class="mb-2"><summary class="text-warning"><strong>Sem telefone (' + w.detalhes_sem_telefone.length + ')</strong></summary><ul class="list-group mt-2">';
+          w.detalhes_sem_telefone.forEach(x => {
+            html += `<li class="list-group-item py-1">${x.paciente}</li>`;
+          });
+          html += '</ul></details>';
+        }
+        wppArea.innerHTML = html;
+      }).catch(e => {
+        wppArea.innerHTML = `<div class="alert alert-danger"><strong>Falha ao chamar enviar_wpp:</strong> ${e}<br>A falta foi gravada normalmente; tente o disparo manual depois.</div>`;
+      });
     }).catch(e => { setLoading(false); $("#msgFalta").textContent = "Falha: " + e; });
   });
 })();
