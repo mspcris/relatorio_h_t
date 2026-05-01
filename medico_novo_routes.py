@@ -256,26 +256,35 @@ def api_buscar_medico():
     if len(q) < 2:
         return jsonify({"medicos": []})
     like = f"%{q}%"
+    # Se o termo é só dígitos, também busca em CPF (sem máscara) e ConselhoNumero
+    so_digitos = re.sub(r"\D", "", q)
+    like_dig = f"%{so_digitos}%" if so_digitos else like
     try:
         with _conn_for_posto(posto) as con:
             cur = con.cursor()
             cur.execute(
                 """SELECT TOP 30 idmedico, Nome, ConselhoProfissional, ConselhoNumero,
-                                 especializacao, valormedico
+                                 CPF, especializacao, valormedico
                      FROM cad_medico
                      WHERE desativado = 0
-                       AND (Nome LIKE ? OR ConselhoNumero LIKE ?)
+                       AND (Nome LIKE ? OR ConselhoNumero LIKE ? OR CPF LIKE ?)
                      ORDER BY Nome""",
-                like, like,
+                like, like_dig, like_dig,
             )
+            seen = set()
             out = []
             for r in cur.fetchall():
+                idmed = int(r[0])
+                if idmed in seen:
+                    continue
+                seen.add(idmed)
                 out.append({
-                    "idmedico": int(r[0]),
+                    "idmedico": idmed,
                     "nome": (r[1] or "").strip(),
                     "conselho": f"{(r[2] or '').strip()} {(r[3] or '').strip()}".strip(),
-                    "especializacao": (r[4] or "").strip(),
-                    "valor_medico": float(r[5]) if r[5] is not None else None,
+                    "cpf": (r[4] or "").strip(),
+                    "especializacao": (r[5] or "").strip(),
+                    "valor_medico": float(r[6]) if r[6] is not None else None,
                 })
         return jsonify({"medicos": out})
     except Exception as e:

@@ -145,19 +145,22 @@
       <div class="card wizard-step locked" id="step1b">
         <div class="card-header"><span class="step-num">1</span><strong id="step1b_title">Buscar médico já cadastrado</strong></div>
         <div class="card-body">
-          <div class="form-row">
+          <div id="b_search_area" class="form-row">
             <div class="col-md-8 mb-2">
-              <label>Buscar por nome ou número do conselho</label>
-              <input id="b_query" type="text" class="form-control" placeholder="Digite ao menos 2 caracteres..." autocomplete="off" />
+              <label>Buscar por nome, CPF ou número do conselho</label>
+              <input id="b_query" type="text" class="form-control" placeholder="Digite ao menos 2 caracteres (nome, CPF ou CRM)..." autocomplete="off" />
               <div class="small-help">Mostra os 30 primeiros resultados ativos do posto.</div>
             </div>
             <div class="col-12">
               <div id="b_resultados" class="list-group" style="max-height:300px;overflow-y:auto"></div>
             </div>
           </div>
-          <div id="b_selecionado" class="alert alert-success mt-3" style="display:none">
-            <strong>Selecionado:</strong> <span id="b_sel_nome"></span> — <span id="b_sel_esp"></span><br>
-            <small>idmedico: <span id="b_sel_idmedico"></span> · valor médico: <span id="b_sel_valor"></span></small>
+          <div id="b_selecionado" class="alert alert-success mt-3 d-flex justify-content-between align-items-start" style="display:none !important">
+            <div>
+              <strong>Selecionado:</strong> <span id="b_sel_nome"></span> — <span id="b_sel_esp"></span><br>
+              <small>idmedico: <span id="b_sel_idmedico"></span> · valor médico: <span id="b_sel_valor"></span></small>
+            </div>
+            <button id="btnTrocarMedico" class="btn btn-sm btn-outline-secondary"><i class="fas fa-undo mr-1"></i>Trocar</button>
           </div>
           <div class="mt-2 text-right">
             <button id="btnConfirmExistente" class="btn btn-success" disabled><i class="fas fa-arrow-right mr-1"></i><span id="btnConfirmExistenteLabel">Confirmar e ir para o plantão</span></button>
@@ -577,7 +580,8 @@
           const a = document.createElement("button");
           a.type = "button";
           a.className = "list-group-item list-group-item-action";
-          a.innerHTML = `<strong>${m.nome}</strong> <small class="text-muted">— ${m.especializacao || "—"} · ${m.conselho || ""}</small><br><small>id ${m.idmedico} · valor R$ ${m.valor_medico != null ? m.valor_medico.toFixed(2) : "—"}</small>`;
+          const cpfFmt = m.cpf ? ` · CPF ${m.cpf}` : "";
+          a.innerHTML = `<strong>${m.nome}</strong> <small class="text-muted">— ${m.especializacao || "—"} · ${m.conselho || ""}${cpfFmt}</small><br><small>id ${m.idmedico} · valor R$ ${m.valor_medico != null ? m.valor_medico.toFixed(2) : "—"}</small>`;
           a.addEventListener("click", () => selecionarMedico(m));
           lst.appendChild(a);
         });
@@ -592,11 +596,22 @@
     $("#b_sel_esp").textContent = m.especializacao || "—";
     $("#b_sel_idmedico").textContent = m.idmedico;
     $("#b_sel_valor").textContent = m.valor_medico != null ? ("R$ " + m.valor_medico.toFixed(2)) : "—";
-    $("#b_selecionado").style.display = "block";
+    $("#b_selecionado").style.display = "flex";
+    $("#b_search_area").style.display = "none";  // oculta lista após escolher — botão fica visível
     $("#btnConfirmExistente").disabled = false;
-    // marca visual
-    document.querySelectorAll("#b_resultados .list-group-item").forEach(el => el.classList.remove("active"));
   }
+  $("#btnTrocarMedico").addEventListener("click", () => {
+    state.idmedico = null;
+    state.nome = null;
+    state.valor_medico = null;
+    state.especializacao = null;
+    $("#b_selecionado").style.display = "none";
+    $("#b_search_area").style.display = "";
+    $("#btnConfirmExistente").disabled = true;
+    $("#b_query").value = "";
+    $("#b_resultados").innerHTML = "";
+    $("#b_query").focus();
+  });
 
   $("#btnConfirmExistente").addEventListener("click", () => {
     if (!state.idmedico) return;
