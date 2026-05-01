@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>CAMIM — Médico - Cadastrar Falta + WhatsApp</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="kpi-id" content="medico_falta" />
+  <meta name="kpi-title" content="Médico - Cadastrar Falta + WhatsApp" />
+  <meta name="kpi-description" content="Cadastra falta de médico (Cad_MedicoFalta) e envia WhatsApp aos pacientes afetados." />
+  <meta name="kpi-category" content="Operacional" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="/css/style2.css?v=20260501">
+  <link rel="stylesheet" href="/css/style_kpi.css?v=20260501">
+  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+  <style>
+    body { font-family: "Source Sans Pro", system-ui, -apple-system, sans-serif; }
+    .wizard-step { transition: opacity .25s; }
+    .wizard-step.locked { opacity: .35; pointer-events: none; }
+    .wizard-step.done .card-header { background: #28a745 !important; color: #fff; }
+    .wizard-step.done .card-header .step-num { background: #fff; color: #28a745; }
+    .step-num {
+      display: inline-block; width: 28px; height: 28px; line-height: 28px;
+      text-align: center; border-radius: 50%; background: #007bff; color: #fff;
+      font-weight: 700; margin-right: 10px;
+    }
+    .wizard-step .card-header { background: #f4f6f9; cursor: default; }
+    .form-row label { font-weight: 600; font-size: .85rem; margin-bottom: .25rem; }
+    .small-help { font-size: .75rem; color: #6c757d; }
+    .input-error { border-color: #dc3545 !important; background-color: #f8d7da !important; }
+    .input-ok    { border-color: #28a745 !important; background-color: #d4edda !important; }
+    #loadingBar { display: none; height: 3px; background: #007bff; animation: barpulse 1s infinite; }
+    @keyframes barpulse { 0%{opacity:.3} 50%{opacity:1} 100%{opacity:.3} }
+    .table-faltas th { font-size: .82rem; background: #343a40; color: #fff; position: sticky; top: 0; }
+    .table-faltas td { font-size: .85rem; vertical-align: middle; }
+    .badge-tot { background: #dc3545; color: #fff; }
+    .badge-parc { background: #fd7e14; color: #fff; }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini text-sm">
+<div class="wrapper">
+
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav"><li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li></ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+      <span class="ml-2">Quem tem saúde é mais feliz!</span>
+    </span>
+  </nav>
+
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a></li>
+          <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+          <li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline">
+              <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                <i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p>
+              </button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="content-wrapper">
+    <section class="content p-3">
+
+      <div class="card mb-3">
+        <div class="card-body d-flex justify-content-between align-items-center">
+          <div>
+            <h2 class="mb-1"><i class="fas fa-user-times mr-2 text-danger"></i>Médico - Cadastrar Falta + WhatsApp</h2>
+            <p class="lead mb-0">Lista faltas existentes ou cadastra nova (total/parcial). Após salvar, opcionalmente notifica os pacientes afetados via WhatsApp.</p>
+          </div>
+          <button id="btnReiniciar" class="btn btn-outline-danger" title="Apaga tudo e começa do zero">
+            <i class="fas fa-redo mr-1"></i>Reiniciar
+          </button>
+        </div>
+      </div>
+
+      <div id="loadingBar"></div>
+      <div id="blockBox" class="alert alert-danger" style="display:none; font-weight:600; line-height:1.5;"></div>
+
+      <!-- ============================================================ -->
+      <!-- ETAPA 0: posto + escolha (listar / cadastrar)                 -->
+      <!-- ============================================================ -->
+      <div class="card wizard-step" id="step0">
+        <div class="card-header"><span class="step-num">0</span><strong>Posto e ação</strong></div>
+        <div class="card-body">
+          <div class="row form-row">
+            <div class="col-md-6 mb-2">
+              <label>Posto</label>
+              <select id="selPosto" class="form-control"></select>
+              <div class="small-help">Apenas postos liberados no seu acesso.</div>
+            </div>
+            <div class="col-md-6 mb-2">
+              <label>O que você quer fazer?</label>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="acao" id="aListar" value="listar" checked>
+                <label class="form-check-label" for="aListar"><strong>Listar faltas existentes</strong></label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="acao" id="aCadastrar" value="cadastrar">
+                <label class="form-check-label" for="aCadastrar"><strong>Cadastrar nova falta</strong></label>
+              </div>
+            </div>
+            <div class="col-12 mt-2">
+              <button id="btnConfirmPosto" class="btn btn-primary"><i class="fas fa-arrow-right mr-1"></i>Continuar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- ETAPA 1A: LISTAR                                              -->
+      <!-- ============================================================ -->
+      <div class="card wizard-step locked" id="stepList">
+        <div class="card-header"><span class="step-num">1</span><strong>Faltas cadastradas</strong></div>
+        <div class="card-body">
+          <div class="form-row mb-2">
+            <div class="col-md-3">
+              <label>Início</label>
+              <input id="lst_ini" type="date" class="form-control" />
+            </div>
+            <div class="col-md-3">
+              <label>Fim</label>
+              <input id="lst_fim" type="date" class="form-control" />
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+              <button id="btnFiltrar" class="btn btn-primary"><i class="fas fa-filter mr-1"></i>Filtrar</button>
+            </div>
+            <div class="col-md-3 d-flex align-items-end justify-content-end">
+              <span id="qtdFaltas" class="text-muted"></span>
+            </div>
+          </div>
+          <div class="table-responsive" style="max-height:65vh;overflow-y:auto">
+            <table class="table table-sm table-faltas mb-0">
+              <thead>
+                <tr>
+                  <th>Data</th><th>Hora</th><th>Tipo</th><th>Médico</th>
+                  <th>Especialidade</th><th>Motivo</th><th>Pacientes</th>
+                  <th>Cadastrado por</th><th>Observação</th>
+                </tr>
+              </thead>
+              <tbody id="tblFaltas"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- ETAPA 1B: CADASTRAR — buscar médico                           -->
+      <!-- ============================================================ -->
+      <div class="card wizard-step locked" id="stepBusca">
+        <div class="card-header"><span class="step-num">1</span><strong>Buscar médico</strong></div>
+        <div class="card-body">
+          <div id="b_search_area" class="form-row">
+            <div class="col-md-8 mb-2">
+              <label>Nome, CPF ou número do conselho</label>
+              <input id="b_query" type="text" class="form-control" placeholder="Digite ao menos 2 caracteres..." autocomplete="off" />
+            </div>
+            <div class="col-12">
+              <div id="b_resultados" class="list-group" style="max-height:300px;overflow-y:auto"></div>
+            </div>
+          </div>
+          <div id="b_selecionado" class="alert alert-success mt-3 d-flex justify-content-between align-items-start" style="display:none">
+            <div>
+              <strong>Selecionado:</strong> <span id="b_sel_nome"></span> — <span id="b_sel_esp"></span><br>
+              <small>idmedico: <span id="b_sel_idmedico"></span></small>
+            </div>
+            <button id="btnTrocarMedico" class="btn btn-sm btn-outline-secondary"><i class="fas fa-undo mr-1"></i>Trocar</button>
+          </div>
+          <div class="mt-2 text-right">
+            <button id="btnIrFalta" class="btn btn-success" disabled><i class="fas fa-arrow-right mr-1"></i>Continuar</button>
+            <span id="msgB" class="ml-2 text-danger"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- ETAPA 2: dados da falta                                       -->
+      <!-- ============================================================ -->
+      <div class="card wizard-step locked" id="stepFalta">
+        <div class="card-header"><span class="step-num">2</span><strong>Dados da falta</strong></div>
+        <div class="card-body">
+          <div class="row form-row">
+            <div class="col-md-3 mb-2">
+              <label>Data da falta *</label>
+              <input id="f_data" type="date" class="form-control" />
+            </div>
+            <div class="col-md-3 mb-2">
+              <label>Tipo *</label>
+              <select id="f_tipo" class="form-control">
+                <option value="total">Falta total (00:00–23:59)</option>
+                <option value="parcial">Parcial</option>
+              </select>
+            </div>
+            <div class="col-md-3 mb-2 horario-parcial" style="display:none">
+              <label>Hora início</label>
+              <input id="f_hini" type="time" class="form-control" value="08:00" />
+            </div>
+            <div class="col-md-3 mb-2 horario-parcial" style="display:none">
+              <label>Hora fim</label>
+              <input id="f_hfim" type="time" class="form-control" value="12:00" />
+            </div>
+
+            <div class="col-md-6 mb-2">
+              <label>Motivo *</label>
+              <select id="f_motivo" class="form-control"></select>
+            </div>
+            <div class="col-md-6 mb-2">
+              <label>Especialidade</label>
+              <input id="f_especialidade" type="text" class="form-control" maxlength="50" placeholder="Ex.: CLÍNICA GERAL" />
+              <div class="small-help">Pré-preenchida da especialidade do médico (se única).</div>
+            </div>
+
+            <div class="col-md-12 mb-2">
+              <label>Observação</label>
+              <textarea id="f_obs" class="form-control" rows="2" maxlength="2000"></textarea>
+            </div>
+
+            <div class="col-md-3 mb-2">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="f_clinica_fechou" />
+                <label class="form-check-label" for="f_clinica_fechou">Clínica fechou a agenda</label>
+              </div>
+            </div>
+            <div class="col-md-3 mb-2">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="f_medico_fechou" />
+                <label class="form-check-label" for="f_medico_fechou">Médico fechou a agenda</label>
+              </div>
+            </div>
+            <div class="col-md-6 mb-2">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="f_wpp" checked />
+                <label class="form-check-label" for="f_wpp"><strong>Enviar WhatsApp</strong> aos pacientes afetados (template <code>notificacao_de_falta_do_medico</code>)</label>
+              </div>
+            </div>
+          </div>
+
+          <hr>
+          <div id="previewBox">
+            <button id="btnPreview" class="btn btn-outline-info"><i class="fas fa-eye mr-1"></i>Pré-visualizar pacientes afetados</button>
+            <div id="previewArea" class="mt-2"></div>
+          </div>
+
+          <div class="mt-3 text-right">
+            <button id="btnSalvarFalta" class="btn btn-danger"><i class="fas fa-save mr-1"></i>Cadastrar falta</button>
+            <span id="msgFalta" class="ml-2 text-danger"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- ETAPA FINAL                                                   -->
+      <!-- ============================================================ -->
+      <div class="card wizard-step locked" id="stepFinal">
+        <div class="card-header bg-success text-white"><span class="step-num" style="background:#fff;color:#28a745">✓</span><strong>Falta cadastrada</strong></div>
+        <div class="card-body">
+          <div class="alert alert-success">
+            <strong>Falta registrada:</strong> idFalta <span id="r_id"></span> · <span id="r_qtd"></span> pacientes afetados.
+          </div>
+          <div id="wppArea"></div>
+          <div class="text-right mt-3">
+            <button class="btn btn-primary" onclick="location.reload()"><i class="fas fa-plus-circle mr-1"></i>Cadastrar outra falta</button>
+            <a href="/mais_servicos" class="btn btn-outline-secondary">Voltar</a>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const state = { posto: null, posto_nome: null, idmedico: null, nome: null, especializacao: null };
+
+  function setLoading(on) { $("#loadingBar").style.display = on ? "block" : "none"; }
+  function unlock(sel) { $(sel).classList.remove("locked"); $(sel).scrollIntoView({behavior:"smooth",block:"start"}); }
+  function done(sel) { $(sel).classList.add("done"); }
+  function bloqueiaTudo(msg) {
+    $("#blockBox").textContent = msg;
+    $("#blockBox").style.display = "block";
+    document.querySelectorAll(".wizard-step").forEach(el => el.classList.add("locked"));
+  }
+
+  $("#btnReiniciar").addEventListener("click", () => {
+    if (confirm("Reiniciar? Os dados preenchidos nesta página serão perdidos.")) location.reload();
+  });
+
+  // ---------- Etapa 0: postos (reusa endpoint de medico_novo) ----------
+  fetch("/api/medico_novo/postos", {credentials:"same-origin"})
+    .then(r => r.json()).then(data => {
+      if (data.sem_vinculo) { bloqueiaTudo(data.msg || data.error); return; }
+      const sel = $("#selPosto");
+      sel.innerHTML = '<option value="">--</option>';
+      (data.postos || []).forEach(p => {
+        const o = document.createElement("option");
+        o.value = p.letra; o.textContent = `${p.letra} — ${p.nome}`;
+        sel.appendChild(o);
+      });
+    });
+
+  $("#btnConfirmPosto").addEventListener("click", () => {
+    const sel = $("#selPosto");
+    if (!sel.value) { alert("Selecione um posto."); return; }
+    state.posto = sel.value;
+    state.posto_nome = sel.options[sel.selectedIndex].text;
+    const acao = document.querySelector('input[name="acao"]:checked').value;
+    $("#selPosto").disabled = true;
+    document.querySelectorAll('input[name="acao"]').forEach(el => el.disabled = true);
+    $("#btnConfirmPosto").disabled = true;
+    done("#step0");
+    if (acao === "listar") {
+      const hoje = new Date().toISOString().slice(0,10);
+      const fim = new Date(Date.now() + 30*86400000).toISOString().slice(0,10);
+      $("#lst_ini").value = hoje;
+      $("#lst_fim").value = fim;
+      unlock("#stepList");
+      carregarFaltas();
+    } else {
+      // Carrega motivos para a Fase 2
+      setLoading(true);
+      fetch(`/api/medico_falta/lookups?posto=${encodeURIComponent(state.posto)}`, {credentials:"same-origin"})
+        .then(r => r.json()).then(d => {
+          setLoading(false);
+          if (d.sem_vinculo || d.sem_vinculo_posto) { bloqueiaTudo(d.error); return; }
+          if (d.error) { alert("Erro: " + d.error); return; }
+          const ms = $("#f_motivo");
+          ms.innerHTML = '<option value="">--</option>';
+          (d.motivos || []).forEach(m => {
+            const o = document.createElement("option");
+            o.value = m.id; o.textContent = m.label; o.dataset.label = m.label;
+            ms.appendChild(o);
+          });
+          unlock("#stepBusca");
+          $("#b_query").focus();
+        });
+    }
+  });
+
+  // ---------- Listar faltas ----------
+  $("#btnFiltrar").addEventListener("click", carregarFaltas);
+  function carregarFaltas() {
+    setLoading(true);
+    const ini = $("#lst_ini").value;
+    const fim = $("#lst_fim").value;
+    fetch(`/api/medico_falta/list?posto=${encodeURIComponent(state.posto)}&ini=${ini}&fim=${fim}`, {credentials:"same-origin"})
+      .then(r => r.json()).then(d => {
+        setLoading(false);
+        if (d.error) { alert("Erro: " + d.error); return; }
+        const tbody = $("#tblFaltas");
+        tbody.innerHTML = "";
+        (d.faltas || []).forEach(f => {
+          const tipo = (f.hora_inicio === "00:00" && f.hora_fim === "23:59")
+            ? '<span class="badge badge-tot">Total</span>'
+            : '<span class="badge badge-parc">Parcial</span>';
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${f.data_falta || "—"}</td>
+            <td>${f.hora_inicio || ""}–${f.hora_fim || ""}</td>
+            <td>${tipo}</td>
+            <td>${f.medico}</td>
+            <td>${f.especialidade || "—"}</td>
+            <td>${f.motivo || "—"}</td>
+            <td>${f.qtd_pacientes != null ? f.qtd_pacientes : "—"}</td>
+            <td>${f.usuario_cadastrou || "—"}</td>
+            <td>${f.observacao || ""}</td>`;
+          tbody.appendChild(tr);
+        });
+        $("#qtdFaltas").textContent = `${(d.faltas||[]).length} falta(s) no período`;
+      });
+  }
+
+  // ---------- Buscar médico (reusa endpoint de medico_novo) ----------
+  let buscaTimer = null;
+  $("#b_query").addEventListener("input", () => {
+    clearTimeout(buscaTimer);
+    buscaTimer = setTimeout(buscarMedico, 300);
+  });
+  function buscarMedico() {
+    const q = $("#b_query").value.trim();
+    const lst = $("#b_resultados");
+    lst.innerHTML = "";
+    if (q.length < 2) return;
+    fetch(`/api/medico_novo/buscar_medico?posto=${encodeURIComponent(state.posto)}&q=${encodeURIComponent(q)}`, {credentials:"same-origin"})
+      .then(r => r.json()).then(d => {
+        if (d.error) { lst.innerHTML = '<div class="text-danger p-2">' + d.error + '</div>'; return; }
+        if (!d.medicos || !d.medicos.length) { lst.innerHTML = '<div class="text-muted p-2">Sem resultados.</div>'; return; }
+        d.medicos.forEach(m => {
+          const a = document.createElement("button");
+          a.type = "button";
+          a.className = "list-group-item list-group-item-action";
+          const cpfFmt = m.cpf ? ` · CPF ${m.cpf}` : "";
+          a.innerHTML = `<strong>${m.nome}</strong> <small class="text-muted">— ${m.especializacao || "—"} · ${m.conselho || ""}${cpfFmt}</small><br><small>id ${m.idmedico}</small>`;
+          a.addEventListener("click", () => selecionarMedico(m));
+          lst.appendChild(a);
+        });
+      });
+  }
+  function selecionarMedico(m) {
+    state.idmedico = m.idmedico;
+    state.nome = m.nome;
+    state.especializacao = m.especializacao;
+    $("#b_sel_nome").textContent = m.nome;
+    $("#b_sel_esp").textContent = m.especializacao || "—";
+    $("#b_sel_idmedico").textContent = m.idmedico;
+    $("#b_selecionado").style.display = "flex";
+    $("#b_search_area").style.display = "none";
+    $("#btnIrFalta").disabled = false;
+  }
+  $("#btnTrocarMedico").addEventListener("click", () => {
+    state.idmedico = state.nome = state.especializacao = null;
+    $("#b_selecionado").style.display = "none";
+    $("#b_search_area").style.display = "";
+    $("#btnIrFalta").disabled = true;
+    $("#b_query").value = "";
+    $("#b_resultados").innerHTML = "";
+    $("#b_query").focus();
+  });
+
+  $("#btnIrFalta").addEventListener("click", () => {
+    if (!state.idmedico) return;
+    $("#f_data").value = new Date().toISOString().slice(0,10);
+    $("#f_especialidade").value = state.especializacao || "";
+    done("#stepBusca");
+    unlock("#stepFalta");
+  });
+
+  // ---------- Etapa 2 ----------
+  $("#f_tipo").addEventListener("change", () => {
+    document.querySelectorAll(".horario-parcial").forEach(el => {
+      el.style.display = $("#f_tipo").value === "parcial" ? "" : "none";
+    });
+  });
+
+  $("#btnPreview").addEventListener("click", () => {
+    const data = $("#f_data").value;
+    if (!data) { alert("Escolha a data primeiro."); return; }
+    const parcial = $("#f_tipo").value === "parcial";
+    const hi = parcial ? $("#f_hini").value : "00:00";
+    const hf = parcial ? $("#f_hfim").value : "23:59";
+    setLoading(true);
+    fetch(`/api/medico_falta/agendamentos?posto=${state.posto}&idmedico=${state.idmedico}&data=${data}&hora_ini=${hi}&hora_fim=${hf}`, {credentials:"same-origin"})
+      .then(r => r.json()).then(d => {
+        setLoading(false);
+        const area = $("#previewArea");
+        if (d.error) { area.innerHTML = `<div class="alert alert-danger">${d.error}</div>`; return; }
+        if (!d.agendamentos || !d.agendamentos.length) {
+          area.innerHTML = '<div class="alert alert-warning">Nenhum paciente agendado no intervalo.</div>';
+          return;
+        }
+        let html = `<div class="alert alert-info"><strong>${d.total} paciente(s)</strong> serão afetados:</div>`;
+        html += '<ul class="list-group" style="max-height:200px;overflow-y:auto">';
+        d.agendamentos.forEach(a => {
+          html += `<li class="list-group-item py-1"><strong>${a.hora}</strong> · ${a.paciente} <small class="text-muted">${a.servico}</small></li>`;
+        });
+        html += '</ul>';
+        area.innerHTML = html;
+      });
+  });
+
+  $("#btnSalvarFalta").addEventListener("click", () => {
+    $("#msgFalta").textContent = "";
+    const motSel = $("#f_motivo");
+    const id_motivo = parseInt(motSel.value) || 0;
+    if (!id_motivo) { $("#msgFalta").textContent = "Escolha um motivo."; return; }
+    const data = $("#f_data").value;
+    if (!data) { $("#msgFalta").textContent = "Escolha a data."; return; }
+    const parcial = $("#f_tipo").value === "parcial";
+    const payload = {
+      posto: state.posto,
+      idmedico: state.idmedico,
+      data_falta: data,
+      parcial: parcial,
+      hora_inicio: parcial ? $("#f_hini").value : "00:00",
+      hora_fim:    parcial ? $("#f_hfim").value : "23:59",
+      id_motivo: id_motivo,
+      motivo_label: motSel.options[motSel.selectedIndex].dataset.label || motSel.options[motSel.selectedIndex].text,
+      especialidade: $("#f_especialidade").value.trim() || null,
+      observacao: $("#f_obs").value.trim() || null,
+      clinica_fechou: $("#f_clinica_fechou").checked,
+      medico_fechou: $("#f_medico_fechou").checked,
+    };
+    setLoading(true);
+    fetch("/api/medico_falta/insert", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    }).then(r => r.json()).then(d => {
+      setLoading(false);
+      if (d.error) { $("#msgFalta").textContent = "Erro: " + d.error; return; }
+      $("#r_id").textContent = d.id_falta;
+      $("#r_qtd").textContent = d.qtd_pacientes_afetados;
+      const wppArea = $("#wppArea");
+      if ($("#f_wpp").checked && d.agendamentos && d.agendamentos.length) {
+        wppArea.innerHTML = `
+          <div class="alert alert-warning">
+            <strong>WhatsApp:</strong> envio do template <code>notificacao_de_falta_do_medico</code> ainda não está plugado nesse fluxo (o usuário ainda vai mandar a API).
+            Os ${d.agendamentos.length} pacientes afetados estão registrados no banco — quando a API for integrada, o disparo será automático.
+          </div>`;
+      } else {
+        wppArea.innerHTML = '<div class="alert alert-info">WhatsApp não solicitado.</div>';
+      }
+      done("#stepFalta");
+      unlock("#stepFinal");
+    }).catch(e => { setLoading(false); $("#msgFalta").textContent = "Falha: " + e; });
+  });
+})();
+</script>
+</body>
+</html>

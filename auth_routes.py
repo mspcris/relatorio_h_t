@@ -184,6 +184,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "iot_monitor",               "label": "Monitor IoT (Ar Condicionado)","group": "mais"},
     {"key": "camila_funcionarios",       "label": "Camila dos Funcionários",     "group": "mais"},
     {"key": "medico_novo",               "label": "Médico - Inclusão Agenda Temporária", "group": "mais"},
+    {"key": "medico_falta",              "label": "Médico - Cadastrar Falta + WhatsApp", "group": "mais"},
 ]
 
 # ── Estado inicializado por init_auth() ───────────────────────────────────────

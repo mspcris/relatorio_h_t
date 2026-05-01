@@ -57,6 +57,13 @@ except Exception as _e:
     logging.getLogger(__name__).error("medico_novo_bp não carregado: %s", _e)
 
 try:
+    from medico_falta_routes import medico_falta_bp
+    app.register_blueprint(medico_falta_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("medico_falta_bp não carregado: %s", _e)
+
+try:
     from kpi_receita_despesa_api import receita_despesa_bp
     app.register_blueprint(receita_despesa_bp)
 except Exception as _e:
@@ -129,6 +136,9 @@ _TEMPLATE_TO_PAGINA = {
     "medico_novo.html":                 "medico_novo",
     "medico_novo":                      "medico_novo",
     "/medico_novo":                     "medico_novo",
+    "medico_falta.html":                "medico_falta",
+    "medico_falta":                     "medico_falta",
+    "/medico_falta":                    "medico_falta",
     # Itens de mais_servicos.html (internos)
     "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
     "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",
@@ -1227,6 +1237,11 @@ def h_preagendamento():
 @app.get('/medico_novo.html')
 def h_medico_novo():
     return render_protected_page("medico_novo.html")
+
+@app.get('/medico_falta')
+@app.get('/medico_falta.html')
+def h_medico_falta():
+    return render_protected_page("medico_falta.html")
 
 @app.get('/higienizacao.html')
 def h_higienizacao():
