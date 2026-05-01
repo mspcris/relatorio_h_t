@@ -210,8 +210,15 @@ def api_insert_medico():
     if not conselho_numero:
         return jsonify({"error": "ConselhoNumero obrigatório"}), 400
 
-    # Datas: conforme CLAUDE.md, em TABELAS (não views) o formato ISO funciona.
-    data_nasc = (data.get("data_nascimento") or "").strip() or None  # YYYY-MM-DD
+    # SET DATEFORMAT dmy do SQL Server CAMIM corrompe strings ISO via pyodbc:
+    # passar objeto `date` Python — pyodbc envia como tipo SQL DATE/DATETIME nativo.
+    data_nasc_raw = (data.get("data_nascimento") or "").strip()
+    data_nasc = None
+    if data_nasc_raw:
+        try:
+            data_nasc = datetime.strptime(data_nasc_raw, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "data_nascimento inválida (YYYY-MM-DD)"}), 400
 
     valor_medico = data.get("valor_medico")  # decimal/None
     sexo = (data.get("sexo") or "").strip().upper()[:1] or None  # 'M' ou 'F'
@@ -229,7 +236,6 @@ def api_insert_medico():
         "ConselhoUF": (data.get("conselho_uf") or "").strip().upper()[:2] or None,
         "CPF": cpf,
         "Sexo": sexo,
-        "Sala": (data.get("sala_texto") or "").strip() or None,
         "ValorMedico": valor_medico,
         "idContaTipoMedico": data.get("id_conta_tipo_medico"),
         "idPlanoMedico": data.get("id_plano_medico"),
@@ -251,15 +257,14 @@ def api_insert_medico():
     INSERT INTO cad_medico
         (Nome, telefone, TelefoneWhatsApp, Email, DataNascimento, especializacao,
          crm, ConselhoProfissional, ConselhoNumero, ConselhoUF, cpf, sexo,
-         sala, valormedico, idcontatipomedico, idplanomedico, idforma,
+         valormedico, idcontatipomedico, idplanomedico, idforma,
          Endereco, numero, Complemento, Bairro, Cidade, Estado, CEP,
          bMedicoSolicitante, bMedicoExecutante, GerarPagamentoMedicoAutomatico,
          PessoaJuridica, datainclusao)
-    OUTPUT INSERTED.idmedico
     VALUES
         (?, ?, ?, ?, ?, ?,
          ?, ?, ?, ?, ?, ?,
-         ?, ?, ?, ?, ?,
+         ?, ?, ?, ?,
          ?, ?, ?, ?, ?, ?, ?,
          ?, ?, ?,
          ?, GETDATE())
@@ -269,7 +274,7 @@ def api_insert_medico():
         payload["DataNascimento"], payload["Especializacao"],
         payload["crm"], payload["ConselhoProfissional"], payload["ConselhoNumero"],
         payload["ConselhoUF"], payload["CPF"], payload["Sexo"],
-        payload["Sala"], payload["ValorMedico"], payload["idContaTipoMedico"],
+        payload["ValorMedico"], payload["idContaTipoMedico"],
         payload["idPlanoMedico"], payload["idForma"],
         payload["Endereco"], payload["Numero"], payload["Complemento"], payload["Bairro"],
         payload["Cidade"], payload["Estado"], payload["CEP"],
@@ -281,6 +286,7 @@ def api_insert_medico():
         with _conn_for_posto(posto) as con:
             cur = con.cursor()
             cur.execute(sql, params)
+            cur.execute("SELECT SCOPE_IDENTITY()")
             row = cur.fetchone()
             con.commit()
             idmedico = int(row[0])
@@ -373,8 +379,8 @@ def api_insert_especialidade():
         1, 1, 0,
         0, 1, 1,
         idade_min, idade_max, numero_rqe, descricao or None,
-        date.today().strftime("%Y-%m-%d"),  # DataInicioExibicao = hoje
-        data_fim_exib.strftime("%Y-%m-%d"),
+        date.today(),       # passa objeto date — pyodbc envia como SQL DATE nativo
+        data_fim_exib,      # idem (string ISO seria interpretada errada com SET DATEFORMAT dmy)
         bits["segunda"], bits["Terca"], bits["quarta"], bits["quinta"],
         bits["sexta"], bits["sabado"], bits["domingo"],
         0, 0, 0, 0, 0, 0, 0,  # OrdemChegada de todos os dias = 0
@@ -457,14 +463,16 @@ def api_insert_usuario():
             if cur.fetchone():
                 return jsonify({"error": "usuario_duplicado", "campo": "usuario"}), 409
             id_endereco = _fetch_id_endereco(con)
+            # OBS: sis_usuario tem trigger TR_SIS_USUARIO_ImpedirUsuarioEmBranco habilitada,
+            # então OUTPUT INSERTED direto falha (erro 334). Usar SCOPE_IDENTITY após o INSERT.
             sql = """
             INSERT INTO sis_usuario
                 (Usuario, Nome, Senha, idEndereco, idMedicoProntuario,
                  Desativado, Setor, idPerfil)
-            OUTPUT INSERTED.idUsuario
             VALUES (?, ?, ?, ?, ?, 0, 'MÉDICO', NULL)
             """
             cur.execute(sql, (usuario, nome, senha_plain, id_endereco, int(idmedico)))
+            cur.execute("SELECT SCOPE_IDENTITY()")
             row = cur.fetchone()
             con.commit()
             id_usuario = int(row[0])
