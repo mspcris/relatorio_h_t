@@ -480,6 +480,60 @@ def api_insert():
         return jsonify({"error": str(e)[:400]}), 500
 
 
+@medico_falta_bp.post("/api/medico_falta/desativar")
+def api_desativar():
+    """Soft-delete da falta: UPDATE Cad_MedicoFalta SET desativado=1.
+    Registra em Sis_Historico (idTabela=50, idComando=3=Exclusão).
+    """
+    email, postos, login_campinho = _check_admin()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    if not login_campinho:
+        return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo": True}), 403
+    data = request.get_json(silent=True) or {}
+    posto = (data.get("posto") or "").strip().upper()
+    erro = _require_posto_in_acl(posto, postos)
+    if erro:
+        return jsonify({"error": erro}), 400
+    try:
+        id_falta = int(data.get("id_falta") or 0)
+    except (TypeError, ValueError):
+        id_falta = 0
+    if not id_falta:
+        return jsonify({"error": "id_falta obrigatório"}), 400
+
+    try:
+        with _conn_for_posto(posto) as con:
+            id_usuario_op = _resolver_idusuario_no_posto(con, login_campinho)
+            if not id_usuario_op:
+                return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo_posto": True}), 403
+            cur = con.cursor()
+            # Confirma que existe e ainda está ativa
+            cur.execute(
+                """SELECT idMedico, DataFalta FROM Cad_MedicoFalta
+                    WHERE idFalta = ? AND Desativado = 0""",
+                id_falta,
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"error": "falta não encontrada ou já desativada"}), 404
+            idmedico, data_falta = int(row[0]), row[1]
+            # Soft-delete
+            cur.execute(
+                "UPDATE Cad_MedicoFalta SET Desativado = 1 WHERE idFalta = ?",
+                id_falta,
+            )
+            _audit(con, id_falta, ID_TABELA_CAD_MEDICO_FALTA, ID_COMANDO_EXCLUSAO,
+                   id_usuario_op,
+                   f"Exclusão (soft) Falta Médica via RH&T (medico={idmedico}, "
+                   f"data={data_falta.strftime('%d/%m/%Y') if data_falta else '?'})")
+            con.commit()
+        return jsonify({"ok": True, "id_falta": id_falta})
+    except Exception as e:
+        logger.exception("desativar falta %s falhou", id_falta)
+        return jsonify({"error": str(e)[:400]}), 500
+
+
 @medico_falta_bp.post("/api/medico_falta/enviar_wpp")
 def api_enviar_wpp():
     """Dispara o template `notificacao_de_falta_do_medico` aos pacientes afetados.

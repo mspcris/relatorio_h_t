@@ -152,7 +152,7 @@
                 <tr>
                   <th>Data</th><th>Hora</th><th>Tipo</th><th>Médico</th>
                   <th>Especialidade</th><th>Motivo</th><th>Pacientes</th>
-                  <th>Cadastrado por</th><th>Observação</th>
+                  <th>Cadastrado por</th><th>Observação</th><th></th>
                 </tr>
               </thead>
               <tbody id="tblFaltas"></tbody>
@@ -381,11 +381,34 @@
             <td>${f.motivo || "—"}</td>
             <td>${f.qtd_pacientes != null ? f.qtd_pacientes : "—"}</td>
             <td>${f.usuario_cadastrou || "—"}</td>
-            <td>${f.observacao || ""}</td>`;
+            <td>${f.observacao || ""}</td>
+            <td><button class="btn btn-sm btn-outline-danger" data-id="${f.id_falta}" data-medico="${f.medico}" data-data="${f.data_falta}" title="Apagar falta (soft-delete + auditoria)"><i class="fas fa-trash"></i></button></td>`;
           tbody.appendChild(tr);
+        });
+        // Liga o handler dos botões de apagar
+        tbody.querySelectorAll("button[data-id]").forEach(btn => {
+          btn.addEventListener("click", () => apagarFalta(btn));
         });
         $("#qtdFaltas").textContent = `${(d.faltas||[]).length} falta(s) no período`;
       });
+  }
+
+  function apagarFalta(btn) {
+    const id = btn.dataset.id;
+    const medico = btn.dataset.medico;
+    const dataF = btn.dataset.data;
+    if (!confirm(`Apagar (soft-delete) a falta de ${medico} em ${dataF}?\n\nA ação fica registrada em Sis_Historico (auditoria).`)) return;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    fetch("/api/medico_falta/desativar", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({posto: state.posto, id_falta: parseInt(id)}),
+    }).then(r => r.json()).then(d => {
+      if (d.error) { alert("Erro: " + d.error); btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i>'; return; }
+      carregarFaltas();
+    }).catch(e => { alert("Falha: " + e); btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i>'; });
   }
 
   // ---------- Buscar médico (reusa endpoint de medico_novo) ----------
