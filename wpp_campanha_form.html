@@ -116,6 +116,7 @@
                   <option value="pre_vencimento"    {{ 'selected' if modo == 'pre_vencimento' }}>Lembrete antes do vencimento</option>
                   <option value="clientes_admissao" {{ 'selected' if modo == 'clientes_admissao' }}>Campanha de clientes (admissão)</option>
                   <option value="cliente_novo"      {{ 'selected' if modo == 'cliente_novo' }}>Cliente Novo — Seja Bem-Vindo!</option>
+                  <option value="falta_medico"      {{ 'selected' if modo == 'falta_medico' }}>Falta de Médico (disparo via API)</option>
                 </select>
                 <small id="modo_envio_nota" class="form-text text-info"
                        style="display:none;margin-top:4px">
@@ -214,7 +215,7 @@
       </div>
 
       <!-- ── POSTOS ──────────────────────────────────────────────── -->
-      <div class="card">
+      <div class="card" id="card-postos">
         <div class="card-header"><strong>Postos</strong></div>
         <div class="card-body">
           <p class="text-muted small mb-2">Selecione os postos. Os filtros de cliente abaixo serão carregados automaticamente.</p>
@@ -237,7 +238,7 @@
       </div>
 
       <!-- ── FILTROS DE ATRASO ───────────────────────────────────── -->
-      <div class="card">
+      <div class="card" id="card-regra-envio">
         <div class="card-header"><strong id="titulo-regra-envio">Filtros de Atraso</strong></div>
         <div class="card-body">
           <div class="row" id="box-atraso">
@@ -647,7 +648,7 @@
       </div>
 
       <!-- ── JANELA DE ENVIO ─────────────────────────────────────── -->
-      <div class="card">
+      <div class="card" id="card-janela-envio">
         <div class="card-header"><strong>Janela de Envio</strong></div>
         <div class="card-body">
           <div class="row">
@@ -1180,12 +1181,32 @@ function atualizarModoEnvio() {
   const boxPre      = document.getElementById('box-pre-vencimento');
   const boxClientes = document.getElementById('box-clientes');
   const cardFiltros = document.getElementById('card-filtros-cliente');
+  const cardPostos  = document.getElementById('card-postos');
+  const cardRegra   = document.getElementById('card-regra-envio');
+  const cardJanela  = document.getElementById('card-janela-envio');
   const titulo      = document.getElementById('titulo-regra-envio');
 
   const notaVenc = document.getElementById('modo_envio_nota');
   if (notaVenc) {
     notaVenc.style.display = (modo === 'atraso' || modo === 'pre_vencimento') ? '' : 'none';
   }
+
+  // Modo 'falta_medico': API direta — sem postos/filtros/janela. Mostra
+  // apenas Identificação (Nome/Status/Tipo + Fila + Template) e o Usuário
+  // remetente. Disparo é feito pelo RH&T (página /medico_falta), essa
+  // campanha existe só como log/configuração no painel.
+  if (modo === 'falta_medico') {
+    if (cardPostos)  cardPostos.style.display  = 'none';
+    if (cardRegra)   cardRegra.style.display   = 'none';
+    if (cardFiltros) cardFiltros.style.display = 'none';
+    if (cardJanela)  cardJanela.style.display  = 'none';
+    return;
+  }
+
+  // Caso contrário, todos os cards principais visíveis (estado padrão)
+  if (cardPostos)  cardPostos.style.display  = '';
+  if (cardRegra)   cardRegra.style.display   = '';
+  if (cardJanela)  cardJanela.style.display  = '';
 
   if (modo === 'pre_vencimento') {
     boxAtraso.style.display   = 'none';
