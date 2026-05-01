@@ -96,6 +96,9 @@
 
       <div id="loadingBar"></div>
 
+      <!-- Bloqueio cruel se o admin não tem login_campinho -->
+      <div id="blockBox" class="alert alert-danger" style="display:none; font-weight:600; line-height:1.5;"></div>
+
       <!-- ========================================================== -->
       <!-- ETAPA 0: POSTO + TIPO                                       -->
       <!-- ========================================================== -->
@@ -453,8 +456,18 @@
   }
 
   // ---------- Etapa 0: Postos ----------
+  function bloqueiaTudo(msg) {
+    const box = $("#blockBox");
+    box.textContent = msg;
+    box.style.display = "block";
+    document.querySelectorAll(".wizard-step").forEach(el => el.classList.add("locked"));
+  }
   fetch("/api/medico_novo/postos", {credentials: "same-origin"})
     .then(r => r.json()).then(data => {
+      if (data.sem_vinculo) {
+        bloqueiaTudo(data.msg || data.error || "Acesso bloqueado.");
+        return;
+      }
       const sel = $("#selPosto");
       sel.innerHTML = '<option value="">--</option>';
       (data.postos || []).forEach(p => {
@@ -489,6 +502,7 @@
     fetch(`/api/medico_novo/lookups?posto=${encodeURIComponent(state.posto)}`, {credentials: "same-origin"})
       .then(r => r.json()).then(data => {
         setLoading(false);
+        if (data.sem_vinculo || data.sem_vinculo_posto) { bloqueiaTudo(data.error); return; }
         if (data.error) { alert("Erro: " + data.error); return; }
         // Popular dropdowns da Etapa 1 (só usados em "novo")
         function fill(selId, items, defaultLabel) {

@@ -35,29 +35,76 @@ ESPECIALIDADES_PERMITIDAS = ("CLÍNICA GERAL", "PEDIATRIA")
 DIAS_COL = {0: "Segunda", 1: "Terca", 2: "Quarta", 3: "Quinta", 4: "Sexta", 5: "Sabado", 6: "Domingo"}
 DIAS_BIT = {0: "segunda", 1: "Terca", 2: "quarta", 3: "quinta", 4: "sexta", 5: "sabado", 6: "domingo"}
 
+# Sis_HistoricoTabela / Sis_HistoricoComando (IDs descobertos via SELECT em 2026-05-01)
+ID_TABELA_CAD_MEDICO         = 37
+ID_TABELA_SIS_USUARIO        = 38
+ID_TABELA_CAD_ESPECIALIDADE  = 53
+ID_COMANDO_INCLUSAO          = 1
+ID_COMANDO_EDICAO            = 2
+ID_COMANDO_EXCLUSAO          = 3
+
+COMPUTADOR_ORIGEM = "kpi.camim.com.br"
+
+# Mensagem cruel quando o admin não tem login_campinho vinculado
+ERR_SEM_VINCULO = (
+    "Acesso bloqueado. Seu login no RH&T não tem vínculo com um usuário do "
+    "CAMIM (Login Campinho). Sem vínculo, nada do que você fizer aqui fica "
+    "auditável — e o sistema não tolera ação anônima. Cristiano pediu esse "
+    "dado e você não passou. Resolva com ele e volte."
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers de conexão / autenticação
 # ---------------------------------------------------------------------------
 
 def _check_admin():
-    """Retorna (email, postos_set) se autenticado, senão (None, None).
+    """Retorna (email, postos_set, login_campinho) se autenticado, senão (None, None, None).
+    `login_campinho` é a string Usuario do sis_usuario (ex.: 'cristiano2.a').
     Importação tardia para evitar circular import com app.py.
     """
     from auth_routes import decode_user
     from auth_db import SessionLocal, get_user_by_email
     email, postos = decode_user()
     if not email:
-        return None, None
+        return None, None, None
     db = SessionLocal()
     try:
         u = get_user_by_email(db, email)
         if not u:
-            return None, None
-        # Não obrigamos is_admin — quem tem a página liberada pode usar.
-        return email, set(postos or [])
+            return None, None, None
+        login_campinho = (getattr(u, "login_campinho", None) or "").strip() or None
+        return email, set(postos or []), login_campinho
     finally:
         db.close()
+
+
+def _resolver_idusuario_no_posto(con: pyodbc.Connection, login_campinho: str) -> int | None:
+    """Busca idUsuario na sis_usuario do posto-alvo pelo Usuario (login_campinho).
+    Retorna None se não achar — significa que o admin não opera nesse posto.
+    """
+    if not login_campinho:
+        return None
+    cur = con.cursor()
+    cur.execute(
+        "SELECT TOP 1 idUsuario FROM sis_usuario WHERE Usuario = ? AND Desativado = 0",
+        login_campinho,
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
+def _audit(con: pyodbc.Connection, id_alvo: int, id_tabela: int,
+           id_comando: int, id_usuario: int, detalhe: str) -> None:
+    """Insere em Sis_Historico para registrar auditoria. Chamar APÓS o INSERT/UPDATE/DELETE
+    e ANTES do commit (roda na mesma transação)."""
+    cur = con.cursor()
+    cur.execute(
+        """INSERT INTO Sis_Historico
+                  (id, idTabela, idComando, idUsuario, DataHora, Detalhe, Computador)
+           VALUES (?, ?, ?, ?, GETDATE(), ?, ?)""",
+        id_alvo, id_tabela, id_comando, id_usuario, (detalhe or "")[:250], COMPUTADOR_ORIGEM,
+    )
 
 
 def _conn_for_posto(posto: str) -> pyodbc.Connection:
@@ -145,21 +192,24 @@ def _fetch_id_endereco(con: pyodbc.Connection) -> int:
 
 @medico_novo_bp.get("/api/medico_novo/postos")
 def api_postos():
-    """Postos liberados ao admin, com nomes legíveis."""
-    email, postos = _check_admin()
+    """Postos liberados ao admin, com nomes legíveis. Inclui flag `tem_vinculo`
+    indicando se o admin tem `login_campinho` cadastrado no posto.
+    """
+    email, postos, login_campinho = _check_admin()
     if not email:
         return jsonify({"error": "unauthorized"}), 401
     try:
         from alarmes_db import POSTOS_NOMES
     except Exception:
         POSTOS_NOMES = {}
+    if not login_campinho:
+        return jsonify({"postos": [], "sem_vinculo": True, "msg": ERR_SEM_VINCULO})
     out = []
     for p in sorted(postos or []):
-        # Considera só postos que têm DB_HOST_X configurado (filtra ACLs antigas inválidas)
         if not os.getenv(f"DB_HOST_{p}"):
             continue
         out.append({"letra": p, "nome": POSTOS_NOMES.get(p, p)})
-    return jsonify({"postos": out})
+    return jsonify({"postos": out, "login_campinho": login_campinho})
 
 
 @medico_novo_bp.get("/api/medico_novo/buscar_medico")
@@ -167,7 +217,7 @@ def api_buscar_medico():
     """Busca médicos já cadastrados no posto (para fluxo de plantão extra).
     Retorna até 30 médicos cujo Nome OU ConselhoNumero contenham o termo `q`.
     """
-    email, postos = _check_admin()
+    email, postos, login_campinho = _check_admin()
     if not email:
         return jsonify({"error": "unauthorized"}), 401
     posto = request.args.get("posto", "")
@@ -207,9 +257,11 @@ def api_buscar_medico():
 
 @medico_novo_bp.get("/api/medico_novo/lookups")
 def api_lookups():
-    email, postos = _check_admin()
+    email, postos, login_campinho = _check_admin()
     if not email:
         return jsonify({"error": "unauthorized"}), 401
+    if not login_campinho:
+        return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo": True}), 403
     posto = request.args.get("posto", "")
     erro = _require_posto_in_acl(posto, postos)
     if erro:
@@ -217,6 +269,18 @@ def api_lookups():
     p = posto.strip().upper()
     try:
         with _conn_for_posto(p) as con:
+            # Valida que o admin tem usuário ativo no posto-alvo
+            id_usuario_op = _resolver_idusuario_no_posto(con, login_campinho)
+            if not id_usuario_op:
+                return jsonify({
+                    "error": (
+                        f"Acesso bloqueado neste posto. Seu Login Campinho "
+                        f"`{login_campinho}` não existe em sis_usuario do posto {p} "
+                        f"(ou está desativado). Sem isso, qualquer ação aqui ficaria "
+                        f"sem responsável e o sistema bloqueia. Procure o Cristiano."
+                    ),
+                    "sem_vinculo_posto": True,
+                }), 403
             cur = con.cursor()
             cur.execute("SELECT IDCONTATIPO, TIPO FROM Fin_ContaTipo WHERE Desativado=0 ORDER BY TIPO")
             conta_tipos = [{"id": int(r[0]), "label": (r[1] or "").strip()} for r in cur.fetchall()]
@@ -248,7 +312,7 @@ def api_lookups():
 @medico_novo_bp.post("/api/medico_novo/medico")
 def api_insert_medico():
     """Fase 1: INSERT em cad_medico. Retorna idmedico."""
-    email, postos = _check_admin()
+    email, postos, login_campinho = _check_admin()
     if not email:
         return jsonify({"error": "unauthorized"}), 401
     data = request.get_json(silent=True) or {}
@@ -313,7 +377,10 @@ def api_insert_medico():
         "PessoaJuridica": 0,
     }
 
+    # OUTPUT INTO @t é compatível com triggers; SCOPE_IDENTITY() retorna NULL
+    # em alguns casos quando há triggers downstream (visto em cad_medico).
     sql = """
+    DECLARE @t TABLE (idmedico INT);
     INSERT INTO cad_medico
         (Nome, telefone, TelefoneWhatsApp, Email, DataNascimento, especializacao,
          crm, ConselhoProfissional, ConselhoNumero, ConselhoUF, cpf, sexo,
@@ -321,13 +388,15 @@ def api_insert_medico():
          Endereco, numero, Complemento, Bairro, Cidade, Estado, CEP,
          bMedicoSolicitante, bMedicoExecutante, GerarPagamentoMedicoAutomatico,
          PessoaJuridica, datainclusao)
+    OUTPUT INSERTED.idmedico INTO @t
     VALUES
         (?, ?, ?, ?, ?, ?,
          ?, ?, ?, ?, ?, ?,
          ?, ?, ?, ?,
          ?, ?, ?, ?, ?, ?, ?,
          ?, ?, ?,
-         ?, GETDATE())
+         ?, GETDATE());
+    SELECT idmedico FROM @t;
     """
     params = (
         payload["Nome"], payload["telefone"], payload["TelefoneWhatsApp"], payload["Email"],
@@ -344,12 +413,23 @@ def api_insert_medico():
 
     try:
         with _conn_for_posto(posto) as con:
+            id_usuario_op = _resolver_idusuario_no_posto(con, login_campinho)
+            if not id_usuario_op:
+                return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo_posto": True}), 403
             cur = con.cursor()
             cur.execute(sql, params)
-            cur.execute("SELECT SCOPE_IDENTITY()")
+            # Pular result sets vazios do DECLARE/INSERT até o SELECT do @t
+            while cur.description is None:
+                if not cur.nextset():
+                    break
             row = cur.fetchone()
-            con.commit()
+            if not row or row[0] is None:
+                con.rollback()
+                return jsonify({"error": "INSERT cad_medico não retornou idmedico"}), 500
             idmedico = int(row[0])
+            _audit(con, idmedico, ID_TABELA_CAD_MEDICO, ID_COMANDO_INCLUSAO,
+                   id_usuario_op, f"Inclusão de Médico via RH&T (CPF={cpf})")
+            con.commit()
         return jsonify({"ok": True, "idmedico": idmedico})
     except Exception as e:
         logger.exception("INSERT cad_medico falhou no posto %s", posto)
@@ -359,7 +439,7 @@ def api_insert_medico():
 @medico_novo_bp.post("/api/medico_novo/especialidade")
 def api_insert_especialidade():
     """Fase 2: INSERT em cad_especialidade."""
-    email, postos = _check_admin()
+    email, postos, login_campinho = _check_admin()
     if not email:
         return jsonify({"error": "unauthorized"}), 401
     data = request.get_json(silent=True) or {}
@@ -412,15 +492,24 @@ def api_insert_especialidade():
     # data_fim_exibicao = data_plantao + 7 dias
     data_fim_exib = d + timedelta(days=7)
 
-    # Monta dict só dos campos que vão ser preenchidos. Demais campos: NULL implícito (não listados).
+    # Capacidade do dia: estima a quantidade de vagas a partir do horário e almoço.
+    # 1 vaga = 15 min (regra de produtividade típica do CAMIM). Subtrai almoço.
+    def _to_min(s: str) -> int:
+        h, m = s.split(":")
+        return int(h) * 60 + int(m)
+    minutos_total = _to_min(hora_fim) - _to_min(hora_ini)
+    if almoco:
+        minutos_total -= max(0, _to_min(almoco_fim) - _to_min(almoco_ini))
+    quantidade_dia = max(1, minutos_total // 15) if minutos_total > 0 else 1
+
     base_cols = [
         "idmedico", "Especialidade", "Visibility",
         "permitirf6", "F3ExibirNumeroEmBranco", "F6ConfirmarEspecialidadeMedico",
         "ExibirnoF3", "PermitirAgendamentoquenuncaconsultou",
-        "GerarPagamentoMedicoAutomatico", "temporario", "desativado",
+        "GerarPagamentoMedicoAutomatico", "Temporario", "Desativado",
         "MedicoRecebePorComissao", "Maisde1Agendamento", "AutoAtendimentoExibir",
         "idademinima", "idademaxima", "numerorqe", "Descricao",
-        "DataInicioExibicao", "datafimexibicao",
+        "DataInicioExibicao", "DataFimExibicao", "DataPlantao",
         "segunda", "Terca", "quarta", "quinta", "sexta", "sabado", "domingo",
         "DomingoOrdemChegada", "segundaOrdemChegada", "tercaOrdemChegada",
         "quartaOrdemChegada", "quintaOrdemChegada", "sextaOrdemChegada", "sabadoOrdemChegada",
@@ -428,9 +517,15 @@ def api_insert_especialidade():
         f"{col_sufixo}HoraInicio", f"{col_sufixo}HoraFim",
         f"{col_sufixo}Almoco", f"{col_sufixo}Almocoinicio", f"{col_sufixo}Almocofim",
         f"ValorCusto{col_sufixo}",
+        f"{col_sufixo}Quantidade", f"{col_sufixo}QuantidadeMaxima",
+        f"{col_sufixo}Quantidadeweb", f"{col_sufixo}QuantidadeMaximaweb",
     ]
-    # Atenção: nomes de colunas dos dias têm casing irregular (Terca, sabado, etc).
-    # SQL Server é case-insensitive em nomes de coluna por padrão; mantenho como nos exemplos.
+
+    # OrdemChegada do dia escolhido = 1 (plantonista marca por ordem de chegada).
+    ordem_chegada = {dia: 0 for dia in ("Domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado")}
+    # Mapear DIAS_COL[py_wd] para o nome usado em <dia>OrdemChegada (case do exemplo)
+    nome_oc_por_wd = {0: "segunda", 1: "terca", 2: "quarta", 3: "quinta", 4: "sexta", 5: "sabado", 6: "Domingo"}
+    ordem_chegada[nome_oc_por_wd[py_wd]] = 1
 
     base_vals = [
         idmedico, especialidade, "all",
@@ -439,29 +534,50 @@ def api_insert_especialidade():
         1, 1, 0,
         0, 1, 1,
         idade_min, idade_max, numero_rqe, descricao or None,
-        date.today(),       # passa objeto date — pyodbc envia como SQL DATE nativo
-        data_fim_exib,      # idem (string ISO seria interpretada errada com SET DATEFORMAT dmy)
+        d,                  # DataInicioExibicao = data do plantão
+        data_fim_exib,      # DataFimExibicao = plantão + 7
+        d,                  # DataPlantao = data do plantão
         bits["segunda"], bits["Terca"], bits["quarta"], bits["quinta"],
         bits["sexta"], bits["sabado"], bits["domingo"],
-        0, 0, 0, 0, 0, 0, 0,  # OrdemChegada de todos os dias = 0
+        ordem_chegada["Domingo"], ordem_chegada["segunda"], ordem_chegada["terca"],
+        ordem_chegada["quarta"], ordem_chegada["quinta"], ordem_chegada["sexta"], ordem_chegada["sabado"],
         id_sala,
         hora_ini, hora_fim,
         1 if almoco else 0,
         almoco_ini if almoco else None,
         almoco_fim if almoco else None,
         valor_medico,
+        quantidade_dia, quantidade_dia,
+        quantidade_dia, quantidade_dia,
     ]
 
     placeholders = ",".join("?" * len(base_cols))
     cols_sql = ",".join(f"[{c}]" for c in base_cols)
-    sql = f"INSERT INTO cad_especialidade ({cols_sql}) VALUES ({placeholders})"
+    sql = f"""
+    DECLARE @t TABLE (idEspecialidade INT);
+    INSERT INTO cad_especialidade ({cols_sql})
+    OUTPUT INSERTED.idEspecialidade INTO @t
+    VALUES ({placeholders});
+    SELECT idEspecialidade FROM @t;
+    """
 
     try:
         with _conn_for_posto(posto) as con:
+            id_usuario_op = _resolver_idusuario_no_posto(con, login_campinho)
+            if not id_usuario_op:
+                return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo_posto": True}), 403
             cur = con.cursor()
             cur.execute(sql, tuple(base_vals))
+            while cur.description is None:
+                if not cur.nextset():
+                    break
+            row = cur.fetchone()
+            id_esp = int(row[0]) if row and row[0] is not None else None
+            _audit(con, id_esp or int(idmedico), ID_TABELA_CAD_ESPECIALIDADE,
+                   ID_COMANDO_INCLUSAO, id_usuario_op,
+                   f"Inclusão Quadro Especialidade via RH&T (médico={idmedico}, plantão={d.isoformat()})")
             con.commit()
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "idEspecialidade": id_esp})
     except Exception as e:
         logger.exception("INSERT cad_especialidade falhou no posto %s", posto)
         return jsonify({"error": str(e)[:400]}), 500
@@ -470,7 +586,7 @@ def api_insert_especialidade():
 @medico_novo_bp.get("/api/medico_novo/check_usuario")
 def api_check_usuario():
     """Verifica se o login já existe no posto. Retorna {existe: bool, sugerido: str}."""
-    email, postos = _check_admin()
+    email, postos, login_campinho = _check_admin()
     if not email:
         return jsonify({"error": "unauthorized"}), 401
     posto = request.args.get("posto", "")
@@ -500,7 +616,7 @@ def api_reset_senha():
     """Gera nova senha plain de 5 dígitos e atualiza sis_usuario.Senha do médico.
     Retorna { usuario, senha, idUsuario }.
     """
-    email, postos = _check_admin()
+    email, postos, login_campinho = _check_admin()
     if not email:
         return jsonify({"error": "unauthorized"}), 401
     data = request.get_json(silent=True) or {}
@@ -514,6 +630,9 @@ def api_reset_senha():
     senha_plain = f"{random.randint(0, 99999):05d}"
     try:
         with _conn_for_posto(posto) as con:
+            id_usuario_op = _resolver_idusuario_no_posto(con, login_campinho)
+            if not id_usuario_op:
+                return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo_posto": True}), 403
             cur = con.cursor()
             cur.execute(
                 """SELECT TOP 1 idUsuario, Usuario, Nome FROM sis_usuario
@@ -525,6 +644,8 @@ def api_reset_senha():
                 return jsonify({"error": "médico não tem usuário ativo cadastrado"}), 404
             id_usuario, usuario, nome_usr = int(row[0]), row[1], row[2]
             cur.execute("UPDATE sis_usuario SET Senha = ? WHERE idUsuario = ?", senha_plain, id_usuario)
+            _audit(con, id_usuario, ID_TABELA_SIS_USUARIO, ID_COMANDO_EDICAO,
+                   id_usuario_op, f"Reset de senha via RH&T (medico={idmedico}, login={usuario})")
             con.commit()
         return jsonify({
             "ok": True,
@@ -541,7 +662,7 @@ def api_reset_senha():
 @medico_novo_bp.post("/api/medico_novo/usuario")
 def api_insert_usuario():
     """Fase 3: INSERT em sis_usuario. Gera senha 5 dígitos plain-text e retorna."""
-    email, postos = _check_admin()
+    email, postos, login_campinho = _check_admin()
     if not email:
         return jsonify({"error": "unauthorized"}), 401
     data = request.get_json(silent=True) or {}
@@ -560,25 +681,38 @@ def api_insert_usuario():
 
     try:
         with _conn_for_posto(posto) as con:
+            id_usuario_op = _resolver_idusuario_no_posto(con, login_campinho)
+            if not id_usuario_op:
+                return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo_posto": True}), 403
             cur = con.cursor()
             # Recheck duplicidade dentro da mesma transação para evitar corrida
             cur.execute("SELECT TOP 1 idUsuario FROM sis_usuario WHERE Usuario = ?", usuario)
             if cur.fetchone():
                 return jsonify({"error": "usuario_duplicado", "campo": "usuario"}), 409
             id_endereco = _fetch_id_endereco(con)
-            # OBS: sis_usuario tem trigger TR_SIS_USUARIO_ImpedirUsuarioEmBranco habilitada,
-            # então OUTPUT INSERTED direto falha (erro 334). Usar SCOPE_IDENTITY após o INSERT.
+            # OBS: sis_usuario tem trigger TR_SIS_USUARIO_ImpedirUsuarioEmBranco.
+            # OUTPUT INTO @t é a forma compatível com triggers para obter o IDENTITY.
             sql = """
+            DECLARE @t TABLE (idUsuario INT);
             INSERT INTO sis_usuario
                 (Usuario, Nome, Senha, idEndereco, idMedicoProntuario,
                  Desativado, Setor, idPerfil)
-            VALUES (?, ?, ?, ?, ?, 0, 'MÉDICO', NULL)
+            OUTPUT INSERTED.idUsuario INTO @t
+            VALUES (?, ?, ?, ?, ?, 0, 'MÉDICO', NULL);
+            SELECT idUsuario FROM @t;
             """
             cur.execute(sql, (usuario, nome, senha_plain, id_endereco, int(idmedico)))
-            cur.execute("SELECT SCOPE_IDENTITY()")
+            while cur.description is None:
+                if not cur.nextset():
+                    break
             row = cur.fetchone()
-            con.commit()
+            if not row or row[0] is None:
+                con.rollback()
+                return jsonify({"error": "INSERT sis_usuario não retornou idUsuario"}), 500
             id_usuario = int(row[0])
+            _audit(con, id_usuario, ID_TABELA_SIS_USUARIO, ID_COMANDO_INCLUSAO,
+                   id_usuario_op, f"Inclusão de Usuário via RH&T (medico={idmedico}, login={usuario})")
+            con.commit()
         return jsonify({
             "ok": True,
             "idUsuario": id_usuario,
