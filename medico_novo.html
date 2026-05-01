@@ -92,20 +92,68 @@
       <div id="loadingBar"></div>
 
       <!-- ========================================================== -->
-      <!-- ETAPA 0: POSTO                                              -->
+      <!-- ETAPA 0: POSTO + TIPO                                       -->
       <!-- ========================================================== -->
       <div class="card wizard-step" id="step0">
-        <div class="card-header"><span class="step-num">0</span><strong>Selecione o posto</strong></div>
+        <div class="card-header"><span class="step-num">0</span><strong>Posto e tipo de inclusão</strong></div>
         <div class="card-body">
           <div class="row form-row">
-            <div class="col-md-6">
+            <div class="col-md-6 mb-2">
               <label>Posto onde o médico vai atender</label>
               <select id="selPosto" class="form-control"></select>
               <div class="small-help">Apenas postos liberados no seu acesso aparecem aqui.</div>
             </div>
-            <div class="col-md-6 d-flex align-items-end">
+            <div class="col-md-6 mb-2">
+              <label>Tipo de inclusão</label>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="tipoInclusao" id="tipoNovo" value="novo" checked>
+                <label class="form-check-label" for="tipoNovo">
+                  <strong>Cadastrar médico</strong> — médico novo no posto (cad_medico → cad_especialidade → sis_usuario)
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="tipoInclusao" id="tipoExistente" value="existente">
+                <label class="form-check-label" for="tipoExistente">
+                  <strong>Cadastrar horário</strong> — médico já existe no posto, só adiciona plantão (cad_especialidade)
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="tipoInclusao" id="tipoReset" value="reset">
+                <label class="form-check-label" for="tipoReset">
+                  <strong>Resetar senha</strong> — médico não está conseguindo logar (UPDATE sis_usuario.Senha)
+                </label>
+              </div>
+            </div>
+            <div class="col-12 mt-2">
               <button id="btnConfirmPosto" class="btn btn-primary"><i class="fas fa-arrow-right mr-1"></i>Continuar</button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========================================================== -->
+      <!-- ETAPA 1B: BUSCAR MÉDICO EXISTENTE                           -->
+      <!-- ========================================================== -->
+      <div class="card wizard-step locked" id="step1b">
+        <div class="card-header"><span class="step-num">1</span><strong id="step1b_title">Buscar médico já cadastrado</strong></div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="col-md-8 mb-2">
+              <label>Buscar por nome ou número do conselho</label>
+              <input id="b_query" type="text" class="form-control" placeholder="Digite ao menos 2 caracteres..." autocomplete="off" />
+              <div class="small-help">Mostra os 30 primeiros resultados ativos do posto.</div>
+            </div>
+            <div class="col-12">
+              <div id="b_resultados" class="list-group" style="max-height:300px;overflow-y:auto"></div>
+            </div>
+          </div>
+          <div id="b_selecionado" class="alert alert-success mt-3" style="display:none">
+            <strong>Selecionado:</strong> <span id="b_sel_nome"></span> — <span id="b_sel_esp"></span><br>
+            <small>idmedico: <span id="b_sel_idmedico"></span> · valor médico: <span id="b_sel_valor"></span></small>
+          </div>
+          <div class="mt-2 text-right">
+            <button id="btnConfirmExistente" class="btn btn-success" disabled><i class="fas fa-arrow-right mr-1"></i><span id="btnConfirmExistenteLabel">Confirmar e ir para o plantão</span></button>
+            <span id="msgB" class="ml-2 text-danger"></span>
           </div>
         </div>
       </div>
@@ -331,9 +379,13 @@
             </div>
           </div>
           <div class="mt-3 text-right">
-            <button id="btnSalvarUsuario" class="btn btn-success"><i class="fas fa-save mr-1"></i>Concluir cadastro</button>
+            <button id="btnFinalizarSemUsuario" class="btn btn-outline-secondary mr-2">
+              <i class="fas fa-flag-checkered mr-1"></i>Finalizar sem criar usuário
+            </button>
+            <button id="btnSalvarUsuario" class="btn btn-success"><i class="fas fa-save mr-1"></i>Criar usuário e concluir</button>
             <span id="msg3" class="ml-2 text-danger"></span>
           </div>
+          <div class="small-help mt-1 text-right">"Finalizar" deixa o médico sem login no sistema operacional.</div>
         </div>
       </div>
 
@@ -371,9 +423,11 @@
   const state = {
     posto: null,
     posto_nome: null,
+    tipo: "novo",        // "novo" | "existente"
     idmedico: null,
     nome: null,
     valor_medico: null,
+    especializacao: null,
   };
 
   function setLoading(on) {
@@ -412,12 +466,14 @@
     if (!sel.value) { alert("Selecione um posto."); return; }
     state.posto = sel.value;
     state.posto_nome = sel.options[sel.selectedIndex].text;
+    state.tipo = document.querySelector('input[name="tipoInclusao"]:checked').value;
+
     setLoading(true);
     fetch(`/api/medico_novo/lookups?posto=${encodeURIComponent(state.posto)}`, {credentials: "same-origin"})
       .then(r => r.json()).then(data => {
         setLoading(false);
         if (data.error) { alert("Erro: " + data.error); return; }
-        // Popular dropdowns da Etapa 1
+        // Popular dropdowns da Etapa 1 (só usados em "novo")
         function fill(selId, items, defaultLabel) {
           const s = $(selId);
           s.innerHTML = '<option value="">--</option>';
@@ -441,9 +497,98 @@
           sSala.appendChild(o);
         });
         done("#step0");
-        unlock("#step1");
+        // Roteia conforme o tipo escolhido
+        if (state.tipo === "novo") {
+          unlock("#step1");
+        } else {
+          // existente OU reset → mostra busca
+          const isReset = (state.tipo === "reset");
+          $("#step1b_title").textContent = isReset
+            ? "Buscar médico para resetar senha"
+            : "Buscar médico já cadastrado";
+          $("#btnConfirmExistenteLabel").textContent = isReset
+            ? "Resetar senha"
+            : "Confirmar e ir para o plantão";
+          unlock("#step1b");
+          $("#b_query").focus();
+        }
       })
       .catch(e => { setLoading(false); alert("Falha: " + e); });
+  });
+
+  // ---------- Etapa 1B: busca de médico existente (existente|reset) ----------
+  let buscaTimer = null;
+  $("#b_query").addEventListener("input", () => {
+    clearTimeout(buscaTimer);
+    buscaTimer = setTimeout(buscarMedico, 300);
+  });
+  function buscarMedico() {
+    const q = $("#b_query").value.trim();
+    const lst = $("#b_resultados");
+    lst.innerHTML = "";
+    if (q.length < 2) return;
+    fetch(`/api/medico_novo/buscar_medico?posto=${encodeURIComponent(state.posto)}&q=${encodeURIComponent(q)}`,
+          {credentials: "same-origin"})
+      .then(r => r.json()).then(data => {
+        if (data.error) { lst.innerHTML = '<div class="text-danger p-2">' + data.error + '</div>'; return; }
+        if (!data.medicos || !data.medicos.length) { lst.innerHTML = '<div class="text-muted p-2">Sem resultados.</div>'; return; }
+        data.medicos.forEach(m => {
+          const a = document.createElement("button");
+          a.type = "button";
+          a.className = "list-group-item list-group-item-action";
+          a.innerHTML = `<strong>${m.nome}</strong> <small class="text-muted">— ${m.especializacao || "—"} · ${m.conselho || ""}</small><br><small>id ${m.idmedico} · valor R$ ${m.valor_medico != null ? m.valor_medico.toFixed(2) : "—"}</small>`;
+          a.addEventListener("click", () => selecionarMedico(m));
+          lst.appendChild(a);
+        });
+      });
+  }
+  function selecionarMedico(m) {
+    state.idmedico = m.idmedico;
+    state.nome = m.nome;
+    state.valor_medico = m.valor_medico;
+    state.especializacao = m.especializacao;
+    $("#b_sel_nome").textContent = m.nome;
+    $("#b_sel_esp").textContent = m.especializacao || "—";
+    $("#b_sel_idmedico").textContent = m.idmedico;
+    $("#b_sel_valor").textContent = m.valor_medico != null ? ("R$ " + m.valor_medico.toFixed(2)) : "—";
+    $("#b_selecionado").style.display = "block";
+    $("#btnConfirmExistente").disabled = false;
+    // marca visual
+    document.querySelectorAll("#b_resultados .list-group-item").forEach(el => el.classList.remove("active"));
+  }
+
+  $("#btnConfirmExistente").addEventListener("click", () => {
+    if (!state.idmedico) return;
+    if (state.tipo === "reset") {
+      // Faz POST /reset_senha e vai pra tela final
+      setLoading(true);
+      fetch("/api/medico_novo/reset_senha", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({posto: state.posto, idmedico: state.idmedico}),
+      }).then(r => r.json()).then(data => {
+        setLoading(false);
+        if (data.error) { $("#msgB").textContent = "Erro: " + data.error; return; }
+        $("#r_posto").textContent = state.posto_nome;
+        $("#r_nome").textContent = data.nome || state.nome;
+        $("#r_idmedico").textContent = state.idmedico;
+        $("#r_idusuario").textContent = data.idUsuario;
+        $("#r_usuario").textContent = data.usuario;
+        $("#r_senha").textContent = data.senha;
+        // Muda o título da tela final pra refletir "senha resetada"
+        const finalHeader = document.querySelector("#stepFinal .card-header strong");
+        if (finalHeader) finalHeader.textContent = "Senha resetada";
+        done("#step1b");
+        unlock("#stepFinal");
+      }).catch(e => { setLoading(false); $("#msgB").textContent = "Falha: " + e; });
+    } else {
+      // existente → vai pra Fase 2 com idmedico/valor já preenchidos
+      $("#e_especialidade").value = state.especializacao || "";
+      $("#e_valor").value = state.valor_medico != null ? state.valor_medico.toFixed(2) : "";
+      done("#step1b");
+      unlock("#step2");
+    }
   });
 
   // ---------- Etapa 1: cad_medico ----------
@@ -562,16 +707,28 @@
     }).then(r => r.json()).then(data => {
       setLoading(false);
       if (data.error) { showMsg("#msg2", "Erro: " + data.error); return; }
-      // Pré-preencher Etapa 3
+      done("#step2");
+      // Se for fluxo "existente", o médico já tem usuário — pula Fase 3 e vai pra tela final
+      if (state.tipo === "existente") {
+        $("#r_posto").textContent = state.posto_nome;
+        $("#r_nome").textContent = state.nome;
+        $("#r_idmedico").textContent = state.idmedico;
+        $("#r_idusuario").textContent = "(usuário pré-existente — não alterado)";
+        $("#r_usuario").textContent = "—";
+        $("#r_senha").textContent = "—";
+        const finalHeader = document.querySelector("#stepFinal .card-header strong");
+        if (finalHeader) finalHeader.textContent = "Plantão cadastrado";
+        unlock("#stepFinal");
+        return;
+      }
+      // Fluxo "novo" → Fase 3
       $("#u_nome").value = state.nome;
-      // gerar login sugerido (front tenta sozinho; backend valida)
       const norm = (state.nome || "")
         .normalize("NFKD").replace(/[̀-ͯ]/g, "")
         .replace(/[^A-Za-z\s]/g, "").toLowerCase().trim().split(/\s+/);
       const login = norm.length === 1 ? norm[0] : (norm[0] + norm.slice(1).map(p => p[0]).join(""));
       $("#u_usuario").value = login;
       checkUsuario();
-      done("#step2");
       unlock("#step3");
     }).catch(e => { setLoading(false); showMsg("#msg2", "Falha: " + e); });
   });
@@ -599,6 +756,19 @@
   $("#u_usuario").addEventListener("input", () => {
     clearTimeout(usuarioCheckTimer);
     usuarioCheckTimer = setTimeout(checkUsuario, 350);
+  });
+
+  $("#btnFinalizarSemUsuario").addEventListener("click", () => {
+    $("#r_posto").textContent = state.posto_nome;
+    $("#r_nome").textContent = state.nome;
+    $("#r_idmedico").textContent = state.idmedico;
+    $("#r_idusuario").textContent = "(não criado)";
+    $("#r_usuario").textContent = "—";
+    $("#r_senha").textContent = "—";
+    const finalHeader = document.querySelector("#stepFinal .card-header strong");
+    if (finalHeader) finalHeader.textContent = "Cadastro concluído (sem usuário)";
+    done("#step3");
+    unlock("#stepFinal");
   });
 
   $("#btnSalvarUsuario").addEventListener("click", () => {

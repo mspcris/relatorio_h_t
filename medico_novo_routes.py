@@ -145,6 +145,49 @@ def api_postos():
     return jsonify({"postos": out})
 
 
+@medico_novo_bp.get("/api/medico_novo/buscar_medico")
+def api_buscar_medico():
+    """Busca médicos já cadastrados no posto (para fluxo de plantão extra).
+    Retorna até 30 médicos cujo Nome OU ConselhoNumero contenham o termo `q`.
+    """
+    email, postos = _check_admin()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    posto = request.args.get("posto", "")
+    erro = _require_posto_in_acl(posto, postos)
+    if erro:
+        return jsonify({"error": erro}), 400
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify({"medicos": []})
+    like = f"%{q}%"
+    try:
+        with _conn_for_posto(posto) as con:
+            cur = con.cursor()
+            cur.execute(
+                """SELECT TOP 30 idmedico, Nome, ConselhoProfissional, ConselhoNumero,
+                                 especializacao, valormedico
+                     FROM cad_medico
+                     WHERE desativado = 0
+                       AND (Nome LIKE ? OR ConselhoNumero LIKE ?)
+                     ORDER BY Nome""",
+                like, like,
+            )
+            out = []
+            for r in cur.fetchall():
+                out.append({
+                    "idmedico": int(r[0]),
+                    "nome": (r[1] or "").strip(),
+                    "conselho": f"{(r[2] or '').strip()} {(r[3] or '').strip()}".strip(),
+                    "especializacao": (r[4] or "").strip(),
+                    "valor_medico": float(r[5]) if r[5] is not None else None,
+                })
+        return jsonify({"medicos": out})
+    except Exception as e:
+        logger.exception("buscar_medico falhou no posto %s", posto)
+        return jsonify({"error": str(e)[:300]}), 500
+
+
 @medico_novo_bp.get("/api/medico_novo/lookups")
 def api_lookups():
     email, postos = _check_admin()
@@ -433,6 +476,49 @@ def api_check_usuario():
     except Exception as e:
         logger.exception("check_usuario falhou no posto %s", posto)
         return jsonify({"error": str(e)[:300]}), 500
+
+
+@medico_novo_bp.post("/api/medico_novo/reset_senha")
+def api_reset_senha():
+    """Gera nova senha plain de 5 dígitos e atualiza sis_usuario.Senha do médico.
+    Retorna { usuario, senha, idUsuario }.
+    """
+    email, postos = _check_admin()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    posto = (data.get("posto") or "").strip().upper()
+    erro = _require_posto_in_acl(posto, postos)
+    if erro:
+        return jsonify({"error": erro}), 400
+    idmedico = data.get("idmedico")
+    if not idmedico:
+        return jsonify({"error": "idmedico obrigatório"}), 400
+    senha_plain = f"{random.randint(0, 99999):05d}"
+    try:
+        with _conn_for_posto(posto) as con:
+            cur = con.cursor()
+            cur.execute(
+                """SELECT TOP 1 idUsuario, Usuario, Nome FROM sis_usuario
+                    WHERE idMedicoProntuario = ? AND Desativado = 0""",
+                int(idmedico),
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"error": "médico não tem usuário ativo cadastrado"}), 404
+            id_usuario, usuario, nome_usr = int(row[0]), row[1], row[2]
+            cur.execute("UPDATE sis_usuario SET Senha = ? WHERE idUsuario = ?", senha_plain, id_usuario)
+            con.commit()
+        return jsonify({
+            "ok": True,
+            "idUsuario": id_usuario,
+            "usuario": usuario,
+            "nome": nome_usr,
+            "senha": senha_plain,
+        })
+    except Exception as e:
+        logger.exception("reset_senha falhou no posto %s", posto)
+        return jsonify({"error": str(e)[:400]}), 500
 
 
 @medico_novo_bp.post("/api/medico_novo/usuario")
