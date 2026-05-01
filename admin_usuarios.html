@@ -187,13 +187,14 @@
                     <th class="th-sort" data-sort="nome">Nome <span class="sort-ind"></span></th>
                     <th class="th-sort" data-sort="postos">Postos <span class="sort-ind"></span></th>
                     <th class="th-sort text-center" style="width:80px" data-sort="is_admin">Admin <span class="sort-ind"></span></th>
+                    <th class="th-sort text-center" style="width:80px" data-sort="user_camim">User CAMIM <span class="sort-ind"></span></th>
                     <th class="th-sort text-center" style="width:80px" data-sort="ativo">Ativo <span class="sort-ind"></span></th>
                     <th class="th-sort" style="width:170px" data-sort="ultimo_login">Último Login <span class="sort-ind"></span></th>
                     <th style="width:180px">Ações</th>
                   </tr>
                 </thead>
                 <tbody id="tbody">
-                  <tr><td colspan="7" class="text-center text-muted py-4">Carregando…</td></tr>
+                  <tr><td colspan="8" class="text-center text-muted py-4">Carregando…</td></tr>
                 </tbody>
               </table>
             </div>
@@ -890,6 +891,7 @@ function _valorParaOrdenar(u, field) {
     case 'nome':         return (u.nome  || '').toLowerCase();
     case 'postos':       return (u.postos || []).join(',');
     case 'is_admin':     return u.is_admin ? 1 : 0;
+    case 'user_camim':   return u.id_usuario_sqlserver ? 1 : 0;
     case 'ativo':        return u.ativo    ? 1 : 0;
     case 'ultimo_login': return u.ultimo_login || null;
     default:             return '';
@@ -961,6 +963,7 @@ function renderTabela() {
       <td>${u.nome || '<span class="text-muted">—</span>'}</td>
       <td>${u.postos.map(p => `<span class="badge-posto${POSTOS_RESTRITOS.has(p) ? ' restrito' : ''}">${p}</span>`).join('') || '<span class="text-muted">nenhum</span>'}</td>
       <td class="text-center">${u.is_admin ? '<i class="fas fa-shield-alt text-warning" title="Admin"></i>' : ''}</td>
+      <td class="text-center">${u.id_usuario_sqlserver ? `<span class="badge badge-success" title="Vinculado: ${u.login_campinho||''} (id ${u.id_usuario_sqlserver})">T</span>` : '<span class="badge badge-danger" title="Sem login_campinho — não pode operar no CAMIM">F</span>'}</td>
       <td class="text-center">
         <span class="badge badge-${u.ativo ? 'success' : 'secondary'}">${u.ativo ? 'Sim' : 'Não'}</span>
       </td>
