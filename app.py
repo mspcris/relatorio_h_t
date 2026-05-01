@@ -134,6 +134,8 @@ _TEMPLATE_TO_PAGINA = {
     "https://atendimento.camilaia.camim.com.br/crm":    "camila_crm",
     "https://crm.camim.com.br/":                        "crm",
     "https://central.camim.com.br/":                    "central",
+    "https://iot.propagacaodigital.com.br/":            "iot_monitor",
+    "https://iot.propagacaodigital.com.br":             "iot_monitor",
 }
 
 _MENU_RESOURCES_CACHE = None
