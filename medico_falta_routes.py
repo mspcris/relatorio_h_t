@@ -370,6 +370,24 @@ def api_insert():
                 return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo_posto": True}), 403
             cur = con.cursor()
 
+            # Anti-duplicidade: não permite 2 faltas ativas para o mesmo médico no mesmo dia
+            cur.execute(
+                """SELECT TOP 1 idFalta FROM Cad_MedicoFalta
+                    WHERE idMedico = ? AND DataFalta = ? AND Desativado = 0""",
+                idmedico, data_falta,
+            )
+            existente = cur.fetchone()
+            if existente:
+                return jsonify({
+                    "error": (
+                        f"Já existe falta cadastrada (idFalta={int(existente[0])}) "
+                        f"para esse médico em {data_falta.strftime('%d/%m/%Y')}. "
+                        f"Edite ou desative a existente antes de criar outra."
+                    ),
+                    "duplicada": True,
+                    "id_falta_existente": int(existente[0]),
+                }), 409
+
             # Conta pacientes agendados no intervalo (para QuantidadePacienteAgendado)
             cur.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
             d_str = data_falta.strftime("%d/%m/%Y")
