@@ -151,18 +151,10 @@ PAGINAS_DISPONIVEIS = [
     {"key": "kpi_liberty",               "label": "KPI CAMIM Liberty",           "group": "kpi"},
     {"key": "kpi_receita_despesa",       "label": "KPI Receitas x Despesas",     "group": "kpi"},
     {"key": "kpi_receita_despesa_rateio","label": "KPI R x D com Rateio",        "group": "kpi"},
-    {"key": "admin_auditoria",           "label": "Admin · Regras de Auditoria", "group": "kpi"},
     {"key": "growth",                    "label": "Growth Dashboard",            "group": "kpi"},
     {"key": "mais_servicos",             "label": "Mais Serviços",               "group": "kpi"},
-    {"key": "trello_harvest",            "label": "Trello Harvest",              "group": "kpi"},
-    {"key": "tef",                       "label": "TEF Recorrente",              "group": "kpi"},
     {"key": "email_clientes",            "label": "Email de Cobrança",           "group": "kpi"},
     {"key": "chat_avaliacoes",           "label": "CHAT Avaliações",             "group": "kpi"},
-    {"key": "chat_dashboard",            "label": "Dashboard Chat (Camila.ai)",  "group": "kpi"},
-    {"key": "wpp_dashboard",             "label": "Dashboard WhatsApp (Meta)",   "group": "kpi"},
-    {"key": "ctrlq_desbloqueio",         "label": "Desbloqueio de Agenda CTRL-Q","group": "kpi"},
-    {"key": "qualidade_agenda",          "label": "Qualidade da Agenda Médica",  "group": "kpi"},
-    {"key": "higienizacao",              "label": "Higienização",                "group": "kpi"},
     {"key": "leiame",                    "label": "Leia-me (Painel Antigo)",     "group": "kpi"},
     # ── Mais Serviços ──
     {"key": "k_nbs_ibs_cbs",            "label": "Notas Fiscais NBS/IBS/CBS",   "group": "mais"},
@@ -185,6 +177,12 @@ PAGINAS_DISPONIVEIS = [
     {"key": "camila_funcionarios",       "label": "Camila dos Funcionários",     "group": "mais"},
     {"key": "medico_novo",               "label": "Médico - Inclusão Agenda Temporária", "group": "mais"},
     {"key": "medico_falta",              "label": "Médico - Cadastrar Falta + WhatsApp", "group": "mais"},
+    {"key": "tef",                       "label": "TEF Recorrente",              "group": "mais"},
+    {"key": "chat_dashboard",            "label": "Dashboard Chat (Camila.ai)",  "group": "mais"},
+    {"key": "wpp_dashboard",             "label": "Dashboard WhatsApp (Meta)",   "group": "mais"},
+    {"key": "ctrlq_desbloqueio",         "label": "Desbloqueio de Agenda CTRL-Q","group": "mais"},
+    {"key": "qualidade_agenda",          "label": "Qualidade da Agenda Médica",  "group": "mais"},
+    {"key": "higienizacao",              "label": "Higienização",                "group": "mais"},
 ]
 
 # ── Estado inicializado por init_auth() ───────────────────────────────────────
