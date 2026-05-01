@@ -203,8 +203,11 @@ def api_list():
     try:
         with _conn_for_posto(posto) as con:
             cur = con.cursor()
+            # Atenção: vw_Cad_MedicoFalta tem `idFalta` (PK real da Cad_MedicoFalta,
+            # ex.: 173472) E `idMedicoFalta` (que é o idMedico, ex.: 1741).
+            # Nomes confusos do banco — sempre usar idFalta para identificar a falta.
             cur.execute(
-                """SELECT TOP 200 idMedicoFalta, idMedico, Medico, Especialidade,
+                """SELECT TOP 200 idFalta, idMedico, Medico, Especialidade,
                                   DataFalta, [Hora Inicial], [Hora Final],
                                   Motivo, [Nome Usuario], [Usuário Avisado],
                                   Observacao, ClinicaFechouAgenda, MedicoFechouAgenda,
