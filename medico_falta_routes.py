@@ -45,7 +45,7 @@ ID_COMANDO_EXCLUSAO = 3
 WPP_MODO_ENVIO_FALTA = "falta_medico"  # cron de cobrança ignora esse modo
 WPP_CAMPANHA_NOME = "Falta de Médico (avisos automáticos)"
 # Defaults usados apenas se a campanha precisar ser criada pela primeira vez
-WPP_TEMPLATE_DEFAULT_AO_CRIAR = "notificaao_de_falta_do_medico"
+WPP_TEMPLATE_DEFAULT_AO_CRIAR = "aviso_de_fechamento_de_agenda"
 WPP_FROM_USER_DEFAULT_AO_CRIAR = "cmg8cum8g0519jbbm6r9l93f7"
 
 
@@ -598,13 +598,16 @@ def api_enviar_wpp():
                         ref_extra=f"falta {id_falta}",
                     )
                     continue
-                # 6 parâmetros do template (chave igual ao Meta)
+                # Parâmetros do template `aviso_de_fechamento_de_agenda`
+                # (template recriado em 2026-05-01 com nomes minúsculos):
+                #   {{paciente}} {{medico}} {{data_consulta}} {{local}}
+                #   {{resp_fechamento}} {{motivo}}
                 params = {
                     "paciente": nome_paciente,
-                    "Médico": nome_medico_raw,
+                    "medico": nome_medico_raw,
                     "data_consulta": data_str,
-                    "posto": posto_descricao,
-                    "medico_clinica": medico_ou_clinica,
+                    "local": posto_descricao,
+                    "resp_fechamento": medico_ou_clinica,
                     "motivo": motivo_label,
                 }
                 status, wamid = send_mod.enviar(
