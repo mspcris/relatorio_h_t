@@ -353,6 +353,28 @@ jobs:
           fi
 
       # ================================================================
+      # 5A.1) Regera embeddings.json na VM (não vai pelo git — gitignored)
+      # ================================================================
+      - name: Regera embeddings.json (build_search_index.py embed)
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+            set -e
+            cd /opt/relatorio_h_t
+            if [ -x .venv/bin/python ] && [ -f build_search_index.py ] && [ -f search_index/summaries.json ]; then
+              .venv/bin/python build_search_index.py embed
+              # espelha embeddings.json para o search_index do camim-auth (consumido pelo /api/search)
+              cp -f search_index/embeddings.json /opt/camim-auth/search_index/embeddings.json
+              echo 'embeddings.json regenerado e espelhado em /opt/camim-auth/'
+            else
+              echo 'WARN: pré-requisitos do embed ausentes — pulando'
+            fi
+          "
+
+      # ================================================================
       # 5B) Deps novas no venv de /opt/camim-auth
       # ================================================================
       - name: pip install werkzeug no venv camim-auth

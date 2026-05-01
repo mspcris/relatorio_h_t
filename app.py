@@ -136,6 +136,8 @@ _TEMPLATE_TO_PAGINA = {
     "https://central.camim.com.br/":                    "central",
     "https://iot.propagacaodigital.com.br/":            "iot_monitor",
     "https://iot.propagacaodigital.com.br":             "iot_monitor",
+    "https://atendimento.camilaia.camim.com.br/camila-gpt/fullscreen/": "camila_funcionarios",
+    "https://atendimento.camilaia.camim.com.br/camila-gpt/fullscreen":  "camila_funcionarios",
 }
 
 _MENU_RESOURCES_CACHE = None

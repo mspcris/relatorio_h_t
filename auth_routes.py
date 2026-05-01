@@ -182,6 +182,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "agenda_dia",                "label": "Agenda do Dia (F3)",          "group": "mais"},
     {"key": "preagendamento",            "label": "Dashboard Pré-Agendamento",   "group": "mais"},
     {"key": "iot_monitor",               "label": "Monitor IoT (Ar Condicionado)","group": "mais"},
+    {"key": "camila_funcionarios",       "label": "Camila dos Funcionários",     "group": "mais"},
 ]
 
 # ── Estado inicializado por init_auth() ───────────────────────────────────────
