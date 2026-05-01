@@ -185,10 +185,10 @@ def api_agendamentos():
             for r in cur.fetchall():
                 out.append({
                     "id_lancamento_servico": int(r[0]),
-                    "matricula": (r[1] or "").strip() if r[1] else "",
+                    "matricula": str(r[1]).strip() if r[1] is not None else "",
                     "paciente": (r[2] or "").strip(),
                     "idade": int(r[3]) if r[3] is not None else None,
-                    "telefone_raw": (r[4] or "").strip() if r[4] else "",
+                    "telefone_raw": str(r[4]).strip() if r[4] is not None else "",
                     "hora": r[5],
                     "servico": (r[6] or "").strip(),
                     "especialidade": (r[7] or "").strip(),
@@ -329,7 +329,7 @@ def api_insert():
                     "id_lancamento_servico": int(r[0]),
                     "paciente": (r[1] or "").strip(),
                     "hora": r[2],
-                    "telefone_raw": (r[3] or "").strip() if r[3] else "",
+                    "telefone_raw": str(r[3]).strip() if r[3] is not None else "",
                     "especialidade": (r[4] or "").strip(),
                 }
                 for r in cur.fetchall()
