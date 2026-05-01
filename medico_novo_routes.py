@@ -101,6 +101,23 @@ def _strip_accents(s: str) -> str:
     return "".join(c for c in s if not unicodedata.combining(c))
 
 
+def _valida_cpf(cpf: str) -> bool:
+    """Valida CPF: 11 dígitos, não-todos-iguais, dígitos verificadores corretos."""
+    cpf = re.sub(r"\D", "", cpf or "")
+    if len(cpf) != 11 or len(set(cpf)) == 1:
+        return False
+    nums = [int(c) for c in cpf]
+    # Dígito 1
+    s1 = sum(nums[i] * (10 - i) for i in range(9))
+    d1 = 0 if s1 % 11 < 2 else 11 - (s1 % 11)
+    if d1 != nums[9]:
+        return False
+    # Dígito 2
+    s2 = sum(nums[i] * (11 - i) for i in range(10))
+    d2 = 0 if s2 % 11 < 2 else 11 - (s2 % 11)
+    return d2 == nums[10]
+
+
 def _gerar_login(nome_completo: str) -> str:
     """'Cristiano Silva Souza' → 'cristianocss'"""
     nome = _strip_accents((nome_completo or "").strip())
@@ -244,8 +261,8 @@ def api_insert_medico():
     if not nome:
         return jsonify({"error": "nome obrigatório"}), 400
     cpf = re.sub(r"\D", "", (data.get("cpf") or ""))
-    if len(cpf) != 11:
-        return jsonify({"error": "CPF deve ter 11 dígitos"}), 400
+    if not _valida_cpf(cpf):
+        return jsonify({"error": "CPF inválido (dígitos verificadores não conferem)"}), 400
     especializacao = (data.get("especializacao") or "").strip().upper()
     if especializacao not in ESPECIALIDADES_PERMITIDAS:
         return jsonify({"error": "especialização deve ser CLÍNICA GERAL ou PEDIATRIA"}), 400

@@ -83,9 +83,14 @@
     <section class="content p-3">
 
       <div class="card mb-3">
-        <div class="card-body">
-          <h2 class="mb-1"><i class="fas fa-user-md mr-2 text-primary"></i>Inclusão de Médico</h2>
-          <p class="lead mb-0">Cadastro de plantonista temporário em 3 fases: dados do médico → escala/especialidade → usuário do sistema.</p>
+        <div class="card-body d-flex justify-content-between align-items-center">
+          <div>
+            <h2 class="mb-1"><i class="fas fa-user-md mr-2 text-primary"></i>Inclusão de Médico</h2>
+            <p class="lead mb-0">Cadastro de plantonista temporário em 3 fases: dados do médico → escala/especialidade → usuário do sistema.</p>
+          </div>
+          <button id="btnReiniciar" class="btn btn-outline-danger" title="Apaga tudo e começa do zero">
+            <i class="fas fa-redo mr-1"></i>Reiniciar
+          </button>
         </div>
       </div>
 
@@ -172,6 +177,7 @@
             <div class="col-md-4 mb-2">
               <label>CPF *</label>
               <input id="m_cpf" type="text" class="form-control" maxlength="14" placeholder="000.000.000-00" />
+              <div id="m_cpf_msg" class="small-help"></div>
             </div>
 
             <div class="col-md-3 mb-2">
@@ -461,12 +467,23 @@
       }
     });
 
+  // Botão Reiniciar — recarrega a página inteira, voltando a um estado limpo
+  $("#btnReiniciar").addEventListener("click", () => {
+    if (confirm("Reiniciar? Os dados preenchidos nesta página serão perdidos (registros já gravados no banco permanecem).")) {
+      location.reload();
+    }
+  });
+
   $("#btnConfirmPosto").addEventListener("click", () => {
     const sel = $("#selPosto");
     if (!sel.value) { alert("Selecione um posto."); return; }
     state.posto = sel.value;
     state.posto_nome = sel.options[sel.selectedIndex].text;
     state.tipo = document.querySelector('input[name="tipoInclusao"]:checked').value;
+    // bloqueia controles da etapa 0 — só "Reiniciar" recupera mudança
+    $("#selPosto").disabled = true;
+    document.querySelectorAll('input[name="tipoInclusao"]').forEach(el => el.disabled = true);
+    $("#btnConfirmPosto").disabled = true;
 
     setLoading(true);
     fetch(`/api/medico_novo/lookups?posto=${encodeURIComponent(state.posto)}`, {credentials: "same-origin"})
@@ -591,6 +608,46 @@
     }
   });
 
+  // ---------- Validação de CPF (dígitos verificadores) ----------
+  function validaCPF(cpf) {
+    cpf = (cpf || "").replace(/\D/g, "");
+    if (cpf.length !== 11) return false;
+    if (/^(\d)\1{10}$/.test(cpf)) return false;
+    let s1 = 0;
+    for (let i = 0; i < 9; i++) s1 += parseInt(cpf[i]) * (10 - i);
+    let d1 = (s1 % 11) < 2 ? 0 : 11 - (s1 % 11);
+    if (d1 !== parseInt(cpf[9])) return false;
+    let s2 = 0;
+    for (let i = 0; i < 10; i++) s2 += parseInt(cpf[i]) * (11 - i);
+    let d2 = (s2 % 11) < 2 ? 0 : 11 - (s2 % 11);
+    return d2 === parseInt(cpf[10]);
+  }
+  function formataCPF(v) {
+    v = (v || "").replace(/\D/g, "").slice(0, 11);
+    if (v.length > 9) return `${v.slice(0,3)}.${v.slice(3,6)}.${v.slice(6,9)}-${v.slice(9)}`;
+    if (v.length > 6) return `${v.slice(0,3)}.${v.slice(3,6)}.${v.slice(6)}`;
+    if (v.length > 3) return `${v.slice(0,3)}.${v.slice(3)}`;
+    return v;
+  }
+  $("#m_cpf").addEventListener("input", () => {
+    const inp = $("#m_cpf");
+    const msg = $("#m_cpf_msg");
+    const raw = inp.value.replace(/\D/g, "");
+    inp.value = formataCPF(raw);
+    inp.classList.remove("input-error", "input-ok");
+    if (raw.length === 0) { msg.textContent = ""; return; }
+    if (raw.length < 11) { msg.textContent = `${raw.length}/11 dígitos`; msg.style.color = "#6c757d"; return; }
+    if (validaCPF(raw)) {
+      inp.classList.add("input-ok");
+      msg.textContent = "CPF válido";
+      msg.style.color = "#28a745";
+    } else {
+      inp.classList.add("input-error");
+      msg.textContent = "CPF inválido (dígitos verificadores não conferem)";
+      msg.style.color = "#dc3545";
+    }
+  });
+
   // ---------- Etapa 1: cad_medico ----------
   $("#btnSalvarMedico").addEventListener("click", () => {
     showMsg("#msg1", "");
@@ -600,7 +657,7 @@
     const conselho_numero = $("#m_conselho_num").value.trim();
 
     if (!nome) { showMsg("#msg1", "Nome obrigatório."); return; }
-    if (cpf.length !== 11) { showMsg("#msg1", "CPF deve ter 11 dígitos."); return; }
+    if (!validaCPF(cpf)) { showMsg("#msg1", "CPF inválido — verifique os dígitos."); $("#m_cpf").focus(); return; }
     if (!especializacao) { showMsg("#msg1", "Selecione a especialização."); return; }
     if (!conselho_numero) { showMsg("#msg1", "Número do conselho obrigatório."); return; }
 
