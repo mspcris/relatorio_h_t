@@ -514,15 +514,20 @@ def api_desativar():
             if not id_usuario_op:
                 return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo_posto": True}), 403
             cur = con.cursor()
-            # Confirma que existe e ainda está ativa
+            # Confirma que existe (qualquer estado) — log detalhado pra debug
             cur.execute(
-                """SELECT idMedico, DataFalta FROM Cad_MedicoFalta
-                    WHERE idFalta = ? AND Desativado = 0""",
+                "SELECT idMedico, DataFalta, Desativado FROM Cad_MedicoFalta WHERE idFalta = ?",
                 id_falta,
             )
             row = cur.fetchone()
             if not row:
-                return jsonify({"error": "falta não encontrada ou já desativada"}), 404
+                logger.warning("desativar: idFalta=%s NÃO existe no posto %s", id_falta, posto)
+                return jsonify({
+                    "error": f"idFalta={id_falta} não existe no posto {posto} — pode ter sido criada em outro posto",
+                }), 404
+            if bool(row[2]):  # Desativado
+                logger.warning("desativar: idFalta=%s já está desativada no posto %s", id_falta, posto)
+                return jsonify({"error": f"idFalta={id_falta} já está desativada"}), 400
             idmedico, data_falta = int(row[0]), row[1]
             # Soft-delete
             cur.execute(

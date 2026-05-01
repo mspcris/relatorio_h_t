@@ -150,7 +150,7 @@
             <table class="table table-sm table-faltas mb-0">
               <thead>
                 <tr>
-                  <th>Data</th><th>Hora</th><th>Tipo</th><th>Médico</th>
+                  <th>idFalta</th><th>Data</th><th>Hora</th><th>Tipo</th><th>Médico</th>
                   <th>Especialidade</th><th>Motivo</th><th>Pacientes</th>
                   <th>Cadastrado por</th><th>Observação</th><th></th>
                 </tr>
@@ -376,6 +376,7 @@
             : '<span class="badge badge-parc">Parcial</span>';
           const tr = document.createElement("tr");
           tr.innerHTML = `
+            <td><code>${f.id_falta}</code></td>
             <td>${f.data_falta || "—"}</td>
             <td>${f.hora_inicio || ""}–${f.hora_fim || ""}</td>
             <td>${tipo}</td>
@@ -503,7 +504,12 @@
   });
 
   $("#btnSalvarFalta").addEventListener("click", () => {
-    $("#msgFalta").textContent = "";
+    $("#msgFalta").innerHTML = "";
+    // Limpa resíduos de tentativa anterior — o stepFinal só aparece se o
+    // INSERT atual completar com sucesso
+    $("#stepFinal").classList.add("locked");
+    $("#stepFalta").classList.remove("done");
+    $("#wppArea").innerHTML = "";
     const motSel = $("#f_motivo");
     const id_motivo = parseInt(motSel.value) || 0;
     if (!id_motivo) { $("#msgFalta").textContent = "Escolha um motivo."; return; }
@@ -540,6 +546,26 @@
       body: JSON.stringify(payload),
     }).then(r => r.json()).then(d => {
       setLoading(false);
+      if (d.duplicada && d.id_falta_existente) {
+        $("#msgFalta").innerHTML =
+          '<div class="d-block mt-2"><span class="text-danger"><strong>' +
+          (d.error || 'Já existe falta ativa para esse médico nesse dia.') +
+          '</strong></span> ' +
+          '<button class="btn btn-sm btn-outline-danger ml-2" id="btnApagarExistente" data-id="' + d.id_falta_existente + '">' +
+          '<i class="fas fa-trash mr-1"></i>Apagar a falta existente (idFalta=' + d.id_falta_existente + ')</button></div>';
+        $("#btnApagarExistente").addEventListener("click", () => {
+          if (!confirm("Apagar (soft-delete) a falta existente idFalta=" + d.id_falta_existente + "? A ação fica registrada em Sis_Historico.")) return;
+          fetch("/api/medico_falta/desativar", {
+            method: "POST", credentials: "same-origin",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({posto: state.posto, id_falta: d.id_falta_existente}),
+          }).then(r => r.json()).then(dd => {
+            if (dd.error) { alert("Erro ao apagar: " + dd.error); return; }
+            $("#msgFalta").innerHTML = '<span class="text-success">Apagada. Pode clicar em "Cadastrar falta" novamente.</span>';
+          });
+        });
+        return;
+      }
       if (d.error) { $("#msgFalta").textContent = "Erro: " + d.error; return; }
       $("#r_id").textContent = d.id_falta;
       $("#r_qtd").textContent = d.qtd_pacientes_afetados;
