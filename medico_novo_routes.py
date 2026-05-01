@@ -148,6 +148,29 @@ def _strip_accents(s: str) -> str:
     return "".join(c for c in s if not unicodedata.combining(c))
 
 
+def _encrypt_camim_password(plain: str, key: str | None = None) -> str:
+    """Reproduz `TEvCriptografa.TextToCriptoHex` do componente Delphi `Ecrypto`
+    usado pelo sistema CAMIM. Devolve o hex (uppercase) pronto para gravar em
+    `sis_usuario.Senha`.
+
+    Algoritmo (port direto do Pascal):
+      1) Inverte a string `plain`
+      2) Para cada char (1-indexed), XOR com  `(ord(key[(pos % len(key))]) + pos) & 0xFF`
+         (Delphi `Copy(FKey, (SPos mod Length(FKey)) + 1, 1)` → key 0-indexed Python)
+      3) Cada byte resultante vira 2 dígitos hex uppercase
+    """
+    if not plain:
+        return ""
+    if key is None:
+        key = os.getenv("CAMIM_SENHA_KEY", "@#$%").strip().strip("'\"") or "@#$%"
+    text = plain[::-1]
+    klen = len(key)
+    return "".join(
+        f"{(ord(text[spos - 1]) ^ ((ord(key[spos % klen]) + spos) & 0xFF)) & 0xFF:02X}"
+        for spos in range(1, len(text) + 1)
+    )
+
+
 def _valida_cpf(cpf: str) -> bool:
     """Valida CPF: 11 dígitos, não-todos-iguais, dígitos verificadores corretos."""
     cpf = re.sub(r"\D", "", cpf or "")
@@ -630,6 +653,7 @@ def api_reset_senha():
     if not idmedico:
         return jsonify({"error": "idmedico obrigatório"}), 400
     senha_plain = f"{random.randint(0, 99999):05d}"
+    senha_cripto = _encrypt_camim_password(senha_plain)
     try:
         with _conn_for_posto(posto) as con:
             id_usuario_op = _resolver_idusuario_no_posto(con, login_campinho)
@@ -645,7 +669,7 @@ def api_reset_senha():
             if not row:
                 return jsonify({"error": "médico não tem usuário ativo cadastrado"}), 404
             id_usuario, usuario, nome_usr = int(row[0]), row[1], row[2]
-            cur.execute("UPDATE sis_usuario SET Senha = ? WHERE idUsuario = ?", senha_plain, id_usuario)
+            cur.execute("UPDATE sis_usuario SET Senha = ? WHERE idUsuario = ?", senha_cripto, id_usuario)
             _audit(con, id_usuario, ID_TABELA_SIS_USUARIO, ID_COMANDO_EDICAO,
                    id_usuario_op, f"Reset de senha via RH&T (medico={idmedico}, login={usuario})")
             con.commit()
@@ -685,6 +709,7 @@ def api_insert_usuario():
         usuario = re.sub(r"\.[A-Z0-9]$", "", usuario) + suf_posto
 
     senha_plain = f"{random.randint(0, 99999):05d}"
+    senha_cripto = _encrypt_camim_password(senha_plain)
 
     try:
         with _conn_for_posto(posto) as con:
@@ -708,7 +733,7 @@ def api_insert_usuario():
             VALUES (?, ?, ?, ?, ?, 0, 'MÉDICO', NULL);
             SELECT idUsuario FROM @t;
             """
-            cur.execute(sql, (usuario, nome, senha_plain, id_endereco, int(idmedico)))
+            cur.execute(sql, (usuario, nome, senha_cripto, id_endereco, int(idmedico)))
             while cur.description is None:
                 if not cur.nextset():
                     break
