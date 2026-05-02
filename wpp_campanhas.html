@@ -100,11 +100,21 @@
     </section>
     <section class="content px-3 pb-3">
 
-      <!-- Legenda de cores -->
-      <div class="mb-3 d-flex align-items-center" style="gap:16px;font-size:.85rem">
+      <!-- Legenda de cores + filtro ativas/inativas -->
+      <div class="mb-3 d-flex align-items-center flex-wrap" style="gap:16px;font-size:.85rem">
         <span><span class="status-dot dot-verde mr-1"></span>Com envio hoje</span>
         <span><span class="status-dot dot-amarelo mr-1"></span>Ativa · sem envio hoje</span>
         <span><span class="status-dot dot-vermelho mr-1"></span>Suspensa</span>
+        <div class="ml-auto d-flex align-items-center" style="gap:8px">
+          <span id="filtro-label" class="font-weight-bold text-success">Ativas</span>
+          <div class="custom-control custom-switch">
+            <input type="checkbox" class="custom-control-input" id="filtroStatus">
+            <label class="custom-control-label" for="filtroStatus">
+              <span class="text-muted">Inativas</span>
+            </label>
+          </div>
+          <span class="badge badge-light" id="contador-campanhas"></span>
+        </div>
       </div>
 
       {% if not campanhas %}
@@ -225,6 +235,41 @@
 // Collapse sidebar on mobile
 if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
 
+// Filtro Ativas / Inativas
+function aplicarFiltroStatus() {
+  const sw = document.getElementById('filtroStatus');
+  if (!sw) return;
+  const mostrarInativas = sw.checked;
+  const label = document.getElementById('filtro-label');
+  const contador = document.getElementById('contador-campanhas');
+
+  if (label) {
+    label.textContent = mostrarInativas ? 'Inativas' : 'Ativas';
+    label.classList.toggle('text-success', !mostrarInativas);
+    label.classList.toggle('text-danger', mostrarInativas);
+  }
+
+  let visiveis = 0;
+  document.querySelectorAll('tr[id^="row-"]').forEach(tr => {
+    const inativa = tr.classList.contains('suspensa');
+    const exibir = mostrarInativas ? inativa : !inativa;
+    tr.style.display = exibir ? '' : 'none';
+    if (exibir) visiveis++;
+  });
+
+  if (contador) {
+    contador.textContent = visiveis + ' ' + (mostrarInativas ? 'inativa' : 'ativa') + (visiveis === 1 ? '' : 's');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const sw = document.getElementById('filtroStatus');
+  if (sw) {
+    sw.addEventListener('change', aplicarFiltroStatus);
+    aplicarFiltroStatus();
+  }
+});
+
 function toggleCampanha(id, btn) {
   fetch(`/wpp/${id}/toggle`, {method:'POST'})
     .then(r => r.json())
@@ -248,6 +293,7 @@ function toggleCampanha(id, btn) {
         btn.title = 'Retomar campanha';
         icon.className = 'fas fa-play';
       }
+      aplicarFiltroStatus();
     });
 }
 </script>
