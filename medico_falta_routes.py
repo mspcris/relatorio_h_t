@@ -681,7 +681,7 @@ def api_enviar_wpp():
                     _registrar_envio_log(
                         campanha_id, posto, "", nome_paciente, wpp_template,
                         "erro:sem_telefone", None,
-                        ref_extra=f"falta {id_falta}",
+                        ref_extra=f"falta {id_falta}{posto}",
                     )
                     continue
                 # Parâmetros do template `aviso_de_fechamento_de_agenda`
@@ -709,7 +709,7 @@ def api_enviar_wpp():
                 )
                 _registrar_envio_log(
                     campanha_id, posto, tel_limpo, nome_paciente, wpp_template,
-                    status, wamid, ref_extra=f"falta {id_falta}",
+                    status, wamid, ref_extra=f"falta {id_falta}{posto}",
                 )
                 if "erro" in (status or ""):
                     falhados.append({"paciente": nome_paciente, "telefone": tel_limpo, "erro": status})
