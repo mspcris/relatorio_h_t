@@ -42,11 +42,51 @@
             color: rgba(255,255,255,0.4);
             margin-top: 8px;
         }
-        .card-servico { transition: box-shadow 0.15s; }
+        .card-servico { transition: box-shadow 0.15s; position: relative; }
         .card-servico:hover { box-shadow: 0 4px 18px rgba(0,0,0,0.12); }
-        .card-servico .card-title { font-size: 1.1rem; font-weight: 600; }
+        .card-servico .card-title { font-size: 1.1rem; font-weight: 600; padding-right: 28px; }
         .card-servico .card-text { color: #555; }
         .btn-acessar { min-width: 140px; }
+
+        /* Botão de favorito */
+        .fav-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: transparent;
+            border: none;
+            padding: 4px 6px;
+            font-size: 1.15rem;
+            line-height: 1;
+            color: #ced4da;
+            cursor: pointer;
+            z-index: 2;
+            transition: color .15s, transform .15s;
+        }
+        .fav-btn:hover { color: #adb5bd; transform: scale(1.15); }
+        .fav-btn:focus { outline: none; box-shadow: 0 0 0 2px rgba(240,173,78,.25); border-radius: 4px; }
+        .fav-btn.is-fav { color: #f0ad4e; }
+        .fav-btn.is-fav:hover { color: #d39316; }
+
+        /* Seção Favoritos */
+        .favoritos-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0 0 1rem .25rem;
+        }
+        .favoritos-header h3 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #495057;
+        }
+        .favoritos-header h3 i { color: #f0ad4e; margin-right: 6px; }
+        .favoritos-divider {
+            border: 0;
+            border-top: 2px solid #dee2e6;
+            margin: .5rem 0 1.5rem 0;
+        }
     </style>
 </head>
 
@@ -188,6 +228,15 @@
         <div class="content-wrapper">
             <section class="content p-3">
 
+                <!-- Seção Favoritos (oculta quando não há favoritos) -->
+                <div id="favoritos-wrapper" style="display:none">
+                    <div class="favoritos-header">
+                        <h3><i class="fas fa-star"></i>Favoritos</h3>
+                    </div>
+                    <div class="row" id="row-favoritos"></div>
+                    <hr class="favoritos-divider">
+                </div>
+
                 <!-- Cabeçalho -->
                 <div class="card mb-3">
                     <div class="card-body">
@@ -196,7 +245,7 @@
                     </div>
                 </div>
 
-                <div class="row">
+                <div class="row" id="row-normais">
 
 
                     <!-- 01. Agenda do Dia -->
@@ -638,6 +687,111 @@
     </div>
 
 <script src="/js/menu.js" defer></script>
+<script>
+/* Favoritos em mais_servicos — persiste em localStorage por slug do título do card */
+(function () {
+  'use strict';
+  var STORAGE_KEY = 'mais_servicos_favoritos_v1';
+
+  function loadFavs() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+    catch (e) { return []; }
+  }
+  function saveFavs(favs) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(favs)); } catch (e) {}
+  }
+  function slug(s) {
+    return (s || '').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+
+  function reorganize() {
+    var favs = loadFavs();
+    var rowFav = document.getElementById('row-favoritos');
+    var rowNormal = document.getElementById('row-normais');
+    var wrapper = document.getElementById('favoritos-wrapper');
+    if (!rowFav || !rowNormal || !wrapper) return;
+
+    /* Mantém ordem dos favoritos conforme array (mais recente no fim) */
+    var allCols = Array.prototype.slice.call(document.querySelectorAll('[data-card-key]'));
+    var byKey = {};
+    allCols.forEach(function (col) { byKey[col.dataset.cardKey] = col; });
+
+    /* Move favoritos para rowFav, na ordem do array salvo */
+    favs.forEach(function (key) {
+      if (byKey[key]) rowFav.appendChild(byKey[key]);
+    });
+    /* Os não-favoritos vão para rowNormal preservando ordem original (data-orig-idx) */
+    allCols
+      .filter(function (col) { return favs.indexOf(col.dataset.cardKey) < 0; })
+      .sort(function (a, b) {
+        return parseInt(a.dataset.origIdx, 10) - parseInt(b.dataset.origIdx, 10);
+      })
+      .forEach(function (col) { rowNormal.appendChild(col); });
+
+    wrapper.style.display = favs.length > 0 ? '' : 'none';
+  }
+
+  function setBtnState(btn, isFav) {
+    var icon = btn.querySelector('i');
+    if (isFav) {
+      btn.classList.add('is-fav');
+      btn.title = 'Remover dos favoritos';
+      btn.setAttribute('aria-pressed', 'true');
+      if (icon) icon.className = 'fas fa-star';
+    } else {
+      btn.classList.remove('is-fav');
+      btn.title = 'Marcar como favorito';
+      btn.setAttribute('aria-pressed', 'false');
+      if (icon) icon.className = 'far fa-star';
+    }
+  }
+
+  function toggleFav(key, btn) {
+    var favs = loadFavs();
+    var idx = favs.indexOf(key);
+    if (idx >= 0) { favs.splice(idx, 1); setBtnState(btn, false); }
+    else          { favs.push(key);     setBtnState(btn, true);  }
+    saveFavs(favs);
+    reorganize();
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var favs = loadFavs();
+    var cards = document.querySelectorAll('.card-servico');
+
+    cards.forEach(function (card, i) {
+      var titleEl = card.querySelector('.card-title');
+      if (!titleEl) return;
+      var key = slug(titleEl.textContent);
+      if (!key) return;
+
+      var col = card.closest('.col-md-4');
+      if (!col) return;
+      col.dataset.cardKey = key;
+      col.dataset.origIdx = String(i);
+
+      var isFav = favs.indexOf(key) >= 0;
+
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'fav-btn';
+      btn.innerHTML = '<i class="far fa-star"></i>';
+      setBtnState(btn, isFav);
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleFav(key, btn);
+      });
+
+      card.appendChild(btn);
+    });
+
+    reorganize();
+  });
+})();
+</script>
 </body>
 
 </html>
