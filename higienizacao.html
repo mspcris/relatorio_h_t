@@ -346,6 +346,17 @@
     const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const hoje = ymd(new Date());
 
+    // Normaliza nome de funcionário: trim + Title Case (independente de UPPERCASE/minúsculas no source)
+    // Mantém preposições portuguesas em minúsculo (de, da, do, dos, das, e).
+    function tcaseName(s) {
+      if (!s) return '';
+      const sw = new Set(['de','da','do','das','dos','e']);
+      return String(s).trim().toLowerCase().split(/\s+/).map((w, i) => {
+        if (i > 0 && sw.has(w)) return w;
+        return w.charAt(0).toUpperCase() + w.slice(1);
+      }).join(' ');
+    }
+
     function mesAtual() {
       const h = new Date();
       return { ini: ymd(new Date(h.getFullYear(), h.getMonth(), 1)), fim: ymd(new Date(h.getFullYear(), h.getMonth()+1, 0)) };
@@ -536,10 +547,15 @@
       }).join(''));
 
       // ---- Tab: Por Funcionário ----
+      // Agrupa por nome NORMALIZADO (Title Case) — funde registros que diferem só
+      // em caixa/espaço (ex: "Fatima Cassia" vs "FATIMA CASSIA"). IDs do source
+      // são guardados num Set caso a mesma pessoa tenha múltiplos employee_id.
       const byFunc = {};
       regs.forEach(r => {
-        const k = r.funcionario_id || r.funcionario;
-        if (!byFunc[k]) byFunc[k] = { nome: r.funcionario, id: r.funcionario_id, logs: 0, hoje: 0, postos: new Set(), setores: new Set(), ultimo: '', dias: new Set() };
+        const nomeNorm = tcaseName(r.funcionario);
+        const k = nomeNorm || r.funcionario_id || '(sem nome)';
+        if (!byFunc[k]) byFunc[k] = { nome: nomeNorm, id: r.funcionario_id, ids: new Set(), logs: 0, hoje: 0, postos: new Set(), setores: new Set(), ultimo: '', dias: new Set() };
+        if (r.funcionario_id) byFunc[k].ids.add(r.funcionario_id);
         byFunc[k].logs++;
         if (r.dia === hoje) byFunc[k].hoje++;
         byFunc[k].postos.add(r.posto);
@@ -551,9 +567,10 @@
       renderTable('tbFunc', funcKeys.map(k => {
         const ff = byFunc[k];
         const media = ff.dias.size ? (ff.logs / ff.dias.size).toFixed(1) : '0';
+        const idsStr = Array.from(ff.ids).filter(Boolean).join(', ') || (ff.id || '');
         return `<tr>
           <td><strong>${esc(ff.nome)}</strong></td>
-          <td class="text-muted-sm">${esc(ff.id)}</td>
+          <td class="text-muted-sm">${esc(idsStr)}</td>
           <td class="text-right">${fmtN(ff.logs)}</td>
           <td class="text-right">${fmtN(ff.hoje)}</td>
           <td class="text-right">${fmtN(ff.postos.size)}</td>
