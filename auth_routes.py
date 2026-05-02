@@ -159,7 +159,7 @@ PAGINAS_DISPONIVEIS = [
     # ── Mais Serviços ──
     {"key": "k_nbs_ibs_cbs",            "label": "Notas Fiscais NBS/IBS/CBS",   "group": "mais"},
     {"key": "k_relatorio_pcs",          "label": "Planejamento PC's",           "group": "mais"},
-    {"key": "k_whatsapp_explicado",     "label": "Explicando Cobrança WPP",     "group": "mais"},
+    {"key": "k_whatsapp_explicado",     "label": "WhatsApp - Explicando a Cobrança", "group": "mais"},
     {"key": "cobranca",                 "label": "Cobrança",                    "group": "mais"},
     {"key": "chat_externo",             "label": "Chat",                        "group": "mais"},
     {"key": "broker",                   "label": "Vendas Efetivar",             "group": "mais"},
