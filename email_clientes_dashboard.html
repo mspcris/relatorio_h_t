@@ -62,6 +62,41 @@
     .kpi-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #888; }
     .chart-wrap { position: relative; height: 260px; }
 
+    /* ── Loading overlay (1ª carga) ── */
+    #loadingOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(248,249,250,.97);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 1rem;
+      transition: opacity .25s ease;
+    }
+    #loadingOverlay.hide { opacity: 0; pointer-events: none; }
+    #loadingOverlay .spinner {
+      width: 64px; height: 64px;
+      border: 6px solid #e9ecef;
+      border-top-color: #4dabf7;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+      margin-bottom: 1.25rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loadingOverlay .ld-title {
+      font-size: 1.25rem; font-weight: 700; color: #212529;
+      margin-bottom: .35rem;
+    }
+    #loadingOverlay .ld-sub {
+      font-size: .9rem; color: #6c757d; max-width: 420px;
+    }
+    #loadingOverlay .ld-progress {
+      margin-top: 1rem; font-size: .8rem; color: #adb5bd;
+    }
+
     /* Posto table */
     .status-hoje          { color: #2f9e44; font-weight: 600; }
     .status-ontem         { color: #e67700; font-weight: 600; }
@@ -107,6 +142,15 @@
   </style>
 </head>
 <body>
+
+<!-- Loading overlay grande (1ª carga) — esconde após dados chegarem -->
+<div id="loadingOverlay" role="status" aria-live="polite">
+  <div class="spinner" aria-hidden="true"></div>
+  <div class="ld-title">Carregando dashboard…</div>
+  <div class="ld-sub">A consulta pode levar alguns segundos. Por favor, aguarde — não recarregue a página.</div>
+  <div class="ld-progress" id="loadingProgress">conectando à API…</div>
+</div>
+
 
 <!-- ═══ SIDEBAR ═══ -->
 <div id="sidebar">
@@ -459,17 +503,34 @@ function showApiError(msg) {
     `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Erro na API:</strong> ${msg}</div>`;
 }
 
+function hideLoadingOverlay() {
+  const ov = document.getElementById('loadingOverlay');
+  if (!ov) return;
+  ov.classList.add('hide');
+  setTimeout(() => { ov.style.display = 'none'; }, 300);
+}
+function setLoadingProgress(msg) {
+  const el = document.getElementById('loadingProgress');
+  if (el) el.textContent = msg;
+}
+
+let isFirstLoad = true;
+
 async function loadDashboard() {
+  if (isFirstLoad) setLoadingProgress('consultando dados (~5–15s)…');
   try {
     const resp = await fetch('/api/email_clientes/dashboard');
     if (!resp.ok) {
       showApiError(`HTTP ${resp.status} — ${resp.statusText}`);
+      hideLoadingOverlay();
       return;
     }
+    if (isFirstLoad) setLoadingProgress('renderizando…');
     const data = await resp.json();
 
     if (data.erro) {
       showApiError(data.erro);
+      hideLoadingOverlay();
       return;
     }
 
@@ -481,8 +542,12 @@ async function loadDashboard() {
 
     document.getElementById('lastUpdated').textContent =
       'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+
+    hideLoadingOverlay();
+    isFirstLoad = false;
   } catch(e) {
     showApiError(e.message);
+    hideLoadingOverlay();
   }
 }
 
