@@ -434,7 +434,11 @@ def run():
     logger.write(f"  Postos: {len(postos_ordenados)} — {', '.join(postos_ordenados)}")
     logger.write(f"  Especialidades: {len(especialidades)}")
     logger.write(f"  Tempo total: {elapsed:.1f}s")
-    meta.ok('geral')
+    # Registra cada posto presente nos dados como OK no meta — assim o widget
+    # ETLStatus mostra feedback granular por posto. A query é única (view
+    # consolidada via Anchieta), mas conceitualmente cobre todos os postos.
+    for letra in sorted(postos_vistos):
+        meta.ok(letra)
     meta.save()
 
     logger.write(f"\nFinalizado export_qualidade_agenda.")
