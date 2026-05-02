@@ -106,11 +106,11 @@
         <span><span class="status-dot dot-amarelo mr-1"></span>Ativa · sem envio hoje</span>
         <span><span class="status-dot dot-vermelho mr-1"></span>Suspensa</span>
         <div class="ml-auto d-flex align-items-center" style="gap:8px">
-          <span id="filtro-label" class="font-weight-bold text-success">Ativas</span>
+          <span id="filtro-label-inativas" class="font-weight-bold text-muted">Inativas</span>
           <div class="custom-control custom-switch">
-            <input type="checkbox" class="custom-control-input" id="filtroStatus">
+            <input type="checkbox" class="custom-control-input" id="filtroStatus" checked>
             <label class="custom-control-label" for="filtroStatus">
-              <span class="text-muted">Inativas</span>
+              <span id="filtro-label-ativas" class="text-success font-weight-bold">Ativas</span>
             </label>
           </div>
           <span class="badge badge-light" id="contador-campanhas"></span>
@@ -235,30 +235,36 @@
 // Collapse sidebar on mobile
 if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
 
-// Filtro Ativas / Inativas
+// Filtro Ativas / Inativas — switch ON = Ativas (default), OFF = Inativas
 function aplicarFiltroStatus() {
   const sw = document.getElementById('filtroStatus');
   if (!sw) return;
-  const mostrarInativas = sw.checked;
-  const label = document.getElementById('filtro-label');
+  const mostrarAtivas = sw.checked;
+  const labelAtivas = document.getElementById('filtro-label-ativas');
+  const labelInativas = document.getElementById('filtro-label-inativas');
   const contador = document.getElementById('contador-campanhas');
 
-  if (label) {
-    label.textContent = mostrarInativas ? 'Inativas' : 'Ativas';
-    label.classList.toggle('text-success', !mostrarInativas);
-    label.classList.toggle('text-danger', mostrarInativas);
+  if (labelAtivas) {
+    labelAtivas.classList.toggle('text-success', mostrarAtivas);
+    labelAtivas.classList.toggle('font-weight-bold', mostrarAtivas);
+    labelAtivas.classList.toggle('text-muted', !mostrarAtivas);
+  }
+  if (labelInativas) {
+    labelInativas.classList.toggle('text-danger', !mostrarAtivas);
+    labelInativas.classList.toggle('font-weight-bold', !mostrarAtivas);
+    labelInativas.classList.toggle('text-muted', mostrarAtivas);
   }
 
   let visiveis = 0;
   document.querySelectorAll('tr[id^="row-"]').forEach(tr => {
     const inativa = tr.classList.contains('suspensa');
-    const exibir = mostrarInativas ? inativa : !inativa;
+    const exibir = mostrarAtivas ? !inativa : inativa;
     tr.style.display = exibir ? '' : 'none';
     if (exibir) visiveis++;
   });
 
   if (contador) {
-    contador.textContent = visiveis + ' ' + (mostrarInativas ? 'inativa' : 'ativa') + (visiveis === 1 ? '' : 's');
+    contador.textContent = visiveis + ' ' + (mostrarAtivas ? 'ativa' : 'inativa') + (visiveis === 1 ? '' : 's');
   }
 }
 
