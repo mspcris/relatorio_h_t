@@ -42,7 +42,19 @@
   }
   .posto-check label.restrito { color: #c62828; font-weight: 600; }
   .paginas-check { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
-  .paginas-check label { font-weight: normal; font-size: .85rem; cursor: pointer; min-width: 180px; }
+  .paginas-check .pagina-item {
+    display: flex; align-items: center; gap: 6px;
+    font-size: .85rem; min-width: 180px;
+  }
+  .paginas-check .pagina-item input[type="checkbox"] {
+    cursor: pointer; flex-shrink: 0;
+  }
+  .paginas-check .pagina-link {
+    color: #2c3e50; text-decoration: none; cursor: pointer;
+  }
+  .paginas-check .pagina-link:hover {
+    color: #007bff; text-decoration: underline;
+  }
   .paginas-separador {
     width: 100%; margin-top: 8px; margin-bottom: 2px; padding-top: 6px;
     border-top: 1px solid #dee2e6;
@@ -1017,7 +1029,14 @@ function renderPaginasCheck(userPaginas) {
 
   function mkItem(p) {
     const ck = userPaginas.includes(p.key) ? ' checked' : '';
-    return `<label><input type="checkbox" class="pagina-cb" value="${p.key}"${ck}> ${p.label}</label>`;
+    const href = p.href || '#';
+    const isExternal = /^https?:/i.test(href);
+    const extIcon = isExternal ? ' <i class="fas fa-external-link-alt" style="font-size:.65rem;color:#adb5bd;margin-left:2px"></i>' : '';
+    // Click no nome → abre a página em nova aba; click na checkbox → marca/desmarca acesso
+    return `<div class="pagina-item">
+      <input type="checkbox" class="pagina-cb" value="${p.key}"${ck} title="Clique para conceder/remover acesso">
+      <a href="${href}" target="_blank" rel="noopener" class="pagina-link" title="Abrir página em nova aba">${p.label}${extIcon}</a>
+    </div>`;
   }
 
   wrap.innerHTML =
