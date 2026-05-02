@@ -10,10 +10,15 @@
  *     });
  *   </script>
  *
- * Cores do botao (auto-fetch ao carregar):
- *   VERDE    = executou dentro da janela esperada e sem erros
- *   AMARELO  = atrasado (passou da janela esperada) OU postos faltando sem erro
- *   VERMELHO = algum posto com erro OU muito atrasado (> 3x janela) OU nao agendado
+ * Cores do botao (auto-fetch ao carregar) — baseado em CICLOS perdidos, nao tempo absoluto:
+ *   VERDE    = dentro do ciclo atual (runAge <= 1x intervalo) e todos postos OK
+ *   AMARELO  = 1 ciclo perdido (1x < runAge <= 2x intervalo) OU posto com erro/faltando
+ *              na ultima execucao (1 falha conhecida)
+ *   VERMELHO = 2+ ciclos perdidos (runAge > 2x intervalo) OU posto sem atualizar ha 2+ ciclos
+ *   CINZA    = ETL sem agendamento no cron (manual, neutro)
+ *
+ * Exemplo: cron a cada 15 min — 0–15min verde, 15–30min amarelo, 30min+ vermelho.
+ * Exemplo: cron 1x/dia      — 0–24h verde, 24–48h amarelo, 48h+ vermelho.
  *
  * O painel mostra:
  *   - script .py responsavel
@@ -88,51 +93,100 @@
     return '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle;background:' + c.dot + ';"></span>';
   }
 
-  /* ── Classificacao do status geral ── */
+  /* ── Classificacao do status geral (por CICLOS perdidos) ──
+   *
+   * Regra unica para qualquer ETL, independente da periodicidade:
+   *   runAge <= 1x intervalo  → VERDE  (dentro do ciclo atual)
+   *   runAge >  1x intervalo  → AMARELO (1 ciclo perdido)
+   *   runAge >  2x intervalo  → VERMELHO (2+ ciclos perdidos)
+   *
+   * O mesmo se aplica a cada posto individualmente (posto.at).
+   * Posto com status='error' na ultima execucao ou ausente = AMARELO (1 falha pontual).
+   * So vira VERMELHO se a falha persistir alem de 2 ciclos.
+   */
   function classify(data, reg, expectedPostos) {
     var now = Date.now();
-    var finished = data.finished_at ? new Date(data.finished_at) : null;
+    var finished = data && data.finished_at ? new Date(data.finished_at) : null;
     var interval = reg && reg.interval_min ? reg.interval_min * 60000 : null;
-    var postos = data.postos || {};
+    var postos = (data && data.postos) || {};
     var keys = expectedPostos && expectedPostos.length > 0 ? expectedPostos.slice() : Object.keys(postos);
 
-    // Cron nao agendado -> sempre vermelho
+    // Sem agendamento no cron -> neutro (cinza), nao alarme
     if (reg && reg.interval_min === null) {
-      return { level: 'red', summary: 'nao agendado', reason: 'Script existe mas nao tem entrada no /etc/cron.d/relatorio_ht da VM.' };
+      return { level: 'gray', summary: 'sem agendamento', reason: 'Script existe mas nao tem entrada no /etc/cron.d/relatorio_ht da VM (execucao manual).' };
     }
 
-    // Agrega por posto
-    var countOk = 0, countErr = 0, countStale = 0, countMissing = 0;
+    // Sem registro de execucao
+    if (!finished) {
+      return { level: 'yellow', summary: 'sem registro', reason: 'ETL ainda nao registrou nenhuma execucao no meta.' };
+    }
+
+    var runAge = now - finished.getTime();
+
+    // 2+ ciclos perdidos no ETL inteiro -> vermelho (regra principal)
+    if (interval && runAge > 2 * interval) {
+      var ciclosPerdidos = Math.floor(runAge / interval);
+      return {
+        level: 'red',
+        summary: ciclosPerdidos + ' ciclos atrasado',
+        reason: 'Ultima execucao ha ' + fmtAge(runAge) + ' — esperado a cada ' + fmtAge(interval) + ' (' + ciclosPerdidos + ' ciclos sem rodar).'
+      };
+    }
+
+    // Agrega por posto (vermelho > amarelo)
+    var countErr = 0, countStaleRed = 0, countStaleYellow = 0, countMissing = 0;
     keys.forEach(function (k) {
       var p = postos[k];
       if (!p) { countMissing++; return; }
       if (p.status !== 'ok') { countErr++; return; }
-      if (!interval) { countOk++; return; }
+      if (!interval) return;
       var pAge = p.at ? now - new Date(p.at).getTime() : Infinity;
-      if (pAge > 3 * interval) countErr++;
-      else if (pAge > 1.5 * interval) countStale++;
-      else countOk++;
+      if (pAge > 2 * interval) countStaleRed++;
+      else if (pAge > interval) countStaleYellow++;
     });
 
+    // Algum posto sem atualizar ha 2+ ciclos -> vermelho
+    if (countStaleRed > 0) {
+      return {
+        level: 'red',
+        summary: countStaleRed + ' posto(s) 2+ ciclos atras',
+        reason: countStaleRed + ' posto(s) sem atualizacao ha mais de 2 ciclos.'
+      };
+    }
+
+    // ETL inteiro com 1 ciclo perdido -> amarelo
+    if (interval && runAge > interval) {
+      return {
+        level: 'yellow',
+        summary: '1 ciclo atrasado',
+        reason: 'Ultima execucao ha ' + fmtAge(runAge) + ' — esperado a cada ' + fmtAge(interval) + '.'
+      };
+    }
+
+    // Falhas pontuais (1 ciclo) -> amarelo
     if (countErr > 0) {
-      return { level: 'red', summary: countErr + ' erro(s)', reason: countErr + ' posto(s) com falha ou dados muito antigos.' };
+      return {
+        level: 'yellow',
+        summary: countErr + ' erro(s)',
+        reason: countErr + ' posto(s) falharam na ultima execucao (1 ciclo). Vermelho so se persistir alem de 2 ciclos.'
+      };
     }
-
-    var runAge = finished ? now - finished.getTime() : Infinity;
-    if (interval) {
-      if (runAge > 3 * interval) {
-        return { level: 'red', summary: 'muito atrasado', reason: 'Ultima execucao ha ' + fmtAge(runAge) + ' — esperado a cada ' + fmtAge(interval) + '.' };
-      }
-      if (runAge > 1.5 * interval || countStale > 0) {
-        return { level: 'yellow', summary: 'atrasado', reason: 'Ultima execucao ha ' + fmtAge(runAge) + ' — esperado a cada ' + fmtAge(interval) + '.' };
-      }
+    if (countStaleYellow > 0) {
+      return {
+        level: 'yellow',
+        summary: countStaleYellow + ' posto(s) 1 ciclo atras',
+        reason: countStaleYellow + ' posto(s) sem atualizacao ha mais de 1 ciclo.'
+      };
     }
-
     if (countMissing > 0 && keys.length > 0) {
-      return { level: 'yellow', summary: countMissing + ' posto(s) nao rodaram', reason: 'Alguns postos nao aparecem no meta — talvez nao estejam no .env.' };
+      return {
+        level: 'yellow',
+        summary: countMissing + ' posto(s) faltando',
+        reason: countMissing + ' posto(s) nao apareceram na ultima execucao do meta.'
+      };
     }
 
-    return { level: 'green', summary: 'ok', reason: 'Executou na janela esperada e sem erros.' };
+    return { level: 'green', summary: 'ok', reason: 'Executou no ciclo atual e sem erros.' };
   }
 
   /* ── Ícone ── */
@@ -248,8 +302,8 @@
         var dt = p.at ? new Date(p.at) : null;
         var pAge = dt ? now - dt.getTime() : Infinity;
         var lvl = 'green';
-        if (interval && pAge > 3 * interval) lvl = 'red';
-        else if (interval && pAge > 1.5 * interval) lvl = 'yellow';
+        if (interval && pAge > 2 * interval) lvl = 'red';
+        else if (interval && pAge > interval) lvl = 'yellow';
         html += '<span>' + pdot(lvl) + escapeHtml(label) + ': ' +
                 '<span style="color:' + COLORS[lvl].text + ';">' +
                 (dt ? fmtDate(dt) + ' (' + fmtAge(pAge) + ')' : 'ok') +
@@ -296,9 +350,9 @@
         var data = null;
         var result = null;
 
-        /* Cron nao agendado: nem tenta buscar meta, ja marca vermelho. */
+        /* Cron nao agendado: marca cinza (neutro), nao alarma. */
         if (reg && reg.interval_min === null) {
-          result = { level: 'red', summary: 'nao agendado', reason: 'Script ' + reg.py + ' nao tem entrada no cron.' };
+          result = { level: 'gray', summary: 'sem agendamento', reason: 'Script ' + reg.py + ' nao tem entrada no cron (execucao manual).' };
           applyButtonColor(btn, result.level, result.summary);
         } else {
           fetch(cfg.metaUrl, { cache: 'no-store' })
