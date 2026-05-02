@@ -78,10 +78,19 @@ def _load_template_bodies() -> None:
 
 
 def _expandir_template(template_name: str, params: dict) -> str:
-    """Expande as variáveis {{key}} do template com os valores reais."""
+    """Expande as variáveis {{key}} do template com os valores reais.
+
+    Se o template ainda não está no cache (módulo importado pelo Flask sem
+    rodar main(), ou template novo aprovado depois do startup), tenta
+    carregar lazily uma vez antes de cair no fallback "k: v".
+    """
     body = _TEMPLATE_BODIES.get(template_name, "")
     if not body:
-        # fallback: monta texto simples
+        # cache miss → tenta recarregar (template pode ter sido aprovado depois)
+        _load_template_bodies()
+        body = _TEMPLATE_BODIES.get(template_name, "")
+    if not body:
+        # ainda sem template → fallback de último recurso (debug-friendly)
         return "  ".join(f"{k}: {v}" for k, v in params.items() if v)
     for key, val in params.items():
         body = body.replace(f"{{{{{key}}}}}", str(val))
