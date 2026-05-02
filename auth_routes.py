@@ -164,7 +164,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "chat_externo",             "label": "Chat",                        "group": "mais"},
     {"key": "broker",                   "label": "Vendas Efetivar",             "group": "mais"},
     {"key": "corretores",               "label": "Vendas Leads Corretores",     "group": "mais"},
-    {"key": "leads_analytics",           "label": "Leads Analytics",             "group": "mais"},
+    {"key": "leads_analytics",           "label": "Vendas - Leads Analytics",    "group": "mais"},
     {"key": "tarefas",                  "label": "Tarefas",                     "group": "mais"},
     {"key": "push_cobranca",            "label": "Push de Cobrança IA",         "group": "mais"},
     {"key": "wpp_campanhas",            "label": "WhatsApp Campanhas",          "group": "mais"},
@@ -180,7 +180,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "tef",                       "label": "TEF Recorrente",              "group": "mais"},
     {"key": "chat_dashboard",            "label": "Dashboard Chat (Camila.ai)",  "group": "mais"},
     {"key": "wpp_dashboard",             "label": "Dashboard WhatsApp (Meta)",   "group": "mais"},
-    {"key": "ctrlq_desbloqueio",         "label": "Desbloqueio de Agenda CTRL-Q","group": "mais"},
+    {"key": "ctrlq_desbloqueio",         "label": "Médico - Desbloqueio de Agenda — CTRL-Q","group": "mais"},
     {"key": "qualidade_agenda",          "label": "Qualidade da Agenda Médica",  "group": "mais"},
     {"key": "higienizacao",              "label": "Higienização",                "group": "mais"},
 ]
