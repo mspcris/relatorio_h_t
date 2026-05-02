@@ -685,6 +685,21 @@
           </div>
         </div>
 
+        <div class="form-row">
+          <div class="form-group col-md-12">
+            <div class="custom-control custom-switch">
+              <input type="checkbox" class="custom-control-input" id="f-has-openai">
+              <label class="custom-control-label" for="f-has-openai">
+                Tem conta na OpenAI (CAMIM Analytics GPT)
+              </label>
+            </div>
+            <small class="text-muted">
+              Marque se o usuário faz parte da conta CAMIM na OpenAI. Sem isso, o link
+              do GPT em Mais Serviços abre um aviso de acesso negado em vez do 404.
+            </small>
+          </div>
+        </div>
+
         <div class="form-group">
           <label>Postos com acesso</label>
           <div class="posto-check" id="postos-check">
@@ -1023,6 +1038,7 @@ function abrirModalNovo() {
   document.getElementById('f-pode-desbloquear').checked = false;
   document.getElementById('f-pode-desbloquear').disabled = true;
   document.getElementById('desbloquear-hint').textContent = 'Vincule ao SQL Server primeiro';
+  document.getElementById('f-has-openai').checked = false;
   document.getElementById('f-login-campinho').value = '';
   document.getElementById('f-id-usuario-sqlserver').value = '';
   document.getElementById('validacao-sqlserver-result').innerHTML = '';
@@ -1051,6 +1067,7 @@ function editar(id) {
   const temVinculo = !!u.id_usuario_sqlserver;
   document.getElementById('f-pode-desbloquear').disabled = !temVinculo;
   document.getElementById('f-pode-desbloquear').checked = !!u.pode_desbloquear;
+  document.getElementById('f-has-openai').checked = !!u.has_openai_account;
   document.getElementById('desbloquear-hint').textContent = temVinculo ? '' : 'Vincule ao SQL Server primeiro';
   if (temVinculo) {
     document.getElementById('validacao-sqlserver-result').innerHTML =
@@ -1095,10 +1112,11 @@ async function salvar() {
 
   const allPages = document.getElementById('f-all-pages').checked;
   const podeDesbloquear = document.getElementById('f-pode-desbloquear').checked;
+  const hasOpenAI = document.getElementById('f-has-openai').checked;
   const idUsuarioSqlServer = document.getElementById('f-id-usuario-sqlserver').value || null;
   const loginCampinho = document.getElementById('f-login-campinho').value.trim() || null;
   const paginas = allPages ? [] : [...document.querySelectorAll('.pagina-cb:checked')].map(cb => cb.value);
-  const payload = { nome, is_admin: admin, ativo, postos, all_pages: allPages, pode_desbloquear: podeDesbloquear, id_usuario_sqlserver: idUsuarioSqlServer, login_campinho: loginCampinho, paginas };
+  const payload = { nome, is_admin: admin, ativo, postos, all_pages: allPages, pode_desbloquear: podeDesbloquear, has_openai_account: hasOpenAI, id_usuario_sqlserver: idUsuarioSqlServer, login_campinho: loginCampinho, paginas };
   if (!uid) payload.email = email;
   if (senha) payload.senha = senha;
 

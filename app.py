@@ -900,6 +900,7 @@ def render_protected_page(page_name, **extra_vars):
         u = _gue(db, email)
         is_admin   = u.is_admin if u else False
         all_pages  = bool(u.all_pages) if u and hasattr(u, 'all_pages') else True
+        has_openai = bool(getattr(u, 'has_openai_account', False)) if u else False
         paginas    = u.lista_paginas() if u and not all_pages else []
         # Check page-level access
         page_key = _TEMPLATE_TO_PAGINA.get(page_name)
@@ -921,6 +922,7 @@ def render_protected_page(page_name, **extra_vars):
         USER_EMAIL=email,
         USER_POSTOS=json.dumps(postos),
         USER_IS_ADMIN=is_admin,
+        USER_HAS_OPENAI=has_openai,
         **extra_vars,
     )
     # Injetar tracker de tempo por página (sempre) + filtro de sidebar (se aplicável).

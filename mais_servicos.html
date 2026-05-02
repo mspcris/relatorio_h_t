@@ -187,6 +187,15 @@
                         <li class="nav-item"><a href="https://camila1.ia.camim.com.br/" target="_blank" class="nav-link"><i
                                     class="nav-icon fab fa-whatsapp"></i>
                                 <p>WhatsApp Campanhas</p></a></li>
+                        <li class="nav-item">
+                          {% if USER_HAS_OPENAI %}
+                          <a href="https://chatgpt.com/g/g-69e4c16a288c8191b339751f3692cfc3-camim-analytics" target="_blank" rel="noopener" class="nav-link">
+                          {% else %}
+                          <a href="#" onclick="abrirModalSemAcessoOpenAI(); return false;" class="nav-link">
+                          {% endif %}
+                            <i class="nav-icon fas fa-brain"></i><p>CAMIM Analytics</p>
+                          </a>
+                        </li>
                         <li class="nav-item"><a href="https://atendimento.camilaia.camim.com.br/crm" target="_blank" class="nav-link"><i
                                     class="nav-icon fas fa-headset"></i>
                                 <p>Camila.ai dos clientes — CRM</p></a></li>
@@ -294,6 +303,29 @@
                                 <a href="https://atendimento.camilaia.camim.com.br/crm" target="_blank" class="btn btn-acessar mt-3" style="background:#6A1B9A; border-color:#6A1B9A; color:#fff;">
                                     <i class="fas fa-external-link-alt mr-1"></i> Acessar
                                 </a>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <!-- 03b. CAMIM Analytics (acesso restrito a usuários da conta OpenAI) -->
+                    <div class="col-md-4 mb-4">
+                        <div class="card card-servico h-100">
+                            <div class="card-body d-flex flex-column">
+                                <div class="mb-3">
+                                    <i class="fas fa-brain fa-2x" style="color:#10A37F"></i>
+                                </div>
+                                <h5 class="card-title">CAMIM Analytics</h5>
+                                <p class="card-text flex-grow-1">GPT customizado da OpenAI com acesso às APIs dos KPIs — pergunte qualquer dado em linguagem natural. Acesso restrito a usuários com conta na OpenAI da CAMIM.</p>
+                                {% if USER_HAS_OPENAI %}
+                                <a href="https://chatgpt.com/g/g-69e4c16a288c8191b339751f3692cfc3-camim-analytics" target="_blank" rel="noopener" class="btn btn-acessar mt-3" style="background:#10A37F; border-color:#10A37F; color:#fff;">
+                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
+                                </a>
+                                {% else %}
+                                <button type="button" onclick="abrirModalSemAcessoOpenAI()" class="btn btn-acessar mt-3" style="background:#10A37F; border-color:#10A37F; color:#fff;">
+                                    <i class="fas fa-lock mr-1"></i> Acessar
+                                </button>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -685,6 +717,34 @@
         </div>
 
     </div>
+
+<!-- Modal: usuário sem conta OpenAI tentou acessar CAMIM Analytics -->
+<div class="modal fade" id="modalSemAcessoOpenAI" tabindex="-1" role="dialog" aria-labelledby="modalSemAcessoOpenAILabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalSemAcessoOpenAILabel">
+          <i class="fas fa-lock text-warning mr-2"></i>Sem acesso ao CAMIM Analytics
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Fechar"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <p>O <strong>CAMIM Analytics</strong> é um GPT customizado da OpenAI com acesso às APIs dos KPIs CAMIM — você pode perguntar qualquer dado em linguagem natural.</p>
+        <p>Para acessá-lo é necessário ter uma conta na OpenAI vinculada à CAMIM.</p>
+        <p class="mb-0"><strong>Para liberar o acesso, procure o administrador.</strong></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function abrirModalSemAcessoOpenAI() {
+  if (window.jQuery) jQuery('#modalSemAcessoOpenAI').modal('show');
+}
+</script>
 
 <script src="/js/menu.js" defer></script>
 <script>

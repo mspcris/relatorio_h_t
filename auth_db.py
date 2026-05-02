@@ -35,6 +35,7 @@ class User(Base):
     ativo        = Column(Boolean, default=True,  nullable=False)
     all_pages    = Column(Boolean, default=True,  nullable=False)
     pode_desbloquear = Column(Boolean, default=False, nullable=False)
+    has_openai_account = Column(Boolean, default=False, nullable=False)
     id_usuario_sqlserver = Column(Integer, nullable=True)
     login_campinho = Column(String(100), nullable=True)
     reset_token  = Column(String(100), nullable=True)
@@ -329,6 +330,17 @@ def init_db():
             _conn.commit()
         except Exception:
             pass
+        try:
+            _conn.execute(text("ALTER TABLE users ADD COLUMN has_openai_account INTEGER NOT NULL DEFAULT 0"))
+            _conn.commit()
+            # Coluna recém-criada: marca os 3 usuários que já têm conta na OpenAI
+            _conn.execute(text(
+                "UPDATE users SET has_openai_account=1 "
+                "WHERE email IN ('ronald@camim.com.br', 'cristiano@camim.com.br', 'leonardo@camim.com.br')"
+            ))
+            _conn.commit()
+        except Exception:
+            pass  # column already exists; admin gerencia via UI
         try:
             _conn.execute(text("ALTER TABLE historico_desbloqueio ADD COLUMN snapshot TEXT"))
             _conn.commit()

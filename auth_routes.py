@@ -631,6 +631,7 @@ def admin_lista():
                 "postos":        u.lista_postos(),
                 "all_pages":     u.all_pages if hasattr(u, 'all_pages') else True,
                 "pode_desbloquear": getattr(u, 'pode_desbloquear', False),
+                "has_openai_account": getattr(u, 'has_openai_account', False),
                 "id_usuario_sqlserver": getattr(u, 'id_usuario_sqlserver', None),
                 "login_campinho": getattr(u, 'login_campinho', None) or "",
                 "paginas":       u.lista_paginas() if hasattr(u, 'lista_paginas') else [],
@@ -665,6 +666,7 @@ def admin_criar():
             db.add(UserPosto(user_id=user.id, posto=posto.upper()))
         user.all_pages = bool(d.get("all_pages", False))  # new users start restricted by default
         user.pode_desbloquear = bool(d.get("pode_desbloquear", False))
+        user.has_openai_account = bool(d.get("has_openai_account", False))
         if d.get("id_usuario_sqlserver"):
             user.id_usuario_sqlserver = int(d["id_usuario_sqlserver"])
         if d.get("login_campinho"):
@@ -708,6 +710,8 @@ def admin_editar(uid: int):
             if d["pode_desbloquear"] and not (d.get("id_usuario_sqlserver") or getattr(user, 'id_usuario_sqlserver', None)):
                 return jsonify({"erro": "É necessário vincular ao usuário SQL Server antes de ativar Desbloquear Agenda."}), 400
             user.pode_desbloquear = bool(d["pode_desbloquear"])
+        if "has_openai_account" in d:
+            user.has_openai_account = bool(d["has_openai_account"])
         if "id_usuario_sqlserver" in d:
             user.id_usuario_sqlserver = int(d["id_usuario_sqlserver"]) if d["id_usuario_sqlserver"] else None
         if "login_campinho" in d:
