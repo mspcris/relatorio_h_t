@@ -49,18 +49,29 @@ WPP_TEMPLATE_DEFAULT_AO_CRIAR = "aviso_de_fechamento_de_agenda"
 WPP_FROM_USER_DEFAULT_AO_CRIAR = "cmg8cum8g0519jbbm6r9l93f7"
 
 
-# Mapeia letra do posto → idEndereco e descrição (puxado de cad_endereco em runtime)
-def _posto_endereco(con: pyodbc.Connection, letra: str) -> tuple[int | None, str]:
+# Mapeia letra do posto → idEndereco, descrição, telefone (puxado de cad_endereco em runtime)
+def _posto_endereco(con: pyodbc.Connection, letra: str) -> tuple[int | None, str, str]:
     cur = con.cursor()
     cur.execute(
-        "SELECT TOP 1 idEndereco, descricao FROM cad_endereco "
+        "SELECT TOP 1 idEndereco, descricao, Telefone FROM cad_endereco "
         "WHERE codigo = ? AND AtendimentoAtivoPosto = 1",
         letra.strip().upper(),
     )
     row = cur.fetchone()
     if not row:
-        return None, ""
-    return int(row[0]), (row[1] or "").strip()
+        return None, "", ""
+    return int(row[0]), (row[1] or "").strip(), (row[2] or "").strip()
+
+
+# Telefones de saída Meta. Se o telefone do posto bate exatamente com a chave,
+# inclui `from` no payload Meta. Senão, omite (sai pelo número default da conta).
+_WPP_FROM_POR_TELEFONE = {
+    "3529-6666": "552135296666",  # Centro Médico do Couto
+}
+
+
+def _resolve_wpp_from_phone(telefone_posto: str | None) -> str | None:
+    return _WPP_FROM_POR_TELEFONE.get((telefone_posto or "").strip())
 
 
 def _limpar_telefone(raw: str | None) -> str | None:
@@ -610,8 +621,9 @@ def api_enviar_wpp():
             medico_fechou, clinica_fechou = bool(f[5]), bool(f[6])
             motivo_label = (f[7] or "").strip() or "—"
 
-            # 2) Posto: descrição
-            id_endereco_posto, posto_descricao = _posto_endereco(con, posto)
+            # 2) Posto: descrição + telefone (telefone determina o `from` Meta)
+            id_endereco_posto, posto_descricao, posto_telefone = _posto_endereco(con, posto)
+            wpp_from_phone = _resolve_wpp_from_phone(posto_telefone)
 
             # 3) "Médico ou Clínica?" — bit que estiver marcado define a string
             # Se nenhum marcado, default = "Médico"
@@ -706,6 +718,7 @@ def api_enviar_wpp():
                     from_user_id=wpp_from_user,      # da campanha
                     usar_chat=wpp_usar_chat,         # da campanha
                     usar_meta=wpp_usar_meta,         # da campanha
+                    from_phone=wpp_from_phone,       # 3529 (Couto) → from explícito; demais → default
                 )
                 _registrar_envio_log(
                     campanha_id, posto, tel_limpo, nome_paciente, wpp_template,

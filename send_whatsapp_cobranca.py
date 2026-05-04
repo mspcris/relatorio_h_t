@@ -287,7 +287,8 @@ def enviar_via_chat(telefone: str, nome: str, template: str, params: dict,
 
 
 def enviar_via_meta(telefone: str, template: str, params: dict,
-                     header_image_url: str | None = None) -> tuple[str, str | None]:
+                     header_image_url: str | None = None,
+                     from_phone: str | None = None) -> tuple[str, str | None]:
     """Envia template diretamente pela API Meta/WhatsApp Business.
 
     Quando o template tem HEADER do tipo IMAGE, a wrapper API exige o campo
@@ -295,6 +296,9 @@ def enviar_via_meta(telefone: str, template: str, params: dict,
     aprovado — a Meta exige ser passada por mensagem). Se header_image_url
     não vier, ainda assim mandamos `HEADER: {}` (a wrapper retorna 400/500
     indicando isso pra ficar visível no log e na lista de não-enviados).
+
+    `from_phone` (opcional, só usado quando o remetente não é o default da
+    conta Meta — ex.: 552135296666 para o Couto/3529).
     """
     data_field = {"BODY": params}
     if header_image_url:
@@ -307,6 +311,8 @@ def enviar_via_meta(telefone: str, template: str, params: dict,
             "data":  data_field,
         }],
     }
+    if from_phone:
+        payload["from"] = from_phone
     try:
         r = requests.post(
             f"{WPP_API_URL}/templates/send",
@@ -334,7 +340,8 @@ def enviar(telefone: str, nome: str, template: str, params: dict,
            from_user_id: str | None = None,
            usar_chat: bool = True,
            usar_meta: bool = False,
-           header_image_url: str | None = None) -> tuple[str, str | None]:
+           header_image_url: str | None = None,
+           from_phone: str | None = None) -> tuple[str, str | None]:
     if dry_run:
         return "dry_run", None
 
@@ -351,7 +358,8 @@ def enviar(telefone: str, nome: str, template: str, params: dict,
 
     if usar_meta:
         s, w = enviar_via_meta(telefone, template, params,
-                               header_image_url=header_image_url)
+                               header_image_url=header_image_url,
+                               from_phone=from_phone)
         if wamid_final is None:
             wamid_final = w
         # Meta tem prioridade no status final
