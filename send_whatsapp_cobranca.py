@@ -427,6 +427,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
     usar_chat    = bool(campanha.get("enviar_chat", 1))
     usar_meta    = bool(campanha.get("enviar_meta", 0))
     header_url   = campanha.get("header_image_url") or None
+    from_phone   = db.from_phone_por_numero_saida(campanha.get("numero_saida"))
 
     if not postos:
         log.warning(f"  [{campanha['nome']}] Nenhum posto configurado.")
@@ -499,7 +500,8 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
             status, wamid = enviar(telefone, nome_cliente, template, params, dry_run,
                                    queue_id=queue_id, from_user_id=from_user_id,
                                    usar_chat=usar_chat, usar_meta=usar_meta,
-                                   header_image_url=header_url)
+                                   header_image_url=header_url,
+                                   from_phone=from_phone)
             telefones_rodada.add(telefone)
 
             nivel = logging.INFO if "erro" not in status else logging.WARNING

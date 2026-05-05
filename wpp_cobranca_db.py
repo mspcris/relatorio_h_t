@@ -107,7 +107,11 @@ def init_db() -> None:
             plano_premium       INTEGER NOT NULL DEFAULT 0,
             origem              TEXT,
             pagador_atrasado    INTEGER NOT NULL DEFAULT 0,
-            from_user_id        TEXT    NOT NULL DEFAULT 'cmg8cum8g0519jbbm6r9l93f7'
+            from_user_id        TEXT    NOT NULL DEFAULT 'cmg8cum8g0519jbbm6r9l93f7',
+
+            -- Número de saída do WhatsApp (default '2455-9600' = número atual da conta Meta)
+            -- '3529-6666' inclui from: "552135296666" no payload Meta (Centro Médico do Couto)
+            numero_saida        TEXT    NOT NULL DEFAULT '2455-9600'
         );
 
         CREATE TABLE IF NOT EXISTS envios (
@@ -237,6 +241,9 @@ def init_db() -> None:
             "enviar_chat":         "ALTER TABLE campanhas ADD COLUMN enviar_chat INTEGER NOT NULL DEFAULT 1",
             "enviar_meta":         "ALTER TABLE campanhas ADD COLUMN enviar_meta INTEGER NOT NULL DEFAULT 0",
             "header_image_url":    "ALTER TABLE campanhas ADD COLUMN header_image_url TEXT",
+            # Default '2455-9600' garante que campanhas pré-existentes continuem
+            # saindo pelo número atual (default da Meta) sem mudança de comportamento.
+            "numero_saida":        "ALTER TABLE campanhas ADD COLUMN numero_saida TEXT NOT NULL DEFAULT '2455-9600'",
         }
         for _col, _ddl in _novos.items():
             if _col not in cols:
@@ -253,6 +260,30 @@ def init_db() -> None:
 # ---------------------------------------------------------------------------
 # Helpers de tempo
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Roteamento Meta por número de saída
+# ---------------------------------------------------------------------------
+# Mapa numero_saida → from_phone do payload Meta.
+# '2455-9600' = default da conta (omite from); '3529-6666' = Couto (envia from).
+NUMEROS_SAIDA_VALIDOS = ("2455-9600", "3529-6666")
+NUMERO_SAIDA_DEFAULT = "2455-9600"
+
+_FROM_PHONE_POR_NUMERO = {
+    "3529-6666": "552135296666",
+}
+
+
+def _normalizar_numero_saida(valor: str | None) -> str:
+    v = (valor or "").strip()
+    return v if v in NUMEROS_SAIDA_VALIDOS else NUMERO_SAIDA_DEFAULT
+
+
+def from_phone_por_numero_saida(numero_saida: str | None) -> str | None:
+    """Resolve o `from` do payload Meta a partir do numero_saida da campanha.
+    Retorna None quando deve omitir (default 2455 da conta)."""
+    return _FROM_PHONE_POR_NUMERO.get(_normalizar_numero_saida(numero_saida))
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
@@ -310,8 +341,9 @@ def criar_campanha(dados: dict) -> int:
                 clube_beneficio, clube_beneficio_joy, plano_premium,
                 origem, pagador_atrasado, from_user_id,
                 enviar_chat, enviar_meta, header_image_url,
+                numero_saida,
                 created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 dados["nome"], dados.get("template", "notificacao_de_fatura"),
                 dados.get("modo_envio", "atraso"), postos_json,
@@ -348,6 +380,7 @@ def criar_campanha(dados: dict) -> int:
                 1 if dados.get("enviar_chat", True) else 0,
                 1 if dados.get("enviar_meta") else 0,
                 (dados.get("header_image_url") or None),
+                _normalizar_numero_saida(dados.get("numero_saida")),
                 now, now,
             )
         )
@@ -374,6 +407,7 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 clube_beneficio=?, clube_beneficio_joy=?, plano_premium=?,
                 origem=?, pagador_atrasado=?, from_user_id=?,
                 enviar_chat=?, enviar_meta=?, header_image_url=?,
+                numero_saida=?,
                 updated_at=?
             WHERE id=?""",
             (
@@ -412,6 +446,7 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 1 if dados.get("enviar_chat", True) else 0,
                 1 if dados.get("enviar_meta") else 0,
                 (dados.get("header_image_url") or None),
+                _normalizar_numero_saida(dados.get("numero_saida")),
                 now,
                 campanha_id,
             )

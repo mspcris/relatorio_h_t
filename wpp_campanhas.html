@@ -138,6 +138,7 @@
                 <th>Dias</th>
                 <th class="text-center">Chat</th>
                 <th class="text-center">Meta</th>
+                <th>Nº saída</th>
                 <th>Enviados</th>
                 <th>Não enviados</th>
                 <th>Status</th>
@@ -177,6 +178,14 @@
               </td>
               <td class="text-center">
                 {% if c.enviar_meta %}<i class="fab fa-whatsapp text-success"></i>{% else %}<i class="fas fa-times text-muted"></i>{% endif %}
+              </td>
+              <td>
+                {% set ns = c.numero_saida or '2455-9600' %}
+                {% if ns == '3529-6666' %}
+                  <span class="badge badge-info" title="Centro Médico do Couto">3529-6666</span>
+                {% else %}
+                  <span class="badge badge-light" title="Número padrão CAMIM">2455-9600</span>
+                {% endif %}
               </td>
               <td><span class="badge badge-success">{{ c.resumo.enviados }}</span></td>
               <td><span class="badge badge-warning text-dark">{{ c.resumo.nao_enviados }}</span></td>

@@ -868,6 +868,7 @@ def _form_to_dict(form) -> dict:
         "enviar_chat":        "1" in form.getlist("enviar_chat"),
         "enviar_meta":        "1" in form.getlist("enviar_meta"),
         "header_image_url":   (form.get("header_image_url") or "").strip() or None,
+        "numero_saida":       (form.get("numero_saida") or "").strip() or None,
     }
 
 
