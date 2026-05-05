@@ -222,9 +222,14 @@
               <select id="f_motivo" class="form-control"></select>
             </div>
             <div class="col-md-6 mb-2">
-              <label>Especialidade</label>
-              <input id="f_especialidade" type="text" class="form-control" maxlength="50" placeholder="Ex.: CLÍNICA GERAL" />
-              <div class="small-help">Pré-preenchida da especialidade do médico (se única).</div>
+              <label>Especialidade *</label>
+              <select id="f_especialidade" class="form-control">
+                <option value="">— Selecione um médico primeiro —</option>
+              </select>
+              <div class="small-help">
+                Carregada de <code>cad_especialidade</code>. O médico pode atender em várias —
+                a falta vale só para a especialidade selecionada.
+              </div>
             </div>
 
             <div class="col-md-12 mb-2">
@@ -459,13 +464,52 @@
     $("#btnIrFalta").disabled = true;
     $("#b_query").value = "";
     $("#b_resultados").innerHTML = "";
+    $("#f_especialidade").innerHTML = '<option value="">— Selecione um médico primeiro —</option>';
     $("#b_query").focus();
   });
+
+  function carregarEspecialidadesMedico() {
+    const sel = $("#f_especialidade");
+    sel.innerHTML = '<option value="">— Carregando... —</option>';
+    fetch(`/api/medico_falta/especialidades_medico?posto=${state.posto}&idmedico=${state.idmedico}`,
+          {credentials: "same-origin"})
+      .then(r => r.json())
+      .then(d => {
+        sel.innerHTML = "";
+        const especs = (d && d.especialidades) || [];
+        if (!especs.length) {
+          // Fallback: usa o que veio do cad_medico (campo legado), só pra não bloquear
+          // o operador caso o médico tenha cadastro antigo sem cad_especialidade ativa.
+          const leg = (state.especializacao || "").trim();
+          if (leg) {
+            const opt = document.createElement("option");
+            opt.value = leg; opt.textContent = leg + " (cad_medico — legado)";
+            sel.appendChild(opt);
+          } else {
+            sel.innerHTML = '<option value="">— Médico sem especialidade ativa —</option>';
+          }
+          return;
+        }
+        const opt0 = document.createElement("option");
+        opt0.value = ""; opt0.textContent = "— Selecione a especialidade —";
+        sel.appendChild(opt0);
+        especs.forEach(e => {
+          const opt = document.createElement("option");
+          opt.value = e; opt.textContent = e;
+          sel.appendChild(opt);
+        });
+        // Auto-seleciona se houver apenas uma
+        if (especs.length === 1) sel.value = especs[0];
+      })
+      .catch(() => {
+        sel.innerHTML = '<option value="">— Erro ao carregar especialidades —</option>';
+      });
+  }
 
   $("#btnIrFalta").addEventListener("click", () => {
     if (!state.idmedico) return;
     $("#f_data").value = new Date().toISOString().slice(0,10);
-    $("#f_especialidade").value = state.especializacao || "";
+    carregarEspecialidadesMedico();
     done("#stepBusca");
     unlock("#stepFalta");
   });
@@ -480,11 +524,17 @@
   $("#btnPreview").addEventListener("click", () => {
     const data = $("#f_data").value;
     if (!data) { alert("Escolha a data primeiro."); return; }
+    const esp = ($("#f_especialidade").value || "").trim();
+    if (!esp) { alert("Selecione a especialidade primeiro."); return; }
     const parcial = $("#f_tipo").value === "parcial";
     const hi = parcial ? $("#f_hini").value : "00:00";
     const hf = parcial ? $("#f_hfim").value : "23:59";
     setLoading(true);
-    fetch(`/api/medico_falta/agendamentos?posto=${state.posto}&idmedico=${state.idmedico}&data=${data}&hora_ini=${hi}&hora_fim=${hf}`, {credentials:"same-origin"})
+    const qs = new URLSearchParams({
+      posto: state.posto, idmedico: state.idmedico, data,
+      hora_ini: hi, hora_fim: hf, especialidade: esp,
+    });
+    fetch(`/api/medico_falta/agendamentos?${qs.toString()}`, {credentials:"same-origin"})
       .then(r => r.json()).then(d => {
         setLoading(false);
         const area = $("#previewArea");
@@ -515,6 +565,12 @@
     if (!id_motivo) { $("#msgFalta").textContent = "Escolha um motivo."; return; }
     const data = $("#f_data").value;
     if (!data) { $("#msgFalta").textContent = "Escolha a data."; return; }
+    const especialidade = ($("#f_especialidade").value || "").trim();
+    if (!especialidade) {
+      $("#msgFalta").textContent = "Selecione a especialidade. Médico pode atender em várias — a falta é por especialidade.";
+      $("#f_especialidade").focus();
+      return;
+    }
     // XOR obrigatório: exatamente um dos dois responsáveis (nem 0, nem 2)
     const cFech = $("#f_clinica_fechou").checked;
     const mFech = $("#f_medico_fechou").checked;
@@ -533,7 +589,7 @@
       hora_fim:    parcial ? $("#f_hfim").value : "23:59",
       id_motivo: id_motivo,
       motivo_label: motSel.options[motSel.selectedIndex].dataset.label || motSel.options[motSel.selectedIndex].text,
-      especialidade: $("#f_especialidade").value.trim() || null,
+      especialidade: especialidade,
       observacao: $("#f_obs").value.trim() || null,
       clinica_fechou: $("#f_clinica_fechou").checked,
       medico_fechou: $("#f_medico_fechou").checked,

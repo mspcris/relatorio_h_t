@@ -189,6 +189,51 @@ def api_lookups():
         return jsonify({"error": str(e)[:300]}), 500
 
 
+@medico_falta_bp.get("/api/medico_falta/especialidades_medico")
+def api_especialidades_medico():
+    """Lista as especialidades em que o médico atende no posto, lendo cad_especialidade.
+
+    Um médico pode ter N linhas em cad_especialidade (uma por especialidade/horário/sala).
+    O retorno é distinct por nome de especialidade, ignorando linhas desativadas
+    e linhas com janela de exibição já encerrada (DataFimExibicao < hoje).
+    """
+    email, postos, login_campinho = _check_admin()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    if not login_campinho:
+        return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo": True}), 403
+    posto = request.args.get("posto", "")
+    erro = _require_posto_in_acl(posto, postos)
+    if erro:
+        return jsonify({"error": erro}), 400
+    try:
+        idmedico = int(request.args.get("idmedico") or 0)
+    except ValueError:
+        return jsonify({"error": "idmedico inválido"}), 400
+    if not idmedico:
+        return jsonify({"error": "idmedico obrigatório"}), 400
+
+    try:
+        with _conn_for_posto(posto) as con:
+            cur = con.cursor()
+            cur.execute(
+                """SELECT DISTINCT LTRIM(RTRIM(Especialidade)) AS Esp
+                     FROM cad_especialidade
+                    WHERE idmedico = ?
+                      AND ISNULL(Desativado, 0) = 0
+                      AND Especialidade IS NOT NULL
+                      AND LTRIM(RTRIM(Especialidade)) <> ''
+                      AND (DataFimExibicao IS NULL OR DataFimExibicao >= CAST(GETDATE() AS DATE))
+                    ORDER BY Esp""",
+                idmedico,
+            )
+            especs = [(r[0] or "").strip() for r in cur.fetchall() if (r[0] or "").strip()]
+        return jsonify({"especialidades": especs, "total": len(especs)})
+    except Exception as e:
+        logger.exception("especialidades_medico falhou no posto %s", posto)
+        return jsonify({"error": str(e)[:300]}), 500
+
+
 @medico_falta_bp.get("/api/medico_falta/list")
 def api_list():
     """Lista faltas ativas no posto, filtrando por intervalo de DataFalta."""
@@ -281,6 +326,9 @@ def api_agendamentos():
         return jsonify({"error": "data inválida (use YYYY-MM-DD)"}), 400
     hora_ini = (request.args.get("hora_ini") or "00:00").strip()
     hora_fim = (request.args.get("hora_fim") or "23:59").strip()
+    # Especialidade é o que define a falta (médico pode ter N especialidades).
+    # Se não vier, mostra TODOS os agendamentos do médico no intervalo (legado).
+    especialidade = (request.args.get("especialidade") or "").strip()
 
     try:
         with _conn_for_posto(posto) as con:
@@ -291,8 +339,7 @@ def api_agendamentos():
             # CLAUDE.md: views da CAMIM usam SET DATEFORMAT dmy → passar data como DD/MM/YYYY string
             d_str = d.strftime("%d/%m/%Y")
             d_next = (d + timedelta(days=1)).strftime("%d/%m/%Y")
-            cur.execute(
-                """SELECT idLancamentoServico, Matricula, Paciente, idadePaciente,
+            sql = """SELECT idLancamentoServico, Matricula, Paciente, idadePaciente,
                           TelefoneResidencial, HoraPrevistaConsulta, Servico, Especialidade
                      FROM vw_Cad_LancamentoProntuarioComDesistencia WITH (NOLOCK)
                      WHERE idMedico = ?
@@ -300,10 +347,13 @@ def api_agendamentos():
                        AND DataConsulta <  ?
                        AND Desistencia = 0
                        AND HoraPrevistaConsulta >= ?
-                       AND HoraPrevistaConsulta <= ?
-                     ORDER BY HoraPrevistaConsulta""",
-                idmedico, d_str, d_next, hora_ini, hora_fim,
-            )
+                       AND HoraPrevistaConsulta <= ?"""
+            params = [idmedico, d_str, d_next, hora_ini, hora_fim]
+            if especialidade:
+                sql += " AND LTRIM(RTRIM(Especialidade)) = ?"
+                params.append(especialidade)
+            sql += " ORDER BY HoraPrevistaConsulta"
+            cur.execute(sql, params)
             out = []
             for r in cur.fetchall():
                 out.append({
@@ -366,7 +416,16 @@ def api_insert():
         return jsonify({"error": "motivo obrigatório"}), 400
 
     motivo_label = (data.get("motivo_label") or "").strip()[:250] or None
-    especialidade = (data.get("especialidade") or "").strip()[:50] or None
+    # Especialidade vinda do select (cad_especialidade) — obrigatória.
+    # É ela que define a unicidade da falta: o mesmo médico pode ter várias
+    # especialidades, faltando em uma e atendendo em outra no mesmo dia.
+    especialidade = (data.get("especialidade") or "").strip()[:50]
+    if not especialidade:
+        return jsonify({
+            "error": "Especialidade obrigatória. O médico pode atender em várias — "
+                     "selecione a que está com falta.",
+            "campo": "especialidade",
+        }), 400
     observacao = (data.get("observacao") or "").strip() or None
     clinica_fechou = 1 if data.get("clinica_fechou") else 0
     medico_fechou = 1 if data.get("medico_fechou") else 0
@@ -390,25 +449,33 @@ def api_insert():
                 return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo_posto": True}), 403
             cur = con.cursor()
 
-            # Anti-duplicidade: não permite 2 faltas ativas para o mesmo médico no mesmo dia
+            # Anti-duplicidade: não permite 2 faltas ativas para o mesmo
+            # médico+especialidade+dia. Médico com 5 especialidades pode estar
+            # faltando em só uma — outras especialidades seguem atendendo.
             cur.execute(
                 """SELECT TOP 1 idFalta FROM Cad_MedicoFalta
-                    WHERE idMedico = ? AND DataFalta = ? AND Desativado = 0""",
-                idmedico, data_falta,
+                    WHERE idMedico = ?
+                      AND DataFalta = ?
+                      AND LTRIM(RTRIM(ISNULL(Especialidade,''))) = ?
+                      AND Desativado = 0""",
+                idmedico, data_falta, especialidade,
             )
             existente = cur.fetchone()
             if existente:
                 return jsonify({
                     "error": (
                         f"Já existe falta cadastrada (idFalta={int(existente[0])}) "
-                        f"para esse médico em {data_falta.strftime('%d/%m/%Y')}. "
+                        f"para esse médico em {data_falta.strftime('%d/%m/%Y')} "
+                        f"na especialidade {especialidade}. "
                         f"Edite ou desative a existente antes de criar outra."
                     ),
                     "duplicada": True,
                     "id_falta_existente": int(existente[0]),
                 }), 409
 
-            # Conta pacientes agendados no intervalo (para QuantidadePacienteAgendado)
+            # Conta pacientes agendados no intervalo (para QuantidadePacienteAgendado).
+            # Filtra pela especialidade da falta — se médico tem outras, elas
+            # continuam atendendo e não devem entrar nessa contagem.
             cur.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
             d_str = data_falta.strftime("%d/%m/%Y")
             d_next = (data_falta + timedelta(days=1)).strftime("%d/%m/%Y")
@@ -418,8 +485,9 @@ def api_insert():
                      WHERE idMedico = ?
                        AND DataConsulta >= ? AND DataConsulta <  ?
                        AND Desistencia = 0
-                       AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?""",
-                idmedico, d_str, d_next, hora_ini, hora_fim,
+                       AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?
+                       AND LTRIM(RTRIM(Especialidade)) = ?""",
+                idmedico, d_str, d_next, hora_ini, hora_fim, especialidade,
             )
             qtd_pacientes = int(cur.fetchone()[0])
 
@@ -459,7 +527,9 @@ def api_insert():
                 return jsonify({"error": "INSERT Cad_MedicoFalta não retornou idFalta"}), 500
             id_falta = int(row[0])
 
-            # Agendamentos afetados (para o frontend disparar WhatsApp depois)
+            # Agendamentos afetados (para o frontend disparar WhatsApp depois).
+            # Filtra pela especialidade da falta — pacientes de outras especialidades
+            # do mesmo médico não foram afetados.
             cur.execute(
                 """SELECT idLancamentoServico, Paciente, HoraPrevistaConsulta,
                           TelefoneResidencial, Especialidade
@@ -468,8 +538,9 @@ def api_insert():
                        AND DataConsulta >= ? AND DataConsulta <  ?
                        AND Desistencia = 0
                        AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?
+                       AND LTRIM(RTRIM(Especialidade)) = ?
                      ORDER BY HoraPrevistaConsulta""",
-                idmedico, d_str, d_next, hora_ini, hora_fim,
+                idmedico, d_str, d_next, hora_ini, hora_fim, especialidade,
             )
             agendamentos = [
                 {
@@ -606,7 +677,7 @@ def api_enviar_wpp():
                 """SELECT mf.idMedico, m.Nome AS NomeMedico, mf.DataFalta,
                           mf.DataHora, mf.DatahoraFim,
                           mf.MedicoFechouAgenda, mf.ClinicaFechouAgenda,
-                          mfm.Motivo, mf.Observacao
+                          mfm.Motivo, mf.Observacao, mf.Especialidade
                      FROM Cad_MedicoFalta mf
                      LEFT JOIN cad_medico m ON m.idmedico = mf.idMedico
                      LEFT JOIN vw_Cad_MedicoFaltaMotivo mfm ON mfm.idMedicoFaltaMotivo = mf.idMedicoFaltaMotivo
@@ -620,6 +691,7 @@ def api_enviar_wpp():
             dh_ini, dh_fim = f[3], f[4]
             medico_fechou, clinica_fechou = bool(f[5]), bool(f[6])
             motivo_label = (f[7] or "").strip() or "—"
+            especialidade_falta = (f[9] or "").strip()
 
             # 2) Posto: descrição + telefone (telefone determina o `from` Meta)
             id_endereco_posto, posto_descricao, posto_telefone = _posto_endereco(con, posto)
@@ -638,16 +710,20 @@ def api_enviar_wpp():
             d_next = (data_falta + timedelta(days=1)).strftime("%d/%m/%Y")
             hi = dh_ini.strftime("%H:%M") if dh_ini else "00:00"
             hf = dh_fim.strftime("%H:%M") if dh_fim else "23:59"
-            cur.execute(
-                """SELECT idLancamentoServico, idCliente, idDependente, Paciente,
+            sql_pac = """SELECT idLancamentoServico, idCliente, idDependente, Paciente,
                           HoraPrevistaConsulta, TelefoneResidencial, Especialidade
                      FROM vw_Cad_LancamentoProntuarioComDesistencia WITH (NOLOCK)
                      WHERE idMedico = ?
                        AND DataConsulta >= ? AND DataConsulta <  ?
                        AND Desistencia = 0
-                       AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?""",
-                idmedico, d_str, d_next, hi, hf,
-            )
+                       AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?"""
+            params_pac = [idmedico, d_str, d_next, hi, hf]
+            # Filtra pela especialidade da falta — pacientes de outras especialidades
+            # do mesmo médico não foram afetados por essa falta.
+            if especialidade_falta:
+                sql_pac += " AND LTRIM(RTRIM(Especialidade)) = ?"
+                params_pac.append(especialidade_falta)
+            cur.execute(sql_pac, params_pac)
             agendamentos = cur.fetchall()
 
         # Garante a campanha (idempotente). Toda config (template/from_user/queue_id/
