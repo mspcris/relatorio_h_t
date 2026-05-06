@@ -63,15 +63,23 @@ def _posto_endereco(con: pyodbc.Connection, letra: str) -> tuple[int | None, str
     return int(row[0]), (row[1] or "").strip(), (row[2] or "").strip()
 
 
-# Telefones de saída Meta. Se o telefone do posto bate exatamente com a chave,
-# inclui `from` no payload Meta. Senão, omite (sai pelo número default da conta).
-_WPP_FROM_POR_TELEFONE = {
-    "3529-6666": "552135296666",  # Centro Médico do Couto
-}
+# Roteamento Meta: postos do grupo Couto saem pelo número 3529-6666
+# (from=552135296666). Demais postos omitem o `from` e saem pelo número
+# default da conta (2455-9600). Tentamos antes resolver pelo letra/grupo
+# (mais confiável que cad_endereco.Telefone, cuja formatação varia por filial).
+COUTO_POSTOS = frozenset({"C", "D", "J", "M", "P"})
+WPP_FROM_COUTO = "552135296666"
 
 
-def _resolve_wpp_from_phone(telefone_posto: str | None) -> str | None:
-    return _WPP_FROM_POR_TELEFONE.get((telefone_posto or "").strip())
+def _resolve_wpp_from_phone(letra_posto: str | None) -> str | None:
+    """Retorna o `from` Meta para o posto, ou None pra usar o default da conta.
+
+    Posto do grupo Couto (C, D, J, M, P) → 3529-6666 (552135296666).
+    Demais → None (omite `from`, sai pelo 2455-9600 default).
+    """
+    if (letra_posto or "").strip().upper() in COUTO_POSTOS:
+        return WPP_FROM_COUTO
+    return None
 
 
 def _limpar_telefone(raw: str | None) -> str | None:
@@ -695,7 +703,10 @@ def api_enviar_wpp():
 
             # 2) Posto: descrição + telefone (telefone determina o `from` Meta)
             id_endereco_posto, posto_descricao, posto_telefone = _posto_endereco(con, posto)
-            wpp_from_phone = _resolve_wpp_from_phone(posto_telefone)
+            # Roteia pela LETRA do posto (Couto = C,D,J,M,P → 3529).
+            # cad_endereco.Telefone é informativo apenas, não é confiável pro
+            # match exato (formatos variam: "(21) 3529-6666", "2455-9600 / 3529-6666", etc.).
+            wpp_from_phone = _resolve_wpp_from_phone(posto)
 
             # 3) "Médico ou Clínica?" — bit que estiver marcado define a string
             # Se nenhum marcado, default = "Médico"
