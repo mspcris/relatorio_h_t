@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import os
 import re
+import uuid
 import logging
 from datetime import date, datetime, timedelta
 
 import pyodbc
+import requests
 from flask import Blueprint, jsonify, request
 
 # Reusa helpers do módulo medico_novo (sem duplicar lógica de auth/conexão/audit)
@@ -80,6 +82,111 @@ def _resolve_wpp_from_phone(letra_posto: str | None) -> str | None:
     if (letra_posto or "").strip().upper() in COUTO_POSTOS:
         return WPP_FROM_COUTO
     return None
+
+
+def _numero_saida_humano(letra_posto: str | None) -> str:
+    """String legível do número que sai pra ir no MotivoDesistencia/CRM."""
+    if (letra_posto or "").strip().upper() in COUTO_POSTOS:
+        return "3529-6666"
+    return "2455-9600"
+
+
+# ---------------------------------------------------------------------------
+# Integração com api_fin_receita (camila3) — registra CRM e append no MotivoDesistencia
+# ---------------------------------------------------------------------------
+
+CAMILA3_API_URL = os.getenv("CAMILA3_API_URL", "")
+CAMILA3_API_KEY = os.getenv("CAMILA3_API_KEY", "")
+
+# IDs fixos no banco C (lookup confirmado em 2026-05-06):
+CRM_TIPO_OUTROS = 1
+CRM_MOTIVO_ORIENTACAO_AO_CLIENTE = 7
+
+
+def _chat_create_ticket(telefone: str, nome: str, texto: str,
+                        queue_id: str | None, from_user_id: str | None,
+                        display_phone_number: str | None) -> dict:
+    """POST /webhooks/chat — cria ticket sincronamente e devolve ticket_id.
+
+    Diferente do legado /webhooks/whatsapp (background, não devolve nada),
+    o /webhooks/chat roda em foreground e responde com {id, link} — onde
+    `id` é o ticketId no chat. É o que precisamos pra escrever no
+    MotivoDesistencia 'ticket-chat: NNN'.
+    """
+    chat_url = os.getenv("CHAT_API_URL", "").rstrip("/")
+    if not chat_url:
+        return {"ok": False, "error": "CHAT_API_URL não configurado"}
+    if not from_user_id:
+        return {"ok": False, "error": "from_user_id obrigatório"}
+    remetente = from_user_id if from_user_id.startswith("chat:") else f"chat:{from_user_id}"
+    ext_id = uuid.uuid4().hex[:24]
+    ts = datetime.now().astimezone().isoformat(timespec="seconds")
+    payload = {
+        "entry": [{
+            "id": ext_id,
+            "changes": [{
+                "field": "messages",
+                "value": {
+                    "contacts": [{"wa_id": telefone, "profile": {"name": nome}}],
+                    "messages": [{
+                        "id": ext_id, "from": remetente, "queue_id": queue_id,
+                        "text": {"body": texto}, "type": "text", "timestamp": ts,
+                    }],
+                    "metadata": {
+                        "phone_number_id": "",
+                        "display_phone_number": display_phone_number or "",
+                    },
+                    "messaging_product": "whatsapp",
+                },
+            }],
+        }],
+        "object": "whatsapp_business_account",
+    }
+    try:
+        r = requests.post(f"{chat_url}/webhooks/chat", json=payload, timeout=20)
+        r.raise_for_status()
+        d = r.json() if r.content else {}
+        return {"ok": True, "ticket_id": d.get("id"), "link": d.get("link"),
+                "external_id": ext_id}
+    except requests.HTTPError as e:
+        return {"ok": False, "error": f"HTTP {e.response.status_code}",
+                "external_id": ext_id}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200], "external_id": ext_id}
+
+
+def _camila3_append_observacao(id_endereco: int, id_lancamento_servico: int,
+                                texto: str, id_usuario: int | None = None) -> dict:
+    """POST /f3/{id_endereco}/lancamento/{id}/observacao — append no MotivoDesistencia."""
+    if not (CAMILA3_API_URL and CAMILA3_API_KEY):
+        return {"ok": False, "error": "CAMILA3_API_URL/KEY não configurados"}
+    payload = {"texto": texto}
+    if id_usuario:
+        payload["id_usuario"] = int(id_usuario)
+    url = f"{CAMILA3_API_URL.rstrip('/')}/f3/{int(id_endereco)}/lancamento/{int(id_lancamento_servico)}/observacao"
+    try:
+        r = requests.post(url, headers={"x-api-key": CAMILA3_API_KEY},
+                          json=payload, timeout=15)
+        if 200 <= r.status_code < 300:
+            return {"ok": True, **(r.json() if r.content else {})}
+        return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+def _camila3_create_crm(payload: dict) -> dict:
+    """POST /crm — cria registro de atendimento via sp_CRM_Insert (banco C)."""
+    if not (CAMILA3_API_URL and CAMILA3_API_KEY):
+        return {"ok": False, "error": "CAMILA3_API_URL/KEY não configurados"}
+    url = f"{CAMILA3_API_URL.rstrip('/')}/crm"
+    try:
+        r = requests.post(url, headers={"x-api-key": CAMILA3_API_KEY},
+                          json=payload, timeout=20)
+        if 200 <= r.status_code < 300:
+            return {"ok": True, **(r.json() if r.content else {})}
+        return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
 
 
 def _limpar_telefone(raw: str | None) -> str | None:
@@ -747,33 +854,56 @@ def api_enviar_wpp():
         wpp_usar_chat = camp["enviar_chat"]
         wpp_usar_meta = camp["enviar_meta"]
 
-        # 6) Para cada paciente: busca NomeSocial + TelefoneWhatsApp em cad_cliente OU cad_clientedependente,
-        #    monta params, dispara, registra
+        # 6) Para cada paciente:
+        #    a) resolve titular + dados do paciente (matricula, idEnderecoCliente, telefone)
+        #    b) cria ticket no chat via /webhooks/chat (foreground → devolve ticket_id) e
+        #       envia template via Meta — sequencial (preciso do ticket_id antes do registro)
+        #    c) faz o append no MotivoDesistencia da linha do prontuário (Cad_LancamentoServico)
+        #    d) cria CRM (motivo ORIENTAÇÃO AO CLIENTE / tipo OUTROS) — 1 por paciente
+        #    Tudo (c)/(d) é best-effort: se falhar, registra no resultado mas o envio
+        #    já foi feito (não dá pra desfazer WhatsApp).
+        numero_saida_str = _numero_saida_humano(posto)
+        # Display phone number pro chat tagging — formato Meta sem hífen
+        display_phone = "552135296666" if posto.upper() in COUTO_POSTOS else "552124559600"
         with _conn_for_posto(posto) as con:
             cur = con.cursor()
             enviados, falhados, sem_telefone = [], [], []
             for ag in agendamentos:
-                _ils, idcli, iddep, paciente_view, hora, tel_view, especialidade = ag
-                # Resolve dados do cliente/dep
+                id_lancamento_servico, idcli, iddep, paciente_view, hora, tel_view, especialidade = ag
+
+                # --- (a) resolve titular SEMPRE pra ter matricula + idEndereco ---
+                cur.execute(
+                    "SELECT TOP 1 Nome, NomeSocial, TelefoneWhatsApp, TelefoneCelular, "
+                    "       Matricula, idEndereco "
+                    "FROM cad_cliente WHERE idCliente = ?",
+                    int(idcli),
+                )
+                tit_row = cur.fetchone()
+                if not tit_row:
+                    falhados.append({"paciente": paciente_view, "erro": "titular não encontrado em cad_cliente"})
+                    continue
+                tit_nome, tit_nome_social, tit_tel_wpp, tit_tel_cel, matricula_raw, id_endereco_cliente = tit_row
+                titular_resolvido = (tit_nome_social or tit_nome or "").strip()
+                matricula_base = re.sub(r"\D", "", str(matricula_raw or ""))
+
+                # Override paciente info se for dependente
                 if iddep and int(iddep) > 0:
                     cur.execute(
                         "SELECT TOP 1 NomeSocial, Nome, TelefoneWhatsApp, TelefoneCelular "
                         "FROM cad_clientedependente WHERE idCliente = ? AND idDependente = ?",
                         int(idcli), int(iddep),
                     )
+                    dep = cur.fetchone()
+                    if dep:
+                        nome_social, nome_pad, tel_wpp, tel_cel = dep
+                        nome_paciente = (nome_social or nome_pad or paciente_view or "").strip()
+                    else:
+                        nome_paciente = titular_resolvido or (paciente_view or "").strip()
+                        tel_wpp, tel_cel = tit_tel_wpp, tit_tel_cel
                 else:
-                    cur.execute(
-                        "SELECT TOP 1 NomeSocial, Nome, TelefoneWhatsApp, TelefoneCelular "
-                        "FROM cad_cliente WHERE idCliente = ?",
-                        int(idcli),
-                    )
-                cli = cur.fetchone()
-                if not cli:
-                    falhados.append({"paciente": paciente_view, "erro": "cliente não encontrado"})
-                    continue
-                nome_social, nome_pad, tel_wpp, tel_cel = cli
-                nome_paciente = (nome_social or nome_pad or paciente_view or "").strip()
-                # Primeiro tenta TelefoneWhatsApp (campo dedicado); cai pra Celular se vazio
+                    nome_paciente = titular_resolvido or (paciente_view or "").strip()
+                    tel_wpp, tel_cel = tit_tel_wpp, tit_tel_cel
+
                 tel_limpo = _limpar_telefone(tel_wpp) or _limpar_telefone(tel_cel)
                 if not tel_limpo:
                     sem_telefone.append({"paciente": nome_paciente})
@@ -783,8 +913,8 @@ def api_enviar_wpp():
                         ref_extra=f"falta {id_falta}{posto}",
                     )
                     continue
-                # Parâmetros do template `aviso_de_fechamento_de_agenda`
-                # (template recriado em 2026-05-01 com nomes minúsculos):
+
+                # Parâmetros do template (template recriado em 2026-05-01 com nomes minúsculos):
                 #   {{paciente}} {{medico}} {{data_consulta}} {{local}}
                 #   {{resp_fechamento}} {{motivo}}
                 params = {
@@ -795,26 +925,118 @@ def api_enviar_wpp():
                     "resp_fechamento": medico_ou_clinica,
                     "motivo": motivo_label,
                 }
-                status, wamid = send_mod.enviar(
-                    telefone=tel_limpo,
-                    nome=nome_paciente,
-                    template=wpp_template,
-                    params=params,
-                    dry_run=False,
-                    queue_id=wpp_queue_id,           # da campanha (NULL = Camila atende)
-                    from_user_id=wpp_from_user,      # da campanha
-                    usar_chat=wpp_usar_chat,         # da campanha
-                    usar_meta=wpp_usar_meta,         # da campanha
-                    from_phone=wpp_from_phone,       # 3529 (Couto) → from explícito; demais → default
-                )
+                texto_renderizado = send_mod._expandir_template(wpp_template, params)
+
+                # --- (b) chat foreground (devolve ticket_id) + Meta ---
+                ticket_id: str | None = None
+                if wpp_usar_chat:
+                    chat_res = _chat_create_ticket(
+                        telefone=tel_limpo,
+                        nome=nome_paciente,
+                        texto=texto_renderizado,
+                        queue_id=wpp_queue_id,
+                        from_user_id=wpp_from_user,
+                        display_phone_number=display_phone,
+                    )
+                    if chat_res.get("ok"):
+                        ticket_id = chat_res.get("ticket_id")
+                    else:
+                        logger.warning("chat ticket falhou: %s", chat_res.get("error"))
+
+                wamid: str | None = None
+                meta_status = "skipped_meta"
+                if wpp_usar_meta:
+                    meta_status, wamid = send_mod.enviar_via_meta(
+                        telefone=tel_limpo,
+                        template=wpp_template,
+                        params=params,
+                        from_phone=wpp_from_phone,
+                    )
+
+                # Status consolidado pro log de envios (mantém compat com painel WPP)
+                status = (meta_status if wpp_usar_meta else
+                          ("accepted_chat" if ticket_id else "erro:chat_sem_ticket"))
                 _registrar_envio_log(
                     campanha_id, posto, tel_limpo, nome_paciente, wpp_template,
-                    status, wamid, ref_extra=f"falta {id_falta}{posto}",
+                    status, wamid or ticket_id,
+                    ref_extra=f"falta {id_falta}{posto}",
                 )
-                if "erro" in (status or ""):
+
+                envio_falhou = "erro" in (status or "")
+                if envio_falhou:
                     falhados.append({"paciente": nome_paciente, "telefone": tel_limpo, "erro": status})
+                    # Não escreve em MotivoDesistencia/CRM se nem chegou a sair
+                    continue
+
+                paciente_info = {"paciente": nome_paciente, "telefone": tel_limpo,
+                                 "status": status, "wamid": wamid, "ticket_id": ticket_id,
+                                 "id_lancamento_servico": int(id_lancamento_servico)}
+
+                # --- (c) append no MotivoDesistencia ---
+                ticket_str = str(ticket_id) if ticket_id else "?"
+                texto_obs = (f"Foi enviada mensagem pelo whatsapp: {numero_saida_str} "
+                             f"no ticket-chat: {ticket_str}")
+                obs_res = _camila3_append_observacao(
+                    id_endereco=id_endereco_posto,
+                    id_lancamento_servico=int(id_lancamento_servico),
+                    texto=texto_obs,
+                    id_usuario=id_usuario_op,
+                )
+                paciente_info["observacao_ok"] = bool(obs_res.get("ok"))
+                if not obs_res.get("ok"):
+                    paciente_info["observacao_erro"] = obs_res.get("error", "")[:200]
+                    logger.warning("append observacao falhou (idLs=%s): %s",
+                                   id_lancamento_servico, obs_res.get("error"))
+
+                # --- (d) cria CRM (motivo ORIENTAÇÃO AO CLIENTE / tipo OUTROS) ---
+                # historico no estilo do sp_CRM_Insert (vê manual_crm_api.html)
+                historico_crm = (
+                    "INCLUSÃO DE CRM\r\n"
+                    f"PACIENTE: {nome_paciente}\r\n"
+                    f"TELEFONE: {tel_limpo}\r\n"
+                    "MOTIVO: ORIENTAÇÃO AO CLIENTE\r\n"
+                    "TIPO: OUTROS\r\n"
+                    f"PESSOA: {nome_medico_raw}\r\n"
+                    "\r\n"
+                    f"HISTÓRICO: Falta médica em {data_str} no posto {posto_descricao}. "
+                    f"Mensagem WhatsApp enviada pelo {numero_saida_str}, "
+                    f"ticket-chat {ticket_str}.\r\n"
+                    f"TEXTO ENVIADO: {texto_renderizado}"
+                )
+                crm_payload = {
+                    "id_usuario": int(id_usuario_op),
+                    "id_cliente": int(idcli),
+                    "id_dependente": int(iddep) if iddep and int(iddep) > 0 else None,
+                    "matricula": matricula_base,
+                    "titular": titular_resolvido,
+                    "paciente": nome_paciente,
+                    "id_endereco_cliente": int(id_endereco_cliente or id_endereco_posto or 0),
+                    "id_endereco_reclamacao_origem": int(id_endereco_posto or 0),
+                    "id_endereco_reclamacao_resposta": int(id_endereco_posto or 0),
+                    "id_tipo": CRM_TIPO_OUTROS,
+                    "id_motivo": CRM_MOTIVO_ORIENTACAO_AO_CLIENTE,
+                    "pessoa": (nome_medico_raw or "")[:200] or None,
+                    "tipo_pessoa": "MEDICO",
+                    "id_pessoa": int(idmedico),
+                    "telefone_whatsapp_cliente": tel_limpo,
+                    "data_nascimento": None,
+                    "historico": historico_crm,
+                    "relato_cliente": (
+                        f"Notificação automática de falta médica enviada "
+                        f"via WhatsApp ({numero_saida_str})."
+                    ),
+                }
+                crm_res = _camila3_create_crm(crm_payload)
+                paciente_info["crm_ok"] = bool(crm_res.get("ok"))
+                if crm_res.get("ok"):
+                    paciente_info["crm_protocolo"] = crm_res.get("protocolo")
+                    paciente_info["crm_id"] = crm_res.get("id_cliente_historico")
                 else:
-                    enviados.append({"paciente": nome_paciente, "telefone": tel_limpo, "status": status, "wamid": wamid})
+                    paciente_info["crm_erro"] = crm_res.get("error", "")[:200]
+                    logger.warning("create CRM falhou (idCliente=%s, idLs=%s): %s",
+                                   idcli, id_lancamento_servico, crm_res.get("error"))
+
+                enviados.append(paciente_info)
 
         return jsonify({
             "ok": True,
@@ -824,6 +1046,9 @@ def api_enviar_wpp():
             "enviados": len(enviados),
             "falhados": len(falhados),
             "sem_telefone": len(sem_telefone),
+            "observacoes_ok": sum(1 for e in enviados if e.get("observacao_ok")),
+            "crms_ok":        sum(1 for e in enviados if e.get("crm_ok")),
+            "numero_saida":   numero_saida_str,
             "detalhes_enviados": enviados,
             "detalhes_falhados": falhados,
             "detalhes_sem_telefone": sem_telefone,

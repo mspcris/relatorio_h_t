@@ -665,12 +665,27 @@
           wppArea.innerHTML = `<div class="alert alert-danger"><strong>Erro no envio WhatsApp:</strong> ${w.error}<br>A falta foi gravada no banco normalmente.</div>`;
           return;
         }
+        const numeroSaida = w.numero_saida || '?';
         let html = `
           <div class="alert alert-success">
-            <strong>WhatsApp disparado.</strong>
-            ${w.enviados} enviados · ${w.falhados} falhas · ${w.sem_telefone} sem telefone.
-            <small>(campanha id=${w.campanha_id} no painel <a href="https://camila1.ia.camim.com.br/wpp" target="_blank">camila1.ia.camim.com.br/wpp</a>)</small>
+            <strong>WhatsApp disparado pelo número ${numeroSaida}.</strong>
+            ${w.enviados} enviados · ${w.falhados} falhas · ${w.sem_telefone} sem telefone.<br>
+            <small>
+              Prontuário (MotivoDesistencia) anotado em <strong>${w.observacoes_ok||0}/${w.enviados||0}</strong> ·
+              CRM criado em <strong>${w.crms_ok||0}/${w.enviados||0}</strong> ·
+              campanha id=${w.campanha_id} no painel <a href="https://camila1.ia.camim.com.br/wpp" target="_blank">camila1.ia.camim.com.br/wpp</a>
+            </small>
           </div>`;
+        if (w.detalhes_enviados && w.detalhes_enviados.length) {
+          html += '<details class="mb-2"><summary class="text-success"><strong>Enviados (' + w.detalhes_enviados.length + ')</strong></summary><ul class="list-group mt-2">';
+          w.detalhes_enviados.forEach(x => {
+            const ticket = x.ticket_id ? `<small class="text-muted">ticket-chat ${x.ticket_id}</small>` : '<small class="text-muted">sem ticket-chat</small>';
+            const obs = x.observacao_ok ? '<span class="badge badge-success">prontuário ✓</span>' : `<span class="badge badge-warning" title="${(x.observacao_erro||'').replace(/"/g,'&quot;')}">prontuário ✗</span>`;
+            const crm = x.crm_ok ? `<span class="badge badge-success">CRM ${x.crm_protocolo||x.crm_id||'✓'}</span>` : `<span class="badge badge-warning" title="${(x.crm_erro||'').replace(/"/g,'&quot;')}">CRM ✗</span>`;
+            html += `<li class="list-group-item py-1"><strong>${x.paciente}</strong> ${x.telefone||""} ${ticket} ${obs} ${crm}</li>`;
+          });
+          html += '</ul></details>';
+        }
         if (w.detalhes_falhados && w.detalhes_falhados.length) {
           html += '<details class="mb-2"><summary class="text-danger"><strong>Falhas (' + w.detalhes_falhados.length + ')</strong></summary><ul class="list-group mt-2">';
           w.detalhes_falhados.forEach(x => {
