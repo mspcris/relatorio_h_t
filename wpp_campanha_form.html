@@ -1212,12 +1212,13 @@ function atualizarModoEnvio() {
     notaVenc.style.display = (modo === 'atraso' || modo === 'pre_vencimento') ? '' : 'none';
   }
 
-  // Modo 'falta_medico': API direta — sem postos/filtros/janela. Mostra
-  // apenas Identificação (Nome/Status/Tipo + Fila + Template) e o Usuário
-  // remetente. Disparo é feito pelo RH&T (página /medico_falta), essa
-  // campanha existe só como log/configuração no painel.
+  // Modo 'falta_medico': API direta — disparo feito pelo /medico_falta.
+  // POSTOS são escolhidos pra rotear pelo número certo: existe 1 campanha
+  // com numero_saida=2455 cobrindo postos Altamiro, e outra com 3529
+  // cobrindo Couto. O medico_falta_routes escolhe a campanha pelo posto
+  // da falta. Cards de filtros/janela continuam ocultos (não se aplicam).
   if (modo === 'falta_medico') {
-    if (cardPostos)  cardPostos.style.display  = 'none';
+    if (cardPostos)  cardPostos.style.display  = '';
     if (cardRegra)   cardRegra.style.display   = 'none';
     if (cardFiltros) cardFiltros.style.display = 'none';
     if (cardJanela)  cardJanela.style.display  = 'none';

@@ -245,24 +245,38 @@ def _limpar_telefone(raw: str | None) -> str | None:
     return digs
 
 
-def _get_or_create_campanha_falta_medico() -> dict:
-    """Garante a campanha de log para faltas. Retorna dict com config viva
-    (template, from_user_id, queue_id, enviar_chat, enviar_meta) — admin
-    pode alterar via painel sem mexer no código.
+_ALTAMIRO_POSTOS = frozenset({"A", "B", "G", "I", "N", "R", "X", "Y"})
+# COUTO_POSTOS já definido lá em cima
+
+WPP_CAMPANHA_NOME_ALTAMIRO = "Falta de Médico — Altamiro (2455-9600)"
+WPP_CAMPANHA_NOME_COUTO    = "Falta de Médico — Couto (3529-6666)"
+
+
+def _ensure_campanhas_falta_medico() -> None:
+    """Idempotente: garante que existem as 2 campanhas (Altamiro/2455 e Couto/3529).
+
+    - Se nenhuma campanha de modo 'falta_medico' existe → cria a Altamiro.
+    - Se existe a campanha legada (postos=[], numero_saida default) → migra ela
+      pra Altamiro (postos = A,B,G,I,N,R,X,Y) preservando id/template/from_user.
+    - Se não existe campanha cobrindo Couto → cria a Couto duplicando config
+      base da Altamiro mas com numero_saida=3529-6666 e postos=C,D,J,M,P.
     """
-    import sqlite3
+    import sqlite3, json as _json
+    from datetime import datetime as _dt
+
     db_path = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute(
-            "SELECT * FROM campanhas WHERE modo_envio = ? LIMIT 1",
+            "SELECT * FROM campanhas WHERE modo_envio = ? ORDER BY id",
             (WPP_MODO_ENVIO_FALTA,),
         )
-        row = cur.fetchone()
-        if not row:
-            from datetime import datetime as _dt
-            agora = _dt.now().isoformat(timespec="seconds")
+        rows = list(cur.fetchall())
+
+        # Bootstrap: nenhuma campanha falta_medico ainda → cria Altamiro
+        agora = _dt.now().isoformat(timespec="seconds")
+        if not rows:
             cur.execute(
                 """INSERT INTO campanhas
                       (nome, template, postos, dias_atraso_min, dias_atraso_max,
@@ -270,26 +284,121 @@ def _get_or_create_campanha_falta_medico() -> dict:
                        nao_recorrente, hora_inicio, hora_fim, dias_semana,
                        intervalo_dias, ativa, created_at, updated_at,
                        modo_envio, dias_ref_min, dias_ref_max,
-                       from_user_id, enviar_chat, enviar_meta, queue_id)
-                   VALUES (?, ?, '[]', 0, NULL,
+                       from_user_id, enviar_chat, enviar_meta, queue_id, numero_saida)
+                   VALUES (?, ?, ?, 0, NULL,
                            0, 0, NULL, NULL, NULL,
                            0, '00:00', '23:59', '0,1,2,3,4,5,6',
                            1, 1, ?, ?,
                            ?, 0, NULL,
-                           ?, 1, 1, NULL)""",
-                (WPP_CAMPANHA_NOME, WPP_TEMPLATE_DEFAULT_AO_CRIAR, agora, agora,
+                           ?, 1, 1, NULL, '2455-9600')""",
+                (WPP_CAMPANHA_NOME_ALTAMIRO, WPP_TEMPLATE_DEFAULT_AO_CRIAR,
+                 _json.dumps(sorted(_ALTAMIRO_POSTOS)),
+                 agora, agora,
                  WPP_MODO_ENVIO_FALTA, WPP_FROM_USER_DEFAULT_AO_CRIAR),
             )
             conn.commit()
-            cur.execute("SELECT * FROM campanhas WHERE id = ?", (cur.lastrowid,))
-            row = cur.fetchone()
+            cur.execute(
+                "SELECT * FROM campanhas WHERE modo_envio = ? ORDER BY id",
+                (WPP_MODO_ENVIO_FALTA,),
+            )
+            rows = list(cur.fetchall())
+
+        # Migração: campanha legada com postos=[] vira Altamiro
+        for r in rows:
+            try:
+                postos_atuais = _json.loads(r["postos"] or "[]")
+            except Exception:
+                postos_atuais = []
+            ns = (r["numero_saida"] or "2455-9600").strip()
+            if (not postos_atuais) and ns == "2455-9600":
+                cur.execute(
+                    "UPDATE campanhas SET postos = ?, nome = ?, updated_at = ? WHERE id = ?",
+                    (_json.dumps(sorted(_ALTAMIRO_POSTOS)),
+                     WPP_CAMPANHA_NOME_ALTAMIRO, agora, int(r["id"])),
+                )
+                conn.commit()
+
+        # Garantir campanha Couto: nenhuma com numero_saida 3529 ainda?
+        cur.execute(
+            "SELECT * FROM campanhas WHERE modo_envio = ? AND numero_saida = ?",
+            (WPP_MODO_ENVIO_FALTA, "3529-6666"),
+        )
+        if not cur.fetchone():
+            # duplica config base da campanha existente (template/from_user/queue_id)
+            base = rows[0]
+            cur.execute(
+                """INSERT INTO campanhas
+                      (nome, template, postos, dias_atraso_min, dias_atraso_max,
+                       incluir_cancelados, sem_email, sexo, idade_min, idade_max,
+                       nao_recorrente, hora_inicio, hora_fim, dias_semana,
+                       intervalo_dias, ativa, created_at, updated_at,
+                       modo_envio, dias_ref_min, dias_ref_max,
+                       from_user_id, enviar_chat, enviar_meta, queue_id, numero_saida)
+                   VALUES (?, ?, ?, 0, NULL,
+                           0, 0, NULL, NULL, NULL,
+                           0, '00:00', '23:59', '0,1,2,3,4,5,6',
+                           1, 1, ?, ?,
+                           ?, 0, NULL,
+                           ?, ?, ?, ?, '3529-6666')""",
+                (WPP_CAMPANHA_NOME_COUTO, base["template"],
+                 _json.dumps(sorted(COUTO_POSTOS)),
+                 agora, agora,
+                 WPP_MODO_ENVIO_FALTA, base["from_user_id"],
+                 int(base["enviar_chat"] or 1), int(base["enviar_meta"] or 1),
+                 base["queue_id"]),
+            )
+            conn.commit()
+
+
+def _campanha_falta_medico_por_posto(posto: str) -> dict:
+    """Retorna a campanha cobrindo o posto. Cria as duas (Altamiro/Couto) se
+    ainda não existem (idempotente).
+
+    Match por inclusão na lista `postos` da campanha. Se nenhuma cobre o
+    posto, fallback pra primeira campanha falta_medico ativa (defensivo —
+    não quebra o disparo, mas loga warning).
+    """
+    import sqlite3, json as _json
+
+    _ensure_campanhas_falta_medico()
+    posto_u = (posto or "").strip().upper()
+    db_path = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM campanhas WHERE modo_envio = ? AND ativa = 1 ORDER BY id",
+            (WPP_MODO_ENVIO_FALTA,),
+        )
+        rows = list(cur.fetchall())
+
+        chosen = None
+        for r in rows:
+            try:
+                postos_lista = [str(p).strip().upper() for p in _json.loads(r["postos"] or "[]")]
+            except Exception:
+                postos_lista = []
+            if posto_u in postos_lista:
+                chosen = r
+                break
+
+        if not chosen and rows:
+            logger.warning(
+                "Nenhuma campanha falta_medico cobre o posto %s — caindo na 1ª (id=%s)",
+                posto_u, rows[0]["id"],
+            )
+            chosen = rows[0]
+        if not chosen:
+            raise RuntimeError("Nenhuma campanha falta_medico ativa no banco.")
+
         return {
-            "id": int(row["id"]),
-            "template": row["template"],
-            "from_user_id": row["from_user_id"] or None,
-            "queue_id": row["queue_id"] or None,  # NULL = sem fila → Camila atende
-            "enviar_chat": bool(row["enviar_chat"]),
-            "enviar_meta": bool(row["enviar_meta"]),
+            "id": int(chosen["id"]),
+            "template": chosen["template"],
+            "from_user_id": chosen["from_user_id"] or None,
+            "queue_id": chosen["queue_id"] or None,  # NULL = sem fila → Camila atende
+            "enviar_chat": bool(chosen["enviar_chat"]),
+            "enviar_meta": bool(chosen["enviar_meta"]),
+            "numero_saida": (chosen["numero_saida"] or "2455-9600").strip(),
         }
 
 
@@ -851,10 +960,14 @@ def api_enviar_wpp():
 
             # 2) Posto: descrição + telefone (telefone determina o `from` Meta)
             id_endereco_posto, posto_descricao, posto_telefone = _posto_endereco(con, posto)
-            # Roteia pela LETRA do posto (Couto = C,D,J,M,P → 3529).
-            # cad_endereco.Telefone é informativo apenas, não é confiável pro
-            # match exato (formatos variam: "(21) 3529-6666", "2455-9600 / 3529-6666", etc.).
-            wpp_from_phone = _resolve_wpp_from_phone(posto)
+            # Roteia pelo `numero_saida` da campanha escolhida (que por sua
+            # vez foi escolhida pelos `postos` da campanha — admin controla
+            # qual grupo cai em qual número via painel /wpp).
+            wpp_from_phone = wpp_from_phone_camp
+            if wpp_from_phone is None:
+                # Fallback de segurança: se a campanha não tem numero_saida
+                # mapeado, cai pra regra hardcoded (Couto = 3529).
+                wpp_from_phone = _resolve_wpp_from_phone(posto)
 
             # 3) "Médico ou Clínica?" — bit que estiver marcado define a string
             # Se nenhum marcado, default = "Médico"
@@ -885,15 +998,25 @@ def api_enviar_wpp():
             cur.execute(sql_pac, params_pac)
             agendamentos = cur.fetchall()
 
-        # Garante a campanha (idempotente). Toda config (template/from_user/queue_id/
-        # enviar_chat/enviar_meta) vem dela — admin pode alterar via painel sem código.
-        camp = _get_or_create_campanha_falta_medico()
+        # Escolhe a campanha pelo posto da falta:
+        #   posto Altamiro (A,B,G,I,N,R,X,Y) → campanha numero_saida 2455-9600
+        #   posto Couto    (C,D,J,M,P)       → campanha numero_saida 3529-6666
+        # Toda config (template/from_user/queue_id/enviar_chat/meta/numero_saida)
+        # vem da campanha — admin pode reconfigurar via painel sem mexer em código.
+        camp = _campanha_falta_medico_por_posto(posto)
         campanha_id = camp["id"]
         wpp_template = camp["template"]
         wpp_from_user = camp["from_user_id"]
         wpp_queue_id = camp["queue_id"]
         wpp_usar_chat = camp["enviar_chat"]
         wpp_usar_meta = camp["enviar_meta"]
+        # numero_saida da campanha (string '2455-9600' ou '3529-6666') →
+        # converte pro `from` da Meta (552124559600 / 552135296666)
+        try:
+            from wpp_cobranca_db import from_phone_por_numero_saida as _from_phone_resolver
+            wpp_from_phone_camp = _from_phone_resolver(camp["numero_saida"])
+        except Exception:
+            wpp_from_phone_camp = None
 
         # 6) Para cada paciente:
         #    a) resolve titular + dados do paciente (matricula, idEnderecoCliente, telefone)
@@ -903,9 +1026,13 @@ def api_enviar_wpp():
         #    d) cria CRM (motivo ORIENTAÇÃO AO CLIENTE / tipo OUTROS) — 1 por paciente
         #    Tudo (c)/(d) é best-effort: se falhar, registra no resultado mas o envio
         #    já foi feito (não dá pra desfazer WhatsApp).
-        numero_saida_str = _numero_saida_humano(posto)
-        # Display phone number pro chat tagging — formato Meta sem hífen
-        display_phone = "552135296666" if posto.upper() in COUTO_POSTOS else "552124559600"
+        # String humana do número de saída — vem direto da campanha
+        # (ex.: "2455-9600" ou "3529-6666"). Usado pra anotar na
+        # MotivoDesistencia e no histórico do CRM.
+        numero_saida_str = (camp.get("numero_saida") or "2455-9600").strip()
+        # Display phone pro chat tagging — formato Meta sem hífen,
+        # derivado do numero_saida da campanha
+        display_phone = "552135296666" if numero_saida_str == "3529-6666" else "552124559600"
         with _conn_for_posto(posto) as con:
             cur = con.cursor()
             enviados, falhados, sem_telefone = [], [], []
