@@ -103,20 +103,20 @@ CRM_TIPO_OUTROS = 1
 CRM_MOTIVO_ORIENTACAO_AO_CLIENTE = 7
 
 
-def _chat_create_ticket_legacy(telefone: str, nome: str, texto: str,
-                                 queue_id: str | None,
-                                 from_user_id: str | None) -> dict:
-    """POST /webhooks/whatsapp (endpoint LEGADO) — cria ticket de forma assíncrona.
+def _chat_create_ticket(telefone: str, nome: str, texto: str,
+                         queue_id: str | None, from_user_id: str | None,
+                         display_phone_number: str | None) -> dict:
+    """POST /webhooks/chat — cria ticket sincronamente e devolve {id, link}.
 
-    Por que NÃO o /webhooks/chat (que devolve ticket_id direto)?
-    O /webhooks/chat tagga o ticket pelo `from_user_id` (operador) → sempre
-    cai no número default da conta do operador (2455-9600), independente do
-    que mandarmos em metadata.display_phone_number. Já o /webhooks/whatsapp
-    legado deixa o webhook real da Meta atualizar a tag depois — quando a
-    Meta entregar pelo 3529, o chat re-tagga corretamente como 'Contato 3529'.
+    Por que escolhemos esse e não o legado /webhooks/whatsapp?
+    No legado, quando o cliente responde, o chat ABRE TICKET NOVO (perde
+    contexto). No /webhooks/chat a resposta agrega no MESMO ticket, que é
+    o ponto inteiro do CRM.
 
-    Devolve apenas o `external_id` (hash gerado por nós). Pra obter o
-    ticketNumber humano, fazer lookup depois via _chat_lookup_ticket_number().
+    Bug conhecido (em curso pelo dev senior do chat — 2026-05-06): o
+    /webhooks/chat tagga 'Contato 2455' independente do display_phone_number
+    do payload. A entrega Meta sai pelo número certo (3529 quando Couto),
+    mas o painel do chat mostra a tag errada até a correção do lado dele.
     """
     chat_url = os.getenv("CHAT_API_URL", "").rstrip("/")
     if not chat_url:
@@ -137,7 +137,10 @@ def _chat_create_ticket_legacy(telefone: str, nome: str, texto: str,
                         "id": ext_id, "from": remetente, "queue_id": queue_id,
                         "text": {"body": texto}, "type": "text", "timestamp": ts,
                     }],
-                    "metadata": {"phone_number_id": "", "display_phone_number": ""},
+                    "metadata": {
+                        "phone_number_id": "",
+                        "display_phone_number": display_phone_number or "",
+                    },
                     "messaging_product": "whatsapp",
                 },
             }],
@@ -145,9 +148,11 @@ def _chat_create_ticket_legacy(telefone: str, nome: str, texto: str,
         "object": "whatsapp_business_account",
     }
     try:
-        r = requests.post(f"{chat_url}/webhooks/whatsapp", json=payload, timeout=20)
+        r = requests.post(f"{chat_url}/webhooks/chat", json=payload, timeout=20)
         r.raise_for_status()
-        return {"ok": True, "external_id": ext_id}
+        d = r.json() if r.content else {}
+        return {"ok": True, "ticket_id": d.get("id"), "link": d.get("link"),
+                "external_id": ext_id}
     except requests.HTTPError as e:
         return {"ok": False, "error": f"HTTP {e.response.status_code}",
                 "external_id": ext_id}
@@ -189,19 +194,15 @@ def _camila3_create_crm(payload: dict) -> dict:
         return {"ok": False, "error": str(e)[:200]}
 
 
-def _chat_lookup_ticket_by_external_id(external_id: str,
-                                         retries: int = 8,
-                                         interval_s: float = 0.4) -> dict | None:
-    """Resolve {ticket_id, ticketNumber} a partir do external_id (hash que
-    enviamos no payload do /webhooks/whatsapp).
+def _chat_get_ticket_number(ticket_id: str) -> int | None:
+    """Resolve ticketNumber humano (#107800) a partir do id interno (cuid).
 
-    O /webhooks/whatsapp processa de forma assíncrona — entre ele responder
-    HTTP 200 e o ticket de fato existir no MySQL pode levar centenas de ms.
-    Por isso o retry: tenta até `retries * interval_s` segundos no total
-    (default ~3.2s). Se passar disso e não achar, retorna None — o caller
-    decide se loga warning ou abandona.
+    /webhooks/chat já devolve o id direto na resposta — esse helper só faz
+    a tradução id→ticketNumber via PK no MySQL do chat. Lookup leve, single
+    query, sem retry (o ticket existe no momento em que /webhooks/chat
+    devolveu HTTP 201).
     """
-    if not external_id:
+    if not ticket_id:
         return None
     host = os.getenv("CHAT_MYSQL_HOST", "")
     user = os.getenv("CHAT_MYSQL_USER", "")
@@ -212,49 +213,20 @@ def _chat_lookup_ticket_by_external_id(external_id: str,
         return None
     try:
         import pymysql
-        import time as _time
+        conn = pymysql.connect(
+            host=host, user=user, password=pwd, database=db,
+            charset="utf8mb4", connect_timeout=5, read_timeout=5, autocommit=True,
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT ticketNumber FROM Ticket WHERE id = %s", (ticket_id,))
+                row = cur.fetchone()
+                return int(row[0]) if row and row[0] is not None else None
+        finally:
+            conn.close()
     except Exception as e:
-        logger.warning("pymysql indisponível: %s", e)
-        return None
-
-    # Mesma lógica do crm/chat_db.find_ticket_by_external_id: procura em
-    # Message.externalId primeiro, fallback em TicketAttendanceMessage.externalId.
-    sql_msg = (
-        "SELECT t.id AS ticket_id, t.ticketNumber FROM Ticket t "
-        "JOIN Message m ON m.ticketId = t.id "
-        "WHERE m.externalId = %s AND m.deletedAt IS NULL "
-        "ORDER BY m.createdAt DESC LIMIT 1"
-    )
-    sql_tam = (
-        "SELECT t.id AS ticket_id, t.ticketNumber FROM Ticket t "
-        "JOIN TicketAttendanceMessage tam ON tam.ticketId = t.id "
-        "WHERE tam.externalId = %s AND tam.deletedAt IS NULL "
-        "ORDER BY tam.createdAt DESC LIMIT 1"
-    )
-    try:
-        for attempt in range(max(1, retries)):
-            conn = pymysql.connect(
-                host=host, user=user, password=pwd, database=db,
-                charset="utf8mb4", connect_timeout=5, read_timeout=5, autocommit=True,
-            )
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(sql_msg, (external_id,))
-                    row = cur.fetchone()
-                    if not row:
-                        cur.execute(sql_tam, (external_id,))
-                        row = cur.fetchone()
-                    if row:
-                        return {"ticket_id": row[0],
-                                "ticket_number": int(row[1]) if row[1] is not None else None}
-            finally:
-                conn.close()
-            if attempt < retries - 1:
-                _time.sleep(interval_s)
-        return None
-    except Exception as e:
-        logger.warning("lookup ticketNumber falhou (ext=%s): %s",
-                       external_id, str(e)[:200])
+        logger.warning("lookup ticketNumber falhou (id=%s): %s",
+                       ticket_id, str(e)[:200])
         return None
 
 
@@ -996,21 +968,25 @@ def api_enviar_wpp():
                 }
                 texto_renderizado = send_mod._expandir_template(wpp_template, params)
 
-                # --- (b) chat (legado /webhooks/whatsapp — chat re-tagga sozinho
-                # quando Meta entrega via 3529 ou 2455) + Meta ---
+                # --- (b) chat /webhooks/chat (sincrono — devolve ticket_id;
+                # resposta do cliente cai no MESMO ticket, não cria novo) + Meta ---
+                # Bug em curso: tag 'Contato' vem 2455 mesmo passando 3529 em
+                # display_phone_number. Dev senior do chat corrige amanhã
+                # (2026-05-06). Entrega Meta segue indo pelo número certo.
                 ticket_id: str | None = None      # id interno (cuid)
-                ticket_number: int | None = None  # número humano (#107799)
-                external_id: str | None = None
+                ticket_number: int | None = None  # número humano (#107800)
                 if wpp_usar_chat:
-                    chat_res = _chat_create_ticket_legacy(
+                    chat_res = _chat_create_ticket(
                         telefone=tel_limpo,
                         nome=nome_paciente,
                         texto=texto_renderizado,
                         queue_id=wpp_queue_id,
                         from_user_id=wpp_from_user,
+                        display_phone_number=display_phone,
                     )
-                    external_id = chat_res.get("external_id")
-                    if not chat_res.get("ok"):
+                    if chat_res.get("ok"):
+                        ticket_id = chat_res.get("ticket_id")
+                    else:
                         logger.warning("chat ticket falhou: %s", chat_res.get("error"))
 
                 wamid: str | None = None
@@ -1038,14 +1014,10 @@ def api_enviar_wpp():
                     # Não escreve em MotivoDesistencia/CRM se nem chegou a sair
                     continue
 
-                # Resolve ticketNumber humano (#107799) consultando o MySQL
-                # do chat pelo external_id. /webhooks/whatsapp é assíncrono,
-                # então faz retry. Se mesmo assim não achar, fica sem número.
-                if external_id:
-                    look = _chat_lookup_ticket_by_external_id(external_id)
-                    if look:
-                        ticket_id = look.get("ticket_id")
-                        ticket_number = look.get("ticket_number")
+                # Resolve ticketNumber humano (#107800) por PK no MySQL do chat.
+                # /webhooks/chat já devolveu o id (cuid) — só faltava traduzir.
+                if ticket_id:
+                    ticket_number = _chat_get_ticket_number(ticket_id)
 
                 paciente_info = {"paciente": nome_paciente, "telefone": tel_limpo,
                                  "status": status, "wamid": wamid,
