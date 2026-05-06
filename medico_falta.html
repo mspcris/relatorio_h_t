@@ -440,7 +440,22 @@
           a.type = "button";
           a.className = "list-group-item list-group-item-action";
           const cpfFmt = m.cpf ? ` · CPF ${m.cpf}` : "";
-          a.innerHTML = `<strong>${m.nome}</strong> <small class="text-muted">— ${m.especializacao || "—"} · ${m.conselho || ""}${cpfFmt}</small><br><small>id ${m.idmedico}</small>`;
+          // Mostra especialidades de cad_especialidade (a falta é por especialidade).
+          // Se vazio, cai no campo legado cad_medico.especializacao para sinalizar.
+          const ativas = Array.isArray(m.especialidades_ativas) ? m.especialidades_ativas : [];
+          let espHtml;
+          if (ativas.length) {
+            espHtml = ativas.map(e => `<span class="badge badge-info mr-1">${e}</span>`).join("");
+          } else {
+            const leg = (m.especializacao || "").trim();
+            espHtml = leg
+              ? `<span class="badge badge-light border" title="cadastro antigo, sem cad_especialidade ativa">${leg} (legado)</span>`
+              : '<span class="text-muted">— sem especialidade ativa —</span>';
+          }
+          a.innerHTML = `
+            <div><strong>${m.nome}</strong> <small class="text-muted">${m.conselho || ""}${cpfFmt}</small></div>
+            <div class="mt-1">${espHtml}</div>
+            <small>id ${m.idmedico}</small>`;
           a.addEventListener("click", () => selecionarMedico(m));
           lst.appendChild(a);
         });
@@ -450,8 +465,12 @@
     state.idmedico = m.idmedico;
     state.nome = m.nome;
     state.especializacao = m.especializacao;
+    state.especialidades_ativas = Array.isArray(m.especialidades_ativas) ? m.especialidades_ativas : [];
     $("#b_sel_nome").textContent = m.nome;
-    $("#b_sel_esp").textContent = m.especializacao || "—";
+    const ativas = state.especialidades_ativas;
+    $("#b_sel_esp").textContent = ativas.length
+      ? ativas.join(", ")
+      : (m.especializacao ? m.especializacao + " (legado)" : "—");
     $("#b_sel_idmedico").textContent = m.idmedico;
     $("#b_selecionado").style.display = "flex";
     $("#b_search_area").style.display = "none";
@@ -459,6 +478,7 @@
   }
   $("#btnTrocarMedico").addEventListener("click", () => {
     state.idmedico = state.nome = state.especializacao = null;
+    state.especialidades_ativas = [];
     $("#b_selecionado").style.display = "none";
     $("#b_search_area").style.display = "";
     $("#btnIrFalta").disabled = true;

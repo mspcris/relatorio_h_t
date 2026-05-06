@@ -285,7 +285,34 @@ def api_buscar_medico():
                     "cpf": (r[4] or "").strip(),
                     "especializacao": (r[5] or "").strip(),
                     "valor_medico": float(r[6]) if r[6] is not None else None,
+                    "especialidades_ativas": [],  # preenchido abaixo
                 })
+
+            # Especialidades reais (cad_especialidade) — médico pode ter várias.
+            # cad_medico.especializacao é campo legado de valor único; a falta é
+            # por especialidade, então a tela de medico_falta precisa exibir essa
+            # lista. medico_novo continua podendo ler o campo legado.
+            if out:
+                ids = [m["idmedico"] for m in out]
+                placeholders = ",".join("?" * len(ids))
+                cur.execute(
+                    f"""SELECT idmedico, LTRIM(RTRIM(Especialidade)) AS Esp
+                          FROM cad_especialidade
+                         WHERE idmedico IN ({placeholders})
+                           AND ISNULL(Desativado, 0) = 0
+                           AND Especialidade IS NOT NULL
+                           AND LTRIM(RTRIM(Especialidade)) <> ''
+                           AND (DataFimExibicao IS NULL OR DataFimExibicao >= CAST(GETDATE() AS DATE))""",
+                    *ids,
+                )
+                por_medico: dict[int, list[str]] = {i: [] for i in ids}
+                for row in cur.fetchall():
+                    idmed_e = int(row[0])
+                    esp = (row[1] or "").strip()
+                    if esp and esp not in por_medico[idmed_e]:
+                        por_medico[idmed_e].append(esp)
+                for m in out:
+                    m["especialidades_ativas"] = sorted(por_medico.get(m["idmedico"], []))
         return jsonify({"medicos": out})
     except Exception as e:
         logger.exception("buscar_medico falhou no posto %s", posto)
