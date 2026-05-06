@@ -247,3 +247,101 @@ Ao criar uma nova página HTML, siga estes 3 passos obrigatórios:
 4. Se a `page_key` não está na lista do usuário → esconde o `<li>` pai
 
 Isso funciona sem modificar cada template individualmente.
+
+
+## Regra de design — Preservar URL após login (`?next=`)
+
+Sempre que um usuário deslogado tentar acessar uma URL protegida, capturar o
+caminho completo (path + query string) e propagar via `?next=<url>` por todo o
+fluxo de autenticação, de modo que ao final ele caia na URL original — nunca em
+uma home/dashboard genérico.
+
+**Onde está implementado:**
+- [`nginx/teste-ia.conf`](nginx/teste-ia.conf) — `error_page 401 = @loginredir;`
+  + named location `@loginredir { return 302 /login?next=$request_uri; }`.
+  Toda location protegida por `auth_request /auth` herda esse comportamento.
+- [`login.html`](login.html) — JS no final do arquivo lê `?next=` e propaga
+  para o botão IDCamim e para o form local (hidden input).
+- [`auth_routes.py`](auth_routes.py) — `/session/login` (POST), `/auth/idcamim`
+  e `/auth/idcamim/callback` honram `next`. O state OAuth (`_oauth_states`)
+  agora carrega `{"status": ..., "next": ...}`.
+- `_safe_next()` valida (`/`-prefix, sem `//`, sem `/\\`) — anti open-redirect.
+
+A `state` OAuth permanece sendo apenas anti-CSRF — o `next` é guardado
+junto no dict server-side (não dentro da string `state`).
+
+
+## REGRA CRÍTICA — Mudanças que podem disparar custos reais (Meta/WhatsApp/SMS/Email/SQL)
+
+Cada mensagem WhatsApp via Meta custa **~R$ 0,35** (depende do dólar). Cada
+SMS, e-mail transacional, request a API paga, INSERT em base de produção,
+chamada Cielo etc. tem custo real ou efeito colateral irreversível.
+
+**Antes de fazer commit/deploy de qualquer alteração que toque código que
+roda em cron, daemon, scheduler, ETL, ou que processa lotes de
+clientes/pacientes/faturas, OBRIGATÓRIO:**
+
+1. **Mapear TODOS os consumidores** dos dados que você está alterando.
+   Ex.: alterou tabela `campanhas` → grep por `listar_campanhas`,
+   `get_campanha`, `campanhas WHERE`, em `*.py`/`*.sh`/cron jobs.
+2. **Identificar guards/kill-switches** existentes (filtros `WHERE postos != []`,
+   `WHERE ativa=1`, `IF modo NOT IN (...)` etc.) e checar se sua mudança
+   anula algum deles sem perceber.
+3. **Dry-run obrigatório** antes do deploy real, mesmo que pareça "simples":
+   - cron de envio em massa: rodar com `--dry-run` ou flag equivalente
+   - INSERT em SQL Server CAMIM: rodar a SELECT equivalente primeiro
+   - chamada Cielo/Meta: usar sandbox quando existir
+4. **Filtrar pelo modo no consumidor, não confiar só na ausência de dados**.
+   Se uma feature é "disparada via API" (não via cron), o cron precisa ter
+   `if modo == 'api_direta': continue` explícito — não basta deixar
+   `postos=[]` como kill switch implícito.
+5. **Em deploys que mexem em comportamento de envios em massa**: revisar
+   manualmente o crontab da VM (`crontab -l`, `/etc/cron.d/*`) pra ter
+   ciência de QUANDO o cron vai rodar pela próxima vez e o que ele faz.
+
+### Incidente de referência: 2026-05-06
+
+**O que aconteceu:** 473 envios WhatsApp errados pra clientes em atraso do
+posto A (Anchieta), custo aproximado R$ 165,55. Mensagem chegou com TODOS
+os campos do template vazios:
+
+> "Olá . Informamos que o(a) Dr(a). não poderá comparecer no dia .
+> A agenda foi fechada pelo(a) ., foi o motivo registrado."
+
+**Causa raiz em 3 camadas:**
+
+1. A campanha 29 era a "Falta de Médico" original, com `modo='falta_medico'`,
+   `template='aviso_de_fechamento_de_agenda'` e **`postos=[]`**. O cron de
+   cobrança ignorava ela na prática porque sem postos não tinha o que
+   processar — `postos=[]` virou kill-switch implícito.
+2. Pra implementar o roteamento por grupo de posto (Altamiro 2455 vs Couto
+   3529), eu adicionei `postos=[A,B,G,I,N,R,X,Y]` na campanha 29. Isso
+   **REMOVEU o kill-switch implícito** sem que eu percebesse.
+3. O cron `send_whatsapp_cobranca.main()` iterava todas as campanhas com
+   `ativa=1` e processava qualquer modo. **Faltava** o guard
+   `if modo == 'falta_medico': continue`.
+
+Resultado: o cron pegou a campanha 29 com posto A preenchido, processou-a
+como cobrança normal, expandiu o template `aviso_de_fechamento_de_agenda`
+(que espera `{paciente}{medico}{data_consulta}{local}{resp_fechamento}{motivo}`)
+com os parâmetros da fatura (`{nome}{ref}{valor}{venc}`) — placeholders
+não bateram, ficaram vazios — e enviou. A Meta aceitou e cobrou as 473
+mensagens.
+
+**Por que não foi pego no QA:** o teste end-to-end disparou pelo
+`/medico_falta` (caminho API direto), que funcionou perfeito. Não testei
+o cron — não me ocorreu que MUDAR `postos` da campanha 29 ia mudar o
+comportamento do cron.
+
+**Não há reparo possível**: a Meta é integração oficial paga, não dá pra
+"desfazer" nem mandar mensagem corretiva (cada nova mensagem custa de
+novo, e clientes que não responderam não podem receber template fora da
+janela de 24h sem nova cobrança).
+
+**Hotfix aplicado** (commit `23dce87`): filtro explícito
+`if modo == 'falta_medico': continue` no cron + guard documentado.
+
+**Lição permanente:** alterar dados que outras partes do sistema usam
+COMO FILTRO IMPLÍCITO (postos vazio, ativa=0, dias_atraso=0, etc.) é
+EQUIVALENTE a alterar lógica de negócio. Tem que rastrear todos os
+consumidores antes.
