@@ -940,6 +940,22 @@ def api_enviar_wpp():
         return jsonify({"error": f"módulo de envio indisponível: {e}"}), 500
 
     try:
+        # Escolhe a campanha pelo posto da falta. Resolvida ANTES do primeiro
+        # `with`/SQL block porque `wpp_from_phone_camp` é referenciada lá dentro
+        # ao montar o envio. Mover esse bloco pra cá corrige o UnboundLocalError.
+        camp = _campanha_falta_medico_por_posto(posto)
+        campanha_id = camp["id"]
+        wpp_template = camp["template"]
+        wpp_from_user = camp["from_user_id"]
+        wpp_queue_id = camp["queue_id"]
+        wpp_usar_chat = camp["enviar_chat"]
+        wpp_usar_meta = camp["enviar_meta"]
+        try:
+            from wpp_cobranca_db import from_phone_por_numero_saida as _from_phone_resolver
+            wpp_from_phone_camp = _from_phone_resolver(camp["numero_saida"])
+        except Exception:
+            wpp_from_phone_camp = None
+
         with _conn_for_posto(posto) as con:
             id_usuario_op = _resolver_idusuario_no_posto(con, login_campinho)
             if not id_usuario_op:
@@ -1006,26 +1022,6 @@ def api_enviar_wpp():
                 params_pac.append(especialidade_falta)
             cur.execute(sql_pac, params_pac)
             agendamentos = cur.fetchall()
-
-        # Escolhe a campanha pelo posto da falta:
-        #   posto Altamiro (A,B,G,I,N,R,X,Y) → campanha numero_saida 2455-9600
-        #   posto Couto    (C,D,J,M,P)       → campanha numero_saida 3529-6666
-        # Toda config (template/from_user/queue_id/enviar_chat/meta/numero_saida)
-        # vem da campanha — admin pode reconfigurar via painel sem mexer em código.
-        camp = _campanha_falta_medico_por_posto(posto)
-        campanha_id = camp["id"]
-        wpp_template = camp["template"]
-        wpp_from_user = camp["from_user_id"]
-        wpp_queue_id = camp["queue_id"]
-        wpp_usar_chat = camp["enviar_chat"]
-        wpp_usar_meta = camp["enviar_meta"]
-        # numero_saida da campanha (string '2455-9600' ou '3529-6666') →
-        # converte pro `from` da Meta (552124559600 / 552135296666)
-        try:
-            from wpp_cobranca_db import from_phone_por_numero_saida as _from_phone_resolver
-            wpp_from_phone_camp = _from_phone_resolver(camp["numero_saida"])
-        except Exception:
-            wpp_from_phone_camp = None
 
         # 6) Para cada paciente:
         #    a) resolve titular + dados do paciente (matricula, idEnderecoCliente, telefone)

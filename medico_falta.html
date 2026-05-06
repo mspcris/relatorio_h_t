@@ -43,6 +43,26 @@
     .table-faltas td { font-size: .85rem; vertical-align: middle; }
     .badge-tot { background: #dc3545; color: #fff; }
     .badge-parc { background: #fd7e14; color: #fff; }
+
+    /* Barra de contexto fixa (Posto / Médico / Especialidade / Data) */
+    .ctx-bar {
+      position: sticky; top: 0; z-index: 1030;
+      background: linear-gradient(90deg, #1f2937 0%, #374151 100%);
+      color: #fff;
+      padding: 10px 20px;
+      display: flex; flex-wrap: wrap; gap: 24px; align-items: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,.25);
+      font-size: .9rem;
+      border-bottom: 3px solid #007bff;
+    }
+    .ctx-bar .ctx-item { display: flex; flex-direction: column; line-height: 1.15; min-width: 90px; }
+    .ctx-bar .ctx-label {
+      font-size: .68rem; opacity: .7; text-transform: uppercase; letter-spacing: .5px;
+      font-weight: 600;
+    }
+    .ctx-bar .ctx-val { font-weight: 700; font-size: 1.0rem; color: #fff; }
+    .ctx-bar .ctx-val.empty { color: #6b7280; font-weight: 500; font-style: italic; }
+    .ctx-bar .ctx-divider { width: 1px; align-self: stretch; background: rgba(255,255,255,.12); }
   </style>
 </head>
 
@@ -77,6 +97,30 @@
   </aside>
 
   <div class="content-wrapper">
+
+    <!-- Barra de contexto fixa: Posto · Médico · Especialidade · Data -->
+    <div id="ctxBar" class="ctx-bar" style="display:none">
+      <div class="ctx-item">
+        <span class="ctx-label">Posto</span>
+        <span id="ctx_posto" class="ctx-val empty">—</span>
+      </div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item" style="min-width:200px">
+        <span class="ctx-label">Médico</span>
+        <span id="ctx_medico" class="ctx-val empty">—</span>
+      </div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item" style="min-width:160px">
+        <span class="ctx-label">Especialidade</span>
+        <span id="ctx_esp" class="ctx-val empty">—</span>
+      </div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item">
+        <span class="ctx-label">Data</span>
+        <span id="ctx_data" class="ctx-val empty">—</span>
+      </div>
+    </div>
+
     <section class="content p-3">
 
       <div class="card mb-3">
@@ -302,6 +346,33 @@
   function setLoading(on) { $("#loadingBar").style.display = on ? "block" : "none"; }
   function unlock(sel) { $(sel).classList.remove("locked"); $(sel).scrollIntoView({behavior:"smooth",block:"start"}); }
   function done(sel) { $(sel).classList.add("done"); }
+
+  // Barra de contexto fixa (Posto · Médico · Especialidade · Data)
+  function ctxSet(field, value) {
+    const el = $("#ctx_" + field);
+    if (!el) return;
+    if (value && String(value).trim()) {
+      el.textContent = String(value).trim();
+      el.classList.remove("empty");
+    } else {
+      el.textContent = "—";
+      el.classList.add("empty");
+    }
+  }
+  function ctxShow() { $("#ctxBar").style.display = "flex"; }
+  function fmtDataBR(yyyy_mm_dd) {
+    if (!yyyy_mm_dd) return "";
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(yyyy_mm_dd);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : yyyy_mm_dd;
+  }
+  // Formata telefone brasileiro: 21988887777 → (21) 98888-7777
+  function fmtFone(raw) {
+    if (!raw) return "";
+    const d = String(raw).replace(/\D/g, "");
+    if (d.length === 11) return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+    return raw;
+  }
   function bloqueiaTudo(msg) {
     $("#blockBox").textContent = msg;
     $("#blockBox").style.display = "block";
@@ -335,6 +406,9 @@
     document.querySelectorAll('input[name="acao"]').forEach(el => el.disabled = true);
     $("#btnConfirmPosto").disabled = true;
     done("#step0");
+    // Mostra a barra de contexto fixa com o posto selecionado
+    ctxSet("posto", state.posto_nome);
+    ctxShow();
     if (acao === "listar") {
       const hoje = new Date().toISOString().slice(0,10);
       const fim = new Date(Date.now() + 30*86400000).toISOString().slice(0,10);
@@ -475,6 +549,13 @@
     $("#b_selecionado").style.display = "flex";
     $("#b_search_area").style.display = "none";
     $("#btnIrFalta").disabled = false;
+    ctxSet("medico", m.nome);
+    // Se o médico tem só uma especialidade ativa, já mostra na barra
+    if (Array.isArray(m.especialidades_ativas) && m.especialidades_ativas.length === 1) {
+      ctxSet("esp", m.especialidades_ativas[0]);
+    } else {
+      ctxSet("esp", "");
+    }
   }
   $("#btnTrocarMedico").addEventListener("click", () => {
     state.idmedico = state.nome = state.especializacao = null;
@@ -486,6 +567,8 @@
     $("#b_resultados").innerHTML = "";
     $("#f_especialidade").innerHTML = '<option value="">— Selecione um médico primeiro —</option>';
     $("#b_query").focus();
+    ctxSet("medico", "");
+    ctxSet("esp", "");
   });
 
   function carregarEspecialidadesMedico() {
@@ -520,6 +603,8 @@
         });
         // Auto-seleciona se houver apenas uma
         if (especs.length === 1) sel.value = especs[0];
+        // Reflete na barra de contexto fixa
+        ctxSet("esp", sel.value);
       })
       .catch(() => {
         sel.innerHTML = '<option value="">— Erro ao carregar especialidades —</option>';
@@ -528,10 +613,20 @@
 
   $("#btnIrFalta").addEventListener("click", () => {
     if (!state.idmedico) return;
-    $("#f_data").value = new Date().toISOString().slice(0,10);
+    const hoje = new Date().toISOString().slice(0,10);
+    $("#f_data").value = hoje;
+    ctxSet("data", fmtDataBR(hoje));
     carregarEspecialidadesMedico();
     done("#stepBusca");
     unlock("#stepFalta");
+  });
+
+  // Atualiza barra de contexto quando o operador muda data ou especialidade
+  $("#f_data").addEventListener("change", () => {
+    ctxSet("data", fmtDataBR($("#f_data").value));
+  });
+  $("#f_especialidade").addEventListener("change", () => {
+    ctxSet("esp", $("#f_especialidade").value);
   });
 
   // ---------- Etapa 2 ----------
@@ -564,9 +659,13 @@
           return;
         }
         let html = `<div class="alert alert-info"><strong>${d.total} paciente(s)</strong> serão afetados:</div>`;
-        html += '<ul class="list-group" style="max-height:200px;overflow-y:auto">';
+        html += '<ul class="list-group" style="max-height:280px;overflow-y:auto">';
         d.agendamentos.forEach(a => {
-          html += `<li class="list-group-item py-1"><strong>${a.hora}</strong> · ${a.paciente} <small class="text-muted">${a.servico}</small></li>`;
+          const tel = fmtFone(a.telefone_raw);
+          const telHtml = tel
+            ? `<span class="badge badge-light border ml-1" title="TelefoneResidencial — pode diferir do TelefoneWhatsApp usado no envio"><i class="fas fa-phone mr-1"></i>${tel}</span>`
+            : `<span class="badge badge-warning ml-1" title="sem telefone na ficha do agendamento"><i class="fas fa-phone-slash mr-1"></i>sem tel</span>`;
+          html += `<li class="list-group-item py-1"><strong>${a.hora}</strong> · ${a.paciente} ${telHtml} <small class="text-muted">${a.servico}</small></li>`;
         });
         html += '</ul>';
         area.innerHTML = html;
