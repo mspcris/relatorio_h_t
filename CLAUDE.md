@@ -338,10 +338,50 @@ comportamento do cron.
 novo, e clientes que não responderam não podem receber template fora da
 janela de 24h sem nova cobrança).
 
-**Hotfix aplicado** (commit `23dce87`): filtro explícito
-`if modo == 'falta_medico': continue` no cron + guard documentado.
+**Primeiro hotfix** (commit `23dce87`): filtro explícito
+`if modo == 'falta_medico': continue` no cron. **NÃO RESOLVEU SOZINHO**
+porque a função `wpp_cobranca_sql.modo_envio()` tem uma whitelist:
 
-**Lição permanente:** alterar dados que outras partes do sistema usam
-COMO FILTRO IMPLÍCITO (postos vazio, ativa=0, dias_atraso=0, etc.) é
-EQUIVALENTE a alterar lógica de negócio. Tem que rastrear todos os
-consumidores antes.
+```python
+return m if m in (MODO_ATRASO, MODO_PRE_VENCIMENTO, MODO_CLIENTES,
+                   MODO_CLIENTE_NOVO) else MODO_ATRASO
+```
+
+`'falta_medico'` não estava lá → silenciosamente convertido pra `'atraso'`
+→ filtro nunca disparava. Custo final SUBIU de R$ 165 (estimativa) pra
+**R$ 421,40 reais (1.204 envios)**. Cron continuou processando entre
+02:27 e 02:56 mesmo após o "fix".
+
+**Hotfix REAL** (commit `a2bb607`): adicionou `MODO_FALTA_MEDICO` à
+whitelist + filtro de defesa em profundidade que compara TANTO o valor
+bruto do dict QUANTO o valor normalizado.
+
+**Lições permanentes:**
+
+1. **Filtros implícitos são bombas**: alterar dados que outras partes do
+   sistema usam COMO KILL-SWITCH IMPLÍCITO (`postos=[]`, `ativa=0`,
+   `dias_atraso=0`, `status=null`, etc.) é EQUIVALENTE a alterar lógica
+   de negócio. Rastreie TODOS os consumidores antes.
+
+2. **Whitelists silenciosas escondem bugs**: funções que devolvem um
+   default quando o input não bate em uma lista (`return X if X in
+   (...) else DEFAULT`) escondem dados inválidos. Quando você adicionar
+   um novo modo/tipo/status, OBRIGATÓRIO grep pela whitelist em TODO o
+   código pra incluir o novo valor. Idealmente, log um warning quando o
+   default é usado.
+
+3. **Defesa em profundidade**: o filtro do consumidor (cron) NÃO PODE
+   depender só de uma camada (a função normalizadora). Compare o valor
+   bruto E normalizado.
+
+4. **Dry-run não é opcional**: depois de QUALQUER mudança em código de
+   cron/scheduler, rodar `--dry-run` e verificar o LOG mostra o
+   comportamento esperado. Foi o dry-run que revelou que o primeiro
+   hotfix não funcionou.
+
+5. **Sync de arquivos compartilhados em múltiplos paths**: o `wpp-campanhas`
+   service importa módulos do `/opt/relatorio_h_t` via `sys.path.insert`,
+   mas se houver cópia local em `/opt/wpp-campanhas`, o Python pode
+   preferir essa cópia. O `deploy.yml` precisa sincronizar os arquivos
+   compartilhados (`wpp_cobranca_*`, `send_whatsapp_cobranca`) PARA OS
+   DOIS PATHS pra evitar versões divergentes silenciosas.

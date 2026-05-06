@@ -404,7 +404,16 @@ jobs:
           set -euxo pipefail
           DEST=/opt/wpp-campanhas
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "sudo mkdir -p '$DEST' && sudo chmod 775 '$DEST'"
-          for f in wpp-campanhas/app.py wpp-campanhas/requirements.txt; do
+          # IMPORTANTE: wpp-campanhas (port 8023) importa wpp_cobranca_routes
+          # via sys.path.insert pra /opt/relatorio_h_t. PORÉM, se sobrar uma
+          # cópia local em /opt/wpp-campanhas, o Python pode preferí-la e
+          # carregar código DESATUALIZADO. A solução correta: sincronizar OS
+          # MESMOS arquivos compartilhados também aqui pra os 2 caminhos
+          # baterem. (Bug 2026-05-06: wpp-campanhas/wpp_cobranca_routes.py
+          # ficou de março, sem o endpoint /conversa novo.)
+          for f in wpp-campanhas/app.py wpp-campanhas/requirements.txt \
+                   wpp_cobranca_routes.py wpp_cobranca_db.py wpp_cobranca_sql.py \
+                   send_whatsapp_cobranca.py; do
             if [ -f "$f" ]; then
               echo "Copiando $f → $DEST"
               rsync -lvz \
