@@ -404,21 +404,30 @@ def _campanha_falta_medico_por_posto(posto: str) -> dict:
 
 def _registrar_envio_log(campanha_id: int, posto: str, telefone: str,
                           paciente: str, template: str, status: str,
-                          wamid: str | None, ref_extra: str = "") -> None:
-    """Insere em whatsapp_cobranca.db.envios — adapta o pattern existente."""
+                          wamid: str | None, ref_extra: str = "",
+                          chat_ticket_id: str | None = None) -> int | None:
+    """Insere em whatsapp_cobranca.db.envios. Retorna o id do envio inserido.
+
+    `chat_ticket_id` (cuid devolvido pelo /webhooks/chat) é gravado pra
+    permitir lookup direto na tela 'Ver conversa' sem depender de wamid
+    (que o chat NÃO armazena pra outgoing).
+    """
     import sqlite3
     db_path = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
     with sqlite3.connect(db_path) as conn:
         from datetime import datetime as _dt
-        conn.execute(
+        cur = conn.execute(
             """INSERT INTO envios
                   (campanha_id, posto, telefone, idreceita, matricula, nome,
-                   ref, valor, venc, dias_atraso, template, status, wamid, enviado_em)
-               VALUES (?, ?, ?, '', '', ?, ?, '', '', NULL, ?, ?, ?, ?)""",
+                   ref, valor, venc, dias_atraso, template, status, wamid,
+                   chat_ticket_id, enviado_em)
+               VALUES (?, ?, ?, '', '', ?, ?, '', '', NULL, ?, ?, ?, ?, ?)""",
             (campanha_id, posto, telefone, paciente, ref_extra,
-             template, status, wamid, _dt.now().isoformat(timespec="seconds")),
+             template, status, wamid, chat_ticket_id,
+             _dt.now().isoformat(timespec="seconds")),
         )
         conn.commit()
+        return cur.lastrowid
 
 
 # ---------------------------------------------------------------------------
@@ -1126,13 +1135,28 @@ def api_enviar_wpp():
                         from_phone=wpp_from_phone,
                     )
 
-                # Status consolidado pro log de envios (mantém compat com painel WPP)
-                status = (meta_status if wpp_usar_meta else
-                          ("accepted_chat" if ticket_id else "erro:chat_sem_ticket"))
+                # Status consolidado pro log de envios. Quando os 2 canais
+                # (chat + Meta) deram OK, normaliza pra 'accepted' — o painel
+                # /wpp conta envios pelo prefixo 'accepted%', e contadores
+                # antigos (resumo_campanha, enviados_hoje, etc.) batiam só em
+                # 'accepted' exato. Status compostos só sobrevivem em casos
+                # de falha parcial (ex.: 'accepted_chat' quando Meta falhou).
+                chat_ok = bool(ticket_id) if wpp_usar_chat else True
+                meta_ok = ("erro" not in (meta_status or "")) if wpp_usar_meta else True
+                if chat_ok and meta_ok:
+                    status = "accepted"
+                elif meta_ok and not chat_ok:
+                    status = "accepted_meta"   # Meta saiu, chat falhou
+                elif chat_ok and not meta_ok:
+                    status = "accepted_chat"   # Chat OK, Meta falhou
+                else:
+                    status = meta_status if wpp_usar_meta else "erro:chat_sem_ticket"
+
                 _registrar_envio_log(
                     campanha_id, posto, tel_limpo, nome_paciente, wpp_template,
-                    status, wamid or ticket_id,
+                    status, wamid,
                     ref_extra=f"falta {id_falta}{posto}",
+                    chat_ticket_id=ticket_id,
                 )
 
                 envio_falhou = "erro" in (status or "")

@@ -256,6 +256,14 @@ def init_db() -> None:
                 "ALTER TABLE cache_clientes ADD COLUMN pagador_atrasado INTEGER NOT NULL DEFAULT 0"
             )
 
+        # Migração: adiciona chat_ticket_id em envios pra lookup direto da
+        # tela 'Ver conversa aqui' (sem depender do wamid bater no externalId
+        # do chat — o chat NÃO grava wamid em outgoing, só em incoming).
+        env_cols = {r["name"] for r in conn.execute("PRAGMA table_info(envios)").fetchall()}
+        if "chat_ticket_id" not in env_cols:
+            conn.execute("ALTER TABLE envios ADD COLUMN chat_ticket_id TEXT")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_envios_chat_ticket ON envios(chat_ticket_id)")
+
 
 # ---------------------------------------------------------------------------
 # Helpers de tempo
@@ -513,7 +521,8 @@ def resumo_campanha(campanha_id: int) -> dict:
     """Contadores rápidos para exibir na listagem."""
     with get_conn() as conn:
         env = conn.execute(
-            "SELECT COUNT(*) as total, SUM(CASE WHEN status='accepted' THEN 1 ELSE 0 END) as ok "
+            "SELECT COUNT(*) as total, "
+            "SUM(CASE WHEN status LIKE 'accepted%' THEN 1 ELSE 0 END) as ok "
             "FROM envios WHERE campanha_id=?", (campanha_id,)
         ).fetchone()
         nenv = conn.execute(
@@ -663,7 +672,7 @@ def enviados_hoje(campanha_id: int) -> int:
     with get_conn() as conn:
         row = conn.execute(
             "SELECT COUNT(*) as n FROM envios "
-            "WHERE campanha_id=? AND status='accepted' AND date(enviado_em)=?",
+            "WHERE campanha_id=? AND status LIKE 'accepted%' AND date(enviado_em)=?",
             (campanha_id, hoje)
         ).fetchone()
     return row["n"] if row else 0
@@ -677,7 +686,7 @@ def ultimo_envio_aceito(telefone: str) -> str | None:
     """Retorna ISO string do último envio accepted para este telefone, ou None."""
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT MAX(enviado_em) as dt FROM envios WHERE telefone=? AND status='accepted'",
+            "SELECT MAX(enviado_em) as dt FROM envios WHERE telefone=? AND status LIKE 'accepted%'",
             (telefone,)
         ).fetchone()
     return row["dt"] if row and row["dt"] else None
@@ -709,7 +718,7 @@ def indicadores_wpp() -> list[dict]:
             for posto in postos_lista:
                 row = conn.execute(
                     "SELECT MAX(enviado_em) as ultimo FROM envios "
-                    "WHERE campanha_id=? AND posto=? AND status='accepted'",
+                    "WHERE campanha_id=? AND posto=? AND status LIKE 'accepted%'",
                     (c["id"], posto)
                 ).fetchone()
 

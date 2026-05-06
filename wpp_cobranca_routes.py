@@ -632,16 +632,18 @@ def _achar_ticket_para_envio(envio: dict) -> dict | None:
     """Tenta localizar o Ticket no chat correspondente a esse envio.
 
     Estratégias em ordem de confiabilidade:
-      1) Message.externalId == envio.wamid
-         (Meta confirma entrega → chat grava webhookEvent com wamid)
-      2) Customer.pushNotificationId == envio.telefone E Ticket criado
-         dentro de janela ±10min do envio.enviado_em
-         (fallback quando o Meta webhook ainda não chegou no chat)
+      1) chat_ticket_id (cuid devolvido pelo /webhooks/chat e gravado em
+         envios.chat_ticket_id) — lookup direto por PK no Ticket. CONFIÁVEL.
+      2) Message.externalId == envio.hash_id que enviamos (futuro)
+      3) Message.externalId == envio.wamid (raro: chat só grava wamid pra
+         mensagens INCOMING — outgoing ficam com nosso ext_id)
+      4) (descontinuado) por telefone + janela:
+         Customer.pushNotificationId vem NULL no banco do chat — telefone
+         não é indexável daquele lado. Só dá pra recuperar por chat_ticket_id.
     Devolve dict {ticket_id, ticketNumber, customerId, createdAt} ou None.
     """
+    chat_ticket_id = (envio.get("chat_ticket_id") or "").strip()
     wamid = (envio.get("wamid") or "").strip()
-    tel   = (envio.get("telefone") or "").strip()
-    enviado = (envio.get("enviado_em") or "").strip()
     try:
         conn = _chat_mysql_conn()
     except Exception as e:
@@ -649,6 +651,19 @@ def _achar_ticket_para_envio(envio: dict) -> dict | None:
         return None
     try:
         with conn.cursor() as cur:
+            # 1) Lookup direto por PK — caminho preferido pra envios novos
+            if chat_ticket_id:
+                cur.execute(
+                    """SELECT id, ticketNumber, customerId, createdAt
+                         FROM Ticket
+                        WHERE id = %s AND deletedAt IS NULL""",
+                    (chat_ticket_id,),
+                )
+                row = cur.fetchone()
+                if row:
+                    return {"ticket_id": row[0], "ticketNumber": row[1],
+                            "customerId": row[2], "createdAt": row[3]}
+            # 2) Fallback pra envios LEGADOS (sem chat_ticket_id) — wamid
             if wamid:
                 cur.execute(
                     """SELECT t.id, t.ticketNumber, t.customerId, t.createdAt
@@ -657,25 +672,6 @@ def _achar_ticket_para_envio(envio: dict) -> dict | None:
                         WHERE m.externalId = %s AND m.deletedAt IS NULL
                         ORDER BY m.createdAt DESC LIMIT 1""",
                     (wamid,),
-                )
-                row = cur.fetchone()
-                if row:
-                    return {"ticket_id": row[0], "ticketNumber": row[1],
-                            "customerId": row[2], "createdAt": row[3]}
-            # Fallback: por telefone + janela
-            if tel and enviado:
-                cur.execute(
-                    """SELECT t.id, t.ticketNumber, t.customerId, t.createdAt
-                         FROM Ticket t
-                         JOIN Customer c ON c.id = t.customerId
-                        WHERE c.pushNotificationId = %s
-                          AND t.deletedAt IS NULL
-                          AND t.createdAt BETWEEN
-                              DATE_SUB(%s, INTERVAL 10 MINUTE)
-                          AND DATE_ADD(%s, INTERVAL 10 MINUTE)
-                        ORDER BY ABS(TIMESTAMPDIFF(SECOND, t.createdAt, %s)) ASC
-                        LIMIT 1""",
-                    (tel, enviado, enviado, enviado),
                 )
                 row = cur.fetchone()
                 if row:
