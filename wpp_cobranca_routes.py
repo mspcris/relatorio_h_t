@@ -608,6 +608,184 @@ def detalhe_envio(eid):
 
 
 # ---------------------------------------------------------------------------
+# Visualização da conversa (estilo WhatsApp Web — ler-só)
+# ---------------------------------------------------------------------------
+
+def _chat_mysql_conn():
+    """Conexão com o MySQL do chat (camim_chat_production no RDS).
+    Importa pymysql lazy pra não quebrar load do módulo se faltar.
+    """
+    import pymysql
+    host = os.getenv("CHAT_MYSQL_HOST", "")
+    user = os.getenv("CHAT_MYSQL_USER", "")
+    pwd  = os.getenv("CHAT_MYSQL_PASSWORD", "")
+    dbn  = os.getenv("CHAT_MYSQL_DATABASE", "")
+    if not (host and user and pwd and dbn):
+        raise RuntimeError("CHAT_MYSQL_* não configurado no .env")
+    return pymysql.connect(
+        host=host, user=user, password=pwd, database=dbn,
+        charset="utf8mb4", connect_timeout=8, read_timeout=15, autocommit=True,
+    )
+
+
+def _achar_ticket_para_envio(envio: dict) -> dict | None:
+    """Tenta localizar o Ticket no chat correspondente a esse envio.
+
+    Estratégias em ordem de confiabilidade:
+      1) Message.externalId == envio.wamid
+         (Meta confirma entrega → chat grava webhookEvent com wamid)
+      2) Customer.pushNotificationId == envio.telefone E Ticket criado
+         dentro de janela ±10min do envio.enviado_em
+         (fallback quando o Meta webhook ainda não chegou no chat)
+    Devolve dict {ticket_id, ticketNumber, customerId, createdAt} ou None.
+    """
+    wamid = (envio.get("wamid") or "").strip()
+    tel   = (envio.get("telefone") or "").strip()
+    enviado = (envio.get("enviado_em") or "").strip()
+    try:
+        conn = _chat_mysql_conn()
+    except Exception as e:
+        log.warning("chat MySQL indisponível: %s", e)
+        return None
+    try:
+        with conn.cursor() as cur:
+            if wamid:
+                cur.execute(
+                    """SELECT t.id, t.ticketNumber, t.customerId, t.createdAt
+                         FROM Ticket t
+                         JOIN Message m ON m.ticketId = t.id
+                        WHERE m.externalId = %s AND m.deletedAt IS NULL
+                        ORDER BY m.createdAt DESC LIMIT 1""",
+                    (wamid,),
+                )
+                row = cur.fetchone()
+                if row:
+                    return {"ticket_id": row[0], "ticketNumber": row[1],
+                            "customerId": row[2], "createdAt": row[3]}
+            # Fallback: por telefone + janela
+            if tel and enviado:
+                cur.execute(
+                    """SELECT t.id, t.ticketNumber, t.customerId, t.createdAt
+                         FROM Ticket t
+                         JOIN Customer c ON c.id = t.customerId
+                        WHERE c.pushNotificationId = %s
+                          AND t.deletedAt IS NULL
+                          AND t.createdAt BETWEEN
+                              DATE_SUB(%s, INTERVAL 10 MINUTE)
+                          AND DATE_ADD(%s, INTERVAL 10 MINUTE)
+                        ORDER BY ABS(TIMESTAMPDIFF(SECOND, t.createdAt, %s)) ASC
+                        LIMIT 1""",
+                    (tel, enviado, enviado, enviado),
+                )
+                row = cur.fetchone()
+                if row:
+                    return {"ticket_id": row[0], "ticketNumber": row[1],
+                            "customerId": row[2], "createdAt": row[3]}
+        return None
+    finally:
+        conn.close()
+
+
+def _carregar_conversa_ticket(ticket_id: str) -> dict:
+    """Carrega Customer + lista de Messages do ticket.
+    Retorna dict {customer, messages, ticket_id, ticketNumber}.
+    """
+    conn = _chat_mysql_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT t.id, t.ticketNumber, t.customerId, t.createdAt,
+                          t.closedAt, t.isActive, t.queueId
+                     FROM Ticket t WHERE t.id = %s""",
+                (ticket_id,),
+            )
+            t = cur.fetchone()
+            if not t:
+                return {"ticket_id": ticket_id, "ticketNumber": None,
+                        "customer": None, "messages": []}
+            customer_id = t[2]
+            cur.execute(
+                """SELECT id, name, pushNotificationId, imageUrl,
+                          matricula, idCliente, idDependente
+                     FROM Customer WHERE id = %s""",
+                (customer_id,),
+            )
+            cust_row = cur.fetchone()
+            customer = None
+            if cust_row:
+                customer = {
+                    "id": cust_row[0], "name": cust_row[1] or "",
+                    "phone": cust_row[2] or "", "imageUrl": cust_row[3] or "",
+                    "matricula": cust_row[4] or "",
+                    "id_cliente": cust_row[5], "id_dependente": cust_row[6],
+                }
+            cur.execute(
+                """SELECT m.id, m.body, m.mediaUrl, m.mimeType,
+                          m.userProfileId, m.customerId, m.createdAt,
+                          m.deliveredAt, m.customerReadAt, m.userProfileReadAt,
+                          u.name AS user_name
+                     FROM Message m
+                     LEFT JOIN User u ON u.id = m.userProfileId
+                    WHERE m.ticketId = %s AND m.deletedAt IS NULL
+                    ORDER BY m.createdAt ASC""",
+                (ticket_id,),
+            )
+            msgs = []
+            for r in cur.fetchall():
+                is_out = bool(r[4])  # tem userProfileId → operador → saída
+                msgs.append({
+                    "id": r[0],
+                    "body": r[1] or "",
+                    "mediaUrl": r[2] or "",
+                    "mimeType": r[3] or "",
+                    "is_out": is_out,
+                    "createdAt": r[6],
+                    "deliveredAt": r[7],
+                    "customerReadAt": r[8],
+                    "userProfileReadAt": r[9],
+                    "user_name": r[10] or "",
+                })
+            return {
+                "ticket_id": t[0], "ticketNumber": t[1],
+                "createdAt": t[3], "closedAt": t[4], "isActive": bool(t[5]),
+                "customer": customer, "messages": msgs,
+            }
+    finally:
+        conn.close()
+
+
+@wpp_bp.get("/envio/<int:eid>/conversa")
+def conversa_envio(eid):
+    """Página estilo WhatsApp Web mostrando a conversa do ticket associado a esse envio."""
+    email, is_admin = _check_auth()
+    if not email:
+        return ('', 401)
+    envio = db.get_envio(eid)
+    if not envio:
+        return ("Envio não encontrado", 404)
+    campanha = db.get_campanha(envio["campanha_id"])
+    erro = None
+    conversa = {"messages": [], "customer": None, "ticket_id": None, "ticketNumber": None}
+    try:
+        ticket = _achar_ticket_para_envio(envio)
+        if ticket:
+            conversa = _carregar_conversa_ticket(ticket["ticket_id"])
+        else:
+            erro = ("Não consegui localizar o ticket no chat associado a esse envio. "
+                    "Pode ser que a Meta ainda não tenha confirmado entrega ou que "
+                    "o ticket foi apagado.")
+    except Exception as e:
+        log.exception("falha ao carregar conversa do envio %s", eid)
+        erro = f"Erro consultando chat: {str(e)[:200]}"
+    return render_template(
+        "wpp_envio_conversa.html",
+        USER_EMAIL=email, USER_IS_ADMIN=is_admin,
+        envio=envio, campanha=campanha,
+        conversa=conversa, erro=erro,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Busca global de envios por telefone / nome
 # ---------------------------------------------------------------------------
 
