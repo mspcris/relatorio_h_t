@@ -105,7 +105,8 @@ CRM_MOTIVO_ORIENTACAO_AO_CLIENTE = 7
 
 def _chat_create_ticket(telefone: str, nome: str, texto: str,
                          queue_id: str | None, from_user_id: str | None,
-                         display_phone_number: str | None) -> dict:
+                         display_phone_number: str | None,
+                         phone_number_id: str | None = None) -> dict:
     """POST /webhooks/chat — cria ticket sincronamente e devolve {id, link}.
 
     Por que escolhemos esse e não o legado /webhooks/whatsapp?
@@ -138,7 +139,7 @@ def _chat_create_ticket(telefone: str, nome: str, texto: str,
                         "text": {"body": texto}, "type": "text", "timestamp": ts,
                     }],
                     "metadata": {
-                        "phone_number_id": "",
+                        "phone_number_id": phone_number_id or "",
                         "display_phone_number": display_phone_number or "",
                     },
                     "messaging_product": "whatsapp",
@@ -1038,6 +1039,15 @@ def api_enviar_wpp():
         # Display phone pro chat tagging — formato Meta sem hífen,
         # derivado do numero_saida da campanha
         display_phone = "552135296666" if numero_saida_str == "3529-6666" else "552124559600"
+        # phone_number_id (ID interno Meta) — vai no metadata.phone_number_id
+        # do payload do chat. O dev sênior do chat passou esses IDs em
+        # 2026-05-06 pra resolver o bug da tag "Contato 2455" sair errada
+        # quando o número de saída é Couto.
+        try:
+            from wpp_cobranca_db import phone_number_id_por_numero_saida as _pn_id_resolver
+            phone_number_id_camp = _pn_id_resolver(numero_saida_str)
+        except Exception:
+            phone_number_id_camp = None
         with _conn_for_posto(posto) as con:
             cur = con.cursor()
             enviados, falhados, sem_telefone = [], [], []
@@ -1115,6 +1125,7 @@ def api_enviar_wpp():
                         queue_id=wpp_queue_id,
                         from_user_id=wpp_from_user,
                         display_phone_number=display_phone,
+                        phone_number_id=phone_number_id_camp,
                     )
                     if chat_res.get("ok"):
                         ticket_id = chat_res.get("ticket_id")

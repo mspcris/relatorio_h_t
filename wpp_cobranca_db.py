@@ -281,6 +281,16 @@ _FROM_PHONE_POR_NUMERO = {
     "3529-6666": "552135296666",
 }
 
+# IDs internos da Meta (phone_number_id da WhatsApp Business Account).
+# Diferente do `from` do payload Meta — este vai no metadata do payload do
+# /webhooks/chat para o chat conseguir taggar o "Contato" certo (2455 vs
+# 3529) sem depender do display_phone_number (que é string e tava sendo
+# ignorada pelo chat — bug em curso de correção pelo dev sênior do chat).
+_PHONE_NUMBER_ID_POR_NUMERO = {
+    "2455-9600": "1028772396984767",
+    "3529-6666": "1101062063090022",
+}
+
 
 def _normalizar_numero_saida(valor: str | None) -> str:
     v = (valor or "").strip()
@@ -291,6 +301,12 @@ def from_phone_por_numero_saida(numero_saida: str | None) -> str | None:
     """Resolve o `from` do payload Meta a partir do numero_saida da campanha.
     Retorna None quando deve omitir (default 2455 da conta)."""
     return _FROM_PHONE_POR_NUMERO.get(_normalizar_numero_saida(numero_saida))
+
+
+def phone_number_id_por_numero_saida(numero_saida: str | None) -> str | None:
+    """Resolve o phone_number_id (ID interno Meta) do numero_saida da campanha.
+    Vai no metadata.phone_number_id do payload de /webhooks/chat."""
+    return _PHONE_NUMBER_ID_POR_NUMERO.get(_normalizar_numero_saida(numero_saida))
 
 
 def _now_iso() -> str:

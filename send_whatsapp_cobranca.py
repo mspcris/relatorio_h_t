@@ -240,7 +240,9 @@ def fmt_venc(v) -> str:
 
 def enviar_via_chat(telefone: str, nome: str, template: str, params: dict,
                     queue_id: str | None = None,
-                    from_user_id: str | None = None) -> tuple[str, str | None]:
+                    from_user_id: str | None = None,
+                    phone_number_id: str | None = None,
+                    display_phone_number: str | None = None) -> tuple[str, str | None]:
     """Envia webhook simulado para a plataforma de chat (cria ticket + conversa)."""
     hash_id  = uuid.uuid4().hex[:24]
     texto    = _expandir_template(template, params)
@@ -265,7 +267,10 @@ def enviar_via_chat(telefone: str, nome: str, template: str, params: dict,
                         "type":     "text",
                         "timestamp": ts,
                     }],
-                    "metadata": {"phone_number_id": "", "display_phone_number": ""},
+                    "metadata": {
+                        "phone_number_id": phone_number_id or "",
+                        "display_phone_number": display_phone_number or "",
+                    },
                     "messaging_product": "whatsapp",
                 },
             }],
@@ -342,7 +347,8 @@ def enviar(telefone: str, nome: str, template: str, params: dict,
            usar_chat: bool = True,
            usar_meta: bool = False,
            header_image_url: str | None = None,
-           from_phone: str | None = None) -> tuple[str, str | None]:
+           from_phone: str | None = None,
+           phone_number_id: str | None = None) -> tuple[str, str | None]:
     if dry_run:
         return "dry_run", None
 
@@ -350,8 +356,14 @@ def enviar(telefone: str, nome: str, template: str, params: dict,
     wamid_final = None
 
     if usar_chat:
+        # display_phone_number cai pro default 2455 quando from_phone é None
+        # (campanha de Altamiro omite `from` no payload Meta porque é o número
+        # default da conta — mas o chat ainda precisa do display).
+        display_chat = from_phone or "552124559600"
         s, w = enviar_via_chat(telefone, nome, template, params,
-                               queue_id=queue_id, from_user_id=from_user_id)
+                               queue_id=queue_id, from_user_id=from_user_id,
+                               phone_number_id=phone_number_id,
+                               display_phone_number=display_chat)
         status_final = s
         wamid_final = w
         if "erro" in s:
@@ -429,6 +441,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
     usar_meta    = bool(campanha.get("enviar_meta", 0))
     header_url   = campanha.get("header_image_url") or None
     from_phone   = db.from_phone_por_numero_saida(campanha.get("numero_saida"))
+    phone_number_id = db.phone_number_id_por_numero_saida(campanha.get("numero_saida"))
 
     if not postos:
         log.warning(f"  [{campanha['nome']}] Nenhum posto configurado.")
@@ -502,7 +515,8 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                                    queue_id=queue_id, from_user_id=from_user_id,
                                    usar_chat=usar_chat, usar_meta=usar_meta,
                                    header_image_url=header_url,
-                                   from_phone=from_phone)
+                                   from_phone=from_phone,
+                                   phone_number_id=phone_number_id)
             telefones_rodada.add(telefone)
 
             nivel = logging.INFO if "erro" not in status else logging.WARNING
