@@ -269,12 +269,11 @@ SELECT
     HoraPrevistaConsulta,
     CONVERT(varchar(5), dataconfirmacaoconsulta, 108) AS hora_confirmacao,
     Dif_dias_agend_cons,
-    Atendido
+    Atendido,
+    Desistencia
 FROM vw_Cad_LancamentoProntuarioComDesistencia
 WHERE dataconsulta >= :dt_ini
   AND dataconsulta <  :dt_fim
-  AND desistencia = 0
-  AND atendido <> 'MÉDICO faltou'
 ORDER BY nomemedico, HoraPrevistaConsulta ASC
 """
 
@@ -565,6 +564,7 @@ def build_payload(agendas: dict, status_global: dict, pagou_global: dict, datas:
                     "hora_confirmacao": (r.get("hora_confirmacao") or "").strip(),
                     "dias_agend_cons":  safe_int(r.get("Dif_dias_agend_cons")),
                     "atendido":         (str(r.get("Atendido") or "")).strip(),
+                    "desistencia":      1 if r.get("Desistencia") else 0,
                     "situacao":         situacao,
                     "pagou_no_dia":     pagou,
                     "idendereco":       safe_int(r.get("idendereco")),

@@ -88,7 +88,13 @@
     #tblAgenda th { position: sticky; top: 0; background: #343a40; color: #fff; font-size: .82rem; white-space: nowrap; z-index: 2; }
     #tblAgenda td { font-size: .85rem; vertical-align: middle; white-space: nowrap; }
     .table-container { max-height: 65vh; overflow: auto; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-    #tblAgenda .group-header td { background: #e9ecef; font-weight: 700; font-size: .9rem; }
+    #tblAgenda .group-header td { background: #e9ecef; font-weight: 700; font-size: .9rem; cursor: pointer; user-select: none; }
+    #tblAgenda .group-header:hover td { background: #dde1e7; }
+    #tblAgenda .group-header.group-faltou td { background: #fff3cd; color: #856404; }
+    #tblAgenda .group-header.group-faltou:hover td { background: #ffe9a8; }
+    #tblAgenda .group-header.group-desist td { background: #f8d7da; color: #721c24; }
+    #tblAgenda .group-header.group-desist:hover td { background: #f1c2c7; }
+    #tblAgenda .group-caret { display: inline-block; width: 12px; transition: none; }
 
     /* Charts */
     .chart-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
@@ -187,6 +193,13 @@
       <div>
         <label>Buscar paciente</label>
         <input type="text" id="inpBusca" class="form-control form-control-sm" placeholder="Nome ou matrícula..." style="width:200px" />
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <div class="custom-control custom-switch" style="padding-top:4px">
+          <input type="checkbox" class="custom-control-input" id="chkDesistencia" />
+          <label class="custom-control-label" for="chkDesistencia" title="Mostra grupo DESISTÊNCIA no fim da lista">Exibir desistência</label>
+        </div>
       </div>
       <div>
         <button id="btnCarregar" class="btn btn-sm btn-primary"><i class="fas fa-search mr-1"></i>Consultar</button>
@@ -302,6 +315,34 @@
     $('#selGroup').on('change', renderTable);
     $('#inpBusca').on('input', renderTable);
     $('#inpData').on('change', carregar);
+    $('#chkDesistencia').on('change', renderTable);
+
+    // Click no header de grupo → colapsa/expande linhas filhas
+    $('#tblBody').on('click', 'tr.group-header', function() {
+      const $h = $(this);
+      const key = $h.data('group');
+      if (!key) return;
+      const $rows = $('#tblBody').find(`tr.group-row[data-group="${$.escapeSelector(String(key))}"]`);
+      const $icon = $h.find('.group-caret');
+      const isCollapsed = $h.hasClass('collapsed');
+      if (isCollapsed) {
+        $rows.show();
+        $h.removeClass('collapsed');
+        $icon.removeClass('fa-caret-right').addClass('fa-caret-down');
+      } else {
+        $rows.hide();
+        $h.addClass('collapsed');
+        $icon.removeClass('fa-caret-down').addClass('fa-caret-right');
+      }
+    });
+  }
+
+  // Helpers de status — usados pra decidir o agrupamento
+  function _isMedicoFaltou(p) {
+    return (p.atendido||'').toUpperCase().replace(/\s+/g,' ').trim() === 'MÉDICO FALTOU';
+  }
+  function _isDesistente(p) {
+    return p.desistencia === 1 || p.desistencia === true;
   }
 
   const NOMES_POSTOS = {
@@ -368,12 +409,14 @@
 
   // ── KPIs ──
   function updateKPIs() {
-    const total         = DATA.length;
-    const atendidos     = DATA.filter(p => _isAtendido(p)).length;
-    const faltas        = DATA.filter(p => _isFalta(p)).length;
-    const atrasados     = DATA.filter(p => _isAtrasado(p)).length;
-    const pagouMens     = DATA.filter(p => p.pagou_no_dia).length;
-    const pagouAtrasado = DATA.filter(p => p.pagou_no_dia && _isAtrasado(p)).length;
+    // Desistentes ficam fora dos contadores — igual ao sistema antigo.
+    const ativos        = DATA.filter(p => !_isDesistente(p));
+    const total         = ativos.length;
+    const atendidos     = ativos.filter(p => _isAtendido(p)).length;
+    const faltas        = ativos.filter(p => _isFalta(p)).length;
+    const atrasados     = ativos.filter(p => _isAtrasado(p)).length;
+    const pagouMens     = ativos.filter(p => p.pagou_no_dia).length;
+    const pagouAtrasado = ativos.filter(p => p.pagou_no_dia && _isAtrasado(p)).length;
 
     $('#kpiTotal').text(total);
     $('#kpiAtendidos').text(atendidos);
@@ -398,6 +441,7 @@
   function renderTable() {
     const groupBy = $('#selGroup').val();
     const busca   = ($('#inpBusca').val()||'').toLowerCase().trim();
+    const showDesist = $('#chkDesistencia').is(':checked');
 
     let filtered = DATA;
     if (busca) {
@@ -406,24 +450,72 @@
         String(p.matricula||'').includes(busca)
       );
     }
+    // Esconde desistentes do fluxo principal a não ser que toggle esteja on.
+    // Quando on, eles vão pro grupo "DESISTÊNCIA" no fim — mas só quando agrupado.
+    const ativos = filtered.filter(p => !_isDesistente(p));
+    const desistentes = filtered.filter(p => _isDesistente(p));
 
     const tbody = $('#tblBody');
     tbody.empty();
 
     if (!groupBy) {
-      filtered.forEach(p => tbody.append(rowHtml(p)));
-    } else {
-      const groups = {};
-      filtered.forEach(p => {
-        const key = (p[groupBy] || '(sem info)').toString();
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(p);
+      // Sem agrupamento: mostra ativos sempre, desistentes só se toggle on
+      ativos.forEach(p => tbody.append(rowHtml(p)));
+      if (showDesist) desistentes.forEach(p => tbody.append(rowHtml(p)));
+      return;
+    }
+
+    // Com agrupamento — chave especial pra "MÉDICO FALTOU" só quando agrupando por médico
+    const groups = {};
+    ativos.forEach(p => {
+      let key = (p[groupBy] || '(sem info)').toString();
+      if (groupBy === 'medico' && _isMedicoFaltou(p)) {
+        key = key + ' — MÉDICO FALTOU';
+      }
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(p);
+    });
+
+    // Ordena: chaves "— MÉDICO FALTOU" vão DEPOIS do nome do médico equivalente
+    const sortedKeys = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+    sortedKeys.forEach(key => {
+      const items = groups[key];
+      const isFaltou = key.endsWith('— MÉDICO FALTOU');
+      const headerCls = 'group-header collapsed' + (isFaltou ? ' group-faltou' : '');
+      const safeKey = escHtml(key);
+      tbody.append(
+        `<tr class="${headerCls}" data-group="${safeKey}">` +
+          `<td colspan="12">` +
+            `<i class="fas fa-caret-right mr-1 group-caret"></i>` +
+            `${safeKey} <span class="text-muted">(${items.length})</span>` +
+          `</td>` +
+        `</tr>`
+      );
+      items.forEach(p => {
+        // group-row começa hidden (collapsed por padrão)
+        const $r = $(rowHtml(p));
+        $r.addClass('group-row').attr('data-group', key).hide();
+        tbody.append($r);
       });
-      const sortedKeys = Object.keys(groups).sort();
-      sortedKeys.forEach(key => {
-        const items = groups[key];
-        tbody.append(`<tr class="group-header"><td colspan="12"><i class="fas fa-caret-down mr-1"></i>${escHtml(key)} (${items.length})</td></tr>`);
-        items.forEach(p => tbody.append(rowHtml(p)));
+    });
+
+    // Grupo DESISTÊNCIA no FIM, só se toggle on
+    if (showDesist && desistentes.length) {
+      const key = 'DESISTÊNCIA';
+      tbody.append(
+        `<tr class="group-header collapsed group-desist" data-group="${key}">` +
+          `<td colspan="12">` +
+            `<i class="fas fa-caret-right mr-1 group-caret"></i>` +
+            `<i class="fas fa-times-circle mr-1"></i>${key} ` +
+            `<span class="text-muted">(${desistentes.length})</span>` +
+          `</td>` +
+        `</tr>`
+      );
+      desistentes.forEach(p => {
+        const $r = $(rowHtml(p));
+        $r.addClass('group-row').attr('data-group', key).hide();
+        tbody.append($r);
       });
     }
   }
@@ -471,10 +563,12 @@
 
   // ── Charts ──
   function renderCharts() {
+    // Charts ignoram desistentes (mesma lógica dos KPIs).
+    const ATIVOS = DATA.filter(p => !_isDesistente(p));
     // Presença
-    const atendidos = DATA.filter(p => _isAtendido(p)).length;
-    const ausentes  = DATA.filter(p => _isFalta(p)).length;
-    const outros    = DATA.length - atendidos - ausentes;
+    const atendidos = ATIVOS.filter(p => _isAtendido(p)).length;
+    const ausentes  = ATIVOS.filter(p => _isFalta(p)).length;
+    const outros    = ATIVOS.length - atendidos - ausentes;
 
     if (chartPresenca) chartPresenca.destroy();
     chartPresenca = new Chart($('#chartPresenca')[0].getContext('2d'), {
@@ -488,7 +582,7 @@
 
     // Situação Financeira
     const sitCount = {};
-    DATA.forEach(p => {
+    ATIVOS.forEach(p => {
       const s = p.situacao || '(sem info)';
       sitCount[s] = (sitCount[s]||0) + 1;
     });
@@ -513,7 +607,7 @@
     });
 
     // Pagamento no dia — entre atrasados/inadimplentes
-    const atrasados = DATA.filter(p => _isAtrasado(p));
+    const atrasados = ATIVOS.filter(p => _isAtrasado(p));
     const pagaram   = atrasados.filter(p => p.pagou_no_dia).length;
     const naoPag    = atrasados.length - pagaram;
 
