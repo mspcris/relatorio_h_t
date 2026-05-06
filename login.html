@@ -541,6 +541,26 @@ document.getElementById('togglePwd').addEventListener('click', function () {
   }
 })();
 
+// Propaga ?next=... para o botão IDCamim e para o form local,
+// de forma que após o login o usuário caia na URL que ele tentou abrir.
+(function () {
+  const qs = new URLSearchParams(location.search);
+  const next = qs.get('next');
+  if (!next || !next.startsWith('/') || next.startsWith('//')) return;
+  const btn = document.querySelector('a.btn-idcamim');
+  if (btn) {
+    const sep = btn.getAttribute('href').includes('?') ? '&' : '?';
+    btn.setAttribute('href', btn.getAttribute('href') + sep + 'next=' + encodeURIComponent(next));
+  }
+  document.querySelectorAll('form').forEach(f => {
+    if (!f.querySelector('input[name="next"]')) {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'next'; inp.value = next;
+      f.appendChild(inp);
+    }
+  });
+})();
+
 // Contador animado para as stats
 (function () {
   const nums = document.querySelectorAll('[data-target]');

@@ -174,7 +174,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "agenda_dia",                "label": "Agenda do Dia (F3)",          "group": "mais", "href": "/agenda_dia"},
     {"key": "preagendamento",            "label": "Dashboard Pré-Agendamento",   "group": "mais", "href": "/preagendamento"},
     {"key": "iot_monitor",               "label": "Monitor IoT (Ar Condicionado)","group": "mais", "href": "https://iot.propagacaodigital.com.br/"},
-    {"key": "camila_funcionarios",       "label": "Camila dos Funcionários",     "group": "mais", "href": "https://atendimento.camilaia.camim.com.br/camila-gpt/fullscreen/"},
+    {"key": "camila_funcionarios",       "label": "Camila dos Funcionários",     "group": "mais", "href": "https://camila.camim.com.br/"},
     {"key": "medico_novo",               "label": "Médico - Inclusão Agenda Temporária", "group": "mais", "href": "/medico_novo"},
     {"key": "medico_falta",              "label": "Médico - Cadastrar Falta + WhatsApp", "group": "mais", "href": "/medico_falta"},
     {"key": "tef",                       "label": "TEF Recorrente",              "group": "mais", "href": "/tef"},
@@ -331,17 +331,29 @@ def _enviar_reset(email_destino: str, token: str) -> bool:
 
 # ── Login / Logout ─────────────────────────────────────────────────────────────
 
+def _safe_next(url, fallback="/"):
+    """Aceita só caminhos same-origin. Evita open redirect."""
+    if not url or not isinstance(url, str):
+        return fallback
+    if not url.startswith("/") or url.startswith("//") or url.startswith("/\\"):
+        return fallback
+    return url
+
+
 @auth_bp.post("/session/login")
 def login():
+    import urllib.parse
     email = request.form.get("email", "").strip().lower()
     senha = request.form.get("senha", "")
+    next_url = _safe_next(request.form.get("next") or request.args.get("next"))
 
     db = SessionLocal()
     try:
         user = get_user_by_email(db, email)
         if not user or not user.ativo or not user.check_senha(senha):
             r = make_response("", 302)
-            r.headers["Location"] = "/login?e=1"
+            err_qs = urllib.parse.urlencode({"e": "1", "next": next_url}) if next_url != "/" else "e=1"
+            r.headers["Location"] = f"/login?{err_qs}"
             return r
 
         ip = (
@@ -356,7 +368,7 @@ def login():
         token = _signer.sign(f"{email}:{secrets.token_hex(8)}").decode()
         r = make_response("", 302)
         _set_cookie(r, token)
-        r.headers["Location"] = "/"
+        r.headers["Location"] = next_url
         return r
     finally:
         db.close()
@@ -389,7 +401,8 @@ def idcamim_login():
     """Inicia o fluxo OAuth2 — redireciona para auth.camim.com.br/authorize."""
     import urllib.parse
     state = secrets.token_urlsafe(16)
-    _oauth_states[state] = "pending"
+    next_url = _safe_next(request.args.get("next"))
+    _oauth_states[state] = {"status": "pending", "next": next_url}
     params = {
         "client_id":     _IDCAMIM_CLIENT_ID,
         "redirect_uri":  _IDCAMIM_REDIRECT_URI,
@@ -413,7 +426,10 @@ def idcamim_callback():
         r.headers["Location"] = "/login?e=1"
         return r
 
-    _oauth_states.pop(state, None)
+    state_data = _oauth_states.pop(state, None)
+    next_url = "/"
+    if isinstance(state_data, dict):
+        next_url = _safe_next(state_data.get("next"))
 
     # Trocar código por tokens
     try:
@@ -480,7 +496,7 @@ def idcamim_callback():
     token = _signer.sign(f"{email}:{secrets.token_hex(8)}").decode()
     r = make_response("", 302)
     _set_cookie(r, token)
-    r.headers["Location"] = "/"
+    r.headers["Location"] = next_url
     return r
 
 
