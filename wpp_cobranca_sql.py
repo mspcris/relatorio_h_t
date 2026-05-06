@@ -26,6 +26,12 @@ MODO_ATRASO = "atraso"
 MODO_PRE_VENCIMENTO = "pre_vencimento"
 MODO_CLIENTES = "clientes_admissao"
 MODO_CLIENTE_NOVO = "cliente_novo"
+# Modo 'falta_medico' é disparo via API direta pelo /medico_falta — NUNCA
+# pelo cron. PRECISA estar na whitelist abaixo, senão a função modo_envio()
+# silenciosamente devolve MODO_ATRASO como fallback e o cron processa a
+# campanha como cobrança normal — bug que causou 1.204 envios errados em
+# 2026-05-06 (custo R$ 421,40, ver CLAUDE.md).
+MODO_FALTA_MEDICO = "falta_medico"
 
 # Lookback para encontrar clientes novos (dias antes de hoje)
 CLIENTE_NOVO_LOOKBACK_DIAS = 7
@@ -556,7 +562,10 @@ def _env(key, default=""):
 
 def modo_envio(campanha: dict | None) -> str:
     m = str((campanha or {}).get("modo_envio") or MODO_ATRASO).strip().lower()
-    return m if m in (MODO_ATRASO, MODO_PRE_VENCIMENTO, MODO_CLIENTES, MODO_CLIENTE_NOVO) else MODO_ATRASO
+    return m if m in (
+        MODO_ATRASO, MODO_PRE_VENCIMENTO, MODO_CLIENTES,
+        MODO_CLIENTE_NOVO, MODO_FALTA_MEDICO,
+    ) else MODO_ATRASO
 
 
 def get_query_cliente_novo(lookback_dias: int = CLIENTE_NOVO_LOOKBACK_DIAS) -> tuple:

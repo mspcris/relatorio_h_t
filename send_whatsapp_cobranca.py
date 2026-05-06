@@ -38,6 +38,7 @@ from wpp_cobranca_sql import (
     modo_envio as campanha_modo_envio,
     MODO_CLIENTES,
     MODO_CLIENTE_NOVO,
+    MODO_FALTA_MEDICO,
     get_query_cliente_novo,
 )
 
@@ -569,14 +570,20 @@ def main():
     for campanha in campanhas:
         modo = campanha_modo_envio(campanha)
 
-        # SAFETY: campanhas modo='falta_medico' são disparadas via API direta
-        # pelo /medico_falta — NUNCA pelo cron de cobrança. Sem esse filtro,
-        # se a campanha tiver `postos` preenchido (necessário pra roteamento
-        # 2455/3529), o cron tenta processar como cobrança e expande o template
-        # `aviso_de_fechamento_de_agenda` com placeholders de fatura ({nome}{ref}{valor})
-        # — gera mensagem com TODOS os campos vazios pros clientes em atraso.
-        # Bug detectado em 2026-05-06: 473 envios disparados antes do stop.
-        if modo == "falta_medico":
+        # SAFETY DUPLA pra modo 'falta_medico'. Esse modo é disparado via API
+        # direta pelo /medico_falta — NUNCA pelo cron de cobrança.
+        #
+        # Camada 1 (essa): filtro explícito no loop principal.
+        # Camada 2 (wpp_cobranca_sql.modo_envio): 'falta_medico' está na
+        # whitelist de modos válidos — sem isso a função silenciosamente
+        # devolve MODO_ATRASO (= 'atraso') e ESSE filtro aqui nunca dispara,
+        # como aconteceu em 2026-05-06 (1.204 envios errados, R$ 421,40).
+        #
+        # Comparamos pelo VALOR BRUTO da campanha (não pela função normalizada)
+        # pra evitar ficar refém da whitelist: mesmo se um modo novo for
+        # criado e não estiver na whitelist, esse filtro continua funcionando.
+        modo_raw = str(campanha.get("modo_envio") or "").strip().lower()
+        if modo_raw == MODO_FALTA_MEDICO or modo == MODO_FALTA_MEDICO:
             log.info(f"  [{campanha['nome']}] modo=falta_medico — disparo é via API "
                      f"do /medico_falta, cron pula essa campanha.")
             continue
