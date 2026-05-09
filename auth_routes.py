@@ -183,6 +183,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "ctrlq_desbloqueio",         "label": "Médico - Desbloqueio de Agenda — CTRL-Q","group": "mais", "href": "/ctrlq_desbloqueio"},
     {"key": "qualidade_agenda",          "label": "Qualidade da Agenda Médica",  "group": "mais", "href": "/qualidade_agenda"},
     {"key": "higienizacao",              "label": "Higienização",                "group": "mais", "href": "/higienizacao"},
+    {"key": "monitor_avisos",            "label": "Monitor de Avisos",           "group": "mais", "href": "https://avisos.camim.com.br/avisos"},
 ]
 
 # ── Estado inicializado por init_auth() ───────────────────────────────────────
