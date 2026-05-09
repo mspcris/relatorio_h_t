@@ -184,6 +184,7 @@ PAGINAS_DISPONIVEIS = [
     {"key": "qualidade_agenda",          "label": "Qualidade da Agenda Médica",  "group": "mais", "href": "/qualidade_agenda"},
     {"key": "higienizacao",              "label": "Higienização",                "group": "mais", "href": "/higienizacao"},
     {"key": "monitor_avisos",            "label": "Monitor de Avisos",           "group": "mais", "href": "https://avisos.camim.com.br/avisos"},
+    {"key": "quadro_avisos_postos",      "label": "Quadro de Avisos dos Postos", "group": "mais", "href": "https://avisos.camim.com.br/"},
 ]
 
 # ── Estado inicializado por init_auth() ───────────────────────────────────────

@@ -162,6 +162,8 @@ _TEMPLATE_TO_PAGINA = {
     "https://atendimento.camilaia.camim.com.br/camila-gpt/fullscreen":  "camila_funcionarios",
     "https://avisos.camim.com.br/avisos":                "monitor_avisos",
     "https://avisos.camim.com.br/avisos/":               "monitor_avisos",
+    "https://avisos.camim.com.br/":                      "quadro_avisos_postos",
+    "https://avisos.camim.com.br":                       "quadro_avisos_postos",
 }
 
 _MENU_RESOURCES_CACHE = None
