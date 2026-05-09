@@ -179,8 +179,11 @@ def _coletar_push() -> dict:
 def _coletar_wpp() -> list:
     conn = _connect_ro(WPP_DB)
     conn.row_factory = sqlite3.Row
+    # Exclui modo='falta_medico' do painel: são disparos one-shot via API
+    # (route /medico_falta), não cron — não fazem sentido como "robô atrasado".
     campanhas = conn.execute(
-        "SELECT id, nome, postos FROM campanhas WHERE ativa=1"
+        "SELECT id, nome, postos FROM campanhas "
+        "WHERE ativa=1 AND COALESCE(modo_envio,'atraso') <> 'falta_medico'"
     ).fetchall()
 
     result = []
