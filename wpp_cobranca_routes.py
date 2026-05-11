@@ -611,9 +611,11 @@ def detalhe_envio(eid):
 # Visualização da conversa (estilo WhatsApp Web — ler-só)
 # ---------------------------------------------------------------------------
 
-def _chat_mysql_conn():
-    """Conexão com o MySQL do chat (camim_chat_production no RDS).
-    Importa pymysql lazy pra não quebrar load do módulo se faltar.
+def _chat_mysql_conn_tuple():
+    """Conexão com o MySQL do chat para leitura por índice (Cursor tuple).
+    Usada pelo viewer de conversa (Ticket/Message/Customer) que faz row[0..N].
+    Não usar para endpoints que serializam direto via jsonify — para esses,
+    use _chat_mysql_conn() que aplica DictCursor.
     """
     import pymysql
     host = os.getenv("CHAT_MYSQL_HOST", "")
@@ -645,7 +647,7 @@ def _achar_ticket_para_envio(envio: dict) -> dict | None:
     chat_ticket_id = (envio.get("chat_ticket_id") or "").strip()
     wamid = (envio.get("wamid") or "").strip()
     try:
-        conn = _chat_mysql_conn()
+        conn = _chat_mysql_conn_tuple()
     except Exception as e:
         log.warning("chat MySQL indisponível: %s", e)
         return None
@@ -686,7 +688,7 @@ def _carregar_conversa_ticket(ticket_id: str) -> dict:
     """Carrega Customer + lista de Messages do ticket.
     Retorna dict {customer, messages, ticket_id, ticketNumber}.
     """
-    conn = _chat_mysql_conn()
+    conn = _chat_mysql_conn_tuple()
     try:
         with conn.cursor() as cur:
             cur.execute(
