@@ -23,6 +23,7 @@ import subprocess
 import threading
 import time
 import requests
+from datetime import datetime
 from flask import Blueprint, request, jsonify, render_template, redirect, url_for, Response
 
 # Importa db do diretório de ETL
@@ -87,6 +88,63 @@ def _fetch_templates() -> list[dict]:
         return r.json().get("items", [])
     except Exception:
         return []
+
+
+# ---------------------------------------------------------------------------
+# Upload de imagens para header de templates
+# ---------------------------------------------------------------------------
+# Pasta pública servida pelo nginx em https://camila1.ia.camim.com.br/wpp-uploads/
+# (location ^~ /wpp-uploads/ em nginx/camila1.conf — whitelist de extensões,
+#  X-Content-Type-Options nosniff, limit_except GET HEAD).
+#
+# Defesa em profundidade:
+#   1. Nginx só serve arquivos com extensão de imagem (jpg/jpeg/png/gif/webp).
+#   2. Flask exige login (qualquer usuário logado pode subir).
+#   3. Validação por Pillow (Image.verify()) — confirma que é imagem real.
+#   4. Tamanho máximo 5MB (limite Meta).
+#   5. Nome sanitizado via secure_filename + slug + timestamp (sem colisão).
+#   6. Extensão final derivada do MIME detectado pelo Pillow, não da extensão
+#      enviada pelo cliente.
+#   7. Cada upload gera log para auditoria.
+WPP_UPLOADS_DIR    = os.getenv("WPP_UPLOADS_DIR", "/var/www/wpp-uploads")
+WPP_UPLOADS_URL    = os.getenv("WPP_UPLOADS_URL", "https://camila1.ia.camim.com.br/wpp-uploads")
+WPP_UPLOAD_MAX_MB  = 5
+_PIL_TO_EXT = {"JPEG": "jpg", "PNG": "png", "GIF": "gif", "WEBP": "webp"}
+
+
+def _slugify(s: str, max_len: int = 60) -> str:
+    """Slug seguro para nome de arquivo: a-z, 0-9 e hífen."""
+    import re, unicodedata
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode("ascii")
+    s = s.lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    s = re.sub(r"-{2,}", "-", s)
+    return (s or "imagem")[:max_len]
+
+
+def _validate_image_bytes(raw: bytes) -> tuple[str | None, str | None]:
+    """Confirma que `raw` é uma imagem suportada via Pillow.
+    Retorna (ext, erro). Em sucesso: ext em {jpg, png, gif, webp}, erro=None.
+    Em falha: ext=None, erro=mensagem.
+    """
+    try:
+        from PIL import Image
+        import io
+        # Image.verify() consome o stream, então abrimos duas vezes
+        with Image.open(io.BytesIO(raw)) as im:
+            im.verify()
+        with Image.open(io.BytesIO(raw)) as im:
+            fmt = (im.format or "").upper()
+            w, h = im.size
+        if fmt not in _PIL_TO_EXT:
+            return None, f"formato não suportado: {fmt or 'desconhecido'}"
+        if w < 32 or h < 32:
+            return None, "imagem muito pequena (mínimo 32x32)"
+        if w > 8000 or h > 8000:
+            return None, "imagem muito grande (máximo 8000x8000)"
+        return _PIL_TO_EXT[fmt], None
+    except Exception as e:
+        return None, f"arquivo inválido: {str(e)[:120]}"
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +470,110 @@ def api_templates():
             "header_handle_preview":  header_handle_preview,  # URL Meta (só preview)
         })
     return jsonify({"templates": result})
+
+
+# ---------------------------------------------------------------------------
+# Imagens para header de campanha (galeria + upload)
+# ---------------------------------------------------------------------------
+
+@wpp_bp.get("/api/imagens")
+def api_imagens_listar():
+    """Lista imagens disponíveis na galeria (somente arquivos com extensão válida).
+    Retorna: { imagens: [ { nome, url, tamanho, mtime }, ... ] }
+    """
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        os.makedirs(WPP_UPLOADS_DIR, exist_ok=True)
+    except Exception as e:
+        return jsonify({"error": f"pasta de uploads indisponível: {e}"}), 500
+
+    valid_exts = tuple(_PIL_TO_EXT.values()) + ("jpeg",)
+    items = []
+    try:
+        for fname in os.listdir(WPP_UPLOADS_DIR):
+            if not fname.lower().endswith(tuple("." + e for e in valid_exts)):
+                continue
+            fpath = os.path.join(WPP_UPLOADS_DIR, fname)
+            if not os.path.isfile(fpath):
+                continue
+            st = os.stat(fpath)
+            items.append({
+                "nome":    fname,
+                "url":     f"{WPP_UPLOADS_URL}/{fname}",
+                "tamanho": st.st_size,
+                "mtime":   int(st.st_mtime),
+            })
+    except Exception as e:
+        return jsonify({"error": f"erro ao listar: {e}"}), 500
+
+    items.sort(key=lambda x: x["mtime"], reverse=True)
+    return jsonify({"imagens": items})
+
+
+@wpp_bp.post("/api/imagens")
+def api_imagens_upload():
+    """Recebe upload de imagem para header de template. Login obrigatório.
+
+    Validações:
+      - Content-Length ≤ 5MB
+      - Pillow consegue abrir e identificar o formato
+      - Formato em {JPEG, PNG, GIF, WEBP}
+      - Dimensões entre 32x32 e 8000x8000
+      - Nome final: <slug>-<YYYYMMDD_HHMMSS>.<ext-real>
+    """
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+
+    f = request.files.get("arquivo")
+    if not f or not f.filename:
+        return jsonify({"error": "arquivo ausente (campo 'arquivo')"}), 400
+
+    # Limite de tamanho (lê o stream uma vez)
+    raw = f.read(WPP_UPLOAD_MAX_MB * 1024 * 1024 + 1)
+    if len(raw) > WPP_UPLOAD_MAX_MB * 1024 * 1024:
+        return jsonify({"error": f"arquivo maior que {WPP_UPLOAD_MAX_MB} MB"}), 413
+    if len(raw) < 100:
+        return jsonify({"error": "arquivo vazio ou muito pequeno"}), 400
+
+    ext, erro = _validate_image_bytes(raw)
+    if erro or not ext:
+        return jsonify({"error": erro or "imagem inválida"}), 400
+
+    # Nome do arquivo final: <slug>-<timestamp>.<ext> — extensão vem do MIME real
+    from werkzeug.utils import secure_filename
+    base_original = secure_filename(f.filename) or "imagem"
+    base_sem_ext  = base_original.rsplit(".", 1)[0]
+    slug = _slugify(base_sem_ext)
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nome = f"{slug}-{ts}.{ext}"
+
+    try:
+        os.makedirs(WPP_UPLOADS_DIR, exist_ok=True)
+        dest = os.path.join(WPP_UPLOADS_DIR, nome)
+        # Evita race condition de overwrite (timestamp já garante, mas seguro)
+        if os.path.exists(dest):
+            ts2 = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            nome = f"{slug}-{ts2}.{ext}"
+            dest = os.path.join(WPP_UPLOADS_DIR, nome)
+        with open(dest, "wb") as fh:
+            fh.write(raw)
+        os.chmod(dest, 0o644)
+    except Exception as e:
+        return jsonify({"error": f"falha ao salvar: {e}"}), 500
+
+    # Auditoria via stderr (capturada pelo journalctl do serviço)
+    print(f"[wpp-imagens] upload OK: user={email} file={nome} "
+          f"size={len(raw)} ext={ext}", file=sys.stderr, flush=True)
+
+    return jsonify({
+        "ok":      True,
+        "nome":    nome,
+        "url":     f"{WPP_UPLOADS_URL}/{nome}",
+        "tamanho": len(raw),
+    }), 201
 
 
 # ---------------------------------------------------------------------------

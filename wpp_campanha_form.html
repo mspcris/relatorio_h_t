@@ -213,22 +213,81 @@
                      placeholder="Nome do template">
             </div>
 
-            <!-- Campo condicional: URL da imagem do HEADER (apenas para templates com header IMAGE) -->
+            <!-- Campo condicional: imagem do HEADER (apenas para templates com header IMAGE) -->
             <div id="header-image-block" class="mt-2" style="display:none">
               <label class="font-weight-bold" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:#6c757d">
-                URL da imagem do header
+                Imagem do header
                 <span class="text-danger" id="header-image-required" style="display:none">*</span>
               </label>
-              <input type="url" name="header_image_url" id="header_image_url" class="form-control"
-                     placeholder="https://www.camim.com.br/wp-content/uploads/...jpg"
-                     value="{{ campanha.header_image_url if campanha and campanha.header_image_url else '' }}">
+              <div class="input-group">
+                <input type="text" id="header_image_url_display" class="form-control"
+                       readonly placeholder="Nenhuma imagem selecionada"
+                       value="{{ campanha.header_image_url if campanha and campanha.header_image_url else '' }}">
+                <input type="hidden" name="header_image_url" id="header_image_url"
+                       value="{{ campanha.header_image_url if campanha and campanha.header_image_url else '' }}">
+                <div class="input-group-append">
+                  <button type="button" class="btn btn-outline-primary"
+                          onclick="abrirGaleriaImagens()">
+                    <i class="fas fa-image mr-1"></i> Escolher imagem
+                  </button>
+                </div>
+              </div>
               <small class="form-text text-muted">
-                Este template tem header de imagem. Cole a URL pública da imagem que será enviada.
+                Este template tem header de imagem. Selecione uma imagem existente ou envie uma nova.
                 Cada mensagem incluirá esta imagem no topo.
               </small>
               <div id="header-image-preview" class="mt-2" style="display:none">
                 <img id="header-image-thumb" src="" alt="preview"
                      style="max-width:240px;max-height:120px;border:1px solid #ddd;border-radius:4px">
+              </div>
+            </div>
+
+            <!-- Modal: Galeria de imagens + upload -->
+            <div class="modal fade" id="modalImagens" tabindex="-1" role="dialog" aria-hidden="true">
+              <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">
+                      <i class="fas fa-images mr-1"></i> Imagens disponíveis
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Fechar">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                  <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                      <small class="text-muted">
+                        Clique em uma imagem para selecioná-la, ou envie uma nova.
+                        Formatos: JPG, PNG, GIF, WEBP. Máx. 5 MB.
+                      </small>
+                      <div>
+                        <input type="file" id="inputArquivoImagem" class="d-none"
+                               accept="image/jpeg,image/png,image/gif,image/webp"
+                               onchange="enviarImagemSelecionada(this)">
+                        <button type="button" class="btn btn-sm btn-success"
+                                onclick="document.getElementById('inputArquivoImagem').click()">
+                          <i class="fas fa-cloud-upload-alt mr-1"></i> Enviar nova
+                        </button>
+                      </div>
+                    </div>
+                    <div id="uploadProgresso" class="alert alert-info py-2 mb-2" style="display:none">
+                      <i class="fas fa-spinner fa-spin mr-1"></i>
+                      <span id="uploadProgressoMsg">Enviando...</span>
+                    </div>
+                    <div id="uploadErro" class="alert alert-danger py-2 mb-2" style="display:none"></div>
+                    <div id="galeriaCarregando" class="text-center text-muted py-4">
+                      <i class="fas fa-spinner fa-spin"></i> Carregando galeria...
+                    </div>
+                    <div id="galeriaVazia" class="text-center text-muted py-4" style="display:none">
+                      <i class="fas fa-image fa-2x mb-2 d-block"></i>
+                      Nenhuma imagem na galeria. Envie a primeira clicando em "Enviar nova".
+                    </div>
+                    <div id="galeriaGrid" class="row" style="display:none"></div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -908,9 +967,119 @@ function _atualizarThumb() {
   }
 }
 
-document.addEventListener('input', (e)=>{
-  if (e.target && e.target.id === 'header_image_url') _atualizarThumb();
-});
+// ── Galeria / upload de imagens do header ───────────────────────────────────
+function _selecionarImagem(url, nome) {
+  const hidden  = document.getElementById('header_image_url');
+  const display = document.getElementById('header_image_url_display');
+  if (hidden)  hidden.value  = url;
+  if (display) display.value = nome || url;
+  _atualizarThumb();
+  $('#modalImagens').modal('hide');
+}
+
+function _fmtTamanho(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1024/1024).toFixed(2) + ' MB';
+}
+
+async function abrirGaleriaImagens() {
+  $('#modalImagens').modal('show');
+  await _carregarGaleria();
+}
+
+async function _carregarGaleria() {
+  const loading = document.getElementById('galeriaCarregando');
+  const vazia   = document.getElementById('galeriaVazia');
+  const grid    = document.getElementById('galeriaGrid');
+  const erroBox = document.getElementById('uploadErro');
+  loading.style.display = 'block';
+  vazia.style.display   = 'none';
+  grid.style.display    = 'none';
+  grid.innerHTML        = '';
+  erroBox.style.display = 'none';
+  try {
+    const r = await fetch('/wpp/api/imagens', { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const items = d.imagens || [];
+    loading.style.display = 'none';
+    if (!items.length) { vazia.style.display = 'block'; return; }
+    items.forEach(it => {
+      const col = document.createElement('div');
+      col.className = 'col-6 col-md-4 col-lg-3 mb-3';
+      const safeNome = it.nome.replace(/[<>&"]/g, c =>
+        ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+      col.innerHTML = `
+        <div class="card h-100" style="cursor:pointer" title="Clique para selecionar">
+          <img src="${it.url}" alt="${safeNome}" loading="lazy"
+               style="width:100%;height:120px;object-fit:cover;border-bottom:1px solid #eee">
+          <div class="card-body p-2">
+            <div class="small text-truncate" title="${safeNome}">${safeNome}</div>
+            <div class="small text-muted">${_fmtTamanho(it.tamanho)}</div>
+          </div>
+        </div>`;
+      col.querySelector('.card').addEventListener('click', () => {
+        _selecionarImagem(it.url, it.nome);
+      });
+      grid.appendChild(col);
+    });
+    grid.style.display = 'flex';
+  } catch (e) {
+    loading.style.display = 'none';
+    erroBox.textContent = 'Erro ao carregar galeria: ' + e.message;
+    erroBox.style.display = 'block';
+  }
+}
+
+async function enviarImagemSelecionada(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const progBox = document.getElementById('uploadProgresso');
+  const progMsg = document.getElementById('uploadProgressoMsg');
+  const erroBox = document.getElementById('uploadErro');
+  erroBox.style.display = 'none';
+
+  // Pré-validação no client (servidor revalida)
+  const okType = ['image/jpeg','image/png','image/gif','image/webp'].includes(f.type);
+  if (!okType) {
+    erroBox.textContent = 'Tipo de arquivo não permitido. Use JPG, PNG, GIF ou WEBP.';
+    erroBox.style.display = 'block';
+    input.value = '';
+    return;
+  }
+  if (f.size > 5 * 1024 * 1024) {
+    erroBox.textContent = 'Arquivo maior que 5 MB.';
+    erroBox.style.display = 'block';
+    input.value = '';
+    return;
+  }
+
+  progMsg.textContent = `Enviando ${f.name} (${_fmtTamanho(f.size)})...`;
+  progBox.style.display = 'block';
+  try {
+    const fd = new FormData();
+    fd.append('arquivo', f, f.name);
+    const r = await fetch('/wpp/api/imagens', {
+      method: 'POST', body: fd, credentials: 'same-origin'
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    progBox.style.display = 'none';
+    input.value = '';
+    // Recarrega galeria e seleciona automaticamente a imagem recém-enviada
+    await _carregarGaleria();
+    _selecionarImagem(d.url, d.nome);
+  } catch (e) {
+    progBox.style.display = 'none';
+    erroBox.textContent = 'Falha no envio: ' + e.message;
+    erroBox.style.display = 'block';
+    input.value = '';
+  }
+}
+
+// Inicializa thumb se a campanha já tem uma imagem salva
+document.addEventListener('DOMContentLoaded', _atualizarThumb);
 
 // ── Selects dinâmicos ─────────────────────────────────────────────────────────
 const CAMPOS_SEL     = ['operadora','cobrador','corretor','bairro','rua'];
