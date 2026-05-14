@@ -206,23 +206,30 @@ def _chat_get_ticket_number(ticket_id: str) -> int | None:
     if not ticket_id:
         return None
     host = os.getenv("CHAT_MYSQL_HOST", "")
+    port = int(os.getenv("CHAT_MYSQL_PORT", "3306"))
     user = os.getenv("CHAT_MYSQL_USER", "")
     pwd  = os.getenv("CHAT_MYSQL_PASSWORD", "")
-    db   = os.getenv("CHAT_MYSQL_DATABASE", "")
-    if not (host and user and pwd and db):
-        logger.warning("CHAT_MYSQL_* não configurado — sem lookup de ticketNumber")
+    # Default igual ao resto do código (auth_routes.py, wpp_cobranca_routes.py):
+    # o .env de produção não traz CHAT_MYSQL_DATABASE — sem o default o lookup
+    # falhava silencioso e o cuid (id) ia parar no CRM/MotivoDesistencia.
+    db   = os.getenv("CHAT_MYSQL_DATABASE", "camim_chat_production")
+    if not (host and user and pwd):
+        logger.warning("CHAT_MYSQL_HOST/USER/PASSWORD não configurado — sem lookup de ticketNumber")
         return None
     try:
         import pymysql
         conn = pymysql.connect(
-            host=host, user=user, password=pwd, database=db,
+            host=host, port=port, user=user, password=pwd, database=db,
             charset="utf8mb4", connect_timeout=5, read_timeout=5, autocommit=True,
         )
         try:
             with conn.cursor() as cur:
                 cur.execute("SELECT ticketNumber FROM Ticket WHERE id = %s", (ticket_id,))
                 row = cur.fetchone()
-                return int(row[0]) if row and row[0] is not None else None
+                if row and row[0] is not None:
+                    return int(row[0])
+                logger.warning("ticketNumber NULL/inexistente para id=%s", ticket_id)
+                return None
         finally:
             conn.close()
     except Exception as e:
