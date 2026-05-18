@@ -413,12 +413,21 @@ def _campanha_falta_medico_por_posto(posto: str) -> dict:
 def _registrar_envio_log(campanha_id: int, posto: str, telefone: str,
                           paciente: str, template: str, status: str,
                           wamid: str | None, ref_extra: str = "",
-                          chat_ticket_id: str | None = None) -> int | None:
+                          chat_ticket_id: str | None = None,
+                          medico: str | None = None,
+                          especialidade: str | None = None,
+                          data_falta: str | None = None,
+                          hora_falta: str | None = None,
+                          motivo_falta: str | None = None) -> int | None:
     """Insere em whatsapp_cobranca.db.envios. Retorna o id do envio inserido.
 
     `chat_ticket_id` (cuid devolvido pelo /webhooks/chat) é gravado pra
     permitir lookup direto na tela 'Ver conversa' sem depender de wamid
     (que o chat NÃO armazena pra outgoing).
+
+    Campos medico/especialidade/data_falta/hora_falta/motivo_falta são
+    específicos do modo 'falta_medico' e renderizados em envios.html quando
+    a campanha é desse modo (no lugar de ref/valor/venc/dias_atraso).
     """
     import sqlite3
     db_path = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
@@ -428,11 +437,14 @@ def _registrar_envio_log(campanha_id: int, posto: str, telefone: str,
             """INSERT INTO envios
                   (campanha_id, posto, telefone, idreceita, matricula, nome,
                    ref, valor, venc, dias_atraso, template, status, wamid,
-                   chat_ticket_id, enviado_em)
-               VALUES (?, ?, ?, '', '', ?, ?, '', '', NULL, ?, ?, ?, ?, ?)""",
+                   chat_ticket_id, enviado_em,
+                   medico, especialidade, data_falta, hora_falta, motivo_falta)
+               VALUES (?, ?, ?, '', '', ?, ?, '', '', NULL, ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?)""",
             (campanha_id, posto, telefone, paciente, ref_extra,
              template, status, wamid, chat_ticket_id,
-             _dt.now().isoformat(timespec="seconds")),
+             _dt.now().isoformat(timespec="seconds"),
+             medico, especialidade, data_falta, hora_falta, motivo_falta),
         )
         conn.commit()
         return cur.lastrowid
@@ -1009,6 +1021,15 @@ def api_enviar_wpp():
             # 4) Data formatada para o template
             data_str = data_falta.strftime("%d/%m/%Y") if data_falta else ""
 
+            # Hora formatada para envios.medico_falta (renderiza coluna "Hora").
+            # Falta integral = sem hora; parcial = "HH:MM-HH:MM".
+            try:
+                _h_ini = dh_ini.strftime("%H:%M") if dh_ini else ""
+                _h_fim = dh_fim.strftime("%H:%M") if dh_fim else ""
+                hora_falta_str = f"{_h_ini}-{_h_fim}" if (_h_ini and _h_fim and (_h_ini, _h_fim) != ("00:00", "23:59")) else None
+            except Exception:
+                hora_falta_str = None
+
             # 5) Lista pacientes afetados no intervalo
             cur.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
             d_str = data_falta.strftime("%d/%m/%Y")
@@ -1101,6 +1122,11 @@ def api_enviar_wpp():
                         campanha_id, posto, "", nome_paciente, wpp_template,
                         "erro:sem_telefone", None,
                         ref_extra=f"falta {id_falta}{posto}",
+                        medico=nome_medico_raw or None,
+                        especialidade=especialidade_falta or None,
+                        data_falta=data_str or None,
+                        hora_falta=hora_falta_str,
+                        motivo_falta=motivo_label if motivo_label != "—" else None,
                     )
                     continue
 
@@ -1171,6 +1197,11 @@ def api_enviar_wpp():
                     status, wamid,
                     ref_extra=f"falta {id_falta}{posto}",
                     chat_ticket_id=ticket_id,
+                    medico=nome_medico_raw or None,
+                    especialidade=especialidade_falta or None,
+                    data_falta=data_str or None,
+                    hora_falta=hora_falta_str,
+                    motivo_falta=motivo_label if motivo_label != "—" else None,
                 )
 
                 envio_falhou = "erro" in (status or "")

@@ -264,6 +264,20 @@ def init_db() -> None:
             conn.execute("ALTER TABLE envios ADD COLUMN chat_ticket_id TEXT")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_envios_chat_ticket ON envios(chat_ticket_id)")
 
+        # Migração: colunas específicas pra modo falta_medico. Cobrança não usa
+        # (ficam NULL). Renderizadas em envios.html quando campanha.modo_envio
+        # = 'falta_medico' no lugar de ref/valor/venc/dias_atraso.
+        _falta_cols = {
+            "medico":         "ALTER TABLE envios ADD COLUMN medico TEXT",
+            "especialidade":  "ALTER TABLE envios ADD COLUMN especialidade TEXT",
+            "data_falta":     "ALTER TABLE envios ADD COLUMN data_falta TEXT",
+            "hora_falta":     "ALTER TABLE envios ADD COLUMN hora_falta TEXT",
+            "motivo_falta":   "ALTER TABLE envios ADD COLUMN motivo_falta TEXT",
+        }
+        for _col, _ddl in _falta_cols.items():
+            if _col not in env_cols:
+                conn.execute(_ddl)
+
 
 # ---------------------------------------------------------------------------
 # Helpers de tempo

@@ -131,17 +131,26 @@
           <div class="card">
             <div class="card-body p-0">
               <div class="table-responsive">
+              {% set is_falta = (campanha.modo_envio == 'falta_medico') %}
               <table class="table table-sm table-hover mb-0">
                 <thead class="thead-light">
                   <tr>
                     <th>Data/Hora</th>
                     <th>Posto</th>
                     <th>Telefone</th>
-                    <th>Nome</th>
-                    <th>Ref</th>
-                    <th>Valor</th>
-                    <th>Venc.</th>
-                    <th>Atraso</th>
+                    <th>{{ 'Paciente' if is_falta else 'Nome' }}</th>
+                    {% if is_falta %}
+                      <th>Médico</th>
+                      <th>Especialidade</th>
+                      <th>Data Falta</th>
+                      <th>Hora</th>
+                      <th>Motivo</th>
+                    {% else %}
+                      <th>Ref</th>
+                      <th>Valor</th>
+                      <th>Venc.</th>
+                      <th>Atraso</th>
+                    {% endif %}
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -152,10 +161,18 @@
                   <td><span class="badge badge-secondary">{{ e.posto or '' }}</span></td>
                   <td><small>{{ e.telefone }}</small></td>
                   <td>{{ (e.nome or '')[:28] }}</td>
-                  <td>{{ e.ref or '' }}</td>
-                  <td>R$ {{ e.valor or '' }}</td>
-                  <td>{{ e.venc or '' }}</td>
-                  <td>{{ e.dias_atraso or '' }}d</td>
+                  {% if is_falta %}
+                    <td>{{ (e.medico or '')[:28] }}</td>
+                    <td>{{ (e.especialidade or '')[:24] }}</td>
+                    <td>{{ e.data_falta or '' }}</td>
+                    <td><small>{{ e.hora_falta or '' }}</small></td>
+                    <td><small>{{ (e.motivo_falta or '')[:32] }}</small></td>
+                  {% else %}
+                    <td>{{ e.ref or '' }}</td>
+                    <td>R$ {{ e.valor or '' }}</td>
+                    <td>{{ e.venc or '' }}</td>
+                    <td>{{ e.dias_atraso or '' }}d</td>
+                  {% endif %}
                   <td>
                     {% if e.status and e.status.startswith('accepted') %}
                       <span class="badge badge-success">{{ e.status }}</span>
