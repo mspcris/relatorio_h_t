@@ -166,6 +166,52 @@ _TEMPLATE_TO_PAGINA = {
     "https://avisos.camim.com.br":                       "quadro_avisos_postos",
 }
 
+# Cache do dict enriquecido pelo RDS (TTL 60s).
+# Adicionados serviços criados via admin pegam efeito em até 1 min sem restart.
+_TEMPLATE_TO_PAGINA_CACHE: dict | None = None
+_TEMPLATE_TO_PAGINA_CACHE_TS: float = 0.0
+_TEMPLATE_TO_PAGINA_TTL = 60.0
+
+
+def _get_template_to_pagina() -> dict:
+    """Retorna o mapeamento href→page_key, combinando aliases técnicos (acima)
+    com os hrefs lidos da tabela public.servicos no RDS.
+
+    Aliases técnicos (templates antigos, variações sem prefixo /) ficam estáticos.
+    Hrefs canônicos vêm do DB e são atualizados a cada 60s.
+    """
+    global _TEMPLATE_TO_PAGINA_CACHE, _TEMPLATE_TO_PAGINA_CACHE_TS
+    import time
+    now = time.time()
+    if _TEMPLATE_TO_PAGINA_CACHE is not None and (now - _TEMPLATE_TO_PAGINA_CACHE_TS) < _TEMPLATE_TO_PAGINA_TTL:
+        return _TEMPLATE_TO_PAGINA_CACHE
+
+    merged = dict(_TEMPLATE_TO_PAGINA)
+    try:
+        from servicos_db import PgSession, listar_servicos
+        db = PgSession()
+        try:
+            for s in listar_servicos(db, somente_ativos=True):
+                href = s.href
+                merged[href] = s.key
+                # variações comuns: sem prefixo "/" e sem trailing slash
+                if href.startswith("/"):
+                    merged[href.lstrip("/")] = s.key
+                if href.endswith("/") and len(href) > 1:
+                    merged[href.rstrip("/")] = s.key
+        finally:
+            db.close()
+    except Exception as _e:
+        # Em caso de falha na conexão com o RDS, devolve o dict estático como fallback.
+        # Não é fatal: aliases técnicos cobrem o cenário típico.
+        import logging
+        logging.getLogger(__name__).warning("_get_template_to_pagina: RDS indisponível, usando só aliases estáticos: %s", _e)
+
+    _TEMPLATE_TO_PAGINA_CACHE = merged
+    _TEMPLATE_TO_PAGINA_CACHE_TS = now
+    return merged
+
+
 _MENU_RESOURCES_CACHE = None
 _log = logging.getLogger(__name__)
 HIGIENIZACAO_SNAPSHOT_PATH = os.getenv(
@@ -717,8 +763,8 @@ def track_page_hits():
     # O page_key é resolvido mais precisamente em render_protected_page (templates);
     # aqui usamos o mapa pelo path canônico como best-effort.
     try:
-        page_key = _TEMPLATE_TO_PAGINA.get(canonical.lstrip("/")) \
-                   or _TEMPLATE_TO_PAGINA.get(canonical)
+        _tmap = _get_template_to_pagina()
+        page_key = _tmap.get(canonical.lstrip("/")) or _tmap.get(canonical)
         _log_access(email, canonical, page_key, allowed=True, reason="hit")
     except Exception:
         pass
@@ -853,7 +899,7 @@ def _patch_json_meta(posto: str, ym: str, meta_obj: dict):
 
 def _sidebar_filter_script(paginas: list) -> str:
     """JS injetado no </body> para ocultar itens do menu que o usuário não tem acesso."""
-    href_map = json.dumps(_TEMPLATE_TO_PAGINA)
+    href_map = json.dumps(_get_template_to_pagina())
     plist    = json.dumps(paginas)
     return (
         f'<script>(function(){{'
@@ -906,10 +952,20 @@ def render_protected_page(page_name, **extra_vars):
         u = _gue(db, email)
         is_admin   = u.is_admin if u else False
         all_pages  = bool(u.all_pages) if u and hasattr(u, 'all_pages') else True
-        has_openai = bool(getattr(u, 'has_openai_account', False)) if u else False
         paginas    = u.lista_paginas() if u and not all_pages else []
+        # has_openai durante transição: True se o usuário tem permissão de página
+        # 'gpt_kpi_manus' OU tem all_pages OU o flag legado has_openai_account=True.
+        # O flag legado some quando todos forem migrados (cleanup_has_openai_column.py).
+        if u:
+            has_openai = (
+                all_pages
+                or "gpt_kpi_manus" in paginas
+                or bool(getattr(u, "has_openai_account", False))
+            )
+        else:
+            has_openai = False
         # Check page-level access
-        page_key = _TEMPLATE_TO_PAGINA.get(page_name)
+        page_key = _get_template_to_pagina().get(page_name)
         if page_key and not all_pages and page_key not in paginas:
             _log_access(email, request.path, page_key,
                         allowed=False, reason="page_key_denied")
@@ -945,7 +1001,20 @@ def render_protected_page(page_name, **extra_vars):
 
 @app.get('/mais_servicos')
 def r_mais_servicos():
-    return render_protected_page("mais_servicos.html")
+    """Lista de cards (Mais Serviços + Extras) carregada da tabela
+    public.servicos no RDS. Cada card vem com icone/cor/descricao/lock."""
+    from servicos_db import PgSession as _PgS, listar_servicos as _ls
+    _db = _PgS()
+    try:
+        servicos_mais   = [s.to_dict() for s in _ls(_db, grupo="mais")]
+        servicos_extras = [s.to_dict() for s in _ls(_db, grupo="extras")]
+    finally:
+        _db.close()
+    return render_protected_page(
+        "mais_servicos.html",
+        SERVICOS_MAIS=servicos_mais,
+        SERVICOS_EXTRAS=servicos_extras,
+    )
 
 @app.get('/leiame')
 def r_leiame():
@@ -1682,7 +1751,8 @@ def r12(): return render_protected_page("trello_harvest.html")
 
 @app.get('/mais_servicos.html')
 def h_mais_servicos():
-    return render_protected_page("mais_servicos.html")
+    # Mesma carga de SERVICOS_* que /mais_servicos
+    return r_mais_servicos()
 
 @app.get('/kpi_receita_despesa_rateio.html')
 def h_rateio():
@@ -2061,7 +2131,7 @@ def any_html(filename):
         db.close()
 
     # Check page-level access
-    page_key = _TEMPLATE_TO_PAGINA.get(filename)
+    page_key = _get_template_to_pagina().get(filename)
     if page_key and not all_pages and page_key not in paginas:
         try:
             return render_template(

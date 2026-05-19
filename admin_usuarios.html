@@ -1016,33 +1016,68 @@ function renderTabela() {
 }
 
 // ── Renderiza checkboxes de páginas agrupados e ordenados ─────────────────────
+// Cadeados (somente em mais + extras):
+//   free   → verde     (#2E7D32) — sem IDCamim
+//   bronze → bronze    (#CD7F32) — só IDCamim
+//   prata  → cinza     (#9CA3AF) — IDCamim + cadastro
+//   ouro   → dourado   (#D4AF37) — superadmin/diretor
+const LOCK_CORES = { free: '#2E7D32', bronze: '#CD7F32', prata: '#9CA3AF', ouro: '#D4AF37' };
+
 function renderPaginasCheck(userPaginas) {
   const wrap = document.getElementById('paginas-check');
-  const kpi  = _todasPaginas.filter(p => p.group === 'kpi');
-  const mais = _todasPaginas.filter(p => p.group === 'mais');
+  const kpi    = _todasPaginas.filter(p => p.group === 'kpi');
+  const mais   = _todasPaginas.filter(p => p.group === 'mais');
+  const extras = _todasPaginas.filter(p => p.group === 'extras');
 
-  function sortGroup(pages) {
-    const on  = pages.filter(p =>  userPaginas.includes(p.key));
-    const off = pages.filter(p => !userPaginas.includes(p.key));
-    return [...on, ...off];
-  }
+  // Item 1: ordem alfabética por label dentro de cada grupo (collation pt-BR).
+  const sortAlpha = (a, b) => a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' });
 
   function mkItem(p) {
     const ck = userPaginas.includes(p.key) ? ' checked' : '';
     const href = p.href || '#';
     const isExternal = /^https?:/i.test(href);
     const extIcon = isExternal ? ' <i class="fas fa-external-link-alt" style="font-size:.65rem;color:#adb5bd;margin-left:2px"></i>' : '';
-    // Click no nome → abre a página em nova aba; click na checkbox → marca/desmarca acesso
-    return `<div class="pagina-item">
-      <input type="checkbox" class="pagina-cb" value="${p.key}"${ck} title="Clique para conceder/remover acesso">
-      <a href="${href}" target="_blank" rel="noopener" class="pagina-link" title="Abrir página em nova aba">${p.label}${extIcon}</a>
+    // Cadeado: só nos grupos mais/extras (KPIs não levam lock).
+    const lockIcon = p.lock
+      ? ` <i class="fas fa-lock pagina-lock" data-lock-level="${p.lock}" style="color:${LOCK_CORES[p.lock] || '#9CA3AF'}; font-size:.7rem; margin-left:3px;" title="Acesso ${p.lock}"></i>`
+      : '';
+    // data-group permite o toggle master desabilitar mais+extras em bloco (item 11).
+    return `<div class="pagina-item" data-group="${p.group}">
+      <input type="checkbox" class="pagina-cb" value="${p.key}" data-group="${p.group}"${ck} title="Clique para conceder/remover acesso">
+      <a href="${href}" target="_blank" rel="noopener" class="pagina-link" title="Abrir página em nova aba">${p.label}${lockIcon}${extIcon}</a>
     </div>`;
   }
 
   wrap.innerHTML =
-    sortGroup(kpi).map(mkItem).join('') +
-    '<div class="paginas-separador w-100">Mais Serviços</div>' +
-    sortGroup(mais).map(mkItem).join('');
+    kpi.sort(sortAlpha).map(mkItem).join('') +
+    (mais.length    ? '<div class="paginas-separador w-100">Mais Serviços</div>' + mais.sort(sortAlpha).map(mkItem).join('')     : '') +
+    (extras.length  ? '<div class="paginas-separador w-100">Extras</div>'        + extras.sort(sortAlpha).map(mkItem).join('')   : '');
+
+  // Item 11: toggle master — checkbox "Mais Serviços" controla a habilitação
+  // dos checkboxes de mais+extras. Quando desmarcado, todos ficam disabled +
+  // grayed out (mas o estado de acesso individual permanece salvo).
+  aplicarToggleMaisServicos();
+}
+
+function aplicarToggleMaisServicos() {
+  const masterCb = document.querySelector('.pagina-cb[value="mais_servicos"]');
+  if (!masterCb) return;
+  const sync = () => {
+    const habilitado = masterCb.checked;
+    document.querySelectorAll('#paginas-check .pagina-item').forEach(item => {
+      const g = item.getAttribute('data-group');
+      if (g !== 'mais' && g !== 'extras') return;
+      // Não desabilita o próprio master (que está no grupo kpi de qualquer forma).
+      const cb = item.querySelector('.pagina-cb');
+      if (cb) cb.disabled = !habilitado;
+      item.style.opacity = habilitado ? '1' : '0.4';
+      item.style.pointerEvents = habilitado ? '' : 'none';
+    });
+  };
+  masterCb.removeEventListener('change', masterCb._masterToggleHandler || (() => {}));
+  masterCb._masterToggleHandler = sync;
+  masterCb.addEventListener('change', sync);
+  sync();
 }
 
 // ── Modal novo ────────────────────────────────────────────────────────────────

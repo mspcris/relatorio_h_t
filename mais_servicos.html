@@ -255,480 +255,78 @@
                 </div>
 
                 <div class="row" id="row-normais">
-
-
-                    <!-- 01. Agenda do Dia -->
-                    <div class="col-md-4 mb-4">
+                {# 27 cards lidos da tabela public.servicos no RDS #}
+                {% set _lock_cores = {'free':'#2E7D32','bronze':'#CD7F32','prata':'#9CA3AF','ouro':'#D4AF37'} %}
+                {% for s in SERVICOS_MAIS %}
+                    <div class="col-md-4 mb-4" data-page-key="{{ s.key }}" data-lock="{{ s.lock or '' }}">
                         <div class="card card-servico h-100">
                             <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-calendar-check fa-2x " style="color:#1565C0"></i>
+                                <div class="mb-3 d-flex justify-content-between align-items-start">
+                                    <i class="{{ s.icone or 'fas fa-cube' }} fa-2x" style="color:{{ s.cor or '#666' }}"></i>
+                                    {% if s.lock %}
+                                    <i class="fas fa-lock card-lock"
+                                       title="Acesso {{ s.lock }}"
+                                       data-lock-level="{{ s.lock }}"
+                                       style="color:{{ _lock_cores[s.lock] }}; font-size:1.05rem;"></i>
+                                    {% endif %}
                                 </div>
-                                <h5 class="card-title">Agenda do Dia</h5>
-                                <p class="card-text flex-grow-1">Relatório de clientes agendados no dia por posto — presença, situação financeira (adimplente, atrasado, inadimplente) e pagamentos realizados no dia da consulta.</p>
-                                <a href="agenda_dia.html" class="btn btn-acessar mt-3" style="background:#1565C0; border-color:#1565C0; color:#fff;">
-                                    <i class="fas fa-arrow-right mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 02. Camila dos Funcionários -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-comment-dots fa-2x " style="color:#2E7D32"></i>
-                                </div>
-                                <h5 class="card-title">Camila dos Funcionários</h5>
-                                <p class="card-text flex-grow-1">Assistente IA da Camila para uso interno — analisa atendimentos, consulta histórico de clientes, explica políticas, reescreve mensagens e redige e-mails. Para a equipe operacional.</p>
-                                <a href="https://camila.camim.com.br/" target="_blank" class="btn btn-acessar mt-3" style="background:#2E7D32; border-color:#2E7D32; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 03. Camila.ai dos clientes — CRM -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-headset fa-2x " style="color:#6A1B9A"></i>
-                                </div>
-                                <h5 class="card-title">Camila.ai dos clientes — CRM</h5>
-                                <p class="card-text flex-grow-1">Chatbot de atendimento Camila.ai voltado a clientes — painel CRM com histórico de conversas, gestão de atendimentos e métricas de suporte ao beneficiário.</p>
-                                <a href="https://atendimento.camilaia.camim.com.br/crm" target="_blank" class="btn btn-acessar mt-3" style="background:#6A1B9A; border-color:#6A1B9A; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 03b. CAMIM Analytics (acesso restrito a usuários da conta OpenAI) -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-brain fa-2x" style="color:#10A37F"></i>
-                                </div>
-                                <h5 class="card-title">CAMIM Analytics</h5>
-                                <p class="card-text flex-grow-1">GPT customizado da OpenAI com acesso às APIs dos KPIs — pergunte qualquer dado em linguagem natural. Acesso restrito a usuários com conta na OpenAI da CAMIM.</p>
-                                {% if USER_HAS_OPENAI %}
-                                <a href="https://chatgpt.com/g/g-69e4c16a288c8191b339751f3692cfc3-camim-analytics" target="_blank" rel="noopener" class="btn btn-acessar mt-3" style="background:#10A37F; border-color:#10A37F; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
-                                </a>
+                                <h5 class="card-title">{{ s.label }}</h5>
+                                <p class="card-text flex-grow-1">{{ s.descricao or '' }}</p>
+                                {% if s.key == 'gpt_kpi_manus' %}
+                                  {% if USER_HAS_OPENAI %}
+                                    <a href="{{ s.href }}" target="_blank" rel="noopener" class="btn btn-acessar mt-3" style="background:{{ s.cor }}; border-color:{{ s.cor }}; color:#fff;">
+                                        <i class="fas fa-external-link-alt mr-1"></i> Acessar
+                                    </a>
+                                  {% else %}
+                                    <button type="button" onclick="abrirModalSemAcessoOpenAI()" class="btn btn-acessar mt-3" style="background:{{ s.cor }}; border-color:{{ s.cor }}; color:#fff;">
+                                        <i class="fas fa-lock mr-1"></i> Acessar
+                                    </button>
+                                  {% endif %}
                                 {% else %}
-                                <button type="button" onclick="abrirModalSemAcessoOpenAI()" class="btn btn-acessar mt-3" style="background:#10A37F; border-color:#10A37F; color:#fff;">
-                                    <i class="fas fa-lock mr-1"></i> Acessar
-                                </button>
+                                  {% set is_external = s.href.startswith('http://') or s.href.startswith('https://') %}
+                                  <a href="{{ s.href }}" {% if is_external %}target="_blank" rel="noopener"{% endif %} class="btn btn-acessar mt-3" style="background:{{ s.cor }}; border-color:{{ s.cor }}; color:#fff;">
+                                    <i class="fas {% if is_external %}fa-external-link-alt{% else %}fa-arrow-right{% endif %} mr-1"></i> Acessar
+                                  </a>
                                 {% endif %}
                             </div>
                         </div>
                     </div>
+                {% endfor %}
+                </div>
 
-
-                    <!-- 04. Central -->
-                    <div class="col-md-4 mb-4">
+                {% if SERVICOS_EXTRAS %}
+                <div class="card mb-3 mt-3">
+                    <div class="card-body">
+                        <h3 class="mb-1">Extras</h3>
+                        <p class="text-muted mb-0">Ferramentas adicionais — planejamento e dados fiscais.</p>
+                    </div>
+                </div>
+                <div class="row" id="row-extras">
+                {% for s in SERVICOS_EXTRAS %}
+                    <div class="col-md-4 mb-4" data-page-key="{{ s.key }}" data-lock="{{ s.lock or '' }}">
                         <div class="card card-servico h-100">
                             <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-building fa-2x " style="color:#00838F"></i>
+                                <div class="mb-3 d-flex justify-content-between align-items-start">
+                                    <i class="{{ s.icone or 'fas fa-cube' }} fa-2x" style="color:{{ s.cor or '#666' }}"></i>
+                                    {% if s.lock %}
+                                    <i class="fas fa-lock card-lock"
+                                       title="Acesso {{ s.lock }}"
+                                       data-lock-level="{{ s.lock }}"
+                                       style="color:{{ _lock_cores[s.lock] }}; font-size:1.05rem;"></i>
+                                    {% endif %}
                                 </div>
-                                <h5 class="card-title">Central</h5>
-                                <p class="card-text flex-grow-1">Base de conhecimento da Central de Atendimento G e C — procedimentos, scripts de atendimento e materiais de apoio para a equipe.</p>
-                                <a href="https://central.camim.com.br/" target="_blank" class="btn btn-acessar mt-3" style="background:#00838F; border-color:#00838F; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
+                                <h5 class="card-title">{{ s.label }}</h5>
+                                <p class="card-text flex-grow-1">{{ s.descricao or '' }}</p>
+                                {% set is_external = s.href.startswith('http://') or s.href.startswith('https://') %}
+                                <a href="{{ s.href }}" {% if is_external %}target="_blank" rel="noopener"{% endif %} class="btn btn-acessar mt-3" style="background:{{ s.cor }}; border-color:{{ s.cor }}; color:#fff;">
+                                    <i class="fas {% if is_external %}fa-external-link-alt{% else %}fa-arrow-right{% endif %} mr-1"></i> Acessar
                                 </a>
                             </div>
                         </div>
                     </div>
-
-
-                    <!-- 05. Chat -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-comments fa-2x " style="color:#4527A0"></i>
-                                </div>
-                                <h5 class="card-title">Chat</h5>
-                                <p class="card-text flex-grow-1">Plataforma de chat CAMIM — conversas com clientes via Camila.ai, métricas operacionais e avaliações deixadas pelos usuários ao fechar os atendimentos.</p>
-                                <div class="d-flex flex-wrap mt-3" style="gap:6px; row-gap:6px;">
-                                    <a href="https://chat.camim.com.br/" target="_blank" class="btn btn-acessar flex-fill" style="background:#4527A0; border-color:#4527A0; color:#fff; padding:.5rem .25rem; font-size:.82rem; flex: 1 1 90px; min-width:90px;" title="Abrir plataforma de chat">
-                                        <i class="fas fa-external-link-alt mr-1"></i> Chat
-                                    </a>
-                                    <a href="/chat_dashboard.html" class="btn btn-acessar flex-fill" style="background:#4527A0; border-color:#4527A0; color:#fff; padding:.5rem .25rem; font-size:.82rem; flex: 1 1 90px; min-width:90px;" title="Dashboard operacional Camila.ai">
-                                        <i class="fas fa-chart-line mr-1"></i> Dashboard
-                                    </a>
-                                    <a href="/chat_avaliacoes" class="btn btn-acessar flex-fill" style="background:#4527A0; border-color:#4527A0; color:#fff; padding:.5rem .25rem; font-size:.82rem; flex: 1 1 90px; min-width:90px;" title="Avaliações e comentários dos clientes">
-                                        <i class="fas fa-star mr-1"></i> Avaliações
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 06. Cobrança -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-file-invoice-dollar fa-2x " style="color:#EF6C00"></i>
-                                </div>
-                                <h5 class="card-title">Cobrança</h5>
-                                <p class="card-text flex-grow-1">Sistema de cobrança CAMIM — gestão de inadimplência, geração de boletos e acompanhamento de pagamentos por beneficiário.</p>
-                                <a href="https://cobranca.camim.com.br/" target="_blank" class="btn btn-acessar mt-3" style="background:#EF6C00; border-color:#EF6C00; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 07. CRM -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-address-card fa-2x " style="color:#4E342E"></i>
-                                </div>
-                                <h5 class="card-title">CRM</h5>
-                                <p class="card-text flex-grow-1">Gestão de reclamações de clientes registradas em todos os postos — abertura, acompanhamento e encerramento de CRMs (Comunicação de Reclamação) gerados via Central de Atendimento.</p>
-                                <a href="https://crm.camim.com.br/" target="_blank" class="btn btn-acessar mt-3" style="background:#4E342E; border-color:#4E342E; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 08. Dashboard Pré-Agendamento -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-clipboard-check fa-2x " style="color:#00695C"></i>
-                                </div>
-                                <h5 class="card-title">Dashboard Pré-Agendamento</h5>
-                                <p class="card-text flex-grow-1">Mede o impacto da regra de confirmação de consulta na janela de 5 a 2 dias antes — taxa de falta, comparecimento, desistências, rotatividade de vagas e comparação por canal de marcação (Web/App, ASU, F6).</p>
-                                <a href="/preagendamento" class="btn btn-acessar mt-3" style="background:#00695C; border-color:#00695C; color:#fff;">
-                                    <i class="fas fa-arrow-right mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 09. Email de Cobrança -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-envelope fa-2x " style="color:#AD1457"></i>
-                                </div>
-                                <h5 class="card-title">Email de Cobrança</h5>
-                                <p class="card-text flex-grow-1">Dashboard de emails de cobrança enviados — acompanhamento por posto e categoria, histórico de envios e status por beneficiário.</p>
-                                <a href="/email_clientes" class="btn btn-acessar mt-3" style="background:#AD1457; border-color:#AD1457; color:#fff;">
-                                    <i class="fas fa-arrow-right mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 10. Higienização -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-broom fa-2x " style="color:#283593"></i>
-                                </div>
-                                <h5 class="card-title">Higienização</h5>
-                                <p class="card-text flex-grow-1">Painel operacional de higienização com cobertura por ambiente, aderência por periodicidade, produtividade por colaborador e pendências por local.</p>
-                                <a href="/higienizacao" class="btn btn-acessar mt-3" style="background:#283593; border-color:#283593; color:#fff;">
-                                    <i class="fas fa-arrow-right mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 11. Médico - Cadastrar Falta + WhatsApp -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-user-times fa-2x " style="color:#B71C1C"></i>
-                                </div>
-                                <h5 class="card-title">Médico - Cadastrar Falta + WhatsApp</h5>
-                                <p class="card-text flex-grow-1">Lista faltas existentes ou cadastra nova falta (total/parcial). Após salvar, notifica os pacientes afetados via WhatsApp usando o template <code>notificacao_de_falta_do_medico</code>.</p>
-                                <a href="/medico_falta" class="btn btn-acessar mt-3" style="background:#B71C1C; border-color:#B71C1C; color:#fff;">
-                                    <i class="fas fa-arrow-right mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 12. Médico - Desbloqueio de Agenda — CTRL-Q -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-unlock-alt fa-2x " style="color:#C62828"></i>
-                                </div>
-                                <h5 class="card-title">Médico - Desbloqueio de Agenda — CTRL-Q</h5>
-                                <p class="card-text flex-grow-1">Registros de desbloqueio temporário de agenda médica — visualize os pedidos ativos por posto, o que foi alterado e quando expira.</p>
-                                <a href="/ctrlq_desbloqueio" class="btn btn-acessar mt-3" style="background:#C62828; border-color:#C62828; color:#fff;">
-                                    <i class="fas fa-arrow-right mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 13. Médico - Inclusão Agenda Temporária -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-user-md fa-2x " style="color:#1B5E20"></i>
-                                </div>
-                                <h5 class="card-title">Médico - Inclusão Agenda Temporária</h5>
-                                <p class="card-text flex-grow-1">Inclui médicos no cadastro de médico, cria agenda no CTRL-Q e gera o usuário do sistema. Também permite alterar a senha do médico, caso ele não lembre dela.</p>
-                                <a href="/medico_novo" class="btn btn-acessar mt-3" style="background:#1B5E20; border-color:#1B5E20; color:#fff;">
-                                    <i class="fas fa-arrow-right mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 14. Monitor IoT -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-snowflake fa-2x " style="color:#00ACC1"></i>
-                                </div>
-                                <h5 class="card-title">Monitor IoT</h5>
-                                <p class="card-text flex-grow-1">Monitoramento de dispositivos IoT — condicionadores de ar e demais equipamentos conectados nos postos.</p>
-                                <a href="https://iot.propagacaodigital.com.br" target="_blank" class="btn btn-acessar mt-3" style="background:#00ACC1; border-color:#00ACC1; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 15. Notas Fiscais NBS -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-file-invoice fa-2x " style="color:#5D4037"></i>
-                                </div>
-                                <h5 class="card-title">Notas Fiscais NBS</h5>
-                                <p class="card-text flex-grow-1">Manual de Emissão de Nota Fiscal para clínicas e operadoras — mostra exatamente como preencher cada campo da nota fiscal.</p>
-                                <a href="k_adicional_NBS-IBS-CBS.html" class="btn btn-acessar mt-3" style="background:#5D4037; border-color:#5D4037; color:#fff;">
-                                    <i class="fas fa-arrow-right mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 16. Planejamento PC's -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-tasks fa-2x " style="color:#37474F"></i>
-                                </div>
-                                <h5 class="card-title">Planejamento PC's</h5>
-                                <p class="card-text flex-grow-1">Planejamento de compra e substituição do parque de computadores — inventário de equipamentos por posto, previsão de obsolescência e priorização de renovação.</p>
-                                <a href="k_adicional_relatorio_pcs.html" class="btn btn-acessar mt-3" style="background:#37474F; border-color:#37474F; color:#fff;">
-                                    <i class="fas fa-arrow-right mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 17. Push de Cobrança (IA) -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-robot fa-2x " style="color:#D84315"></i>
-                                </div>
-                                <h5 class="card-title">Push de Cobrança (IA)</h5>
-                                <p class="card-text flex-grow-1">Controle de envio de push de cobrança via IA (Camila 5) — configuração, agendamento e monitoramento dos disparos automáticos.</p>
-                                <a href="https://camila5.ia.camim.com.br/login?next=/" target="_blank" class="btn btn-acessar mt-3" style="background:#D84315; border-color:#D84315; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 17b. Quadro de Avisos dos Postos -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-thumbtack fa-2x " style="color:#5E35B1"></i>
-                                </div>
-                                <h5 class="card-title">Quadro de Avisos dos Postos</h5>
-                                <p class="card-text flex-grow-1">Mural de avisos compartilhado entre os postos — comunicados internos, recados operacionais e alertas de equipe publicados em tempo real.</p>
-                                <a href="https://avisos.camim.com.br/" target="_blank" class="btn btn-acessar mt-3" style="background:#5E35B1; border-color:#5E35B1; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 18. Qualidade da Agenda Médica -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-calendar-check fa-2x " style="color:#880E4F"></i>
-                                </div>
-                                <h5 class="card-title">Qualidade da Agenda Médica</h5>
-                                <p class="card-text flex-grow-1">Monitore a disponibilidade de vagas por especialidade em cada posto — identifique especialidades críticas, compare com prazos ANS e tome decisões de contratação.</p>
-                                <a href="/qualidade_agenda" class="btn btn-acessar mt-3" style="background:#880E4F; border-color:#880E4F; color:#fff;">
-                                    <i class="fas fa-arrow-right mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 19. Tarefas - Nosso Trello -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-check-square fa-2x " style="color:#558B2F"></i>
-                                </div>
-                                <h5 class="card-title">Tarefas - Nosso Trello</h5>
-                                <p class="card-text flex-grow-1">Gestão de tarefas CAMIM — criação, atribuição e acompanhamento de demandas operacionais por equipe e prazo.</p>
-                                <a href="https://tarefas.camim.com.br/" target="_blank" class="btn btn-acessar mt-3" style="background:#558B2F; border-color:#558B2F; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 20. TEF Recorrente -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-credit-card fa-2x " style="color:#FF8F00"></i>
-                                </div>
-                                <h5 class="card-title">TEF Recorrente</h5>
-                                <p class="card-text flex-grow-1">Dashboard de cobranças recorrentes via cartão — tentativas por posto, aprovadas, negadas e principais motivos de recusa Cielo.</p>
-                                <a href="/tef" class="btn btn-acessar mt-3" style="background:#FF8F00; border-color:#FF8F00; color:#000;">
-                                    <i class="fas fa-arrow-right mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 21. Vendas — Efetivar -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-handshake fa-2x " style="color:#E65100"></i>
-                                </div>
-                                <h5 class="card-title">Vendas — Efetivar</h5>
-                                <p class="card-text flex-grow-1">Sistema Broker de efetivação de vendas — controle de propostas, contratos e confirmação de adesões por posto.</p>
-                                <a href="https://broker.camim.com.br/" target="_blank" class="btn btn-acessar mt-3" style="background:#E65100; border-color:#E65100; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 22. Vendas — Leads (Corretores) -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-user-tie fa-2x " style="color:#455A64"></i>
-                                </div>
-                                <h5 class="card-title">Vendas — Leads (Corretores)</h5>
-                                <p class="card-text flex-grow-1">Portal de corretores para captação e gestão de leads — acompanhamento do funil de vendas e performance por corretor.</p>
-                                <a href="https://corretores.camim.com.br/" target="_blank" class="btn btn-acessar mt-3" style="background:#455A64; border-color:#455A64; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 23. Vendas - Leads Analytics -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fas fa-chart-line fa-2x " style="color:#0277BD"></i>
-                                </div>
-                                <h5 class="card-title">Vendas - Leads Analytics</h5>
-                                <p class="card-text flex-grow-1">Dashboard analitico de leads — funil de conversao, performance de corretores, timing, gargalos e insights automaticos.</p>
-                                <a href="/leads_analytics.html" class="btn btn-acessar mt-3" style="background:#0277BD; border-color:#0277BD; color:#fff;">
-                                    <i class="fas fa-chart-line mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 24. WhatsApp - Explicando a Cobrança -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fab fa-whatsapp fa-2x " style="color:#F9A825"></i>
-                                </div>
-                                <h5 class="card-title">WhatsApp - Explicando a Cobrança</h5>
-                                <p class="card-text flex-grow-1">Guia explicativo sobre como funciona a cobrança via WhatsApp — fluxo de mensagens, régua de comunicação e critérios de envio.</p>
-                                <a href="k_whatsapp_como_funciona.html" class="btn btn-acessar mt-3" style="background:#F9A825; border-color:#F9A825; color:#000;">
-                                    <i class="fas fa-arrow-right mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <!-- 25. WhatsApp Campanhas -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card card-servico h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="mb-3">
-                                    <i class="fab fa-whatsapp fa-2x " style="color:#00C853"></i>
-                                </div>
-                                <h5 class="card-title">WhatsApp Campanhas</h5>
-                                <p class="card-text flex-grow-1">Plataforma de campanhas via WhatsApp — crie regras de filtro por posto, atraso, cliente e janela de envio. Relatório completo de enviados e não enviados.</p>
-                                <a href="https://camila1.ia.camim.com.br/" target="_blank" class="btn btn-acessar mt-3" style="background:#00C853; border-color:#00C853; color:#fff;">
-                                    <i class="fas fa-external-link-alt mr-1"></i> Acessar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                                </div>
+                {% endfor %}
+                </div>
+                {% endif %}
 
             </section>
         </div>

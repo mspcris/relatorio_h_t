@@ -37,6 +37,7 @@ from auth_db import (
     PageUsagePing, RegraAnomalia, AnomaliaVerificacao,
     get_user_by_email, get_user_by_id, init_db,
 )
+from servicos_db import PgSession as ServicoSession, Servico, listar_servicos
 
 # Clientes LLM (carregados sob demanda para não quebrar se a API key faltar)
 _openai_client = None
@@ -133,59 +134,28 @@ IA_GROQ_URL = os.environ.get("IA_GROQ_URL", "http://127.0.0.1:8030/ia/analisar")
 
 auth_bp = Blueprint("auth_bp", __name__)
 
-PAGINAS_DISPONIVEIS = [
-    # ── KPIs ──
-    {"key": "alimentacao",               "label": "KPI Custo Alimentação",      "group": "kpi", "href": "/kpi_alimentacao.html"},
-    {"key": "medicos",                   "label": "KPI Custo Médico",            "group": "kpi", "href": "/kpi_medicos.html"},
-    {"key": "ctrlq_relatorio",           "label": "KPI Médicos (Qualidade)",     "group": "kpi", "href": "/ctrlq_relatorio.html"},
-    {"key": "kpi_v2",                    "label": "KPI Mensalidades",            "group": "kpi", "href": "/kpi_v2.html"},
-    {"key": "kpi_vendas",                "label": "KPI Vendas",                  "group": "kpi", "href": "/kpi_vendas.html"},
-    {"key": "clientes",                  "label": "KPI Clientes",                "group": "kpi", "href": "/kpi_clientes.html"},
-    {"key": "kpi_prescricao",            "label": "KPI Prescrições",             "group": "kpi", "href": "/KPI_prescricao.html"},
-    {"key": "kpi_fidelizacao",           "label": "KPI Fidelização Churn",       "group": "kpi", "href": "/kpi_fidelizacao_cliente.html"},
-    {"key": "kpi_consultas",             "label": "KPI Consultas (Status)",      "group": "kpi", "href": "/kpi_consultas_status.html"},
-    {"key": "kpi_egide",                 "label": "KPI Égide Saúde",             "group": "kpi", "href": "/kpi_egide.html"},
-    {"key": "kpi_notas_rps",             "label": "KPI Notas x RPS",             "group": "kpi", "href": "/kpi_notas_rps.html"},
-    {"key": "kpi_metas",                 "label": "KPI Metas (Mens/Vendas)",     "group": "kpi", "href": "/kpi_metas.html"},
-    {"key": "kpi_governo",               "label": "KPI Índices Oficiais",        "group": "kpi", "href": "/kpi_governo.html"},
-    {"key": "kpi_liberty",               "label": "KPI CAMIM Liberty",           "group": "kpi", "href": "/kpi_liberty.html"},
-    {"key": "kpi_receita_despesa",       "label": "KPI Receitas x Despesas",     "group": "kpi", "href": "/kpi_receita_despesa.html"},
-    {"key": "kpi_receita_despesa_rateio","label": "KPI R x D com Rateio",        "group": "kpi", "href": "/kpi_receita_despesa_rateio.html"},
-    {"key": "growth",                    "label": "Growth Dashboard",            "group": "kpi", "href": "/growth.html"},
-    {"key": "mais_servicos",             "label": "Mais Serviços",               "group": "kpi", "href": "/mais_servicos"},
-    {"key": "email_clientes",            "label": "Email de Cobrança",           "group": "kpi", "href": "/email_clientes"},
-    {"key": "chat_avaliacoes",           "label": "CHAT Avaliações",             "group": "kpi", "href": "/chat_avaliacoes"},
-    {"key": "leiame",                    "label": "Leia-me (Painel Antigo)",     "group": "kpi", "href": "/leiame"},
-    # ── Mais Serviços ──
-    {"key": "k_nbs_ibs_cbs",            "label": "Notas Fiscais NBS/IBS/CBS",   "group": "mais", "href": "/k_adicional_NBS-IBS-CBS.html"},
-    {"key": "k_relatorio_pcs",          "label": "Planejamento PC's",           "group": "mais", "href": "/k_adicional_relatorio_pcs.html"},
-    {"key": "k_whatsapp_explicado",     "label": "WhatsApp - Explicando a Cobrança", "group": "mais", "href": "/k_whatsapp_como_funciona.html"},
-    {"key": "cobranca",                 "label": "Cobrança",                    "group": "mais", "href": "https://cobranca.camim.com.br/"},
-    {"key": "chat_externo",             "label": "Chat",                        "group": "mais", "href": "https://chat.camim.com.br/"},
-    {"key": "broker",                   "label": "Vendas Efetivar",             "group": "mais", "href": "https://broker.camim.com.br/"},
-    {"key": "corretores",               "label": "Vendas Leads Corretores",     "group": "mais", "href": "https://corretores.camim.com.br/"},
-    {"key": "leads_analytics",           "label": "Vendas - Leads Analytics",    "group": "mais", "href": "/leads_analytics.html"},
-    {"key": "tarefas",                  "label": "Tarefas - Nosso Trello",      "group": "mais", "href": "https://tarefas.camim.com.br/"},
-    {"key": "push_cobranca",            "label": "Push de Cobrança IA",         "group": "mais", "href": "https://camila5.ia.camim.com.br/login?next=/"},
-    {"key": "wpp_campanhas",            "label": "WhatsApp Campanhas",          "group": "mais", "href": "https://camila1.ia.camim.com.br/"},
-    {"key": "camila_crm",               "label": "Camila.ai CRM",               "group": "mais", "href": "https://atendimento.camilaia.camim.com.br/crm"},
-    {"key": "crm",                      "label": "CRM",                         "group": "mais", "href": "https://crm.camim.com.br/"},
-    {"key": "central",                  "label": "Central",                     "group": "mais", "href": "https://central.camim.com.br/"},
-    {"key": "agenda_dia",                "label": "Agenda do Dia (F3)",          "group": "mais", "href": "/agenda_dia"},
-    {"key": "preagendamento",            "label": "Dashboard Pré-Agendamento",   "group": "mais", "href": "/preagendamento"},
-    {"key": "iot_monitor",               "label": "Monitor IoT (Ar Condicionado)","group": "mais", "href": "https://iot.propagacaodigital.com.br/"},
-    {"key": "camila_funcionarios",       "label": "Camila dos Funcionários",     "group": "mais", "href": "https://camila.camim.com.br/"},
-    {"key": "medico_novo",               "label": "Médico - Inclusão Agenda Temporária", "group": "mais", "href": "/medico_novo"},
-    {"key": "medico_falta",              "label": "Médico - Cadastrar Falta + WhatsApp", "group": "mais", "href": "/medico_falta"},
-    {"key": "tef",                       "label": "TEF Recorrente",              "group": "mais", "href": "/tef"},
-    {"key": "chat_dashboard",            "label": "Dashboard Chat (Camila.ai)",  "group": "mais", "href": "/chat_dashboard.html"},
-    {"key": "wpp_dashboard",             "label": "Dashboard WhatsApp (Meta)",   "group": "mais", "href": "/wpp_dashboard.html"},
-    {"key": "ctrlq_desbloqueio",         "label": "Médico - Desbloqueio de Agenda — CTRL-Q","group": "mais", "href": "/ctrlq_desbloqueio"},
-    {"key": "qualidade_agenda",          "label": "Qualidade da Agenda Médica",  "group": "mais", "href": "/qualidade_agenda"},
-    {"key": "higienizacao",              "label": "Higienização",                "group": "mais", "href": "/higienizacao"},
-    {"key": "monitor_avisos",            "label": "Monitor de Avisos",           "group": "mais", "href": "https://avisos.camim.com.br/avisos"},
-    {"key": "quadro_avisos_postos",      "label": "Quadro de Avisos dos Postos", "group": "mais", "href": "https://avisos.camim.com.br/"},
-]
+def obter_paginas_disponiveis() -> list[dict]:
+    """Lê o catálogo de serviços do RDS Postgres (public.servicos).
+
+    Substitui a antiga constante hardcoded `PAGINAS_DISPONIVEIS`. Mantém o
+    mesmo contrato JSON que o admin já consome (key/label/group/href), e
+    acrescenta `lock` e `ordem` pra UI nova (item 5-11 da lista do usuário).
+    """
+    db = ServicoSession()
+    try:
+        return [
+            {
+                "key":   s.key,
+                "label": s.label,
+                "group": s.group_name,
+                "href":  s.href,
+                "lock":  s.lock,
+                "ordem": s.ordem,
+            }
+            for s in listar_servicos(db, somente_ativos=True)
+        ]
+    finally:
+        db.close()
 
 # ── Estado inicializado por init_auth() ───────────────────────────────────────
 _SESS_NAME   = "appsess"
@@ -622,7 +592,7 @@ def admin_page():
 def admin_paginas():
     if not _require_admin():
         return jsonify({"erro": "Não autorizado"}), 403
-    return jsonify(PAGINAS_DISPONIVEIS)
+    return jsonify(obter_paginas_disponiveis())
 
 
 @auth_bp.get("/admin/api/usuarios")
