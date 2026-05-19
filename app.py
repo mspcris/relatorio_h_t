@@ -1301,6 +1301,7 @@ def h_qualidade_agenda():
     resp.headers['Pragma'] = 'no-cache'
     return resp
 
+@app.get('/agenda_dia')
 @app.get('/agenda_dia.html')
 def h_agenda_dia():
     return render_protected_page("agenda_dia.html")
