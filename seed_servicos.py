@@ -38,7 +38,9 @@ from servicos_db import PgSession, Servico, init_pg_db
 # Mesma lista do auth_routes.PAGINAS_DISPONIVEIS, mantendo cada `key`.
 # Adicionados campos:
 #   - ordem  : posição dentro do grupo (10, 20, 30 … pra permitir inserts no meio)
-#   - lock   : NULL para kpi; default "free" para mais/extras (admin classifica depois)
+#   - lock   : NULL para kpi; default "verde" para mais/extras (admin classifica depois)
+#              Níveis: verde (IDCamim basta) / prata (cadastro extra) / dourado (admin/diretor)
+#              / vermelho (oculto na intranet.camim.com.br).
 #
 # Renames e movimentações da nova lista serão aplicados pelo seed só quando
 # rodado com --force (ou via UI do admin depois). Aqui ficam os valores
@@ -69,39 +71,39 @@ SERVICOS_SEED: list[dict] = [
     {"key": "chat_avaliacoes",            "label": "CHAT Avaliações",            "group_name": "kpi", "href": "/chat_avaliacoes",                     "ordem": 900},
     {"key": "mais_servicos",              "label": "Mais Serviços",              "group_name": "kpi", "href": "/mais_servicos",                       "ordem": 910},
 
-    # ── Mais Serviços (cadeado default "free"; admin classifica depois) ──────
-    {"key": "k_whatsapp_explicado",       "label": "WhatsApp - Explicando a Cobrança",         "group_name": "mais", "href": "/k_whatsapp_como_funciona.html",                "lock": "free", "ordem":  10},
-    {"key": "cobranca",                   "label": "Cobrança",                                 "group_name": "mais", "href": "https://cobranca.camim.com.br/",                "lock": "free", "ordem":  20},
-    {"key": "chat_externo",               "label": "Chat",                                     "group_name": "mais", "href": "https://chat.camim.com.br/",                    "lock": "free", "ordem":  30},
-    {"key": "broker",                     "label": "Vendas Efetivar - Broker",                 "group_name": "mais", "href": "https://broker.camim.com.br/",                  "lock": "free", "ordem":  40},
-    {"key": "corretores",                 "label": "Vendas Leads Corretores",                  "group_name": "mais", "href": "https://corretores.camim.com.br/",              "lock": "free", "ordem":  50},
-    {"key": "leads_analytics",            "label": "Vendas - Leads Analytics",                 "group_name": "mais", "href": "/leads_analytics.html",                         "lock": "free", "ordem":  60},
-    {"key": "tarefas",                    "label": "Tarefas - Nosso Trello",                   "group_name": "mais", "href": "https://tarefas.camim.com.br/",                 "lock": "free", "ordem":  70},
-    {"key": "push_cobranca",              "label": "Push de Cobrança IA",                      "group_name": "mais", "href": "https://camila5.ia.camim.com.br/login?next=/",  "lock": "free", "ordem":  80},
-    {"key": "wpp_campanhas",              "label": "WhatsApp Campanhas",                       "group_name": "mais", "href": "https://camila1.ia.camim.com.br/",              "lock": "free", "ordem":  90},
-    {"key": "camila_crm",                 "label": "Camila dos Clientes",                      "group_name": "mais", "href": "https://atendimento.camilaia.camim.com.br/crm", "lock": "free", "ordem": 100},
-    {"key": "crm",                        "label": "CRM",                                      "group_name": "mais", "href": "https://crm.camim.com.br/",                     "lock": "free", "ordem": 110},
-    {"key": "central",                    "label": "Central",                                  "group_name": "mais", "href": "https://central.camim.com.br/",                 "lock": "free", "ordem": 120},
-    {"key": "agenda_dia",                 "label": "Agenda do Dia (F3)",                       "group_name": "mais", "href": "/agenda_dia",                                   "lock": "free", "ordem": 130},
-    {"key": "preagendamento",             "label": "Dashboard Pré-Agendamento",                "group_name": "mais", "href": "/preagendamento",                               "lock": "free", "ordem": 140},
-    {"key": "iot_monitor",                "label": "Monitor IoT (Ar Condicionado)",            "group_name": "mais", "href": "https://iot.propagacaodigital.com.br/",         "lock": "free", "ordem": 150},
-    {"key": "camila_funcionarios",        "label": "Camila dos Funcionários",                  "group_name": "mais", "href": "https://camila.camim.com.br/",                  "lock": "free", "ordem": 160},
-    {"key": "medico_novo",                "label": "Médico - Inclusão Agenda Temporária",      "group_name": "mais", "href": "/medico_novo",                                  "lock": "free", "ordem": 170},
-    {"key": "medico_falta",               "label": "Médico - Cadastrar Falta + WhatsApp",      "group_name": "mais", "href": "/medico_falta",                                 "lock": "free", "ordem": 180},
-    {"key": "tef",                        "label": "TEF Recorrente",                           "group_name": "mais", "href": "/tef",                                          "lock": "free", "ordem": 190},
-    {"key": "chat_dashboard",             "label": "Dashboard Chat (Camila.ai)",               "group_name": "mais", "href": "/chat_dashboard.html",                          "lock": "free", "ordem": 200},
-    {"key": "wpp_dashboard",              "label": "Dashboard WhatsApp (Meta)",                "group_name": "mais", "href": "/wpp_dashboard.html",                           "lock": "free", "ordem": 210},
-    {"key": "ctrlq_desbloqueio",          "label": "Médico - Desbloqueio de Agenda — CTRL-Q",  "group_name": "mais", "href": "/ctrlq_desbloqueio",                            "lock": "free", "ordem": 220},
-    {"key": "qualidade_agenda",           "label": "Qualidade da Agenda Médica",               "group_name": "mais", "href": "/qualidade_agenda",                             "lock": "free", "ordem": 230},
-    {"key": "higienizacao",               "label": "Higienização",                             "group_name": "mais", "href": "/higienizacao",                                 "lock": "free", "ordem": 240},
-    {"key": "monitor_avisos",             "label": "Monitor de Avisos",                        "group_name": "mais", "href": "https://avisos.camim.com.br/avisos",            "lock": "free", "ordem": 250},
-    {"key": "quadro_avisos_postos",       "label": "MURAL - Quadro de Avisos",                 "group_name": "mais", "href": "https://avisos.camim.com.br/",                  "lock": "free", "ordem": 260},
+    # ── Mais Serviços (cadeado default "verde"; admin classifica depois) ──────
+    {"key": "k_whatsapp_explicado",       "label": "WhatsApp - Explicando a Cobrança",         "group_name": "mais", "href": "/k_whatsapp_como_funciona.html",                "lock": "verde", "ordem":  10},
+    {"key": "cobranca",                   "label": "Cobrança",                                 "group_name": "mais", "href": "https://cobranca.camim.com.br/",                "lock": "verde", "ordem":  20},
+    {"key": "chat_externo",               "label": "Chat",                                     "group_name": "mais", "href": "https://chat.camim.com.br/",                    "lock": "verde", "ordem":  30},
+    {"key": "broker",                     "label": "Vendas Efetivar - Broker",                 "group_name": "mais", "href": "https://broker.camim.com.br/",                  "lock": "verde", "ordem":  40},
+    {"key": "corretores",                 "label": "Vendas Leads Corretores",                  "group_name": "mais", "href": "https://corretores.camim.com.br/",              "lock": "verde", "ordem":  50},
+    {"key": "leads_analytics",            "label": "Vendas - Leads Analytics",                 "group_name": "mais", "href": "/leads_analytics.html",                         "lock": "verde", "ordem":  60},
+    {"key": "tarefas",                    "label": "Tarefas - Nosso Trello",                   "group_name": "mais", "href": "https://tarefas.camim.com.br/",                 "lock": "verde", "ordem":  70},
+    {"key": "push_cobranca",              "label": "Push de Cobrança IA",                      "group_name": "mais", "href": "https://camila5.ia.camim.com.br/login?next=/",  "lock": "verde", "ordem":  80},
+    {"key": "wpp_campanhas",              "label": "WhatsApp Campanhas",                       "group_name": "mais", "href": "https://camila1.ia.camim.com.br/",              "lock": "verde", "ordem":  90},
+    {"key": "camila_crm",                 "label": "Camila dos Clientes",                      "group_name": "mais", "href": "https://atendimento.camilaia.camim.com.br/crm", "lock": "verde", "ordem": 100},
+    {"key": "crm",                        "label": "CRM",                                      "group_name": "mais", "href": "https://crm.camim.com.br/",                     "lock": "verde", "ordem": 110},
+    {"key": "central",                    "label": "Central",                                  "group_name": "mais", "href": "https://central.camim.com.br/",                 "lock": "verde", "ordem": 120},
+    {"key": "agenda_dia",                 "label": "Agenda do Dia (F3)",                       "group_name": "mais", "href": "/agenda_dia",                                   "lock": "verde", "ordem": 130},
+    {"key": "preagendamento",             "label": "Dashboard Pré-Agendamento",                "group_name": "mais", "href": "/preagendamento",                               "lock": "verde", "ordem": 140},
+    {"key": "iot_monitor",                "label": "Monitor IoT (Ar Condicionado)",            "group_name": "mais", "href": "https://iot.propagacaodigital.com.br/",         "lock": "verde", "ordem": 150},
+    {"key": "camila_funcionarios",        "label": "Camila dos Funcionários",                  "group_name": "mais", "href": "https://camila.camim.com.br/",                  "lock": "verde", "ordem": 160},
+    {"key": "medico_novo",                "label": "Médico - Inclusão Agenda Temporária",      "group_name": "mais", "href": "/medico_novo",                                  "lock": "verde", "ordem": 170},
+    {"key": "medico_falta",               "label": "Médico - Cadastrar Falta + WhatsApp",      "group_name": "mais", "href": "/medico_falta",                                 "lock": "verde", "ordem": 180},
+    {"key": "tef",                        "label": "TEF Recorrente",                           "group_name": "mais", "href": "/tef",                                          "lock": "verde", "ordem": 190},
+    {"key": "chat_dashboard",             "label": "Dashboard Chat (Camila.ai)",               "group_name": "mais", "href": "/chat_dashboard.html",                          "lock": "verde", "ordem": 200},
+    {"key": "wpp_dashboard",              "label": "Dashboard WhatsApp (Meta)",                "group_name": "mais", "href": "/wpp_dashboard.html",                           "lock": "verde", "ordem": 210},
+    {"key": "ctrlq_desbloqueio",          "label": "Médico - Desbloqueio de Agenda — CTRL-Q",  "group_name": "mais", "href": "/ctrlq_desbloqueio",                            "lock": "verde", "ordem": 220},
+    {"key": "qualidade_agenda",           "label": "Qualidade da Agenda Médica",               "group_name": "mais", "href": "/qualidade_agenda",                             "lock": "verde", "ordem": 230},
+    {"key": "higienizacao",               "label": "Higienização",                             "group_name": "mais", "href": "/higienizacao",                                 "lock": "verde", "ordem": 240},
+    {"key": "monitor_avisos",             "label": "Monitor de Avisos",                        "group_name": "mais", "href": "https://avisos.camim.com.br/avisos",            "lock": "verde", "ordem": 250},
+    {"key": "quadro_avisos_postos",       "label": "MURAL - Quadro de Avisos",                 "group_name": "mais", "href": "https://avisos.camim.com.br/",                  "lock": "verde", "ordem": 260},
     # CAMIM Analytics migrado de has_openai_account → page_key, com lock=ouro
-    {"key": "gpt_kpi_manus",              "label": "ChatGPT dos KPI's / Manus",                "group_name": "mais", "href": "https://chatgpt.com/g/g-67be0c9b8b748191988b4e2bd49b09d2-camim-analytics", "lock": "ouro", "ordem": 270, "descricao": "GPT customizado da OpenAI com acesso às APIs dos KPIs — pergunte qualquer dado em linguagem natural. Acesso restrito a usuários com conta na OpenAI da CAMIM."},
+    {"key": "gpt_kpi_manus",              "label": "ChatGPT dos KPI's / Manus",                "group_name": "mais", "href": "https://chatgpt.com/g/g-67be0c9b8b748191988b4e2bd49b09d2-camim-analytics", "lock": "dourado", "ordem": 270, "descricao": "GPT customizado da OpenAI com acesso às APIs dos KPIs — pergunte qualquer dado em linguagem natural. Acesso restrito a usuários com conta na OpenAI da CAMIM."},
 
     # ── Extras (Planejamento PCs + Notas Fiscais NBS/IBS/CBS) ─────────────────
-    {"key": "k_relatorio_pcs",            "label": "Planejamento PC's",          "group_name": "extras", "href": "/k_adicional_relatorio_pcs.html",   "lock": "free", "ordem":  10},
-    {"key": "k_nbs_ibs_cbs",              "label": "Notas Fiscais NBS/IBS/CBS",  "group_name": "extras", "href": "/k_adicional_NBS-IBS-CBS.html",     "lock": "free", "ordem":  20},
+    {"key": "k_relatorio_pcs",            "label": "Planejamento PC's",          "group_name": "extras", "href": "/k_adicional_relatorio_pcs.html",   "lock": "verde", "ordem":  10},
+    {"key": "k_nbs_ibs_cbs",              "label": "Notas Fiscais NBS/IBS/CBS",  "group_name": "extras", "href": "/k_adicional_NBS-IBS-CBS.html",     "lock": "verde", "ordem":  20},
 ]
 
 

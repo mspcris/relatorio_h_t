@@ -40,7 +40,7 @@ PgBase = declarative_base()
 
 
 GROUPS = ("kpi", "mais", "extras")
-LOCKS  = ("free", "bronze", "prata", "ouro")
+LOCKS  = ("verde", "prata", "dourado", "vermelho")
 
 
 class Servico(PgBase):
@@ -52,10 +52,12 @@ class Servico(PgBase):
       - extras → grupo Extras (Planejamento PCs, Notas Fiscais NBS/IBS/CBS, etc.).
 
     `lock` só faz sentido para group_name ∈ {mais, extras}. Para KPIs fica NULL.
-      - free   → sem IDCamim (público).
-      - bronze → exige IDCamim.
-      - prata  → IDCamim + cadastro na plataforma.
-      - ouro   → IDCamim + cadastro + superadmin/diretor.
+    Todos os usuários autenticados têm IDCamim; o lock indica restrições adicionais.
+      - verde    → IDCamim basta (acesso geral).
+      - prata    → IDCamim + cadastro/permissão extra na plataforma.
+      - dourado  → IDCamim + admin/diretor.
+      - vermelho → visível só no kpi.camim.com.br; intranet.camim.com.br oculta
+                    (a intranet filtra `WHERE lock != 'vermelho'` no seu SELECT).
     """
     __tablename__ = "servicos"
 

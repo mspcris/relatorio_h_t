@@ -1028,11 +1028,12 @@ function renderTabela() {
 
 // ── Renderiza checkboxes de páginas agrupados e ordenados ─────────────────────
 // Cadeados (somente em mais + extras):
-//   free   → verde     (#2E7D32) — sem IDCamim
-//   bronze → bronze    (#CD7F32) — só IDCamim
-//   prata  → cinza     (#9CA3AF) — IDCamim + cadastro
-//   ouro   → dourado   (#D4AF37) — superadmin/diretor
-const LOCK_CORES = { free: '#2E7D32', bronze: '#CD7F32', prata: '#9CA3AF', ouro: '#D4AF37' };
+//   verde    → IDCamim basta
+//   prata    → IDCamim + cadastro/permissão extra
+//   dourado  → IDCamim + admin/diretor
+//   vermelho → visível só aqui; intranet.camim.com.br oculta itens vermelhos
+const LOCK_CORES = { verde: '#2E7D32', prata: '#9CA3AF', dourado: '#D4AF37', vermelho: '#C62828' };
+const LOCK_CICLO = ['verde', 'prata', 'dourado', 'vermelho'];
 
 function renderPaginasCheck(userPaginas) {
   const wrap = document.getElementById('paginas-check');
@@ -1049,8 +1050,9 @@ function renderPaginasCheck(userPaginas) {
     const isExternal = /^https?:/i.test(href);
     const extIcon = isExternal ? ' <i class="fas fa-external-link-alt" style="font-size:.65rem;color:#adb5bd;margin-left:2px"></i>' : '';
     // Cadeado: só nos grupos mais/extras (KPIs não levam lock).
+    // Clicável: cicla free → bronze → prata → ouro → free (handler delegado abaixo).
     const lockIcon = p.lock
-      ? ` <i class="fas fa-lock pagina-lock" data-lock-level="${p.lock}" style="color:${LOCK_CORES[p.lock] || '#9CA3AF'}; font-size:.7rem; margin-left:3px;" title="Acesso ${p.lock}"></i>`
+      ? ` <i class="fas fa-lock pagina-lock" data-lock-level="${p.lock}" data-key="${p.key}" style="color:${LOCK_CORES[p.lock] || '#9CA3AF'}; font-size:.8rem; margin-left:3px; cursor:pointer;" title="Acesso ${p.lock} — clique para alterar"></i>`
       : '';
     // data-group permite o toggle master desabilitar mais+extras em bloco (item 11).
     return `<div class="pagina-item" data-group="${p.group}">
@@ -1090,6 +1092,50 @@ function aplicarToggleMaisServicos() {
   masterCb.addEventListener('change', sync);
   sync();
 }
+
+// ── Ciclar nível do cadeado ao clicar no ícone ────────────────────────────────
+// verde → prata → dourado → vermelho → verde. Salva via POST e atualiza UI.
+async function ciclarLockServico(iconElement) {
+  const atual = iconElement.getAttribute('data-lock-level');
+  const key   = iconElement.getAttribute('data-key');
+  if (!key) return;
+  const idx = LOCK_CICLO.indexOf(atual);
+  const novo = LOCK_CICLO[(idx + 1) % LOCK_CICLO.length];
+  try {
+    const r = await fetch(`/admin/api/servicos/${encodeURIComponent(key)}/lock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lock: novo }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      toast(`Falha (HTTP ${r.status}): ${err.erro || ''}`, true);
+      return;
+    }
+    iconElement.setAttribute('data-lock-level', novo);
+    iconElement.style.color = LOCK_CORES[novo];
+    iconElement.setAttribute('title', `Acesso ${novo} — clique para alterar`);
+    // Mantém o cache em memória sincronizado para a próxima abertura do modal
+    const p = _todasPaginas.find(x => x.key === key);
+    if (p) p.lock = novo;
+    toast(`${key}: ${novo}`);
+  } catch (e) {
+    toast(`Erro de rede ao salvar lock: ${e}`, true);
+  }
+}
+
+// Event delegation no container — pega cliques em qualquer .pagina-lock que existir.
+document.addEventListener('DOMContentLoaded', () => {
+  const wrap = document.getElementById('paginas-check');
+  if (!wrap) return;
+  wrap.addEventListener('click', (e) => {
+    const icon = e.target.closest('.pagina-lock');
+    if (!icon) return;
+    e.preventDefault();
+    e.stopPropagation();
+    ciclarLockServico(icon);
+  });
+});
 
 // ── Modal novo ────────────────────────────────────────────────────────────────
 function abrirModalNovo() {

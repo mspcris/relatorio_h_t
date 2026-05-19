@@ -37,7 +37,7 @@ from auth_db import (
     PageUsagePing, RegraAnomalia, AnomaliaVerificacao,
     get_user_by_email, get_user_by_id, init_db,
 )
-from servicos_db import PgSession as ServicoSession, Servico, listar_servicos
+from servicos_db import PgSession as ServicoSession, Servico, listar_servicos, LOCKS
 
 # Clientes LLM (carregados sob demanda para não quebrar se a API key faltar)
 _openai_client = None
@@ -593,6 +593,30 @@ def admin_paginas():
     if not _require_admin():
         return jsonify({"erro": "Não autorizado"}), 403
     return jsonify(obter_paginas_disponiveis())
+
+
+@auth_bp.post("/admin/api/servicos/<key>/lock")
+def admin_servico_set_lock(key):
+    """Atualiza o nível de cadeado (free/bronze/prata/ouro) de um serviço.
+    Usado pelo clique no ícone-cadeado da grade de acesso a páginas."""
+    if not _require_admin():
+        return jsonify({"erro": "Não autorizado"}), 403
+    d = request.get_json(silent=True) or {}
+    novo = (d.get("lock") or "").strip()
+    if novo not in LOCKS:
+        return jsonify({"erro": f"lock inválido. Use: {','.join(LOCKS)}"}), 400
+    db = ServicoSession()
+    try:
+        s = db.query(Servico).filter_by(key=key).first()
+        if not s:
+            return jsonify({"erro": "serviço não encontrado"}), 404
+        if s.group_name not in ("mais", "extras"):
+            return jsonify({"erro": "lock só se aplica a serviços de mais/extras"}), 400
+        s.lock = novo
+        db.commit()
+        return jsonify({"ok": True, "key": key, "lock": novo})
+    finally:
+        db.close()
 
 
 @auth_bp.get("/admin/api/usuarios")
