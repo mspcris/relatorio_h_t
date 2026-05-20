@@ -403,6 +403,11 @@ def montar_params_template(template_name: str, fatura: dict) -> dict:
         "tipo_cliente": str(fatura.get("tipo_cliente") or ""),
         "situacao":     str(fatura.get("situacao_efetiva") or ""),
         "planotipo":    str(fatura.get("planotipo") or ""),
+        # Template seja_bem_vindo (modo cliente_novo)
+        "plano":        str(fatura.get("plano") or ""),
+        "cobrador":     str(fatura.get("cobrador") or ""),
+        "referencia":   str(fatura.get("referencia") or ""),
+        "linkapp":      "https://app.camim.com.br/",
     }
     body = _TEMPLATE_BODIES.get(template_name, "")
     if body:

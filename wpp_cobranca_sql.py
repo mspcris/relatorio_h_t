@@ -40,6 +40,14 @@ CLIENTE_NOVO_PREVIEW_DIAS  = 30
 # Nome para o template: prioriza nomesocial; cai para nome quando vazio.
 # Alias `nome` (não `nomecadastro`) porque monta_params() no cron lê
 # fatura.get("nome") — usar outro alias deixa o {{nome}} do Bem-Vindo vazio.
+#
+# Template seja_bem_vindo exige: {{nome}} {{plano}} {{matricula}}
+# {{referencia}} {{cobrador}} {{linkapp}}. Sem todos preenchidos no
+# CAMPO_MAP do cron, a mensagem sai com placeholders vazios — vide
+# incidente 2026-05-06 no CLAUDE.md. JOINs com cad_plano/cad_cobrador
+# alimentam plano e cobrador; referencia = dia da cobrança (DAY do
+# cl.diacobranca quando preenchido, senão do dia da DataMensalidade).
+# linkapp NÃO vem do SQL — é constante, preenchida no CAMPO_MAP.
 _SQL_CLIENTE_NOVO = """
 SELECT DISTINCT
     r.idCliente                                    AS idreceita,
@@ -55,9 +63,17 @@ SELECT DISTINCT
     CONVERT(VARCHAR(10), cl.DataAdmissao, 120)     AS ref,
     NULL                                           AS valor,
     NULL                                           AS venc,
-    0                                              AS diasdebito
+    0                                              AS diasdebito,
+    p.plano                                        AS plano,
+    cob.nome                                       AS cobrador,
+    CAST(
+        COALESCE(NULLIF(cl.diacobranca, 0), DAY(r.DataMensalidade))
+        AS VARCHAR(2)
+    )                                              AS referencia
 FROM fin_receita r
-JOIN cad_cliente cl ON cl.idCliente = r.idCliente
+JOIN cad_cliente   cl  ON cl.idCliente = r.idCliente
+LEFT JOIN cad_plano    p   ON p.idplano    = cl.idplano
+LEFT JOIN cad_cobrador cob ON cob.idcobrador = cl.idcobrador
 WHERE r.idContaTipo = 5
   AND r.DataPagamentoAuto IS NOT NULL
   AND cl.Desativado = 0
@@ -910,6 +926,8 @@ def _listar_preview_cliente_novo(campanha: dict, postos: list,
     sql_count = "SELECT COUNT(DISTINCT r.idCliente) " + from_join + where_base
 
     # nome efetivo = nomesocial, senão nome (mesma regra do _SQL_CLIENTE_NOVO)
+    # Inclui plano (cad_plano.plano) e cobrador (cad_cobrador.nome) — os
+    # mesmos campos que o cron usa para preencher o template seja_bem_vindo.
     sql_rows = (
         "SELECT DISTINCT "
         "  cl.Matricula AS matricula, "
@@ -921,15 +939,13 @@ def _listar_preview_cliente_novo(campanha: dict, postos: list,
         "  CONVERT(VARCHAR(10), cl.DataAdmissao, 103) AS data_admissao, "
         "  cl.idadecomputada AS idade, "
         "  CASE WHEN cl.tipo = 'j' THEN 'Jurídica' ELSE 'Física' END AS tipo_pessoa, "
-        "  CASE "
-        "    WHEN p.clubebeneficio = 1 THEN 'clube' "
-        "    WHEN p.clubebeneficiojoy = 1 THEN 'joy' "
-        "    WHEN p.planopremium = 1 THEN 'premium' "
-        "    ELSE 'camim' "
-        "  END AS planotipo, "
+        "  p.plano AS plano, "
+        "  cob.nome AS cobrador, "
+        "  CAST(COALESCE(NULLIF(cl.diacobranca,0), DAY(r.DataMensalidade)) AS VARCHAR(2)) AS referencia, "
         "  CONVERT(VARCHAR(10), r.DataPagamentoAuto, 103) AS pagamento_em "
         + from_join
-        + "LEFT JOIN cad_plano p ON p.idplano = cl.idplano "
+        + "LEFT JOIN cad_plano    p   ON p.idplano    = cl.idplano "
+        + "LEFT JOIN cad_cobrador cob ON cob.idcobrador = cl.idcobrador "
         + where_base
         + "ORDER BY cl.Matricula "
         + "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
@@ -966,8 +982,9 @@ def _listar_preview_cliente_novo(campanha: dict, postos: list,
                     "situacao":           "Ativo",
                     "plano":              row[6],
                     "bairro":             "",
-                    "cobrador":           "",
-                    "pagamento_em":       row[7],
+                    "cobrador":           row[7],
+                    "referencia":         row[8],
+                    "pagamento_em":       row[9],
                 })
         except Exception as e:
             log.error("listar_preview cliente_novo posto=%s: %s", posto, e)
