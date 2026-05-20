@@ -53,9 +53,12 @@ except Exception as e:
 
 
 # ── Config sessão (alinhada com camim-auth) ────────────────────────────────
-SECRET_KEY  = os.environ.get('SECRET_KEY') or os.environ.get('CAMILA2_SECRET_KEY')
+# camim-auth usa env SESSION_SECRET (visto em app.py:25). Camila2 LÊ A MESMA
+# var pra que o signer compartilhe semente — único jeito de validar o mesmo
+# cookie appsess emitido pelo KPI.
+SECRET_KEY  = os.environ.get('SESSION_SECRET') or os.environ.get('SECRET_KEY')
 if not SECRET_KEY:
-    raise SystemExit("camila2: SECRET_KEY ausente no .env (precisa ser IGUAL ao do camim-auth)")
+    raise SystemExit("camila2: SESSION_SECRET ausente no .env (precisa ser IGUAL ao do camim-auth)")
 
 SESS_NAME   = os.environ.get('SESS_NAME', 'appsess')
 TTL_SECONDS = int(os.environ.get('SESS_TTL_SECONDS', 3600 * 8))
