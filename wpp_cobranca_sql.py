@@ -569,11 +569,15 @@ def modo_envio(campanha: dict | None) -> str:
 
 
 def get_query_cliente_novo(lookback_dias: int = CLIENTE_NOVO_LOOKBACK_DIAS) -> tuple:
-    """Retorna (sql, [ini_str, fim_str]) para a query de clientes novos."""
+    """Retorna (sql, [ini, fim]) para a query de clientes novos.
+
+    Datas passadas como objeto `date` (não str) — com SET DATEFORMAT dmy
+    o SQL Server lê '2026-04-20' como dia=2026 e estoura 22007.
+    """
     from datetime import date, timedelta
     hoje = date.today()
-    ini  = str(hoje - timedelta(days=lookback_dias))
-    fim  = str(hoje + timedelta(days=1))
+    ini  = hoje - timedelta(days=lookback_dias)
+    fim  = hoje + timedelta(days=1)
     return _SQL_CLIENTE_NOVO, [ini, fim]
 
 
@@ -839,8 +843,10 @@ def _contar_preview_cliente_novo(campanha: dict) -> dict:
         "  AND r.DataPagamentoAuto <  ?"
     )
     hoje  = date.today()
-    ini   = str(hoje - timedelta(days=CLIENTE_NOVO_PREVIEW_DIAS))
-    fim   = str(hoje + timedelta(days=1))
+    # Objeto date (não str) — SET DATEFORMAT dmy do SQL Server CAMIM lê
+    # ISO '2026-04-20' como dia=2026 e estoura 22007.
+    ini   = hoje - timedelta(days=CLIENTE_NOVO_PREVIEW_DIAS)
+    fim   = hoje + timedelta(days=1)
     params = [ini, fim]
 
     total_faturas = 0

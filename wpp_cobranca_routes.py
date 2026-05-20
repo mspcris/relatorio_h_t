@@ -464,7 +464,7 @@ def api_templates():
             "name":     t["name"],
             "status":   t.get("status", ""),
             "language": t.get("language", ""),
-            "preview":  body_text[:120],
+            "preview":  body_text,
             "params":   params,
             "header_type":            header_type,            # "IMAGE" pra exigir imageUrl
             "header_handle_preview":  header_handle_preview,  # URL Meta (só preview)
