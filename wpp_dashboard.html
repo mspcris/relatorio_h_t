@@ -278,24 +278,10 @@
         </div>
 
         <div class="row mb-3">
-          <div class="col-md-6 mb-2">
+          <div class="col-md-12 mb-2">
             <div class="card">
               <div class="card-header"><h3 class="card-title">Curva de pagamento (acumulada)</h3></div>
               <div class="card-body"><div class="chart-container-sm"><canvas id="chartCurva"></canvas></div></div>
-            </div>
-          </div>
-          <div class="col-md-6 mb-2">
-            <div class="card">
-              <div class="card-header"><h3 class="card-title">Valor arrecadado (R$)</h3></div>
-              <div class="card-body">
-                <div class="kpi-box green" style="text-align:center;">
-                  <div class="label">Faturas pagas em 30d após envio</div>
-                  <div class="value" id="gValor">—</div>
-                  <div class="sub" style="font-size:.72rem;">
-                    teto atribuído — não desconta mensagens não entregues nem pagamentos espontâneos
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -404,16 +390,11 @@
             <div class="card">
               <div class="card-header">
                 <h3 class="card-title">Conversão por campanha</h3>
-                <div class="card-tools">
-                  <small class="text-muted" title="Soma de fin_receita.ValorPago das faturas pagas em até 30d após o envio. Não desconta mensagens não entregues pela Meta nem pagamentos que ocorreriam sem a mensagem — é um teto de atribuição, não valor realizado.">
-                    <i class="fas fa-info-circle"></i> Valor arrecadado = teto atribuído
-                  </small>
-                </div>
               </div>
               <div class="card-body p-0">
                 <div style="max-height:320px;overflow:auto;">
                   <table class="table table-sm mb-0">
-                    <thead><tr><th>Campanha</th><th class="text-right">Enviados</th><th class="text-right">Pagos</th><th class="text-right">Conversão</th><th class="text-right">Dias médios</th><th class="text-right">Valor arrecadado (R$)</th></tr></thead>
+                    <thead><tr><th>Campanha</th><th class="text-right">Enviados</th><th class="text-right">Pagos</th><th class="text-right">Conversão</th><th class="text-right">Dias médios</th></tr></thead>
                     <tbody id="tblConvCampanha"></tbody>
                   </table>
                 </div>
@@ -517,17 +498,9 @@
     document.getElementById('custoCobDet').textContent =
       `${fmtInt(nUtil)} mensagens × US$ ${pUtil.toFixed(4)} × R$ ${usd.toFixed(4)}/USD`;
 
-    // ROI comparativo com Valor arrecadado
-    const arrec = Number((data.conversao_geral || {}).valor_pago_total || 0);
-    if (arrec > 0 && utilBrl > 0) {
-      const roi = ((arrec - utilBrl) / utilBrl) * 100;
-      document.getElementById('custoRoi').innerHTML =
-        `<i class="fas fa-chart-line mr-1"></i> Valor arrecadado: <b>${fmtBR(arrec)}</b> · ` +
-        `ROI: <b>${roi.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%</b> ` +
-        `(cada R$ 1 gasto retornou R$ ${(arrec / utilBrl).toLocaleString('pt-BR', { maximumFractionDigits: 2 })})`;
-    } else {
-      document.getElementById('custoRoi').textContent = '';
-    }
+    // Linha de ROI/atribuição monetária removida: o teto inflava o ROI ao 100%
+    // dos pagamentos pós-envio sem descontar espontâneos (ver commit anterior).
+    document.getElementById('custoRoi').textContent = '';
   }
 
   // Busca cotação USD-BRL (awesomeapi, sem auth) — não bloqueia o render
@@ -612,7 +585,7 @@
   document.getElementById('gDiasSub').textContent = g.dias_mediana != null
     ? `mediana ${fmtDias(g.dias_mediana)} · p75 ${fmtDias(g.dias_p75)}`
     : '';
-  document.getElementById('gValor').textContent = fmtBR(g.valor_pago_total);
+  // gValor removido — o card "Valor arrecadado" foi tirado por inflar ROI
 
   // Curva de sobrevivência
   const curva = (data.breakdowns || {}).curva_sobrevivencia || [];
@@ -721,7 +694,6 @@
         <td class="text-right">${fmtInt(r.pagos)}</td>
         <td class="text-right">${fmtPct(r.conversao)}</td>
         <td class="text-right">${fmtDias(r.dias_medio)}</td>
-        <td class="text-right">${fmtBR(r.valor_pago_total)}</td>
       </tr>`);
   });
 
