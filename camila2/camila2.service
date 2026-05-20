@@ -1,0 +1,16 @@
+[Unit]
+Description=camila2 Flask App (camila2.ia.camim.com.br)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/camila2
+EnvironmentFile=-/opt/camila2/.env
+ExecStart=/opt/camila2/venv/bin/gunicorn -b 127.0.0.1:8025 --workers 2 --timeout 60 app:app
+Restart=on-failure
+RestartSec=3
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target

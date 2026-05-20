@@ -440,6 +440,69 @@ jobs:
           "
 
       # ================================================================
+      # 5D) camila2 app + deps -> /opt/camila2
+      # ================================================================
+      - name: camila2 app -> /opt/camila2
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          DEST=/opt/camila2
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "sudo mkdir -p '$DEST/templates' && sudo chown -R www-data:www-data '$DEST' && sudo chmod 775 '$DEST'"
+          for f in camila2/app.py camila2/requirements.txt camila2/.env.example; do
+            if [ -f "$f" ]; then
+              echo "Copiando $f → $DEST/"
+              rsync -lvz \
+                --omit-dir-times --no-perms --no-owner --no-group \
+                -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+                "$f" "$SSH_USER@$SSH_HOST:$DEST/$(basename $f)"
+            fi
+          done
+          # Templates (vazio por enquanto — ChoiceLoader pega do /opt/camim-auth/templates)
+          if [ -d camila2/templates ] && [ "$(ls -A camila2/templates 2>/dev/null)" ]; then
+            rsync -rlvz \
+              --omit-dir-times --no-perms --no-owner --no-group \
+              -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+              camila2/templates/ "$SSH_USER@$SSH_HOST:$DEST/templates/"
+          fi
+
+      - name: camila2 systemd unit -> /etc/systemd/system
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          if [ -f camila2/camila2.service ]; then
+            rsync -lvz \
+              --omit-dir-times --no-perms --no-owner --no-group \
+              -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+              camila2/camila2.service "$SSH_USER@$SSH_HOST:/tmp/camila2.service"
+            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+              sudo mv /tmp/camila2.service /etc/systemd/system/camila2.service
+              sudo systemctl daemon-reload
+            "
+          fi
+
+      - name: pip install deps no venv camila2 (cria se não existir)
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+            VENV=/opt/camila2/venv
+            if [ ! -d \"\$VENV\" ]; then
+              python3 -m venv \$VENV
+            fi
+            cd /opt/camila2
+            \$VENV/bin/pip install --quiet --upgrade pip 2>/dev/null || true
+            \$VENV/bin/pip install --quiet -r requirements.txt 2>/dev/null || true
+          "
+
+      # ================================================================
       # 6) Sync SQL (todas as pastas que começam com sql*)
       # ================================================================
       - name: Sync sql* -> /opt/relatorio_h_t
@@ -629,18 +692,25 @@ jobs:
           done
 
       # ================================================================
-      # 9) Restart FINAL (camim-auth + wpp-campanhas + nginx)
+      # 9) Restart FINAL (camim-auth + wpp-campanhas + camila2 + nginx)
       # ================================================================
-      - name: Restart camim-auth + wpp-campanhas + nginx
+      - name: Restart camim-auth + wpp-campanhas + camila2 + nginx
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
-            echo 'Reiniciando camim-auth, wpp-campanhas e nginx...'
+            echo 'Reiniciando camim-auth, wpp-campanhas, camila2 e nginx...'
             sudo systemctl restart camim-auth.service
             sudo systemctl restart wpp-campanhas.service
+            # camila2 só restarta se o unit já existir; primeiro deploy precisa enable manual
+            if systemctl list-unit-files 2>/dev/null | grep -q '^camila2\.service'; then
+              sudo systemctl restart camila2.service || true
+              sudo systemctl status camila2.service --no-pager || true
+            else
+              echo 'camila2.service ainda não habilitado — primeiro deploy precisa de \`systemctl enable\` manual'
+            fi
             sudo systemctl restart nginx
             sudo systemctl status camim-auth.service --no-pager || true
             sudo systemctl status wpp-campanhas.service --no-pager || true
