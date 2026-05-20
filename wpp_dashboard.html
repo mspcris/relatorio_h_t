@@ -232,7 +232,7 @@
         <div class="card mb-3" style="background:#f0fdf4;border:2px solid #15803d;">
           <div class="card-body text-center py-4">
             <div class="label" style="color:#15803d;font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:.9rem;">
-              Custo total estimado — mensagens de cobrança
+              Custo total estimado — Meta (marketing + cobrança)
             </div>
             <div id="custoCobBig" style="font-size:3rem;font-weight:700;color:#15803d;line-height:1.1;margin:8px 0;">—</div>
             <div id="custoCobDet" class="text-muted" style="font-size:.9rem;"></div>
@@ -493,10 +493,13 @@
     document.getElementById('custoUtilDet').textContent =
       `${fmtInt(nUtil)} msgs × US$ ${pUtil.toFixed(4)} = US$ ${utilUsd.toFixed(2)}`;
 
-    // Big number — custo cobrança (utility)
-    document.getElementById('custoCobBig').textContent = fmtBR(utilBrl);
+    // Big number — custo TOTAL Meta (marketing + utility somados)
+    const totalBrl = mktBrl + utilBrl;
+    const totalUsd = mktUsd + utilUsd;
+    const totalMsgs = nMkt + nUtil;
+    document.getElementById('custoCobBig').textContent = fmtBR(totalBrl);
     document.getElementById('custoCobDet').textContent =
-      `${fmtInt(nUtil)} mensagens × US$ ${pUtil.toFixed(4)} × R$ ${usd.toFixed(4)}/USD`;
+      `${fmtInt(totalMsgs)} mensagens (utility + marketing) = US$ ${totalUsd.toFixed(2)} × R$ ${usd.toFixed(4)}/USD`;
 
     // Linha de ROI/atribuição monetária removida: o teto inflava o ROI ao 100%
     // dos pagamentos pós-envio sem descontar espontâneos (ver commit anterior).
