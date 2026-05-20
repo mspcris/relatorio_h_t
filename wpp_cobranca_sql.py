@@ -37,11 +37,17 @@ MODO_FALTA_MEDICO = "falta_medico"
 CLIENTE_NOVO_LOOKBACK_DIAS = 7
 CLIENTE_NOVO_PREVIEW_DIAS  = 30
 
+# Nome para o template: prioriza nomesocial; cai para nome quando vazio.
+# Alias `nome` (não `nomecadastro`) porque monta_params() no cron lê
+# fatura.get("nome") — usar outro alias deixa o {{nome}} do Bem-Vindo vazio.
 _SQL_CLIENTE_NOVO = """
 SELECT DISTINCT
     r.idCliente                                    AS idreceita,
     cl.Matricula                                   AS matricula,
-    cl.nome                                        AS nomecadastro,
+    COALESCE(
+        NULLIF(LTRIM(RTRIM(ISNULL(cl.nomesocial, ''))), ''),
+        cl.nome
+    )                                              AS nome,
     COALESCE(
         NULLIF(LTRIM(RTRIM(ISNULL(cl.TelefoneWhatsApp,   ''))), ''),
         NULLIF(LTRIM(RTRIM(ISNULL(cl.responsaveltelefonewhatsapp, ''))), '')
@@ -429,7 +435,12 @@ def listar_preview(campanha: dict, page: int = 1, per_page: int = 10) -> dict:
     postos = campanha.get("postos") or []
     m = modo_envio(campanha)
 
-    if m in (MODO_CLIENTES, MODO_CLIENTE_NOVO):
+    # cliente_novo: SQL Server (mesma regra do contar_preview). NÃO usa cache
+    # SQLite — o cache não tem o filtro de 1ª mensalidade paga; iria listar
+    # qualquer cliente do posto, sem relação com o critério de envio.
+    if m == MODO_CLIENTE_NOVO:
+        return _listar_preview_cliente_novo(campanha, postos, page, per_page)
+    if m == MODO_CLIENTES:
         return _listar_preview_sqlite(campanha, postos, page, per_page)
     return _listar_preview_sqlserver(campanha, postos, page, per_page)
 
@@ -872,6 +883,109 @@ def _contar_preview_cliente_novo(campanha: dict) -> dict:
         finally:
             conn.close()
     return {"total_faturas": total_faturas, "total_telefones": total_tel, "por_posto": por_posto}
+
+
+def _listar_preview_cliente_novo(campanha: dict, postos: list,
+                                 page: int, per_page: int) -> dict:
+    """Preview paginado do modo cliente_novo — SQL Server com a MESMA regra
+    do _contar_preview_cliente_novo (1ª mensalidade paga na janela de 30d).
+    NÃO usa cache SQLite — o cache não tem o critério de admissão.
+    """
+    from datetime import date, timedelta
+    import math
+
+    where_base = (
+        "WHERE r.idContaTipo = 5 "
+        "  AND r.DataPagamentoAuto IS NOT NULL "
+        "  AND cl.Desativado = 0 "
+        "  AND MONTH(r.DataMensalidade) = MONTH(cl.DataAdmissao) "
+        "  AND YEAR(r.DataMensalidade)  = YEAR(cl.DataAdmissao) "
+        "  AND r.DataPagamentoAuto >= ? "
+        "  AND r.DataPagamentoAuto <  ? "
+    )
+    from_join = (
+        "FROM fin_receita r "
+        "JOIN cad_cliente cl ON cl.idCliente = r.idCliente "
+    )
+    sql_count = "SELECT COUNT(DISTINCT r.idCliente) " + from_join + where_base
+
+    # nome efetivo = nomesocial, senão nome (mesma regra do _SQL_CLIENTE_NOVO)
+    sql_rows = (
+        "SELECT DISTINCT "
+        "  cl.Matricula AS matricula, "
+        "  COALESCE(NULLIF(LTRIM(RTRIM(ISNULL(cl.nomesocial,''))),''), cl.nome) AS nome, "
+        "  COALESCE("
+        "    NULLIF(LTRIM(RTRIM(ISNULL(cl.TelefoneWhatsApp,''))),''),"
+        "    NULLIF(LTRIM(RTRIM(ISNULL(cl.responsaveltelefonewhatsapp,''))),'')"
+        "  ) AS telefone, "
+        "  CONVERT(VARCHAR(10), cl.DataAdmissao, 103) AS data_admissao, "
+        "  cl.idadecomputada AS idade, "
+        "  CASE WHEN cl.tipo = 'j' THEN 'Jurídica' ELSE 'Física' END AS tipo_pessoa, "
+        "  CASE "
+        "    WHEN p.clubebeneficio = 1 THEN 'clube' "
+        "    WHEN p.clubebeneficiojoy = 1 THEN 'joy' "
+        "    WHEN p.planopremium = 1 THEN 'premium' "
+        "    ELSE 'camim' "
+        "  END AS planotipo, "
+        "  CONVERT(VARCHAR(10), r.DataPagamentoAuto, 103) AS pagamento_em "
+        + from_join
+        + "LEFT JOIN cad_plano p ON p.idplano = cl.idplano "
+        + where_base
+        + "ORDER BY cl.Matricula "
+        + "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
+    )
+
+    hoje = date.today()
+    ini  = hoje - timedelta(days=CLIENTE_NOVO_PREVIEW_DIAS)
+    fim  = hoje + timedelta(days=1)
+    offset = (page - 1) * per_page
+
+    registros = []
+    total = 0
+    for posto in postos:
+        conn = get_conn_posto(posto)
+        if not conn:
+            continue
+        try:
+            cur = conn.cursor()
+            cur.execute(sql_count, [ini, fim])
+            r = cur.fetchone()
+            total += (r[0] or 0) if r else 0
+
+            cur.execute(sql_rows, [ini, fim, offset, per_page])
+            for row in cur.fetchall():
+                registros.append({
+                    "matricula":          row[0],
+                    "nome":               row[1],
+                    "telefone":           row[2],
+                    "posto":              posto,
+                    "data_admissao":      row[3],
+                    "idade":              row[4],
+                    "tipo_cliente":       row[5],
+                    "titular_dependente": "",
+                    "situacao":           "Ativo",
+                    "plano":              row[6],
+                    "bairro":             "",
+                    "cobrador":           "",
+                    "pagamento_em":       row[7],
+                })
+        except Exception as e:
+            log.error("listar_preview cliente_novo posto=%s: %s", posto, e)
+            registros.append({"matricula": "", "nome": f"[erro posto {posto}: {str(e)[:80]}]",
+                              "telefone": "", "posto": posto})
+        finally:
+            conn.close()
+        if len(registros) >= per_page:
+            break
+
+    total_pages = math.ceil(total / per_page) if per_page and total else 1
+    return {
+        "registros":   registros[:per_page],
+        "total":       total,
+        "page":        page,
+        "per_page":    per_page,
+        "total_pages": total_pages,
+    }
 
 
 def contar_preview(campanha: dict) -> dict:
