@@ -593,8 +593,51 @@ def main():
             print(f"  [{posto}] ERRO: {e}")
             meta.error(posto, str(e))
 
-    # 3) Build e salva
-    payload = build_dashboard(df_envios, pagamentos_por_posto)
+    # 3) Build por PERÍODO (mes_atual default + outras janelas pra seletor no frontend)
+    hoje = date.today()
+    primeiro_dia_mes_atual = hoje.replace(day=1)
+    if hoje.month == 1:
+        primeiro_dia_mes_passado = date(hoje.year - 1, 12, 1)
+    else:
+        primeiro_dia_mes_passado = date(hoje.year, hoje.month - 1, 1)
+
+    # Cada período: (data_inicio_inclusiva, data_fim_exclusiva or None)
+    periodos = {
+        "mes_atual":     (primeiro_dia_mes_atual, None),
+        "mes_passado":   (primeiro_dia_mes_passado, primeiro_dia_mes_atual),
+        "ultimos_30d":   (hoje - timedelta(days=30), None),
+        "ultimos_90d":   (hoje - timedelta(days=90), None),
+        "tudo":          (None, None),
+    }
+
+    por_periodo: dict = {}
+    for nome, (ini, fim) in periodos.items():
+        df_filt = df_envios
+        if ini is not None:
+            df_filt = df_filt[df_filt["enviado_data"] >= ini]
+        if fim is not None:
+            df_filt = df_filt[df_filt["enviado_data"] < fim]
+        # .copy() pra evitar contaminar df_envios original ao adicionar colunas is_mkt etc.
+        por_periodo[nome] = build_dashboard(df_filt.copy(), pagamentos_por_posto)
+        n = por_periodo[nome]["envios_custo"]["total_meta"]
+        print(f"  [{nome:13}] envios={n}")
+
+    # Payload final: meta única no topo; cada período é uma "fatia" autocontida.
+    # Mantém compat: chaves antigas no nível raiz apontam para "tudo".
+    base_meta = por_periodo["tudo"]["meta"]
+    base_meta["periodos_disponiveis"] = list(periodos.keys())
+    base_meta["periodo_default"] = "mes_atual"
+    payload = {
+        "meta":             base_meta,
+        "por_periodo":      por_periodo,
+        # Backward-compat: o JS antigo lê data.conversao_geral direto; aponta pra "tudo"
+        # até o frontend novo passar a ler por_periodo[X].
+        "envios_custo":     por_periodo["tudo"]["envios_custo"],
+        "conversao_geral":  por_periodo["tudo"]["conversao_geral"],
+        "conversao_faixa":  por_periodo["tudo"]["conversao_faixa"],
+        "lembranca":        por_periodo["tudo"]["lembranca"],
+        "breakdowns":       por_periodo["tudo"]["breakdowns"],
+    }
     atomic_write_json(OUT_PATH, payload)
     meta.save()
 

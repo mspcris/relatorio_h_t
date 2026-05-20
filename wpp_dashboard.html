@@ -101,6 +101,25 @@
       <div id="mainContent" style="display:none;">
 
         <!-- ============================================================ -->
+        <!-- SELETOR DE PERÍODO                                           -->
+        <!-- ============================================================ -->
+        <div class="card mb-3" style="background:#fffaf2;border-left:4px solid #f39c12;">
+          <div class="card-body py-2 d-flex align-items-center" style="gap:14px;flex-wrap:wrap;">
+            <label class="m-0" style="font-weight:600;">
+              <i class="far fa-calendar-alt mr-1"></i> Período:
+            </label>
+            <select id="periodoSel" class="form-control form-control-sm" style="width:auto;">
+              <option value="mes_atual">Mês atual</option>
+              <option value="mes_passado">Mês passado</option>
+              <option value="ultimos_30d">Últimos 30 dias</option>
+              <option value="ultimos_90d">Últimos 90 dias</option>
+              <option value="tudo">Tudo (histórico completo)</option>
+            </select>
+            <small id="periodoInfo" class="text-muted" style="font-size:.8rem;"></small>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
         <!-- SEÇÃO 1 — ENVIOS & CUSTO                                     -->
         <!-- ============================================================ -->
         <h2 class="section-title"><i class="fas fa-paper-plane mr-1"></i> Envios & Custo (Meta)</h2>
@@ -455,9 +474,46 @@
   loading.style.display = 'none';
   main.style.display = 'block';
 
-  const meta = data.meta || {};
+  // 'data' fica reapontável: o filtro de período troca o conteúdo (por_periodo[X]).
+  // Cada renderTudo() relê data.* atual.
+  const payload = data;
+  const payloadMeta = payload.meta || {};
   document.getElementById('jsonInfo').textContent =
-    '• atualizado em ' + (meta.gerado_em_br || '?');
+    '• atualizado em ' + (payloadMeta.gerado_em_br || '?');
+
+  const PERIODO_LABELS = {
+    mes_atual:    'Mês atual',
+    mes_passado:  'Mês passado',
+    ultimos_30d:  'Últimos 30 dias',
+    ultimos_90d:  'Últimos 90 dias',
+    tudo:         'Histórico completo (' + (payloadMeta.historico_dias || '?') + 'd)',
+  };
+
+  function setPeriodo(nome) {
+    const slice = (payload.por_periodo && payload.por_periodo[nome]) || payload;
+    data = slice;
+    const lbl = PERIODO_LABELS[nome] || nome;
+    document.getElementById('periodoInfo').textContent = 'mostrando: ' + lbl;
+    // Destrói charts anteriores antes de recriar — evita leak e ghost frames
+    ['chartDiario','chartCurva','chartFaixa','chartHora','chartDow'].forEach(id => {
+      const el = document.getElementById(id);
+      const inst = el && window.Chart && window.Chart.getChart ? window.Chart.getChart(el) : null;
+      if (inst) inst.destroy();
+    });
+    renderTudo();
+  }
+
+  const defaultPer = payloadMeta.periodo_default || 'mes_atual';
+  const sel = document.getElementById('periodoSel');
+  if (sel) {
+    sel.value = defaultPer;
+    sel.addEventListener('change', e => setPeriodo(e.target.value));
+  }
+  // Aplica o período inicial — chamada movida para o fim do IIFE,
+  // depois que renderTudo() estiver definida.
+
+  function renderTudo() {
+  const meta = data.meta || payloadMeta;  // dentro do período mes_atual a meta é local; cai pro topo se faltar
 
   // ── Seção 1: Envios & Custo ────────────────────────────────────
   const ec = data.envios_custo || {};
@@ -729,6 +785,10 @@
       plugins: { legend: { display: false } }
     }
   });
+  }  // ── fim renderTudo() ──────────────────────────────────────────
+
+  // Render inicial com o período default — usa setPeriodo pra que o info-label preencha.
+  setPeriodo(defaultPer);
 
 })();
 </script>
