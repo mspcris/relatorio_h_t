@@ -174,15 +174,10 @@ def init_auth(sess_name: str, secret: str, ttl: int):
 # ── Helpers internos ──────────────────────────────────────────────────────────
 
 def _set_cookie(resp, value: str):
-    # COOKIE_DOMAIN=.camim.com.br compartilha sessão entre kpi.camim.com.br e
-    # camila2.ia.camim.com.br (e outros subdomínios). Sem env: cookie só vale
-    # no host atual (comportamento legado).
-    domain = os.environ.get("COOKIE_DOMAIN") or None
     resp.set_cookie(
         _SESS_NAME, value,
         max_age=_TTL_SECONDS,
-        httponly=True, secure=True, samesite="Lax", path="/",
-        domain=domain,
+        httponly=True, secure=True, samesite="Lax", path="/"
     )
 
 
