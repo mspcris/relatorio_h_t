@@ -168,7 +168,9 @@ def ler_envios_meta() -> pd.DataFrame:
     df["idreceita"]  = df["idreceita"].fillna("").astype(str).str.strip()
     df["modo_envio"] = df["modo_envio"].fillna("atraso").str.strip().str.lower()
     df["dias_atraso"] = pd.to_numeric(df["dias_atraso"], errors="coerce").fillna(0).astype(int)
-    df["enviado_em_dt"] = df["enviado_em"].apply(parse_dt)
+    # pd.to_datetime garante coluna datetimelike (.dt funciona). apply(parse_dt)
+    # produzia série de datetime puro, que quebra em pandas modernos.
+    df["enviado_em_dt"] = pd.to_datetime(df["enviado_em"], errors="coerce")
     df = df.dropna(subset=["enviado_em_dt"])
     df["enviado_data"] = df["enviado_em_dt"].dt.date
 
