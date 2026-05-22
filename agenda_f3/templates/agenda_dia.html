@@ -16,56 +16,68 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <style>
-    html { font-size: 16px; }
+    /* Otimizado pra 1366×768 (95% dos usuários).
+       Altura útil ~600-650px → preciso compactar TUDO no topo pra sobrar
+       espaço pra tabela. Alvo: ~380px pra tabela. */
+    html { font-size: 14px; }
+    html, body { height: 100%; margin: 0; overflow: hidden; }
     body {
       font-size: 1rem;
       background: #f4f6f9;
       font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
-    h1,h2,h3 { margin-top:0; margin-bottom:.5rem; font-weight:600; line-height:1.25; }
+    h1,h2,h3 { margin-top:0; margin-bottom:.4rem; font-weight:600; line-height:1.2; }
 
-    /* Top bar simples */
+    /* Layout fixo 100vh — sem scroll na página, só dentro da tabela */
+    .layout { display: flex; flex-direction: column; height: 100vh; }
+
+    /* Top bar — 36px */
     .top-bar {
+      flex: 0 0 auto;
       background: #fff; border-bottom: 1px solid #dee2e6;
-      padding: 10px 24px; display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 16px; display: flex; align-items: center; justify-content: space-between;
+      min-height: 36px;
     }
-    .top-bar .brand { font-weight: 700; font-size: 1.1rem; }
-    .top-bar .user-info { font-size: .85rem; color: #6c757d; }
+    .top-bar .brand { font-weight: 700; font-size: .95rem; }
+    .top-bar .user-info { font-size: .8rem; color: #6c757d; }
+    .top-bar .btn-sm { padding: 2px 8px; font-size: .75rem; }
 
-    /* Status banner (sticky) */
+    /* Status banner — ~30px */
     .status-banner {
-      position: sticky; top: 0; z-index: 100;
-      padding: 10px 24px; font-weight: 600;
+      flex: 0 0 auto;
+      padding: 5px 16px; font-weight: 600; font-size: .82rem;
       transition: background .3s;
     }
     .status-banner.status-ok      { background: #d4edda; color: #155724; border-bottom: 1px solid #c3e6cb; }
     .status-banner.status-warning { background: #fff3cd; color: #856404; border-bottom: 1px solid #ffeeba; }
     .status-banner.status-danger  { background: #f8d7da; color: #721c24; border-bottom: 1px solid #f5c6cb; }
     .status-banner.status-info    { background: #d1ecf1; color: #0c5460; border-bottom: 1px solid #bee5eb; }
-    .status-banner .badge-fonte { font-size: .7rem; opacity: .7; margin-left: 12px; font-weight: 400; }
+    .status-banner .badge-fonte { font-size: .68rem; opacity: .7; margin-left: 10px; font-weight: 400; }
 
-    .container-main { padding: 16px 24px; max-width: 1600px; margin: 0 auto; }
+    /* Tabs — ~32px */
+    .nav-tabs { flex: 0 0 auto; padding: 0 12px; background: #fff; border-bottom: 1px solid #dee2e6; }
+    .nav-tabs .nav-link { font-size: .82rem; padding: 5px 14px; color: #495057; border: none; border-bottom: 2px solid transparent; }
+    .nav-tabs .nav-link.active { color: #007bff; border-bottom-color: #007bff; background: transparent; font-weight: 600; }
+    .nav-tabs .nav-link:hover:not(.active) { border-bottom-color: #adb5bd; }
 
-    /* Banner do header */
-    .ad-banner {
-      background: linear-gradient(135deg, #0f1923 0%, #1a2940 50%, #0f2333 100%);
-      border-radius: 12px; padding: 20px 24px; margin-bottom: 0;
-      color: #e0f0ff; position: relative; overflow: hidden;
-    }
-    .ad-banner h1 { color: #fff; font-size: 1.6rem; margin: 0; }
-    .ad-banner p { color: #8ab4d8; margin: 4px 0 0; font-size: .95rem; }
+    /* Tab content fills remaining height; cada pane vira flex column */
+    .tab-content { flex: 1 1 auto; overflow: hidden; }
+    .tab-pane { height: 100%; }
+    .tab-pane.active { display: flex; flex-direction: column; padding: 8px 12px; }
 
-    /* Filtros */
-    .filtros-bar { background: #fff; border-radius: 8px; padding: 12px 16px; margin: 12px 0; display: flex; gap: 12px; align-items: end; flex-wrap: wrap; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
-    .filtros-bar label { font-size: .85rem; font-weight: 600; color: #495057; margin-bottom: 2px; }
-    .filtros-bar .form-control, .filtros-bar .custom-select { font-size: .9rem; }
+    /* Filtros — ~48px */
+    .filtros-bar { flex: 0 0 auto; background: #fff; border-radius: 6px; padding: 6px 10px; margin-bottom: 6px; display: flex; gap: 10px; align-items: end; flex-wrap: wrap; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .filtros-bar label { font-size: .72rem; font-weight: 600; color: #495057; margin-bottom: 1px; }
+    .filtros-bar .form-control-sm, .filtros-bar .custom-select-sm { font-size: .78rem; padding: 2px 6px; height: calc(1.3em + .5rem + 2px); }
+    .filtros-bar .btn-sm { font-size: .78rem; padding: 3px 10px; }
+    .filtros-bar .custom-control-label { font-size: .78rem; }
 
-    /* KPI cards */
-    .kpi-row { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
-    .kpi-card { flex: 1; min-width: 140px; background: #fff; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 4px rgba(0,0,0,.08); text-align: center; }
-    .kpi-card .kpi-val { font-size: 1.8rem; font-weight: 700; line-height: 1.1; }
-    .kpi-card .kpi-lbl { font-size: .82rem; color: #6c757d; margin-top: 4px; }
+    /* KPI cards — ~48px, compactos numa linha */
+    .kpi-row { flex: 0 0 auto; display: flex; gap: 6px; margin-bottom: 6px; }
+    .kpi-card { flex: 1; min-width: 0; background: #fff; border-radius: 6px; padding: 4px 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); text-align: center; }
+    .kpi-card .kpi-val { font-size: 1.25rem; font-weight: 700; line-height: 1.1; }
+    .kpi-card .kpi-lbl { font-size: .68rem; color: #6c757d; margin-top: 1px; line-height: 1.1; }
 
     /* Status badges */
     .badge-adimplente   { background: #28a745; color: #fff; }
@@ -79,10 +91,15 @@
     .badge-faltou       { background: #dc3545; color: #fff; }
     .badge { font-size: .78rem; padding: 3px 9px; border-radius: 12px; font-weight: 600; }
 
-    /* Tabela */
+    /* Tabela — ocupa todo o espaço restante; só ela rola */
+    .table-container {
+      flex: 1 1 auto; overflow: auto;
+      border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.06); background: #fff;
+      min-height: 0;        /* CRÍTICO p/ o flex calcular altura corretamente */
+    }
+    #tblAgenda { margin-bottom: 0; }
     #tblAgenda th { position: sticky; top: 0; background: #343a40; color: #fff; font-size: .82rem; white-space: nowrap; z-index: 2; }
     #tblAgenda td { font-size: .85rem; vertical-align: middle; white-space: nowrap; }
-    .table-container { max-height: 65vh; overflow: auto; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); background: #fff; }
     #tblAgenda .group-header td { background: #e9ecef; font-weight: 700; font-size: .9rem; cursor: pointer; user-select: none; }
     #tblAgenda .group-header:hover td { background: #dde1e7; }
     #tblAgenda .group-header.group-faltou td { background: #fff3cd; color: #856404; }
@@ -91,8 +108,16 @@
     #tblAgenda .group-header.group-desist:hover td { background: #f1c2c7; }
     #tblAgenda .group-caret { display: inline-block; width: 12px; }
 
-    /* Charts */
-    .chart-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    /* Charts (na tab Dashboard) */
+    .dashboard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; height: 100%; min-height: 0; }
+    @media (max-width: 992px) { .dashboard-grid { grid-template-columns: 1fr; overflow-y: auto; } }
+    .chart-card {
+      background: #fff; border-radius: 10px; padding: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      display: flex; flex-direction: column; min-height: 0;
+    }
+    .chart-card h3 { flex: 0 0 auto; font-size: 1.05rem; }
+    .chart-card .chart-wrapper { flex: 1 1 auto; min-height: 0; position: relative; }
 
     /* Loading */
     .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(255,255,255,.7); z-index: 9999; align-items: center; justify-content: center; }
@@ -102,118 +127,145 @@
 
 <body>
 
-<!-- TOP BAR -->
-<div class="top-bar">
-  <div class="brand">
-    <i class="fas fa-calendar-check mr-1 text-primary"></i>
-    Agenda do Dia — F3
-  </div>
-  <div class="user-info">
-    <i class="fas fa-user mr-1"></i><span id="userEmail">{{ USER_EMAIL or '' }}</span>
-    <form method="POST" action="/auth/logout" style="display:inline;margin-left:12px">
-      <button type="submit" class="btn btn-sm btn-outline-secondary">
-        <i class="fas fa-sign-out-alt mr-1"></i>Sair
-      </button>
-    </form>
-  </div>
-</div>
+<div class="layout">
 
-<!-- STATUS BANNER (atualizado pelo selPosto) -->
-<div id="statusBanner" class="status-banner status-info">
-  <i class="fas fa-spinner fa-spin mr-2"></i>Carregando status do snapshot…
-</div>
-
-<div class="container-main">
-
-  <!-- Banner -->
-  <div class="ad-banner">
-    <h1><i class="fas fa-calendar-check mr-2"></i>Agenda do Dia</h1>
-    <p>Snapshot do RDS Postgres (F3) atualizado a cada 30 minutos — backup do SQL Server CAMIM</p>
+  <!-- TOP BAR -->
+  <div class="top-bar">
+    <div class="brand">
+      <i class="fas fa-calendar-check mr-1 text-primary"></i>
+      Agenda do Dia — F3
+    </div>
+    <div class="user-info">
+      <i class="fas fa-user mr-1"></i><span id="userEmail">{{ USER_EMAIL or '' }}</span>
+      <form method="POST" action="/auth/logout" style="display:inline;margin-left:10px">
+        <button type="submit" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-sign-out-alt mr-1"></i>Sair
+        </button>
+      </form>
+    </div>
   </div>
 
-  <!-- Filtros -->
-  <div class="filtros-bar">
-    <div>
-      <label>Posto</label>
-      <select id="selPosto" class="custom-select custom-select-sm" style="width:180px"></select>
+  <!-- STATUS BANNER -->
+  <div id="statusBanner" class="status-banner status-info">
+    <i class="fas fa-spinner fa-spin mr-2"></i>Carregando status do snapshot…
+  </div>
+
+  <!-- TABS -->
+  <ul class="nav nav-tabs" role="tablist">
+    <li class="nav-item">
+      <a class="nav-link active" id="tab-agenda-link" data-toggle="tab" href="#tab-agenda" role="tab">
+        <i class="fas fa-list-ul mr-1"></i>Agenda
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" id="tab-dashboard-link" data-toggle="tab" href="#tab-dashboard" role="tab">
+        <i class="fas fa-chart-pie mr-1"></i>Dashboard
+      </a>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+
+    <!-- ──────────────── TAB AGENDA ──────────────── -->
+    <div class="tab-pane fade show active" id="tab-agenda" role="tabpanel">
+
+      <!-- Filtros -->
+      <div class="filtros-bar">
+        <div>
+          <label>Posto</label>
+          <select id="selPosto" class="custom-select custom-select-sm" style="width:170px"></select>
+        </div>
+        <div>
+          <label>Data</label>
+          <input type="date" id="inpData" class="form-control form-control-sm" style="width:150px" />
+        </div>
+        <div>
+          <label>Agrupar por</label>
+          <select id="selGroup" class="custom-select custom-select-sm" style="width:170px">
+            <option value="">Sem agrupamento</option>
+            <option value="medico" selected>Médico</option>
+            <option value="especialidade">Especialidade</option>
+            <option value="situacao">Situação Financeira</option>
+            <option value="atendido">Status Atendimento</option>
+            <option value="posto_cliente">Posto do Cliente</option>
+          </select>
+        </div>
+        <div>
+          <label>Buscar paciente</label>
+          <input type="text" id="inpBusca" class="form-control form-control-sm" placeholder="Nome ou matrícula..." style="width:180px" />
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <div class="custom-control custom-switch" style="padding-top:3px">
+            <input type="checkbox" class="custom-control-input" id="chkDesistencia" />
+            <label class="custom-control-label" for="chkDesistencia">Exibir desistência</label>
+          </div>
+        </div>
+        <div>
+          <button id="btnCarregar" class="btn btn-sm btn-primary"><i class="fas fa-search mr-1"></i>Consultar</button>
+        </div>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="kpi-row" id="kpiRow" style="display:none">
+        <div class="kpi-card"><div class="kpi-val" id="kpiTotal">0</div><div class="kpi-lbl">Atendimentos no dia</div></div>
+        <div class="kpi-card"><div class="kpi-val text-success" id="kpiAtendidos">0</div><div class="kpi-lbl">Atendidos</div></div>
+        <div class="kpi-card"><div class="kpi-val text-danger" id="kpiFaltas">0</div><div class="kpi-lbl">Ausentes</div></div>
+        <div class="kpi-card"><div class="kpi-val text-warning" id="kpiAtrasados">0</div><div class="kpi-lbl">Atrasados</div></div>
+        <div class="kpi-card"><div class="kpi-val text-info" id="kpiPagouMens">0</div><div class="kpi-lbl">Pagou mensalidade</div></div>
+        <div class="kpi-card"><div class="kpi-val" id="kpiPagouAtrasado" style="color:#20c997">0</div><div class="kpi-lbl">Pagou e estava atrasado</div></div>
+      </div>
+
+      <!-- Tabela (toma o resto da altura, só ela rola) -->
+      <div class="table-container" id="tblContainer" style="display:none">
+        <table class="table table-sm table-bordered table-hover mb-0" id="tblAgenda">
+          <thead>
+            <tr>
+              <th>Hora</th>
+              <th>Confirmação</th>
+              <th>Paciente</th>
+              <th>Matrícula</th>
+              <th>Posto</th>
+              <th>Idade</th>
+              <th>Especialidade</th>
+              <th>Médico</th>
+              <th>Atendimento</th>
+              <th>Situação Financeira</th>
+              <th>Pagou no Dia</th>
+              <th>Dias Agend→Cons</th>
+            </tr>
+          </thead>
+          <tbody id="tblBody"></tbody>
+        </table>
+      </div>
+
+      <div id="msgVazio" class="text-center text-muted py-5" style="display:none">
+        <i class="fas fa-calendar-times fa-2x mb-2"></i>
+        <p class="h6">Nenhum agendamento encontrado para este dia/posto.</p>
+      </div>
+
     </div>
-    <div>
-      <label>Data</label>
-      <input type="date" id="inpData" class="form-control form-control-sm" style="width:170px" />
-    </div>
-    <div>
-      <label>Agrupar por</label>
-      <select id="selGroup" class="custom-select custom-select-sm" style="width:180px">
-        <option value="">Sem agrupamento</option>
-        <option value="medico" selected>Médico</option>
-        <option value="especialidade">Especialidade</option>
-        <option value="situacao">Situação Financeira</option>
-        <option value="atendido">Status Atendimento</option>
-        <option value="posto_cliente">Posto do Cliente</option>
-      </select>
-    </div>
-    <div>
-      <label>Buscar paciente</label>
-      <input type="text" id="inpBusca" class="form-control form-control-sm" placeholder="Nome ou matrícula..." style="width:200px" />
-    </div>
-    <div>
-      <label>&nbsp;</label>
-      <div class="custom-control custom-switch" style="padding-top:4px">
-        <input type="checkbox" class="custom-control-input" id="chkDesistencia" />
-        <label class="custom-control-label" for="chkDesistencia">Exibir desistência</label>
+
+    <!-- ──────────────── TAB DASHBOARD ──────────────── -->
+    <div class="tab-pane fade" id="tab-dashboard" role="tabpanel">
+      <div class="dashboard-grid">
+        <div class="chart-card">
+          <h3>Presença</h3>
+          <div class="chart-wrapper"><canvas id="chartPresenca"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Situação Financeira</h3>
+          <div class="chart-wrapper"><canvas id="chartSituacao"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Pagamento no Dia</h3>
+          <div class="chart-wrapper"><canvas id="chartPagamento"></canvas></div>
+        </div>
       </div>
     </div>
-    <div>
-      <button id="btnCarregar" class="btn btn-sm btn-primary"><i class="fas fa-search mr-1"></i>Consultar</button>
-    </div>
-  </div>
 
-  <!-- KPI Cards -->
-  <div class="kpi-row" id="kpiRow" style="display:none">
-    <div class="kpi-card"><div class="kpi-val" id="kpiTotal">0</div><div class="kpi-lbl">Atendimentos no dia</div></div>
-    <div class="kpi-card"><div class="kpi-val text-success" id="kpiAtendidos">0</div><div class="kpi-lbl">Atendidos</div></div>
-    <div class="kpi-card"><div class="kpi-val text-danger" id="kpiFaltas">0</div><div class="kpi-lbl">Ausentes</div></div>
-    <div class="kpi-card"><div class="kpi-val text-warning" id="kpiAtrasados">0</div><div class="kpi-lbl">Atrasados</div></div>
-    <div class="kpi-card"><div class="kpi-val text-info" id="kpiPagouMens">0</div><div class="kpi-lbl">Pagou mensalidade</div></div>
-    <div class="kpi-card"><div class="kpi-val" id="kpiPagouAtrasado" style="color:#20c997">0</div><div class="kpi-lbl">Pagou e estava atrasado</div></div>
-  </div>
-
-  <!-- Tabela -->
-  <div class="table-container mt-3" id="tblContainer" style="display:none">
-    <table class="table table-sm table-bordered table-hover mb-0" id="tblAgenda">
-      <thead>
-        <tr>
-          <th>Hora</th>
-          <th>Confirmação</th>
-          <th>Paciente</th>
-          <th>Matrícula</th>
-          <th>Posto</th>
-          <th>Idade</th>
-          <th>Especialidade</th>
-          <th>Médico</th>
-          <th>Atendimento</th>
-          <th>Situação Financeira</th>
-          <th>Pagou no Dia</th>
-          <th>Dias Agend→Cons</th>
-        </tr>
-      </thead>
-      <tbody id="tblBody"></tbody>
-    </table>
-  </div>
-
-  <!-- Gráficos -->
-  <div class="row mt-4" id="chartsRow" style="display:none">
-    <div class="col-md-4"><div class="chart-card"><h3 class="card-title">Presença</h3><canvas id="chartPresenca"></canvas></div></div>
-    <div class="col-md-4"><div class="chart-card"><h3 class="card-title">Situação Financeira</h3><canvas id="chartSituacao"></canvas></div></div>
-    <div class="col-md-4"><div class="chart-card"><h3 class="card-title">Pagamento no Dia</h3><canvas id="chartPagamento"></canvas></div></div>
-  </div>
-
-  <div id="msgVazio" class="text-center text-muted py-5" style="display:none">
-    <i class="fas fa-calendar-times fa-3x mb-3"></i>
-    <p class="h5">Nenhum agendamento encontrado para este dia/posto.</p>
-  </div>
-
-</div><!-- container-main -->
+  </div><!-- /tab-content -->
+</div><!-- /layout -->
 
 <div class="loading-overlay" id="loadingOverlay">
   <div class="spinner-border text-primary" role="status" style="width:48px;height:48px"><span class="sr-only">Carregando...</span></div>
@@ -229,6 +281,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
   let DATA = [];
   let META_GLOBAL = {};   // {posto: {gerado_em, sucesso, erro, n_registros}}
   let chartPresenca, chartSituacao, chartPagamento;
+  let chartsNeedRefresh = true;   // marcado quando DATA muda; consumido ao abrir dashboard
 
   const NOMES_POSTOS = {
     A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho', G:'Campo Grande',
@@ -366,6 +419,15 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
         $icon.removeClass('fa-caret-down').addClass('fa-caret-right');
       }
     });
+
+    // Renderiza charts só quando a aba Dashboard é exibida (Chart.js precisa
+    // de canvas visível pra calcular tamanho corretamente)
+    $('#tab-dashboard-link').on('shown.bs.tab', function() {
+      if (chartsNeedRefresh && DATA.length) {
+        renderCharts();
+        chartsNeedRefresh = false;
+      }
+    });
   }
 
   function carregar() {
@@ -374,20 +436,26 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     if (!posto || !data) return;
     $('#loadingOverlay').addClass('active');
     $('#msgVazio').hide();
-    $('#kpiRow, #tblContainer, #chartsRow').hide();
+    $('#kpiRow, #tblContainer').hide();
     $.getJSON(`/api/agenda_dia?posto=${posto}&data=${data}`)
       .done(res => {
         $('#loadingOverlay').removeClass('active');
         if (!res.ok) { alert(res.error || 'Erro'); return; }
         DATA = deduplicarExames(res.pacientes || []);
+        chartsNeedRefresh = true;   // dashboard precisa re-renderizar
         if (res.fonte === 'json_fallback') {
-          // Aviso adicional: estamos lendo do JSON, Postgres caiu
           const $b = $('#statusBanner');
           $b.append(' <span class="badge-fonte">(fonte: JSON fallback — Postgres indisponível)</span>');
         }
         if (!DATA.length) { $('#msgVazio').show(); return; }
-        updateKPIs(); renderTable(); renderCharts();
-        $('#kpiRow, #tblContainer, #chartsRow').show();
+        updateKPIs();
+        renderTable();
+        $('#kpiRow, #tblContainer').show();
+        // Se Dashboard estiver visível agora, atualiza charts imediatamente
+        if ($('#tab-dashboard').hasClass('active')) {
+          renderCharts();
+          chartsNeedRefresh = false;
+        }
       })
       .fail(xhr => {
         $('#loadingOverlay').removeClass('active');
@@ -510,6 +578,12 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
   function escHtml(s) { return $('<span>').text(s||'').html(); }
 
   function renderCharts() {
+    const baseOpts = {
+      responsive: true,
+      maintainAspectRatio: false,    // preenche o .chart-wrapper (que tem flex:1)
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 11 } } } }
+    };
+
     const ATIVOS = DATA.filter(p => !_isDesistente(p));
     const atendidos = ATIVOS.filter(_isAtendido).length;
     const ausentes  = ATIVOS.filter(_isFalta).length;
@@ -519,7 +593,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
       type: 'doughnut',
       data: { labels: ['Atendidos','Ausentes','Outros'],
               datasets: [{ data: [atendidos,ausentes,outros], backgroundColor: ['#28a745','#dc3545','#6c757d'] }] },
-      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+      options: baseOpts
     });
 
     const sitCount = {};
@@ -537,7 +611,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     chartSituacao = new Chart($('#chartSituacao')[0].getContext('2d'), {
       type: 'doughnut',
       data: { labels: sitLabels, datasets: [{ data: sitLabels.map(l=>sitCount[l]), backgroundColor: sitColors }] },
-      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+      options: baseOpts
     });
 
     const atrasados = ATIVOS.filter(_isAtrasado);
@@ -548,7 +622,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
       type: 'doughnut',
       data: { labels: ['Pagaram no dia','Não pagaram'],
               datasets: [{ data: [pagaram,naoPag], backgroundColor: ['#17a2b8','#e9ecef'] }] },
-      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+      options: baseOpts
     });
   }
 
