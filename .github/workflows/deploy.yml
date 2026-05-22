@@ -458,15 +458,23 @@ jobs:
         run: |
           set -euxo pipefail
           DEST=/opt/agenda_f3
-          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "sudo mkdir -p '$DEST' '$DEST/templates' '$DEST/sql' '$DEST/logs' '$DEST/json_consolidado' && sudo chown -R www-data:www-data '$DEST' && sudo chmod 775 '$DEST'"
-          # rsync da pasta agenda_f3/ inteira (sem .env), com --delete pra
-          # garantir limpeza de arquivos removidos do repo.
+          # Cria subdirs e ajusta perms ANTES do rsync. logs/ e json_consolidado/
+          # precisam ser writable por www-data (ETL roda como www-data).
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+            sudo mkdir -p '$DEST' '$DEST/templates' '$DEST/sql' '$DEST/logs' '$DEST/json_consolidado'
+            sudo chown -R www-data:www-data '$DEST/logs' '$DEST/json_consolidado'
+            sudo chmod 775 '$DEST/logs' '$DEST/json_consolidado'
+          "
+          # rsync como sudo: arquivos ficam root:root (readable pelo www-data),
+          # subdirs criados sem problema. Mesmo padrão dos vhosts nginx (step 8D).
           rsync -rlvz --delete \
             --exclude='.env' \
             --exclude='__pycache__' \
             --exclude='logs/' \
             --exclude='json_consolidado/' \
+            --exclude='venv/' \
             --omit-dir-times --no-perms --no-owner --no-group \
+            --rsync-path="sudo rsync" \
             -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
             ./agenda_f3/ "$SSH_USER@$SSH_HOST:$DEST/"
 
