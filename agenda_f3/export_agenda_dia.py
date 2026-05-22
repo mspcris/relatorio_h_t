@@ -303,21 +303,39 @@ def aggregate_matriculas(agendas: dict):
 # =========================
 
 def fetch_status_for_posto(eng, posto: str, matriculas: list, id_endereco: int):
+    """Retorna {matricula: {situacao, plano, cobrador_fatura, situacao_clube}}.
+
+    Junta vw_Cad_Cliente pra trazer SituaçãoClube (usado em planos clube como
+    Camim Liberty). Agrupa por matrícula com MAX pra evitar duplicatas vindas
+    de múltiplas prestações da mesma matrícula.
+    """
     status = {}
     for i in range(0, len(matriculas), 500):
         batch = matriculas[i:i+500]
         phs = ",".join(str(m) for m in batch)
-        id_filter = f"AND idendereco = {id_endereco}" if id_endereco else ""
+        id_filter = f"AND r.idendereco = {id_endereco}" if id_endereco else ""
         sql = f"""
         SET NOCOUNT ON;
-        SELECT DISTINCT matricula, [Cliente Situação] AS situacao
-        FROM vw_fin_receita2
-        WHERE matricula IN ({phs}) {id_filter}
+        SELECT
+            r.matricula,
+            MAX(ISNULL(r.[Cliente Situação], '')) AS situacao,
+            MAX(ISNULL(r.[Plano], ''))            AS plano,
+            MAX(ISNULL(r.[Cobrador fatura], ''))  AS cobrador_fatura,
+            MAX(ISNULL(c.SituaçãoClube, ''))      AS situacao_clube
+        FROM vw_fin_receita2 r
+        LEFT JOIN vw_Cad_Cliente c ON c.idCliente = r.idcliente
+        WHERE r.matricula IN ({phs}) {id_filter}
+        GROUP BY r.matricula
         """
         with eng.connect() as con:
             rows = con.execute(text(sql)).mappings().all()
         for r in rows:
-            status[int(r["matricula"])] = (r["situacao"] or "").strip()
+            status[int(r["matricula"])] = {
+                "situacao":        (r["situacao"]        or "").strip(),
+                "plano":           (r["plano"]           or "").strip(),
+                "cobrador_fatura": (r["cobrador_fatura"] or "").strip(),
+                "situacao_clube":  (r["situacao_clube"]  or "").strip(),
+            }
     return status
 
 
@@ -446,6 +464,47 @@ def validate_postos(engines: dict, agendas: dict, erros_agenda: dict,
 # FASE 6 — Montar pacientes + REPLACE atômico
 # =========================
 
+def resolve_situacao(matricula, status_data):
+    """Aplica as regras de negócio do CAMIM pra Situação Financeira:
+
+      1. matrícula == 0           → "Particular" (regra de ouro — vence tudo)
+      2. sem dados financeiros    → "Égide" (matrícula > 0 mas não está em vw_fin_receita2)
+      3. Plano "Camim Liberty"    → SituaçãoClube (vw_Cad_Cliente)
+      4. Plano vazio + Cobrador "ÉGIDE" → "Égide"
+      5. Plano vazio + outro     → Cliente Situação (fallback)
+      6. Outros planos            → Cliente Situação (regra atual)
+
+    Validado com cliente em 2026-05-21 (incidente Malvinete/Nathan/Letícia).
+    """
+    # 1) Regra de ouro
+    if not matricula or matricula == 0:
+        return "Particular"
+
+    # 2) Sem dados financeiros pra essa matrícula
+    if not status_data:
+        return "Égide"
+
+    plano    = (status_data.get("plano")           or "").strip()
+    cobrador = (status_data.get("cobrador_fatura") or "").strip()
+    sit_view = (status_data.get("situacao")        or "").strip()
+    sit_club = (status_data.get("situacao_clube")  or "").strip()
+
+    # 3) Liberty (clube) → SituaçãoClube
+    if "liberty" in plano.lower():
+        return sit_club or sit_view or "(sem info)"
+
+    # 4) Sem plano + Cobrador ÉGIDE → Égide
+    if not plano:
+        cob_upper = cobrador.upper()
+        if "ÉGIDE" in cob_upper or "EGIDE" in cob_upper:
+            return "Égide"
+        # 5) Sem plano + outro cobrador → fallback Cliente Situação
+        return sit_view or "Égide"
+
+    # 6) Outros planos → Cliente Situação (regra atual)
+    return sit_view or "(sem info)"
+
+
 def build_pacientes(rows, dt_iso: str, status_global: dict, pagou_global: dict):
     pacientes = []
     exame_visto = set()
@@ -459,7 +518,8 @@ def build_pacientes(rows, dt_iso: str, status_global: dict, pagou_global: dict):
                 continue
             exame_visto.add(chave)
         cf = (str(r.get("cfcliente") or "")).strip().upper()
-        situacao = status_global.get(mat, "") if mat else ""
+        # Aplica regras de negócio (matrícula 0 = Particular, Liberty = clube, etc)
+        situacao = resolve_situacao(mat, status_global.get(mat) if mat else None)
         pagou = mat in pagou_global.get(dt_iso, set()) if mat else False
         pacientes.append({
             "matricula":        mat,
