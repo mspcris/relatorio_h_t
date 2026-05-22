@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS agenda_dia (
     id               BIGSERIAL    PRIMARY KEY,
     posto            CHAR(1)      NOT NULL,
     data             DATE         NOT NULL,
-    matricula        INTEGER,
+    matricula        BIGINT,                 -- bigint p/ segurança (KPI já viu erro out-of-range)
     cfcliente        VARCHAR(4),
     posto_cliente    VARCHAR(4),
     paciente         TEXT,
@@ -24,12 +24,12 @@ CREATE TABLE IF NOT EXISTS agenda_dia (
     medico           TEXT,
     hora_prevista    CHAR(5),
     hora_confirmacao CHAR(5),
-    dias_agend_cons  INTEGER,
+    dias_agend_cons  BIGINT,                 -- bigint p/ casos extremos de DATEDIFF
     atendido         TEXT,
     desistencia      SMALLINT     NOT NULL DEFAULT 0,
     situacao         TEXT,
     pagou_no_dia     BOOLEAN      NOT NULL DEFAULT false,
-    idendereco       INTEGER,
+    idendereco       BIGINT,
     gerado_em        TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 

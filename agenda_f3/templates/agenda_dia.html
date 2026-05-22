@@ -264,10 +264,10 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
 
   // ── Postos ──
   function populatePostos(postos) {
-    const altamuro = ['A','B','G','I','N','R','X','Y'];
+    const altamiro = ['A','B','G','I','N','R','X','Y'];
     const couto    = ['C','D','J','M','P'];
-    let html = '<optgroup label="Altamuro">';
-    postos.filter(p => altamuro.includes(p)).sort().forEach(p => {
+    let html = '<optgroup label="Altamiro">';
+    postos.filter(p => altamiro.includes(p)).sort().forEach(p => {
       html += `<option value="${p}">${p} — ${NOMES_POSTOS[p]||p}</option>`;
     });
     html += '</optgroup><optgroup label="Couto">';
@@ -275,7 +275,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
       html += `<option value="${p}">${p} — ${NOMES_POSTOS[p]||p}</option>`;
     });
     html += '</optgroup>';
-    const outros = postos.filter(p => !altamuro.includes(p) && !couto.includes(p));
+    const outros = postos.filter(p => !altamiro.includes(p) && !couto.includes(p));
     if (outros.length) {
       html += '<optgroup label="Outros">';
       outros.sort().forEach(p => { html += `<option value="${p}">${p} — ${NOMES_POSTOS[p]||p}</option>`; });

@@ -45,7 +45,7 @@ class AgendaDia(Base):
     id               = Column(BigInteger, primary_key=True, autoincrement=True)
     posto            = Column(String(1), nullable=False)
     data             = Column(Date,      nullable=False)
-    matricula        = Column(Integer)
+    matricula        = Column(BigInteger)        # bigint p/ segurança
     cfcliente        = Column(String(4))
     posto_cliente    = Column(String(4))
     paciente         = Column(Text)
@@ -54,12 +54,12 @@ class AgendaDia(Base):
     medico           = Column(Text)
     hora_prevista    = Column(String(5))
     hora_confirmacao = Column(String(5))
-    dias_agend_cons  = Column(Integer)
+    dias_agend_cons  = Column(BigInteger)        # bigint p/ casos extremos DATEDIFF
     atendido         = Column(Text)
     desistencia      = Column(SmallInteger, default=0, nullable=False)
     situacao         = Column(Text)
     pagou_no_dia     = Column(Boolean, default=False, nullable=False)
-    idendereco       = Column(Integer)
+    idendereco       = Column(BigInteger)
     gerado_em        = Column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (

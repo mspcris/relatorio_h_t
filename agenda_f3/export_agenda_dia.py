@@ -34,6 +34,10 @@ from dotenv import load_dotenv
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
+# CRÍTICO: load_dotenv ANTES de importar f3_db, porque f3_db cria o engine
+# do Postgres em tempo de import (precisa de PG_RDS_HOST/USER/PASSWORD).
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
 from f3_db import replace_posto, mark_posto_failure, update_run
 
 
@@ -567,8 +571,6 @@ def write_json_fallback(dados_validos: dict, datas: list, gerado_em):
 # =========================
 
 def run():
-    load_dotenv(os.path.join(BASE_DIR, ".env"))
-
     t0 = time.time()
     iniciado_em = datetime.now(timezone.utc)
     hoje   = date.today()
