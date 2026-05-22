@@ -491,8 +491,11 @@ jobs:
               --rsync-path="sudo rsync" \
               -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
               agenda_f3/agenda_f3.service "$SSH_USER@$SSH_HOST:/etc/systemd/system/agenda_f3.service"
+            # daemon-reload não está em sudoers NOPASSWD — best-effort.
+            # Se falhar, o operador faz manualmente (uma vez) na VM:
+            #   sudo systemctl daemon-reload && sudo systemctl enable --now agenda_f3
             ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
-              "sudo systemctl daemon-reload"
+              "sudo -n systemctl daemon-reload 2>/dev/null && echo 'daemon-reload OK' || echo 'WARN: daemon-reload requer password — execute manualmente: sudo systemctl daemon-reload'"
           fi
 
       - name: pip install deps no venv agenda_f3
