@@ -1,0 +1,9 @@
+# =============================================================================
+# /etc/cron.d/agenda_f3
+# ETL agenda_f3: roda a cada 30 min entre 06h e 22h (todos os dias).
+# Deployado por .github/workflows/deploy.yml (step 8E).
+# =============================================================================
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+*/30 6-22 * * *  www-data  /opt/agenda_f3/export_agenda_dia.sh >> /opt/agenda_f3/logs/cron.log 2>&1

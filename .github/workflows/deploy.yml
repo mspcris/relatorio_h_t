@@ -134,6 +134,7 @@ jobs:
           DEST=/opt/camim-auth/templates
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
           rsync -rlvz --delete \
+            --exclude='agenda_f3/***' \
             --include='*/' \
             --include='*.html' \
             --exclude='*' \
@@ -281,6 +282,7 @@ jobs:
             --include='*.sh' \
             --include='requirements*.txt' \
             --exclude='analyze_groq.py' \
+            --exclude='/agenda_f3/***' \
             --exclude='/css/***' \
             --exclude='/fonts/***' \
             --exclude='/images/***' \
@@ -436,6 +438,72 @@ jobs:
               \$VENV/bin/pip install --quiet -r requirements.txt 2>/dev/null || true
             else
               echo 'WARN: venv em /opt/wpp-campanhas/venv nao encontrado'
+            fi
+          "
+
+      # ================================================================
+      # 5D) agenda_f3 -> /opt/agenda_f3
+      # ================================================================
+      # Aplicação independente do KPI: Flask + ETL próprio que escreve no
+      # banco "f3" do RDS Postgres. Serve camila2.ia.camim.com.br (porta 8024).
+      #
+      # O .env NÃO é sincronizado pelo deploy — fica gerenciado manualmente
+      # na VM (mesmo padrão de /opt/relatorio_h_t/.env desde 2026-04-18).
+      # ================================================================
+      - name: agenda_f3 app -> /opt/agenda_f3
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          DEST=/opt/agenda_f3
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "sudo mkdir -p '$DEST' '$DEST/templates' '$DEST/sql' '$DEST/logs' '$DEST/json_consolidado' && sudo chown -R www-data:www-data '$DEST' && sudo chmod 775 '$DEST'"
+          # rsync da pasta agenda_f3/ inteira (sem .env), com --delete pra
+          # garantir limpeza de arquivos removidos do repo.
+          rsync -rlvz --delete \
+            --exclude='.env' \
+            --exclude='__pycache__' \
+            --exclude='logs/' \
+            --exclude='json_consolidado/' \
+            --omit-dir-times --no-perms --no-owner --no-group \
+            -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+            ./agenda_f3/ "$SSH_USER@$SSH_HOST:$DEST/"
+
+      - name: agenda_f3 systemd unit -> /etc/systemd/system
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euxo pipefail
+          if [ -f agenda_f3/agenda_f3.service ]; then
+            rsync -lvz \
+              --omit-dir-times --no-perms --no-owner --no-group \
+              --rsync-path="sudo rsync" \
+              -e "ssh -i ~/.ssh/id_vm -p ${SSH_PORT:-22}" \
+              agenda_f3/agenda_f3.service "$SSH_USER@$SSH_HOST:/etc/systemd/system/agenda_f3.service"
+            ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
+              "sudo systemctl daemon-reload"
+          fi
+
+      - name: pip install deps no venv agenda_f3
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+            VENV=/opt/agenda_f3/venv
+            if [ ! -d \"\$VENV\" ]; then
+              echo 'Criando venv em /opt/agenda_f3/venv...'
+              sudo -u www-data python3 -m venv \"\$VENV\"
+            fi
+            if [ -d \"\$VENV\" ] && [ -f /opt/agenda_f3/requirements.txt ]; then
+              sudo -u www-data \$VENV/bin/pip install --quiet --upgrade pip
+              sudo -u www-data \$VENV/bin/pip install --quiet -r /opt/agenda_f3/requirements.txt
+            else
+              echo 'WARN: venv ou requirements.txt em /opt/agenda_f3 ausente'
             fi
           "
 
@@ -629,18 +697,26 @@ jobs:
           done
 
       # ================================================================
-      # 9) Restart FINAL (camim-auth + wpp-campanhas + nginx)
+      # 9) Restart FINAL (camim-auth + wpp-campanhas + agenda_f3 + nginx)
       # ================================================================
-      - name: Restart camim-auth + wpp-campanhas + nginx
+      - name: Restart camim-auth + wpp-campanhas + agenda_f3 + nginx
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
-            echo 'Reiniciando camim-auth, wpp-campanhas e nginx...'
+            echo 'Reiniciando camim-auth, wpp-campanhas, agenda_f3 e nginx...'
             sudo systemctl restart camim-auth.service
             sudo systemctl restart wpp-campanhas.service
+            # agenda_f3 só restart se o unit existir (primeiro deploy ainda não enabled).
+            if systemctl list-unit-files agenda_f3.service >/dev/null 2>&1 \
+                && systemctl is-enabled agenda_f3.service >/dev/null 2>&1; then
+              sudo systemctl restart agenda_f3.service
+              sudo systemctl status agenda_f3.service --no-pager || true
+            else
+              echo 'agenda_f3.service ainda não habilitado — pulando restart (faça systemctl enable --now na VM)'
+            fi
             sudo systemctl restart nginx
             sudo systemctl status camim-auth.service --no-pager || true
             sudo systemctl status wpp-campanhas.service --no-pager || true

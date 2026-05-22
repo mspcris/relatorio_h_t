@@ -1,0 +1,19 @@
+[Unit]
+Description=Agenda F3 — Flask (camila2.ia.camim.com.br)
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/agenda_f3
+EnvironmentFile=/opt/agenda_f3/.env
+ExecStart=/opt/agenda_f3/venv/bin/gunicorn \
+    -b 127.0.0.1:8024 \
+    --workers 2 \
+    --timeout 120 \
+    app:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

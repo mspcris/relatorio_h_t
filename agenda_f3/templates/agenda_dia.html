@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>CAMIM — Agenda do Dia (F3)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap">
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    html { font-size: 16px; }
+    body {
+      font-size: 1rem;
+      background: #f4f6f9;
+      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1,h2,h3 { margin-top:0; margin-bottom:.5rem; font-weight:600; line-height:1.25; }
+
+    /* Top bar simples */
+    .top-bar {
+      background: #fff; border-bottom: 1px solid #dee2e6;
+      padding: 10px 24px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .top-bar .brand { font-weight: 700; font-size: 1.1rem; }
+    .top-bar .user-info { font-size: .85rem; color: #6c757d; }
+
+    /* Status banner (sticky) */
+    .status-banner {
+      position: sticky; top: 0; z-index: 100;
+      padding: 10px 24px; font-weight: 600;
+      transition: background .3s;
+    }
+    .status-banner.status-ok      { background: #d4edda; color: #155724; border-bottom: 1px solid #c3e6cb; }
+    .status-banner.status-warning { background: #fff3cd; color: #856404; border-bottom: 1px solid #ffeeba; }
+    .status-banner.status-danger  { background: #f8d7da; color: #721c24; border-bottom: 1px solid #f5c6cb; }
+    .status-banner.status-info    { background: #d1ecf1; color: #0c5460; border-bottom: 1px solid #bee5eb; }
+    .status-banner .badge-fonte { font-size: .7rem; opacity: .7; margin-left: 12px; font-weight: 400; }
+
+    .container-main { padding: 16px 24px; max-width: 1600px; margin: 0 auto; }
+
+    /* Banner do header */
+    .ad-banner {
+      background: linear-gradient(135deg, #0f1923 0%, #1a2940 50%, #0f2333 100%);
+      border-radius: 12px; padding: 20px 24px; margin-bottom: 0;
+      color: #e0f0ff; position: relative; overflow: hidden;
+    }
+    .ad-banner h1 { color: #fff; font-size: 1.6rem; margin: 0; }
+    .ad-banner p { color: #8ab4d8; margin: 4px 0 0; font-size: .95rem; }
+
+    /* Filtros */
+    .filtros-bar { background: #fff; border-radius: 8px; padding: 12px 16px; margin: 12px 0; display: flex; gap: 12px; align-items: end; flex-wrap: wrap; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+    .filtros-bar label { font-size: .85rem; font-weight: 600; color: #495057; margin-bottom: 2px; }
+    .filtros-bar .form-control, .filtros-bar .custom-select { font-size: .9rem; }
+
+    /* KPI cards */
+    .kpi-row { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+    .kpi-card { flex: 1; min-width: 140px; background: #fff; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 4px rgba(0,0,0,.08); text-align: center; }
+    .kpi-card .kpi-val { font-size: 1.8rem; font-weight: 700; line-height: 1.1; }
+    .kpi-card .kpi-lbl { font-size: .82rem; color: #6c757d; margin-top: 4px; }
+
+    /* Status badges */
+    .badge-adimplente   { background: #28a745; color: #fff; }
+    .badge-atrasado     { background: #fd7e14; color: #fff; }
+    .badge-inadimplente { background: #dc3545; color: #fff; }
+    .badge-cancelado    { background: #6c757d; color: #fff; }
+    .badge-sem-info     { background: #adb5bd; color: #fff; }
+    .badge-pagou        { background: #17a2b8; color: #fff; }
+    .badge-atendido     { background: #28a745; color: #fff; }
+    .badge-agendado     { background: #007bff; color: #fff; }
+    .badge-faltou       { background: #dc3545; color: #fff; }
+    .badge { font-size: .78rem; padding: 3px 9px; border-radius: 12px; font-weight: 600; }
+
+    /* Tabela */
+    #tblAgenda th { position: sticky; top: 0; background: #343a40; color: #fff; font-size: .82rem; white-space: nowrap; z-index: 2; }
+    #tblAgenda td { font-size: .85rem; vertical-align: middle; white-space: nowrap; }
+    .table-container { max-height: 65vh; overflow: auto; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); background: #fff; }
+    #tblAgenda .group-header td { background: #e9ecef; font-weight: 700; font-size: .9rem; cursor: pointer; user-select: none; }
+    #tblAgenda .group-header:hover td { background: #dde1e7; }
+    #tblAgenda .group-header.group-faltou td { background: #fff3cd; color: #856404; }
+    #tblAgenda .group-header.group-faltou:hover td { background: #ffe9a8; }
+    #tblAgenda .group-header.group-desist td { background: #f8d7da; color: #721c24; }
+    #tblAgenda .group-header.group-desist:hover td { background: #f1c2c7; }
+    #tblAgenda .group-caret { display: inline-block; width: 12px; }
+
+    /* Charts */
+    .chart-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+    /* Loading */
+    .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(255,255,255,.7); z-index: 9999; align-items: center; justify-content: center; }
+    .loading-overlay.active { display: flex; }
+  </style>
+</head>
+
+<body>
+
+<!-- TOP BAR -->
+<div class="top-bar">
+  <div class="brand">
+    <i class="fas fa-calendar-check mr-1 text-primary"></i>
+    Agenda do Dia — F3
+  </div>
+  <div class="user-info">
+    <i class="fas fa-user mr-1"></i><span id="userEmail">{{ USER_EMAIL or '' }}</span>
+    <form method="POST" action="/auth/logout" style="display:inline;margin-left:12px">
+      <button type="submit" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-sign-out-alt mr-1"></i>Sair
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- STATUS BANNER (atualizado pelo selPosto) -->
+<div id="statusBanner" class="status-banner status-info">
+  <i class="fas fa-spinner fa-spin mr-2"></i>Carregando status do snapshot…
+</div>
+
+<div class="container-main">
+
+  <!-- Banner -->
+  <div class="ad-banner">
+    <h1><i class="fas fa-calendar-check mr-2"></i>Agenda do Dia</h1>
+    <p>Snapshot do RDS Postgres (F3) atualizado a cada 30 minutos — backup do SQL Server CAMIM</p>
+  </div>
+
+  <!-- Filtros -->
+  <div class="filtros-bar">
+    <div>
+      <label>Posto</label>
+      <select id="selPosto" class="custom-select custom-select-sm" style="width:180px"></select>
+    </div>
+    <div>
+      <label>Data</label>
+      <input type="date" id="inpData" class="form-control form-control-sm" style="width:170px" />
+    </div>
+    <div>
+      <label>Agrupar por</label>
+      <select id="selGroup" class="custom-select custom-select-sm" style="width:180px">
+        <option value="">Sem agrupamento</option>
+        <option value="medico" selected>Médico</option>
+        <option value="especialidade">Especialidade</option>
+        <option value="situacao">Situação Financeira</option>
+        <option value="atendido">Status Atendimento</option>
+        <option value="posto_cliente">Posto do Cliente</option>
+      </select>
+    </div>
+    <div>
+      <label>Buscar paciente</label>
+      <input type="text" id="inpBusca" class="form-control form-control-sm" placeholder="Nome ou matrícula..." style="width:200px" />
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <div class="custom-control custom-switch" style="padding-top:4px">
+        <input type="checkbox" class="custom-control-input" id="chkDesistencia" />
+        <label class="custom-control-label" for="chkDesistencia">Exibir desistência</label>
+      </div>
+    </div>
+    <div>
+      <button id="btnCarregar" class="btn btn-sm btn-primary"><i class="fas fa-search mr-1"></i>Consultar</button>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-row" id="kpiRow" style="display:none">
+    <div class="kpi-card"><div class="kpi-val" id="kpiTotal">0</div><div class="kpi-lbl">Atendimentos no dia</div></div>
+    <div class="kpi-card"><div class="kpi-val text-success" id="kpiAtendidos">0</div><div class="kpi-lbl">Atendidos</div></div>
+    <div class="kpi-card"><div class="kpi-val text-danger" id="kpiFaltas">0</div><div class="kpi-lbl">Ausentes</div></div>
+    <div class="kpi-card"><div class="kpi-val text-warning" id="kpiAtrasados">0</div><div class="kpi-lbl">Atrasados</div></div>
+    <div class="kpi-card"><div class="kpi-val text-info" id="kpiPagouMens">0</div><div class="kpi-lbl">Pagou mensalidade</div></div>
+    <div class="kpi-card"><div class="kpi-val" id="kpiPagouAtrasado" style="color:#20c997">0</div><div class="kpi-lbl">Pagou e estava atrasado</div></div>
+  </div>
+
+  <!-- Tabela -->
+  <div class="table-container mt-3" id="tblContainer" style="display:none">
+    <table class="table table-sm table-bordered table-hover mb-0" id="tblAgenda">
+      <thead>
+        <tr>
+          <th>Hora</th>
+          <th>Confirmação</th>
+          <th>Paciente</th>
+          <th>Matrícula</th>
+          <th>Posto</th>
+          <th>Idade</th>
+          <th>Especialidade</th>
+          <th>Médico</th>
+          <th>Atendimento</th>
+          <th>Situação Financeira</th>
+          <th>Pagou no Dia</th>
+          <th>Dias Agend→Cons</th>
+        </tr>
+      </thead>
+      <tbody id="tblBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Gráficos -->
+  <div class="row mt-4" id="chartsRow" style="display:none">
+    <div class="col-md-4"><div class="chart-card"><h3 class="card-title">Presença</h3><canvas id="chartPresenca"></canvas></div></div>
+    <div class="col-md-4"><div class="chart-card"><h3 class="card-title">Situação Financeira</h3><canvas id="chartSituacao"></canvas></div></div>
+    <div class="col-md-4"><div class="chart-card"><h3 class="card-title">Pagamento no Dia</h3><canvas id="chartPagamento"></canvas></div></div>
+  </div>
+
+  <div id="msgVazio" class="text-center text-muted py-5" style="display:none">
+    <i class="fas fa-calendar-times fa-3x mb-3"></i>
+    <p class="h5">Nenhum agendamento encontrado para este dia/posto.</p>
+  </div>
+
+</div><!-- container-main -->
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner-border text-primary" role="status" style="width:48px;height:48px"><span class="sr-only">Carregando...</span></div>
+</div>
+
+<script>
+window.USER_POSTOS = {{ USER_POSTOS|safe }};
+</script>
+
+<script>
+(function(){
+  // ── Globals ──
+  let DATA = [];
+  let META_GLOBAL = {};   // {posto: {gerado_em, sucesso, erro, n_registros}}
+  let chartPresenca, chartSituacao, chartPagamento;
+
+  const NOMES_POSTOS = {
+    A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho', G:'Campo Grande',
+    I:'Nova Iguaçu', J:'Jacarepaguá', M:'Madureira', N:'Nilópolis',
+    P:'Rio das Pedras', R:'Realengo', X:'X Campo Grande', Y:'Y Campo Grande'
+  };
+
+  function deduplicarExames(pacientes) {
+    const result = [], vistos = new Set();
+    for (const p of pacientes) {
+      if ((p.especialidade||'').toUpperCase() === 'EXAME') {
+        const chave = `${p.matricula}_${p.medico}_EXAME`;
+        if (vistos.has(chave)) continue;
+        vistos.add(chave);
+      }
+      result.push(p);
+    }
+    return result;
+  }
+
+  function _isMedicoFaltou(p) {
+    return (p.atendido||'').toUpperCase().replace(/\s+/g,' ').trim() === 'MÉDICO FALTOU';
+  }
+  function _isDesistente(p) {
+    return p.desistencia === 1 || p.desistencia === true;
+  }
+  function _isAtendido(p) { return (p.atendido||'').toUpperCase() === 'ATENDIDO'; }
+  function _isFalta(p)    { return (p.atendido||'').toUpperCase() === 'AUSENTE'; }
+  function _isAtrasado(p) {
+    const s = (p.situacao||'').toLowerCase();
+    return s.includes('atrasad') || s.includes('inadimplente');
+  }
+
+  // ── Postos ──
+  function populatePostos(postos) {
+    const altamuro = ['A','B','G','I','N','R','X','Y'];
+    const couto    = ['C','D','J','M','P'];
+    let html = '<optgroup label="Altamuro">';
+    postos.filter(p => altamuro.includes(p)).sort().forEach(p => {
+      html += `<option value="${p}">${p} — ${NOMES_POSTOS[p]||p}</option>`;
+    });
+    html += '</optgroup><optgroup label="Couto">';
+    postos.filter(p => couto.includes(p)).sort().forEach(p => {
+      html += `<option value="${p}">${p} — ${NOMES_POSTOS[p]||p}</option>`;
+    });
+    html += '</optgroup>';
+    const outros = postos.filter(p => !altamuro.includes(p) && !couto.includes(p));
+    if (outros.length) {
+      html += '<optgroup label="Outros">';
+      outros.sort().forEach(p => { html += `<option value="${p}">${p} — ${NOMES_POSTOS[p]||p}</option>`; });
+      html += '</optgroup>';
+    }
+    $('#selPosto').html(html);
+  }
+
+  // ── Status banner: pinta verde/amarelo/vermelho conforme idade do snapshot ──
+  function fmtMinutos(min) {
+    if (min < 1) return 'agora há pouco';
+    if (min < 60) return `há ${Math.floor(min)} min`;
+    const h = Math.floor(min/60), m = Math.floor(min%60);
+    return `há ${h}h${m ? ' '+m+'min' : ''}`;
+  }
+
+  function updateBanner(posto) {
+    const $b = $('#statusBanner');
+    const meta = META_GLOBAL[posto];
+    if (!meta || !meta.gerado_em) {
+      $b.removeClass('status-ok status-warning status-danger').addClass('status-info');
+      $b.html(`<i class="fas fa-question-circle mr-2"></i>Sem dados pra <b>${posto} — ${NOMES_POSTOS[posto]||posto}</b>. Aguarde a primeira rodada do ETL.`);
+      return;
+    }
+    const d = new Date(meta.gerado_em);
+    const minAtras = (Date.now() - d.getTime()) / 60000;
+    const txtData = d.toLocaleString('pt-BR');
+    let cls, icon, txt;
+    if (!meta.sucesso) {
+      cls = 'status-danger';
+      icon = 'fa-exclamation-triangle';
+      txt = `Última tentativa ${txtData} <b>FALHOU</b>${meta.erro ? ' — '+escHtml(meta.erro) : ''}. Mostrando snapshot anterior.`;
+    } else if (minAtras < 40) {
+      cls = 'status-ok'; icon = 'fa-check-circle';
+      txt = `Atualizado ${txtData} (${fmtMinutos(minAtras)}) — ${meta.n_registros} registros`;
+    } else if (minAtras < 90) {
+      cls = 'status-warning'; icon = 'fa-clock';
+      txt = `Atualizado ${txtData} (${fmtMinutos(minAtras)}) — pode estar desatualizado`;
+    } else {
+      cls = 'status-danger'; icon = 'fa-exclamation-triangle';
+      txt = `Última atualização ${txtData} (${fmtMinutos(minAtras)}) — possível falha no SQL Server CAMIM`;
+    }
+    $b.removeClass('status-ok status-warning status-danger status-info').addClass(cls);
+    $b.html(`<i class="fas ${icon} mr-2"></i><b>${posto} — ${NOMES_POSTOS[posto]||posto}:</b> ${txt}`);
+  }
+
+  function refreshMeta() {
+    return $.getJSON('/api/agenda_dia/meta').then(res => {
+      if (res.ok) {
+        META_GLOBAL = res.postos || {};
+        const posto = $('#selPosto').val();
+        if (posto) updateBanner(posto);
+      }
+    }).catch(() => {
+      $('#statusBanner').removeClass('status-ok status-warning status-info')
+        .addClass('status-danger')
+        .html('<i class="fas fa-exclamation-triangle mr-2"></i>Erro de conexão ao buscar status do snapshot');
+    });
+  }
+
+  // ── Init ──
+  function init() {
+    const hoje = new Date().toISOString().slice(0,10);
+    $('#inpData').val(hoje);
+    populatePostos(window.USER_POSTOS);
+
+    refreshMeta().then(carregar);
+    setInterval(refreshMeta, 60000);   // re-fetch meta a cada 1 min
+
+    $('#btnCarregar').on('click', carregar);
+    $('#selGroup').on('change', renderTable);
+    $('#inpBusca').on('input', renderTable);
+    $('#inpData').on('change', carregar);
+    $('#selPosto').on('change', () => { updateBanner($('#selPosto').val()); carregar(); });
+    $('#chkDesistencia').on('change', renderTable);
+
+    $('#tblBody').on('click', 'tr.group-header', function() {
+      const $h = $(this);
+      const key = $h.data('group');
+      if (!key) return;
+      const $rows = $('#tblBody').find(`tr.group-row[data-group="${$.escapeSelector(String(key))}"]`);
+      const $icon = $h.find('.group-caret');
+      if ($h.hasClass('collapsed')) {
+        $rows.show(); $h.removeClass('collapsed');
+        $icon.removeClass('fa-caret-right').addClass('fa-caret-down');
+      } else {
+        $rows.hide(); $h.addClass('collapsed');
+        $icon.removeClass('fa-caret-down').addClass('fa-caret-right');
+      }
+    });
+  }
+
+  function carregar() {
+    const posto = $('#selPosto').val();
+    const data  = $('#inpData').val();
+    if (!posto || !data) return;
+    $('#loadingOverlay').addClass('active');
+    $('#msgVazio').hide();
+    $('#kpiRow, #tblContainer, #chartsRow').hide();
+    $.getJSON(`/api/agenda_dia?posto=${posto}&data=${data}`)
+      .done(res => {
+        $('#loadingOverlay').removeClass('active');
+        if (!res.ok) { alert(res.error || 'Erro'); return; }
+        DATA = deduplicarExames(res.pacientes || []);
+        if (res.fonte === 'json_fallback') {
+          // Aviso adicional: estamos lendo do JSON, Postgres caiu
+          const $b = $('#statusBanner');
+          $b.append(' <span class="badge-fonte">(fonte: JSON fallback — Postgres indisponível)</span>');
+        }
+        if (!DATA.length) { $('#msgVazio').show(); return; }
+        updateKPIs(); renderTable(); renderCharts();
+        $('#kpiRow, #tblContainer, #chartsRow').show();
+      })
+      .fail(xhr => {
+        $('#loadingOverlay').removeClass('active');
+        alert(xhr.responseJSON ? xhr.responseJSON.error : 'Erro de conexão');
+      });
+  }
+
+  function updateKPIs() {
+    const ativos = DATA.filter(p => !_isDesistente(p));
+    $('#kpiTotal').text(ativos.length);
+    $('#kpiAtendidos').text(ativos.filter(_isAtendido).length);
+    $('#kpiFaltas').text(ativos.filter(_isFalta).length);
+    $('#kpiAtrasados').text(ativos.filter(_isAtrasado).length);
+    $('#kpiPagouMens').text(ativos.filter(p => p.pagou_no_dia).length);
+    $('#kpiPagouAtrasado').text(ativos.filter(p => p.pagou_no_dia && _isAtrasado(p)).length);
+  }
+
+  function renderTable() {
+    const groupBy = $('#selGroup').val();
+    const busca   = ($('#inpBusca').val()||'').toLowerCase().trim();
+    const showDesist = $('#chkDesistencia').is(':checked');
+
+    let filtered = DATA;
+    if (busca) {
+      filtered = DATA.filter(p =>
+        (p.paciente||'').toLowerCase().includes(busca) ||
+        String(p.matricula||'').includes(busca));
+    }
+    const ativos = filtered.filter(p => !_isDesistente(p));
+    const desistentes = filtered.filter(p => _isDesistente(p));
+
+    const tbody = $('#tblBody'); tbody.empty();
+
+    if (!groupBy) {
+      ativos.forEach(p => tbody.append(rowHtml(p)));
+      if (showDesist) desistentes.forEach(p => tbody.append(rowHtml(p)));
+      return;
+    }
+
+    const groups = {};
+    ativos.forEach(p => {
+      let key = (p[groupBy] || '(sem info)').toString();
+      if (groupBy === 'medico' && _isMedicoFaltou(p)) key += ' — MÉDICO FALTOU';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(p);
+    });
+
+    Object.keys(groups).sort((a,b) => a.localeCompare(b,'pt-BR')).forEach(key => {
+      const items = groups[key];
+      const isFaltou = key.endsWith('— MÉDICO FALTOU');
+      const headerCls = 'group-header collapsed' + (isFaltou ? ' group-faltou' : '');
+      const safeKey = escHtml(key);
+      tbody.append(
+        `<tr class="${headerCls}" data-group="${safeKey}">` +
+        `<td colspan="12"><i class="fas fa-caret-right mr-1 group-caret"></i>` +
+        `${safeKey} <span class="text-muted">(${items.length})</span></td></tr>`
+      );
+      items.forEach(p => {
+        const $r = $(rowHtml(p));
+        $r.addClass('group-row').attr('data-group', key).hide();
+        tbody.append($r);
+      });
+    });
+
+    if (showDesist && desistentes.length) {
+      const key = 'DESISTÊNCIA';
+      tbody.append(
+        `<tr class="group-header collapsed group-desist" data-group="${key}">` +
+        `<td colspan="12"><i class="fas fa-caret-right mr-1 group-caret"></i>` +
+        `<i class="fas fa-times-circle mr-1"></i>${key} ` +
+        `<span class="text-muted">(${desistentes.length})</span></td></tr>`
+      );
+      desistentes.forEach(p => {
+        const $r = $(rowHtml(p));
+        $r.addClass('group-row').attr('data-group', key).hide();
+        tbody.append($r);
+      });
+    }
+  }
+
+  function rowHtml(p) {
+    const postoCliente = p.posto_cliente || '?';
+    const postoClass = postoCliente !== $('#selPosto').val() ? 'font-weight-bold text-danger' : '';
+    return `<tr>
+      <td>${escHtml(p.hora_prevista||'—')}</td>
+      <td>${escHtml(p.hora_confirmacao||'—')}</td>
+      <td>${escHtml(p.paciente)}</td>
+      <td>${p.matricula||'—'}</td>
+      <td class="text-center ${postoClass}">${escHtml(postoCliente)}</td>
+      <td class="text-center">${p.idade!=null?p.idade:'—'}</td>
+      <td>${escHtml(p.especialidade)}</td>
+      <td>${escHtml(p.medico)}</td>
+      <td>${badgeAtendimento(p.atendido)}</td>
+      <td>${badgeSituacao(p.situacao)}</td>
+      <td>${p.pagou_no_dia ? '<span class="badge badge-pagou"><i class="fas fa-check mr-1"></i>Sim</span>' : '—'}</td>
+      <td class="text-center">${p.dias_agend_cons!=null?p.dias_agend_cons:'—'}</td>
+    </tr>`;
+  }
+
+  function badgeAtendimento(val) {
+    if (!val) return '<span class="badge badge-agendado">—</span>';
+    const v = val.toUpperCase();
+    if (v === 'ATENDIDO')   return '<span class="badge badge-atendido"><i class="fas fa-check mr-1"></i>Atendido</span>';
+    if (v === 'AUSENTE')    return '<span class="badge badge-faltou"><i class="fas fa-times mr-1"></i>Ausente</span>';
+    if (v === 'AGUARDANDO') return '<span class="badge badge-agendado">Aguardando</span>';
+    if (v.startsWith('PENDÊNCIA')) return `<span class="badge" style="background:#6f42c1;color:#fff">${escHtml(val)}</span>`;
+    return `<span class="badge badge-agendado">${escHtml(val)}</span>`;
+  }
+
+  function badgeSituacao(val) {
+    if (!val) return '<span class="badge badge-sem-info">—</span>';
+    const v = val.toLowerCase();
+    if (v.includes('adimplente') && !v.includes('inadimplente')) return `<span class="badge badge-adimplente">${escHtml(val)}</span>`;
+    if (v.includes('atrasad'))      return `<span class="badge badge-atrasado">${escHtml(val)}</span>`;
+    if (v.includes('inadimplente')) return `<span class="badge badge-inadimplente">${escHtml(val)}</span>`;
+    if (v.includes('cancelad'))     return `<span class="badge badge-cancelado">${escHtml(val)}</span>`;
+    return `<span class="badge badge-sem-info">${escHtml(val)}</span>`;
+  }
+
+  function escHtml(s) { return $('<span>').text(s||'').html(); }
+
+  function renderCharts() {
+    const ATIVOS = DATA.filter(p => !_isDesistente(p));
+    const atendidos = ATIVOS.filter(_isAtendido).length;
+    const ausentes  = ATIVOS.filter(_isFalta).length;
+    const outros    = ATIVOS.length - atendidos - ausentes;
+    if (chartPresenca) chartPresenca.destroy();
+    chartPresenca = new Chart($('#chartPresenca')[0].getContext('2d'), {
+      type: 'doughnut',
+      data: { labels: ['Atendidos','Ausentes','Outros'],
+              datasets: [{ data: [atendidos,ausentes,outros], backgroundColor: ['#28a745','#dc3545','#6c757d'] }] },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    const sitCount = {};
+    ATIVOS.forEach(p => { const s = p.situacao || '(sem info)'; sitCount[s] = (sitCount[s]||0)+1; });
+    const sitLabels = Object.keys(sitCount).sort();
+    const sitColors = sitLabels.map(s => {
+      const v = s.toLowerCase();
+      if (v.includes('adimplente') && !v.includes('inadimplente')) return '#28a745';
+      if (v.includes('atrasad'))      return '#fd7e14';
+      if (v.includes('inadimplente')) return '#dc3545';
+      if (v.includes('cancelad'))     return '#6c757d';
+      return '#adb5bd';
+    });
+    if (chartSituacao) chartSituacao.destroy();
+    chartSituacao = new Chart($('#chartSituacao')[0].getContext('2d'), {
+      type: 'doughnut',
+      data: { labels: sitLabels, datasets: [{ data: sitLabels.map(l=>sitCount[l]), backgroundColor: sitColors }] },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    const atrasados = ATIVOS.filter(_isAtrasado);
+    const pagaram = atrasados.filter(p => p.pagou_no_dia).length;
+    const naoPag = atrasados.length - pagaram;
+    if (chartPagamento) chartPagamento.destroy();
+    chartPagamento = new Chart($('#chartPagamento')[0].getContext('2d'), {
+      type: 'doughnut',
+      data: { labels: ['Pagaram no dia','Não pagaram'],
+              datasets: [{ data: [pagaram,naoPag], backgroundColor: ['#17a2b8','#e9ecef'] }] },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+  }
+
+  $(init);
+})();
+</script>
+
+</body>
+</html>
