@@ -19,7 +19,7 @@
     /* Otimizado pra 1366×768 (95% dos usuários).
        Altura útil ~600-650px → preciso compactar TUDO no topo pra sobrar
        espaço pra tabela. Alvo: ~380px pra tabela. */
-    html { font-size: 14px; }
+    html { font-size: 13px; }
     html, body { height: 100%; margin: 0; overflow: hidden; }
     body {
       font-size: 1rem;
@@ -29,8 +29,11 @@
     }
     h1,h2,h3 { margin-top:0; margin-bottom:.4rem; font-weight:600; line-height:1.2; }
 
-    /* Layout fixo 100vh — sem scroll na página, só dentro da tabela */
-    .layout { display: flex; flex-direction: column; height: 100vh; }
+    /* Layout fixo — sem scroll na página, só dentro da tabela.
+       100dvh: dynamic viewport height, desconta corretamente a URL bar
+       do Chrome/Safari mobile. Sem isso, os últimos rows da tabela ficam
+       escondidos abaixo da URL bar quando ela está aberta. */
+    .layout { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
 
     /* Top bar — 36px */
     .top-bar {
