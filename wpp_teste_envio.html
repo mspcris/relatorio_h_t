@@ -141,6 +141,16 @@
                   <small class="text-muted">Formato: 55 + DDD + número (ex: 5521987654321)</small>
                 </div>
 
+                <!-- Número de saída -->
+                <div class="form-group">
+                  <label class="font-weight-bold">Número de saída <span class="text-danger">*</span></label>
+                  <select id="selNumeroSaida" class="form-control">
+                    <option value="2455-9600">2455-9600 (padrão CAMIM)</option>
+                    <option value="3529-6666">3529-6666 (Centro Médico do Couto)</option>
+                  </select>
+                  <small class="text-muted">Define de qual número Meta o teste sai. Sem isso, vai pelo default da conta.</small>
+                </div>
+
                 <button id="btnEnviar" class="btn btn-success btn-block" disabled>
                   <i class="fas fa-paper-plane mr-1"></i> Enviar Teste
                 </button>
@@ -266,6 +276,7 @@
   btnEnv.addEventListener('click', async () => {
     const template = sel.value;
     const telefone = inpTel.value.trim();
+    const numeroSaida = document.getElementById('selNumeroSaida').value;
     if (!template || !telefone) return;
 
     const params = {};
@@ -282,7 +293,7 @@
         method: 'POST',
         credentials: 'same-origin',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ template, telefone, params }),
+        body: JSON.stringify({ template, telefone, params, numero_saida: numeroSaida }),
       });
       const data = await resp.json();
 

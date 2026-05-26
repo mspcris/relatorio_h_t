@@ -1287,7 +1287,14 @@ def teste_envio_page():
 
 @wpp_bp.post("/api/envio_teste")
 def api_envio_teste():
-    """Envia mensagem de teste para um número, com variáveis preenchidas manualmente."""
+    """Envia mensagem de teste pra um número, idêntico ao envio de produção:
+    1) Meta (/templates/send da whatsapp-api) — esse é o canal que ENTREGA
+       pro WhatsApp do cliente. Suporta numero_saida 2455-9600 ou 3529-6666.
+    2) api-chat (/webhooks/whatsapp) — registra a conversa no chat externo.
+       Best-effort: se falhar, retorna sucesso mesmo assim (a Meta já entregou).
+
+    Antes esta rota só chamava a api-chat, que é registradora — por isso
+    o teste 'nunca funcionou' (nada chegava no WhatsApp do destinatário)."""
     import uuid as _uuid
     import re as _re
     from datetime import datetime as _dt
@@ -1296,18 +1303,23 @@ def api_envio_teste():
     if not email:
         return jsonify({"error": "unauthorized"}), 401
 
-    data         = request.get_json(force=True) or {}
-    telefone_raw = (data.get("telefone") or "").strip()
+    data          = request.get_json(force=True) or {}
+    telefone_raw  = (data.get("telefone") or "").strip()
     template_name = (data.get("template") or "").strip()
-    params       = data.get("params") or {}
-    telefone     = _re.sub(r"\D+", "", telefone_raw)
+    params        = data.get("params") or {}
+    numero_saida  = (data.get("numero_saida") or "2455-9600").strip()
+    telefone      = _re.sub(r"\D+", "", telefone_raw)
 
     if not telefone or not template_name:
         return jsonify({"error": "telefone e template são obrigatórios"}), 400
     if len(telefone) < 12 or len(telefone) > 15:
         return jsonify({"error": "telefone inválido (use DDI+DDD+número, ex.: 5521999999999)"}), 400
 
-    # Busca o body do template na API
+    # Resolve identidade do número de saída (igual rotina de produção)
+    from_phone      = db.from_phone_por_numero_saida(numero_saida)       # ex: '552135296666' p/ Couto, None p/ default
+    phone_number_id = db.phone_number_id_por_numero_saida(numero_saida)  # ex: '1101062063090022' p/ Couto
+
+    # Busca o body do template — usado pra montar o preview de retorno
     body = ""
     for t in _fetch_templates():
         if t.get("name") == template_name:
@@ -1316,84 +1328,125 @@ def api_envio_teste():
                     body = comp.get("text", "")
                     break
             break
-
     if not body:
         return jsonify({"error": f"Template '{template_name}' não encontrado ou sem BODY"}), 400
 
-    # Substitui variáveis
-    texto = body
+    texto_preview = body
     for key, val in params.items():
-        texto = texto.replace(f"{{{{{key}}}}}", str(val))
+        texto_preview = texto_preview.replace(f"{{{{{key}}}}}", str(val))
 
+    # ============================================================
+    # 1) ENVIO REAL via Meta (whatsapp-api wrapper /templates/send)
+    # ============================================================
+    WPP_API_URL = os.getenv("WAPP_API_URL", "https://whatsapp-api.camim.com.br")
+    WPP_TOKEN   = os.getenv("WAPP_TOKEN", "")
+    if not WPP_TOKEN:
+        return jsonify({"error": "WAPP_TOKEN não configurado no .env"}), 500
+
+    meta_payload = {
+        "template": template_name,
+        "people": [{
+            "phone": telefone,
+            "data":  {"BODY": params},
+        }],
+    }
+    if from_phone:
+        meta_payload["from"] = from_phone
+
+    wamid_meta = None
+    erro_meta  = None
+    try:
+        r_meta = requests.post(
+            f"{WPP_API_URL}/templates/send",
+            headers={"Authorization": f"Bearer {WPP_TOKEN}"},
+            json=meta_payload, timeout=20,
+        )
+        r_meta.raise_for_status()
+        try:
+            jm = r_meta.json()
+            wamid_meta = jm.get("id") or jm.get("wamid")
+        except Exception:
+            pass
+    except requests.HTTPError as e:
+        body_text = ""
+        try:    body_text = (e.response.text or "")[:300]
+        except Exception: pass
+        erro_meta = f"HTTP {e.response.status_code}: {body_text}"
+    except Exception as e:
+        erro_meta = f"{type(e).__name__}: {str(e)[:200]}"
+
+    # ============================================================
+    # 2) REGISTRO via api-chat (/webhooks/whatsapp) — best-effort
+    # ============================================================
     CHAT_API_URL  = os.getenv("CHAT_API_URL",   "")
     CHAT_FROM     = os.getenv("WAPP_CHAT_FROM", "")
     CHAT_QUEUE_ID = os.getenv("WAPP_QUEUE_ID",  "")
 
-    if not CHAT_API_URL:
-        return jsonify({"error": "CHAT_API_URL não configurado no .env"}), 500
-    if not CHAT_FROM:
-        return jsonify({"error": "WAPP_CHAT_FROM não configurado no .env"}), 500
-    if not CHAT_QUEUE_ID:
-        return jsonify({"error": "WAPP_QUEUE_ID não configurado no .env"}), 500
-
-    hash_id = _uuid.uuid4().hex[:24]
-    ts      = _dt.now().astimezone().isoformat(timespec="seconds")
-
-    payload = {
-        "entry": [{
-            "id": hash_id,
-            "changes": [{
-                "field": "messages",
-                "value": {
-                    "contacts": [{"wa_id": telefone, "profile": {"name": "Teste"}}],
-                    "messages": [{
-                        "id":        hash_id,
-                        "from":      CHAT_FROM,
-                        "queue_id":  CHAT_QUEUE_ID,
-                        "text":      {"body": texto},
-                        "type":      "text",
-                        "timestamp": ts,
-                    }],
-                    "metadata":          {"phone_number_id": "", "display_phone_number": ""},
-                    "messaging_product": "whatsapp",
-                },
+    chat_status = "skipped"
+    chat_erro   = None
+    if CHAT_API_URL and CHAT_FROM and CHAT_QUEUE_ID:
+        hash_id = _uuid.uuid4().hex[:24]
+        ts      = _dt.now().astimezone().isoformat(timespec="seconds")
+        remetente = CHAT_FROM if CHAT_FROM.startswith("chat:") else "chat:" + CHAT_FROM
+        chat_payload = {
+            "entry": [{
+                "id": hash_id,
+                "changes": [{
+                    "field": "messages",
+                    "value": {
+                        "contacts": [{"wa_id": telefone, "profile": {"name": "Teste"}}],
+                        "messages": [{
+                            "id":        hash_id,
+                            "from":      remetente,
+                            "queue_id":  CHAT_QUEUE_ID,
+                            "text":      {"body": texto_preview},
+                            "type":      "text",
+                            "timestamp": ts,
+                        }],
+                        "metadata": {
+                            "phone_number_id":      phone_number_id or "",
+                            "display_phone_number": from_phone or "",
+                        },
+                        "messaging_product": "whatsapp",
+                    },
+                }],
             }],
-        }],
-        "object": "whatsapp_business_account",
-    }
+            "object": "whatsapp_business_account",
+        }
+        try:
+            r_chat = requests.post(f"{CHAT_API_URL}/webhooks/whatsapp",
+                                   json=chat_payload, timeout=15)
+            r_chat.raise_for_status()
+            chat_status = "accepted"
+        except Exception as e:
+            chat_status = "erro"
+            chat_erro   = f"{type(e).__name__}: {str(e)[:200]}"
 
-    try:
-        r = requests.post(f"{CHAT_API_URL}/webhooks/whatsapp", json=payload, timeout=15)
-        r.raise_for_status()
-        body_json = None
-        body_text = ""
-        try:
-            body_json = r.json()
-        except Exception:
-            body_text = (r.text or "")[:800]
+    # ============================================================
+    # Resultado consolidado
+    # ============================================================
+    # Sucesso = Meta aceitou. api-chat falhar é detalhe (a mensagem chegou
+    # mesmo assim no WhatsApp do destinatário).
+    if erro_meta:
         return jsonify({
-            "status": "accepted",
-            "texto": texto,
-            "telefone": telefone,
-            "hash_id": hash_id,
-            "gateway_http": r.status_code,
-            "gateway_body": body_json if body_json is not None else body_text,
+            "status":         f"erro_meta:{erro_meta}",
+            "texto":          texto_preview,
+            "telefone":       telefone,
+            "numero_saida":   numero_saida,
+            "wamid":          None,
+            "meta_erro":      erro_meta,
+            "chat_status":    chat_status,
+            "chat_erro":      chat_erro,
         })
-    except requests.HTTPError as e:
-        body_text = ""
-        try:
-            body_text = (e.response.text or "")[:800]
-        except Exception:
-            body_text = ""
-        return jsonify({
-            "status": f"erro:HTTP {e.response.status_code}",
-            "texto": texto,
-            "telefone": telefone,
-            "hash_id": hash_id,
-            "gateway_body": body_text,
-        }), 502
-    except Exception as e:
-        return jsonify({"status": f"erro:{str(e)[:120]}", "texto": texto}), 500
+    return jsonify({
+        "status":         "accepted",
+        "texto":          texto_preview,
+        "telefone":       telefone,
+        "numero_saida":   numero_saida,
+        "wamid":          wamid_meta,
+        "chat_status":    chat_status,
+        "chat_erro":      chat_erro,
+    })
 
 
 # ---------------------------------------------------------------------------
