@@ -761,6 +761,98 @@ def envios(cid):
 # Detalhe de um envio
 # ---------------------------------------------------------------------------
 
+def _expandir_template_envio(template_name: str, envio: dict) -> str:
+    """Reconstrói o texto da mensagem que foi enviada, expandindo os
+    placeholders {{nome}}, {{matricula}}, {{ref}}, {{valor}}, {{venc}}, etc.
+    com os valores gravados em envios. Aplica as mesmas regras de
+    montar_params_template em send_whatsapp_cobranca: {{nome}} = primeiro
+    nome; {{matricula}} = matricula + letra do posto.
+    Retorna '' se não conseguir achar o body do template."""
+    body = ""
+    for t in _fetch_templates():
+        if t.get("name") == template_name:
+            for comp in t.get("components", []):
+                if comp.get("type") == "BODY":
+                    body = comp.get("text", "")
+                    break
+            break
+    if not body:
+        return ""
+
+    nome_completo = str(envio.get("nome") or "").strip()
+    primeiro_nome = nome_completo.split()[0] if nome_completo else ""
+
+    matricula_raw = str(envio.get("matricula") or "").strip()
+    posto = str(envio.get("posto") or "").strip().upper()
+    matricula_letra = (
+        f"{matricula_raw}{posto}"
+        if matricula_raw and len(posto) == 1 and posto.isalpha()
+        else matricula_raw
+    )
+
+    mapa = {
+        "nome":      primeiro_nome,
+        "matricula": matricula_letra,
+        "ref":       str(envio.get("ref") or ""),
+        "valor":     str(envio.get("valor") or ""),
+        "venc":      str(envio.get("venc") or ""),
+        "idreceita": str(envio.get("idreceita") or ""),
+    }
+    texto = body
+    for k, v in mapa.items():
+        texto = texto.replace("{{" + k + "}}", v)
+    return texto
+
+
+def _achar_ticket_no_chat(telefone: str) -> dict | None:
+    """Tenta localizar o ticket mais recente no chat externo (camim-db2) a
+    partir do telefone do envio. Cruza por CustomerCommunicator.phoneNumber
+    (cobre clientes que usaram o app/web chat) e por Customer.hash (padrão
+    da maioria das integrações). Devolve {ticket_number, ticket_id, customer_id}
+    ou None."""
+    if not telefone:
+        return None
+    try:
+        conn = _chat_mysql_conn()
+        cur = conn.cursor()
+        # 1) Cruzamento principal: phoneNumber em CustomerCommunicator
+        cur.execute(
+            """SELECT t.id, t.ticketNumber, t.customerId
+                 FROM Ticket t
+                 JOIN CustomerCommunicator cc
+                       ON cc.customerId = t.customerId
+                      AND cc.deletedAt IS NULL
+                WHERE cc.phoneNumber = %s AND t.deletedAt IS NULL
+             ORDER BY t.createdAt DESC LIMIT 1""",
+            (telefone,),
+        )
+        row = cur.fetchone()
+        if not row:
+            # 2) Fallback: Customer.hash = telefone (padrão de Customer criado
+            # via webhook whatsapp simples)
+            cur.execute(
+                """SELECT t.id, t.ticketNumber, t.customerId
+                     FROM Ticket t
+                     JOIN Customer c ON c.id = t.customerId
+                    WHERE c.hash = %s AND t.deletedAt IS NULL
+                 ORDER BY t.createdAt DESC LIMIT 1""",
+                (telefone,),
+            )
+            row = cur.fetchone()
+        conn.close()
+        if not row:
+            return None
+        return {
+            "ticket_id":     row["id"],
+            "ticket_number": row["ticketNumber"],
+            "customer_id":   row["customerId"],
+            "chat_url":      f"https://chat.camim.com.br/tickets/{row['ticketNumber']}",
+        }
+    except Exception as e:
+        log.warning("achar_ticket_no_chat falhou: %s", e)
+        return None
+
+
 @wpp_bp.get("/envio/<int:eid>")
 def detalhe_envio(eid):
     email, is_admin = _check_auth()
@@ -770,11 +862,15 @@ def detalhe_envio(eid):
     if not envio:
         return ("Envio não encontrado", 404)
     campanha = db.get_campanha(envio["campanha_id"])
+    mensagem_expandida = _expandir_template_envio(envio.get("template", ""), envio)
+    ticket_info = _achar_ticket_no_chat(envio.get("telefone"))
     return render_template(
         "wpp_envio_detalhe.html",
         USER_EMAIL=email, USER_IS_ADMIN=is_admin,
         envio=envio,
         campanha=campanha,
+        mensagem_expandida=mensagem_expandida,
+        ticket_info=ticket_info,
     )
 
 
