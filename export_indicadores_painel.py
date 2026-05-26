@@ -177,10 +177,19 @@ def _coletar_push() -> dict:
 
 
 def _coletar_wpp() -> list:
+    """Pra cada campanha ativa, coleta:
+    - postos: {posto: {ultimo_envio}}  — granular pra detalhe
+    - agregado: ultimo_envio mais recente em QUALQUER posto da campanha
+
+    Status considerados como 'enviado de fato' incluem 'accepted',
+    'accepted_meta' e 'accepted_chat' (depois da refatoração de batch
+    em 26/05/2026 o cron registra com sufixo).
+
+    Campanhas com modo='falta_medico' são one-shot via API — não fazem
+    sentido como 'robô atrasado'; excluídas.
+    """
     conn = _connect_ro(WPP_DB)
     conn.row_factory = sqlite3.Row
-    # Exclui modo='falta_medico' do painel: são disparos one-shot via API
-    # (route /medico_falta), não cron — não fazem sentido como "robô atrasado".
     campanhas = conn.execute(
         "SELECT id, nome, postos FROM campanhas "
         "WHERE ativa=1 AND COALESCE(modo_envio,'atraso') <> 'falta_medico'"
@@ -192,17 +201,31 @@ def _coletar_wpp() -> list:
             postos_lista = json.loads(c["postos"] or "[]")
         except Exception:
             postos_lista = []
+
+        # Último envio AGREGADO da campanha (qualquer posto)
+        row_agg = conn.execute(
+            "SELECT MAX(enviado_em) AS ultimo FROM envios "
+            "WHERE campanha_id=? AND status LIKE 'accepted%'",
+            (c["id"],),
+        ).fetchone()
+        ultimo_agg = row_agg["ultimo"] if row_agg and row_agg["ultimo"] else None
+
+        # Detalhe por posto pra mostrar cobertura
         postos_dados = {}
         for posto in postos_lista:
             row = conn.execute(
                 "SELECT MAX(enviado_em) AS ultimo FROM envios "
-                "WHERE campanha_id=? AND posto=? AND status='accepted'",
+                "WHERE campanha_id=? AND posto=? AND status LIKE 'accepted%'",
                 (c["id"], posto),
             ).fetchone()
             postos_dados[posto] = {
                 "ultimo_envio": row["ultimo"] if row and row["ultimo"] else None
             }
-        result.append({"id": c["id"], "nome": c["nome"], "postos": postos_dados})
+        result.append({
+            "id": c["id"], "nome": c["nome"],
+            "postos": postos_dados,
+            "ultimo_envio_agregado": ultimo_agg,
+        })
     conn.close()
     return result
 

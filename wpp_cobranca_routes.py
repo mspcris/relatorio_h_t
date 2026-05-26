@@ -346,17 +346,45 @@ def api_indicadores():
     campanhas = painel.get("indicadores", {}).get("wpp", []) or []
     hoje = _date.today()
 
+    def _dias_desde(ts):
+        if not ts:
+            return 999
+        try:
+            return (hoje - _datetime.fromisoformat(str(ts)).date()).days
+        except Exception:
+            return 999
+
     out = []
     for camp in campanhas:
         postos_dados = {}
+        postos_com_envio = []   # postos com envio nos últimos 7 dias
+        postos_sem_envio = []   # postos da campanha que nunca enviaram OU >7d
         for posto, d in (camp.get("postos") or {}).items():
             ultimo = d.get("ultimo_envio")
-            try:
-                dias = (hoje - _datetime.fromisoformat(str(ultimo)).date()).days if ultimo else 999
-            except Exception:
-                dias = 999
+            dias = _dias_desde(ultimo)
             postos_dados[posto] = {"dias": dias, "ultimo_envio": ultimo}
-        out.append({"id": camp.get("id"), "nome": camp.get("nome"), "postos": postos_dados})
+            if ultimo and dias <= 7:
+                postos_com_envio.append(posto)
+            else:
+                postos_sem_envio.append(posto)
+        # Agregado da campanha: o melhor (mais recente) entre todos os postos.
+        # Campanhas têm vários postos agrupados desde 2026-05; medir cada posto
+        # como 'robô independente' gera falsos negativos (posto sem cliente naquele
+        # ciclo não significa robô parado).
+        ultimo_agg = camp.get("ultimo_envio_agregado")
+        dias_agg = _dias_desde(ultimo_agg)
+        out.append({
+            "id": camp.get("id"),
+            "nome": camp.get("nome"),
+            "postos": postos_dados,
+            "agregado": {
+                "ultimo_envio": ultimo_agg,
+                "dias": dias_agg,
+                "postos_com_envio": sorted(postos_com_envio),
+                "postos_sem_envio": sorted(postos_sem_envio),
+                "total_postos": len(postos_dados),
+            },
+        })
 
     return jsonify({"campanhas": out})
 

@@ -1120,22 +1120,40 @@
 
     const { campanhas } = json;
     const postosSet = new Set(postos);
-    const mostrar1Posto = postos.length === 1;
 
-    // Uma entrada por (campanha × posto): cada campanha ativa gera sua própria linha
+    // 1 linha por CAMPANHA (não × posto). Desde 2026-05 cada campanha agrupa
+    // vários postos — um posto sem envio num ciclo pode só significar que não
+    // teve cliente pra cobrar, não que o robô está parado. Status agregado
+    // usa o mais recente em qualquer posto.
     const itens = [];
     for (const camp of (campanhas || [])) {
-      for (const [posto, d] of Object.entries(camp.postos)) {
-        if (!postosSet.has(posto)) continue;
-        const sKey = diasParaStatus(d.dias);
-        const nome = mostrar1Posto
-          ? (camp.nome || 'WhatsApp Cobrança')
-          : `${camp.nome || 'WhatsApp Cobrança'} — Posto ${posto}`;
-        const texto = d.ultimo_envio
-          ? `${fmtDias(d.dias)} · ${fmtDateBR(d.ultimo_envio)}`
-          : fmtDias(d.dias);
-        itens.push({ html: barraHTML('WPP', nome, sKey, texto, posto), order: STATUS[sKey].order });
-      }
+      const ag = camp.agregado || {};
+      const postosCamp = Object.keys(camp.postos || {});
+
+      // Filtro por posto selecionado: mostra só campanhas que TÊM ao menos
+      // um dos postos selecionados.
+      if (!postosCamp.some(p => postosSet.has(p))) continue;
+
+      const sKey = diasParaStatus(ag.dias);
+      const ultStr = ag.ultimo_envio
+        ? `${fmtDias(ag.dias)} · ${fmtDateBR(ag.ultimo_envio)}`
+        : 'nunca enviado';
+
+      // Cobertura: quais postos da campanha estão "saudáveis" (envio recente)
+      // e quais estão sem envio recente. Mostra como hint depois da data.
+      const coberturaOK = (ag.postos_com_envio || []).filter(p => postosSet.has(p));
+      const coberturaFalta = (ag.postos_sem_envio || []).filter(p => postosSet.has(p));
+      const detalhe = [];
+      if (coberturaOK.length)    detalhe.push(`✓ ${coberturaOK.join(' ')}`);
+      if (coberturaFalta.length) detalhe.push(`✗ ${coberturaFalta.join(' ')}`);
+      const texto = detalhe.length
+        ? `${ultStr} <span class="text-muted ml-2" style="font-size:.78rem">(${detalhe.join(' · ')})</span>`
+        : ultStr;
+
+      itens.push({
+        html: barraHTML('WPP', camp.nome || 'WhatsApp Cobrança', sKey, texto, postosCamp[0] || ''),
+        order: STATUS[sKey].order,
+      });
     }
 
     return itens;
