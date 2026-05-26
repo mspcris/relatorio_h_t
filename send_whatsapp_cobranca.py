@@ -613,6 +613,27 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
             fatura["_valor_fmt"] = fmt_valor(fatura.get("valor"))
             fatura["_venc_fmt"]  = fmt_venc(fatura.get("venc"))
 
+            # Filtro de cadastros de teste no SQL Server da CAMIM.
+            # Incidente 2026-05-26: cliente real 'MATRICULA DE TESTE DE BANGU'
+            # (mat 90333 posto B) recebeu envio com {{nome}}='MATRICULA' porque
+            # montar_params_template pega o primeiro nome via split()[0].
+            # Filtro abaixo bloqueia qualquer nome cujas palavras incluam
+            # 'TESTE' (word-boundary) ou comece com 'MATRICULA' — esses são os
+            # padrões observados pra registros legados de teste na base.
+            nome_real = str(fatura.get("nome") or "").strip()
+            nome_upper = nome_real.upper()
+            if re.search(r"\bTESTE\b", nome_upper) or nome_upper.startswith("MATRICULA "):
+                log.warning(
+                    f"    {fatura.get('matricula')} | {nome_real[:40]} | "
+                    "→ skip:nome_de_teste"
+                )
+                if not dry_run:
+                    db.registrar_nao_enviado(
+                        campanha["id"], posto, fatura,
+                        rodada_em, None, "nome_de_teste",
+                    )
+                continue
+
             raw_tel  = fatura.get("telefonewhatsapp")
             telefone = limpar_telefone(raw_tel)
 
