@@ -633,16 +633,21 @@ def api_agendamentos():
             # CLAUDE.md: views da CAMIM usam SET DATEFORMAT dmy → passar data como DD/MM/YYYY string
             d_str = d.strftime("%d/%m/%Y")
             d_next = (d + timedelta(days=1)).strftime("%d/%m/%Y")
+            # Falta integral (dia inteiro) = não filtrar por hora — senão pacientes
+            # com HoraPrevistaConsulta NULL ficam invisíveis (eles existem: agendamento
+            # cadastrado sem horário definido). Na parcial, mantém o filtro estrito.
+            integral = (hora_ini == "00:00" and hora_fim == "23:59")
             sql = """SELECT idLancamentoServico, Matricula, Paciente, idadePaciente,
                           TelefoneResidencial, HoraPrevistaConsulta, Servico, Especialidade
                      FROM vw_Cad_LancamentoProntuarioComDesistencia WITH (NOLOCK)
                      WHERE idMedico = ?
                        AND DataConsulta >= ?
                        AND DataConsulta <  ?
-                       AND Desistencia = 0
-                       AND HoraPrevistaConsulta >= ?
-                       AND HoraPrevistaConsulta <= ?"""
-            params = [idmedico, d_str, d_next, hora_ini, hora_fim]
+                       AND Desistencia = 0"""
+            params = [idmedico, d_str, d_next]
+            if not integral:
+                sql += " AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?"
+                params += [hora_ini, hora_fim]
             if especialidade:
                 sql += " AND LTRIM(RTRIM(Especialidade)) = ?"
                 params.append(especialidade)
@@ -773,16 +778,21 @@ def api_insert():
             cur.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
             d_str = data_falta.strftime("%d/%m/%Y")
             d_next = (data_falta + timedelta(days=1)).strftime("%d/%m/%Y")
-            cur.execute(
-                """SELECT COUNT(*)
+            # Falta integral = ignora filtro de hora (pacientes sem HoraPrevistaConsulta
+            # contam). Detalhes no comentário do endpoint /api/medico_falta/agendamentos.
+            integral_count = (hora_ini == "00:00" and hora_fim == "23:59")
+            sql_count = """SELECT COUNT(*)
                      FROM vw_Cad_LancamentoProntuarioComDesistencia WITH (NOLOCK)
                      WHERE idMedico = ?
                        AND DataConsulta >= ? AND DataConsulta <  ?
-                       AND Desistencia = 0
-                       AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?
-                       AND LTRIM(RTRIM(Especialidade)) = ?""",
-                idmedico, d_str, d_next, hora_ini, hora_fim, especialidade,
-            )
+                       AND Desistencia = 0"""
+            params_count = [idmedico, d_str, d_next]
+            if not integral_count:
+                sql_count += " AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?"
+                params_count += [hora_ini, hora_fim]
+            sql_count += " AND LTRIM(RTRIM(Especialidade)) = ?"
+            params_count.append(especialidade)
+            cur.execute(sql_count, params_count)
             qtd_pacientes = int(cur.fetchone()[0])
 
             # INSERT na Cad_MedicoFalta com OUTPUT INTO @t (compatível com triggers caso futuras)
@@ -824,18 +834,19 @@ def api_insert():
             # Agendamentos afetados (para o frontend disparar WhatsApp depois).
             # Filtra pela especialidade da falta — pacientes de outras especialidades
             # do mesmo médico não foram afetados.
-            cur.execute(
-                """SELECT idLancamentoServico, Paciente, HoraPrevistaConsulta,
+            sql_list = """SELECT idLancamentoServico, Paciente, HoraPrevistaConsulta,
                           TelefoneResidencial, Especialidade
                      FROM vw_Cad_LancamentoProntuarioComDesistencia WITH (NOLOCK)
                      WHERE idMedico = ?
                        AND DataConsulta >= ? AND DataConsulta <  ?
-                       AND Desistencia = 0
-                       AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?
-                       AND LTRIM(RTRIM(Especialidade)) = ?
-                     ORDER BY HoraPrevistaConsulta""",
-                idmedico, d_str, d_next, hora_ini, hora_fim, especialidade,
-            )
+                       AND Desistencia = 0"""
+            params_list = [idmedico, d_str, d_next]
+            if not integral_count:
+                sql_list += " AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?"
+                params_list += [hora_ini, hora_fim]
+            sql_list += " AND LTRIM(RTRIM(Especialidade)) = ? ORDER BY HoraPrevistaConsulta"
+            params_list.append(especialidade)
+            cur.execute(sql_list, params_list)
             agendamentos = [
                 {
                     "id_lancamento_servico": int(r[0]),
@@ -1036,14 +1047,19 @@ def api_enviar_wpp():
             d_next = (data_falta + timedelta(days=1)).strftime("%d/%m/%Y")
             hi = dh_ini.strftime("%H:%M") if dh_ini else "00:00"
             hf = dh_fim.strftime("%H:%M") if dh_fim else "23:59"
+            # Falta integral = não filtrar por hora (pacientes sem HoraPrevistaConsulta
+            # devem receber a mensagem). Na parcial mantém filtro estrito.
+            integral_envio = (hi == "00:00" and hf == "23:59")
             sql_pac = """SELECT idLancamentoServico, idCliente, idDependente, Paciente,
                           HoraPrevistaConsulta, TelefoneResidencial, Especialidade
                      FROM vw_Cad_LancamentoProntuarioComDesistencia WITH (NOLOCK)
                      WHERE idMedico = ?
                        AND DataConsulta >= ? AND DataConsulta <  ?
-                       AND Desistencia = 0
-                       AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?"""
-            params_pac = [idmedico, d_str, d_next, hi, hf]
+                       AND Desistencia = 0"""
+            params_pac = [idmedico, d_str, d_next]
+            if not integral_envio:
+                sql_pac += " AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?"
+                params_pac += [hi, hf]
             # Filtra pela especialidade da falta — pacientes de outras especialidades
             # do mesmo médico não foram afetados por essa falta.
             if especialidade_falta:
