@@ -238,19 +238,35 @@ def fmt_venc(v) -> str:
 # Envio via API
 # ---------------------------------------------------------------------------
 
-def enviar_via_chat(telefone: str, nome: str, template: str, params: dict,
-                    queue_id: str | None = None,
-                    from_user_id: str | None = None,
-                    phone_number_id: str | None = None,
-                    display_phone_number: str | None = None) -> tuple[str, str | None]:
-    """Envia webhook simulado para a plataforma de chat (cria ticket + conversa)."""
+def montar_payload_chat(telefone: str, nome: str, texto: str,
+                         queue_id: str | None = None,
+                         from_user_id: str | None = None,
+                         phone_number_id: str | None = None,
+                         display_phone_number: str | None = None,
+                         must_close_ticket: bool = False) -> tuple[dict, str]:
+    """Monta o envelope do webhook pra api-chat sem disparar request.
+    Útil pra acumular em lote (POST /webhooks/batch) ou disparar 1-a-1.
+    Retorna (payload_dict, hash_id_gerado)."""
     hash_id  = uuid.uuid4().hex[:24]
-    texto    = _expandir_template(template, params)
     ts       = datetime.now().astimezone().isoformat(timespec="seconds")
     fila_id  = queue_id or CHAT_QUEUE_ID
     remetente = from_user_id or CHAT_FROM
     if remetente and not remetente.startswith("chat:"):
         remetente = "chat:" + remetente
+
+    msg = {
+        "id":       hash_id,
+        "from":     remetente,
+        "queue_id": fila_id,
+        "text":     {"body": texto},
+        "type":     "text",
+        "timestamp": ts,
+    }
+    # Campo opcional acordado com o dev sênior (Robson, 26/05/2026):
+    # quando True, o chat fecha o ticket automaticamente após registrar.
+    # Não enviar a chave (em vez de False) preserva o comportamento default.
+    if must_close_ticket:
+        msg["must_close_ticket"] = True
 
     payload = {
         "entry": [{
@@ -259,14 +275,7 @@ def enviar_via_chat(telefone: str, nome: str, template: str, params: dict,
                 "field": "messages",
                 "value": {
                     "contacts": [{"wa_id": telefone, "profile": {"name": nome}}],
-                    "messages": [{
-                        "id":       hash_id,
-                        "from":     remetente,
-                        "queue_id": fila_id,
-                        "text":     {"body": texto},
-                        "type":     "text",
-                        "timestamp": ts,
-                    }],
+                    "messages": [msg],
                     "metadata": {
                         "phone_number_id": phone_number_id or "",
                         "display_phone_number": display_phone_number or "",
@@ -277,12 +286,61 @@ def enviar_via_chat(telefone: str, nome: str, template: str, params: dict,
         }],
         "object": "whatsapp_business_account",
     }
+    return payload, hash_id
 
+
+def enviar_chat_batch(payloads: list[dict]) -> tuple[str, dict | str]:
+    """POST /webhooks/batch com até 100 items. Endpoint introduzido pelo dev
+    sênior pra reduzir N POSTs sequenciais (e pressão na api-chat) quando
+    o cron processa centenas de envios por rodada.
+
+    Quando 1 ≤ len(payloads) ≤ 100, faz 1 request. Pra mais, o caller deve
+    fatiar (limite 200 hard, 100 confortável). Retorna (status, body).
+
+    `status` ∈ {'accepted_batch', 'erro_batch:...', 'skipped'}."""
+    if not payloads:
+        return "skipped", {}
+    try:
+        r = requests.post(
+            f"{CHAT_API_URL}/webhooks/batch",
+            json={"items": payloads},
+            timeout=30,
+        )
+        r.raise_for_status()
+        try:
+            return "accepted_batch", r.json()
+        except Exception:
+            return "accepted_batch", (r.text or "")[:500]
+    except requests.HTTPError as e:
+        body = ""
+        try: body = (e.response.text or "")[:200]
+        except Exception: pass
+        return f"erro_batch:HTTP {e.response.status_code} {body}", {}
+    except Exception as e:
+        return f"erro_batch:{type(e).__name__}: {str(e)[:200]}", {}
+
+
+def enviar_via_chat(telefone: str, nome: str, template: str, params: dict,
+                    queue_id: str | None = None,
+                    from_user_id: str | None = None,
+                    phone_number_id: str | None = None,
+                    display_phone_number: str | None = None,
+                    must_close_ticket: bool = False) -> tuple[str, str | None]:
+    """Envia webhook 1-a-1 pra api-chat (cria ticket + conversa). Mantido pra
+    compatibilidade com callers que processam 1 envio por vez (ex: tela
+    /wpp/teste). Pra envios em lote, prefira montar_payload_chat + enviar_chat_batch."""
+    texto = _expandir_template(template, params)
+    payload, hash_id = montar_payload_chat(
+        telefone, nome, texto,
+        queue_id=queue_id, from_user_id=from_user_id,
+        phone_number_id=phone_number_id,
+        display_phone_number=display_phone_number,
+        must_close_ticket=must_close_ticket,
+    )
     try:
         r = requests.post(
             f"{CHAT_API_URL}/webhooks/whatsapp",
-            json=payload,
-            timeout=15,
+            json=payload, timeout=15,
         )
         r.raise_for_status()
         return "accepted_chat", hash_id
@@ -462,8 +520,12 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
     usar_chat    = bool(campanha.get("enviar_chat", 1))
     usar_meta    = bool(campanha.get("enviar_meta", 0))
     header_url   = campanha.get("header_image_url") or None
+    must_close   = bool(campanha.get("must_close_ticket", 0))
     from_phone   = db.from_phone_por_numero_saida(campanha.get("numero_saida"))
     phone_number_id = db.phone_number_id_por_numero_saida(campanha.get("numero_saida"))
+    # Tamanho do lote chat. Limite hard do endpoint: 200. Confortável: 100
+    # (acordado com o dev sênior em 26/05/2026). Reduz N requests sequenciais.
+    CHAT_BATCH_SIZE = 100
 
     if not postos:
         log.warning(f"  [{campanha['nome']}] Nenhum posto configurado.")
@@ -471,6 +533,56 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
 
     enviados_campanha   = 0
     hoje = date.today()
+
+    # Buffer de envios de chat — cada item: (payload_dict, fatura, telefone,
+    # status_meta, wamid_meta). Quando atinge CHAT_BATCH_SIZE, flush via
+    # POST /webhooks/batch e grava em envios/nao_enviados.
+    chat_buffer: list[tuple] = []
+
+    def _flush_chat_batch():
+        """Dispara POST /webhooks/batch com o buffer atual e grava registros
+        em envios/nao_enviados combinando o status do Meta (se houve) com o
+        resultado do batch."""
+        if not chat_buffer:
+            return
+        payloads = [item[0] for item in chat_buffer]
+        b_status, _b_body = enviar_chat_batch(payloads)
+        chat_ok = b_status.startswith("accepted")
+        log.info(
+            f"  [{campanha['nome']}] BATCH chat ({len(payloads)} msgs): {b_status}"
+        )
+        for payload, f_item, tel, status_meta, wamid_meta in chat_buffer:
+            # Combina status: Meta tem prioridade quando ambos canais foram
+            # tentados (igual lógica antiga em `enviar()`).
+            if status_meta is not None:
+                if "erro" not in status_meta:
+                    status_final = status_meta  # 'accepted_meta' ou similar
+                elif chat_ok:
+                    status_final = "accepted_chat"  # Meta caiu, chat segurou
+                else:
+                    status_final = status_meta  # ambos falharam, Meta no log
+            else:
+                status_final = "accepted_chat" if chat_ok else b_status
+
+            if "erro" in status_final:
+                db.registrar_nao_enviado(
+                    campanha["id"], posto, f_item, rodada_em, tel,
+                    f"erro_api:{status_final}",
+                )
+                log.warning(
+                    f"    {tel} | {(f_item.get('nome') or '')[:25]} | → {status_final}"
+                )
+            else:
+                db.registrar_envio(
+                    campanha["id"], posto, f_item, tel, template,
+                    status_final, wamid_meta,
+                )
+                log.info(
+                    f"    {tel} | {(f_item.get('nome') or '')[:25]} | "
+                    f"{f_item.get('diasdebito',0)}d | {f_item.get('ref','')} | "
+                    f"R${f_item.get('_valor_fmt','')} | {f_item.get('_venc_fmt','')} | → {status_final}"
+                )
+        chat_buffer.clear()
 
     for posto in postos:
         sql_conn = get_conn_posto(posto)
@@ -533,32 +645,71 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
 
             params = montar_params_template(template, fatura)
             nome_cliente = str(fatura.get("nome") or "")
-            status, wamid = enviar(telefone, nome_cliente, template, params, dry_run,
-                                   queue_id=queue_id, from_user_id=from_user_id,
-                                   usar_chat=usar_chat, usar_meta=usar_meta,
-                                   header_image_url=header_url,
-                                   from_phone=from_phone,
-                                   phone_number_id=phone_number_id)
-            telefones_rodada.add(telefone)
 
-            nivel = logging.INFO if "erro" not in status else logging.WARNING
-            log.log(nivel,
-                f"    {telefone} | {(fatura.get('nome') or '')[:25]} | "
-                f"{fatura.get('diasdebito',0)}d | {fatura.get('ref','')} | "
-                f"R${fatura['_valor_fmt']} | {fatura['_venc_fmt']} | → {status}"
-            )
+            # ============================================================
+            # Meta — chamada 1-a-1 (wrapper só expõe /templates/send;
+            # endpoint de lote ainda não existe pra Meta)
+            # ============================================================
+            status_meta = None
+            wamid       = None
+            if usar_meta and not dry_run:
+                s_meta, w = enviar_via_meta(
+                    telefone, template, params,
+                    header_image_url=header_url,
+                    from_phone=from_phone,
+                )
+                status_meta = s_meta
+                wamid       = w
+                if "erro" in s_meta:
+                    log.warning("  enviar_via_meta falhou: %s", s_meta)
 
-            if not dry_run:
-                if "erro" in status:
+            # ============================================================
+            # api-chat — acumula payload em buffer; flush em lotes de
+            # CHAT_BATCH_SIZE via POST /webhooks/batch. Quando há menos que
+            # CHAT_BATCH_SIZE itens (ex: 5, 80, 35), o flush final manda
+            # tudo num único request — endpoint suporta size variável.
+            # ============================================================
+            if usar_chat and not dry_run:
+                texto = _expandir_template(template, params)
+                # display_phone_number pro chat: cai pro default 2455 quando
+                # from_phone é None (campanha do Altamiro omite `from`)
+                display_chat = from_phone or "552124559600"
+                payload, _hash = montar_payload_chat(
+                    telefone, nome_cliente, texto,
+                    queue_id=queue_id, from_user_id=from_user_id,
+                    phone_number_id=phone_number_id,
+                    display_phone_number=display_chat,
+                    must_close_ticket=must_close,
+                )
+                chat_buffer.append((payload, fatura, telefone, status_meta, wamid))
+
+                if len(chat_buffer) >= CHAT_BATCH_SIZE:
+                    _flush_chat_batch()
+
+            elif not dry_run:
+                # Só Meta — grava direto (sem buffer)
+                if status_meta and "erro" not in status_meta:
+                    db.registrar_envio(campanha["id"], posto, fatura,
+                                       telefone, template, status_meta, wamid)
+                else:
                     db.registrar_nao_enviado(campanha["id"], posto, fatura,
                                              rodada_em, telefone,
-                                             f"erro_api:{status}")
-                else:
-                    db.registrar_envio(campanha["id"], posto, fatura,
-                                       telefone, template, status, wamid)
-                time.sleep(0.3)
+                                             f"erro_api:{status_meta or 'sem_canal'}")
 
+            elif dry_run:
+                # dry_run: só conta sem enviar nem gravar
+                log.info(
+                    f"    {telefone} | {nome_cliente[:25]} | "
+                    f"{fatura.get('diasdebito',0)}d | {fatura.get('ref','')} | "
+                    "→ dry_run"
+                )
+
+            telefones_rodada.add(telefone)
             enviados_campanha += 1
+
+        # Flush final do posto — esvazia o que sobrou no buffer.
+        if not dry_run:
+            _flush_chat_batch()
 
         cursor.close()
         sql_conn.close()

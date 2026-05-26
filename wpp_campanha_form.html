@@ -131,7 +131,7 @@
 
           <!-- Canal de envio -->
           <div class="row mt-2">
-            <div class="col-md-6 d-flex align-items-center" style="gap:1.5rem">
+            <div class="col-md-12 d-flex align-items-center flex-wrap" style="gap:1.5rem">
               <div class="custom-control custom-switch">
                 <input type="hidden" name="enviar_chat" value="0">
                 <input type="checkbox" class="custom-control-input" id="enviar_chat"
@@ -148,6 +148,16 @@
                        {% if campanha and campanha.get('enviar_meta', 0) %}checked{% endif %}>
                 <label class="custom-control-label" for="enviar_meta">
                   <i class="fab fa-whatsapp mr-1 text-success"></i> Enviar via Meta API
+                </label>
+              </div>
+              <div class="custom-control custom-switch"
+                   title="Quando ligado, o api-chat fecha o ticket automaticamente após registrar a mensagem (must_close_ticket=true no payload). Útil pra avisos unidirecionais que não esperam resposta do cliente.">
+                <input type="hidden" name="must_close_ticket" value="0">
+                <input type="checkbox" class="custom-control-input" id="must_close_ticket"
+                       name="must_close_ticket" value="1"
+                       {% if campanha and campanha.get('must_close_ticket', 0) %}checked{% endif %}>
+                <label class="custom-control-label" for="must_close_ticket">
+                  <i class="fas fa-door-closed mr-1 text-warning"></i> Fechar ticket ao enviar mensagem?
                 </label>
               </div>
             </div>

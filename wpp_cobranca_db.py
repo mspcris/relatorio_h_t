@@ -279,6 +279,11 @@ def init_db() -> None:
             # Default '2455-9600' garante que campanhas pré-existentes continuem
             # saindo pelo número atual (default da Meta) sem mudança de comportamento.
             "numero_saida":        "ALTER TABLE campanhas ADD COLUMN numero_saida TEXT NOT NULL DEFAULT '2455-9600'",
+            # Quando 1, o payload pra api-chat inclui must_close_ticket=true em
+            # messages[0] — o chat fecha o ticket automaticamente após registrar.
+            # Útil pra campanhas de aviso unidirecional (cliente não precisa
+            # responder); evita a fila do chat ficar entupida.
+            "must_close_ticket":   "ALTER TABLE campanhas ADD COLUMN must_close_ticket INTEGER NOT NULL DEFAULT 0",
         }
         for _col, _ddl in _novos.items():
             if _col not in cols:
@@ -415,9 +420,9 @@ def criar_campanha(dados: dict) -> int:
                 clube_beneficio, clube_beneficio_joy, plano_premium,
                 origem, pagador_atrasado, from_user_id,
                 enviar_chat, enviar_meta, header_image_url,
-                numero_saida,
+                numero_saida, must_close_ticket,
                 created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 dados["nome"], dados.get("template", "notificacao_de_fatura"),
                 dados.get("modo_envio", "atraso"), postos_json,
@@ -455,6 +460,7 @@ def criar_campanha(dados: dict) -> int:
                 1 if dados.get("enviar_meta") else 0,
                 (dados.get("header_image_url") or None),
                 _normalizar_numero_saida(dados.get("numero_saida")),
+                1 if dados.get("must_close_ticket") else 0,
                 now, now,
             )
         )
@@ -481,7 +487,7 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 clube_beneficio=?, clube_beneficio_joy=?, plano_premium=?,
                 origem=?, pagador_atrasado=?, from_user_id=?,
                 enviar_chat=?, enviar_meta=?, header_image_url=?,
-                numero_saida=?,
+                numero_saida=?, must_close_ticket=?,
                 updated_at=?
             WHERE id=?""",
             (
@@ -521,6 +527,7 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 1 if dados.get("enviar_meta") else 0,
                 (dados.get("header_image_url") or None),
                 _normalizar_numero_saida(dados.get("numero_saida")),
+                1 if dados.get("must_close_ticket") else 0,
                 now,
                 campanha_id,
             )
