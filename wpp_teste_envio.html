@@ -151,6 +151,21 @@
                   <small class="text-muted">Define de qual número Meta o teste sai. Sem isso, vai pelo default da conta.</small>
                 </div>
 
+                <!-- Fechar ticket -->
+                <div class="form-group">
+                  <div class="custom-control custom-switch">
+                    <input type="checkbox" class="custom-control-input" id="chkMustClose">
+                    <label class="custom-control-label" for="chkMustClose">
+                      <i class="fas fa-door-closed mr-1 text-warning"></i>
+                      Fechar ticket ao enviar mensagem?
+                    </label>
+                  </div>
+                  <small class="text-muted">
+                    Quando marcado, o payload pro api-chat inclui <code>must_close_ticket: true</code>
+                    e o chat fecha o ticket automaticamente após registrar.
+                  </small>
+                </div>
+
                 <button id="btnEnviar" class="btn btn-success btn-block" disabled>
                   <i class="fas fa-paper-plane mr-1"></i> Enviar Teste
                 </button>
@@ -277,6 +292,7 @@
     const template = sel.value;
     const telefone = inpTel.value.trim();
     const numeroSaida = document.getElementById('selNumeroSaida').value;
+    const mustClose  = document.getElementById('chkMustClose').checked;
     if (!template || !telefone) return;
 
     const params = {};
@@ -293,7 +309,9 @@
         method: 'POST',
         credentials: 'same-origin',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ template, telefone, params, numero_saida: numeroSaida }),
+        body: JSON.stringify({ template, telefone, params,
+                                numero_saida: numeroSaida,
+                                must_close_ticket: mustClose }),
       });
       const data = await resp.json();
 

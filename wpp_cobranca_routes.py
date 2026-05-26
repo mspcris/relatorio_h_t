@@ -1403,6 +1403,7 @@ def api_envio_teste():
     template_name = (data.get("template") or "").strip()
     params        = data.get("params") or {}
     numero_saida  = (data.get("numero_saida") or "2455-9600").strip()
+    must_close    = bool(data.get("must_close_ticket"))
     telefone      = _re.sub(r"\D+", "", telefone_raw)
 
     if not telefone or not template_name:
@@ -1483,6 +1484,18 @@ def api_envio_teste():
         hash_id = _uuid.uuid4().hex[:24]
         ts      = _dt.now().astimezone().isoformat(timespec="seconds")
         remetente = CHAT_FROM if CHAT_FROM.startswith("chat:") else "chat:" + CHAT_FROM
+        chat_msg = {
+            "id":        hash_id,
+            "from":      remetente,
+            "queue_id":  CHAT_QUEUE_ID,
+            "text":      {"body": texto_preview},
+            "type":      "text",
+            "timestamp": ts,
+        }
+        # Quando o checkbox 'Fechar ticket ao enviar?' está marcado, o chat
+        # fecha o ticket automaticamente após registrar essa mensagem.
+        if must_close:
+            chat_msg["must_close_ticket"] = True
         chat_payload = {
             "entry": [{
                 "id": hash_id,
@@ -1490,14 +1503,7 @@ def api_envio_teste():
                     "field": "messages",
                     "value": {
                         "contacts": [{"wa_id": telefone, "profile": {"name": "Teste"}}],
-                        "messages": [{
-                            "id":        hash_id,
-                            "from":      remetente,
-                            "queue_id":  CHAT_QUEUE_ID,
-                            "text":      {"body": texto_preview},
-                            "type":      "text",
-                            "timestamp": ts,
-                        }],
+                        "messages": [chat_msg],
                         "metadata": {
                             "phone_number_id":      phone_number_id or "",
                             "display_phone_number": from_phone or "",
