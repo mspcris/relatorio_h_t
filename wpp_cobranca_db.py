@@ -346,7 +346,8 @@ def _row_to_dict(row) -> dict:
 def listar_campanhas() -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM campanhas ORDER BY ativa DESC, updated_at DESC"
+            "SELECT * FROM campanhas "
+            "ORDER BY COALESCE(numero_saida, '2455-9600') ASC, id ASC"
         ).fetchall()
     return [_row_to_dict(r) for r in rows]
 
