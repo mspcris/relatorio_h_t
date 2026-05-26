@@ -749,6 +749,17 @@ def desculpas_por_campanha(campanha_id: int) -> dict[int, dict]:
     return {r["envio_id"]: dict(r) for r in rows}
 
 
+def contar_desculpas_por_campanha() -> dict[int, int]:
+    """Retorna {campanha_id: qtd_desculpas_enviadas} pra exibir badge na
+    tela /wpp/desculpas. Só campanhas que têm ao menos 1 registro."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT campanha_id, COUNT(*) c FROM desculpas_enviadas "
+            "GROUP BY campanha_id"
+        ).fetchall()
+    return {r["campanha_id"]: r["c"] for r in rows}
+
+
 def envios_da_campanha(campanha_id: int) -> list[dict]:
     """Todos os envios accepted (status='accepted') de uma campanha, ordenados
     por enviado_em DESC. Inclui chat_ticket_id pra cruzar com chat MySQL."""

@@ -1005,6 +1005,30 @@ def _calcular_status_janela(ultima_resposta_iso: str | None) -> dict:
             "restante_min": restante_min, "status": st}
 
 
+@wpp_bp.get("/desculpas")
+def desculpas_lista_page():
+    """Listagem de campanhas pra escolher qual ver respondentes. Útil quando
+    uma campanha foi disparada com template errado e o operador precisa
+    atender quem respondeu (caso a wrapper ainda não tenha endpoint pra
+    texto livre — então o operador responde manualmente pelo chat externo).
+    Cada linha leva pra /wpp/<id>/respondentes."""
+    email, is_admin = _check_auth()
+    if not email:
+        return ('', 401)
+    campanhas = db.listar_campanhas()
+    # Anexa contadores leves: total envios + desculpas marcadas
+    contagem_desculpas = db.contar_desculpas_por_campanha()
+    for c in campanhas:
+        resumo = db.resumo_campanha(c["id"])
+        c["total_envios"]     = resumo.get("enviados", 0)
+        c["desculpas_marcadas"] = contagem_desculpas.get(c["id"], 0)
+    return render_template(
+        "wpp_desculpas_lista.html",
+        USER_EMAIL=email, USER_IS_ADMIN=is_admin,
+        campanhas=campanhas,
+    )
+
+
 @wpp_bp.get("/<int:cid>/respondentes")
 def respondentes_page(cid):
     email, is_admin = _check_auth()
