@@ -391,13 +391,30 @@ def montar_params_template(template_name: str, fatura: dict) -> dict:
     Extrai as variáveis {{key}} do corpo do template e mapeia com os campos da fatura.
     Funciona dinamicamente para qualquer template — não precisa de hardcode por nome.
     """
+    # nome: só primeiro nome (templates novos como mensalidade_vencida usam
+    # forma de tratamento informal — "Olá João" soa melhor que "Olá João da Silva")
+    nome_completo = str(fatura.get("nome") or "").strip()
+    primeiro_nome = nome_completo.split()[0] if nome_completo else ""
+
+    # matricula com letra do posto sufixada (ex: 123456A = matricula 123456 do
+    # idendereco A=Anchieta). Padrão da CAMIM pra identificar unicamente a
+    # matrícula entre os 13 postos. Só sufixa quando posto é uma letra (single
+    # char alfa) — defesa contra valores vazios/numéricos que apareçam.
+    matricula_raw = str(fatura.get("matricula") or "").strip()
+    posto = str(fatura.get("posto") or "").strip().upper()
+    matricula_com_letra = (
+        f"{matricula_raw}{posto}"
+        if matricula_raw and len(posto) == 1 and posto.isalpha()
+        else matricula_raw
+    )
+
     CAMPO_MAP = {
         "ref":          str(fatura.get("ref") or ""),
         "valor":        fatura.get("_valor_fmt", ""),
         "venc":         fatura.get("_venc_fmt", ""),
-        "matricula":    str(fatura.get("matricula") or ""),
+        "matricula":    matricula_com_letra,
         "idreceita":    str(fatura.get("idreceita") or ""),
-        "nome":         str(fatura.get("nome") or ""),
+        "nome":         primeiro_nome,
         # Campos do modo clientes_admissao
         "admissao":     str(fatura.get("ref") or ""),   # ref = dataadmissao formatada
         "tipo_cliente": str(fatura.get("tipo_cliente") or ""),
