@@ -946,6 +946,225 @@ def conversa_envio(eid):
 
 
 # ---------------------------------------------------------------------------
+# RESPONDENTES — tela pra atender quem respondeu a um envio errado
+# ---------------------------------------------------------------------------
+# Caso de uso: o operador disparou uma campanha com template errado. Quer
+# enviar pedido de desculpas SÓ pra quem respondeu (única forma grátis da
+# Meta = service msg dentro da janela de 24h). Como a whatsapp-api interna
+# só expõe /templates/send (não tem endpoint pra texto livre), o envio é
+# manual pelo chat externo. Esta tela:
+#   1) Cruza envios.chat_ticket_id com Message do chat MySQL pra identificar
+#      quem respondeu e quando.
+#   2) Calcula prazo restante da janela de 24h por cliente.
+#   3) Mostra mensagem pronta com {{nome}} substituído pra copiar.
+#   4) Link direto pro chat (chat.camim.com.br/tickets/<num>) pra responder.
+#   5) Botão "marcar como desculpa enviada" → persiste em desculpas_enviadas
+#      + registra em auditoria.
+# ---------------------------------------------------------------------------
+
+# Mensagem padrão de pedido de desculpa. Editável pelo operador no front
+# antes de copiar — esta é só a versão base com nome placeholder.
+_MSG_DESCULPA_DEFAULT = (
+    "Olá {{nome}}, aqui é da CAMIM. Hoje cedo enviamos por engano um WhatsApp "
+    "avisando que sua fatura estava vencida — não está. O envio correto era "
+    "apenas um lembrete de que o vencimento se aproxima. Pedimos desculpas "
+    "pelo susto e pelo incômodo. Qualquer dúvida estamos aqui.\n"
+    "At. Cristiano Souza - Atendimento Camim"
+)
+
+
+def _calcular_status_janela(ultima_resposta_iso: str | None) -> dict:
+    """Recebe timestamp ISO da última resposta do cliente, devolve
+    {respondeu, expira_em_iso, restante_min, status}.
+    status ∈ {'sem_resposta','ativa','apertada','vencida'}.
+    'apertada' = menos de 2h restantes."""
+    from datetime import datetime, timedelta, timezone
+    if not ultima_resposta_iso:
+        return {"respondeu": False, "expira_em_iso": None,
+                "restante_min": None, "status": "sem_resposta"}
+    # Aceita ISO com timezone ou sem (MySQL devolve sem TZ → assume UTC)
+    s = str(ultima_resposta_iso).replace(" ", "T")
+    if "+" not in s and "Z" not in s and s.count("-") <= 2:
+        s = s + "+00:00"
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return {"respondeu": True, "expira_em_iso": None,
+                "restante_min": None, "status": "ativa"}
+    expira = dt + timedelta(hours=24)
+    agora = datetime.now(timezone.utc)
+    restante_seg = (expira - agora).total_seconds()
+    restante_min = int(restante_seg // 60)
+    if restante_seg <= 0:
+        st = "vencida"
+    elif restante_seg < 2 * 3600:
+        st = "apertada"
+    else:
+        st = "ativa"
+    return {"respondeu": True, "expira_em_iso": expira.isoformat(),
+            "restante_min": restante_min, "status": st}
+
+
+@wpp_bp.get("/<int:cid>/respondentes")
+def respondentes_page(cid):
+    email, is_admin = _check_auth()
+    if not email:
+        return ('', 401)
+    campanha = db.get_campanha(cid)
+    if not campanha:
+        return ("Campanha não encontrada", 404)
+    return render_template(
+        "wpp_respondentes.html",
+        USER_EMAIL=email, USER_IS_ADMIN=is_admin,
+        campanha=campanha,
+        msg_desculpa_default=_MSG_DESCULPA_DEFAULT,
+    )
+
+
+@wpp_bp.get("/<int:cid>/respondentes/data")
+def respondentes_data(cid):
+    """JSON consumido pelo auto-refresh do front. Cruza envios da campanha
+    com o chat MySQL pra ver quem respondeu e quando."""
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+
+    envios = db.envios_da_campanha(cid)
+    desculpas = db.desculpas_por_campanha(cid)
+
+    # Coleta os chat_ticket_id (UUIDs do chat) pra fazer 1 query batch
+    ticket_ids = [e["chat_ticket_id"] for e in envios if e.get("chat_ticket_id")]
+    resp_por_ticket: dict[str, dict] = {}
+    chat_erro = None
+    if ticket_ids:
+        try:
+            conn = _chat_mysql_conn()
+            cur = conn.cursor()
+            placeholders = ",".join(["%s"] * len(ticket_ids))
+            cur.execute(
+                f"""SELECT t.id            AS ticket_id,
+                           t.ticketNumber  AS ticket_number,
+                           MAX(CASE WHEN m.userProfileId IS NULL
+                                    THEN m.createdAt END) AS ultima_resp_cliente,
+                           COUNT(CASE WHEN m.userProfileId IS NULL
+                                       THEN 1 END)         AS qtd_msg_cliente
+                      FROM Ticket t
+                 LEFT JOIN Message m ON m.ticketId = t.id AND m.deletedAt IS NULL
+                     WHERE t.id IN ({placeholders}) AND t.deletedAt IS NULL
+                  GROUP BY t.id, t.ticketNumber""",
+                ticket_ids,
+            )
+            for r in cur.fetchall():
+                resp_por_ticket[r["ticket_id"]] = {
+                    "ticket_number": r["ticket_number"],
+                    "ultima_resp_cliente": (
+                        r["ultima_resp_cliente"].isoformat()
+                        if r["ultima_resp_cliente"] else None
+                    ),
+                    "qtd_msg_cliente": int(r["qtd_msg_cliente"] or 0),
+                }
+            conn.close()
+        except Exception as e:
+            log.warning("respondentes_data: erro chat MySQL: %s", e)
+            chat_erro = f"chat MySQL indisponível: {str(e)[:120]}"
+
+    # Estatísticas + lista enriquecida
+    stats = {
+        "total_envios":      len(envios),
+        "responderam":       0,
+        "janela_ativa":      0,
+        "janela_apertada":   0,
+        "janela_vencida":    0,
+        "desculpa_enviada":  len(desculpas),
+        "pendentes":         0,
+    }
+    out = []
+    for e in envios:
+        tid = e.get("chat_ticket_id")
+        meta_chat = resp_por_ticket.get(tid, {}) if tid else {}
+        ultima = meta_chat.get("ultima_resp_cliente")
+        janela = _calcular_status_janela(ultima)
+        atendido = e["id"] in desculpas
+        # Stats
+        if janela["respondeu"]:
+            stats["responderam"] += 1
+            if janela["status"] == "ativa":      stats["janela_ativa"]    += 1
+            if janela["status"] == "apertada":   stats["janela_apertada"] += 1
+            if janela["status"] == "vencida":    stats["janela_vencida"]  += 1
+            if not atendido and janela["status"] != "vencida":
+                stats["pendentes"] += 1
+        out.append({
+            "envio_id":         e["id"],
+            "posto":            e["posto"],
+            "nome":             e["nome"],
+            "matricula":        e["matricula"],
+            "telefone":         e["telefone"],
+            "idreceita":        e["idreceita"],
+            "ref":              e["ref"],
+            "valor":            e["valor"],
+            "venc":             e["venc"],
+            "dias_atraso":      e["dias_atraso"],
+            "wamid":            e["wamid"],
+            "chat_ticket_id":   tid,
+            "ticket_number":    meta_chat.get("ticket_number"),
+            "qtd_msg_cliente":  meta_chat.get("qtd_msg_cliente", 0),
+            "ultima_resp_cliente": ultima,
+            "enviado_em":       e["enviado_em"],
+            "respondeu":        janela["respondeu"],
+            "janela_status":    janela["status"],
+            "janela_expira_em": janela["expira_em_iso"],
+            "janela_restante_min": janela["restante_min"],
+            "desculpa_enviada": atendido,
+            "desculpa_marcada_em":  desculpas.get(e["id"], {}).get("marcado_em"),
+            "desculpa_marcada_por": desculpas.get(e["id"], {}).get("marcado_por"),
+        })
+
+    return jsonify({
+        "campanha_id": cid,
+        "stats": stats,
+        "envios": out,
+        "chat_erro": chat_erro,
+        "msg_desculpa_default": _MSG_DESCULPA_DEFAULT,
+    })
+
+
+@wpp_bp.post("/<int:cid>/respondentes/marcar/<int:envio_id>")
+def respondentes_marcar(cid, envio_id):
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    envio = db.get_envio(envio_id)
+    if not envio or envio.get("campanha_id") != cid:
+        return jsonify({"error": "envio não pertence à campanha"}), 404
+    obs = (request.json or {}).get("obs") if request.is_json else None
+    inserido = db.marcar_desculpa_enviada(
+        cid, envio_id, envio.get("chat_ticket_id"), email, obs,
+    )
+    db.registrar_auditoria(
+        email, "DESCULPA_ENVIADA", cid,
+        f"campanha {cid}",
+        {"envio_id": envio_id, "telefone": envio.get("telefone"),
+         "nome": envio.get("nome"), "ticket_id": envio.get("chat_ticket_id"),
+         "ja_existia": not inserido, "obs": obs},
+    )
+    return jsonify({"ok": True, "inserido": inserido})
+
+
+@wpp_bp.post("/<int:cid>/respondentes/desmarcar/<int:envio_id>")
+def respondentes_desmarcar(cid, envio_id):
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    removeu = db.desmarcar_desculpa_enviada(envio_id)
+    db.registrar_auditoria(
+        email, "DESCULPA_DESMARCADA", cid,
+        f"campanha {cid}",
+        {"envio_id": envio_id, "removeu": removeu},
+    )
+    return jsonify({"ok": True, "removeu": removeu})
+
+
+# ---------------------------------------------------------------------------
 # Busca global de envios por telefone / nome
 # ---------------------------------------------------------------------------
 

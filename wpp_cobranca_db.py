@@ -153,6 +153,21 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_naoenviados_camp   ON nao_enviados(campanha_id);
         CREATE INDEX IF NOT EXISTS idx_naoenviados_rodada ON nao_enviados(rodada_em);
 
+        -- Pedidos de desculpa enviados manualmente (por operador via chat externo)
+        -- após um envio errado de campanha. Usada pra tela /wpp/<id>/respondentes
+        -- não mostrar de novo o envio que já foi atendido. UNIQUE por envio garante
+        -- idempotência: 1 desculpa por envio errado.
+        CREATE TABLE IF NOT EXISTS desculpas_enviadas (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            campanha_id  INTEGER NOT NULL,
+            envio_id     INTEGER NOT NULL UNIQUE,
+            ticket_id    TEXT,
+            marcado_em   TEXT    NOT NULL,
+            marcado_por  TEXT    NOT NULL,
+            obs          TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_desculpas_camp ON desculpas_enviadas(campanha_id);
+
         -- Auditoria de todas as ações no módulo WhatsApp Cobrança
         CREATE TABLE IF NOT EXISTS auditoria (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -688,6 +703,64 @@ def listar_auditoria(limit: int = 500) -> list[dict]:
         rows = conn.execute(
             "SELECT * FROM auditoria ORDER BY ocorrido_em DESC LIMIT ?",
             (limit,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# DESCULPAS — registro de qual envio errado já recebeu pedido de desculpa
+# ---------------------------------------------------------------------------
+
+def marcar_desculpa_enviada(campanha_id: int, envio_id: int,
+                             ticket_id: str | None, usuario: str,
+                             obs: str | None = None) -> bool:
+    """Marca que esse envio errado já recebeu pedido de desculpa (enviado
+    manualmente via chat externo). Idempotente: INSERT OR IGNORE. Retorna
+    True se inseriu, False se já existia."""
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT OR IGNORE INTO desculpas_enviadas
+               (campanha_id, envio_id, ticket_id, marcado_em, marcado_por, obs)
+               VALUES (?,?,?,?,?,?)""",
+            (campanha_id, envio_id, ticket_id, _now_iso(), usuario, obs),
+        )
+        return cur.rowcount > 0
+
+
+def desmarcar_desculpa_enviada(envio_id: int) -> bool:
+    """Desfaz a marcação (caso o operador tenha marcado errado)."""
+    with get_conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM desculpas_enviadas WHERE envio_id=?", (envio_id,)
+        )
+        return cur.rowcount > 0
+
+
+def desculpas_por_campanha(campanha_id: int) -> dict[int, dict]:
+    """Retorna {envio_id: {marcado_em, marcado_por, obs}} pros envios da
+    campanha que já foram atendidos. Usado na tela /respondentes pra cruzar
+    com a lista de envios."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT envio_id, marcado_em, marcado_por, obs "
+            "FROM desculpas_enviadas WHERE campanha_id=?",
+            (campanha_id,),
+        ).fetchall()
+    return {r["envio_id"]: dict(r) for r in rows}
+
+
+def envios_da_campanha(campanha_id: int) -> list[dict]:
+    """Todos os envios accepted (status='accepted') de uma campanha, ordenados
+    por enviado_em DESC. Inclui chat_ticket_id pra cruzar com chat MySQL."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT id, posto, telefone, idreceita, matricula, nome,
+                      ref, valor, venc, dias_atraso, template,
+                      status, wamid, chat_ticket_id, enviado_em
+                 FROM envios
+                WHERE campanha_id=? AND status='accepted'
+                ORDER BY enviado_em DESC""",
+            (campanha_id,),
         ).fetchall()
     return [dict(r) for r in rows]
 
