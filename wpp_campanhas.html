@@ -141,6 +141,7 @@
                 <th>Dias</th>
                 <th class="text-center">Chat</th>
                 <th class="text-center">Meta</th>
+                <th class="text-center" title="Fechar ticket ao enviar mensagem (must_close_ticket)">Fechar</th>
                 <th>Nº saída</th>
                 <th>Enviados</th>
                 <th>Não enviados</th>
@@ -181,6 +182,13 @@
               </td>
               <td class="text-center">
                 {% if c.enviar_meta %}<i class="fab fa-whatsapp text-success"></i>{% else %}<i class="fas fa-times text-muted"></i>{% endif %}
+              </td>
+              <td class="text-center">
+                {% if c.must_close_ticket %}
+                  <i class="fas fa-door-closed text-warning" title="Fecha o ticket após enviar"></i>
+                {% else %}
+                  <i class="fas fa-door-open text-muted" title="Mantém o ticket aberto"></i>
+                {% endif %}
               </td>
               <td>
                 {% set ns = c.numero_saida or '2455-9600' %}
