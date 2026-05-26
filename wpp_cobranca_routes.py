@@ -436,6 +436,15 @@ def api_templates():
     if not email:
         return jsonify({"error": "unauthorized"}), 401
     templates = _fetch_templates()
+    # ?only_visible=1 filtra pelos marcados na tela /wpp/templates.
+    # Se não houver NENHUMA config ainda (instalação nova), devolve TUDO —
+    # fallback compatível, evita dropdown vazio na campanha por engano.
+    only_visible = request.args.get("only_visible") in ("1", "true", "yes")
+    if only_visible:
+        visiveis = db.templates_visiveis()
+        # Vazio = sem config ainda → ignora filtro
+        if visiveis:
+            templates = [t for t in templates if t.get("name") in visiveis]
     result = []
     for t in templates:
         body_text  = ""
@@ -1003,6 +1012,92 @@ def _calcular_status_janela(ultima_resposta_iso: str | None) -> dict:
         st = "ativa"
     return {"respondeu": True, "expira_em_iso": expira.isoformat(),
             "restante_min": restante_min, "status": st}
+
+
+# ---------------------------------------------------------------------------
+# TEMPLATES — configuração de visibilidade e padrão por modo_envio
+# ---------------------------------------------------------------------------
+
+# Modos de envio reconhecidos pelo sistema (mesmos do form de campanha).
+# Mantém em sync com wpp_campanha_form.html (select#modo_envio).
+_MODOS_ENVIO = [
+    ("atraso",            "Cobrança por atraso"),
+    ("pre_vencimento",    "Lembrete antes do vencimento"),
+    ("clientes_admissao", "Campanha de clientes (admissão)"),
+    ("cliente_novo",      "Cliente Novo — Seja Bem-Vindo!"),
+    ("falta_medico",      "Falta de Médico (disparo via API)"),
+]
+
+
+@wpp_bp.get("/templates")
+def templates_config_page():
+    email, is_admin = _check_auth()
+    if not email:
+        return ('', 401)
+    if not is_admin:
+        return ('Acesso restrito a administradores.', 403)
+
+    # Templates da Meta (todos, mesmo os escondidos)
+    todos = _fetch_templates()
+    todos_min = [{
+        "name":     t["name"],
+        "status":   t.get("status", ""),
+        "language": t.get("language", ""),
+    } for t in todos]
+
+    config_atual = db.listar_templates_config()
+    defaults     = db.modo_template_defaults()
+
+    return render_template(
+        "wpp_templates_config.html",
+        USER_EMAIL=email, USER_IS_ADMIN=is_admin,
+        templates=todos_min,
+        config_atual=config_atual,
+        defaults=defaults,
+        modos=_MODOS_ENVIO,
+    )
+
+
+@wpp_bp.post("/templates/save")
+def templates_config_save():
+    email, is_admin = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    if not is_admin:
+        return jsonify({"error": "forbidden"}), 403
+
+    data = request.get_json(force=True) or {}
+    visiveis = data.get("visiveis") or []
+    defaults = data.get("defaults") or {}
+
+    # `todos_conhecidos` = todos os nomes vindos da Meta — garante que ao
+    # desmarcar um template, ele grava visivel=0 (em vez de só sumir).
+    todos_meta = [t["name"] for t in _fetch_templates()]
+
+    # Filtra defaults pra só modos válidos e templates conhecidos
+    modos_validos = {m for m, _ in _MODOS_ENVIO}
+    defaults_clean = {
+        m: t for m, t in defaults.items()
+        if m in modos_validos and t and t in todos_meta
+    }
+
+    db.salvar_templates_config(visiveis, todos_meta, defaults_clean, email)
+    db.registrar_auditoria(
+        email, "TEMPLATES_CONFIG", None, "config de templates",
+        {"qtd_visiveis": len(visiveis), "defaults": defaults_clean},
+    )
+    return jsonify({"ok": True, "qtd_visiveis": len(visiveis),
+                    "qtd_defaults": len(defaults_clean)})
+
+
+@wpp_bp.get("/api/modo_defaults")
+def api_modo_defaults():
+    """Retorna {modo_envio: template_padrao} pro JS do form de campanha
+    preencher automaticamente quando o operador escolhe um tipo de envio."""
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    return jsonify({"defaults": db.modo_template_defaults()})
 
 
 @wpp_bp.get("/desculpas")

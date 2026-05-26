@@ -153,6 +153,26 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_naoenviados_camp   ON nao_enviados(campanha_id);
         CREATE INDEX IF NOT EXISTS idx_naoenviados_rodada ON nao_enviados(rodada_em);
 
+        -- Configuração dos templates Meta: quais aparecem no dropdown do form
+        -- de campanha (visivel=1) e qual é o padrão de cada modo_envio (1 por
+        -- modo, em modo_template_default). Evita confusão quando a Meta tem
+        -- 30+ templates parecidos — operador marca só os que usa.
+        CREATE TABLE IF NOT EXISTS templates_config (
+            template_name   TEXT    PRIMARY KEY,
+            visivel         INTEGER NOT NULL DEFAULT 1,
+            atualizado_em   TEXT    NOT NULL,
+            atualizado_por  TEXT
+        );
+
+        -- Default por modo_envio. Não obrigatório — quando o operador escolhe o
+        -- modo no form, o template é pré-selecionado mas pode ser trocado.
+        CREATE TABLE IF NOT EXISTS modo_template_default (
+            modo_envio      TEXT    PRIMARY KEY,
+            template_name   TEXT    NOT NULL,
+            atualizado_em   TEXT    NOT NULL,
+            atualizado_por  TEXT
+        );
+
         -- Pedidos de desculpa enviados manualmente (por operador via chat externo)
         -- após um envio errado de campanha. Usada pra tela /wpp/<id>/respondentes
         -- não mostrar de novo o envio que já foi atendido. UNIQUE por envio garante
@@ -747,6 +767,73 @@ def desculpas_por_campanha(campanha_id: int) -> dict[int, dict]:
             (campanha_id,),
         ).fetchall()
     return {r["envio_id"]: dict(r) for r in rows}
+
+
+# ---------------------------------------------------------------------------
+# TEMPLATES — config de visibilidade no dropdown + padrão por modo_envio
+# ---------------------------------------------------------------------------
+
+def listar_templates_config() -> dict[str, dict]:
+    """Retorna {template_name: {visivel: bool, atualizado_em, atualizado_por}}.
+    Só inclui templates explicitamente configurados — quando ainda não houver
+    config nenhuma, devolve dict vazio e o front trata como 'tudo visível'."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT template_name, visivel, atualizado_em, atualizado_por "
+            "FROM templates_config"
+        ).fetchall()
+    return {r["template_name"]: dict(r) for r in rows}
+
+
+def templates_visiveis() -> set[str]:
+    """Conjunto de templates marcados como visiveis. Vazio = sem config →
+    front mostra tudo (fallback compatível com instalações antigas)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT template_name FROM templates_config WHERE visivel=1"
+        ).fetchall()
+    return {r["template_name"] for r in rows}
+
+
+def modo_template_defaults() -> dict[str, str]:
+    """Retorna {modo_envio: template_padrao} pra cada modo configurado."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT modo_envio, template_name FROM modo_template_default"
+        ).fetchall()
+    return {r["modo_envio"]: r["template_name"] for r in rows}
+
+
+def salvar_templates_config(visiveis: list[str], todos_conhecidos: list[str],
+                             modo_defaults: dict[str, str], usuario: str) -> None:
+    """Salva a configuração:
+    - Cada template em `todos_conhecidos` (vindos da Meta) tem seu registro
+      em templates_config com visivel=1 se aparece em `visiveis`, senão 0.
+      Isso garante idempotência: marcar/desmarcar grava sempre.
+    - modo_template_default é reescrito por completo (REPLACE INTO)."""
+    visiveis_set = set(visiveis)
+    now = _now_iso()
+    with get_conn() as conn:
+        for nome in todos_conhecidos:
+            conn.execute(
+                """INSERT INTO templates_config (template_name, visivel, atualizado_em, atualizado_por)
+                   VALUES (?,?,?,?)
+                   ON CONFLICT(template_name) DO UPDATE SET
+                     visivel=excluded.visivel,
+                     atualizado_em=excluded.atualizado_em,
+                     atualizado_por=excluded.atualizado_por""",
+                (nome, 1 if nome in visiveis_set else 0, now, usuario),
+            )
+        # Defaults: limpa os ausentes e regrava os presentes
+        conn.execute("DELETE FROM modo_template_default")
+        for modo, tpl in modo_defaults.items():
+            if tpl:
+                conn.execute(
+                    """INSERT INTO modo_template_default
+                       (modo_envio, template_name, atualizado_em, atualizado_por)
+                       VALUES (?,?,?,?)""",
+                    (modo, tpl, now, usuario),
+                )
 
 
 def contar_desculpas_por_campanha() -> dict[int, int]:

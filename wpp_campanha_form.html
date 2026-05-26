@@ -62,6 +62,7 @@
         <li class="nav-item"><a href="https://kpi.camim.com.br/index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home</p></a></li>
         <li class="nav-item"><a href="https://kpi.camim.com.br/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
         <li class="nav-item"><a href="/wpp" class="nav-link active"><i class="nav-icon fab fa-whatsapp"></i><p>Campanhas</p></a></li>
+        <li class="nav-item"><a href="/wpp/templates" class="nav-link"><i class="nav-icon fas fa-file-alt"></i><p>Templates</p></a></li>
         <li class="nav-item"><a href="/wpp/dashboard" class="nav-link"><i class="nav-icon fas fa-chart-line"></i><p>Dashboard</p></a></li>
         <li class="nav-item"><a href="/wpp/desculpas" class="nav-link"><i class="nav-icon fas fa-heart-broken"></i><p>Pedido de Desculpas</p></a></li>
         <li class="nav-item"><a href="/wpp/auditoria" class="nav-link"><i class="nav-icon fas fa-history"></i><p>Auditoria</p></a></li>
@@ -808,6 +809,7 @@ if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
 
 // ── Templates ────────────────────────────────────────────────────────────────
 let _templates = [];
+let _modo_defaults = {};  // { atraso: 'mensalidade_vencida', pre_vencimento: ..., ... }
 const TEMPLATE_ATUAL = "{{ campanha.template if campanha else 'notificacao_de_fatura' }}";
 const MODO_ENVIO_ATUAL = "{{ campanha.modo_envio if campanha and campanha.modo_envio else 'atraso' }}";
 const QUEUE_ID_ATUAL   = "{{ campanha.queue_id if campanha and campanha.queue_id else '' }}";
@@ -1487,11 +1489,15 @@ document.addEventListener('DOMContentLoaded', () => {
     carregarTodasOpcoes();
   }
 
-  // Templates
-  fetch('/wpp/api/templates')
-    .then(r => r.json())
-    .then(data => {
-      _templates = data.templates || [];
+  // Templates — filtrados pelos visíveis configurados em /wpp/templates
+  // (fallback: se nenhum estiver configurado, devolve todos)
+  // + carrega mapa de defaults por modo_envio pra auto-preencher
+  Promise.all([
+    fetch('/wpp/api/templates?only_visible=1').then(r => r.json()),
+    fetch('/wpp/api/modo_defaults').then(r => r.json()).catch(() => ({defaults: {}})),
+  ]).then(([tData, mData]) => {
+      _templates = tData.templates || [];
+      _modo_defaults = mData.defaults || {};
       document.getElementById('templates-loading').style.display = 'none';
       if (!_templates.length) {
         document.getElementById('templates-erro').style.display = 'block';
@@ -1506,6 +1512,34 @@ document.addEventListener('DOMContentLoaded', () => {
         sel.appendChild(opt);
       });
       document.getElementById('templates-container').style.display = 'block';
+
+      // Auto-preencher template padrão ao trocar modo_envio (não obrigatório:
+      // o usuário pode escolher outro depois).
+      const modoSel = document.getElementById('modo_envio');
+      if (modoSel) {
+        modoSel.addEventListener('change', () => {
+          const novoModo = modoSel.value;
+          const padrao = _modo_defaults[novoModo];
+          if (padrao) {
+            // só troca se o template existir no dropdown (visível)
+            const opt = Array.from(sel.options).find(o => o.value === padrao);
+            if (opt) {
+              sel.value = padrao;
+              mostrarPreview();
+            }
+          }
+        });
+      }
+
+      // Nova campanha (sem template salvo): aplica padrão do modo atual
+      if (!TEMPLATE_ATUAL && modoSel) {
+        const padrao = _modo_defaults[modoSel.value];
+        if (padrao) {
+          const opt = Array.from(sel.options).find(o => o.value === padrao);
+          if (opt) sel.value = padrao;
+        }
+      }
+
       mostrarPreview();
     })
     .catch(() => {
