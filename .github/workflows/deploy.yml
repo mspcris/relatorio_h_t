@@ -503,16 +503,27 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
+        # Best-effort: o user `deploy` não tem NOPASSWD pra `sudo -u www-data`.
+        # Se sudo -n falhar, o step apenas emite WARN — o operador roda manualmente
+        # na VM uma vez (ou quando requirements.txt mudar):
+        #   sudo -u www-data /opt/agenda_f3/venv/bin/pip install -r /opt/agenda_f3/requirements.txt
+        # Sem esse fix, qualquer push falhava o deploy inteiro e os steps de restart
+        # nunca rodavam — bloqueando atualização dos outros serviços (commit anterior
+        # 0e1933b aplicou o mesmo padrão best-effort pro daemon-reload).
         run: |
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
             VENV=/opt/agenda_f3/venv
             if [ ! -d \"\$VENV\" ]; then
               echo 'Criando venv em /opt/agenda_f3/venv...'
-              sudo -u www-data python3 -m venv \"\$VENV\"
+              sudo -n -u www-data python3 -m venv \"\$VENV\" 2>/dev/null \
+                || echo 'WARN: criar venv requer password — rode manualmente: sudo -u www-data python3 -m venv /opt/agenda_f3/venv'
             fi
             if [ -d \"\$VENV\" ] && [ -f /opt/agenda_f3/requirements.txt ]; then
-              sudo -u www-data \$VENV/bin/pip install --quiet --upgrade pip
-              sudo -u www-data \$VENV/bin/pip install --quiet -r /opt/agenda_f3/requirements.txt
+              sudo -n -u www-data \$VENV/bin/pip install --quiet --upgrade pip 2>/dev/null \
+                || echo 'WARN: pip upgrade requer password — rode manualmente'
+              sudo -n -u www-data \$VENV/bin/pip install --quiet -r /opt/agenda_f3/requirements.txt 2>/dev/null \
+                && echo 'pip install agenda_f3 OK' \
+                || echo 'WARN: pip install requer password — rode manualmente: sudo -u www-data /opt/agenda_f3/venv/bin/pip install -r /opt/agenda_f3/requirements.txt'
             else
               echo 'WARN: venv ou requirements.txt em /opt/agenda_f3 ausente'
             fi
