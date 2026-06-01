@@ -77,6 +77,13 @@ except Exception as _e:
     import logging
     logging.getLogger(__name__).error("fin_despesas_bp não carregado: %s", _e)
 
+try:
+    from acesso_avancado_routes import acesso_avancado_bp
+    app.register_blueprint(acesso_avancado_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("acesso_avancado_bp não carregado: %s", _e)
+
 PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
 
 # Mapeamento page_key → template para controle de acesso por página
@@ -139,6 +146,13 @@ _TEMPLATE_TO_PAGINA = {
     "medico_falta.html":                "medico_falta",
     "medico_falta":                     "medico_falta",
     "/medico_falta":                    "medico_falta",
+    # KPI Acesso Avançado — page_key PROPOSITALMENTE fora de public.servicos:
+    # como nenhum usuário consegue tê-la em `paginas`, render_protected_page
+    # devolve 403 a todo mundo que NÃO tem all_pages. Não adicionar ao catálogo
+    # de serviços (senão o admin poderia liberar avulso, violando a regra).
+    "acesso_avancado.html":             "acesso_avancado",
+    "acesso_avancado":                  "acesso_avancado",
+    "/acesso_avancado":                 "acesso_avancado",
     # Itens de mais_servicos.html (internos)
     "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
     "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",
@@ -1320,6 +1334,13 @@ def h_medico_novo():
 @app.get('/medico_falta.html')
 def h_medico_falta():
     return render_protected_page("medico_falta.html")
+
+@app.get('/acesso_avancado')
+@app.get('/acesso_avancado.html')
+def h_acesso_avancado():
+    # Restrito a all_pages: o page_key 'acesso_avancado' nunca está em paginas
+    # de usuários comuns, então render_protected_page já devolve 403 pra eles.
+    return render_protected_page("acesso_avancado.html")
 
 @app.get('/higienizacao.html')
 def h_higienizacao():

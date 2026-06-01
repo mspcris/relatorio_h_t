@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>CAMIM — Acesso Avançado (permissões sensíveis)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="kpi-id" content="acesso_avancado" />
+  <meta name="kpi-title" content="Acesso Avançado" />
+  <meta name="kpi-description" content="Auditoria das flags sensíveis de sis_usuario por posto: acesso avançado (superusuário), visão de salários e liberação de agenda." />
+  <meta name="kpi-category" content="Segurança" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&family=Inter:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="/css/style2.css?v=20260501">
+  <link rel="stylesheet" href="/css/style_kpi.css?v=20260501">
+  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+  <style>
+    body { font-family: "Source Sans Pro", system-ui, -apple-system, sans-serif; }
+    .posto-card .card-header { background:#343a40; color:#fff; }
+    .posto-card .badge-count { font-size:.8rem; }
+    table.grid-acesso { font-size:.82rem; }
+    table.grid-acesso thead th {
+      position:sticky; top:0; background:#f4f6f9; z-index:2;
+      vertical-align:middle; white-space:nowrap;
+    }
+    table.grid-acesso th.rot {
+      writing-mode:vertical-rl; transform:rotate(180deg);
+      height:150px; text-align:left; font-size:.78rem; font-weight:600;
+      padding:6px 2px;
+    }
+    table.grid-acesso th.rot.critico { color:#b30000; }
+    table.grid-acesso td.flag { text-align:center; width:46px; }
+    table.grid-acesso td.flag.on  { background:#fde2e2; }
+    table.grid-acesso td.flag.on.critico { background:#f5b7b1; }
+    table.grid-acesso td.flag i.on  { color:#c0392b; }
+    table.grid-acesso td.flag i.off { color:#dfe3e6; }
+    table.grid-acesso tr.desativado { opacity:.5; }
+    table.grid-acesso tr.tem-critico td.nome { font-weight:700; }
+    .legenda dt { color:#c0392b; }
+    .legenda dd { margin-bottom:.5rem; font-size:.85rem; }
+    .col-usuario { font-family:'Courier New', monospace; font-size:.8rem; color:#555; }
+    .filtros .custom-control-label { cursor:pointer; }
+    #loadingBar { display:none; height:3px; background:#c0392b; animation:barpulse 1s infinite; }
+    @keyframes barpulse { 0%{opacity:.3} 50%{opacity:1} 100%{opacity:.3} }
+    .resumo-chip { display:inline-block; padding:2px 8px; border-radius:12px; background:#f1f3f5; margin:2px 4px 2px 0; font-size:.8rem; }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini text-sm">
+<div class="wrapper">
+
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav"><li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li></ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+      <span class="ml-2">Quem tem saúde é mais feliz!</span>
+    </span>
+  </nav>
+
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a></li>
+          <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+          <li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline">
+              <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                <i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p>
+              </button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="content-wrapper">
+    <section class="content p-3">
+
+      <div class="card mb-3">
+        <div class="card-body">
+          <h2 class="mb-1"><i class="fas fa-user-shield mr-2 text-danger"></i>Acesso Avançado — permissões sensíveis</h2>
+          <p class="lead mb-0">Quem, em cada posto, pode ver salários, criar superusuários e liberar agenda médica. Tudo vem de <code>sis_usuario</code>.</p>
+        </div>
+      </div>
+
+      <div id="loadingBar"></div>
+
+      <!-- Legenda -->
+      <div class="card mb-3">
+        <div class="card-header"><strong><i class="fas fa-info-circle mr-1"></i>O que cada permissão significa</strong></div>
+        <div class="card-body legenda">
+          <dl class="row mb-0">
+            <dt class="col-sm-4">Acesso Avançado</dt>
+            <dd class="col-sm-8">Aba que <strong>cria superusuários</strong> e libera/bloqueia qualquer opção do sistema. Só superusuários deveriam ter.</dd>
+            <dt class="col-sm-4">Salário (cad. funcionário)</dt>
+            <dd class="col-sm-8">Vê o valor do salário no cadastro de funcionário.</dd>
+            <dt class="col-sm-4">Salário func. (Contas a Pagar)</dt>
+            <dd class="col-sm-8">Vê o salário dos funcionários no filtro do Contas a Pagar.</dd>
+            <dt class="col-sm-4">Salário médico</dt>
+            <dd class="col-sm-8">Vê o salário do médico.</dd>
+            <dt class="col-sm-4">Limpar Data Fim (F3)</dt>
+            <dd class="col-sm-8">Limpa a Data Fim da agenda médica pelo F3, liberando a agenda.</dd>
+            <dt class="col-sm-4">Limpar Data Fim (Ctrl-Q)</dt>
+            <dd class="col-sm-8">Limpa a Data Fim pelo cadastro de especialidade (Ctrl-Q).</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- Filtros -->
+      <div class="card mb-3">
+        <div class="card-body filtros">
+          <div class="row align-items-center">
+            <div class="col-md-4 mb-2">
+              <label class="mb-1"><i class="fas fa-search mr-1"></i>Buscar por nome ou login</label>
+              <input id="fBusca" type="text" class="form-control form-control-sm" placeholder="Digite parte do nome ou usuário...">
+            </div>
+            <div class="col-md-4 mb-2">
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="fSoComAcesso" checked>
+                <label class="custom-control-label" for="fSoComAcesso">Só quem tem alguma permissão sensível</label>
+              </div>
+              <div class="custom-control custom-switch mt-2">
+                <input type="checkbox" class="custom-control-input" id="fIncluirDesativados">
+                <label class="custom-control-label" for="fIncluirDesativados">Incluir usuários desativados</label>
+              </div>
+            </div>
+            <div class="col-md-4 mb-2 text-md-right">
+              <button id="btnRecarregar" class="btn btn-outline-secondary btn-sm"><i class="fas fa-sync-alt mr-1"></i>Recarregar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="alertBox" class="alert alert-danger" style="display:none;"></div>
+      <div id="postosContainer"></div>
+
+    </section>
+  </div>
+
+  <footer class="main-footer text-sm">
+    <strong>CAMIM</strong> — Acesso Avançado · somente leitura
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var FLAGS = [];            // [{key,label}]
+  var DATA  = {};            // posto -> [usuarios]
+  var POSTOS = [];           // [{letra,nome}]
+
+  // Flag mais crítica (superusuário) — destaque extra
+  var CRITICO = "verAbaAcessoAvancado";
+
+  var el = function (id) { return document.getElementById(id); };
+  var loading = el("loadingBar");
+
+  function showAlert(msg) {
+    var a = el("alertBox");
+    a.textContent = msg;
+    a.style.display = "block";
+  }
+  function clearAlert() { el("alertBox").style.display = "none"; }
+
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function fetchJSON(url) {
+    return fetch(url, { credentials: "same-origin" }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok) { throw new Error(j && j.error ? j.error : ("HTTP " + r.status)); }
+        return j;
+      });
+    });
+  }
+
+  // ---- filtros ----
+  function getFiltros() {
+    return {
+      busca: (el("fBusca").value || "").trim().toLowerCase(),
+      soComAcesso: el("fSoComAcesso").checked,
+      incluirDesativados: el("fIncluirDesativados").checked,
+    };
+  }
+
+  function passaFiltro(u, f) {
+    if (!f.incluirDesativados && u.desativado) { return false; }
+    if (f.soComAcesso && !u.tem_algum) { return false; }
+    if (f.busca) {
+      var hay = (u.nome + " " + u.usuario).toLowerCase();
+      if (hay.indexOf(f.busca) === -1) { return false; }
+    }
+    return true;
+  }
+
+  // ---- render ----
+  function headerCols() {
+    var ths = "";
+    for (var i = 0; i < FLAGS.length; i++) {
+      var fl = FLAGS[i];
+      var crit = fl.key === CRITICO ? " critico" : "";
+      ths += '<th class="rot' + crit + '" title="' + esc(fl.label) + '">' + esc(fl.label) + "</th>";
+    }
+    return ths;
+  }
+
+  function renderPosto(posto) {
+    var info = POSTOS.filter(function (p) { return p.letra === posto; })[0] || { letra: posto, nome: posto };
+    var usuarios = DATA[posto] || [];
+    var f = getFiltros();
+    var vis = usuarios.filter(function (u) { return passaFiltro(u, f); });
+
+    // contadores por flag (sobre os ativos, independente do filtro de busca)
+    var counts = {};
+    FLAGS.forEach(function (fl) { counts[fl.key] = 0; });
+    var nSuper = 0;
+    usuarios.forEach(function (u) {
+      if (u.desativado) { return; }
+      FLAGS.forEach(function (fl) { if (u.flags[fl.key]) { counts[fl.key]++; } });
+      if (u.flags[CRITICO]) { nSuper++; }
+    });
+
+    var chips = "";
+    FLAGS.forEach(function (fl) {
+      var crit = fl.key === CRITICO ? ' style="background:#f5b7b1;font-weight:700"' : "";
+      chips += '<span class="resumo-chip"' + crit + '>' + esc(fl.label) + ": <strong>" + counts[fl.key] + "</strong></span>";
+    });
+
+    var rows = "";
+    if (vis.length === 0) {
+      rows = '<tr><td colspan="' + (FLAGS.length + 2) + '" class="text-center text-muted py-3">Nenhum usuário no filtro atual.</td></tr>';
+    } else {
+      vis.forEach(function (u) {
+        var temCrit = u.flags[CRITICO];
+        var cls = (u.desativado ? "desativado " : "") + (temCrit ? "tem-critico" : "");
+        var tds = "";
+        FLAGS.forEach(function (fl) {
+          var on = u.flags[fl.key];
+          var crit = fl.key === CRITICO ? " critico" : "";
+          var icon = on
+            ? '<i class="fas fa-check on" title="SIM"></i>'
+            : '<i class="fas fa-minus off" title="não"></i>';
+          tds += '<td class="flag' + (on ? " on" + crit : "") + '">' + icon + "</td>";
+        });
+        var badgeDes = u.desativado ? ' <span class="badge badge-secondary">desativado</span>' : "";
+        rows += '<tr class="' + cls + '">'
+          + '<td class="nome">' + esc(u.nome) + badgeDes
+          + '<div class="col-usuario">' + esc(u.usuario) + " · id " + u.idUsuario + "</div></td>"
+          + tds + "</tr>";
+      });
+    }
+
+    var html = ''
+      + '<div class="card posto-card mb-3" data-posto="' + posto + '">'
+      + '  <div class="card-header d-flex justify-content-between align-items-center">'
+      + '    <strong><i class="fas fa-clinic-medical mr-1"></i>' + esc(info.nome) + " (" + esc(info.letra) + ")</strong>"
+      + '    <span class="badge ' + (nSuper > 0 ? "badge-danger" : "badge-light") + ' badge-count">'
+      + '       <i class="fas fa-user-shield mr-1"></i>' + nSuper + " com Acesso Avançado</span>"
+      + "  </div>"
+      + '  <div class="card-body p-2">'
+      + '    <div class="mb-2">' + chips + "</div>"
+      + '    <div class="table-responsive">'
+      + '      <table class="table table-sm table-hover grid-acesso mb-0">'
+      + "        <thead><tr><th>Usuário</th>" + headerCols() + "</tr></thead>"
+      + "        <tbody>" + rows + "</tbody>"
+      + "      </table>"
+      + "    </div>"
+      + "  </div>"
+      + "</div>";
+    return html;
+  }
+
+  function renderTudo() {
+    var cont = el("postosContainer");
+    var html = "";
+    POSTOS.forEach(function (p) {
+      if (DATA[p.letra] !== undefined) { html += renderPosto(p.letra); }
+    });
+    cont.innerHTML = html || '<div class="text-muted">Carregando...</div>';
+  }
+
+  function carregar() {
+    clearAlert();
+    loading.style.display = "block";
+    DATA = {};
+    el("postosContainer").innerHTML = '<div class="text-muted p-2">Carregando postos...</div>';
+
+    fetchJSON("/api/acesso_avancado/postos").then(function (j) {
+      FLAGS = j.flags || [];
+      POSTOS = j.postos || [];
+      if (POSTOS.length === 0) {
+        loading.style.display = "none";
+        el("postosContainer").innerHTML = '<div class="alert alert-warning">Nenhum posto liberado no seu acesso.</div>';
+        return;
+      }
+      // Renderiza placeholders na ordem e busca cada posto em paralelo.
+      var pendentes = POSTOS.length;
+      POSTOS.forEach(function (p) {
+        fetchJSON("/api/acesso_avancado/data?posto=" + encodeURIComponent(p.letra))
+          .then(function (d) {
+            DATA[p.letra] = d.usuarios || [];
+          })
+          .catch(function (e) {
+            DATA[p.letra] = [];
+            showAlert("Posto " + p.letra + ": " + e.message);
+          })
+          .then(function () {
+            pendentes--;
+            renderTudo();
+            if (pendentes === 0) { loading.style.display = "none"; }
+          });
+      });
+    }).catch(function (e) {
+      loading.style.display = "none";
+      showAlert("Falha ao carregar: " + e.message);
+    });
+  }
+
+  // listeners
+  el("fBusca").addEventListener("input", renderTudo);
+  el("fSoComAcesso").addEventListener("change", renderTudo);
+  el("fIncluirDesativados").addEventListener("change", renderTudo);
+  el("btnRecarregar").addEventListener("click", carregar);
+
+  carregar();
+})();
+</script>
+</body>
+</html>
