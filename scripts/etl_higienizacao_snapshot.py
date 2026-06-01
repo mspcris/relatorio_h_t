@@ -28,6 +28,9 @@ LOG_FILE   = os.path.join(LOG_DIR, f"export_higienizacao_{datetime.now().strftim
 OUT_PATH   = os.path.join(JSON_DIR, "higienizacao_snapshot.json")
 
 SSH_HOST   = os.getenv("HIGIENIZACAO_DB_SSH", "root@217.216.85.81")
+# Porta do sshd remoto. Mudou de 22 → 2222 em ~24/04/2026; o ETL ficou parado
+# porque continuava tentando a 22 (timeout). Configurável via env.
+SSH_PORT   = os.getenv("HIGIENIZACAO_DB_SSH_PORT", "2222")
 DB_NAME    = os.getenv("HIGIENIZACAO_DB_NAME", "gestao_higienizacao")
 
 
@@ -84,10 +87,11 @@ def run_sql(sql: str) -> list[str]:
     p = subprocess.run(
         [
             "ssh",
+            "-p", SSH_PORT,
             "-o", "BatchMode=yes",
             "-o", "StrictHostKeyChecking=no",
             "-o", "UserKnownHostsFile=/dev/null",
-            "-o", "ConnectTimeout=10",
+            "-o", "ConnectTimeout=15",
             SSH_HOST,
             remote_cmd,
         ],
@@ -282,7 +286,7 @@ def main():
     logger.write("=" * 60)
     logger.write("ETL HIGIENIZAÇÃO — Snapshot Analítico")
     logger.write("=" * 60)
-    logger.write(f"  SSH: {SSH_HOST}")
+    logger.write(f"  SSH: {SSH_HOST} (porta {SSH_PORT})")
     logger.write(f"  DB:  {DB_NAME}")
     logger.write(f"  Out: {OUT_PATH}")
     logger.write("")
