@@ -25,19 +25,36 @@
 
   <style>
     body { font-family: "Source Sans Pro", system-ui, -apple-system, sans-serif; }
+
+    /* Banner de aviso de acesso restrito */
+    .aviso-restrito {
+      background:#fff3cd; border:2px solid #ffc107; color:#664d03;
+      border-radius:8px; padding:12px 16px; font-weight:700; font-size:1rem;
+      display:flex; align-items:center; gap:10px;
+    }
+    .aviso-restrito i { color:#b8860b; font-size:1.3rem; }
+
+    /* Seletor de posto (pílulas por letra) */
+    .posto-pills .nav-link {
+      border:1px solid #ced4da; margin:3px; min-width:42px; text-align:center;
+      font-weight:700; color:#343a40; background:#fff; border-radius:6px; padding:6px 10px;
+    }
+    .posto-pills .nav-link:hover { background:#e9ecef; }
+    .posto-pills .nav-link.active { background:#28a745; border-color:#28a745; color:#fff; }
+
+    /* Grade */
     .posto-card .card-header { background:#343a40; color:#fff; }
-    .posto-card .badge-count { font-size:.8rem; }
-    table.grid-acesso { font-size:.82rem; }
-    table.grid-acesso thead th {
-      position:sticky; top:0; background:#f4f6f9; z-index:2;
-      vertical-align:middle; white-space:nowrap;
+    table.grid-acesso { font-size:.84rem; }
+    table.grid-acesso thead th { background:#f4f6f9; vertical-align:bottom; }
+    table.grid-acesso thead th.rot {
+      height:118px; width:46px; padding:0 0 6px 0; border-bottom:2px solid #dee2e6;
     }
-    table.grid-acesso th.rot {
-      writing-mode:vertical-rl; transform:rotate(180deg);
-      height:150px; text-align:left; font-size:.78rem; font-weight:600;
-      padding:6px 2px;
+    table.grid-acesso thead th.rot span {
+      display:inline-block; white-space:nowrap; line-height:1;
+      transform:rotate(-45deg); transform-origin:left bottom;
+      margin-left:55%; font-size:.78rem; font-weight:600;
     }
-    table.grid-acesso th.rot.critico { color:#b30000; }
+    table.grid-acesso thead th.rot.critico span { color:#b30000; }
     table.grid-acesso td.flag { text-align:center; width:46px; }
     table.grid-acesso td.flag.on  { background:#fde2e2; }
     table.grid-acesso td.flag.on.critico { background:#f5b7b1; }
@@ -48,10 +65,13 @@
     .legenda dt { color:#c0392b; }
     .legenda dd { margin-bottom:.5rem; font-size:.85rem; }
     .col-usuario { font-family:'Courier New', monospace; font-size:.8rem; color:#555; }
-    .filtros .custom-control-label { cursor:pointer; }
+    .resumo-chip { display:inline-block; padding:3px 10px; border-radius:12px; background:#f1f3f5; margin:2px 4px 2px 0; font-size:.8rem; cursor:pointer; border:1px solid transparent; user-select:none; }
+    .resumo-chip:hover { background:#e2e6ea; }
+    .resumo-chip.ativo { background:#c0392b; color:#fff; border-color:#922b21; }
+    .resumo-chip.ativo strong { color:#fff; }
+    .filtro-flag-hint { font-size:.78rem; color:#6c757d; margin-bottom:6px; }
     #loadingBar { display:none; height:3px; background:#c0392b; animation:barpulse 1s infinite; }
     @keyframes barpulse { 0%{opacity:.3} 50%{opacity:1} 100%{opacity:.3} }
-    .resumo-chip { display:inline-block; padding:2px 8px; border-radius:12px; background:#f1f3f5; margin:2px 4px 2px 0; font-size:.8rem; }
   </style>
 </head>
 
@@ -88,6 +108,12 @@
   <div class="content-wrapper">
     <section class="content p-3">
 
+      <!-- Aviso de acesso restrito (amarelo destacado) -->
+      <div class="aviso-restrito mb-3">
+        <i class="fas fa-lock"></i>
+        <span>Somente visualiza esta página quem tem acesso a todas as páginas do projeto.</span>
+      </div>
+
       <div class="card mb-3">
         <div class="card-body">
           <h2 class="mb-1"><i class="fas fa-user-shield mr-2 text-danger"></i>Acesso Avançado — permissões sensíveis</h2>
@@ -104,15 +130,15 @@
           <dl class="row mb-0">
             <dt class="col-sm-4">Acesso Avançado</dt>
             <dd class="col-sm-8">Aba que <strong>cria superusuários</strong> e libera/bloqueia qualquer opção do sistema. Só superusuários deveriam ter.</dd>
-            <dt class="col-sm-4">Salário (cad. funcionário)</dt>
+            <dt class="col-sm-4">Salário func.</dt>
             <dd class="col-sm-8">Vê o valor do salário no cadastro de funcionário.</dd>
-            <dt class="col-sm-4">Salário func. (Contas a Pagar)</dt>
+            <dt class="col-sm-4">Salário C. Pagar</dt>
             <dd class="col-sm-8">Vê o salário dos funcionários no filtro do Contas a Pagar.</dd>
             <dt class="col-sm-4">Salário médico</dt>
             <dd class="col-sm-8">Vê o salário do médico.</dd>
-            <dt class="col-sm-4">Limpar Data Fim (F3)</dt>
+            <dt class="col-sm-4">Data Fim F3</dt>
             <dd class="col-sm-8">Limpa a Data Fim da agenda médica pelo F3, liberando a agenda.</dd>
-            <dt class="col-sm-4">Limpar Data Fim (Ctrl-Q)</dt>
+            <dt class="col-sm-4">Data Fim Ctrl-Q</dt>
             <dd class="col-sm-8">Limpa a Data Fim pelo cadastro de especialidade (Ctrl-Q).</dd>
           </dl>
         </div>
@@ -122,7 +148,7 @@
       <div class="card mb-3">
         <div class="card-body filtros">
           <div class="row align-items-center">
-            <div class="col-md-4 mb-2">
+            <div class="col-md-5 mb-2">
               <label class="mb-1"><i class="fas fa-search mr-1"></i>Buscar por nome ou login</label>
               <input id="fBusca" type="text" class="form-control form-control-sm" placeholder="Digite parte do nome ou usuário...">
             </div>
@@ -136,15 +162,23 @@
                 <label class="custom-control-label" for="fIncluirDesativados">Incluir usuários desativados</label>
               </div>
             </div>
-            <div class="col-md-4 mb-2 text-md-right">
+            <div class="col-md-3 mb-2 text-md-right">
               <button id="btnRecarregar" class="btn btn-outline-secondary btn-sm"><i class="fas fa-sync-alt mr-1"></i>Recarregar</button>
             </div>
           </div>
         </div>
       </div>
 
+      <!-- Seletor de posto (um por vez) -->
+      <div class="card mb-3">
+        <div class="card-body py-2">
+          <span class="font-weight-bold mr-2"><i class="fas fa-clinic-medical mr-1"></i>Posto:</span>
+          <ul id="postoPills" class="nav posto-pills d-inline-flex" style="vertical-align:middle"></ul>
+        </div>
+      </div>
+
       <div id="alertBox" class="alert alert-danger" style="display:none;"></div>
-      <div id="postosContainer"></div>
+      <div id="gridContainer"></div>
 
     </section>
   </div>
@@ -158,21 +192,28 @@
 (function () {
   "use strict";
 
-  var FLAGS = [];            // [{key,label}]
-  var DATA  = {};            // posto -> [usuarios]
-  var POSTOS = [];           // [{letra,nome}]
+  var FLAGS = [];        // [{key,label}]
+  var POSTOS = [];       // [{letra,nome}]
+  var CACHE = {};        // posto -> [usuarios]
+  var ATUAL = null;      // letra do posto selecionado
+  var FLAG_FILTRO = null; // se setado, mostra só quem tem essa permissão
 
-  // Flag mais crítica (superusuário) — destaque extra
   var CRITICO = "verAbaAcessoAvancado";
+
+  // Rótulos curtos para os cabeçalhos inclinados (a legenda explica em detalhe)
+  var HEADER_SHORT = {
+    "verAbaAcessoAvancado":                    "Acesso Avançado",
+    "FuncionarioVerSalario":                   "Salário func.",
+    "verPlanoDeContaSalarioContasPagar":       "Salário C. Pagar",
+    "verPlanoDeContaSalarioContasPagarMedico": "Salário médico",
+    "AcessoLimparDataFim":                     "Data Fim F3",
+    "EspecialidadeAlterarDataFim":             "Data Fim Ctrl-Q",
+  };
 
   var el = function (id) { return document.getElementById(id); };
   var loading = el("loadingBar");
 
-  function showAlert(msg) {
-    var a = el("alertBox");
-    a.textContent = msg;
-    a.style.display = "block";
-  }
+  function showAlert(msg) { var a = el("alertBox"); a.textContent = msg; a.style.display = "block"; }
   function clearAlert() { el("alertBox").style.display = "none"; }
 
   function esc(s) {
@@ -189,17 +230,18 @@
     });
   }
 
-  // ---- filtros ----
   function getFiltros() {
     return {
       busca: (el("fBusca").value || "").trim().toLowerCase(),
       soComAcesso: el("fSoComAcesso").checked,
       incluirDesativados: el("fIncluirDesativados").checked,
+      flagFiltro: FLAG_FILTRO,
     };
   }
 
   function passaFiltro(u, f) {
     if (!f.incluirDesativados && u.desativado) { return false; }
+    if (f.flagFiltro && !u.flags[f.flagFiltro]) { return false; }
     if (f.soComAcesso && !u.tem_algum) { return false; }
     if (f.busca) {
       var hay = (u.nome + " " + u.usuario).toLowerCase();
@@ -208,24 +250,31 @@
     return true;
   }
 
-  // ---- render ----
   function headerCols() {
     var ths = "";
     for (var i = 0; i < FLAGS.length; i++) {
       var fl = FLAGS[i];
       var crit = fl.key === CRITICO ? " critico" : "";
-      ths += '<th class="rot' + crit + '" title="' + esc(fl.label) + '">' + esc(fl.label) + "</th>";
+      var lbl = HEADER_SHORT[fl.key] || fl.label;
+      ths += '<th class="rot' + crit + '" title="' + esc(fl.label) + '"><span>' + esc(lbl) + "</span></th>";
     }
     return ths;
   }
 
-  function renderPosto(posto) {
-    var info = POSTOS.filter(function (p) { return p.letra === posto; })[0] || { letra: posto, nome: posto };
-    var usuarios = DATA[posto] || [];
+  function renderGrid() {
+    var cont = el("gridContainer");
+    if (!ATUAL) { cont.innerHTML = ""; return; }
+    var info = POSTOS.filter(function (p) { return p.letra === ATUAL; })[0] || { letra: ATUAL, nome: ATUAL };
+    var usuarios = CACHE[ATUAL];
+
+    if (usuarios === undefined) {
+      cont.innerHTML = '<div class="text-muted p-3"><i class="fas fa-spinner fa-spin mr-2"></i>Carregando posto ' + esc(info.nome) + "...</div>";
+      return;
+    }
+
     var f = getFiltros();
     var vis = usuarios.filter(function (u) { return passaFiltro(u, f); });
 
-    // contadores por flag (sobre os ativos, independente do filtro de busca)
     var counts = {};
     FLAGS.forEach(function (fl) { counts[fl.key] = 0; });
     var nSuper = 0;
@@ -237,13 +286,19 @@
 
     var chips = "";
     FLAGS.forEach(function (fl) {
-      var crit = fl.key === CRITICO ? ' style="background:#f5b7b1;font-weight:700"' : "";
-      chips += '<span class="resumo-chip"' + crit + '>' + esc(fl.label) + ": <strong>" + counts[fl.key] + "</strong></span>";
+      var ativo = FLAG_FILTRO === fl.key;
+      var critBase = (fl.key === CRITICO && !ativo) ? ' style="background:#f5b7b1;font-weight:700"' : "";
+      chips += '<span class="resumo-chip' + (ativo ? " ativo" : "") + '" data-flag="' + esc(fl.key) + '"'
+        + ' title="Clique para ver só quem tem: ' + esc(fl.label) + '"' + critBase + '>'
+        + esc(HEADER_SHORT[fl.key] || fl.label) + ": <strong>" + counts[fl.key] + "</strong></span>";
     });
+    var hint = FLAG_FILTRO
+      ? '<div class="filtro-flag-hint"><i class="fas fa-filter mr-1"></i>Filtrando por <strong>' + esc(HEADER_SHORT[FLAG_FILTRO] || FLAG_FILTRO) + '</strong>. Clique de novo no chip para limpar.</div>'
+      : '<div class="filtro-flag-hint"><i class="fas fa-hand-pointer mr-1"></i>Clique num indicador abaixo para ver só os usuários com aquela permissão.</div>';
 
     var rows = "";
     if (vis.length === 0) {
-      rows = '<tr><td colspan="' + (FLAGS.length + 2) + '" class="text-center text-muted py-3">Nenhum usuário no filtro atual.</td></tr>';
+      rows = '<tr><td colspan="' + (FLAGS.length + 1) + '" class="text-center text-muted py-3">Nenhum usuário no filtro atual.</td></tr>';
     } else {
       vis.forEach(function (u) {
         var temCrit = u.flags[CRITICO];
@@ -252,9 +307,7 @@
         FLAGS.forEach(function (fl) {
           var on = u.flags[fl.key];
           var crit = fl.key === CRITICO ? " critico" : "";
-          var icon = on
-            ? '<i class="fas fa-check on" title="SIM"></i>'
-            : '<i class="fas fa-minus off" title="não"></i>';
+          var icon = on ? '<i class="fas fa-check on" title="SIM"></i>' : '<i class="fas fa-minus off" title="não"></i>';
           tds += '<td class="flag' + (on ? " on" + crit : "") + '">' + icon + "</td>";
         });
         var badgeDes = u.desativado ? ' <span class="badge badge-secondary">desativado</span>' : "";
@@ -265,77 +318,106 @@
       });
     }
 
-    var html = ''
-      + '<div class="card posto-card mb-3" data-posto="' + posto + '">'
+    cont.innerHTML = ''
+      + '<div class="card posto-card mb-3">'
       + '  <div class="card-header d-flex justify-content-between align-items-center">'
       + '    <strong><i class="fas fa-clinic-medical mr-1"></i>' + esc(info.nome) + " (" + esc(info.letra) + ")</strong>"
-      + '    <span class="badge ' + (nSuper > 0 ? "badge-danger" : "badge-light") + ' badge-count">'
-      + '       <i class="fas fa-user-shield mr-1"></i>' + nSuper + " com Acesso Avançado</span>"
+      + '    <span class="badge ' + (nSuper > 0 ? "badge-danger" : "badge-light") + '">'
+      + '       <i class="fas fa-user-shield mr-1"></i>' + nSuper + " com Acesso Avançado · " + vis.length + " usuários no filtro</span>"
       + "  </div>"
       + '  <div class="card-body p-2">'
+      + '    ' + hint
       + '    <div class="mb-2">' + chips + "</div>"
       + '    <div class="table-responsive">'
       + '      <table class="table table-sm table-hover grid-acesso mb-0">'
-      + "        <thead><tr><th>Usuário</th>" + headerCols() + "</tr></thead>"
+      + "        <thead><tr><th style=\"min-width:240px\">Usuário</th>" + headerCols() + "</tr></thead>"
       + "        <tbody>" + rows + "</tbody>"
       + "      </table>"
       + "    </div>"
       + "  </div>"
       + "</div>";
-    return html;
+
+    // chips clicáveis: toggle do filtro por permissão
+    cont.querySelectorAll(".resumo-chip").forEach(function (c) {
+      c.addEventListener("click", function () {
+        var k = c.getAttribute("data-flag");
+        FLAG_FILTRO = (FLAG_FILTRO === k) ? null : k;
+        renderGrid();
+      });
+    });
   }
 
-  function renderTudo() {
-    var cont = el("postosContainer");
+  function selecionarPosto(letra) {
+    ATUAL = letra;
+    // marca a pílula ativa
+    var links = el("postoPills").querySelectorAll(".nav-link");
+    for (var i = 0; i < links.length; i++) {
+      links[i].classList.toggle("active", links[i].getAttribute("data-posto") === letra);
+    }
+    renderGrid();
+    if (CACHE[letra] === undefined) { carregarPosto(letra); }
+  }
+
+  function carregarPosto(letra) {
+    clearAlert();
+    loading.style.display = "block";
+    fetchJSON("/api/acesso_avancado/data?posto=" + encodeURIComponent(letra))
+      .then(function (d) { CACHE[letra] = d.usuarios || []; })
+      .catch(function (e) { CACHE[letra] = []; showAlert("Posto " + letra + ": " + e.message); })
+      .then(function () {
+        loading.style.display = "none";
+        if (ATUAL === letra) { renderGrid(); }
+      });
+  }
+
+  function renderPills() {
+    var ul = el("postoPills");
     var html = "";
     POSTOS.forEach(function (p) {
-      if (DATA[p.letra] !== undefined) { html += renderPosto(p.letra); }
+      html += '<li class="nav-item"><a href="#" class="nav-link" data-posto="' + esc(p.letra) + '" title="' + esc(p.nome) + '">' + esc(p.letra) + "</a></li>";
     });
-    cont.innerHTML = html || '<div class="text-muted">Carregando...</div>';
+    ul.innerHTML = html;
+    ul.querySelectorAll(".nav-link").forEach(function (a) {
+      a.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        selecionarPosto(a.getAttribute("data-posto"));
+      });
+    });
   }
 
   function carregar() {
     clearAlert();
     loading.style.display = "block";
-    DATA = {};
-    el("postosContainer").innerHTML = '<div class="text-muted p-2">Carregando postos...</div>';
+    CACHE = {};
+    el("gridContainer").innerHTML = "";
+    el("postoPills").innerHTML = '<li class="text-muted px-2">carregando...</li>';
 
     fetchJSON("/api/acesso_avancado/postos").then(function (j) {
       FLAGS = j.flags || [];
       POSTOS = j.postos || [];
+      loading.style.display = "none";
       if (POSTOS.length === 0) {
-        loading.style.display = "none";
-        el("postosContainer").innerHTML = '<div class="alert alert-warning">Nenhum posto liberado no seu acesso.</div>';
+        el("postoPills").innerHTML = "";
+        el("gridContainer").innerHTML = '<div class="alert alert-warning">Nenhum posto liberado no seu acesso.</div>';
         return;
       }
-      // Renderiza placeholders na ordem e busca cada posto em paralelo.
-      var pendentes = POSTOS.length;
-      POSTOS.forEach(function (p) {
-        fetchJSON("/api/acesso_avancado/data?posto=" + encodeURIComponent(p.letra))
-          .then(function (d) {
-            DATA[p.letra] = d.usuarios || [];
-          })
-          .catch(function (e) {
-            DATA[p.letra] = [];
-            showAlert("Posto " + p.letra + ": " + e.message);
-          })
-          .then(function () {
-            pendentes--;
-            renderTudo();
-            if (pendentes === 0) { loading.style.display = "none"; }
-          });
-      });
+      renderPills();
+      selecionarPosto(POSTOS[0].letra);   // abre o primeiro posto automaticamente
     }).catch(function (e) {
       loading.style.display = "none";
       showAlert("Falha ao carregar: " + e.message);
     });
   }
 
-  // listeners
-  el("fBusca").addEventListener("input", renderTudo);
-  el("fSoComAcesso").addEventListener("change", renderTudo);
-  el("fIncluirDesativados").addEventListener("change", renderTudo);
-  el("btnRecarregar").addEventListener("click", carregar);
+  // filtros re-renderizam só o posto atual
+  el("fBusca").addEventListener("input", renderGrid);
+  el("fSoComAcesso").addEventListener("change", renderGrid);
+  el("fIncluirDesativados").addEventListener("change", renderGrid);
+  el("btnRecarregar").addEventListener("click", function () {
+    var atual = ATUAL;
+    CACHE = {};
+    if (atual) { selecionarPosto(atual); } else { carregar(); }
+  });
 
   carregar();
 })();
