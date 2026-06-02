@@ -302,6 +302,12 @@
                 <label class="form-check-label" for="f_wpp"><strong>Enviar WhatsApp</strong> aos pacientes afetados (template <code>notificacao_de_falta_do_medico</code>)</label>
               </div>
             </div>
+            <div class="col-md-6 mb-2">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="f_aviso_app" />
+                <label class="form-check-label" for="f_aviso_app"><strong>Avisar no aplicativo</strong> (mostra a falta no app dos pacientes)</label>
+              </div>
+            </div>
           </div>
 
           <hr>
@@ -712,6 +718,7 @@
       observacao: $("#f_obs").value.trim() || null,
       clinica_fechou: $("#f_clinica_fechou").checked,
       medico_fechou: $("#f_medico_fechou").checked,
+      aviso_aplicativo: $("#f_aviso_app").checked,
     };
     setLoading(true);
     fetch("/api/medico_falta/insert", {

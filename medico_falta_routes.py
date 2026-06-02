@@ -728,6 +728,8 @@ def api_insert():
     observacao = (data.get("observacao") or "").strip() or None
     clinica_fechou = 1 if data.get("clinica_fechou") else 0
     medico_fechou = 1 if data.get("medico_fechou") else 0
+    # Bit AvisoFaltaMedicoAplicativo: nasce false, marcável no cadastro.
+    aviso_aplicativo = 1 if data.get("aviso_aplicativo") else 0
     # XOR obrigatório: exatamente um dos dois (nem 0, nem 2)
     if (clinica_fechou + medico_fechou) != 1:
         return jsonify({
@@ -810,7 +812,7 @@ def api_insert():
                     0, ?, ?, ?,
                     ?, ?,
                     ?, ?,
-                    ?, 0,
+                    ?, ?,
                     GETDATE());
             SELECT idFalta FROM @t;
             """
@@ -819,7 +821,7 @@ def api_insert():
                 motivo_label, especialidade, id_motivo,
                 observacao, qtd_pacientes,
                 clinica_fechou, medico_fechou,
-                qtd_pacientes,
+                qtd_pacientes, aviso_aplicativo,
             )
             cur.execute(sql, params)
             while cur.description is None:
@@ -862,7 +864,8 @@ def api_insert():
                    id_usuario_op,
                    f"Inclusão Falta Médica via RH&T (medico={idmedico}, "
                    f"data={data_falta.isoformat()} {hora_ini}-{hora_fim}, "
-                   f"motivo={motivo_label or id_motivo}, pacientes={qtd_pacientes})")
+                   f"motivo={motivo_label or id_motivo}, pacientes={qtd_pacientes}, "
+                   f"aviso_aplicativo={aviso_aplicativo})")
             con.commit()
 
         return jsonify({
