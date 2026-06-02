@@ -528,14 +528,15 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
     from_phone   = db.from_phone_por_numero_saida(campanha.get("numero_saida"))
     phone_number_id = db.phone_number_id_por_numero_saida(campanha.get("numero_saida"))
     # Lote: até 200 mensagens por iteração (limite hard do endpoint batch).
-    # Fluxo de 2 fases por lote — fase 1 dispara chat batch, espera 5 min, fase
-    # 2 dispara Meta 1-a-1 e grava envios. Garante que o ticket no chat fique
-    # registrado ANTES da mensagem chegar no WhatsApp do cliente (senão a
-    # resposta dele cria um ticket órfão sem a outbound).
-    # Acordado em 26/05/2026 após teste real onde cliente respondeu antes do
-    # registro no chat (flush 5-em-5 min do api-chat).
+    # Fluxo de 2 fases por lote — fase 1 dispara chat batch, espera um buffer,
+    # fase 2 dispara Meta 1-a-1 e grava envios. O buffer dá uma janela pro
+    # ticket no chat ser registrado ANTES da mensagem chegar no WhatsApp do
+    # cliente (senão uma resposta imediata pode virar ticket órfão).
+    # Reduzido de 5min → 30s em 02/06/2026 ("tempo do arrependimento"): 5min por
+    # lote/posto serializava a rodada inteira em horas. 30s é buffer suficiente
+    # e não afeta custo nem destinatários (só a janela de registro no chat).
     LOTE_SIZE = 200
-    WAIT_BEFORE_META_SEC = 5 * 60  # 300s = 5min de buffer pro chat processar
+    WAIT_BEFORE_META_SEC = 30  # 30s de buffer pro chat processar (era 5min)
 
     if not postos:
         log.warning(f"  [{campanha['nome']}] Nenhum posto configurado.")
