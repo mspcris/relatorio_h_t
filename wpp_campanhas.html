@@ -156,6 +156,9 @@
               <td>
                 <a href="/wpp/{{ c.id }}/envios" class="font-weight-bold">{{ c.nome }}</a>
                 <br><small class="text-muted">criada {{ c.created_at[:10] }}</small>
+                {% if c.motivo_sem_envio_hoje %}
+                <br><small class="text-warning" title="Por que não há envio hoje"><i class="fas fa-info-circle mr-1"></i>{{ c.motivo_sem_envio_hoje }}</small>
+                {% endif %}
               </td>
               <td>
                 {% for p in c.postos|sort %}<span class="badge badge-secondary mr-1">{{ p }}</span>{% endfor %}

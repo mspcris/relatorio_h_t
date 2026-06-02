@@ -617,6 +617,59 @@ def api_imagens_upload():
 # Lista de campanhas
 # ---------------------------------------------------------------------------
 
+_DIAS_NOMES = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
+
+
+def _motivo_sem_envio_hoje(c: dict) -> str | None:
+    """Frase padronizada explicando por que a campanha não enviou hoje.
+
+    Retorna None quando já houve envio hoje (a linha não deve aparecer).
+    A análise espelha exatamente os gates do cron (send_whatsapp_cobranca):
+    dia da semana, janela de horário, postos e o intervalo global por
+    telefone — usando datetime.now() (horário da VM, igual ao JanelaEnvio).
+    """
+    if (c.get("enviados_hoje") or 0) > 0:
+        return None
+    if not c.get("ativa"):
+        return "Pausada — não dispara enquanto estiver suspensa."
+    if not (c.get("postos") or []):
+        return "Sem posto configurado — não há para quem enviar."
+
+    # Dias da semana permitidos (0=seg … 6=dom, igual ao cron e ao template)
+    dias = {int(d.strip()) for d in str(c.get("dias_semana") or "0,1,2,3,4").split(",")
+            if d.strip().isdigit()}
+    agora = datetime.now()
+    if agora.weekday() not in dias:
+        permitidos = ", ".join(_DIAS_NOMES[d] for d in sorted(dias)) or "—"
+        return f"Hoje não é dia de envio (programada para {permitidos})."
+
+    # Janela de horário
+    def _hm(s, default):
+        try:
+            h, m = str(s or default).split(":")
+            return int(h), int(m)
+        except Exception:
+            return default
+    hi = _hm(c.get("hora_inicio"), (8, 0))
+    hf = _hm(c.get("hora_fim"), (20, 0))
+    hi_s = f"{hi[0]:02d}:{hi[1]:02d}"
+    hf_s = f"{hf[0]:02d}:{hf[1]:02d}"
+    agora_hm = (agora.hour, agora.minute)
+    if agora_hm < hi:
+        return f"Aguardando a janela abrir hoje ({hi_s}–{hf_s})."
+    if agora_hm >= hf:
+        return f"Janela de hoje já encerrou ({hi_s}–{hf_s}) sem envios."
+
+    # Dentro da janela e ainda 0 envios: os dois motivos reais são o intervalo
+    # global por telefone (contato já avisado nos últimos N dias por QUALQUER
+    # campanha) e a ordem do cron (campanhas de id menor rodam antes, com
+    # espera de 5 min por lote — esta pode não ter sido alcançada na rodada).
+    intervalo = int(c.get("intervalo_dias") or 7)
+    return (f"Na janela ({hi_s}–{hf_s}), mas 0 hoje: contatos elegíveis já "
+            f"avisados nos últimos {intervalo}d (intervalo global) ou o cron "
+            f"ainda não alcançou esta campanha na rodada.")
+
+
 @wpp_bp.get("")
 @wpp_bp.get("/")
 def campanhas():
@@ -627,6 +680,7 @@ def campanhas():
     for c in lista:
         c["resumo"]        = db.resumo_campanha(c["id"])
         c["enviados_hoje"] = db.enviados_hoje(c["id"])
+        c["motivo_sem_envio_hoje"] = _motivo_sem_envio_hoje(c)
     return render_template(
         "wpp_campanhas.html",
         USER_EMAIL=email, USER_IS_ADMIN=is_admin,
