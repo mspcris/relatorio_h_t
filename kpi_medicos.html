@@ -1203,12 +1203,13 @@ ETLStatus.init({
             <thead class="thead-light" style="position:sticky;top:0;z-index:1">
               <tr>
                 <th>Posto</th><th>Médico</th><th>Especialidade</th><th>CRM</th><th>CPF</th>
+                <th class="text-right">Valor/h</th>
                 <th class="text-right">Seg</th><th class="text-right">Ter</th><th class="text-right">Qua</th>
                 <th class="text-right">Qui</th><th class="text-right">Sex</th><th class="text-right">Sáb</th><th class="text-right">Dom</th>
               </tr>
             </thead>
             <tbody id="ctrlqTbody">
-              <tr><td colspan="12" class="text-center text-muted py-4">Digite ao menos 2 caracteres pra buscar.</td></tr>
+              <tr><td colspan="13" class="text-center text-muted py-4">Digite ao menos 2 caracteres pra buscar.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1227,6 +1228,12 @@ ETLStatus.init({
   const dig  = s => (s || '').toString().replace(/\D/g, '');
   const fmt  = v => (v === null || v === undefined || v === '') ? '·'
       : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Célula de dia: custo em cima, horas embaixo (ex.: "1.050,00" / "7h").
+  const cell = (c, h) => {
+    if (c === null || c === undefined || c === '') return '·';
+    const v = fmt(c);
+    return h ? `${v}<br><small class="text-muted">${(+h).toLocaleString('pt-BR')}h</small>` : v;
+  };
 
   async function carregar() {
     if (DADOS || carregando) return;
@@ -1249,7 +1256,7 @@ ETLStatus.init({
     const cnt = document.getElementById('ctrlqCount');
     if (!DADOS || !DADOS.registros) { return; }
     if (q.length < 2) {
-      tb.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">Digite ao menos 2 caracteres pra buscar.</td></tr>';
+      tb.innerHTML = '<tr><td colspan="13" class="text-center text-muted py-4">Digite ao menos 2 caracteres pra buscar.</td></tr>';
       cnt.textContent = ''; return;
     }
     const qn = norm(q), qd = dig(q);
@@ -1260,7 +1267,7 @@ ETLStatus.init({
     );
     cnt.textContent = hits.length + ' resultado(s)' + (hits.length > MAX_ROWS ? ` (mostrando ${MAX_ROWS})` : '');
     if (!hits.length) {
-      tb.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">Nenhum médico encontrado.</td></tr>';
+      tb.innerHTML = '<tr><td colspan="13" class="text-center text-muted py-4">Nenhum médico encontrado.</td></tr>';
       return;
     }
     const rows = hits.slice(0, MAX_ROWS).map(r => `
@@ -1270,13 +1277,14 @@ ETLStatus.init({
         <td><small>${r.especialidade || '—'}</small></td>
         <td><small>${[r.conselho, r.crm].filter(Boolean).join(' ') || '—'}</small></td>
         <td><small>${r.cpf || '—'}</small></td>
-        <td class="text-right">${fmt(r.segunda)}</td>
-        <td class="text-right">${fmt(r.terca)}</td>
-        <td class="text-right">${fmt(r.quarta)}</td>
-        <td class="text-right">${fmt(r.quinta)}</td>
-        <td class="text-right">${fmt(r.sexta)}</td>
-        <td class="text-right">${fmt(r.sabado)}</td>
-        <td class="text-right">${fmt(r.domingo)}</td>
+        <td class="text-right font-weight-bold">${r.valor_hora ? 'R$ ' + fmt(r.valor_hora) : '·'}</td>
+        <td class="text-right">${cell(r.segunda, r.h_segunda)}</td>
+        <td class="text-right">${cell(r.terca, r.h_terca)}</td>
+        <td class="text-right">${cell(r.quarta, r.h_quarta)}</td>
+        <td class="text-right">${cell(r.quinta, r.h_quinta)}</td>
+        <td class="text-right">${cell(r.sexta, r.h_sexta)}</td>
+        <td class="text-right">${cell(r.sabado, r.h_sabado)}</td>
+        <td class="text-right">${cell(r.domingo, r.h_domingo)}</td>
       </tr>`).join('');
     tb.innerHTML = rows;
   }

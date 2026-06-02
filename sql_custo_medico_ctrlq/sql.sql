@@ -18,7 +18,15 @@ SELECT
     e.ValorCustoQuinta,
     e.ValorCustoSexta,
     e.ValorCustoSabado,
-    e.ValorCustoDomingo
+    e.ValorCustoDomingo,
+    -- Janela de atendimento por dia (varchar "HH:MM"); horas = fim - início.
+    e.SegundaHoraInicio, e.SegundaHoraFim,
+    e.TercaHoraInicio,   e.TercaHoraFim,
+    e.QuartaHoraInicio,  e.QuartaHoraFim,
+    e.QuintaHoraInicio,  e.QuintaHoraFim,
+    e.SextaHoraInicio,   e.SextaHoraFim,
+    e.SabadoHoraInicio,  e.SabadoHoraFim,
+    e.DomingoHoraInicio, e.DomingoHoraFim
 FROM cad_especialidade e
 JOIN cad_medico m ON m.idmedico = e.idmedico
 WHERE e.desativado = 0

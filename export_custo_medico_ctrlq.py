@@ -26,16 +26,34 @@ OUT_PATH = os.path.join(JSON_DIR, "CONSOLIDADO.json")
 ODBC_DRIVER = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 POSTOS      = list("ANXYBRPCDGIMJ")
 
-# Colunas de custo na ordem Seg→Dom (chaves no JSON de saída).
+# (col_custo, col_hora_inicio, col_hora_fim, chave) na ordem Seg→Dom.
 DIAS = [
-    ("ValorCustoSegunda", "segunda"),
-    ("ValorCustoTerca",   "terca"),
-    ("ValorCustoQuarta",  "quarta"),
-    ("ValorCustoQuinta",  "quinta"),
-    ("ValorCustoSexta",   "sexta"),
-    ("ValorCustoSabado",  "sabado"),
-    ("ValorCustoDomingo", "domingo"),
+    ("ValorCustoSegunda", "SegundaHoraInicio", "SegundaHoraFim", "segunda"),
+    ("ValorCustoTerca",   "TercaHoraInicio",   "TercaHoraFim",   "terca"),
+    ("ValorCustoQuarta",  "QuartaHoraInicio",  "QuartaHoraFim",  "quarta"),
+    ("ValorCustoQuinta",  "QuintaHoraInicio",  "QuintaHoraFim",  "quinta"),
+    ("ValorCustoSexta",   "SextaHoraInicio",   "SextaHoraFim",   "sexta"),
+    ("ValorCustoSabado",  "SabadoHoraInicio",  "SabadoHoraFim",  "sabado"),
+    ("ValorCustoDomingo", "DomingoHoraInicio", "DomingoHoraFim", "domingo"),
 ]
+
+
+def _horas(ini, fim):
+    """Horas entre 'HH:MM' início e fim (float 2 casas) ou None."""
+    def _min(s):
+        s = (s or "").strip()
+        if not s or ":" not in s:
+            return None
+        try:
+            h, m = s.split(":")[:2]
+            return int(h) * 60 + int(m)
+        except Exception:
+            return None
+    a, b = _min(ini), _min(fim)
+    if a is None or b is None:
+        return None
+    d = b - a
+    return round(d / 60.0, 2) if d > 0 else None
 
 
 def _env(key, default=""):
@@ -126,8 +144,17 @@ def main():
                     "cpf":           _str(r.get("cpf")),
                     "especialidade": _str(r.get("especialidade")),
                 }
-                for col, key in DIAS:
-                    item[key] = _num(r.get(col))
+                vh = []  # (custo, custo/hora) dos dias com custo e horas
+                for col, ini_c, fim_c, key in DIAS:
+                    custo = _num(r.get(col))
+                    horas = _horas(r.get(ini_c), r.get(fim_c))
+                    item[key] = custo
+                    item["h_" + key] = horas
+                    if custo and horas:
+                        vh.append((custo, custo / horas))
+                # Valor/hora representativo (consistente entre dias): usa o dia
+                # de MAIOR custo pra não pegar dias de valor simbólico (0,01).
+                item["valor_hora"] = round(max(vh, key=lambda t: t[0])[1], 2) if vh else None
                 registros.append(item)
             postos_ok.append(posto)
             print(f"OK ({len(df)} linhas)")
