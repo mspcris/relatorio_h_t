@@ -80,7 +80,7 @@
 
   <div class="content-wrapper">
     <section class="content-header px-3 pt-3 pb-1">
-      <h1>{{ titulo }}</h1>
+      <h1>{{ titulo }}{% if campanha %} <span class="badge badge-secondary align-middle" style="font-size:.5em;vertical-align:middle" title="ID interno da campanha">ID {{ campanha.id }}</span>{% endif %}</h1>
       <a href="/wpp" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left mr-1"></i> Voltar</a>
     </section>
     <section class="content px-3 pb-4">
@@ -783,9 +783,12 @@
             </div>
             <div class="col-md-2">
               <div class="form-group">
-                <label>Intervalo reenvios (dias)</label>
-                <input type="number" name="intervalo_dias" class="form-control" min="1"
+                <label id="lbl_intervalo_dias">Intervalo reenvios (dias)</label>
+                <input type="number" name="intervalo_dias" id="intervalo_dias_input" class="form-control" min="1"
                        value="{{ campanha.intervalo_dias if campanha else 7 }}">
+                <small id="hint_intervalo_dias" class="form-text text-muted" style="display:none">
+                  Desativado: "Ignorar intervalo" está ligado (envio único por contato).
+                </small>
               </div>
             </div>
           </div>
@@ -1463,6 +1466,28 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   // Demais selects de clientes (exceto situação, já inicializado acima)
   $('.wpp-sel2-cli:not(#sel_cli_situacao_efetiva)').select2({ placeholder: '— Todos —', allowClear: true, width: '100%' });
+
+  // "Ignorar intervalo" e "Intervalo reenvios (dias)" são mutuamente exclusivos:
+  // quando o bit está ligado, o campo de intervalo é desativado e fica cinza
+  // (a campanha ignora o intervalo — envio único por contato).
+  (function () {
+    const bit  = document.getElementById('ignorar_intervalo');
+    const inp  = document.getElementById('intervalo_dias_input');
+    const lbl  = document.getElementById('lbl_intervalo_dias');
+    const hint = document.getElementById('hint_intervalo_dias');
+    function sync() {
+      if (!bit || !inp) return;
+      const on = bit.checked;
+      inp.disabled      = on;
+      inp.style.opacity = on ? '0.5' : '';
+      if (lbl)  lbl.style.color   = on ? '#adb5bd' : '';
+      if (hint) hint.style.display = on ? 'block' : 'none';
+    }
+    if (bit) { bit.addEventListener('change', sync); sync(); }
+    // Campo disabled não é enviado no POST — reabilita no submit pra preservar o valor.
+    const f = document.getElementById('formCampanha');
+    if (f) f.addEventListener('submit', () => { if (inp) inp.disabled = false; });
+  })();
 
   // Validação: situação obrigatória no modo clientes_admissao
   document.getElementById('formCampanha').addEventListener('submit', function(e) {
