@@ -203,6 +203,14 @@ copy_dir_tree "$SRC/json_ctrlq_desbloqueio" "$DST/json_ctrlq_desbloqueio"
 copy_dir_tree "$SRC/json_ctrlq_desbloqueio" "$TPL/json_ctrlq_desbloqueio"
 
 # -----------------------------------------------------------
+# CUSTO MÉDICO CTRL-Q (botão na página KPI Custo Médico)
+# -----------------------------------------------------------
+
+echo "sync json_custo_medico_ctrlq -> $DST/json_custo_medico_ctrlq e $TPL/json_custo_medico_ctrlq"
+copy_dir_tree "$SRC/json_custo_medico_ctrlq" "$DST/json_custo_medico_ctrlq"
+copy_dir_tree "$SRC/json_custo_medico_ctrlq" "$TPL/json_custo_medico_ctrlq"
+
+# -----------------------------------------------------------
 # JSON CONSULTAS MENSAL
 # -----------------------------------------------------------
 

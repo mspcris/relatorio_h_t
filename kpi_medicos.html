@@ -214,6 +214,9 @@
                 <div class="d-flex w-100 align-items-center">
                     <span class="ml-2 font-weight-bold">KPI — Custo Médico x Mensalidades</span>
                     <div class="ml-auto">
+                        <button id="btnCustoCtrlq" class="btn btn-sm btn-success mr-2"
+                            title="Custo dos médicos de TODOS os postos — busca por nome, CRM ou CPF">
+                            <i class="fas fa-user-md mr-1"></i> Custo Médico no Ctrl-Q</button>
                         <button id="btnComparar" class="btn btn-sm btn-outline-secondary"
                             title="Mostrar/ocultar bloco de comparação">Comparar</button>
                         <span id="ia-anchor"></span>
@@ -1177,6 +1180,122 @@ ETLStatus.init({
 });
 </script>
 <script src="/js/menu.js"></script>
+<!-- ===== Modal: Custo Médico no Ctrl-Q (todos os postos) ===== -->
+<div class="modal fade" id="modalCustoCtrlq" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-success">
+        <h5 class="modal-title text-white"><i class="fas fa-user-md mr-2"></i>Custo Médico — todos os postos</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Fechar"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="input-group mb-2">
+          <div class="input-group-prepend"><span class="input-group-text"><i class="fas fa-search"></i></span></div>
+          <input type="text" id="ctrlqBusca" class="form-control"
+                 placeholder="Buscar por nome do médico, CRM ou CPF… (mín. 2 caracteres)" autocomplete="off">
+        </div>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <small id="ctrlqInfo" class="text-muted">Carregando…</small>
+          <small id="ctrlqCount" class="text-muted"></small>
+        </div>
+        <div class="table-responsive" style="max-height:60vh;overflow:auto">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="thead-light" style="position:sticky;top:0;z-index:1">
+              <tr>
+                <th>Posto</th><th>Médico</th><th>Especialidade</th><th>CRM</th><th>CPF</th>
+                <th class="text-right">Seg</th><th class="text-right">Ter</th><th class="text-right">Qua</th>
+                <th class="text-right">Qui</th><th class="text-right">Sex</th><th class="text-right">Sáb</th><th class="text-right">Dom</th>
+              </tr>
+            </thead>
+            <tbody id="ctrlqTbody">
+              <tr><td colspan="12" class="text-center text-muted py-4">Digite ao menos 2 caracteres pra buscar.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const URL_JSON = '/json_custo_medico_ctrlq/CONSOLIDADO.json';
+  const MAX_ROWS = 800;
+  let DADOS = null, carregando = false;
+
+  const norm = s => (s || '').toString().toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '');   // sem acento, minúsculo
+  const dig  = s => (s || '').toString().replace(/\D/g, '');
+  const fmt  = v => (v === null || v === undefined || v === '') ? '·'
+      : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  async function carregar() {
+    if (DADOS || carregando) return;
+    carregando = true;
+    try {
+      const r = await fetch(URL_JSON, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      DADOS = await r.json();
+      const m = DADOS.meta || {};
+      document.getElementById('ctrlqInfo').textContent =
+        `Atualizado em ${m.gerado_em_br || '—'} · ${m.total || 0} registros · ${(m.postos || []).length} postos`;
+    } catch (e) {
+      document.getElementById('ctrlqInfo').textContent = 'Falha ao carregar os dados (' + e.message + ').';
+    } finally { carregando = false; }
+  }
+
+  function buscar() {
+    const q = (document.getElementById('ctrlqBusca').value || '').trim();
+    const tb = document.getElementById('ctrlqTbody');
+    const cnt = document.getElementById('ctrlqCount');
+    if (!DADOS || !DADOS.registros) { return; }
+    if (q.length < 2) {
+      tb.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">Digite ao menos 2 caracteres pra buscar.</td></tr>';
+      cnt.textContent = ''; return;
+    }
+    const qn = norm(q), qd = dig(q);
+    const hits = DADOS.registros.filter(r =>
+      (qn && norm(r.medico).includes(qn)) ||
+      (qd && dig(r.crm).includes(qd)) ||
+      (qd && dig(r.cpf).includes(qd))
+    );
+    cnt.textContent = hits.length + ' resultado(s)' + (hits.length > MAX_ROWS ? ` (mostrando ${MAX_ROWS})` : '');
+    if (!hits.length) {
+      tb.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">Nenhum médico encontrado.</td></tr>';
+      return;
+    }
+    const rows = hits.slice(0, MAX_ROWS).map(r => `
+      <tr>
+        <td><span class="badge badge-secondary">${r.posto || ''}</span></td>
+        <td>${r.medico || '—'}</td>
+        <td><small>${r.especialidade || '—'}</small></td>
+        <td><small>${[r.conselho, r.crm].filter(Boolean).join(' ') || '—'}</small></td>
+        <td><small>${r.cpf || '—'}</small></td>
+        <td class="text-right">${fmt(r.segunda)}</td>
+        <td class="text-right">${fmt(r.terca)}</td>
+        <td class="text-right">${fmt(r.quarta)}</td>
+        <td class="text-right">${fmt(r.quinta)}</td>
+        <td class="text-right">${fmt(r.sexta)}</td>
+        <td class="text-right">${fmt(r.sabado)}</td>
+        <td class="text-right">${fmt(r.domingo)}</td>
+      </tr>`).join('');
+    tb.innerHTML = rows;
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('btnCustoCtrlq');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      carregar();
+      if (window.jQuery) jQuery('#modalCustoCtrlq').modal('show');
+      setTimeout(() => document.getElementById('ctrlqBusca').focus(), 300);
+    });
+    let t;
+    document.getElementById('ctrlqBusca').addEventListener('input', () => {
+      clearTimeout(t); t = setTimeout(buscar, 180);
+    });
+  });
+})();
+</script>
 </body>
 
 </html>
