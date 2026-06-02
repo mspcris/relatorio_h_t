@@ -972,6 +972,81 @@ def detalhe_envio(eid):
 
 
 # ---------------------------------------------------------------------------
+# CONSULTA READ-ONLY (intranet) — lista campanhas → mensagens → detalhe.
+# Mesma auth OIDC (garantida pelo before_request do app), porém SEM nenhuma
+# ação de edição/pausa/exclusão. Pensado pra publicar um link na intranet onde
+# qualquer usuário logado vê o que foi enviado e o wamid, sem risco de mexer na
+# config das campanhas (ver incidente do template corrompido em 02/06).
+# ---------------------------------------------------------------------------
+
+@wpp_bp.get("/consulta")
+def consulta_campanhas():
+    email, _is_admin = _check_auth()
+    if not email:
+        return ('', 401)
+    lista = db.listar_campanhas()
+    for c in lista:
+        c["resumo"] = db.resumo_campanha(c["id"])
+    return render_template(
+        "wpp_consulta_campanhas.html",
+        USER_EMAIL=email,
+        campanhas=lista,
+    )
+
+
+@wpp_bp.get("/consulta/<int:cid>")
+def consulta_envios(cid):
+    email, _is_admin = _check_auth()
+    if not email:
+        return ('', 401)
+    campanha = db.get_campanha(cid)
+    if not campanha:
+        return ("Campanha não encontrada", 404)
+    import math
+    page   = max(1, int(request.args.get("page", 1)))
+    limit  = 100
+    offset = (page - 1) * limit
+    lista_envios = db.listar_envios(cid, limit=limit, offset=offset)
+    resumo       = db.resumo_campanha(cid)
+    total_pages  = max(1, math.ceil((resumo.get("enviados") or 0) / limit))
+    return render_template(
+        "wpp_consulta_envios.html",
+        USER_EMAIL=email,
+        campanha=campanha,
+        envios=lista_envios,
+        resumo=resumo,
+        page=page,
+        total_pages=total_pages,
+    )
+
+
+@wpp_bp.get("/consulta/envio/<int:eid>")
+def consulta_detalhe(eid):
+    email, _is_admin = _check_auth()
+    if not email:
+        return ('', 401)
+    envio = db.get_envio(eid)
+    if not envio:
+        return ("Envio não encontrado", 404)
+    campanha = db.get_campanha(envio["campanha_id"])
+    mensagem_expandida = _expandir_template_envio(envio.get("template", ""), envio)
+    # Mesmo lookup do detalhe admin — habilita o botão "Abrir conversa no chat".
+    # Robusto a falha (chat MySQL indisponível): não derruba a página read-only.
+    try:
+        ticket_info = _achar_ticket_no_chat(envio.get("telefone"))
+    except Exception:
+        ticket_info = None
+    return render_template(
+        "wpp_consulta_detalhe.html",
+        USER_EMAIL=email,
+        envio=envio,
+        campanha=campanha,
+        mensagem_expandida=mensagem_expandida,
+        ticket_info=ticket_info,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Visualização da conversa (estilo WhatsApp Web — ler-só)
 # ---------------------------------------------------------------------------
 

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8"/>
+  <title>CAMIM — Mensagem #{{ envio.id }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="icon" href="/images/favicon-wpp.svg" type="image/svg+xml">
+  <style>
+    body { font-family: "Source Sans Pro", system-ui, sans-serif; background:#f4f6f9; }
+    .topbar { background:#075e54; color:#fff; padding:14px 20px; display:flex; align-items:center; gap:10px; }
+    .topbar h1 { font-size:1.15rem; margin:0; font-weight:600; }
+    .wrap { max-width:1100px; margin:20px auto; padding:0 16px; }
+    .detail-label { font-weight: 600; color: #555; font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; }
+    .detail-value { font-size: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <i class="fab fa-whatsapp fa-lg"></i>
+    <h1>Mensagem #{{ envio.id }}</h1>
+  </div>
+  <div class="wrap">
+    <div class="d-flex flex-wrap mb-3" style="gap:8px;align-items:center">
+      <a href="/wpp/consulta/{{ campanha.id }}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left mr-1"></i> Voltar para {{ campanha.nome }}
+      </a>
+      <a href="/wpp/envio/{{ envio.id }}/conversa" class="btn btn-sm btn-success">
+        <i class="fab fa-whatsapp mr-1"></i> Ver conversa aqui
+      </a>
+      {% if ticket_info and ticket_info.chat_url %}
+      <a href="{{ ticket_info.chat_url }}" target="_blank" class="btn btn-sm btn-outline-success">
+        <i class="fas fa-external-link-alt mr-1"></i> Abrir conversa no chat (ticket #{{ ticket_info.ticket_number }})
+      </a>
+      {% endif %}
+    </div>
+
+    <div class="row">
+      <!-- Mensagem + Cliente -->
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header"><h5 class="mb-0"><i class="fas fa-paper-plane mr-2 text-success"></i>Mensagem enviada</h5></div>
+          <div class="card-body">
+            <div class="row mb-2"><div class="col-5 detail-label">ID Envio</div><div class="col-7 detail-value">#{{ envio.id }}</div></div>
+            <div class="row mb-2"><div class="col-5 detail-label">Data/Hora</div><div class="col-7 detail-value">{{ envio.enviado_em[:19].replace('T',' ') }}</div></div>
+            <div class="row mb-2"><div class="col-5 detail-label">Telefone</div><div class="col-7 detail-value"><code>{{ envio.telefone }}</code></div></div>
+            <div class="row mb-2"><div class="col-5 detail-label">Status</div><div class="col-7 detail-value">
+              {% if envio.status and envio.status.startswith('accepted') %}<span class="badge badge-success">{{ envio.status }}</span>
+              {% elif envio.status == 'dry_run' %}<span class="badge badge-secondary">dry_run</span>
+              {% else %}<span class="badge badge-danger">{{ envio.status }}</span>{% endif %}
+            </div></div>
+            {% if envio.wamid %}
+            <div class="row mb-2"><div class="col-5 detail-label">WAMID</div><div class="col-7 detail-value"><small class="text-muted">{{ envio.wamid }}</small></div></div>
+            {% endif %}
+            <div class="row mb-2"><div class="col-5 detail-label">Template</div><div class="col-7 detail-value"><code>{{ envio.template }}</code></div></div>
+            {% if mensagem_expandida %}
+            <hr class="my-3">
+            <div class="detail-label mb-2"><i class="fab fa-whatsapp text-success mr-1"></i>Mensagem enviada</div>
+            <div style="background:#dcf8c6;padding:12px 14px;border-radius:8px 8px 2px 8px;font-size:.92rem;color:#111;line-height:1.5;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,.1);">
+              {{- mensagem_expandida -}}
+            </div>
+            {% endif %}
+            {% if ticket_info and ticket_info.chat_url %}
+            <div class="mt-3 text-center">
+              <a href="{{ ticket_info.chat_url }}" target="_blank" class="btn btn-sm btn-success">
+                <i class="fas fa-external-link-alt mr-1"></i> Abrir conversa no chat (ticket #{{ ticket_info.ticket_number }})
+              </a>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h5 class="mb-0"><i class="fas fa-user mr-2 text-info"></i>Cliente</h5></div>
+          <div class="card-body">
+            <div class="row mb-2"><div class="col-5 detail-label">Posto</div><div class="col-7 detail-value"><span class="badge badge-secondary">{{ envio.posto or '—' }}</span></div></div>
+            <div class="row mb-2"><div class="col-5 detail-label">Nome</div><div class="col-7 detail-value">{{ envio.nome or '—' }}</div></div>
+            <div class="row mb-2"><div class="col-5 detail-label">Matrícula</div><div class="col-7 detail-value">{{ envio.matricula or '—' }}</div></div>
+            <div class="row mb-2"><div class="col-5 detail-label">ID Receita</div><div class="col-7 detail-value"><small>{{ envio.idreceita or '—' }}</small></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fatura + Campanha -->
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header"><h5 class="mb-0"><i class="fas fa-file-invoice-dollar mr-2 text-warning"></i>Fatura</h5></div>
+          <div class="card-body">
+            <div class="row mb-2"><div class="col-5 detail-label">Referência</div><div class="col-7 detail-value">{{ envio.ref or '—' }}</div></div>
+            <div class="row mb-2"><div class="col-5 detail-label">Valor</div><div class="col-7 detail-value">R$ {{ envio.valor or '—' }}</div></div>
+            <div class="row mb-2"><div class="col-5 detail-label">Vencimento</div><div class="col-7 detail-value">{{ envio.venc or '—' }}</div></div>
+            <div class="row mb-2"><div class="col-5 detail-label">Dias em atraso</div><div class="col-7 detail-value">{{ envio.dias_atraso or '0' }}d</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h5 class="mb-0"><i class="fas fa-bullhorn mr-2 text-primary"></i>Campanha</h5></div>
+          <div class="card-body">
+            <div class="row mb-2"><div class="col-5 detail-label">Nome</div><div class="col-7 detail-value"><a href="/wpp/consulta/{{ campanha.id }}">{{ campanha.nome }}</a></div></div>
+            <div class="row mb-2"><div class="col-5 detail-label">Postos</div><div class="col-7 detail-value">{% for p in campanha.postos %}<span class="badge badge-secondary mr-1">{{ p }}</span>{% endfor %}</div></div>
+            <div class="row mb-2"><div class="col-5 detail-label">Intervalo reenvio</div><div class="col-7 detail-value">{{ campanha.intervalo_dias }}d</div></div>
+            <div class="row mb-2"><div class="col-5 detail-label">Janela de envio</div><div class="col-7 detail-value">{{ campanha.hora_inicio }} – {{ campanha.hora_fim }}</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

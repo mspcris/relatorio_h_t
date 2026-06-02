@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8"/>
+  <title>CAMIM — Consulta de Envios WhatsApp</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="icon" href="/images/favicon-wpp.svg" type="image/svg+xml">
+  <style>
+    body { font-family: "Source Sans Pro", system-ui, sans-serif; background:#f4f6f9; }
+    .topbar { background:#075e54; color:#fff; padding:14px 20px; display:flex; align-items:center; gap:10px; }
+    .topbar h1 { font-size:1.25rem; margin:0; font-weight:600; }
+    .wrap { max-width:1100px; margin:20px auto; padding:0 16px; }
+    .table td, .table th { vertical-align: middle; }
+    .muted { color:#888; font-size:.82rem; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <i class="fab fa-whatsapp fa-lg"></i>
+    <h1>Consulta de Envios — WhatsApp</h1>
+  </div>
+  <div class="wrap">
+    <p class="muted mb-3">
+      <i class="fas fa-eye"></i> Visualização somente leitura. Clique em <strong>Ver mensagens</strong>
+      para listar o que foi enviado em cada campanha.
+    </p>
+    <div class="card">
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+          <thead class="thead-light">
+            <tr>
+              <th style="width:48px">ID</th>
+              <th>Campanha</th>
+              <th>Template</th>
+              <th class="text-center">Enviados</th>
+              <th class="text-center">Não enviados</th>
+              <th style="width:160px"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in campanhas %}
+            <tr>
+              <td class="text-muted"><small>{{ c.id }}</small></td>
+              <td>
+                <strong>{{ c.nome }}</strong>
+                {% if c.created_at %}<br><span class="muted">criada {{ c.created_at[:10] }}</span>{% endif %}
+              </td>
+              <td><small><code>{{ c.template }}</code></small></td>
+              <td class="text-center"><span class="badge badge-success">{{ c.resumo.enviados }}</span></td>
+              <td class="text-center"><span class="badge badge-warning text-dark">{{ c.resumo.nao_enviados }}</span></td>
+              <td>
+                <a href="/wpp/consulta/{{ c.id }}" class="btn btn-sm btn-primary btn-block">
+                  <i class="fas fa-list mr-1"></i> Ver mensagens
+                </a>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center text-muted py-4">Nenhuma campanha encontrada.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
