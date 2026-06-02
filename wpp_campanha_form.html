@@ -161,6 +161,16 @@
                   <i class="fas fa-door-closed mr-1 text-warning"></i> Fechar ticket ao enviar mensagem?
                 </label>
               </div>
+              <div class="custom-control custom-switch"
+                   title="Quando ligado, esta campanha IGNORA o intervalo global de reenvio (envia mesmo a quem recebeu cobrança nos últimos dias) e passa a enviar só UMA VEZ por contato nesta campanha. Use em campanhas one-shot (ex.: indique e ganhe). Desligado (padrão) = respeita o intervalo de dias acima.">
+                <input type="hidden" name="ignorar_intervalo" value="0">
+                <input type="checkbox" class="custom-control-input" id="ignorar_intervalo"
+                       name="ignorar_intervalo" value="1"
+                       {% if campanha and campanha.get('ignorar_intervalo', 0) %}checked{% endif %}>
+                <label class="custom-control-label" for="ignorar_intervalo">
+                  <i class="fas fa-infinity mr-1 text-primary"></i> Ignorar intervalo (envio único por contato)
+                </label>
+              </div>
             </div>
           </div>
 

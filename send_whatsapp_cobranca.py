@@ -513,6 +513,10 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
     # cada campanha respeita seu próprio intervalo_dias, considerando o último
     # envio accepted do telefone em qualquer campanha.
     intervalo    = int(campanha.get("intervalo_dias") or 7)
+    # Bit por campanha: quando 1, ignora o intervalo global cross-campanha e
+    # usa "enviar 1x por contato NESTA campanha". Default 0 = comportamento
+    # histórico (respeita o intervalo global). Ver wpp_cobranca_db.ignorar_intervalo.
+    ignorar_intervalo = bool(campanha.get("ignorar_intervalo"))
     template     = campanha.get("template", "notificacao_de_fatura")
     postos       = campanha.get("postos") or []
     queue_id     = campanha.get("queue_id") or None
@@ -539,6 +543,9 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
 
     enviados_campanha   = 0
     hoje = date.today()
+    # Dedup por contato DENTRO desta campanha — usado só quando ignorar_intervalo=1.
+    # Evita 2 msgs pro mesmo telefone que aparece em várias matrículas/postos.
+    telefones_camp: set[str] = set()
 
     # Buffer de lote em duas fases. Cada item: (chat_payload, fatura,
     # telefone, params). Meta é disparado APENAS dentro de _processar_lote,
@@ -701,26 +708,50 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                                              rodada_em, None, "sem_telefone_valido")
                 continue
 
-            # Controle global na rodada (cross-campanha).
-            if telefone in telefones_rodada:
-                log.info(
-                    f"    {telefone} | {(fatura.get('nome') or '')[:25]} | "
-                    f"{fatura.get('diasdebito',0)}d | {fatura.get('ref','')} | "
-                    "→ bloqueado_rodada_global"
-                )
-                continue
-
-            ultimo = db.ultimo_envio_aceito(telefone)
-            if ultimo:
-                dias_desde = (hoje - datetime.fromisoformat(ultimo).date()).days
-                if dias_desde < intervalo:
-                    telefones_rodada.add(telefone)
+            # Dedup por contato — duas políticas conforme o bit ignorar_intervalo:
+            if ignorar_intervalo:
+                # Campanha one-shot (ex.: indique e ganhe): IGNORA o intervalo
+                # global (envia mesmo a quem recebeu cobrança nos últimos dias) e
+                # trava em "1x por contato NESTA campanha" — telefones_camp evita
+                # repetir na rodada (mesmo telefone em várias matrículas) e
+                # ja_enviado_na_campanha evita reenviar em rodadas/dias seguintes.
+                # NÃO toca telefones_rodada de propósito: precisa ser transparente
+                # pro dedup das outras campanhas (João recebe cobrança E indique).
+                if telefone in telefones_camp:
+                    continue
+                if db.ja_enviado_na_campanha(campanha["id"], telefone):
+                    telefones_camp.add(telefone)
+                    if not dry_run:
+                        db.registrar_nao_enviado(
+                            campanha["id"], posto, fatura, rodada_em, telefone,
+                            "ja_enviado_campanha",
+                        )
+                    log.info(
+                        f"    {telefone} | {(fatura.get('nome') or '')[:25]} | "
+                        f"{fatura.get('ref','')} | → ja_enviado_campanha (envio único)"
+                    )
+                    continue
+            else:
+                # Controle global na rodada (cross-campanha).
+                if telefone in telefones_rodada:
                     log.info(
                         f"    {telefone} | {(fatura.get('nome') or '')[:25]} | "
                         f"{fatura.get('diasdebito',0)}d | {fatura.get('ref','')} | "
-                        f"→ bloqueado_intervalo_global:{dias_desde}d<{intervalo}d"
+                        "→ bloqueado_rodada_global"
                     )
                     continue
+
+                ultimo = db.ultimo_envio_aceito(telefone)
+                if ultimo:
+                    dias_desde = (hoje - datetime.fromisoformat(ultimo).date()).days
+                    if dias_desde < intervalo:
+                        telefones_rodada.add(telefone)
+                        log.info(
+                            f"    {telefone} | {(fatura.get('nome') or '')[:25]} | "
+                            f"{fatura.get('diasdebito',0)}d | {fatura.get('ref','')} | "
+                            f"→ bloqueado_intervalo_global:{dias_desde}d<{intervalo}d"
+                        )
+                        continue
 
             params = montar_params_template(template, fatura)
             nome_cliente = str(fatura.get("nome") or "")
@@ -731,7 +762,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                     f"{fatura.get('diasdebito',0)}d | {fatura.get('ref','')} | "
                     "→ dry_run"
                 )
-                telefones_rodada.add(telefone)
+                (telefones_camp if ignorar_intervalo else telefones_rodada).add(telefone)
                 enviados_campanha += 1
                 continue
 
@@ -754,7 +785,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                 )
 
             lote_buffer.append((chat_payload, fatura, telefone, params))
-            telefones_rodada.add(telefone)
+            (telefones_camp if ignorar_intervalo else telefones_rodada).add(telefone)
             enviados_campanha += 1
 
             if len(lote_buffer) >= LOTE_SIZE:
@@ -798,6 +829,33 @@ def main():
         campanhas = [c for c in campanhas if c]
     else:
         campanhas = [c for c in db.listar_campanhas() if c.get("ativa")]
+        # Processa primeiro as campanhas cuja JANELA FECHA MAIS CEDO.
+        #
+        # Motivo: a rodada é serial e cada lote dorme WAIT_BEFORE_META_SEC
+        # (5 min) entre o batch do chat e o Meta. Com as campanhas pesadas
+        # (atraso / pré-vencimento, milhares de contatos em lotes de 200) na
+        # frente, uma única rodada leva 4h+ e só alcança uma campanha de
+        # janela curta DEPOIS que ela já fechou → 0 envios todo dia útil
+        # (starvation). Visto em 2026-06-02: campanha 43 (janela 08:00–12:00)
+        # só foi alcançada às 12:14 → "fora_do_horario" → 0 enviados, dia após
+        # dia. Ordenar por hora_fim asc dá prioridade a quem tem o prazo mais
+        # apertado; as de janela longa (até 20:00) têm folga de sobra.
+        #
+        # Trade-off conhecido: o dedup global por telefone na rodada
+        # (telefones_rodada / intervalo de 7d) é sensível à ordem. Quando um
+        # mesmo telefone é elegível em duas campanhas, a de janela mais curta
+        # passa a "ganhar" o contato. Aceitável porque janela curta = envio
+        # deliberadamente time-boxed pelo operador.
+        #
+        # sort estável: preserva a ordem anterior (numero_saida, id) entre
+        # campanhas de mesmo hora_fim.
+        def _hora_fim_key(c: dict) -> tuple[int, int]:
+            try:
+                h, m = str(c.get("hora_fim") or "20:00").split(":")
+                return (int(h), int(m))
+            except Exception:
+                return (20, 0)
+        campanhas.sort(key=_hora_fim_key)
 
     if not campanhas:
         log.info("Nenhuma campanha ativa encontrada.")

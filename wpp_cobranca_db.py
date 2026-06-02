@@ -86,6 +86,12 @@ def init_db() -> None:
 
             -- Controle de reenvio
             intervalo_dias      INTEGER NOT NULL DEFAULT 7,
+            -- Quando 1, ESTA campanha ignora o intervalo global cross-campanha
+            -- (ultimo_envio_aceito) e passa a usar a trava "enviar só 1x por
+            -- contato NESTA campanha". Para campanhas one-shot (ex.: indique e
+            -- ganhe) que devem chegar ao contato mesmo que ele já tenha recebido
+            -- uma cobrança. Default 0 = comportamento atual (respeita 7d global).
+            ignorar_intervalo   INTEGER NOT NULL DEFAULT 0,
 
             -- Status
             ativa               INTEGER NOT NULL DEFAULT 1,
@@ -284,6 +290,9 @@ def init_db() -> None:
             # Útil pra campanhas de aviso unidirecional (cliente não precisa
             # responder); evita a fila do chat ficar entupida.
             "must_close_ticket":   "ALTER TABLE campanhas ADD COLUMN must_close_ticket INTEGER NOT NULL DEFAULT 0",
+            # Bit "ignorar intervalo": ver comentário no CREATE TABLE. Default 0
+            # preserva o comportamento das campanhas já existentes.
+            "ignorar_intervalo":   "ALTER TABLE campanhas ADD COLUMN ignorar_intervalo INTEGER NOT NULL DEFAULT 0",
         }
         for _col, _ddl in _novos.items():
             if _col not in cols:
@@ -420,9 +429,9 @@ def criar_campanha(dados: dict) -> int:
                 clube_beneficio, clube_beneficio_joy, plano_premium,
                 origem, pagador_atrasado, from_user_id,
                 enviar_chat, enviar_meta, header_image_url,
-                numero_saida, must_close_ticket,
+                numero_saida, must_close_ticket, ignorar_intervalo,
                 created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 dados["nome"], dados.get("template", "notificacao_de_fatura"),
                 dados.get("modo_envio", "atraso"), postos_json,
@@ -461,6 +470,7 @@ def criar_campanha(dados: dict) -> int:
                 (dados.get("header_image_url") or None),
                 _normalizar_numero_saida(dados.get("numero_saida")),
                 1 if dados.get("must_close_ticket") else 0,
+                1 if dados.get("ignorar_intervalo") else 0,
                 now, now,
             )
         )
@@ -487,7 +497,7 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 clube_beneficio=?, clube_beneficio_joy=?, plano_premium=?,
                 origem=?, pagador_atrasado=?, from_user_id=?,
                 enviar_chat=?, enviar_meta=?, header_image_url=?,
-                numero_saida=?, must_close_ticket=?,
+                numero_saida=?, must_close_ticket=?, ignorar_intervalo=?,
                 updated_at=?
             WHERE id=?""",
             (
@@ -528,6 +538,7 @@ def atualizar_campanha(campanha_id: int, dados: dict) -> None:
                 (dados.get("header_image_url") or None),
                 _normalizar_numero_saida(dados.get("numero_saida")),
                 1 if dados.get("must_close_ticket") else 0,
+                1 if dados.get("ignorar_intervalo") else 0,
                 now,
                 campanha_id,
             )
@@ -899,6 +910,20 @@ def ultimo_envio_aceito(telefone: str) -> str | None:
             (telefone,)
         ).fetchone()
     return row["dt"] if row and row["dt"] else None
+
+
+def ja_enviado_na_campanha(campanha_id: int, telefone: str) -> bool:
+    """True se este telefone já recebeu um envio accepted DESTA campanha (em
+    qualquer data). Trava de "enviar só 1x por contato" usada pelas campanhas
+    com ignorar_intervalo=1 — substitui o intervalo global cross-campanha.
+    Sem ela, ignorar o intervalo faria a campanha reenviar a cada rodada."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM envios WHERE campanha_id=? AND telefone=? "
+            "AND status LIKE 'accepted%' LIMIT 1",
+            (campanha_id, telefone)
+        ).fetchone()
+    return row is not None
 
 
 # ---------------------------------------------------------------------------

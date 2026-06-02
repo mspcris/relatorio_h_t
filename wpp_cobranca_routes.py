@@ -630,6 +630,15 @@ def _motivo_sem_envio_hoje(c: dict) -> str | None:
     """
     if (c.get("enviados_hoje") or 0) > 0:
         return None
+    # falta_medico NÃO é enviada pelo cron de cobrança — o disparo acontece de
+    # forma síncrona no cadastro da falta (/medico_falta). O cron pula essa
+    # campanha de propósito (safety do incidente 2026-05-06). Logo os gates de
+    # janela/intervalo/postos abaixo não se aplicam: 0 hoje só significa que
+    # nenhuma falta foi cadastrada hoje. Sem este caso a frase mentia dizendo
+    # "o cron ainda não alcançou esta campanha".
+    if str(c.get("modo_envio") or "").strip().lower() == "falta_medico":
+        return ("Não é enviada pelo cron — o disparo é no cadastro da falta "
+                "(Falta de Médico). Esta linha só registra os envios feitos.")
     if not c.get("ativa"):
         return "Pausada — não dispara enquanto estiver suspensa."
     if not (c.get("postos") or []):
@@ -664,6 +673,12 @@ def _motivo_sem_envio_hoje(c: dict) -> str | None:
     # global por telefone (contato já avisado nos últimos N dias por QUALQUER
     # campanha) e a ordem do cron (campanhas de id menor rodam antes, com
     # espera de 5 min por lote — esta pode não ter sido alcançada na rodada).
+    if bool(c.get("ignorar_intervalo")):
+        # Campanha com envio único: ignora o intervalo global, então 0 hoje só
+        # pode ser população esgotada (todos já receberam 1x) ou cron atrasado.
+        return (f"Na janela ({hi_s}–{hf_s}), mas 0 hoje: todos os contatos "
+                f"elegíveis já receberam esta campanha (envio único) ou o cron "
+                f"ainda não alcançou esta campanha na rodada.")
     intervalo = int(c.get("intervalo_dias") or 7)
     return (f"Na janela ({hi_s}–{hf_s}), mas 0 hoje: contatos elegíveis já "
             f"avisados nos últimos {intervalo}d (intervalo global) ou o cron "
@@ -1783,6 +1798,7 @@ def _form_to_dict(form) -> dict:
         "header_image_url":   (form.get("header_image_url") or "").strip() or None,
         "numero_saida":       (form.get("numero_saida") or "").strip() or None,
         "must_close_ticket":  "1" in form.getlist("must_close_ticket"),
+        "ignorar_intervalo":  "1" in form.getlist("ignorar_intervalo"),
     }
 
 
