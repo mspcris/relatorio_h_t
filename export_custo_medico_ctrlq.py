@@ -171,7 +171,7 @@ def main():
             "gerado_em_br": agora.strftime("%d/%m/%Y, %H:%M"),
             "postos":       sorted(postos_ok),
             "total":        len(registros),
-            "dias":         [k for _, k in DIAS],
+            "dias":         [t[3] for t in DIAS],
         },
         "registros": registros,
     }
