@@ -192,9 +192,10 @@ def auth_callback():
             TMPL_ERRO, titulo='Erro', msg='Identificador de usuário ausente.'
         ), 502
 
-    if not _is_allowed(sub):
-        return render_template_string(TMPL_NEGADO, email=email, nome=nome, sub=sub), 403
-
+    # Qualquer usuário autenticado no IDCAMIM entra na sessão. O acesso às telas
+    # de GESTÃO (criar/editar/excluir campanha) continua exigindo a whitelist
+    # local — esse gate é aplicado no before_request `check_wpp_auth`. As telas de
+    # CONSULTA (somente leitura) são liberadas a todo usuário IDCAMIM logado.
     session.permanent = True
     session['sub']   = sub
     session['email'] = email
@@ -256,16 +257,44 @@ except Exception as _e:
 @app.get('/')
 @login_required
 def index():
-    return redirect('/wpp')
+    # Whitelist → plataforma de gestão; usuário IDCAMIM comum → consulta read-only.
+    if _is_allowed(session.get('sub', '')):
+        return redirect('/wpp')
+    return redirect('/wpp/consulta')
 
 
 # ── Before request: garante login para /wpp/* ─────────────────────────────────
 
+# Endpoints de CONSULTA (somente leitura) liberados a qualquer usuário IDCAMIM
+# logado — não exigem a whitelist local. Tudo que NÃO está aqui (gestão/edição:
+# criar, editar, pausar, excluir, disparar) continua restrito à whitelist.
+PUBLIC_WPP_ENDPOINTS = {
+    'wpp.consulta_campanhas',   # GET /wpp/consulta
+    'wpp.consulta_envios',      # GET /wpp/consulta/<cid>
+    'wpp.consulta_detalhe',     # GET /wpp/consulta/envio/<eid>
+    'wpp.conversa_envio',       # GET /wpp/envio/<eid>/conversa (viewer read-only)
+}
+
+
 @app.before_request
 def check_wpp_auth():
-    if request.path.startswith('/wpp') and 'sub' not in session:
+    if not request.path.startswith('/wpp'):
+        return
+    # 1) Precisa estar logado via IDCAMIM.
+    if 'sub' not in session:
         session['next'] = request.url
         return redirect(url_for('auth_login'))
+    # 2) Telas de consulta (read-only): liberadas a todo usuário IDCAMIM logado.
+    if request.endpoint in PUBLIC_WPP_ENDPOINTS:
+        return
+    # 3) Demais telas (gestão): exigem whitelist local.
+    if not _is_allowed(session.get('sub', '')):
+        return render_template_string(
+            TMPL_NEGADO,
+            email=session.get('email', ''),
+            nome=session.get('nome', ''),
+            sub=session.get('sub', ''),
+        ), 403
 
 
 # ── Admin whitelist ────────────────────────────────────────────────────────────

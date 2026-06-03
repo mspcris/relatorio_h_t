@@ -987,6 +987,10 @@ def consulta_campanhas():
     lista = db.listar_campanhas()
     for c in lista:
         c["resumo"] = db.resumo_campanha(c["id"])
+    # Ordem por última mensagem enviada: a campanha que enviou mais recentemente
+    # fica no topo; quem está há mais tempo sem enviar desce. Quem nunca enviou
+    # (ultimo_envio=None) vai pro fim. enviado_em é ISO → ordena lexicograficamente.
+    lista.sort(key=lambda c: c["resumo"].get("ultimo_envio") or "", reverse=True)
     return render_template(
         "wpp_consulta_campanhas.html",
         USER_EMAIL=email,

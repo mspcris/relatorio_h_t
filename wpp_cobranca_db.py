@@ -606,7 +606,8 @@ def resumo_campanha(campanha_id: int) -> dict:
     with get_conn() as conn:
         env = conn.execute(
             "SELECT COUNT(*) as total, "
-            "SUM(CASE WHEN status LIKE 'accepted%' THEN 1 ELSE 0 END) as ok "
+            "SUM(CASE WHEN status LIKE 'accepted%' THEN 1 ELSE 0 END) as ok, "
+            "MAX(CASE WHEN status LIKE 'accepted%' THEN enviado_em END) as ultimo_envio "
             "FROM envios WHERE campanha_id=?", (campanha_id,)
         ).fetchone()
         nenv = conn.execute(
@@ -623,6 +624,8 @@ def resumo_campanha(campanha_id: int) -> dict:
         "enviados": env["ok"] or 0,
         "total_tentativas": env["total"] or 0,
         "nao_enviados": nenv["total"] or 0,
+        # enviado_em é texto ISO (ordena lexicograficamente); None = nunca enviou.
+        "ultimo_envio": env["ultimo_envio"],
     }
 
 
