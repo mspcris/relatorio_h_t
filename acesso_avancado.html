@@ -60,15 +60,22 @@
     table.grid-acesso td.flag.on.critico { background:#f5b7b1; }
     table.grid-acesso td.flag i.on  { color:#c0392b; }
     table.grid-acesso td.flag i.off { color:#dfe3e6; }
+    /* Célula marcada (=1) é clicável para revogar */
+    table.grid-acesso td.flag.revogavel { cursor:pointer; }
+    table.grid-acesso td.flag.revogavel:hover { background:#c0392b; }
+    table.grid-acesso td.flag.revogavel:hover i.on { color:#fff; }
+    table.grid-acesso td.flag.revogavel:hover i.on::before { content:"\f00d"; } /* fa-times */
     table.grid-acesso tr.desativado { opacity:.5; }
     table.grid-acesso tr.tem-critico td.nome { font-weight:700; }
     .legenda dt { color:#c0392b; }
     .legenda dd { margin-bottom:.5rem; font-size:.85rem; }
     .col-usuario { font-family:'Courier New', monospace; font-size:.8rem; color:#555; }
     .resumo-chip { display:inline-block; padding:3px 10px; border-radius:12px; background:#f1f3f5; margin:2px 4px 2px 0; font-size:.8rem; cursor:pointer; border:1px solid transparent; user-select:none; }
-    .resumo-chip:hover { background:#e2e6ea; }
-    .resumo-chip.ativo { background:#c0392b; color:#fff; border-color:#922b21; }
+    .resumo-chip:hover { filter:brightness(.95); }
+    .resumo-chip.ativo { background:#2c3e50; color:#fff; border-color:#1b2631; }
     .resumo-chip.ativo strong { color:#fff; }
+    .resumo-chip.off { background:#f1f3f5; color:#adb5bd; text-decoration:line-through; }
+    .resumo-chip.off strong { color:#adb5bd; }
     .filtro-flag-hint { font-size:.78rem; color:#6c757d; margin-bottom:6px; }
     #loadingBar { display:none; height:3px; background:#c0392b; animation:barpulse 1s infinite; }
     @keyframes barpulse { 0%{opacity:.3} 50%{opacity:1} 100%{opacity:.3} }
@@ -153,10 +160,6 @@
               <input id="fBusca" type="text" class="form-control form-control-sm" placeholder="Digite parte do nome ou usuário...">
             </div>
             <div class="col-md-4 mb-2">
-              <div class="custom-control custom-switch">
-                <input type="checkbox" class="custom-control-input" id="fSoComAcesso" checked>
-                <label class="custom-control-label" for="fSoComAcesso">Só quem tem alguma permissão sensível</label>
-              </div>
               <div class="custom-control custom-switch mt-2">
                 <input type="checkbox" class="custom-control-input" id="fIncluirDesativados">
                 <label class="custom-control-label" for="fIncluirDesativados">Incluir usuários desativados</label>
@@ -184,7 +187,7 @@
   </div>
 
   <footer class="main-footer text-sm">
-    <strong>CAMIM</strong> — Acesso Avançado · somente leitura
+    <strong>CAMIM</strong> — Acesso Avançado · revogação auditada em Sis_Historico
   </footer>
 </div>
 
@@ -196,7 +199,7 @@
   var POSTOS = [];       // [{letra,nome}]
   var CACHE = {};        // posto -> [usuarios]
   var ATUAL = null;      // letra do posto selecionado
-  var FLAG_FILTRO = null; // se setado, mostra só quem tem essa permissão
+  var CHECKED = null;    // Set de flags marcadas; começa com TODAS marcadas
 
   var CRITICO = "verAbaAcessoAvancado";
 
@@ -230,19 +233,123 @@
     });
   }
 
+  function postJSON(url, body) {
+    return fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok) { throw new Error(j && j.error ? j.error : ("HTTP " + r.status)); }
+        return j;
+      });
+    });
+  }
+
+  function revogar(td) {
+    if (!ATUAL) { return; }
+    var idu = parseInt(td.getAttribute("data-idu"), 10);
+    var flag = td.getAttribute("data-flag");
+    var usuario = td.getAttribute("data-usuario");
+    var flaglabel = td.getAttribute("data-flaglabel");
+    var info = POSTOS.filter(function (p) { return p.letra === ATUAL; })[0] || { letra: ATUAL, nome: ATUAL };
+
+    if (!confirm(
+      'Revogar "' + flaglabel + '" de ' + usuario + ' no posto ' + info.nome + '?\n\n'
+      + 'Isso altera o sis_usuario (campo = 0) e fica registrado em Sis_Historico.'
+    )) { return; }
+
+    clearAlert();
+    loading.style.display = "block";
+    postJSON("/api/acesso_avancado/revogar", { posto: ATUAL, idUsuario: idu, flag: flag })
+      .then(function () {
+        // Atualiza o cache local e re-renderiza (sem recarregar o posto inteiro).
+        var lst = CACHE[ATUAL] || [];
+        for (var i = 0; i < lst.length; i++) {
+          if (lst[i].idUsuario === idu) {
+            lst[i].flags[flag] = false;
+            lst[i].tem_algum = Object.keys(lst[i].flags).some(function (k) { return lst[i].flags[k]; });
+            break;
+          }
+        }
+        renderGrid();
+      })
+      .catch(function (e) { showAlert("Falha ao revogar: " + e.message); })
+      .then(function () { loading.style.display = "none"; });
+  }
+
+  var STATUS_LABEL = {
+    sera_desativado: "será desativado",
+    desativado: "DESATIVADO",
+    ja_desativado: "já estava desativado",
+    nao_encontrado: "não existe neste posto",
+    sem_vinculo_admin: "PULADO — você não tem login neste posto (sem como auditar)",
+    erro: "ERRO",
+  };
+
+  function resumoResultados(resultados) {
+    return resultados.map(function (r) {
+      var nome = r.nome ? (" — " + r.nome) : "";
+      var extra = r.erro ? (" [" + r.erro + "]") : "";
+      return "• " + r.posto_nome + " (" + r.posto + "): " + (STATUS_LABEL[r.status] || r.status) + nome + extra;
+    }).join("\n");
+  }
+
+  function desativarTodosPostos(login) {
+    if (!login) { return; }
+    clearAlert();
+    loading.style.display = "block";
+    // 1) Pré-visualização (não escreve nada)
+    postJSON("/api/acesso_avancado/desativar/preview", { login: login })
+      .then(function (prev) {
+        loading.style.display = "none";
+        var res = prev.resultados || [];
+        var nVai = res.filter(function (r) { return r.status === "sera_desativado"; }).length;
+        if (nVai === 0) {
+          alert('Nada a desativar para "' + login + '".\n\n' + resumoResultados(res));
+          return;
+        }
+        if (!confirm(
+          'Desativar "' + login + '" em ' + nVai + ' posto(s)?\n\n'
+          + resumoResultados(res)
+          + '\n\nIsso grava Desativado = 1 no sis_usuario e registra em Sis_Historico em cada posto.'
+        )) { return; }
+        // 2) Execução
+        loading.style.display = "block";
+        return postJSON("/api/acesso_avancado/desativar", { login: login, confirmar: true })
+          .then(function (out) {
+            // Marca como desativado no cache de todos os postos já carregados.
+            Object.keys(CACHE).forEach(function (pk) {
+              (CACHE[pk] || []).forEach(function (u) {
+                if (u.usuario === login) { u.desativado = true; }
+              });
+            });
+            renderGrid();
+            alert('"' + login + '" desativado em ' + (out.desativados || 0) + ' posto(s).\n\n' + resumoResultados(out.resultados || []));
+          });
+      })
+      .catch(function (e) { showAlert("Falha ao desativar: " + e.message); })
+      .then(function () { loading.style.display = "none"; });
+  }
+
   function getFiltros() {
     return {
       busca: (el("fBusca").value || "").trim().toLowerCase(),
-      soComAcesso: el("fSoComAcesso").checked,
       incluirDesativados: el("fIncluirDesativados").checked,
-      flagFiltro: FLAG_FILTRO,
     };
   }
 
   function passaFiltro(u, f) {
     if (!f.incluirDesativados && u.desativado) { return false; }
-    if (f.flagFiltro && !u.flags[f.flagFiltro]) { return false; }
-    if (f.soComAcesso && !u.tem_algum) { return false; }
+    // Só aparece quem tem PELO MENOS UMA permissão que ainda está marcada (CHECKED).
+    // Quem não tem nenhum bit, ou só tem bits desmarcados, some da tela.
+    var visivel = false;
+    for (var i = 0; i < FLAGS.length; i++) {
+      var k = FLAGS[i].key;
+      if (u.flags[k] && CHECKED && CHECKED.has(k)) { visivel = true; break; }
+    }
+    if (!visivel) { return false; }
     if (f.busca) {
       var hay = (u.nome + " " + u.usuario).toLowerCase();
       if (hay.indexOf(f.busca) === -1) { return false; }
@@ -286,15 +393,16 @@
 
     var chips = "";
     FLAGS.forEach(function (fl) {
-      var ativo = FLAG_FILTRO === fl.key;
-      var critBase = (fl.key === CRITICO && !ativo) ? ' style="background:#f5b7b1;font-weight:700"' : "";
-      chips += '<span class="resumo-chip' + (ativo ? " ativo" : "") + '" data-flag="' + esc(fl.key) + '"'
-        + ' title="Clique para ver só quem tem: ' + esc(fl.label) + '"' + critBase + '>'
+      var ativo = !CHECKED || CHECKED.has(fl.key);
+      chips += '<span class="resumo-chip' + (ativo ? " ativo" : " off") + '" data-flag="' + esc(fl.key) + '"'
+        + ' title="Clique para ' + (ativo ? "OCULTAR" : "mostrar de novo") + ' quem tem: ' + esc(fl.label) + '">'
         + esc(HEADER_SHORT[fl.key] || fl.label) + ": <strong>" + counts[fl.key] + "</strong></span>";
     });
-    var hint = FLAG_FILTRO
-      ? '<div class="filtro-flag-hint"><i class="fas fa-filter mr-1"></i>Filtrando por <strong>' + esc(HEADER_SHORT[FLAG_FILTRO] || FLAG_FILTRO) + '</strong>. Clique de novo no chip para limpar.</div>'
-      : '<div class="filtro-flag-hint"><i class="fas fa-hand-pointer mr-1"></i>Clique num indicador abaixo para ver só os usuários com aquela permissão.</div>';
+    var nOff = FLAGS.filter(function (fl) { return CHECKED && !CHECKED.has(fl.key); }).length;
+    var hint = nOff
+      ? '<div class="filtro-flag-hint"><i class="fas fa-filter mr-1"></i>Ocultando ' + nOff + ' permissão(ões). Quem ficou sem nenhuma permissão marcada sumiu da lista. Clique no chip cinza para mostrar de novo.</div>'
+      : '<div class="filtro-flag-hint"><i class="fas fa-hand-pointer mr-1"></i>Todas as permissões marcadas. Clique num indicador para <strong>ocultar</strong> quem tem aquela permissão.</div>';
+    hint += '<div class="filtro-flag-hint"><i class="fas fa-user-slash mr-1 text-danger"></i>Para <strong>revogar</strong> uma permissão, clique na célula marcada (<i class="fas fa-check text-danger"></i>) do usuário. Para <strong>desativar</strong> o usuário em todos os postos, use o botão na coluna do nome. Tudo grava em <code>sis_usuario</code> e em <code>Sis_Historico</code>.</div>';
 
     var rows = "";
     if (vis.length === 0) {
@@ -307,13 +415,28 @@
         FLAGS.forEach(function (fl) {
           var on = u.flags[fl.key];
           var crit = fl.key === CRITICO ? " critico" : "";
-          var icon = on ? '<i class="fas fa-check on" title="SIM"></i>' : '<i class="fas fa-minus off" title="não"></i>';
-          tds += '<td class="flag' + (on ? " on" + crit : "") + '">' + icon + "</td>";
+          if (on) {
+            var lbl = HEADER_SHORT[fl.key] || fl.label;
+            tds += '<td class="flag on' + crit + ' revogavel"'
+              + ' data-idu="' + u.idUsuario + '"'
+              + ' data-flag="' + esc(fl.key) + '"'
+              + ' data-usuario="' + esc(u.usuario) + '"'
+              + ' data-flaglabel="' + esc(lbl) + '"'
+              + ' title="Clique para REVOGAR (grava em Sis_Historico)">'
+              + '<i class="fas fa-check on"></i></td>';
+          } else {
+            tds += '<td class="flag"><i class="fas fa-minus off" title="não"></i></td>';
+          }
         });
         var badgeDes = u.desativado ? ' <span class="badge badge-secondary">desativado</span>' : "";
+        var btnDes = u.desativado ? "" :
+          '<button class="btn btn-outline-danger btn-sm btnDesativar mt-1" data-usuario="' + esc(u.usuario) + '"'
+          + ' title="Desativar este usuário em TODOS os postos (audita em Sis_Historico)">'
+          + '<i class="fas fa-user-slash mr-1"></i>Desativar (todos os postos)</button>';
         rows += '<tr class="' + cls + '">'
           + '<td class="nome">' + esc(u.nome) + badgeDes
-          + '<div class="col-usuario">' + esc(u.usuario) + " · id " + u.idUsuario + "</div></td>"
+          + '<div class="col-usuario">' + esc(u.usuario) + " · id " + u.idUsuario + "</div>"
+          + btnDes + "</td>"
           + tds + "</tr>";
       });
     }
@@ -337,13 +460,24 @@
       + "  </div>"
       + "</div>";
 
-    // chips clicáveis: toggle do filtro por permissão
+    // chips clicáveis: marca/desmarca a permissão (oculta quem só tem ela)
     cont.querySelectorAll(".resumo-chip").forEach(function (c) {
       c.addEventListener("click", function () {
         var k = c.getAttribute("data-flag");
-        FLAG_FILTRO = (FLAG_FILTRO === k) ? null : k;
+        if (!CHECKED) { return; }
+        if (CHECKED.has(k)) { CHECKED.delete(k); } else { CHECKED.add(k); }
         renderGrid();
       });
+    });
+
+    // células marcadas: clique revoga a flag (com auditoria no Sis_Historico)
+    cont.querySelectorAll("td.flag.revogavel").forEach(function (td) {
+      td.addEventListener("click", function () { revogar(td); });
+    });
+
+    // botão desativar: cascata em todos os postos (com pré-visualização)
+    cont.querySelectorAll(".btnDesativar").forEach(function (b) {
+      b.addEventListener("click", function () { desativarTodosPostos(b.getAttribute("data-usuario")); });
     });
   }
 
@@ -394,6 +528,7 @@
 
     fetchJSON("/api/acesso_avancado/postos").then(function (j) {
       FLAGS = j.flags || [];
+      CHECKED = new Set(FLAGS.map(function (f) { return f.key; }));  // todas marcadas
       POSTOS = j.postos || [];
       loading.style.display = "none";
       if (POSTOS.length === 0) {
@@ -411,7 +546,6 @@
 
   // filtros re-renderizam só o posto atual
   el("fBusca").addEventListener("input", renderGrid);
-  el("fSoComAcesso").addEventListener("change", renderGrid);
   el("fIncluirDesativados").addEventListener("change", renderGrid);
   el("btnRecarregar").addEventListener("click", function () {
     var atual = ATUAL;
