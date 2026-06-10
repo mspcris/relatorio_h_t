@@ -396,7 +396,7 @@ def api_confirmar_presenca():
             "SET NOCOUNT ON;"
             "DECLARE @upd TABLE (hora varchar(5));"
             "UPDATE Cad_Lancamento "
-            "  SET dataconfirmacaoConsulta = GETDATE(), idUsuarioConfirmaPresenca = ? "
+            "  SET dataconfirmacaoConsulta = GETDATE(), idUsuarioConfirmaPresenca = ?, Confere = 1 "
             "  OUTPUT CONVERT(varchar(5), INSERTED.dataconfirmacaoConsulta, 108) INTO @upd "
             "  WHERE idLancamento = ? AND dataconfirmacaoConsulta IS NULL;"
             "SELECT hora FROM @upd;",
