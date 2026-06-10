@@ -82,6 +82,20 @@
     .kpi-card .kpi-val { font-size: 1.25rem; font-weight: 700; line-height: 1.1; }
     .kpi-card .kpi-lbl { font-size: .68rem; color: #6c757d; margin-top: 1px; line-height: 1.1; }
 
+    /* Topbar: abas + filtros na MESMA linha (ganha espaço vertical) */
+    .topbar { flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+              background: #fff; border-bottom: 1px solid #dee2e6; padding: 2px 12px; flex-wrap: wrap; }
+    .topbar .nav-tabs { border-bottom: none; padding: 0; flex: 0 0 auto; }
+    .topbar-sep { width: 1px; align-self: stretch; min-height: 32px; background: #ced4da; margin: 3px 4px; }
+    .topbar .filtros-bar { flex: 1 1 auto; box-shadow: none; border-radius: 0; padding: 2px 0; margin-bottom: 0; }
+
+    /* Resumo do dia (KPIs) — colapsável, nasce colapsado */
+    .kpi-toggle { flex: 0 0 auto; align-self: flex-start; cursor: pointer; user-select: none;
+                  font-size: .76rem; font-weight: 600; color: #495057; padding: 3px 10px;
+                  margin-bottom: 6px; background: #fff; border-radius: 6px;
+                  box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .kpi-toggle:hover { color: #007bff; }
+
     /* Status badges */
     .badge-adimplente   { background: #28a745; color: #fff; }
     .badge-atrasado     { background: #fd7e14; color: #fff; }
@@ -171,60 +185,70 @@
     <i class="fas fa-spinner fa-spin mr-2"></i>Carregando status do snapshot…
   </div>
 
-  <!-- TABS -->
-  <ul class="nav nav-tabs" role="tablist">
-    <li class="nav-item">
-      <a class="nav-link active" id="tab-agenda-link" data-toggle="tab" href="#tab-agenda" role="tab">
-        <i class="fas fa-list-ul mr-1"></i>Agenda
-      </a>
-    </li>
-    <li class="nav-item">
-      <a class="nav-link" id="tab-dashboard-link" data-toggle="tab" href="#tab-dashboard" role="tab">
-        <i class="fas fa-chart-pie mr-1"></i>Dashboard
-      </a>
-    </li>
-  </ul>
+  <!-- TOPBAR: abas + filtros na mesma linha -->
+  <div class="topbar">
+    <ul class="nav nav-tabs" role="tablist">
+      <li class="nav-item">
+        <a class="nav-link active" id="tab-agenda-link" data-toggle="tab" href="#tab-agenda" role="tab">
+          <i class="fas fa-list-ul mr-1"></i>Agenda
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" id="tab-dashboard-link" data-toggle="tab" href="#tab-dashboard" role="tab">
+          <i class="fas fa-chart-pie mr-1"></i>Dashboard
+        </a>
+      </li>
+    </ul>
+
+    <div class="topbar-sep"></div>
+
+    <!-- Filtros (mesma linha das abas) -->
+    <div class="filtros-bar">
+      <div>
+        <label>Posto</label>
+        <select id="selPosto" class="custom-select custom-select-sm" style="width:150px"></select>
+      </div>
+      <div>
+        <label>Data</label>
+        <input type="date" id="inpData" class="form-control form-control-sm" style="width:145px" />
+      </div>
+      <div>
+        <label>Agrupar por</label>
+        <select id="selGroup" class="custom-select custom-select-sm" style="width:160px">
+          <option value="">Sem agrupamento</option>
+          <option value="medico" selected>Médico</option>
+          <option value="especialidade">Especialidade</option>
+          <option value="situacao">Situação Financeira</option>
+          <option value="atendido">Status Atendimento</option>
+          <option value="posto_cliente">Posto do Cliente</option>
+        </select>
+      </div>
+      <div>
+        <label>Buscar paciente</label>
+        <input type="text" id="inpBusca" class="form-control form-control-sm" placeholder="Nome ou matrícula..." style="width:170px" />
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <div class="custom-control custom-switch" style="padding-top:3px">
+          <input type="checkbox" class="custom-control-input" id="chkDesistencia" />
+          <label class="custom-control-label" for="chkDesistencia">Exibir desistência</label>
+        </div>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button id="btnCarregar" class="btn btn-sm btn-primary d-block"><i class="fas fa-search mr-1"></i>Consultar</button>
+      </div>
+    </div>
+  </div><!-- /topbar -->
 
   <div class="tab-content">
 
     <!-- ──────────────── TAB AGENDA ──────────────── -->
     <div class="tab-pane fade show active" id="tab-agenda" role="tabpanel">
 
-      <!-- Filtros -->
-      <div class="filtros-bar">
-        <div>
-          <label>Posto</label>
-          <select id="selPosto" class="custom-select custom-select-sm" style="width:170px"></select>
-        </div>
-        <div>
-          <label>Data</label>
-          <input type="date" id="inpData" class="form-control form-control-sm" style="width:150px" />
-        </div>
-        <div>
-          <label>Agrupar por</label>
-          <select id="selGroup" class="custom-select custom-select-sm" style="width:170px">
-            <option value="">Sem agrupamento</option>
-            <option value="medico" selected>Médico</option>
-            <option value="especialidade">Especialidade</option>
-            <option value="situacao">Situação Financeira</option>
-            <option value="atendido">Status Atendimento</option>
-            <option value="posto_cliente">Posto do Cliente</option>
-          </select>
-        </div>
-        <div>
-          <label>Buscar paciente</label>
-          <input type="text" id="inpBusca" class="form-control form-control-sm" placeholder="Nome ou matrícula..." style="width:180px" />
-        </div>
-        <div>
-          <label>&nbsp;</label>
-          <div class="custom-control custom-switch" style="padding-top:3px">
-            <input type="checkbox" class="custom-control-input" id="chkDesistencia" />
-            <label class="custom-control-label" for="chkDesistencia">Exibir desistência</label>
-          </div>
-        </div>
-        <div>
-          <button id="btnCarregar" class="btn btn-sm btn-primary"><i class="fas fa-search mr-1"></i>Consultar</button>
-        </div>
+      <!-- Resumo do dia: colapsável, nasce colapsado -->
+      <div class="kpi-toggle collapsed" id="kpiToggle">
+        <i class="fas fa-caret-right mr-1"></i><span>Resumo do dia</span>
       </div>
 
       <!-- KPI Cards -->
@@ -303,6 +327,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
   let META_GLOBAL = {};   // {posto: {gerado_em, sucesso, erro, n_registros}}
   let chartPresenca, chartSituacao, chartPagamento;
   let chartsNeedRefresh = true;   // marcado quando DATA muda; consumido ao abrir dashboard
+  let kpiAberto = false;          // Resumo do dia nasce COLAPSADO
 
   const NOMES_POSTOS = {
     A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho', G:'Campo Grande',
@@ -433,6 +458,15 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     $('#selPosto').on('change', () => { updateBanner($('#selPosto').val()); carregar(); });
     $('#chkDesistencia').on('change', renderTable);
 
+    // Resumo do dia (KPIs) — abre/fecha; nasce colapsado
+    $('#kpiToggle').on('click', function() {
+      kpiAberto = !kpiAberto;
+      $('#kpiRow').toggle(kpiAberto && DATA.length > 0);
+      $(this).toggleClass('collapsed', !kpiAberto)
+             .find('i').toggleClass('fa-caret-right', !kpiAberto)
+                       .toggleClass('fa-caret-down', kpiAberto);
+    });
+
     // Clique no ícone de observação: não propaga (não mexe na linha/grupo) e
     // fecha qualquer outro popover já aberto. O toggle do próprio é do Bootstrap.
     $(document).on('click', '.obs-icon', function(e) {
@@ -491,7 +525,8 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
         if (!DATA.length) { $('#msgVazio').show(); return; }
         updateKPIs();
         renderTable();
-        $('#kpiRow, #tblContainer').show();
+        $('#tblContainer').show();
+        $('#kpiRow').toggle(kpiAberto);   // só mostra se o resumo estiver aberto
         // Se Dashboard estiver visível agora, atualiza charts imediatamente
         if ($('#tab-dashboard').hasClass('active')) {
           renderCharts();
