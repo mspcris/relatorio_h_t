@@ -154,6 +154,49 @@
     .chart-card h3 { flex: 0 0 auto; font-size: 1.05rem; }
     .chart-card .chart-wrapper { flex: 1 1 auto; min-height: 0; position: relative; }
 
+    /* Widget de usuário (canto sup. direito) — padrão foto idCamim + área idCamim */
+    .uw-wrap { position: relative; display: flex; align-items: center; }
+    .uw-btn { display: flex; align-items: center; gap: .4rem; background: none; border: 0;
+              cursor: pointer; padding: 2px 6px; border-radius: 24px; color: inherit; font: inherit; }
+    .uw-btn:hover { background: rgba(0,0,0,.05); }
+    .uw-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex: 0 0 28px;
+                 display: flex; align-items: center; justify-content: center; background: #6c757d;
+                 color: #fff; font-size: .72rem; font-weight: 600; overflow: hidden; }
+    .uw-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .uw-name { font-weight: 600; font-size: .82rem; max-width: 160px; overflow: hidden;
+               text-overflow: ellipsis; white-space: nowrap; }
+    .uw-caret { font-size: .62rem; opacity: .6; }
+    .uw-menu { position: absolute; top: calc(100% + 6px); right: 0; min-width: 240px; background: #fff;
+               border: 1px solid rgba(0,0,0,.12); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.15);
+               padding: .4rem 0; z-index: 1080; display: none; }
+    .uw-menu.open { display: block; }
+    .uw-head { padding: .5rem .9rem; border-bottom: 1px solid rgba(0,0,0,.08); margin-bottom: .3rem; }
+    .uw-head .n { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .uw-head .e { font-size: .76rem; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .uw-vinc { font-size: .72rem; padding: .25rem .9rem .35rem; }
+    .uw-vinc .ok  { color: #198754; } .uw-vinc .no { color: #c0392b; }
+    .uw-item { display: flex; align-items: center; gap: .6rem; width: 100%; padding: .5rem .9rem;
+               background: none; border: 0; text-align: left; cursor: pointer; color: #212529;
+               font: inherit; text-decoration: none; }
+    .uw-item:hover { background: #f1f3f5; color: #212529; text-decoration: none; }
+    .uw-item i { width: 18px; text-align: center; opacity: .75; }
+    .uw-item.danger { color: #c0392b; }
+
+    /* Botão Confirmar presença na coluna Confirmação */
+    .btn-confirmar { font-size: .72rem; padding: 1px 8px; line-height: 1.5; white-space: nowrap; }
+    .conf-ok { color: #198754; font-weight: 600; }
+
+    /* Modal central "vincule seu usuário" */
+    .vinc-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+                    z-index: 10000; align-items: center; justify-content: center; padding: 16px; }
+    .vinc-overlay.active { display: flex; }
+    .vinc-card { background: #fff; border-radius: 12px; max-width: 460px; width: 100%;
+                 box-shadow: 0 12px 48px rgba(0,0,0,.3); padding: 28px 26px; text-align: center; }
+    .vinc-card .vc-ico { font-size: 2.4rem; color: #e0a800; margin-bottom: 10px; }
+    .vinc-card h4 { font-weight: 700; }
+    .vinc-card p { color: #555; font-size: .92rem; }
+    .vinc-card .vc-actions { margin-top: 18px; display: flex; gap: 10px; justify-content: center; }
+
     /* Loading */
     .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(255,255,255,.7); z-index: 9999; align-items: center; justify-content: center; }
     .loading-overlay.active { display: flex; }
@@ -170,14 +213,8 @@
       <i class="fas fa-calendar-check mr-1 text-primary"></i>
       Agenda do Dia — F3
     </div>
-    <div class="user-info">
-      <i class="fas fa-user mr-1"></i><span id="userEmail">{{ USER_EMAIL or '' }}</span>
-      <form method="POST" action="/auth/logout" style="display:inline;margin-left:10px">
-        <button type="submit" class="btn btn-sm btn-outline-secondary">
-          <i class="fas fa-sign-out-alt mr-1"></i>Sair
-        </button>
-      </form>
-    </div>
+    <!-- Widget de usuário (foto idCamim + área idCamim) — montado por JS via /session/me -->
+    <div class="uw-wrap" id="userWidget" data-email="{{ USER_EMAIL or '' }}"></div>
   </div>
 
   <!-- STATUS BANNER -->
@@ -316,6 +353,24 @@
   <div class="spinner-border text-primary" role="status" style="width:48px;height:48px"><span class="sr-only">Carregando...</span></div>
 </div>
 
+<!-- Modal central: usuário sem vínculo CAMIM não pode confirmar presença -->
+<div class="vinc-overlay" id="vincOverlay">
+  <div class="vinc-card">
+    <div class="vc-ico"><i class="fas fa-user-lock"></i></div>
+    <h4>Vincule seu usuário CAMIM</h4>
+    <p id="vincMsg">Você ainda não tem um usuário do sistema CAMIM vinculado ao seu login
+       idCamim. Sem esse vínculo não é possível confirmar presença — a confirmação
+       precisa de um responsável para ser registrada.</p>
+    <div class="vc-actions">
+      <button type="button" class="btn btn-outline-secondary" id="vincFechar">Fechar</button>
+      <a class="btn btn-primary" href="https://idcamim.camim.com.br/conta/login?returnTo=%2Fconta"
+         target="_blank" rel="noopener">
+        <i class="fas fa-id-badge mr-1"></i>Vincular na minha área do IDCamim
+      </a>
+    </div>
+  </div>
+</div>
+
 <script>
 window.USER_POSTOS = {{ USER_POSTOS|safe }};
 </script>
@@ -328,6 +383,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
   let chartPresenca, chartSituacao, chartPagamento;
   let chartsNeedRefresh = true;   // marcado quando DATA muda; consumido ao abrir dashboard
   let kpiAberto = false;          // Resumo do dia nasce COLAPSADO
+  let SESSION = { email: null, nome: null, foto_url: '', vinculado: false };
 
   const NOMES_POSTOS = {
     A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho', G:'Campo Grande',
@@ -443,6 +499,89 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
 
+  // ── Widget de usuário (foto idCamim + área idCamim) ──
+  function _iniciais(nome, email) {
+    const base = (nome||'').trim();
+    if (base) {
+      const p = base.split(/\s+/).filter(Boolean);
+      return (p.length === 1 ? p[0].slice(0,2) : p[0][0]+p[p.length-1][0]).toUpperCase();
+    }
+    return ((email||'?').trim()[0]||'?').toUpperCase();
+  }
+
+  function buildWidget() {
+    const $w = $('#userWidget');
+    const nome = SESSION.nome || SESSION.email || 'Usuário';
+    const ini = _iniciais(SESSION.nome, SESSION.email);
+    const avatar = SESSION.foto_url
+      ? `<span class="uw-avatar" data-ini="${escHtml(ini)}"><img src="${escHtml(SESSION.foto_url)}" alt=""
+           onerror="this.parentNode.textContent=this.parentNode.getAttribute('data-ini')"></span>`
+      : `<span class="uw-avatar">${escHtml(ini)}</span>`;
+    const vinc = SESSION.vinculado
+      ? `<div class="uw-vinc"><i class="fas fa-check-circle ok mr-1"></i><span class="ok">Usuário CAMIM vinculado${SESSION.login_campinho ? ' ('+escHtml(SESSION.login_campinho)+')' : ''}</span></div>`
+      : `<div class="uw-vinc"><i class="fas fa-exclamation-triangle no mr-1"></i><span class="no">Sem usuário CAMIM vinculado</span></div>`;
+    $w.html(
+      `<button type="button" class="uw-btn" id="uwToggle" aria-haspopup="true" aria-expanded="false">
+         ${avatar}<span class="uw-name">${escHtml(nome)}</span><i class="fas fa-chevron-down uw-caret"></i>
+       </button>
+       <div class="uw-menu" id="uwMenu" role="menu">
+         <div class="uw-head"><div class="n">${escHtml(nome)}</div><div class="e">${escHtml(SESSION.email||'')}</div></div>
+         ${vinc}
+         <a class="uw-item" href="https://idcamim.camim.com.br/conta/login?returnTo=%2Fconta" target="_blank" rel="noopener" role="menuitem">
+           <i class="fas fa-id-badge"></i><span>Acessar minha área do IDCamim</span></a>
+         <form method="POST" action="/auth/logout" style="margin:0">
+           <button type="submit" class="uw-item danger" role="menuitem"><i class="fas fa-sign-out-alt"></i><span>Sair</span></button>
+         </form>
+       </div>`);
+    const $toggle = $w.find('#uwToggle'), $menu = $w.find('#uwMenu');
+    $toggle.on('click', function(e){ e.stopPropagation();
+      const open = $menu.toggleClass('open').hasClass('open');
+      $toggle.attr('aria-expanded', open ? 'true':'false');
+    });
+    $(document).on('click', function(e){ if (!$w[0].contains(e.target)) $menu.removeClass('open'); });
+  }
+
+  function loadSession() {
+    return $.getJSON('/session/me').then(d => {
+      if (d) { SESSION = Object.assign(SESSION, d); }
+    }).always(buildWidget);
+  }
+
+  // ── Modal "vincule seu usuário" ──
+  function showVincModal(msg) {
+    if (msg) $('#vincMsg').text(msg);
+    $('#vincOverlay').addClass('active');
+  }
+
+  // ── Confirmar presença ──
+  function confirmarPresenca(idlanc, $btn) {
+    if (!SESSION.vinculado) { showVincModal(); return; }
+    const posto = $('#selPosto').val();
+    const original = $btn.html();
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+    $.ajax({
+      url: '/api/confirmar_presenca', method: 'POST', contentType: 'application/json',
+      data: JSON.stringify({ posto: posto, idlancamento: idlanc }),
+    }).done(res => {
+      if (res && res.ok) {
+        const hora = res.hora_confirmacao || '✓';
+        // Atualiza a célula e o DATA em memória (sobrevive a re-render/agrupamento)
+        $btn.closest('td').html(`<span class="conf-ok"><i class="fas fa-check mr-1"></i>${escHtml(hora)}</span>`);
+        const p = DATA.find(x => String(x.idlancamento) === String(idlanc));
+        if (p) p.hora_confirmacao = res.hora_confirmacao || hora;
+      } else {
+        $btn.prop('disabled', false).html(original);
+        if (res && (res.sem_vinculo || res.sem_vinculo_posto)) showVincModal(res.error);
+        else alert((res && res.error) || 'Falha ao confirmar');
+      }
+    }).fail(xhr => {
+      $btn.prop('disabled', false).html(original);
+      const r = xhr.responseJSON;
+      if (r && (r.sem_vinculo || r.sem_vinculo_posto)) showVincModal(r.error);
+      else alert((r && r.error) || 'Erro de conexão ao confirmar');
+    });
+  }
+
   function init() {
     const hoje = hojeLocal();
     $('#inpData').val(hoje);
@@ -457,6 +596,17 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     $('#inpData').on('change', carregar);
     $('#selPosto').on('change', () => { updateBanner($('#selPosto').val()); carregar(); });
     $('#chkDesistencia').on('change', renderTable);
+
+    // Sessão (widget + estado de vínculo p/ confirmar presença)
+    loadSession();
+
+    // Confirmar presença — delegado; stopPropagation p/ não togglar o grupo
+    $('#tblBody').on('click', '.btn-confirmar', function(e) {
+      e.stopPropagation();
+      confirmarPresenca($(this).data('idlanc'), $(this));
+    });
+    $('#vincFechar').on('click', () => $('#vincOverlay').removeClass('active'));
+    $('#vincOverlay').on('click', e => { if (e.target.id === 'vincOverlay') $('#vincOverlay').removeClass('active'); });
 
     // Resumo do dia (KPIs) — abre/fecha; nasce colapsado
     $('#kpiToggle').on('click', function() {
@@ -638,7 +788,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     const postoClass = postoCliente !== $('#selPosto').val() ? 'font-weight-bold text-danger' : '';
     return `<tr>
       <td>${escHtml(p.hora_prevista||'—')}</td>
-      <td>${escHtml(p.hora_confirmacao||'—')}</td>
+      <td>${confirmacaoCell(p)}</td>
       <td>${escHtml(p.paciente)}${obsIcon(p.observacao)}</td>
       <td>${p.matricula||'—'}</td>
       <td class="text-center ${postoClass}">${escHtml(postoCliente)}</td>
@@ -650,6 +800,19 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
       <td>${p.pagou_no_dia ? '<span class="badge badge-pagou"><i class="fas fa-check mr-1"></i>Sim</span>' : '—'}</td>
       <td class="text-center">${p.dias_agend_cons!=null?p.dias_agend_cons:'—'}</td>
     </tr>`;
+  }
+
+  // Coluna Confirmação: hora se já confirmado; senão botão "Confirmar"
+  // (só quando há idlancamento, não é desistência nem médico-faltou).
+  function confirmacaoCell(p) {
+    if (p.hora_confirmacao) {
+      return `<span class="conf-ok"><i class="fas fa-check mr-1"></i>${escHtml(p.hora_confirmacao)}</span>`;
+    }
+    if (p.idlancamento && !_isDesistente(p) && !_isMedicoFaltou(p)) {
+      return `<button type="button" class="btn btn-outline-primary btn-confirmar" data-idlanc="${p.idlancamento}">`
+           + `<i class="fas fa-check mr-1"></i>Confirmar</button>`;
+    }
+    return '—';
   }
 
   function badgeAtendimento(val) {

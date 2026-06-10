@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS agenda_dia (
     id               BIGSERIAL    PRIMARY KEY,
     posto            CHAR(1)      NOT NULL,
     data             DATE         NOT NULL,
+    idlancamento     BIGINT,                 -- chave p/ confirmar presença (UPDATE pontual)
     matricula        BIGINT,                 -- bigint p/ segurança (KPI já viu erro out-of-range)
     cfcliente        VARCHAR(4),
     posto_cliente    VARCHAR(4),
@@ -37,12 +38,17 @@ CREATE TABLE IF NOT EXISTS agenda_dia (
 );
 
 -- Migração idempotente p/ bancos que já tinham a tabela sem as colunas novas
-ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS observacao  TEXT;
-ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS medico_sala TEXT;
-ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS medico_obs  TEXT;
+ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS observacao   TEXT;
+ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS medico_sala  TEXT;
+ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS medico_obs   TEXT;
+ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS idlancamento BIGINT;
 
 CREATE INDEX IF NOT EXISTS idx_agenda_dia_posto_data
     ON agenda_dia (posto, data);
+
+-- Confirmação de presença faz UPDATE pontual por (posto, idlancamento)
+CREATE INDEX IF NOT EXISTS idx_agenda_dia_idlancamento
+    ON agenda_dia (posto, idlancamento);
 
 -- Status da última rodada por posto (atualizado SEMPRE — inclusive em falha)
 CREATE TABLE IF NOT EXISTS agenda_dia_meta (

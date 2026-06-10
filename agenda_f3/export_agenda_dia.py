@@ -186,6 +186,7 @@ def connect_all_postos():
 SQL_AGENDA = """
 SET NOCOUNT ON;
 SELECT
+    v.idLancamento,
     v.idendereco,
     v.matricula,
     v.codigo       AS cfcliente,
@@ -650,6 +651,7 @@ def build_pacientes(rows, dt_iso: str, status_global: dict, pagou_global: dict,
         medico_sala = sala_map.get(idmed) if idmed else None
         medico_obs  = falta_map.get((idmed, dt_iso)) if idmed else None
         pacientes.append({
+            "idlancamento":     safe_int(r.get("idLancamento")),
             "matricula":        mat,
             "cfcliente":        cf,
             "posto_cliente":    cf if cf else "?",

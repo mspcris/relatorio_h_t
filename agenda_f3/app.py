@@ -42,6 +42,20 @@ app.config['PERMANENT_SESSION_LIFETIME'] = 3600 * 8
 POSTOS_TODOS = list("ABCDGIJMNPRXY")  # todos os 13, exibidos a qualquer usuário
 JSON_FALLBACK = '/opt/agenda_f3/json_consolidado/agenda_dia.json'
 
+# Claims do idCamim usados pra vincular o login ao usuário do sistema CAMIM.
+# O que importa pra confirmar presença é o `login_campinho` (a string `Usuario`
+# do sis_usuario, ex.: 'cristiano2.a') — ela é igual em todos os postos; o
+# idUsuario é resolvido POR POSTO no momento da confirmação (ver pegadinha em
+# project_confirmar_presenca_schema). NÃO se confia num id_usuario_sqlserver
+# fixo: o mesmo Usuario tem idUsuario diferente em cada banco de posto.
+_CLAIM_LOGIN_CAMPINHO = 'login_campinho'
+
+# Auditoria (Sis_Historico) da confirmação de presença em Cad_Lancamento.
+ID_TABELA_CAD_LANCAMENTO = 44   # de Sis_HistoricoTabela
+ID_COMANDO_EDICAO        = 2    # de Sis_HistoricoComando (não há "Confirmação")
+COMPUTADOR_ORIGEM        = 'camila2.ia.camim.com.br'
+ODBC_DRIVER              = os.getenv('ODBC_DRIVER', 'ODBC Driver 17 for SQL Server')
+
 # ── OIDC config (lazy) ───────────────────────────────────────────────────────
 
 IDCAMIM_CLIENT_ID     = os.environ['IDCAMIM_CLIENT_ID']
@@ -134,6 +148,9 @@ def auth_callback():
     session['sub']   = sub
     session['email'] = userinfo.get('email', '')
     session['nome']  = userinfo.get('name') or userinfo.get('preferred_username', '')
+    session['foto_url'] = (userinfo.get('picture') or '').strip()
+    # Vínculo com o usuário do sistema CAMIM (idCamim é fonte de verdade).
+    session['login_campinho'] = (userinfo.get(_CLAIM_LOGIN_CAMPINHO) or '').strip()
 
     return redirect(session.pop('next', '/'))
 
@@ -159,7 +176,17 @@ def session_me():
     if 'sub' not in session:
         return jsonify({'email': None, 'postos': []}), 401
     # Decisão de produto: qualquer login IDCamim vê todos os 13 postos.
-    return jsonify({'email': session.get('email'), 'postos': POSTOS_TODOS})
+    # `vinculado` = tem login_campinho do idCamim; sem ele não dá pra confirmar
+    # presença (não há usuário CAMIM pra assinar a alteração/Sis_Historico).
+    login_campinho = (session.get('login_campinho') or '').strip()
+    return jsonify({
+        'email':          session.get('email'),
+        'nome':           session.get('nome'),
+        'foto_url':       session.get('foto_url') or '',
+        'login_campinho': login_campinho,
+        'vinculado':      bool(login_campinho),
+        'postos':         POSTOS_TODOS,
+    })
 
 
 # ── Rota raiz / template ─────────────────────────────────────────────────────
@@ -261,6 +288,151 @@ def api_agenda_dia_meta():
         return jsonify({'ok': True, 'postos': postos_meta, 'fonte': 'json_fallback'})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# ── Confirmar presença (escreve no SQL Server do posto) ──────────────────────
+#
+# Grava em Cad_Lancamento: dataconfirmacaoConsulta = agora + idUsuarioConfirmaPresenca
+# = idUsuario do operador NAQUELE posto. Auditado em Sis_Historico (idTabela=44,
+# idComando=2). O idUsuario é resolvido por posto via login_campinho (o mesmo
+# Usuario tem id diferente em cada banco — ver project_confirmar_presenca_schema).
+
+def _mssql_conn_for_posto(posto: str):
+    """Abre conexão pyodbc no SQL Server do posto. Mesma convenção de env do ETL
+    (DB_HOST_{p}/DB_BASE_{p}/DB_USER_{p}/DB_PASSWORD_{p}/DB_PORT_{p})."""
+    import pyodbc
+    p = (posto or '').strip().upper()
+    if not p or len(p) != 1:
+        raise ValueError('posto inválido')
+    host = (os.getenv(f'DB_HOST_{p}', '') or '').strip()
+    base = (os.getenv(f'DB_BASE_{p}', '') or '').strip()
+    if not host or not base:
+        raise ValueError(f'posto {p} sem configuração no .env')
+    user    = (os.getenv(f'DB_USER_{p}', '') or '').strip()
+    pwd     = (os.getenv(f'DB_PASSWORD_{p}', '') or '').strip()
+    port    = (os.getenv(f'DB_PORT_{p}', '1433') or '1433').strip()
+    encrypt = (os.getenv('DB_ENCRYPT', 'yes') or 'yes').strip()
+    trust   = (os.getenv('DB_TRUST_CERT', 'yes') or 'yes').strip()
+    timeout = (os.getenv('DB_TIMEOUT', '20') or '20').strip()
+    cs = (
+        f'DRIVER={{{ODBC_DRIVER}}};'
+        f'SERVER=tcp:{host},{port};DATABASE={base};'
+        f'Encrypt={encrypt};TrustServerCertificate={trust};'
+        f'Connection Timeout={timeout};'
+    )
+    cs += f'UID={user};PWD={pwd}' if user else 'Trusted_Connection=yes'
+    return pyodbc.connect(cs, timeout=int(timeout) if timeout.isdigit() else 20)
+
+
+def _resolver_idusuario_no_posto(con, login_campinho: str):
+    """idUsuario do operador NO banco do posto, pelo Usuario (login_campinho).
+    None se não existir/estiver desativado — significa que não opera nesse posto."""
+    if not login_campinho:
+        return None
+    cur = con.cursor()
+    cur.execute(
+        "SELECT TOP 1 idUsuario FROM sis_usuario WHERE Usuario = ? AND Desativado = 0",
+        login_campinho,
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
+@app.post('/api/confirmar_presenca')
+@login_required
+def api_confirmar_presenca():
+    login_campinho = (session.get('login_campinho') or '').strip()
+    if not login_campinho:
+        # Sem vínculo no idCamim → não há usuário CAMIM pra assinar a confirmação.
+        return jsonify({
+            'ok': False, 'sem_vinculo': True,
+            'error': ('Você ainda não tem um usuário do sistema CAMIM vinculado '
+                      'ao seu login idCamim. Vincule na sua área do IDCamim para '
+                      'poder confirmar presenças.'),
+        }), 403
+
+    data = request.get_json(silent=True) or {}
+    posto = (data.get('posto') or '').strip().upper()
+    if posto not in POSTOS_TODOS:
+        return jsonify({'ok': False, 'error': 'posto inválido'}), 400
+    try:
+        idlanc = int(data.get('idlancamento'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'idlancamento obrigatório'}), 400
+
+    try:
+        con = _mssql_conn_for_posto(posto)
+    except Exception as e:
+        app.logger.warning('Falha ao conectar no posto %s: %s', posto, e)
+        return jsonify({'ok': False, 'error': f'Falha ao conectar no posto {posto}'}), 502
+
+    try:
+        id_usuario_op = _resolver_idusuario_no_posto(con, login_campinho)
+        if not id_usuario_op:
+            return jsonify({
+                'ok': False, 'sem_vinculo_posto': True,
+                'error': (f'Seu usuário CAMIM "{login_campinho}" não existe (ou está '
+                          f'desativado) no posto {posto}. Sem isso a confirmação '
+                          f'ficaria sem responsável e o sistema bloqueia.'),
+            }), 403
+
+        cur = con.cursor()
+        # Já confirmado? Não sobrescreve o confirmante original (idempotente).
+        cur.execute(
+            "SELECT CONVERT(varchar(5), dataconfirmacaoConsulta, 108) "
+            "FROM Cad_Lancamento WHERE idLancamento = ?", idlanc)
+        row = cur.fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'lançamento não encontrado neste posto'}), 404
+        if row[0]:
+            return jsonify({'ok': True, 'ja_confirmado': True, 'hora_confirmacao': row[0]})
+
+        cur.execute(
+            "UPDATE Cad_Lancamento "
+            "SET dataconfirmacaoConsulta = GETDATE(), idUsuarioConfirmaPresenca = ? "
+            "WHERE idLancamento = ? AND dataconfirmacaoConsulta IS NULL",
+            id_usuario_op, idlanc)
+        if cur.rowcount != 1:
+            con.rollback()
+            return jsonify({'ok': False, 'error': 'nada atualizado (confirmação concorrente?)'}), 409
+
+        # Auditoria obrigatória — mesma transação, antes do commit.
+        cur.execute(
+            "INSERT INTO Sis_Historico (id, idTabela, idComando, idUsuario, DataHora, Detalhe, Computador) "
+            "VALUES (?, ?, ?, ?, GETDATE(), ?, ?)",
+            idlanc, ID_TABELA_CAD_LANCAMENTO, ID_COMANDO_EDICAO, id_usuario_op,
+            'Confirmação de presença via Agenda (camila2/kpi)', COMPUTADOR_ORIGEM)
+
+        # Hora gravada (pra UI atualizar a coluna Confirmação sem recarregar).
+        cur.execute(
+            "SELECT CONVERT(varchar(5), dataconfirmacaoConsulta, 108) "
+            "FROM Cad_Lancamento WHERE idLancamento = ?", idlanc)
+        hora = (cur.fetchone() or [None])[0]
+        con.commit()
+
+        # Reflete no cache Postgres na hora (a agenda lê de lá; sem isso só
+        # apareceria no próximo ciclo do ETL). Best-effort: se falhar, a fonte
+        # de verdade (SQL Server) já está gravada e o ETL corrige depois.
+        try:
+            from f3_db import set_hora_confirmacao
+            set_hora_confirmacao(posto, idlanc, hora or '')
+        except Exception as e:
+            app.logger.warning('confirmou no SQL Server mas falhou ao refletir no '
+                               'Postgres (posto=%s, idlanc=%s): %s', posto, idlanc, e)
+
+        return jsonify({'ok': True, 'hora_confirmacao': hora or ''})
+    except Exception as e:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        app.logger.exception('confirmar_presenca falhou (posto=%s, idlanc=%s)', posto, idlanc)
+        return jsonify({'ok': False, 'error': str(e)[:300]}), 500
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
 
 
 # ── Templates inline (erro/logout) ───────────────────────────────────────────

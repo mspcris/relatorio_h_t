@@ -45,6 +45,7 @@ class AgendaDia(Base):
     id               = Column(BigInteger, primary_key=True, autoincrement=True)
     posto            = Column(String(1), nullable=False)
     data             = Column(Date,      nullable=False)
+    idlancamento     = Column(BigInteger)        # chave p/ confirmar presença
     matricula        = Column(BigInteger)        # bigint p/ segurança
     cfcliente        = Column(String(4))
     posto_cliente    = Column(String(4))
@@ -205,9 +206,9 @@ def fetch_agenda(posto: str, data_iso: str) -> tuple[list[dict], datetime | None
     s = Session()
     try:
         rows = s.execute(text("""
-            SELECT matricula, cfcliente, posto_cliente, paciente, idade, especialidade,
-                   medico, hora_prevista, hora_confirmacao, dias_agend_cons, atendido,
-                   desistencia, situacao, pagou_no_dia, idendereco, observacao,
+            SELECT idlancamento, matricula, cfcliente, posto_cliente, paciente, idade,
+                   especialidade, medico, hora_prevista, hora_confirmacao, dias_agend_cons,
+                   atendido, desistencia, situacao, pagou_no_dia, idendereco, observacao,
                    medico_sala, medico_obs, gerado_em
               FROM agenda_dia
              WHERE posto = :p AND data = :d
@@ -232,6 +233,26 @@ def fetch_agenda(posto: str, data_iso: str) -> tuple[list[dict], datetime | None
             p.pop("gerado_em", None)
 
         return pacientes, gerado_em
+    finally:
+        s.close()
+
+
+def set_hora_confirmacao(posto: str, idlancamento: int, hora: str) -> int:
+    """Reflete a confirmação de presença no cache Postgres na hora (sem esperar o
+    próximo ciclo do ETL). Atualiza hora_confirmacao da(s) linha(s) do lançamento.
+    Retorna nº de linhas afetadas. Falha aqui NÃO deve derrubar a confirmação no
+    SQL Server (que é a fonte de verdade) — o ETL corrige no próximo ciclo."""
+    s = Session()
+    try:
+        res = s.execute(text("""
+            UPDATE agenda_dia SET hora_confirmacao = :h
+             WHERE posto = :p AND idlancamento = :idl
+        """), {"h": (hora or "")[:5], "p": posto, "idl": idlancamento})
+        s.commit()
+        return res.rowcount or 0
+    except Exception:
+        s.rollback()
+        raise
     finally:
         s.close()
 
