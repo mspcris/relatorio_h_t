@@ -216,6 +216,13 @@ def fetch_agenda(posto: str, data_iso: str) -> tuple[list[dict], datetime | None
         """), {"p": posto, "d": data_iso}).mappings().all()
 
         pacientes = [dict(r) for r in rows]
+        # Colunas CHAR no Postgres voltam padded com espaços (ex.: CHAR(5) vazio
+        # = '     '). Isso quebra checagens truthy no front (5 espaços é truthy).
+        # Normaliza pra string limpa — alinha com o caminho do JSON fallback.
+        for p in pacientes:
+            for k in ("hora_prevista", "hora_confirmacao", "cfcliente", "posto_cliente"):
+                if isinstance(p.get(k), str):
+                    p[k] = p[k].strip()
         gerado_em = pacientes[0]["gerado_em"] if pacientes else None
 
         if not pacientes:

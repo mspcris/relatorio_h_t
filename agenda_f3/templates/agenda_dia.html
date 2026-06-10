@@ -805,8 +805,9 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
   // Coluna Confirmação: hora se já confirmado; senão botão "Confirmar"
   // (só quando há idlancamento, não é desistência nem médico-faltou).
   function confirmacaoCell(p) {
-    if (p.hora_confirmacao) {
-      return `<span class="conf-ok"><i class="fas fa-check mr-1"></i>${escHtml(p.hora_confirmacao)}</span>`;
+    const h = (p.hora_confirmacao || '').trim();   // CHAR(5) volta padded
+    if (h) {
+      return `<span class="conf-ok"><i class="fas fa-check mr-1"></i>${escHtml(h)}</span>`;
     }
     if (p.idlancamento && !_isDesistente(p) && !_isMedicoFaltou(p)) {
       return `<button type="button" class="btn btn-outline-primary btn-confirmar" data-idlanc="${p.idlancamento}">`
