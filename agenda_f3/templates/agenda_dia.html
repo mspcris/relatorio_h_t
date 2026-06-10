@@ -102,11 +102,15 @@
 
     /* Anotação do médico no cabeçalho do grupo */
     .medico-sala { color: #444; font-weight: 600; font-size: .82rem; }
+    .medico-esp  { color: #1565c0; font-weight: 600; font-size: .8rem; font-style: italic; margin-left: 4px; }
     .medico-obs-flag {
-      background: #39ff14; color: #063d00; font-weight: 700; font-size: .8rem;
-      padding: 2px 8px; border-radius: 6px; margin-left: 6px;
-      box-shadow: 0 0 5px rgba(57,255,20,.75); text-shadow: none;
+      font-weight: 700; font-size: .8rem; padding: 2px 8px;
+      border-radius: 6px; margin-left: 6px; text-shadow: none;
     }
+    /* Falta TOTAL (dia inteiro) → vermelho fluorescente */
+    .medico-obs-falta   { background: #ff1f1f; color: #fff;     box-shadow: 0 0 6px rgba(255,31,31,.85); }
+    /* Falta PARCIAL (horário alterado) → amarelo fluorescente */
+    .medico-obs-horario { background: #fff200; color: #3a2f00; box-shadow: 0 0 6px rgba(255,242,0,.9); }
 
     /* Tabela — ocupa todo o espaço restante; só ela rola */
     .table-container {
@@ -548,12 +552,22 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
       // Anotação do médico (sala + falta/fechamento) — só quando agrupado por médico
       const sala = groupBy === 'medico' ? ((items.find(p => p.medico_sala)||{}).medico_sala || '') : '';
       const obs  = groupBy === 'medico' ? ((items.find(p => p.medico_obs) ||{}).medico_obs  || '') : '';
-      // Se há flag verde de falta, o sufixo "— MÉDICO FALTOU" do nome vira redundante
+      // Especialidade(s) distintas do médico — replica o sistema-fonte
+      let esps = '';
+      if (groupBy === 'medico') {
+        const vistos = [];
+        items.forEach(p => { const e = (p.especialidade||'').trim(); if (e && !vistos.includes(e)) vistos.push(e); });
+        esps = vistos.join(', ');
+      }
+      // Se há flag de falta, o sufixo "— MÉDICO FALTOU" do nome vira redundante
       let displayKey = key;
       if (obs && / — MÉDICO FALTOU$/.test(key)) displayKey = key.replace(/ — MÉDICO FALTOU$/, '');
+      // Cor: total (MÉDICO FALTOU)=vermelho fluor.; parcial (HORÁRIO ALTERADO)=amarelo fluor.
+      const flagCls = obs.startsWith('MÉDICO FALTOU') ? 'medico-obs-falta' : 'medico-obs-horario';
       let extra = '';
       if (sala) extra += ` <span class="medico-sala">${escHtml(sala)}</span>`;
-      if (obs)  extra += ` <span class="medico-obs-flag">${escHtml(obs)}</span>`;
+      if (obs)  extra += ` <span class="medico-obs-flag ${flagCls}">${escHtml(obs)}</span>`;
+      if (esps) extra += ` <span class="medico-esp">${escHtml(esps)}</span>`;
       tbody.append(
         `<tr class="${headerCls}" data-group="${escHtml(key)}">` +
         `<td colspan="12"><i class="fas fa-caret-right mr-1 group-caret"></i>` +
