@@ -192,6 +192,7 @@ SELECT
     v.paciente,
     v.idadePaciente,
     v.especialidade,
+    v.idMedico,
     v.nomemedico   AS medico,
     v.HoraPrevistaConsulta,
     CONVERT(varchar(5), v.dataconfirmacaoconsulta, 108) AS hora_confirmacao,
@@ -242,6 +243,119 @@ def fetch_all_agendas(engines: dict, datas: list):
     total = sum(len(r) for p in agendas.values() for r in p.values())
     logger.write(f"  → {total} registros | {fmt_time(time.time()-t0)}")
     return agendas, erros
+
+
+# =========================
+# FASE 2B — Observação do médico (SALA + falta/fechamento de agenda)
+# =========================
+# Dados LOCAIS ao posto da agenda (médico pertence ao posto da consulta — não é
+# cross-posto como o financeiro). Suplementar: falha aqui NÃO invalida o posto.
+
+SQL_MEDICO_SALA = """
+SET NOCOUNT ON;
+SELECT idMedico, Sala
+FROM Cad_Medico WITH (NOLOCK)
+WHERE Sala IS NOT NULL AND LTRIM(RTRIM(Sala)) <> ''
+"""
+
+
+def _falta_label_e_janela(dh_ini, dh_fim, dia):
+    """Para a data 'dia' da agenda, decide se a falta é dia INTEIRO (fechamento
+    total → 'MÉDICO FALTOU') ou PARCIAL (fechamento parcial → 'HORÁRIO ALTERADO').
+
+    Regra validada com dados reais de Anchieta (09/06/2026):
+      - HAROLD: 00:00–23:59  → dia inteiro  → MÉDICO FALTOU
+      - MARCIA: 14:25–23:59  → parte do dia → HORÁRIO ALTERADO
+    """
+    from datetime import time as _time
+    ini_t = dh_ini.time() if dh_ini.date() == dia else _time(0, 0)
+    fim_t = dh_fim.time() if dh_fim.date() == dia else _time(23, 59)
+    dia_inteiro = (ini_t <= _time(0, 0)) and (fim_t >= _time(23, 58))
+    if dia_inteiro:
+        return "MÉDICO FALTOU", None
+    janela = f"ausente das {ini_t.strftime('%H:%M')} às {fim_t.strftime('%H:%M')}"
+    return "HORÁRIO ALTERADO", janela
+
+
+def _compor_falta_txt(r, dh_ini, dh_fim, dia):
+    """Texto da anotação de falta para a data 'dia', no formato do sistema-fonte."""
+    label, janela = _falta_label_e_janela(dh_ini, dh_fim, dia)
+    txt = label
+    if label == "MÉDICO FALTOU":
+        incl    = r.get("DataHoraInclusao")     # quando a falta foi CADASTRADA
+        usuario = (r.get("usuario") or "").strip()
+        if incl:
+            suf = f"Falta cadastrada em {incl.strftime('%d/%m/%Y')}"
+            if usuario:
+                suf += f" por {usuario}"
+            txt += f" ({suf})"
+    elif janela:
+        txt += f" ({janela})"
+    motivo = (r.get("motivo") or "").strip()
+    if motivo:
+        txt += f" · {motivo}"
+    return txt
+
+
+def fetch_medico_extra_for_posto(eng, posto, datas):
+    """Sala por médico + faltas ATIVAS (match por intervalo DataHora..DatahoraFim,
+    não por DataFalta — uma falta cadastrada hoje pode valer p/ um dia futuro)."""
+    sala_map  = {}   # {idMedico: "SALA X"}
+    falta_map = {}   # {(idMedico, dt_iso): "texto"}
+    try:
+        dmin, dmax = min(datas), max(datas)
+        sql_falta = """
+        SET NOCOUNT ON;
+        SELECT f.idMedico, f.DataHora, f.DatahoraFim, f.DataHoraInclusao,
+               ISNULL(NULLIF(LTRIM(RTRIM(f.Motivo)), ''), mo.Motivo) AS motivo,
+               u.Nome AS usuario
+        FROM Cad_MedicoFalta f WITH (NOLOCK)
+        LEFT JOIN Cad_MedicoFaltaMotivo mo WITH (NOLOCK) ON mo.idMedicoFaltaMotivo = f.idMedicoFaltaMotivo
+        LEFT JOIN Sis_Usuario u            WITH (NOLOCK) ON u.idUsuario = f.idUsuario
+        WHERE f.Desativado = 0
+          AND CAST(f.DataHora    AS date) <= :dmax
+          AND CAST(f.DatahoraFim AS date) >= :dmin
+        """
+        with eng.connect() as con:
+            con.execute(text("SET DATEFORMAT dmy"))
+            for r in con.execute(text(SQL_MEDICO_SALA)).mappings().all():
+                idm = safe_int(r.get("idMedico"))
+                sala = (r.get("Sala") or "").strip()
+                if idm and sala:
+                    sala_map[idm] = sala
+            for r in con.execute(text(sql_falta), {"dmin": dmin, "dmax": dmax}).mappings().all():
+                idm    = safe_int(r.get("idMedico"))
+                dh_ini = r.get("DataHora")
+                dh_fim = r.get("DatahoraFim")
+                if not idm or not dh_ini or not dh_fim:
+                    continue
+                for d in datas:
+                    if dh_ini.date() <= d <= dh_fim.date():
+                        falta_map.setdefault((idm, d.isoformat()),
+                                             _compor_falta_txt(r, dh_ini, dh_fim, d))
+        return posto, sala_map, falta_map, None
+    except Exception as ex:
+        return posto, {}, {}, str(ex)
+
+
+def fetch_all_medico_extra(engines, datas):
+    logger.write("")
+    logger.write("FASE 2B — Observação do médico (sala + falta/fechamento)...")
+    logger.write("-" * 70)
+    t0 = time.time()
+    medico_extra = {}   # {posto: (sala_map, falta_map)}
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {pool.submit(fetch_medico_extra_for_posto, eng, p, datas): p
+                   for p, eng in engines.items()}
+        for future in as_completed(futures):
+            posto, sala_map, falta_map, err = future.result()
+            medico_extra[posto] = (sala_map, falta_map)
+            if err:
+                logger.write(f"  [{posto}] ✗ {err} (anotação de médico ignorada)")
+            else:
+                logger.write(f"  [{posto}] ✓ {len(sala_map)} salas | {len(falta_map)} faltas")
+    logger.write(f"  → {fmt_time(time.time()-t0)}")
+    return medico_extra
 
 
 # =========================
@@ -507,7 +621,10 @@ def resolve_situacao(matricula, status_data):
     return sit_view or "(sem info)"
 
 
-def build_pacientes(rows, dt_iso: str, status_global: dict, pagou_global: dict):
+def build_pacientes(rows, dt_iso: str, status_global: dict, pagou_global: dict,
+                    sala_map: dict = None, falta_map: dict = None):
+    sala_map  = sala_map  or {}
+    falta_map = falta_map or {}
     pacientes = []
     exame_visto = set()
     for r in rows:
@@ -523,6 +640,11 @@ def build_pacientes(rows, dt_iso: str, status_global: dict, pagou_global: dict):
         # Aplica regras de negócio (matrícula 0 = Particular, Liberty = clube, etc)
         situacao = resolve_situacao(mat, status_global.get(mat) if mat else None)
         pagou = mat in pagou_global.get(dt_iso, set()) if mat else False
+        # Observação do médico (sala + falta/fechamento) — mesma p/ todos os
+        # pacientes do médico; o front mostra uma vez no cabeçalho do grupo.
+        idmed = safe_int(r.get("idMedico"))
+        medico_sala = sala_map.get(idmed) if idmed else None
+        medico_obs  = falta_map.get((idmed, dt_iso)) if idmed else None
         pacientes.append({
             "matricula":        mat,
             "cfcliente":        cf,
@@ -540,13 +662,17 @@ def build_pacientes(rows, dt_iso: str, status_global: dict, pagou_global: dict):
             "pagou_no_dia":     pagou,
             "idendereco":       safe_int(r.get("idendereco")),
             "observacao":       (r.get("observacao") or "").strip() or None,
+            "medico_sala":      medico_sala,
+            "medico_obs":       medico_obs,
         })
     return pacientes
 
 
 def write_postos_validos(postos_validos: set, agendas: dict, datas: list,
-                         status_global: dict, pagou_global: dict, gerado_em):
+                         status_global: dict, pagou_global: dict, gerado_em,
+                         medico_extra: dict = None):
     """Para cada posto válido, monta pacientes (todas as datas) e faz REPLACE atômico."""
+    medico_extra = medico_extra or {}
     logger.write("")
     logger.write("FASE 6 — Escrevendo em Postgres (transação por posto)...")
     logger.write("-" * 70)
@@ -558,10 +684,12 @@ def write_postos_validos(postos_validos: set, agendas: dict, datas: list,
         try:
             todos_pacientes = []   # pra fase 6: pacientes c/ campo "data"
             dados_para_json[posto] = {}
+            sala_map, falta_map = medico_extra.get(posto, ({}, {}))
             for dt in datas:
                 dt_iso = dt.isoformat()
                 rows = agendas[posto].get(dt_iso, [])
-                pacs = build_pacientes(rows, dt_iso, status_global, pagou_global)
+                pacs = build_pacientes(rows, dt_iso, status_global, pagou_global,
+                                       sala_map, falta_map)
                 dados_para_json[posto][dt_iso] = pacs
                 for p in pacs:
                     p_with_date = dict(p)
@@ -663,6 +791,7 @@ def run():
         sys.exit(1)
 
     agendas, erros_agenda = fetch_all_agendas(engines, datas)
+    medico_extra = fetch_all_medico_extra(engines, datas)
     mats_por_origem, origens_por_posto = aggregate_matriculas(agendas)
     status_global, pagou_global, origens_ok, origens_err = fetch_all_financeiro(
         engines, mats_por_origem, letra_to_id, datas
@@ -678,7 +807,8 @@ def run():
 
     gerado_em = datetime.now(timezone.utc)
     dados_validos, write_errs, total_pacientes = write_postos_validos(
-        postos_validos, agendas, datas, status_global, pagou_global, gerado_em
+        postos_validos, agendas, datas, status_global, pagou_global, gerado_em,
+        medico_extra
     )
 
     n_falhas = mark_failures(postos_invalidos, write_errs, gerado_em)

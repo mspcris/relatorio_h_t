@@ -61,6 +61,8 @@ class AgendaDia(Base):
     pagou_no_dia     = Column(Boolean, default=False, nullable=False)
     idendereco       = Column(BigInteger)
     observacao       = Column(Text)
+    medico_sala      = Column(Text)
+    medico_obs       = Column(Text)
     gerado_em        = Column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
@@ -205,7 +207,8 @@ def fetch_agenda(posto: str, data_iso: str) -> tuple[list[dict], datetime | None
         rows = s.execute(text("""
             SELECT matricula, cfcliente, posto_cliente, paciente, idade, especialidade,
                    medico, hora_prevista, hora_confirmacao, dias_agend_cons, atendido,
-                   desistencia, situacao, pagou_no_dia, idendereco, observacao, gerado_em
+                   desistencia, situacao, pagou_no_dia, idendereco, observacao,
+                   medico_sala, medico_obs, gerado_em
               FROM agenda_dia
              WHERE posto = :p AND data = :d
         """), {"p": posto, "d": data_iso}).mappings().all()

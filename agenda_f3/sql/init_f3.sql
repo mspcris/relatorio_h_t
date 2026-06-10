@@ -31,11 +31,15 @@ CREATE TABLE IF NOT EXISTS agenda_dia (
     pagou_no_dia     BOOLEAN      NOT NULL DEFAULT false,
     idendereco       BIGINT,
     observacao       TEXT,                   -- Cad_Lancamento.Observacao (log da agenda/reagendamento)
+    medico_sala      TEXT,                   -- Cad_Medico.Sala (ex.: "SALA 7", "MAPA")
+    medico_obs       TEXT,                   -- falta/fechamento: MÉDICO FALTOU (total) / HORÁRIO ALTERADO (parcial)
     gerado_em        TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
--- Migração idempotente p/ bancos que já tinham a tabela sem a coluna observacao
-ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS observacao TEXT;
+-- Migração idempotente p/ bancos que já tinham a tabela sem as colunas novas
+ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS observacao  TEXT;
+ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS medico_sala TEXT;
+ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS medico_obs  TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_agenda_dia_posto_data
     ON agenda_dia (posto, data);

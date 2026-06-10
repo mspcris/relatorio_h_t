@@ -100,6 +100,14 @@
     .popover { max-width: 360px; }
     .popover-body { white-space: pre-line; font-size: .82rem; }
 
+    /* Anotação do médico no cabeçalho do grupo */
+    .medico-sala { color: #444; font-weight: 600; font-size: .82rem; }
+    .medico-obs-flag {
+      background: #39ff14; color: #063d00; font-weight: 700; font-size: .8rem;
+      padding: 2px 8px; border-radius: 6px; margin-left: 6px;
+      box-shadow: 0 0 5px rgba(57,255,20,.75); text-shadow: none;
+    }
+
     /* Tabela — ocupa todo o espaço restante; só ela rola */
     .table-container {
       flex: 1 1 auto; overflow: auto;
@@ -517,11 +525,19 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
       const items = groups[key];
       const isFaltou = key.endsWith('— MÉDICO FALTOU');
       const headerCls = 'group-header collapsed' + (isFaltou ? ' group-faltou' : '');
-      const safeKey = escHtml(key);
+      // Anotação do médico (sala + falta/fechamento) — só quando agrupado por médico
+      const sala = groupBy === 'medico' ? ((items.find(p => p.medico_sala)||{}).medico_sala || '') : '';
+      const obs  = groupBy === 'medico' ? ((items.find(p => p.medico_obs) ||{}).medico_obs  || '') : '';
+      // Se há flag verde de falta, o sufixo "— MÉDICO FALTOU" do nome vira redundante
+      let displayKey = key;
+      if (obs && / — MÉDICO FALTOU$/.test(key)) displayKey = key.replace(/ — MÉDICO FALTOU$/, '');
+      let extra = '';
+      if (sala) extra += ` <span class="medico-sala">${escHtml(sala)}</span>`;
+      if (obs)  extra += ` <span class="medico-obs-flag">${escHtml(obs)}</span>`;
       tbody.append(
-        `<tr class="${headerCls}" data-group="${safeKey}">` +
+        `<tr class="${headerCls}" data-group="${escHtml(key)}">` +
         `<td colspan="12"><i class="fas fa-caret-right mr-1 group-caret"></i>` +
-        `${safeKey} <span class="text-muted">(${items.length})</span></td></tr>`
+        `${escHtml(displayKey)}${extra} <span class="text-muted">(${items.length})</span></td></tr>`
       );
       items.forEach(p => {
         const $r = $(rowHtml(p));
