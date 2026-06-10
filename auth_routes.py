@@ -367,6 +367,13 @@ _IDCAMIM_REDIRECT_URI = os.environ.get(
 # estado OAuth armazenado em memória (processo único; suficiente para esse caso)
 _oauth_states: dict[str, str] = {}
 
+# Nomes dos claims do /me (userinfo) do idCamim que carregam o vínculo com o
+# Campinho/ERP. O usuário pode relacionar a própria conta na área dele do idCamim,
+# e o idCamim passa a ser a FONTE DE VERDADE desse vínculo. Se o idCamim usar
+# outros nomes de claim, basta ajustar aqui.
+_CLAIM_LOGIN_CAMPINHO     = "login_campinho"
+_CLAIM_ID_USUARIO_SQLSERVER = "id_usuario_sqlserver"
+
 
 @auth_bp.get("/auth/idcamim")
 def idcamim_login():
@@ -461,6 +468,27 @@ def idcamim_callback():
             or ""
         )
         db.add(LoginHistory(user_id=user.id, ip=ip))
+        # Foto do perfil: o idCamim é a fonte de verdade. Atualiza a cada login
+        # se vier no claim "picture"; se não vier, preserva o que já estava.
+        foto = (me.get("picture") or "").strip()
+        if foto and getattr(user, "foto_url", None) != foto:
+            user.foto_url = foto
+
+        # Vínculo Campinho/ERP (login_campinho + id_usuario_sqlserver):
+        # o usuário pode relacionar a conta na própria área do idCamim, então o
+        # idCamim é a fonte de verdade. Regra: se o claim vier no /me, ele SEMPRE
+        # sobrescreve o vínculo local; se NÃO vier, preserva o que o admin já setou
+        # (não apaga o relacionamento existente daqui).
+        idc_login = (me.get(_CLAIM_LOGIN_CAMPINHO) or "").strip()
+        if idc_login:
+            user.login_campinho = idc_login
+        idc_idusr = me.get(_CLAIM_ID_USUARIO_SQLSERVER)
+        if idc_idusr not in (None, "", 0):
+            try:
+                user.id_usuario_sqlserver = int(idc_idusr)
+            except (TypeError, ValueError):
+                pass
+
         db.commit()
     finally:
         db.close()
@@ -502,9 +530,11 @@ def session_me():
         u = get_user_by_email(db, email)
         is_admin = bool(u.is_admin) if u else False
         nome = (u.nome or "") if u else ""
+        foto_url = (getattr(u, "foto_url", None) or "") if u else ""
     finally:
         db.close()
-    return jsonify({"email": email, "postos": postos, "is_admin": is_admin, "nome": nome})
+    return jsonify({"email": email, "postos": postos, "is_admin": is_admin,
+                    "nome": nome, "foto_url": foto_url})
 
 
 # ── Reset de senha ─────────────────────────────────────────────────────────────

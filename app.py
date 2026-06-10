@@ -954,6 +954,9 @@ _USAGE_TRACKER_JS = (
     '})();</script>'
 )
 
+# Widget de usuário (avatar/foto idCamim + nome + menu) no topo-direito de todas as páginas.
+_USER_WIDGET_JS = '<script src="/js/user_widget.js?v=20260610" defer></script>'
+
 
 def render_protected_page(page_name, **extra_vars):
     from auth_db import SessionLocal, get_user_by_email as _gue
@@ -1003,7 +1006,7 @@ def render_protected_page(page_name, **extra_vars):
     )
     # Injetar tracker de tempo por página (sempre) + filtro de sidebar (se aplicável).
     # Feito em 1 passagem para não duplicar replace de </body>.
-    inject = _USAGE_TRACKER_JS + (_sidebar_filter_script(paginas) if not all_pages else '')
+    inject = _USAGE_TRACKER_JS + _USER_WIDGET_JS + (_sidebar_filter_script(paginas) if not all_pages else '')
     if inject:
         html = html.replace('</body>', inject + '</body>', 1)
     return html
@@ -2173,8 +2176,9 @@ def any_html(filename):
             USER_POSTOS=json.dumps(postos),
             USER_IS_ADMIN=is_admin,
         )
-        if not all_pages:
-            html = html.replace('</body>', _sidebar_filter_script(paginas))
+        inject = _USER_WIDGET_JS + (_sidebar_filter_script(paginas) if not all_pages else '')
+        if inject:
+            html = html.replace('</body>', inject + '</body>', 1)
         return html
     except:
         return ('', 404)

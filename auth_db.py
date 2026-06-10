@@ -38,6 +38,7 @@ class User(Base):
     has_openai_account = Column(Boolean, default=False, nullable=False)
     id_usuario_sqlserver = Column(Integer, nullable=True)
     login_campinho = Column(String(100), nullable=True)
+    foto_url     = Column(Text, nullable=True)   # foto do perfil vinda do idCamim (claim "picture")
     reset_token  = Column(String(100), nullable=True)
     reset_expires = Column(DateTime, nullable=True)
 
@@ -327,6 +328,11 @@ def init_db():
             pass
         try:
             _conn.execute(text("ALTER TABLE users ADD COLUMN login_campinho VARCHAR(100)"))
+            _conn.commit()
+        except Exception:
+            pass
+        try:
+            _conn.execute(text("ALTER TABLE users ADD COLUMN foto_url TEXT"))
             _conn.commit()
         except Exception:
             pass
