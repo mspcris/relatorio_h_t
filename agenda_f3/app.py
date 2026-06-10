@@ -449,6 +449,92 @@ def api_confirmar_presenca():
             pass
 
 
+@app.post('/api/desconfirmar_presenca')
+@login_required
+def api_desconfirmar_presenca():
+    """Desfaz a confirmação (toggle, igual o F3): limpa Confere/dataconfirmacaoConsulta/
+    idUsuarioConfirmaPresenca. Auditado. Mesmo gate de vínculo do confirmar."""
+    login_campinho = (session.get('login_campinho') or '').strip()
+    if not login_campinho:
+        return jsonify({
+            'ok': False, 'sem_vinculo': True,
+            'error': ('Você ainda não tem um usuário do sistema CAMIM vinculado ao seu '
+                      'login idCamim. Vincule na sua área do IDCamim.'),
+        }), 403
+
+    data = request.get_json(silent=True) or {}
+    posto = (data.get('posto') or '').strip().upper()
+    if posto not in POSTOS_TODOS:
+        return jsonify({'ok': False, 'error': 'posto inválido'}), 400
+    try:
+        idlanc = int(data.get('idlancamento'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'idlancamento obrigatório'}), 400
+
+    try:
+        con = _mssql_conn_for_posto(posto)
+    except Exception as e:
+        app.logger.warning('Falha ao conectar no posto %s: %s', posto, e)
+        return jsonify({'ok': False, 'error': f'Falha ao conectar no posto {posto}'}), 502
+
+    try:
+        id_usuario_op = _resolver_idusuario_no_posto(con, login_campinho)
+        if not id_usuario_op:
+            return jsonify({
+                'ok': False, 'sem_vinculo_posto': True,
+                'error': (f'Seu usuário CAMIM "{login_campinho}" não existe (ou está '
+                          f'desativado) no posto {posto}.'),
+            }), 403
+
+        cur = con.cursor()
+        # Toggle off. WHERE ... IS NOT NULL = idempotente. OUTPUT INTO @table
+        # por causa das 6 triggers (cur.rowcount mente).
+        cur.execute(
+            "SET NOCOUNT ON;"
+            "DECLARE @upd TABLE (x int);"
+            "UPDATE Cad_Lancamento "
+            "  SET dataconfirmacaoConsulta = NULL, idUsuarioConfirmaPresenca = NULL, Confere = 0 "
+            "  OUTPUT 1 INTO @upd "
+            "  WHERE idLancamento = ? AND dataconfirmacaoConsulta IS NOT NULL;"
+            "SELECT x FROM @upd;",
+            idlanc)
+        while cur.description is None:
+            if not cur.nextset():
+                break
+        upd = cur.fetchone() if cur.description else None
+        if not upd:
+            con.rollback()
+            return jsonify({'ok': True, 'ja_desconfirmado': True})
+
+        cur.execute(
+            "INSERT INTO Sis_Historico (id, idTabela, idComando, idUsuario, DataHora, Detalhe, Computador) "
+            "VALUES (?, ?, ?, ?, GETDATE(), ?, ?)",
+            idlanc, ID_TABELA_CAD_LANCAMENTO, ID_COMANDO_EDICAO, id_usuario_op,
+            'Desconfirmação de presença via Agenda (camila2/kpi)', COMPUTADOR_ORIGEM)
+        con.commit()
+
+        try:
+            from f3_db import set_hora_confirmacao
+            set_hora_confirmacao(posto, idlanc, '')
+        except Exception as e:
+            app.logger.warning('desconfirmou no SQL Server mas falhou ao refletir no '
+                               'Postgres (posto=%s, idlanc=%s): %s', posto, idlanc, e)
+
+        return jsonify({'ok': True})
+    except Exception as e:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        app.logger.exception('desconfirmar_presenca falhou (posto=%s, idlanc=%s)', posto, idlanc)
+        return jsonify({'ok': False, 'error': str(e)[:300]}), 500
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+
+
 # ── Templates inline (erro/logout) ───────────────────────────────────────────
 
 TMPL_ERRO = '''<!doctype html><html lang="pt-br"><head><meta charset="UTF-8">

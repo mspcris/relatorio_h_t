@@ -582,6 +582,34 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     });
   }
 
+  function desconfirmarPresenca(idlanc, $btn) {
+    if (!SESSION.vinculado) { showVincModal(); return; }
+    if (!confirm('Desconfirmar a presença deste paciente?')) return;
+    const posto = $('#selPosto').val();
+    const $cell = $btn.closest('td');
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+    $.ajax({
+      url: '/api/desconfirmar_presenca', method: 'POST', contentType: 'application/json',
+      data: JSON.stringify({ posto: posto, idlancamento: idlanc }),
+    }).done(res => {
+      if (res && res.ok) {
+        const p = DATA.find(x => String(x.idlancamento) === String(idlanc));
+        if (p) p.hora_confirmacao = '';
+        $cell.html(`<button type="button" class="btn btn-outline-primary btn-confirmar" data-idlanc="${idlanc}">`
+                 + `<i class="fas fa-check mr-1"></i>Confirmar</button>`);
+      } else {
+        $btn.prop('disabled', false).html('<i class="fas fa-times text-danger"></i>');
+        if (res && (res.sem_vinculo || res.sem_vinculo_posto)) showVincModal(res.error);
+        else alert((res && res.error) || 'Falha ao desconfirmar');
+      }
+    }).fail(xhr => {
+      $btn.prop('disabled', false).html('<i class="fas fa-times text-danger"></i>');
+      const r = xhr.responseJSON;
+      if (r && (r.sem_vinculo || r.sem_vinculo_posto)) showVincModal(r.error);
+      else alert((r && r.error) || 'Erro de conexão ao desconfirmar');
+    });
+  }
+
   function init() {
     const hoje = hojeLocal();
     $('#inpData').val(hoje);
@@ -604,6 +632,10 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     $('#tblBody').on('click', '.btn-confirmar', function(e) {
       e.stopPropagation();
       confirmarPresenca($(this).data('idlanc'), $(this));
+    });
+    $('#tblBody').on('click', '.btn-desconfirmar', function(e) {
+      e.stopPropagation();
+      desconfirmarPresenca($(this).data('idlanc'), $(this));
     });
     $('#vincFechar').on('click', () => $('#vincOverlay').removeClass('active'));
     $('#vincOverlay').on('click', e => { if (e.target.id === 'vincOverlay') $('#vincOverlay').removeClass('active'); });
@@ -807,7 +839,13 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
   function confirmacaoCell(p) {
     const h = (p.hora_confirmacao || '').trim();   // CHAR(5) volta padded
     if (h) {
-      return `<span class="conf-ok"><i class="fas fa-check mr-1"></i>${escHtml(h)}</span>`;
+      let cell = `<span class="conf-ok"><i class="fas fa-check mr-1"></i>${escHtml(h)}</span>`;
+      if (p.idlancamento) {
+        cell += ` <button type="button" class="btn btn-link btn-desconfirmar p-0 ml-1"`
+              + ` title="Desconfirmar" data-idlanc="${p.idlancamento}">`
+              + `<i class="fas fa-times text-danger"></i></button>`;
+      }
+      return cell;
     }
     if (p.idlancamento && !_isDesistente(p) && !_isMedicoFaltou(p)) {
       return `<button type="button" class="btn btn-outline-primary btn-confirmar" data-idlanc="${p.idlancamento}">`
