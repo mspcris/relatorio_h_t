@@ -429,6 +429,19 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     $('#selPosto').on('change', () => { updateBanner($('#selPosto').val()); carregar(); });
     $('#chkDesistencia').on('change', renderTable);
 
+    // Clique no ícone de observação: não propaga (não mexe na linha/grupo) e
+    // fecha qualquer outro popover já aberto. O toggle do próprio é do Bootstrap.
+    $(document).on('click', '.obs-icon', function(e) {
+      e.stopPropagation();
+      $('[data-toggle="popover"]').not(this).popover('hide');
+    });
+    // Clicar fora (em área vazia) fecha o popover sem disparar outra ação
+    $(document).on('click', function(e) {
+      if (!$(e.target).closest('.obs-icon, .popover').length) {
+        $('[data-toggle="popover"]').popover('hide');
+      }
+    });
+
     $('#tblBody').on('click', 'tr.group-header', function() {
       const $h = $(this);
       const key = $h.data('group');
@@ -624,12 +637,14 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     if (!obs) return '';
     const conteudo = escAttr(obs).replace(/\|/g, '&#10;');
     return ` <i class="fas fa-comment-dots obs-icon" role="button" tabindex="0"`
-         + ` title="Observação" data-toggle="popover" data-trigger="focus"`
+         + ` title="Observação" data-toggle="popover" data-trigger="click"`
          + ` data-placement="auto" data-content="${conteudo}"></i>`;
   }
 
   function initPopovers() {
-    $('[data-toggle="popover"]').popover({ container: 'body' });
+    // trigger:'click' → clicar no ícone alterna abrir/fechar (sem precisar
+    // clicar fora, o que mexeria em outro elemento da tela)
+    $('[data-toggle="popover"]').popover({ container: 'body', trigger: 'click' });
   }
 
   function renderCharts() {
