@@ -387,14 +387,34 @@ def api_confirmar_presenca():
         if row[0]:
             return jsonify({'ok': True, 'ja_confirmado': True, 'hora_confirmacao': row[0]})
 
+        # Cad_Lancamento tem 6 triggers ENABLED → cur.rowcount é não-confiável
+        # (conta linhas das triggers) e OUTPUT direto falha. Usa OUTPUT INTO
+        # @table (forma trigger-safe, igual medico_novo): devolve linha SÓ se a
+        # confirmação realmente gravou. WHERE ... IS NULL garante idempotência
+        # e segurança contra corrida.
         cur.execute(
+            "SET NOCOUNT ON;"
+            "DECLARE @upd TABLE (hora varchar(5));"
             "UPDATE Cad_Lancamento "
-            "SET dataconfirmacaoConsulta = GETDATE(), idUsuarioConfirmaPresenca = ? "
-            "WHERE idLancamento = ? AND dataconfirmacaoConsulta IS NULL",
+            "  SET dataconfirmacaoConsulta = GETDATE(), idUsuarioConfirmaPresenca = ? "
+            "  OUTPUT CONVERT(varchar(5), INSERTED.dataconfirmacaoConsulta, 108) INTO @upd "
+            "  WHERE idLancamento = ? AND dataconfirmacaoConsulta IS NULL;"
+            "SELECT hora FROM @upd;",
             id_usuario_op, idlanc)
-        if cur.rowcount != 1:
+        while cur.description is None:
+            if not cur.nextset():
+                break
+        upd = cur.fetchone() if cur.description else None
+        if not upd:
+            # Confirmado por outro entre o SELECT e o UPDATE (corrida) — devolve o existente.
             con.rollback()
-            return jsonify({'ok': False, 'error': 'nada atualizado (confirmação concorrente?)'}), 409
+            cur2 = con.cursor()
+            cur2.execute(
+                "SELECT CONVERT(varchar(5), dataconfirmacaoConsulta, 108) "
+                "FROM Cad_Lancamento WHERE idLancamento = ?", idlanc)
+            hora_ex = (cur2.fetchone() or [None])[0]
+            return jsonify({'ok': True, 'ja_confirmado': True, 'hora_confirmacao': hora_ex or ''})
+        hora = upd[0]
 
         # Auditoria obrigatória — mesma transação, antes do commit.
         cur.execute(
@@ -402,12 +422,6 @@ def api_confirmar_presenca():
             "VALUES (?, ?, ?, ?, GETDATE(), ?, ?)",
             idlanc, ID_TABELA_CAD_LANCAMENTO, ID_COMANDO_EDICAO, id_usuario_op,
             'Confirmação de presença via Agenda (camila2/kpi)', COMPUTADOR_ORIGEM)
-
-        # Hora gravada (pra UI atualizar a coluna Confirmação sem recarregar).
-        cur.execute(
-            "SELECT CONVERT(varchar(5), dataconfirmacaoConsulta, 108) "
-            "FROM Cad_Lancamento WHERE idLancamento = ?", idlanc)
-        hora = (cur.fetchone() or [None])[0]
         con.commit()
 
         # Reflete no cache Postgres na hora (a agenda lê de lá; sem isso só
