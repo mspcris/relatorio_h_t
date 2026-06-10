@@ -407,8 +407,15 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
   }
 
   // ── Init ──
+  // Data LOCAL (não toISOString/UTC — à noite no Brasil UTC já virou o dia
+  // seguinte e a agenda abria em amanhã em vez de hoje).
+  function hojeLocal() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
   function init() {
-    const hoje = new Date().toISOString().slice(0,10);
+    const hoje = hojeLocal();
     $('#inpData').val(hoje);
     populatePostos(window.USER_POSTOS);
 
