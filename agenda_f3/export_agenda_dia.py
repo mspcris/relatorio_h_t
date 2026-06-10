@@ -204,7 +204,11 @@ FROM vw_Cad_LancamentoProntuarioComDesistencia v
 LEFT JOIN Cad_Lancamento l WITH (NOLOCK) ON l.idLancamento = v.idLancamento
 WHERE v.dataconsulta >= :dt_ini
   AND v.dataconsulta <  :dt_fim
-ORDER BY v.nomemedico, v.HoraPrevistaConsulta ASC
+-- Ordena por hora prevista; quando não há (ex.: exames, por ordem de chegada),
+-- usa a hora do LANÇAMENTO (Datahora). Só ordenação — não muda a exibição.
+ORDER BY v.nomemedico,
+         COALESCE(NULLIF(LTRIM(RTRIM(v.HoraPrevistaConsulta)), ''),
+                  CONVERT(varchar(8), v.Datahora, 108)) ASC
 """
 
 

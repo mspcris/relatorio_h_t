@@ -211,6 +211,7 @@ def fetch_agenda(posto: str, data_iso: str) -> tuple[list[dict], datetime | None
                    medico_sala, medico_obs, gerado_em
               FROM agenda_dia
              WHERE posto = :p AND data = :d
+             ORDER BY id
         """), {"p": posto, "d": data_iso}).mappings().all()
 
         pacientes = [dict(r) for r in rows]
