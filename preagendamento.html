@@ -333,6 +333,12 @@
                   <option value="isentos">Apenas isentos da regra (&lt;6d antes — sem janela viável)</option>
                 </select>
               </div>
+              <div>
+                <label class="filter-label">Especialidade</label>
+                <select id="selEsp" class="form-control form-control-sm" style="width:230px">
+                  <option value="" selected>Todas as especialidades</option>
+                </select>
+              </div>
             </div>
             <div class="filter-btns-row">
               <button id="btnFiltrar" class="btn btn-sm btn-primary"><i class="fas fa-search mr-1"></i>Filtrar</button>
@@ -816,6 +822,16 @@
       pintarPostos(); pintarBotoesGrupo();
     });
 
+    // Especialidades — distintas, ordenadas
+    const espSet = new Set();
+    (DATA.consultas || []).forEach(c => { if (c.esp) espSet.add(c.esp); });
+    const selEsp = $('#selEsp');
+    [...espSet].sort((a, b) => a.localeCompare(b, 'pt-BR')).forEach(e => {
+      const opt = document.createElement('option');
+      opt.value = e; opt.textContent = e;
+      selEsp.appendChild(opt);
+    });
+
     $('#btnFiltrar').addEventListener('click', aplicarFiltros);
     $('#btnReset').addEventListener('click', () => { aplicarDefaults(); aplicarFiltros(); });
     $('#btnMesAtual').addEventListener('click', () => { aplicarDefaults(); aplicarFiltros(); });
@@ -861,6 +877,7 @@
     $('#dtIni').value = primeiroDiaMesAtual();
     $('#dtFim').value = ontem();
     $('#selPop').value = 'todos';
+    $('#selEsp').value = '';
     $('#rawSearch').value = '';
     $('#rawStatus').value = '';
     $('#rawConf').value = '';
@@ -974,9 +991,14 @@
     const dtIni = $('#dtIni').value;
     const dtFim = $('#dtFim').value;
     const pop   = $('#selPop').value;
+    const esp   = $('#selEsp').value;
     const postosOk = (selPostos === 'ALL') ? new Set(POSTOS) : selPostos;
 
-    dadosFiltrados = (DATA.consultas || []).filter(c => {
+    // Base para as séries mensais (janela completa de 12m, ignora datas) — já
+    // recortada por especialidade para refletir a seleção do topo.
+    const consultasEsp = esp ? (DATA.consultas || []).filter(c => c.esp === esp) : (DATA.consultas || []);
+
+    dadosFiltrados = consultasEsp.filter(c => {
       if (!postosOk.has(c.p)) return false;
       if (dtIni && c.dc < dtIni) return false;
       if (dtFim && c.dc > dtFim) return false;
@@ -989,7 +1011,7 @@
 
     renderKPIs(dadosFiltrados);
     renderConfirmFalta(dadosFiltrados);
-    renderFaltaMensal(DATA.consultas, postosOk);  // série usa janela completa
+    renderFaltaMensal(consultasEsp, postosOk);  // série usa janela completa
     renderFaltaAntec(dadosFiltrados);
     renderHoraConf(dadosFiltrados);
     renderConfirmFaltou(dadosFiltrados);
@@ -999,7 +1021,7 @@
     renderMedianaPagou(dadosFiltrados);
     renderVagaRotacao(dadosFiltrados);
     renderVagaTentativas(dadosFiltrados);
-    renderDesistMensal(DATA.consultas, postosOk);
+    renderDesistMensal(consultasEsp, postosOk);
     renderDesistMedicos(dadosFiltrados);
     renderEspFalta(dadosFiltrados);
     renderMedFalta(dadosFiltrados);
