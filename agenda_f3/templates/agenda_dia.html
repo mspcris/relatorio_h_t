@@ -94,6 +94,12 @@
     .badge-faltou       { background: #dc3545; color: #fff; }
     .badge { font-size: .78rem; padding: 3px 9px; border-radius: 12px; font-weight: 600; }
 
+    /* Ícone de observação (clicar abre popover com o texto completo) */
+    .obs-icon { color: #17a2b8; cursor: pointer; margin-left: 5px; }
+    .obs-icon:hover, .obs-icon:focus { color: #117a8b; outline: none; }
+    .popover { max-width: 360px; }
+    .popover-body { white-space: pre-line; font-size: .82rem; }
+
     /* Tabela — ocupa todo o espaço restante; só ela rola */
     .table-container {
       flex: 1 1 auto; overflow: auto;
@@ -495,6 +501,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     if (!groupBy) {
       ativos.forEach(p => tbody.append(rowHtml(p)));
       if (showDesist) desistentes.forEach(p => tbody.append(rowHtml(p)));
+      initPopovers();
       return;
     }
 
@@ -537,6 +544,8 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
         tbody.append($r);
       });
     }
+
+    initPopovers();
   }
 
   function rowHtml(p) {
@@ -545,7 +554,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     return `<tr>
       <td>${escHtml(p.hora_prevista||'—')}</td>
       <td>${escHtml(p.hora_confirmacao||'—')}</td>
-      <td>${escHtml(p.paciente)}</td>
+      <td>${escHtml(p.paciente)}${obsIcon(p.observacao)}</td>
       <td>${p.matricula||'—'}</td>
       <td class="text-center ${postoClass}">${escHtml(postoCliente)}</td>
       <td class="text-center">${p.idade!=null?p.idade:'—'}</td>
@@ -579,6 +588,26 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
   }
 
   function escHtml(s) { return $('<span>').text(s||'').html(); }
+
+  // Escapa p/ atributo HTML (aspas, <, >, &) — usado no data-content do popover
+  function escAttr(s) {
+    return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')
+                  .replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Ícone de observação: só aparece quando há texto. Clicar abre popover.
+  // O texto vem do Cad_Lancamento.Observacao (separadores '|' viram quebras de linha).
+  function obsIcon(obs) {
+    if (!obs) return '';
+    const conteudo = escAttr(obs).replace(/\|/g, '&#10;');
+    return ` <i class="fas fa-comment-dots obs-icon" role="button" tabindex="0"`
+         + ` title="Observação" data-toggle="popover" data-trigger="focus"`
+         + ` data-placement="auto" data-content="${conteudo}"></i>`;
+  }
+
+  function initPopovers() {
+    $('[data-toggle="popover"]').popover({ container: 'body' });
+  }
 
   function renderCharts() {
     const baseOpts = {

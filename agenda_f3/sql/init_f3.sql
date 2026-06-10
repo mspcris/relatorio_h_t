@@ -30,8 +30,12 @@ CREATE TABLE IF NOT EXISTS agenda_dia (
     situacao         TEXT,
     pagou_no_dia     BOOLEAN      NOT NULL DEFAULT false,
     idendereco       BIGINT,
+    observacao       TEXT,                   -- Cad_Lancamento.Observacao (log da agenda/reagendamento)
     gerado_em        TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
+
+-- Migração idempotente p/ bancos que já tinham a tabela sem a coluna observacao
+ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS observacao TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_agenda_dia_posto_data
     ON agenda_dia (posto, data);

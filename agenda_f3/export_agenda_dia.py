@@ -186,22 +186,24 @@ def connect_all_postos():
 SQL_AGENDA = """
 SET NOCOUNT ON;
 SELECT
-    idendereco,
-    matricula,
-    codigo       AS cfcliente,
-    paciente,
-    idadePaciente,
-    especialidade,
-    nomemedico   AS medico,
-    HoraPrevistaConsulta,
-    CONVERT(varchar(5), dataconfirmacaoconsulta, 108) AS hora_confirmacao,
-    Dif_dias_agend_cons,
-    Atendido,
-    Desistencia
-FROM vw_Cad_LancamentoProntuarioComDesistencia
-WHERE dataconsulta >= :dt_ini
-  AND dataconsulta <  :dt_fim
-ORDER BY nomemedico, HoraPrevistaConsulta ASC
+    v.idendereco,
+    v.matricula,
+    v.codigo       AS cfcliente,
+    v.paciente,
+    v.idadePaciente,
+    v.especialidade,
+    v.nomemedico   AS medico,
+    v.HoraPrevistaConsulta,
+    CONVERT(varchar(5), v.dataconfirmacaoconsulta, 108) AS hora_confirmacao,
+    v.Dif_dias_agend_cons,
+    v.Atendido,
+    v.Desistencia,
+    l.Observacao   AS observacao
+FROM vw_Cad_LancamentoProntuarioComDesistencia v
+LEFT JOIN Cad_Lancamento l WITH (NOLOCK) ON l.idLancamento = v.idLancamento
+WHERE v.dataconsulta >= :dt_ini
+  AND v.dataconsulta <  :dt_fim
+ORDER BY v.nomemedico, v.HoraPrevistaConsulta ASC
 """
 
 
@@ -537,6 +539,7 @@ def build_pacientes(rows, dt_iso: str, status_global: dict, pagou_global: dict):
             "situacao":         situacao,
             "pagou_no_dia":     pagou,
             "idendereco":       safe_int(r.get("idendereco")),
+            "observacao":       (r.get("observacao") or "").strip() or None,
         })
     return pacientes
 
