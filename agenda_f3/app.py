@@ -48,7 +48,7 @@ JSON_FALLBACK = '/opt/agenda_f3/json_consolidado/agenda_dia.json'
 # idUsuario é resolvido POR POSTO no momento da confirmação (ver pegadinha em
 # project_confirmar_presenca_schema). NÃO se confia num id_usuario_sqlserver
 # fixo: o mesmo Usuario tem idUsuario diferente em cada banco de posto.
-_CLAIM_LOGIN_CAMPINHO = 'login_campinho'
+_CLAIM_LOGIN_CAMPINHO = 'user_camim'  # claim do idCamim com o login CAMIM (ex.: "CRISTIANO2.A")
 
 # Auditoria (Sis_Historico) da confirmação de presença em Cad_Lancamento.
 ID_TABELA_CAD_LANCAMENTO = 44   # de Sis_HistoricoTabela
