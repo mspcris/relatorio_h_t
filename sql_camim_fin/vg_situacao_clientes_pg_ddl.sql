@@ -26,8 +26,9 @@ CREATE TABLE IF NOT EXISTS kpi_vg_situacao_clientes (
     responsavel               VARCHAR(200),
     telefone_whatsapp         VARCHAR(40),
     telefone_celular          VARCHAR(40),
-    valor_devido              NUMERIC(14,2),
-    valor_pago                NUMERIC(14,2),
+    valor_devido              NUMERIC(14,2),               -- soma das parcelas
+    valor_pago                NUMERIC(14,2),               -- soma do pago
+    mensalidade               NUMERIC(14,2),               -- [Valor devido] de UMA parcela (max)
     receitas_qtd              INTEGER NOT NULL DEFAULT 0,  -- linhas em vw_fin_receita2 (idcontatipo=5) somadas
     dependentes_qtd           INTEGER NOT NULL DEFAULT 0,
     consultas_dia_adesao_qtd  INTEGER NOT NULL DEFAULT 0,

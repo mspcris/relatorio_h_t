@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS kpi_vg_situacao_clientes (
     telefone_celular          VARCHAR(40),
     valor_devido              NUMERIC(14,2),
     valor_pago                NUMERIC(14,2),
+    mensalidade               NUMERIC(14,2),
     receitas_qtd              INTEGER NOT NULL DEFAULT 0,
     dependentes_qtd           INTEGER NOT NULL DEFAULT 0,
     consultas_dia_adesao_qtd  INTEGER NOT NULL DEFAULT 0,
@@ -173,6 +174,7 @@ CREATE TABLE IF NOT EXISTS kpi_vg_situacao_clientes (
     atualizado_em             TIMESTAMP NOT NULL DEFAULT now(),
     UNIQUE (posto, id_cliente)
 );
+ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mensalidade NUMERIC(14,2);
 CREATE INDEX IF NOT EXISTS ix_vg_sit_cli_data_admissao ON kpi_vg_situacao_clientes (data_admissao);
 CREATE INDEX IF NOT EXISTS ix_vg_sit_cli_posto ON kpi_vg_situacao_clientes (posto);
 CREATE TABLE IF NOT EXISTS kpi_vg_matriculas_anteriores (
@@ -199,7 +201,7 @@ COLS_PRINCIPAL = [
     "posto", "id_cliente", "matricula", "nome", "cpf", "data_admissao",
     "situacao", "situacao_clube", "idade", "sexo", "responsavel",
     "telefone_whatsapp", "telefone_celular", "valor_devido", "valor_pago",
-    "receitas_qtd", "dependentes_qtd",
+    "mensalidade", "receitas_qtd", "dependentes_qtd",
     "consultas_dia_adesao_qtd", "usou_plano_dia_adesao",
     "consultas_futuras_qtd", "tem_consulta_futura",
     "matriculas_anteriores_qtd", "mat_ant_titular_qtd",
@@ -308,15 +310,20 @@ def carregar_posto(engine, posto, adm_inicio_str, hoje_str):
                 "responsavel": clean_str(resp, 200),
                 "telefone_whatsapp": clean_str(telwpp, 40),
                 "telefone_celular": clean_str(telcel, 40),
-                "valor_devido": 0, "valor_pago": 0, "receitas_qtd": 0,
+                "valor_devido": 0, "valor_pago": 0, "mensalidade": 0,
+                "receitas_qtd": 0,
                 "dependentes_qtd": 0,
                 "consultas_dia_adesao_qtd": 0, "consultas_futuras_qtd": 0,
                 "mat_ant": {"titular": set(), "dependente": set(), "responsavel": set()},
                 "cpfs": [],  # (cpf, papel_na_nova, pessoa_nome)
             }
-        # Mais de uma receita idcontatipo=5 pro mesmo cliente: soma valores
-        cli["valor_devido"] += float(vdev or 0)
+        # Mais de uma receita idcontatipo=5 pro mesmo cliente (parcelas): soma
+        # valores e guarda em `mensalidade` o [Valor devido] de UMA parcela
+        # (max — se a 1ª tiver desconto pro-rata, pega a cheia)
+        v = float(vdev or 0)
+        cli["valor_devido"] += v
         cli["valor_pago"] += float(vpago or 0)
+        cli["mensalidade"] = max(cli["mensalidade"], v)
         cli["receitas_qtd"] += 1
 
     if not clientes:
@@ -486,6 +493,7 @@ def main():
                 cli["idade"], cli["sexo"], cli["responsavel"],
                 cli["telefone_whatsapp"], cli["telefone_celular"],
                 round(cli["valor_devido"], 2), round(cli["valor_pago"], 2),
+                round(cli["mensalidade"], 2),
                 cli["receitas_qtd"], cli["dependentes_qtd"],
                 cli["consultas_dia_adesao_qtd"], cli["consultas_dia_adesao_qtd"] > 0,
                 cli["consultas_futuras_qtd"], cli["consultas_futuras_qtd"] > 0,

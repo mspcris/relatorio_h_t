@@ -89,6 +89,7 @@ def vg_listar_clientes():
                telefone_whatsapp, telefone_celular,
                valor_devido::float8 AS valor_devido,
                valor_pago::float8  AS valor_pago,
+               mensalidade::float8 AS mensalidade,
                receitas_qtd, dependentes_qtd,
                consultas_dia_adesao_qtd, usou_plano_dia_adesao,
                consultas_futuras_qtd, tem_consulta_futura,
