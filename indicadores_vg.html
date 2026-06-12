@@ -249,30 +249,40 @@
       <div class="kpi-card"><div class="kpi-val" id="kPago" style="color:#20c997">R$ 0</div><div class="kpi-lbl">Valor pago (soma)</div></div>
     </div>
 
-    <!-- Gráficos -->
-    <div class="row mt-2" id="chartsRow" style="display:none">
-      <div class="col-md-4">
-        <div class="chart-card">
-          <h3 class="card-title">Situação cadastral</h3>
-          <canvas id="chartSituacao"></canvas>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="chart-card">
-          <h3 class="card-title">Admissões por mês</h3>
-          <canvas id="chartMes"></canvas>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="chart-card">
-          <h3 class="card-title">Matrículas anteriores</h3>
-          <canvas id="chartMatAnt"></canvas>
-        </div>
-      </div>
-    </div>
+    <!-- Abas: Tabela / Gráficos -->
+    <div id="resultArea" style="display:none">
+      <ul class="nav nav-tabs mt-2" id="vgTabs">
+        <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tabTabela"><i class="fas fa-table mr-1"></i>Tabela</a></li>
+        <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tabGraficos"><i class="fas fa-chart-pie mr-1"></i>Gráficos</a></li>
+      </ul>
+      <div class="tab-content">
 
-    <!-- Tabela -->
-    <div class="table-container mt-3" id="tblContainer" style="display:none">
+        <div class="tab-pane fade" id="tabGraficos">
+          <div class="row mt-3" id="chartsRow">
+            <div class="col-md-4">
+              <div class="chart-card">
+                <h3 class="card-title">Situação cadastral</h3>
+                <canvas id="chartSituacao"></canvas>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="chart-card">
+                <h3 class="card-title">Admissões por mês</h3>
+                <canvas id="chartMes"></canvas>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="chart-card">
+                <h3 class="card-title">Matrículas anteriores</h3>
+                <canvas id="chartMatAnt"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-pane fade show active" id="tabTabela">
+          <!-- Tabela -->
+          <div class="table-container mt-3" id="tblContainer">
       <table class="table table-sm table-bordered table-hover mb-0" id="tblVG">
         <thead>
           <tr>
@@ -297,7 +307,11 @@
         </thead>
         <tbody id="tblBody"></tbody>
       </table>
-    </div>
+          </div>
+        </div><!-- tab-pane tabTabela -->
+
+      </div><!-- tab-content -->
+    </div><!-- resultArea -->
 
     <!-- Mensagem vazia -->
     <div id="msgVazio" class="text-center text-muted py-5" style="display:none">
@@ -350,6 +364,8 @@
   let selPostos = 'ALL';  // 'ALL' ou Set de letras
   let POSTOS = [];        // postos do usuário
   let chartSituacao, chartMes, chartMatAnt;
+  let ROWS_ATUAIS = [];   // último resultado filtrado (pros gráficos da aba)
+  let CHARTS_DIRTY = false;
 
   const NOMES_POSTOS = {
     A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho', G:'Campo Grande',
@@ -408,6 +424,11 @@
     // Clique no badge de matrículas anteriores → modal
     $('#tblBody').on('click', '.badge-matant', function(){
       abrirModalMatAnt(this.dataset.posto, this.dataset.id, this.dataset.nome);
+    });
+
+    // Aba Gráficos: desenha quando ela fica visível (canvas oculto sai com tamanho 0)
+    $('a[data-toggle="tab"][href="#tabGraficos"]').on('shown.bs.tab', () => {
+      if (CHARTS_DIRTY && ROWS_ATUAIS.length) { renderCharts(ROWS_ATUAIS); CHARTS_DIRTY = false; }
     });
   }
 
@@ -512,20 +533,20 @@
 
   function render(){
     const rows = filtrar();
+    ROWS_ATUAIS = rows;
     if (!DATA.length || !rows.length) {
       $id('kpiRow').style.display = 'none';
-      $id('chartsRow').style.display = 'none';
-      $id('tblContainer').style.display = 'none';
+      $id('resultArea').style.display = 'none';
       $id('msgVazio').style.display = 'block';
       return;
     }
     $id('msgVazio').style.display = 'none';
     renderCards(rows);
-    renderCharts(rows);
     renderTable(rows);
     $id('kpiRow').style.display = 'flex';
-    $id('chartsRow').style.display = 'flex';
-    $id('tblContainer').style.display = 'block';
+    $id('resultArea').style.display = 'block';
+    if ($('#tabGraficos').hasClass('active')) { renderCharts(rows); CHARTS_DIRTY = false; }
+    else { CHARTS_DIRTY = true; }
   }
 
   // ── Cards ──
