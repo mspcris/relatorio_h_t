@@ -434,6 +434,136 @@ def buscar_cpfs_no_posto(engine, posto_alvo, cpfs):
     return matches
 
 
+# ── Pipeline por posto ───────────────────────────────────────────────────────
+# Cada posto é processado e GRAVADO antes de começar o próximo (pedido do
+# usuário 2026-06-12): a página vai sendo atualizada posto a posto, e uma
+# falha no meio não atrasa os postos já concluídos.
+
+def processar_posto(p, engines, pg, adm_inicio_str, hoje_str, meta, dry_run):
+    """Carrega o posto p, busca matrículas anteriores dos CPFs dele em TODOS
+    os bancos, consulta vencidas e grava no Postgres. Retorna (rc, n_clientes)."""
+    rc = 0
+    clientes = carregar_posto(engines[p], p, adm_inicio_str, hoje_str)
+    print(f"[{p}] base OK  clientes={len(clientes)}", flush=True)
+
+    cpf_set = set()
+    for cli in clientes.values():
+        for cpf, _papel, _nome in cli["cpfs"]:
+            cpf_set.add(cpf)
+
+    # busca dos CPFs deste posto em todos os bancos
+    matches_por_cpf = defaultdict(list)
+    t0 = time.time()
+    for q in POSTOS_ORDER:
+        if q not in engines:
+            continue
+        try:
+            for m in buscar_cpfs_no_posto(engines[q], q, cpf_set):
+                matches_por_cpf[m[0]].append(m)
+        except Exception as e:
+            # matrículas anteriores deste posto ficam INCOMPLETAS (sem as
+            # passagens do banco q) — sinaliza e segue
+            rc = 2
+            traceback.print_exc()
+            meta.error(q, f"[{p}] busca CPF no banco {q}: {e}")
+    print(f"[{p}] busca CPF OK  cpfs={len(cpf_set)}  elapsed={time.time()-t0:.1f}s", flush=True)
+
+    # mensalidades vencidas em aberto das matrículas anteriores encontradas
+    ids_ant_por_posto = defaultdict(set)
+    for lst in matches_por_cpf.values():
+        for m in lst:
+            ids_ant_por_posto[m[8]].add(m[2])
+    vencidas = {}  # (posto, idcliente) -> (qtd, valor)
+    t0 = time.time()
+    for q, ids in sorted(ids_ant_por_posto.items()):
+        if q not in engines:
+            continue
+        try:
+            for chunk in chunked(sorted(ids)):
+                ids_sql = ",".join(str(i) for i in chunk)
+                for idc, qtd, total in run_query(
+                        engines[q], SQL_MENS_VENCIDAS.format(ids=ids_sql), (hoje_str,)):
+                    vencidas[(q, int(idc))] = (int(qtd or 0), float(total or 0))
+        except Exception as e:
+            rc = 2
+            traceback.print_exc()
+            meta.error(q, f"[{p}] mens vencidas no banco {q}: {e}")
+    print(f"[{p}] mens vencidas OK  elapsed={time.time()-t0:.1f}s", flush=True)
+
+    # montar linhas
+    rows_principal = []
+    rows_detalhe = []
+    for cli in clientes.values():
+        vistos_detalhe = set()
+        for cpf, papel_novo, pessoa_nome in cli["cpfs"]:
+            for (mcpf, papel_ant, idc_ant, iddep_ant, mat_ant, nome_ant,
+                 adm_ant, desat_ant, posto_ant) in matches_por_cpf.get(cpf, ()):
+                # exclui a própria matrícula nova
+                if posto_ant == p and idc_ant == cli["id_cliente"]:
+                    continue
+                cli["mat_ant"][papel_ant].add((posto_ant, idc_ant))
+                key = (cpf, papel_ant, posto_ant, idc_ant, iddep_ant)
+                if key in vistos_detalhe:
+                    continue
+                vistos_detalhe.add(key)
+                vq, vv = vencidas.get((posto_ant, idc_ant), (0, 0.0))
+                rows_detalhe.append((
+                    p, cli["id_cliente"], cpf, pessoa_nome, papel_novo,
+                    posto_ant, idc_ant, iddep_ant, mat_ant, papel_ant,
+                    nome_ant, adm_ant, desat_ant,
+                    vq, round(vv, 2),
+                ))
+
+        todas = cli["mat_ant"]["titular"] | cli["mat_ant"]["dependente"] | cli["mat_ant"]["responsavel"]
+        venc_qtd = sum(vencidas.get(t, (0, 0.0))[0] for t in todas)
+        venc_val = round(sum(vencidas.get(t, (0, 0.0))[1] for t in todas), 2)
+        rows_principal.append((
+            p, cli["id_cliente"], cli["matricula"], cli["nome"], cli["cpf"],
+            cli["data_admissao"], cli["situacao"], cli["situacao_clube"],
+            cli["idade"], cli["sexo"], cli["responsavel"],
+            cli["telefone_whatsapp"], cli["telefone_celular"],
+            round(cli["valor_devido"], 2), round(cli["valor_pago"], 2),
+            round(cli["mensalidade"], 2),
+            cli["receitas_qtd"], cli["dependentes_qtd"],
+            cli["consultas_dia_adesao_qtd"], cli["consultas_dia_adesao_qtd"] > 0,
+            cli["consultas_futuras_qtd"], cli["consultas_futuras_qtd"] > 0,
+            len(todas),
+            len(cli["mat_ant"]["titular"]),
+            len(cli["mat_ant"]["dependente"]),
+            len(cli["mat_ant"]["responsavel"]),
+            venc_qtd, venc_val,
+        ))
+
+    if dry_run:
+        print(f"[{p}] [dry-run] principal={len(rows_principal)}  detalhe={len(rows_detalhe)}", flush=True)
+        return rc, len(clientes)
+
+    # grava o posto (delete + insert numa transação) e segue pro próximo
+    try:
+        with pg.cursor() as c:
+            c.execute("DELETE FROM kpi_vg_matriculas_anteriores WHERE posto = %s", (p,))
+            c.execute("DELETE FROM kpi_vg_situacao_clientes WHERE posto = %s", (p,))
+            if rows_principal:
+                execute_values(
+                    c,
+                    f"INSERT INTO kpi_vg_situacao_clientes ({', '.join(COLS_PRINCIPAL)}) VALUES %s",
+                    rows_principal, page_size=1000,
+                )
+            if rows_detalhe:
+                execute_values(
+                    c,
+                    f"INSERT INTO kpi_vg_matriculas_anteriores ({', '.join(COLS_DETALHE)}) VALUES %s",
+                    rows_detalhe, page_size=1000,
+                )
+        pg.commit()
+        print(f"[{p}] GRAVADO  principal={len(rows_principal)}  detalhe={len(rows_detalhe)}", flush=True)
+    except Exception:
+        pg.rollback()
+        raise
+
+    return rc, len(clientes)
+
+
 # ── Main ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -449,165 +579,43 @@ def main():
 
     meta = ETLMeta("export_vg_situacao_clientes", "json_consolidado")
     conns = build_conns_from_env()
-    engines = {}
     rc = 0
 
-    # ── Fase 1: base de admissões por posto ──
-    dados = {}        # posto -> {idcliente: cli}
-    postos_ok = []
+    engines = {}
     for p in POSTOS_ORDER:
-        if p not in conns:
-            print(f"[{p}] sem conn no .env — pulando", flush=True)
-            continue
-        t0 = time.time()
-        try:
+        if p in conns:
             engines[p] = make_engine(conns[p])
-            dados[p] = carregar_posto(engines[p], p, adm_inicio_str, hoje_str)
-            postos_ok.append(p)
-            print(f"[{p}] base OK  clientes={len(dados[p])}  elapsed={time.time()-t0:.1f}s", flush=True)
-        except Exception as e:
-            rc = 2
-            traceback.print_exc()
-            meta.error(p, f"fase base: {e}")
+        else:
+            print(f"[{p}] sem conn no .env — pulando", flush=True)
 
-    # ── Fase 2: busca global de CPFs (matrículas anteriores) ──
-    cpf_set = set()
-    for p in postos_ok:
-        for cli in dados[p].values():
-            for cpf, _papel, _nome in cli["cpfs"]:
-                cpf_set.add(cpf)
-    print(f"CPFs distintos pra pesquisar: {len(cpf_set)}", flush=True)
-
-    matches_por_cpf = defaultdict(list)
-    for p in POSTOS_ORDER:
-        if p not in engines:
-            continue
-        t0 = time.time()
-        try:
-            for m in buscar_cpfs_no_posto(engines[p], p, cpf_set):
-                matches_por_cpf[m[0]].append(m)
-            print(f"[{p}] busca CPF OK  elapsed={time.time()-t0:.1f}s", flush=True)
-        except Exception as e:
-            # Contagem de matrículas anteriores fica INCOMPLETA neste run
-            # (faltam as passagens deste posto). Sinaliza no meta e segue.
-            rc = 2
-            traceback.print_exc()
-            meta.error(p, f"fase busca CPF: {e}")
-
-    # ── Fase 2.5: mensalidades vencidas em aberto das matrículas anteriores ──
-    ids_ant_por_posto = defaultdict(set)
-    for lst in matches_por_cpf.values():
-        for m in lst:
-            ids_ant_por_posto[m[8]].add(m[2])  # posto_alvo -> idcliente anterior
-    vencidas = {}  # (posto, idcliente) -> (qtd, valor)
-    for p, ids in sorted(ids_ant_por_posto.items()):
-        if p not in engines:
-            continue
-        t0 = time.time()
-        try:
-            for chunk in chunked(sorted(ids)):
-                ids_sql = ",".join(str(i) for i in chunk)
-                for idc, qtd, total in run_query(
-                        engines[p], SQL_MENS_VENCIDAS.format(ids=ids_sql), (hoje_str,)):
-                    vencidas[(p, int(idc))] = (int(qtd or 0), float(total or 0))
-            print(f"[{p}] mens vencidas OK  matriculas={len(ids)}  elapsed={time.time()-t0:.1f}s", flush=True)
-        except Exception as e:
-            rc = 2
-            traceback.print_exc()
-            meta.error(p, f"fase mens vencidas: {e}")
-
-    # ── Fase 3: montar linhas ──
-    rows_principal = []
-    rows_detalhe = []
-    for p in postos_ok:
-        for cli in dados[p].values():
-            vistos_detalhe = set()
-            for cpf, papel_novo, pessoa_nome in cli["cpfs"]:
-                for (mcpf, papel_ant, idc_ant, iddep_ant, mat_ant, nome_ant,
-                     adm_ant, desat_ant, posto_ant) in matches_por_cpf.get(cpf, ()):
-                    # exclui a própria matrícula nova
-                    if posto_ant == p and idc_ant == cli["id_cliente"]:
-                        continue
-                    cli["mat_ant"][papel_ant].add((posto_ant, idc_ant))
-                    key = (cpf, papel_ant, posto_ant, idc_ant, iddep_ant)
-                    if key in vistos_detalhe:
-                        continue
-                    vistos_detalhe.add(key)
-                    vq, vv = vencidas.get((posto_ant, idc_ant), (0, 0.0))
-                    rows_detalhe.append((
-                        p, cli["id_cliente"], cpf, pessoa_nome, papel_novo,
-                        posto_ant, idc_ant, iddep_ant, mat_ant, papel_ant,
-                        nome_ant, adm_ant, desat_ant,
-                        vq, round(vv, 2),
-                    ))
-
-            todas = cli["mat_ant"]["titular"] | cli["mat_ant"]["dependente"] | cli["mat_ant"]["responsavel"]
-            venc_qtd = sum(vencidas.get(t, (0, 0.0))[0] for t in todas)
-            venc_val = round(sum(vencidas.get(t, (0, 0.0))[1] for t in todas), 2)
-            rows_principal.append((
-                p, cli["id_cliente"], cli["matricula"], cli["nome"], cli["cpf"],
-                cli["data_admissao"], cli["situacao"], cli["situacao_clube"],
-                cli["idade"], cli["sexo"], cli["responsavel"],
-                cli["telefone_whatsapp"], cli["telefone_celular"],
-                round(cli["valor_devido"], 2), round(cli["valor_pago"], 2),
-                round(cli["mensalidade"], 2),
-                cli["receitas_qtd"], cli["dependentes_qtd"],
-                cli["consultas_dia_adesao_qtd"], cli["consultas_dia_adesao_qtd"] > 0,
-                cli["consultas_futuras_qtd"], cli["consultas_futuras_qtd"] > 0,
-                len(todas),
-                len(cli["mat_ant"]["titular"]),
-                len(cli["mat_ant"]["dependente"]),
-                len(cli["mat_ant"]["responsavel"]),
-                venc_qtd, venc_val,
-            ))
-
-    print(f"Linhas: principal={len(rows_principal)}  detalhe={len(rows_detalhe)}  postos_ok={postos_ok}", flush=True)
-
-    if args.dry_run:
-        print("[dry-run] nada gravado no Postgres", flush=True)
-        for r in rows_principal[:5]:
-            print("[dry-run] exemplo:", r, flush=True)
-        meta.save()
-        return rc
-
-    if not postos_ok:
-        print("nenhum posto processado — não escrevo no Postgres", flush=True)
-        meta.save()
-        return 2
-
-    # ── Fase 4: gravar (full rebuild só dos postos que deram certo) ──
-    pg = pg_conn()
-    try:
+    pg = None
+    if not args.dry_run:
+        pg = pg_conn()
         with pg.cursor() as c:
             c.execute(DDL)
-            c.execute("DELETE FROM kpi_vg_matriculas_anteriores WHERE posto = ANY(%s)", (postos_ok,))
-            c.execute("DELETE FROM kpi_vg_situacao_clientes WHERE posto = ANY(%s)", (postos_ok,))
-            if rows_principal:
-                execute_values(
-                    c,
-                    f"INSERT INTO kpi_vg_situacao_clientes ({', '.join(COLS_PRINCIPAL)}) VALUES %s",
-                    rows_principal, page_size=1000,
-                )
-            if rows_detalhe:
-                execute_values(
-                    c,
-                    f"INSERT INTO kpi_vg_matriculas_anteriores ({', '.join(COLS_DETALHE)}) VALUES %s",
-                    rows_detalhe, page_size=1000,
-                )
         pg.commit()
-        for p in postos_ok:
-            meta.ok(p, clientes=len(dados[p]))
-        print("Postgres atualizado.", flush=True)
-    except Exception as e:
-        pg.rollback()
-        rc = 2
-        traceback.print_exc()
-        for p in postos_ok:
-            meta.error(p, f"fase gravação PG: {e}")
+
+    try:
+        for p in POSTOS_ORDER:
+            if p not in engines:
+                continue
+            t0 = time.time()
+            try:
+                rc_p, n_cli = processar_posto(
+                    p, engines, pg, adm_inicio_str, hoje_str, meta, args.dry_run)
+                rc = max(rc, rc_p)
+                meta.ok(p, clientes=n_cli)
+                print(f"[{p}] POSTO CONCLUÍDO  clientes={n_cli}  elapsed={time.time()-t0:.1f}s", flush=True)
+            except Exception as e:
+                rc = 2
+                traceback.print_exc()
+                meta.error(p, f"posto {p}: {e}")
     finally:
-        pg.close()
+        if pg is not None:
+            pg.close()
         meta.save()
 
+    print("Fim.", flush=True)
     return rc
 
 
