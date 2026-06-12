@@ -64,6 +64,9 @@ class AgendaDia(Base):
     observacao       = Column(Text)
     medico_sala      = Column(Text)
     medico_obs       = Column(Text)
+    # CRM criado fora da agenda (sistema CRM/F3) com motivo ORIENTAÇÃO AO
+    # CLIENTE + tipo FINANCEIRO no dia — marcado pelo ETL a cada ciclo.
+    crm_externo      = Column(Boolean, default=False, nullable=False)
     gerado_em        = Column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
@@ -250,7 +253,7 @@ def fetch_agenda(posto: str, data_iso: str) -> tuple[list[dict], datetime | None
                    a.idade, a.especialidade, a.medico, a.hora_prevista, a.hora_confirmacao,
                    a.dias_agend_cons, a.atendido, a.desistencia, a.situacao, a.pagou_no_dia,
                    a.idendereco, a.observacao, a.medico_sala, a.medico_obs, a.gerado_em,
-                   (c.id IS NOT NULL) AS crm_done
+                   a.crm_externo, (c.id IS NOT NULL) AS crm_done
               FROM agenda_dia a
               LEFT JOIN crm_local c
                 ON c.posto = a.posto AND c.idlancamento = a.idlancamento

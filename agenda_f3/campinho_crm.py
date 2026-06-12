@@ -33,6 +33,14 @@ POSTO_ID_ENDERECO = {
 _lookup_cache = {"data": None, "ts": 0.0}
 _LOOKUP_TTL = 600  # 10 min
 
+# CRM "externo" (criado direto no sistema CRM ou no F3/ERP) que acende o bit
+# da agenda: motivo ORIENTAÇÃO AO CLIENTE + tipo FINANCEIRO (Campinho).
+# O ETL marca agenda_dia.crm_externo a cada ciclo com esses filtros.
+def crm_externo_ids() -> tuple[int, int]:
+    """(id_motivo, id_tipo) — configurável por env, defaults validados 2026-06-12."""
+    return (int(os.getenv("CRM_EXTERNO_ID_MOTIVO", "7")),     # ORIENTAÇÃO AO CLIENTE
+            int(os.getenv("CRM_EXTERNO_ID_TIPO", "85")))      # FINANCEIRO
+
 
 def _base_url() -> str:
     return os.getenv("CAMILA3_API_URL", "https://camila3.ia.camim.com.br").rstrip("/")
@@ -69,6 +77,35 @@ def get_lookup() -> dict:
         if _lookup_cache["data"]:
             return _lookup_cache["data"]
         raise
+
+
+def get_crm_externo(matricula, letra: str, data_iso: str) -> dict | None:
+    """Detalhe do CRM externo (criado no CRM/F3) pro modal da agenda: busca os
+    CRMs da matrícula via camila3 e devolve o mais recente do dia `data_iso`
+    com motivo/tipo de orientação financeira. None se não houver."""
+    id_motivo, id_tipo = crm_externo_ids()
+    base, headers = _base_url(), _headers()
+    r = requests.get(f"{base}/crm/existentes/{matricula}{letra}",
+                     headers=headers, timeout=20)
+    r.raise_for_status()
+    for c in r.json().get("crms", []):   # já vem ordenado por datahora DESC
+        if c.get("id_motivo") != id_motivo or c.get("id_tipo") != id_tipo:
+            continue
+        if not str(c.get("data_hora") or "").startswith(data_iso):
+            continue
+        return {
+            "paciente":             c.get("paciente"),
+            "titular":              c.get("titular"),
+            "matricula":            c.get("matricula"),
+            "posto_cliente":        letra,
+            "historico":            c.get("historico"),
+            "pessoa":               c.get("pessoa"),
+            "telefone":             c.get("telefone_whatsapp_cliente"),
+            "protocolo":            c.get("protocolo"),
+            "data_hora":            c.get("data_hora"),
+            "id_cliente_historico": c.get("id_cliente_historico"),
+        }
+    return None
 
 
 def _norm_nome(s: str) -> str:

@@ -707,9 +707,27 @@ def api_crm_detalhe():
     except Exception as e:
         app.logger.exception('crm_get falhou (posto=%s, idlanc=%s)', posto, idlanc)
         return jsonify({'ok': False, 'error': str(e)[:300]}), 500
-    if not reg:
-        return jsonify({'ok': False, 'error': 'CRM não encontrado para este agendamento'}), 404
-    return jsonify({'ok': True, 'crm': reg})
+    if reg:
+        return jsonify({'ok': True, 'origem': 'agenda', 'crm': reg})
+
+    # Não foi criado pela agenda → pode ser CRM externo (sistema CRM / F3).
+    # Busca ao vivo em Campinho via camila3, filtrando orientação/financeiro
+    # da data da agenda (param `data`; default hoje).
+    matricula      = (request.args.get('matricula') or '').strip()
+    posto_cliente  = (request.args.get('posto_cliente') or posto).strip().upper()[:1]
+    data_iso       = (request.args.get('data') or '').strip() or \
+                     datetime.now().date().isoformat()
+    if matricula.isdigit() and posto_cliente:
+        try:
+            ext = campinho_crm.get_crm_externo(matricula, posto_cliente, data_iso)
+        except Exception as e:
+            app.logger.warning('crm externo lookup falhou (mat=%s%s): %s',
+                               matricula, posto_cliente, e)
+            return jsonify({'ok': False,
+                            'error': f'Falha ao consultar CRM em Campinho: {e}'}), 502
+        if ext:
+            return jsonify({'ok': True, 'origem': 'externo', 'crm': ext})
+    return jsonify({'ok': False, 'error': 'CRM não encontrado para este agendamento'}), 404
 
 
 # Tabela crm_local + worker de retry (idempotentes; toleram Postgres fora no boot)

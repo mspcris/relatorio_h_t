@@ -731,7 +731,9 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
 
   function crmCell(p) {
     if (!p.idlancamento) return '—';
-    if (p.crm_done) {
+    // crm_done = criado pela agenda; crm_externo = criado no CRM/F3 (ETL marca
+    // de hora em hora pelos CRMs de orientação/financeiro do dia em Campinho)
+    if (p.crm_done || p.crm_externo) {
       return `<button type="button" class="crm-done" data-idlanc="${p.idlancamento}"`
            + ` title="CRM criado — clique para ver"><i class="fas fa-check-circle"></i></button>`;
     }
@@ -841,10 +843,33 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
   function abrirVerCrm(idlanc) {
     $('#crmVerBody').html('<div class="text-muted">Carregando…</div>');
     $('#crmVerModal').modal('show');
-    $.getJSON(`/api/crm_detalhe?posto=${$('#selPosto').val()}&idlancamento=${idlanc}`)
+    const p = DATA.find(x => String(x.idlancamento) === String(idlanc)) || {};
+    const params = `posto=${$('#selPosto').val()}&idlancamento=${idlanc}`
+                 + `&matricula=${encodeURIComponent(p.matricula||'')}`
+                 + `&posto_cliente=${encodeURIComponent(p.posto_cliente||'')}`
+                 + `&data=${encodeURIComponent($('#inpData').val()||'')}`;
+    $.getJSON(`/api/crm_detalhe?${params}`)
       .done(res => {
         if (!res.ok) { $('#crmVerBody').html(`<div class="text-danger">${escHtml(res.error)}</div>`); return; }
         const c = res.crm;
+        if (res.origem === 'externo') {
+          // Criado direto no sistema CRM ou no F3 — dados ao vivo de Campinho
+          const dt = c.data_hora ? new Date(c.data_hora).toLocaleString('pt-BR') : '—';
+          $('#crmVerBody').html(`
+            <div class="mb-2"><span class="badge badge-info">Criado fora da agenda (CRM/F3)</span>
+              ${c.protocolo ? ` <span class="badge badge-light border">Protocolo ${escHtml(c.protocolo)}</span>` : ''}</div>
+            <dl class="row mb-0" style="font-size:.85rem">
+              <dt class="col-sm-3">Paciente</dt><dd class="col-sm-9">${escHtml(c.paciente||c.titular||'—')}</dd>
+              <dt class="col-sm-3">Matrícula</dt><dd class="col-sm-9">${escHtml(String(c.matricula||'—'))} — posto ${escHtml(c.posto_cliente||'—')}</dd>
+              <dt class="col-sm-3">Motivo</dt><dd class="col-sm-9">ORIENTAÇÃO AO CLIENTE</dd>
+              <dt class="col-sm-3">Tipo</dt><dd class="col-sm-9">FINANCEIRO</dd>
+              ${c.pessoa ? `<dt class="col-sm-3">Pessoa citada</dt><dd class="col-sm-9">${escHtml(c.pessoa)}</dd>` : ''}
+              ${c.telefone ? `<dt class="col-sm-3">Telefone</dt><dd class="col-sm-9">${escHtml(c.telefone)}</dd>` : ''}
+              <dt class="col-sm-3">Histórico</dt><dd class="col-sm-9" style="white-space:pre-wrap">${escHtml(c.historico||'')}</dd>
+              <dt class="col-sm-3">Criado em</dt><dd class="col-sm-9">${escHtml(dt)}</dd>
+            </dl>`);
+          return;
+        }
         const sync = c.sync_status === 'enviado'
           ? `<span class="badge badge-success">Enviado pra Campinho</span>`
             + (c.protocolo ? ` <span class="badge badge-light border">Protocolo ${escHtml(c.protocolo)}</span>` : '')
@@ -863,7 +888,10 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
             <dt class="col-sm-3">Criado por</dt><dd class="col-sm-9">${escHtml(c.criado_por||'—')} em ${escHtml(dt)}</dd>
           </dl>`);
       })
-      .fail(() => $('#crmVerBody').html('<div class="text-danger">Erro de conexão.</div>'));
+      .fail(xhr => {
+        const r = xhr.responseJSON;
+        $('#crmVerBody').html(`<div class="text-danger">${escHtml((r && r.error) || 'Erro de conexão.')}</div>`);
+      });
   }
 
   // ── Quem confirmou (clique no ✔ da coluna Confirmação) ──

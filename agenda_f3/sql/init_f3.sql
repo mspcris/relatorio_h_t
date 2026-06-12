@@ -42,6 +42,8 @@ ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS observacao   TEXT;
 ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS medico_sala  TEXT;
 ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS medico_obs   TEXT;
 ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS idlancamento BIGINT;
+-- CRM externo (criado no CRM/F3 com orientação/financeiro no dia) — ETL marca
+ALTER TABLE agenda_dia ADD COLUMN IF NOT EXISTS crm_externo BOOLEAN NOT NULL DEFAULT false;
 
 CREATE INDEX IF NOT EXISTS idx_agenda_dia_posto_data
     ON agenda_dia (posto, data);

@@ -543,6 +543,55 @@ def fetch_all_financeiro(engines: dict, mats_por_origem: dict, letra_to_id: dict
 
 
 # =========================
+# FASE 4B — CRM externo (Campinho)
+# =========================
+# CRM criado FORA da agenda (direto no sistema CRM ou no F3/ERP) também deve
+# acender o bit ✅ da coluna CRM. Critério: Cad_ClienteHistorico em Campinho
+# (banco C) com motivo ORIENTAÇÃO AO CLIENTE + tipo FINANCEIRO na data da
+# agenda. SUPLEMENTAR: falha aqui NÃO invalida postos — só loga e o bit
+# externo fica apagado até o próximo ciclo.
+
+def fetch_crm_externo(engines: dict, datas: list, id_to_letra: dict):
+    """Retorna {(matricula, letra_cliente, dt_iso)} dos CRMs externos do período."""
+    from campinho_crm import crm_externo_ids
+    id_motivo, id_tipo = crm_externo_ids()
+    logger.write("")
+    logger.write("FASE 4B — CRM externo (Campinho: orientação ao cliente / financeiro)...")
+    logger.write("-" * 70)
+    eng = engines.get("C")
+    if not eng:
+        logger.write("  [C] ✗ banco C offline — bits de CRM externo ficam apagados neste ciclo")
+        return set()
+    d_ini  = min(datas).strftime("%d/%m/%Y")
+    d_fim  = (max(datas) + timedelta(days=1)).strftime("%d/%m/%Y")
+    sql = """
+    SET NOCOUNT ON; SET DATEFORMAT dmy;
+    SELECT ch.matricula, ch.idEnderecoCliente, CONVERT(date, ch.datahora) AS dia
+    FROM Cad_ClienteHistorico ch WITH (NOLOCK)
+    WHERE ch.datahora >= :d_ini AND ch.datahora < :d_fim
+      AND ch.idmotivo = :id_motivo AND ch.idTipo = :id_tipo
+    """
+    try:
+        with eng.connect() as con:
+            rows = con.execute(text(sql), {
+                "d_ini": d_ini, "d_fim": d_fim,
+                "id_motivo": id_motivo, "id_tipo": id_tipo,
+            }).mappings().all()
+        chaves = set()
+        for r in rows:
+            mat   = safe_int(r.get("matricula"))
+            letra = id_to_letra.get(safe_int(r.get("idEnderecoCliente")))
+            dia   = r.get("dia")
+            if mat and letra and dia:
+                chaves.add((mat, letra, dia.isoformat()))
+        logger.write(f"  [C] ✓ {len(chaves)} CRMs externos no período (motivo={id_motivo}, tipo={id_tipo})")
+        return chaves
+    except Exception as e:
+        logger.write(f"  [C] ✗ {e} — bits de CRM externo ficam apagados neste ciclo")
+        return set()
+
+
+# =========================
 # FASE 5 — Validar postos (regra de atomicidade)
 # =========================
 
@@ -627,9 +676,11 @@ def resolve_situacao(matricula, status_data):
 
 
 def build_pacientes(rows, dt_iso: str, status_global: dict, pagou_global: dict,
-                    sala_map: dict = None, falta_map: dict = None):
-    sala_map  = sala_map  or {}
-    falta_map = falta_map or {}
+                    sala_map: dict = None, falta_map: dict = None,
+                    posto: str = "", crm_ext_keys: set = None):
+    sala_map     = sala_map  or {}
+    falta_map    = falta_map or {}
+    crm_ext_keys = crm_ext_keys or set()
     pacientes = []
     exame_visto = set()
     for r in rows:
@@ -670,13 +721,15 @@ def build_pacientes(rows, dt_iso: str, status_global: dict, pagou_global: dict,
             "observacao":       (r.get("observacao") or "").strip() or None,
             "medico_sala":      medico_sala,
             "medico_obs":       medico_obs,
+            # mesma resolução de letra da fase 3: cfcliente, senão posto da agenda
+            "crm_externo":      bool(mat and (mat, cf if cf else posto, dt_iso) in crm_ext_keys),
         })
     return pacientes
 
 
 def write_postos_validos(postos_validos: set, agendas: dict, datas: list,
                          status_global: dict, pagou_global: dict, gerado_em,
-                         medico_extra: dict = None):
+                         medico_extra: dict = None, crm_ext_keys: set = None):
     """Para cada posto válido, monta pacientes (todas as datas) e faz REPLACE atômico."""
     medico_extra = medico_extra or {}
     logger.write("")
@@ -695,7 +748,7 @@ def write_postos_validos(postos_validos: set, agendas: dict, datas: list,
                 dt_iso = dt.isoformat()
                 rows = agendas[posto].get(dt_iso, [])
                 pacs = build_pacientes(rows, dt_iso, status_global, pagou_global,
-                                       sala_map, falta_map)
+                                       sala_map, falta_map, posto, crm_ext_keys)
                 dados_para_json[posto][dt_iso] = pacs
                 for p in pacs:
                     p_with_date = dict(p)
@@ -803,6 +856,8 @@ def run():
         engines, mats_por_origem, letra_to_id, datas
     )
 
+    crm_ext_keys = fetch_crm_externo(engines, datas, id_to_letra)
+
     postos_validos, postos_invalidos = validate_postos(
         engines, agendas, erros_agenda, origens_por_posto, origens_ok, origens_err
     )
@@ -814,7 +869,7 @@ def run():
     gerado_em = datetime.now(timezone.utc)
     dados_validos, write_errs, total_pacientes = write_postos_validos(
         postos_validos, agendas, datas, status_global, pagou_global, gerado_em,
-        medico_extra
+        medico_extra, crm_ext_keys
     )
 
     n_falhas = mark_failures(postos_invalidos, write_errs, gerado_em)
