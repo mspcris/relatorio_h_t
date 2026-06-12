@@ -185,6 +185,15 @@
     /* Botão Confirmar presença na coluna Confirmação */
     .btn-confirmar { font-size: .72rem; padding: 1px 8px; line-height: 1.5; white-space: nowrap; }
     .conf-ok { color: #198754; font-weight: 600; }
+    /* ✔ confirmado é clicável: abre modal com quem confirmou */
+    .conf-ok[data-idlanc] { cursor: pointer; }
+    .conf-ok[data-idlanc]:hover { text-decoration: underline; }
+
+    /* Coluna CRM */
+    .btn-crm { font-size: .72rem; padding: 1px 8px; line-height: 1.5; white-space: nowrap; }
+    .crm-done { color: #198754; font-size: 1rem; cursor: pointer; background: none; border: none; padding: 0 4px; }
+    .crm-done:hover { transform: scale(1.15); }
+    .modal label { font-size: .76rem; font-weight: 600; color: #495057; margin-bottom: 2px; }
 
     /* Modal central "vincule seu usuário" */
     .vinc-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
@@ -313,6 +322,7 @@
               <th>Médico</th>
               <th>Atendimento</th>
               <th>Situação Financeira</th>
+              <th>CRM</th>
               <th>Pagou no Dia</th>
               <th>Dias Agend→Cons</th>
             </tr>
@@ -351,6 +361,108 @@
 
 <div class="loading-overlay" id="loadingOverlay">
   <div class="spinner-border text-primary" role="status" style="width:48px;height:48px"><span class="sr-only">Carregando...</span></div>
+</div>
+
+<!-- Modal: criar CRM (local-first → Campinho em background) -->
+<div class="modal fade" id="crmModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title"><i class="fas fa-headset mr-2 text-primary"></i>Novo CRM</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Fechar"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="crmIdLanc">
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label>Paciente</label>
+            <input type="text" class="form-control form-control-sm" id="crmPaciente" readonly>
+          </div>
+          <div class="form-group col-md-3">
+            <label>Matrícula</label>
+            <input type="text" class="form-control form-control-sm" id="crmMatricula" readonly>
+          </div>
+          <div class="form-group col-md-3">
+            <label>Posto do cliente</label>
+            <input type="text" class="form-control form-control-sm" id="crmPostoCliente" readonly>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label>Motivo *</label>
+            <select class="custom-select custom-select-sm" id="crmMotivo">
+              <option value="">— carregando… —</option>
+            </select>
+          </div>
+          <div class="form-group col-md-6">
+            <label>Tipo *</label>
+            <select class="custom-select custom-select-sm" id="crmTipo">
+              <option value="">— selecione um motivo primeiro —</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label>Pessoa citada</label>
+            <input type="text" class="form-control form-control-sm" id="crmPessoa"
+                   placeholder="Funcionário/médico citado (opcional)">
+          </div>
+          <div class="form-group col-md-6">
+            <label>Telefone WhatsApp do cliente</label>
+            <input type="text" class="form-control form-control-sm" id="crmTelefone" placeholder="(21) 9....">
+          </div>
+        </div>
+        <div class="form-group mb-1">
+          <label>Histórico *</label>
+          <textarea class="form-control form-control-sm" id="crmHistorico" rows="5"
+                    placeholder="Descreva o que aconteceu (o que o cliente relatou, datas, médicos, postos envolvidos, etc.)"></textarea>
+        </div>
+        <div class="text-danger small" id="crmErro" style="display:none"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <small class="text-muted mr-auto">Salva na hora; envia pra Campinho em segundo plano.</small>
+        <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-sm btn-primary" id="btnSalvarCrm">
+          <i class="fas fa-save mr-1"></i>Salvar CRM</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: ver CRM já criado -->
+<div class="modal fade" id="crmVerModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title"><i class="fas fa-headset mr-2 text-success"></i>CRM criado</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Fechar"><span>&times;</span></button>
+      </div>
+      <div class="modal-body" id="crmVerBody">
+        <div class="text-muted">Carregando…</div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: quem confirmou a consulta -->
+<div class="modal fade" id="quemConfirmouModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title"><i class="fas fa-user-check mr-2 text-success"></i>Confirmação de presença</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Fechar"><span>&times;</span></button>
+      </div>
+      <div class="modal-body" id="quemConfirmouBody">
+        <div class="text-muted">Carregando…</div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Modal central: usuário sem vínculo CAMIM não pode confirmar presença -->
@@ -566,7 +678,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
       if (res && res.ok) {
         const hora = res.hora_confirmacao || '✓';
         // Atualiza a célula e o DATA em memória (sobrevive a re-render/agrupamento)
-        $btn.closest('td').html(`<span class="conf-ok"><i class="fas fa-check mr-1"></i>${escHtml(hora)}</span>`);
+        $btn.closest('td').html(`<span class="conf-ok" data-idlanc="${idlanc}" title="Ver quem confirmou"><i class="fas fa-check mr-1"></i>${escHtml(hora)}</span>`);
         const p = DATA.find(x => String(x.idlancamento) === String(idlanc));
         if (p) p.hora_confirmacao = res.hora_confirmacao || hora;
       } else {
@@ -610,6 +722,176 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
     });
   }
 
+  // ── CRM (coluna à direita de Situação Financeira) ──
+  // Sem CRM → botão que abre o modal de criação (processo do sistema CRM:
+  // motivo/tipo/pessoa/telefone/histórico). Com CRM → ✅ que abre modal
+  // mostrando o CRM. Save é local-first: grava no f3 e o servidor sobe pra
+  // Campinho em background.
+  let CRM_MOTIVOS = [], CRM_TIPOS = [], CRM_LOOKUP_OK = false;
+
+  function crmCell(p) {
+    if (!p.idlancamento) return '—';
+    if (p.crm_done) {
+      return `<button type="button" class="crm-done" data-idlanc="${p.idlancamento}"`
+           + ` title="CRM criado — clique para ver"><i class="fas fa-check-circle"></i></button>`;
+    }
+    if (_isDesistente(p)) return '—';
+    return `<button type="button" class="btn btn-outline-primary btn-crm" data-idlanc="${p.idlancamento}">`
+         + `<i class="fas fa-headset mr-1"></i>CRM</button>`;
+  }
+
+  function carregarCrmLookup() {
+    if (CRM_LOOKUP_OK) return $.Deferred().resolve().promise();
+    return $.getJSON('/api/crm/lookup').then(d => {
+      if (!d.ok) throw new Error(d.error || 'Falha ao carregar motivos/tipos');
+      CRM_MOTIVOS = d.motivos; CRM_TIPOS = d.tipos; CRM_LOOKUP_OK = true;
+      $('#crmMotivo').html('<option value="">— selecione —</option>' +
+        CRM_MOTIVOS.map(m => `<option value="${m.id}">${escHtml(m.motivo)}</option>`).join(''));
+    });
+  }
+
+  // Mesma regra do "novo CRM" do sistema CRM: motivo RECLAMAÇÃO restringe os tipos
+  function filtrarTiposPorMotivo() {
+    const motivo = CRM_MOTIVOS.find(m => String(m.id) === $('#crmMotivo').val());
+    const nome = (motivo && motivo.motivo || '').trim().toUpperCase();
+    if (!nome) {
+      $('#crmTipo').html('<option value="">— selecione um motivo primeiro —</option>');
+      return;
+    }
+    let lista;
+    if (nome === 'RECLAMAÇÃO') {
+      const recl = CRM_TIPOS.filter(t => (t.tipo||'').trim().toUpperCase().startsWith('RECLAMAÇÃO'))
+                            .sort((a,b) => (a.tipo||'').localeCompare(b.tipo||'','pt-BR'));
+      const outros = CRM_TIPOS.filter(t => (t.tipo||'').trim().toUpperCase() === 'OUTROS');
+      lista = recl.concat(outros);
+    } else {
+      lista = CRM_TIPOS.slice().sort((a,b) => (a.tipo||'').localeCompare(b.tipo||'','pt-BR'));
+    }
+    $('#crmTipo').html('<option value="">— selecione —</option>' +
+      lista.map(t => `<option value="${t.id}">${escHtml(t.tipo)}</option>`).join(''));
+  }
+
+  function crmErro(msg) {
+    $('#crmErro').text(msg || '').toggle(!!msg);
+  }
+
+  function abrirNovoCrm(idlanc) {
+    if (!SESSION.vinculado) { showVincModal(); return; }
+    const p = DATA.find(x => String(x.idlancamento) === String(idlanc));
+    if (!p) return;
+    $('#crmIdLanc').val(idlanc);
+    $('#crmPaciente').val(p.paciente || '');
+    $('#crmMatricula').val(p.matricula || '');
+    $('#crmPostoCliente').val(p.posto_cliente || $('#selPosto').val());
+    $('#crmPessoa').val(''); $('#crmTelefone').val(''); $('#crmHistorico').val('');
+    $('#crmTipo').html('<option value="">— selecione um motivo primeiro —</option>');
+    crmErro('');
+    $('#crmModal').modal('show');
+    carregarCrmLookup().fail(() => crmErro('Falha ao carregar motivos/tipos. Tente de novo.'));
+  }
+
+  function salvarCrm() {
+    const idlanc = $('#crmIdLanc').val();
+    const p = DATA.find(x => String(x.idlancamento) === String(idlanc));
+    const idMotivo = $('#crmMotivo').val(), idTipo = $('#crmTipo').val();
+    const historico = ($('#crmHistorico').val()||'').trim();
+    if (!idMotivo) { crmErro('Selecione o motivo.'); return; }
+    if (!idTipo)   { crmErro('Selecione o tipo.'); return; }
+    if (!historico){ crmErro('Histórico é obrigatório.'); return; }
+    crmErro('');
+
+    const $btn = $('#btnSalvarCrm');
+    const original = $btn.html();
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i>Salvando…');
+    $.ajax({
+      url: '/api/crm', method: 'POST', contentType: 'application/json',
+      data: JSON.stringify({
+        posto:         $('#selPosto').val(),
+        idlancamento:  parseInt(idlanc),
+        posto_cliente: p ? p.posto_cliente : null,
+        matricula:     p ? p.matricula : null,
+        paciente:      p ? p.paciente : '',
+        id_motivo:     parseInt(idMotivo),
+        motivo:        $('#crmMotivo option:selected').text(),
+        id_tipo:       parseInt(idTipo),
+        tipo:          $('#crmTipo option:selected').text(),
+        pessoa:        $('#crmPessoa').val(),
+        telefone:      $('#crmTelefone').val(),
+        historico:     historico,
+      }),
+    }).done(res => {
+      if (res && res.ok) {
+        // modal some e a célula vira o bit ✅
+        $('#crmModal').modal('hide');
+        if (p) p.crm_done = true;
+        $(`#tblBody .btn-crm[data-idlanc="${idlanc}"]`).closest('td')
+          .html(`<button type="button" class="crm-done" data-idlanc="${idlanc}"`
+              + ` title="CRM criado — clique para ver"><i class="fas fa-check-circle"></i></button>`);
+      } else {
+        if (res && (res.sem_vinculo || res.sem_vinculo_posto)) showVincModal(res.error);
+        else crmErro((res && res.error) || 'Falha ao salvar CRM');
+      }
+    }).fail(xhr => {
+      const r = xhr.responseJSON;
+      if (r && (r.sem_vinculo || r.sem_vinculo_posto)) showVincModal(r.error);
+      else crmErro((r && r.error) || 'Erro de conexão ao salvar CRM');
+    }).always(() => $btn.prop('disabled', false).html(original));
+  }
+
+  function abrirVerCrm(idlanc) {
+    $('#crmVerBody').html('<div class="text-muted">Carregando…</div>');
+    $('#crmVerModal').modal('show');
+    $.getJSON(`/api/crm_detalhe?posto=${$('#selPosto').val()}&idlancamento=${idlanc}`)
+      .done(res => {
+        if (!res.ok) { $('#crmVerBody').html(`<div class="text-danger">${escHtml(res.error)}</div>`); return; }
+        const c = res.crm;
+        const sync = c.sync_status === 'enviado'
+          ? `<span class="badge badge-success">Enviado pra Campinho</span>`
+            + (c.protocolo ? ` <span class="badge badge-light border">Protocolo ${escHtml(c.protocolo)}</span>` : '')
+          : `<span class="badge badge-warning">Aguardando envio pra Campinho</span>`;
+        const dt = c.criado_em ? new Date(c.criado_em).toLocaleString('pt-BR') : '—';
+        $('#crmVerBody').html(`
+          <div class="mb-2">${sync}</div>
+          <dl class="row mb-0" style="font-size:.85rem">
+            <dt class="col-sm-3">Paciente</dt><dd class="col-sm-9">${escHtml(c.paciente||'—')}</dd>
+            <dt class="col-sm-3">Matrícula</dt><dd class="col-sm-9">${escHtml(String(c.matricula||'—'))} — posto ${escHtml(c.posto_cliente||c.posto)}</dd>
+            <dt class="col-sm-3">Motivo</dt><dd class="col-sm-9">${escHtml(c.motivo||'—')}</dd>
+            <dt class="col-sm-3">Tipo</dt><dd class="col-sm-9">${escHtml(c.tipo||'—')}</dd>
+            ${c.pessoa ? `<dt class="col-sm-3">Pessoa citada</dt><dd class="col-sm-9">${escHtml(c.pessoa)}</dd>` : ''}
+            ${c.telefone ? `<dt class="col-sm-3">Telefone</dt><dd class="col-sm-9">${escHtml(c.telefone)}</dd>` : ''}
+            <dt class="col-sm-3">Histórico</dt><dd class="col-sm-9" style="white-space:pre-wrap">${escHtml(c.historico||'')}</dd>
+            <dt class="col-sm-3">Criado por</dt><dd class="col-sm-9">${escHtml(c.criado_por||'—')} em ${escHtml(dt)}</dd>
+          </dl>`);
+      })
+      .fail(() => $('#crmVerBody').html('<div class="text-danger">Erro de conexão.</div>'));
+  }
+
+  // ── Quem confirmou (clique no ✔ da coluna Confirmação) ──
+  function abrirQuemConfirmou(idlanc) {
+    $('#quemConfirmouBody').html('<div class="text-muted">Carregando…</div>');
+    $('#quemConfirmouModal').modal('show');
+    $.getJSON(`/api/quem_confirmou?posto=${$('#selPosto').val()}&idlancamento=${idlanc}`)
+      .done(res => {
+        if (!res.ok) { $('#quemConfirmouBody').html(`<div class="text-danger">${escHtml(res.error)}</div>`); return; }
+        if (!res.confirmado) {
+          $('#quemConfirmouBody').html('<div class="text-muted">Esta consulta não está mais confirmada.</div>');
+          return;
+        }
+        const nome = res.nome || res.usuario || '(usuário não identificado)';
+        $('#quemConfirmouBody').html(`
+          <dl class="row mb-0" style="font-size:.9rem">
+            <dt class="col-sm-4">Confirmado por</dt>
+            <dd class="col-sm-8">${escHtml(nome)}${res.usuario && res.nome ? ` <span class="text-muted">(${escHtml(res.usuario)})</span>` : ''}</dd>
+            <dt class="col-sm-4">Data/hora</dt>
+            <dd class="col-sm-8">${escHtml(res.confirmado_em)}</dd>
+          </dl>`);
+      })
+      .fail(xhr => {
+        const r = xhr.responseJSON;
+        $('#quemConfirmouBody').html(`<div class="text-danger">${escHtml((r && r.error) || 'Erro de conexão.')}</div>`);
+      });
+  }
+
   function init() {
     const hoje = hojeLocal();
     $('#inpData').val(hoje);
@@ -637,6 +919,24 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
       e.stopPropagation();
       desconfirmarPresenca($(this).data('idlanc'), $(this));
     });
+
+    // ✔ confirmado → modal "quem confirmou"
+    $('#tblBody').on('click', '.conf-ok[data-idlanc]', function(e) {
+      e.stopPropagation();
+      abrirQuemConfirmou($(this).data('idlanc'));
+    });
+
+    // CRM: criar e ver
+    $('#tblBody').on('click', '.btn-crm', function(e) {
+      e.stopPropagation();
+      abrirNovoCrm($(this).data('idlanc'));
+    });
+    $('#tblBody').on('click', '.crm-done', function(e) {
+      e.stopPropagation();
+      abrirVerCrm($(this).data('idlanc'));
+    });
+    $('#btnSalvarCrm').on('click', salvarCrm);
+    $('#crmMotivo').on('change', filtrarTiposPorMotivo);
     $('#vincFechar').on('click', () => $('#vincOverlay').removeClass('active'));
     $('#vincOverlay').on('click', e => { if (e.target.id === 'vincOverlay') $('#vincOverlay').removeClass('active'); });
 
@@ -787,7 +1087,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
       if (esps) extra += ` <span class="medico-esp">${escHtml(esps)}</span>`;
       tbody.append(
         `<tr class="${headerCls}" data-group="${escHtml(key)}">` +
-        `<td colspan="12"><i class="fas fa-caret-right mr-1 group-caret"></i>` +
+        `<td colspan="13"><i class="fas fa-caret-right mr-1 group-caret"></i>` +
         `${escHtml(displayKey)}${extra} <span class="text-muted">(${items.length})</span></td></tr>`
       );
       items.forEach(p => {
@@ -801,7 +1101,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
       const key = 'DESISTÊNCIA';
       tbody.append(
         `<tr class="group-header collapsed group-desist" data-group="${key}">` +
-        `<td colspan="12"><i class="fas fa-caret-right mr-1 group-caret"></i>` +
+        `<td colspan="13"><i class="fas fa-caret-right mr-1 group-caret"></i>` +
         `<i class="fas fa-times-circle mr-1"></i>${key} ` +
         `<span class="text-muted">(${desistentes.length})</span></td></tr>`
       );
@@ -829,6 +1129,7 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
       <td>${escHtml(p.medico)}</td>
       <td>${badgeAtendimento(p.atendido)}</td>
       <td>${badgeSituacao(p.situacao)}</td>
+      <td class="text-center">${crmCell(p)}</td>
       <td>${p.pagou_no_dia ? '<span class="badge badge-pagou"><i class="fas fa-check mr-1"></i>Sim</span>' : '—'}</td>
       <td class="text-center">${p.dias_agend_cons!=null?p.dias_agend_cons:'—'}</td>
     </tr>`;
@@ -839,7 +1140,10 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
   function confirmacaoCell(p) {
     const h = (p.hora_confirmacao || '').trim();   // CHAR(5) volta padded
     if (h) {
-      let cell = `<span class="conf-ok"><i class="fas fa-check mr-1"></i>${escHtml(h)}</span>`;
+      // data-idlanc torna o ✔ clicável: abre modal com quem confirmou
+      let cell = p.idlancamento
+        ? `<span class="conf-ok" data-idlanc="${p.idlancamento}" title="Ver quem confirmou"><i class="fas fa-check mr-1"></i>${escHtml(h)}</span>`
+        : `<span class="conf-ok"><i class="fas fa-check mr-1"></i>${escHtml(h)}</span>`;
       if (p.idlancamento) {
         cell += ` <button type="button" class="btn btn-link btn-desconfirmar p-0 ml-1"`
               + ` title="Desconfirmar" data-idlanc="${p.idlancamento}">`

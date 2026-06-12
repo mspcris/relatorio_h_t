@@ -73,3 +73,37 @@ CREATE TABLE IF NOT EXISTS agenda_dia_run (
 -- Garante uma linha em agenda_dia_run pra o ETL sempre poder UPDATE
 INSERT INTO agenda_dia_run (id) VALUES (1)
     ON CONFLICT (id) DO NOTHING;
+
+-- CRM criado pela agenda (local-first: grava aqui na hora, worker sobe pra
+-- Campinho via API camila3/sp_CRM_Insert em background, com retry).
+-- A app também cria esta tabela no boot (f3_db.ensure_crm_table) — este DDL
+-- existe pra documentação/aplicação manual.
+CREATE TABLE IF NOT EXISTS crm_local (
+    id                   BIGSERIAL    PRIMARY KEY,
+    posto                CHAR(1)      NOT NULL,    -- posto da agenda (lançamento)
+    idlancamento         BIGINT       NOT NULL,
+    posto_cliente        VARCHAR(4),               -- posto do cliente (resolve matrícula)
+    matricula            BIGINT,
+    paciente             TEXT,
+    id_motivo            INTEGER      NOT NULL,    -- Cad_ClienteHistoricoMotivo
+    motivo               TEXT,
+    id_tipo              INTEGER      NOT NULL,    -- Cad_ClienteHistoricoTipo
+    tipo                 TEXT,
+    pessoa               TEXT,
+    telefone             TEXT,
+    historico            TEXT         NOT NULL,
+    criado_por           TEXT,                     -- login_campinho do operador
+    id_usuario_campinho  INTEGER,                  -- idUsuario em sis_usuario do banco C
+    criado_em            TIMESTAMPTZ  NOT NULL,
+    sync_status          VARCHAR(16)  NOT NULL DEFAULT 'pendente',  -- pendente|erro|enviado
+    sync_attempts        INTEGER      NOT NULL DEFAULT 0,
+    sync_error           TEXT,
+    synced_at            TIMESTAMPTZ,
+    claimed_em           TIMESTAMPTZ,              -- claim atômico do upload (2 workers)
+    id_cliente_historico BIGINT,                   -- retorno de Campinho
+    protocolo            TEXT
+);
+
+-- Um CRM por lançamento da agenda
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_local_posto_lanc
+    ON crm_local (posto, idlancamento);

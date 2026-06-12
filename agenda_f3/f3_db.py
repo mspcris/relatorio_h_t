@@ -71,6 +71,46 @@ class AgendaDia(Base):
     )
 
 
+class CrmLocal(Base):
+    """CRM criado pela agenda. Local-first: grava aqui na hora (UI responde
+    rápido) e um worker sobe pra Campinho (sp_CRM_Insert via API camila3)
+    em background, com retry até conseguir. Chave de negócio: (posto,
+    idlancamento) — um CRM por lançamento da agenda."""
+    __tablename__ = "crm_local"
+
+    id                  = Column(BigInteger, primary_key=True, autoincrement=True)
+    posto               = Column(String(1), nullable=False)   # posto da agenda (lançamento)
+    idlancamento        = Column(BigInteger, nullable=False)
+    posto_cliente       = Column(String(4))                   # posto do cliente (resolve matrícula)
+    matricula           = Column(BigInteger)
+    paciente            = Column(Text)
+    id_motivo           = Column(Integer, nullable=False)
+    motivo              = Column(Text)
+    id_tipo             = Column(Integer, nullable=False)
+    tipo                = Column(Text)
+    pessoa              = Column(Text)
+    telefone            = Column(Text)
+    historico           = Column(Text, nullable=False)
+    criado_por          = Column(Text)                        # login_campinho do operador
+    id_usuario_campinho = Column(Integer)                     # idUsuario em sis_usuario do banco C
+    criado_em           = Column(DateTime(timezone=True), nullable=False)
+    # pendente → enviado | erro (erro continua elegível pra retry)
+    sync_status         = Column(String(16), nullable=False, default="pendente")
+    sync_attempts       = Column(Integer, nullable=False, default=0)
+    sync_error          = Column(Text)
+    synced_at           = Column(DateTime(timezone=True))
+    # claim atômico do upload (gunicorn tem 2 workers; evita POST duplicado
+    # em Campinho). Setado ao iniciar upload; NULL de novo se falhar.
+    claimed_em          = Column(DateTime(timezone=True))
+    # retorno de Campinho
+    id_cliente_historico = Column(BigInteger)
+    protocolo            = Column(Text)
+
+    __table_args__ = (
+        Index("idx_crm_local_posto_lanc", "posto", "idlancamento", unique=True),
+    )
+
+
 class AgendaDiaMeta(Base):
     __tablename__ = "agenda_dia_meta"
 
@@ -206,13 +246,16 @@ def fetch_agenda(posto: str, data_iso: str) -> tuple[list[dict], datetime | None
     s = Session()
     try:
         rows = s.execute(text("""
-            SELECT idlancamento, matricula, cfcliente, posto_cliente, paciente, idade,
-                   especialidade, medico, hora_prevista, hora_confirmacao, dias_agend_cons,
-                   atendido, desistencia, situacao, pagou_no_dia, idendereco, observacao,
-                   medico_sala, medico_obs, gerado_em
-              FROM agenda_dia
-             WHERE posto = :p AND data = :d
-             ORDER BY id
+            SELECT a.idlancamento, a.matricula, a.cfcliente, a.posto_cliente, a.paciente,
+                   a.idade, a.especialidade, a.medico, a.hora_prevista, a.hora_confirmacao,
+                   a.dias_agend_cons, a.atendido, a.desistencia, a.situacao, a.pagou_no_dia,
+                   a.idendereco, a.observacao, a.medico_sala, a.medico_obs, a.gerado_em,
+                   (c.id IS NOT NULL) AS crm_done
+              FROM agenda_dia a
+              LEFT JOIN crm_local c
+                ON c.posto = a.posto AND c.idlancamento = a.idlancamento
+             WHERE a.posto = :p AND a.data = :d
+             ORDER BY a.id
         """), {"p": posto, "d": data_iso}).mappings().all()
 
         pacientes = [dict(r) for r in rows]
@@ -275,3 +318,137 @@ def fetch_meta_all() -> dict:
         return {r["posto"]: dict(r) for r in rows}
     finally:
         s.close()
+
+
+# ── CRM local (local-first; sync pra Campinho em background) ─────────────────
+
+def ensure_crm_table():
+    """Cria crm_local se não existir (idempotente; DDL também em sql/init_f3.sql)."""
+    Base.metadata.create_all(engine, tables=[CrmLocal.__table__])
+
+
+def crm_insert(dados: dict) -> dict:
+    """Grava o CRM localmente (sync_status=pendente). Retorna o registro como
+    dict. Levanta ValueError se já existir CRM pro (posto, idlancamento)."""
+    s = Session()
+    try:
+        existe = s.execute(text("""
+            SELECT id FROM crm_local WHERE posto = :p AND idlancamento = :idl
+        """), {"p": dados["posto"], "idl": dados["idlancamento"]}).first()
+        if existe:
+            raise ValueError("Já existe CRM criado para este agendamento.")
+        reg = CrmLocal(criado_em=datetime.now(timezone.utc),
+                       sync_status="pendente", sync_attempts=0, **dados)
+        s.add(reg)
+        s.commit()
+        return _crm_to_dict(reg)
+    except Exception:
+        s.rollback()
+        raise
+    finally:
+        s.close()
+
+
+def crm_get(posto: str, idlancamento: int) -> dict | None:
+    s = Session()
+    try:
+        reg = s.query(CrmLocal).filter_by(posto=posto, idlancamento=idlancamento).first()
+        return _crm_to_dict(reg) if reg else None
+    finally:
+        s.close()
+
+
+def crm_pendentes_ids() -> list[int]:
+    """ids dos CRMs que ainda não subiram pra Campinho (pendente/erro)."""
+    s = Session()
+    try:
+        rows = s.execute(text(
+            "SELECT id FROM crm_local WHERE sync_status <> 'enviado' ORDER BY id"
+        )).all()
+        return [r[0] for r in rows]
+    finally:
+        s.close()
+
+
+def crm_get_by_id(crm_id: int) -> dict | None:
+    s = Session()
+    try:
+        reg = s.get(CrmLocal, crm_id)
+        return _crm_to_dict(reg) if reg else None
+    finally:
+        s.close()
+
+
+def crm_claim(crm_id: int) -> bool:
+    """Claim atômico do upload (2 workers gunicorn → só um pode subir cada CRM).
+    True se este processo ganhou o direito de subir agora. Claims com mais de
+    10 min são considerados órfãos (processo morreu no meio) e re-claimáveis."""
+    s = Session()
+    try:
+        row = s.execute(text("""
+            UPDATE crm_local
+               SET claimed_em = now()
+             WHERE id = :id
+               AND sync_status <> 'enviado'
+               AND (claimed_em IS NULL OR claimed_em < now() - interval '10 minutes')
+         RETURNING id
+        """), {"id": crm_id}).first()
+        s.commit()
+        return row is not None
+    except Exception:
+        s.rollback()
+        raise
+    finally:
+        s.close()
+
+
+def crm_mark_sync(crm_id: int, ok: bool, *, id_cliente_historico=None,
+                  protocolo=None, erro: str | None = None):
+    s = Session()
+    try:
+        reg = s.get(CrmLocal, crm_id)
+        if not reg:
+            return
+        reg.sync_attempts += 1
+        if ok:
+            reg.sync_status = "enviado"
+            reg.sync_error = None
+            reg.synced_at = datetime.now(timezone.utc)
+            reg.id_cliente_historico = id_cliente_historico
+            reg.protocolo = protocolo
+        else:
+            reg.sync_status = "erro"
+            reg.sync_error = (erro or "")[:1000]
+            reg.claimed_em = None   # libera pro próximo retry
+        s.commit()
+    except Exception:
+        s.rollback()
+        raise
+    finally:
+        s.close()
+
+
+def _crm_to_dict(reg: CrmLocal) -> dict:
+    return {
+        "id": reg.id,
+        "posto": reg.posto,
+        "idlancamento": reg.idlancamento,
+        "posto_cliente": reg.posto_cliente,
+        "matricula": reg.matricula,
+        "paciente": reg.paciente,
+        "id_motivo": reg.id_motivo,
+        "motivo": reg.motivo,
+        "id_tipo": reg.id_tipo,
+        "tipo": reg.tipo,
+        "pessoa": reg.pessoa,
+        "telefone": reg.telefone,
+        "historico": reg.historico,
+        "criado_por": reg.criado_por,
+        "id_usuario_campinho": reg.id_usuario_campinho,
+        "criado_em": reg.criado_em.isoformat() if reg.criado_em else None,
+        "sync_status": reg.sync_status,
+        "sync_error": reg.sync_error,
+        "synced_at": reg.synced_at.isoformat() if reg.synced_at else None,
+        "id_cliente_historico": reg.id_cliente_historico,
+        "protocolo": reg.protocolo,
+    }

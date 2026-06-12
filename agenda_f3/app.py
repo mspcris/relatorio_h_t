@@ -535,6 +535,192 @@ def api_desconfirmar_presenca():
             pass
 
 
+# ── Quem confirmou (lê do SQL Server do posto, sob demanda) ──────────────────
+
+@app.get('/api/quem_confirmou')
+@login_required
+def api_quem_confirmou():
+    posto = (request.args.get('posto') or '').strip().upper()
+    if posto not in POSTOS_TODOS:
+        return jsonify({'ok': False, 'error': 'posto inválido'}), 400
+    try:
+        idlanc = int(request.args.get('idlancamento'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'idlancamento obrigatório'}), 400
+
+    try:
+        con = _mssql_conn_for_posto(posto)
+    except Exception as e:
+        app.logger.warning('Falha ao conectar no posto %s: %s', posto, e)
+        return jsonify({'ok': False, 'error': f'Falha ao conectar no posto {posto}'}), 502
+
+    try:
+        cur = con.cursor()
+        cur.execute(
+            "SELECT CONVERT(varchar(10), l.dataconfirmacaoConsulta, 103) + ' ' + "
+            "       CONVERT(varchar(5),  l.dataconfirmacaoConsulta, 108) AS confirmado_em, "
+            "       u.Usuario, u.Nome "
+            "FROM Cad_Lancamento l "
+            "LEFT JOIN sis_usuario u ON u.idUsuario = l.idUsuarioConfirmaPresenca "
+            "WHERE l.idLancamento = ?", idlanc)
+        row = cur.fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'lançamento não encontrado neste posto'}), 404
+        if not row[0]:
+            return jsonify({'ok': True, 'confirmado': False})
+        return jsonify({
+            'ok':            True,
+            'confirmado':    True,
+            'confirmado_em': row[0],
+            'usuario':       (row[1] or '').strip(),
+            'nome':          (row[2] or '').strip(),
+        })
+    except Exception as e:
+        app.logger.exception('quem_confirmou falhou (posto=%s, idlanc=%s)', posto, idlanc)
+        return jsonify({'ok': False, 'error': str(e)[:300]}), 500
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+
+
+# ── CRM (local-first → Campinho via camila3, em background) ──────────────────
+#
+# POST /api/crm grava no Postgres f3 (crm_local) e responde na hora; o upload
+# pra Campinho (sp_CRM_Insert via API camila3) roda em background com retry.
+# O idUsuario que assina o CRM em Campinho é resolvido em sis_usuario do banco
+# C pelo login_campinho do operador — mesmo gate de vínculo do confirmar.
+
+import campinho_crm
+
+@app.get('/api/crm/lookup')
+@login_required
+def api_crm_lookup():
+    try:
+        return jsonify({'ok': True, **campinho_crm.get_lookup()})
+    except Exception as e:
+        return jsonify({'ok': False,
+                        'error': f'Falha ao carregar motivos/tipos: {e}'}), 502
+
+
+@app.post('/api/crm')
+@login_required
+def api_crm_criar():
+    login_campinho = (session.get('login_campinho') or '').strip()
+    if not login_campinho:
+        return jsonify({
+            'ok': False, 'sem_vinculo': True,
+            'error': ('Você ainda não tem um usuário do sistema CAMIM vinculado '
+                      'ao seu login idCamim. Vincule na sua área do IDCamim para '
+                      'poder criar CRM.'),
+        }), 403
+
+    data = request.get_json(silent=True) or {}
+    posto = (data.get('posto') or '').strip().upper()
+    if posto not in POSTOS_TODOS:
+        return jsonify({'ok': False, 'error': 'posto inválido'}), 400
+    try:
+        idlanc = int(data.get('idlancamento'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'idlancamento obrigatório'}), 400
+    try:
+        id_motivo = int(data.get('id_motivo'))
+        id_tipo   = int(data.get('id_tipo'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'motivo e tipo são obrigatórios'}), 400
+    historico = (data.get('historico') or '').strip()
+    if not historico:
+        return jsonify({'ok': False, 'error': 'histórico é obrigatório'}), 400
+
+    # idUsuario que assina o CRM em Campinho (banco C) — resolve agora pra
+    # falhar rápido se o operador não existir lá; o upload em background fica
+    # 100% HTTP (camila3) e re-tentável.
+    try:
+        con = _mssql_conn_for_posto('C')
+    except Exception as e:
+        app.logger.warning('Falha ao conectar em Campinho (C): %s', e)
+        return jsonify({'ok': False, 'error': 'Falha ao conectar em Campinho'}), 502
+    try:
+        id_usuario_campinho = _resolver_idusuario_no_posto(con, login_campinho)
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+    if not id_usuario_campinho:
+        return jsonify({
+            'ok': False, 'sem_vinculo_posto': True,
+            'error': (f'Seu usuário CAMIM "{login_campinho}" não existe (ou está '
+                      f'desativado) em Campinho. Sem isso o CRM ficaria sem '
+                      f'responsável e o sistema bloqueia.'),
+        }), 403
+
+    try:
+        matricula = int(data.get('matricula'))
+    except (TypeError, ValueError):
+        matricula = None
+
+    try:
+        from f3_db import crm_insert
+        reg = crm_insert({
+            'posto':               posto,
+            'idlancamento':        idlanc,
+            'posto_cliente':       (data.get('posto_cliente') or posto).strip().upper()[:4],
+            'matricula':           matricula,
+            'paciente':            (data.get('paciente') or '').strip(),
+            'id_motivo':           id_motivo,
+            'motivo':              (data.get('motivo') or '').strip(),
+            'id_tipo':             id_tipo,
+            'tipo':                (data.get('tipo') or '').strip(),
+            'pessoa':              (data.get('pessoa') or '').strip() or None,
+            'telefone':            (data.get('telefone') or '').strip() or None,
+            'historico':           historico,
+            'criado_por':          login_campinho,
+            'id_usuario_campinho': id_usuario_campinho,
+        })
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 409
+    except Exception as e:
+        app.logger.exception('crm_insert falhou (posto=%s, idlanc=%s)', posto, idlanc)
+        return jsonify({'ok': False, 'error': str(e)[:300]}), 500
+
+    # resposta imediata; upload pra Campinho segue em background com retry
+    campinho_crm.sync_async(reg['id'])
+
+    return jsonify({'ok': True, 'crm': reg})
+
+
+@app.get('/api/crm_detalhe')
+@login_required
+def api_crm_detalhe():
+    posto = (request.args.get('posto') or '').strip().upper()
+    if posto not in POSTOS_TODOS:
+        return jsonify({'ok': False, 'error': 'posto inválido'}), 400
+    try:
+        idlanc = int(request.args.get('idlancamento'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'idlancamento obrigatório'}), 400
+    try:
+        from f3_db import crm_get
+        reg = crm_get(posto, idlanc)
+    except Exception as e:
+        app.logger.exception('crm_get falhou (posto=%s, idlanc=%s)', posto, idlanc)
+        return jsonify({'ok': False, 'error': str(e)[:300]}), 500
+    if not reg:
+        return jsonify({'ok': False, 'error': 'CRM não encontrado para este agendamento'}), 404
+    return jsonify({'ok': True, 'crm': reg})
+
+
+# Tabela crm_local + worker de retry (idempotentes; toleram Postgres fora no boot)
+try:
+    from f3_db import ensure_crm_table
+    ensure_crm_table()
+except Exception as _e:
+    app.logger.warning('crm_local: falha ao garantir tabela no boot: %s', _e)
+campinho_crm.start_retry_worker()
+
+
 # ── Templates inline (erro/logout) ───────────────────────────────────────────
 
 TMPL_ERRO = '''<!doctype html><html lang="pt-br"><head><meta charset="UTF-8">
