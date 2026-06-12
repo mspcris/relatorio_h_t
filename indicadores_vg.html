@@ -252,6 +252,7 @@
       <div class="kpi-card"><div class="kpi-val" id="kMatAnt" style="color:#6f42c1">0</div><div class="kpi-sub" id="kMatAntPct"></div><div class="kpi-lbl">Com matrículas anteriores</div></div>
       <div class="kpi-card"><div class="kpi-val text-info" id="kDeps">0</div><div class="kpi-sub" id="kDepsMed"></div><div class="kpi-lbl">Dependentes (total)</div></div>
       <div class="kpi-card"><div class="kpi-val" id="kMens" style="color:#20c997">R$ 0</div><div class="kpi-lbl">Mensalidade média</div></div>
+      <div class="kpi-card"><div class="kpi-val text-danger" id="kDivAnt">R$ 0</div><div class="kpi-sub" id="kDivAntSub"></div><div class="kpi-lbl">Dívida em matr. anteriores</div></div>
     </div>
 
     <!-- Abas: Tabela / Gráficos -->
@@ -307,6 +308,7 @@
             <th data-key="consultas_dia_adesao_qtd" data-num="1" title="Consultas no dia da adesão">Cons. adesão</th>
             <th data-key="consultas_futuras_qtd" data-num="1" title="Consultas marcadas de hoje pra frente (não faturadas)">Cons. futuras</th>
             <th data-key="matriculas_anteriores_qtd" data-num="1" title="Matrículas anteriores (titular + dependentes, todos os postos)">Matr. ant.</th>
+            <th data-key="mat_ant_vencidas_valor" data-num="1" title="Mensalidades vencidas em aberto nas matrículas anteriores (qtd e valor)">Dívida ant.</th>
           </tr>
           <tr id="vgFilterRow"></tr>
         </thead>
@@ -348,6 +350,8 @@
               <th>Nome na anterior</th>
               <th>Admissão</th>
               <th>Desativada?</th>
+              <th>Mens. vencidas</th>
+              <th>Valor em aberto</th>
             </tr>
           </thead>
           <tbody id="tblMatAntBody"></tbody>
@@ -570,7 +574,7 @@
   // Valor da célula como exibido (usado por filtro de coluna)
   function cellVal(c, k){
     if (k === 'data_admissao') return fmtData(c[k]);
-    if (k === 'mensalidade') return fmtMoeda(c[k]);
+    if (k === 'mensalidade' || k === 'mat_ant_vencidas_valor') return fmtMoeda(c[k]);
     const v = c[k];
     return v == null ? '' : String(v);
   }
@@ -605,7 +609,8 @@
 
   // ── Ordenação ──
   const NUM_KEYS = new Set(['idade','mensalidade','dependentes_qtd',
-    'consultas_dia_adesao_qtd','consultas_futuras_qtd','matriculas_anteriores_qtd']);
+    'consultas_dia_adesao_qtd','consultas_futuras_qtd','matriculas_anteriores_qtd',
+    'mat_ant_vencidas_qtd','mat_ant_vencidas_valor']);
 
   function ordenar(rows){
     const { key, dir } = SORT;
@@ -671,6 +676,10 @@
     $id('kDeps').textContent = deps.toLocaleString('pt-BR');
     $id('kDepsMed').textContent = n ? 'média ' + (deps/n).toFixed(2).replace('.',',') : '';
     $id('kMens').textContent = fmtMoeda(n ? mens/n : 0);
+    const divVal = rows.reduce((s,c) => s + (c.mat_ant_vencidas_valor||0), 0);
+    const divCli = rows.filter(c => c.mat_ant_vencidas_qtd > 0).length;
+    $id('kDivAnt').textContent = fmtMoeda(divVal);
+    $id('kDivAntSub').textContent = divCli ? `${divCli} cliente${divCli>1?'s':''}` : '';
   }
 
   // ── Charts ──
@@ -763,6 +772,9 @@
         <td class="text-center">${c.consultas_dia_adesao_qtd ? `<span class="badge badge-sim">${c.consultas_dia_adesao_qtd}</span>` : '—'}</td>
         <td class="text-center">${c.consultas_futuras_qtd ? `<span class="badge badge-sim">${c.consultas_futuras_qtd}</span>` : '—'}</td>
         <td class="text-center">${matAnt}</td>
+        <td class="text-right">${c.mat_ant_vencidas_qtd > 0
+          ? `<span class="badge badge-inadimplente" title="${c.mat_ant_vencidas_qtd} mensalidade(s) vencida(s) em aberto">${c.mat_ant_vencidas_qtd} · ${fmtMoeda(c.mat_ant_vencidas_valor)}</span>`
+          : '—'}</td>
       </tr>`;
     }).join('');
     tbody.innerHTML = html;
@@ -792,6 +804,8 @@
           <td>${escHtml(m.nome_anterior||'—')}</td>
           <td>${fmtData(m.data_admissao_anterior)}</td>
           <td class="text-center">${m.desativado_anterior === true ? '<span class="badge badge-cancelado">Sim</span>' : (m.desativado_anterior === false ? 'Não' : '—')}</td>
+          <td class="text-center">${m.mens_vencidas_qtd > 0 ? `<span class="badge badge-inadimplente">${m.mens_vencidas_qtd}</span>` : '—'}</td>
+          <td class="text-right">${m.mens_vencidas_qtd > 0 ? fmtMoeda(m.mens_vencidas_valor) : '—'}</td>
         </tr>`).join('');
         $id('tblMatAnt').style.display = 'table';
       })
@@ -818,6 +832,8 @@
       ['matriculas_anteriores_qtd','Matrículas anteriores'],
       ['mat_ant_titular_qtd','Como titular'], ['mat_ant_dependente_qtd','Como dependente'],
       ['mat_ant_responsavel_qtd','Como responsável'],
+      ['mat_ant_vencidas_qtd','Mens. vencidas (anteriores)'],
+      ['mat_ant_vencidas_valor','Valor em aberto (anteriores)'],
     ];
     const esc = (v) => {
       let s = v == null ? '' : String(v);
@@ -828,7 +844,7 @@
     rows.forEach(c => {
       linhas.push(cols.map(([k]) => {
         if (k === 'data_admissao') return fmtData(c[k]);
-        if (k === 'mensalidade') return String(c[k]||0).replace('.',',');
+        if (k === 'mensalidade' || k === 'mat_ant_vencidas_valor') return String(c[k]||0).replace('.',',');
         return esc(c[k]);
       }).join(';'));
     });

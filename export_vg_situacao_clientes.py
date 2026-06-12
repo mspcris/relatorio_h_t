@@ -118,11 +118,30 @@ WHERE ls.[Situação] = 'normal'
 GROUP BY ls.idcliente, CONVERT(date, ls.[Data e hora])
 """
 
+# Mensalidades vencidas EM ABERTO de uma matrícula (qualquer posto):
+# vencimento já passou, sem pagamento e não cancelada.
+SQL_MENS_VENCIDAS = """
+SELECT r.idCliente, COUNT(*) AS qtd, SUM(r.[Valor devido]) AS total
+FROM vw_Fin_Receita r
+WHERE r.idCliente IN ({ids})
+  AND r.idContaTipo = 5
+  AND r.[Valor pago] IS NULL
+  AND r.[Data de cancelamento] IS NULL
+  AND r.[Data de vencimento] < ?
+GROUP BY r.idCliente
+"""
+
 # Busca de matrículas por CPF — espelha as 3 queries do endpoint
 # GET /crm/cpf/{id_endereco} da api_fin_receita (camila3).
+#
+# IMPORTANTE: cad_cliente é REPLICADO em todos os bancos (matrícula de
+# Anchieta também existe no banco de Campinho). O JOIN sis_empresa filtra
+# cada banco só pras matrículas da PRÓPRIA filial (emp.idEndereco =
+# c.idendereco) — sem ele, a mesma matrícula aparece 13x, uma por banco.
 SQL_CPF_TITULAR = """
 SELECT c.cpf, c.idcliente, c.matricula, c.nome, c.dataadmissao, c.desativado
 FROM cad_cliente c WITH (NOLOCK)
+JOIN sis_empresa emp ON emp.idEndereco = c.idendereco
 WHERE c.cpf IN ({cpfs})
 """
 
@@ -130,12 +149,14 @@ SQL_CPF_DEPENDENTE = """
 SELECT d.cpf, d.idcliente, d.iddependente, c.matricula, d.nome, d.dataadmissao, d.desativado
 FROM cad_clientedependente d WITH (NOLOCK)
 JOIN cad_cliente c WITH (NOLOCK) ON c.idcliente = d.idcliente
+JOIN sis_empresa emp ON emp.idEndereco = c.idendereco
 WHERE d.cpf IN ({cpfs})
 """
 
 SQL_CPF_RESPONSAVEL = """
 SELECT c.responsavelcpf AS cpf, c.idcliente, c.matricula, c.nome, c.dataadmissao, c.desativado
 FROM cad_cliente c WITH (NOLOCK)
+JOIN sis_empresa emp ON emp.idEndereco = c.idendereco
 WHERE c.responsavelcpf IN ({cpfs})
 """
 
@@ -171,10 +192,14 @@ CREATE TABLE IF NOT EXISTS kpi_vg_situacao_clientes (
     mat_ant_titular_qtd       INTEGER NOT NULL DEFAULT 0,
     mat_ant_dependente_qtd    INTEGER NOT NULL DEFAULT 0,
     mat_ant_responsavel_qtd   INTEGER NOT NULL DEFAULT 0,
+    mat_ant_vencidas_qtd      INTEGER NOT NULL DEFAULT 0,
+    mat_ant_vencidas_valor    NUMERIC(14,2) NOT NULL DEFAULT 0,
     atualizado_em             TIMESTAMP NOT NULL DEFAULT now(),
     UNIQUE (posto, id_cliente)
 );
 ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mensalidade NUMERIC(14,2);
+ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mat_ant_vencidas_qtd INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mat_ant_vencidas_valor NUMERIC(14,2) NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS ix_vg_sit_cli_data_admissao ON kpi_vg_situacao_clientes (data_admissao);
 CREATE INDEX IF NOT EXISTS ix_vg_sit_cli_posto ON kpi_vg_situacao_clientes (posto);
 CREATE TABLE IF NOT EXISTS kpi_vg_matriculas_anteriores (
@@ -192,8 +217,12 @@ CREATE TABLE IF NOT EXISTS kpi_vg_matriculas_anteriores (
     nome_anterior            VARCHAR(200),
     data_admissao_anterior   DATE,
     desativado_anterior      BOOLEAN,
+    mens_vencidas_qtd        INTEGER NOT NULL DEFAULT 0,
+    mens_vencidas_valor      NUMERIC(14,2) NOT NULL DEFAULT 0,
     atualizado_em            TIMESTAMP NOT NULL DEFAULT now()
 );
+ALTER TABLE kpi_vg_matriculas_anteriores ADD COLUMN IF NOT EXISTS mens_vencidas_qtd INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE kpi_vg_matriculas_anteriores ADD COLUMN IF NOT EXISTS mens_vencidas_valor NUMERIC(14,2) NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS ix_vg_mat_ant_cliente ON kpi_vg_matriculas_anteriores (posto, id_cliente);
 """
 
@@ -206,6 +235,7 @@ COLS_PRINCIPAL = [
     "consultas_futuras_qtd", "tem_consulta_futura",
     "matriculas_anteriores_qtd", "mat_ant_titular_qtd",
     "mat_ant_dependente_qtd", "mat_ant_responsavel_qtd",
+    "mat_ant_vencidas_qtd", "mat_ant_vencidas_valor",
 ]
 
 COLS_DETALHE = [
@@ -213,6 +243,7 @@ COLS_DETALHE = [
     "posto_anterior", "id_cliente_anterior", "id_dependente_anterior",
     "matricula_anterior", "papel_anterior", "nome_anterior",
     "data_admissao_anterior", "desativado_anterior",
+    "mens_vencidas_qtd", "mens_vencidas_valor",
 ]
 
 
@@ -463,6 +494,28 @@ def main():
             traceback.print_exc()
             meta.error(p, f"fase busca CPF: {e}")
 
+    # ── Fase 2.5: mensalidades vencidas em aberto das matrículas anteriores ──
+    ids_ant_por_posto = defaultdict(set)
+    for lst in matches_por_cpf.values():
+        for m in lst:
+            ids_ant_por_posto[m[8]].add(m[2])  # posto_alvo -> idcliente anterior
+    vencidas = {}  # (posto, idcliente) -> (qtd, valor)
+    for p, ids in sorted(ids_ant_por_posto.items()):
+        if p not in engines:
+            continue
+        t0 = time.time()
+        try:
+            for chunk in chunked(sorted(ids)):
+                ids_sql = ",".join(str(i) for i in chunk)
+                for idc, qtd, total in run_query(
+                        engines[p], SQL_MENS_VENCIDAS.format(ids=ids_sql), (hoje_str,)):
+                    vencidas[(p, int(idc))] = (int(qtd or 0), float(total or 0))
+            print(f"[{p}] mens vencidas OK  matriculas={len(ids)}  elapsed={time.time()-t0:.1f}s", flush=True)
+        except Exception as e:
+            rc = 2
+            traceback.print_exc()
+            meta.error(p, f"fase mens vencidas: {e}")
+
     # ── Fase 3: montar linhas ──
     rows_principal = []
     rows_detalhe = []
@@ -480,13 +533,17 @@ def main():
                     if key in vistos_detalhe:
                         continue
                     vistos_detalhe.add(key)
+                    vq, vv = vencidas.get((posto_ant, idc_ant), (0, 0.0))
                     rows_detalhe.append((
                         p, cli["id_cliente"], cpf, pessoa_nome, papel_novo,
                         posto_ant, idc_ant, iddep_ant, mat_ant, papel_ant,
                         nome_ant, adm_ant, desat_ant,
+                        vq, round(vv, 2),
                     ))
 
             todas = cli["mat_ant"]["titular"] | cli["mat_ant"]["dependente"] | cli["mat_ant"]["responsavel"]
+            venc_qtd = sum(vencidas.get(t, (0, 0.0))[0] for t in todas)
+            venc_val = round(sum(vencidas.get(t, (0, 0.0))[1] for t in todas), 2)
             rows_principal.append((
                 p, cli["id_cliente"], cli["matricula"], cli["nome"], cli["cpf"],
                 cli["data_admissao"], cli["situacao"], cli["situacao_clube"],
@@ -501,6 +558,7 @@ def main():
                 len(cli["mat_ant"]["titular"]),
                 len(cli["mat_ant"]["dependente"]),
                 len(cli["mat_ant"]["responsavel"]),
+                venc_qtd, venc_val,
             ))
 
     print(f"Linhas: principal={len(rows_principal)}  detalhe={len(rows_detalhe)}  postos_ok={postos_ok}", flush=True)

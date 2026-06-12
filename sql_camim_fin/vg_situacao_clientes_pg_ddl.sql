@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS kpi_vg_situacao_clientes (
     mat_ant_titular_qtd       INTEGER NOT NULL DEFAULT 0,
     mat_ant_dependente_qtd    INTEGER NOT NULL DEFAULT 0,
     mat_ant_responsavel_qtd   INTEGER NOT NULL DEFAULT 0,
+    mat_ant_vencidas_qtd      INTEGER NOT NULL DEFAULT 0,  -- mensalidades vencidas em aberto somadas nas anteriores
+    mat_ant_vencidas_valor    NUMERIC(14,2) NOT NULL DEFAULT 0,
     atualizado_em             TIMESTAMP NOT NULL DEFAULT now(),
     UNIQUE (posto, id_cliente)
 );
@@ -65,6 +67,8 @@ CREATE TABLE IF NOT EXISTS kpi_vg_matriculas_anteriores (
     nome_anterior            VARCHAR(200),
     data_admissao_anterior   DATE,
     desativado_anterior      BOOLEAN,
+    mens_vencidas_qtd        INTEGER NOT NULL DEFAULT 0,   -- vencidas em aberto (idContaTipo=5, sem pagto, não cancelada)
+    mens_vencidas_valor      NUMERIC(14,2) NOT NULL DEFAULT 0,
     atualizado_em            TIMESTAMP NOT NULL DEFAULT now()
 );
 

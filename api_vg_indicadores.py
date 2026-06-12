@@ -94,7 +94,9 @@ def vg_listar_clientes():
                consultas_dia_adesao_qtd, usou_plano_dia_adesao,
                consultas_futuras_qtd, tem_consulta_futura,
                matriculas_anteriores_qtd, mat_ant_titular_qtd,
-               mat_ant_dependente_qtd, mat_ant_responsavel_qtd
+               mat_ant_dependente_qtd, mat_ant_responsavel_qtd,
+               mat_ant_vencidas_qtd,
+               mat_ant_vencidas_valor::float8 AS mat_ant_vencidas_valor
         FROM kpi_vg_situacao_clientes
         WHERE posto = ANY(%s)
           AND data_admissao BETWEEN %s AND %s
@@ -136,7 +138,9 @@ def vg_matriculas_anteriores(posto, id_cliente):
                posto_anterior, id_cliente_anterior, id_dependente_anterior,
                matricula_anterior, papel_anterior, nome_anterior,
                to_char(data_admissao_anterior, 'YYYY-MM-DD') AS data_admissao_anterior,
-               desativado_anterior
+               desativado_anterior,
+               mens_vencidas_qtd,
+               mens_vencidas_valor::float8 AS mens_vencidas_valor
         FROM kpi_vg_matriculas_anteriores
         WHERE posto = %s AND id_cliente = %s
         ORDER BY pessoa_nome, papel_anterior, data_admissao_anterior
