@@ -84,6 +84,13 @@ except Exception as _e:
     import logging
     logging.getLogger(__name__).error("acesso_avancado_bp não carregado: %s", _e)
 
+try:
+    from api_vg_indicadores import vg_indicadores_bp
+    app.register_blueprint(vg_indicadores_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("vg_indicadores_bp não carregado: %s", _e)
+
 PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
 
 # Mapeamento page_key → template para controle de acesso por página
@@ -146,6 +153,9 @@ _TEMPLATE_TO_PAGINA = {
     "medico_falta.html":                "medico_falta",
     "medico_falta":                     "medico_falta",
     "/medico_falta":                    "medico_falta",
+    "indicadores_vg.html":              "indicadores_vg",
+    "indicadores_vg":                   "indicadores_vg",
+    "/indicadores_vg":                  "indicadores_vg",
     # KPI Acesso Avançado — page_key PROPOSITALMENTE fora de public.servicos:
     # como nenhum usuário consegue tê-la em `paginas`, render_protected_page
     # devolve 403 a todo mundo que NÃO tem all_pages. Não adicionar ao catálogo
@@ -1322,6 +1332,11 @@ def h_qualidade_agenda():
 @app.get('/agenda_dia.html')
 def h_agenda_dia():
     return render_protected_page("agenda_dia.html")
+
+@app.get('/indicadores_vg')
+@app.get('/indicadores_vg.html')
+def h_indicadores_vg():
+    return render_protected_page("indicadores_vg.html")
 
 @app.get('/preagendamento')
 @app.get('/preagendamento.html')

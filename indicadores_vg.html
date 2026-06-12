@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>CAMIM — Indicadores Vinícius Gama</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- KPI Metadata -->
+  <meta name="kpi-id" content="indicadores_vg" />
+  <meta name="kpi-title" content="Indicadores Vinícius Gama" />
+  <meta name="kpi-description" content="Situação dos clientes admitidos: uso do plano no dia da adesão, consultas futuras, dependentes e matrículas anteriores." />
+  <meta name="kpi-category" content="Comercial" />
+
+  <!-- CORE CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&family=Inter:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="/css/style2.css?v=20260401">
+  <link rel="stylesheet" href="/css/style_kpi.css?v=20260401">
+  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <!-- JS BASE -->
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- SESSAO -->
+  <script>
+    window.IA_API_URL = '/api/ia/chat';
+    window.PROMPTS_API_BASE = '/prompts';
+    fetch("/session/me", { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => { window.USER_EMAIL = data.email; window.USER_POSTOS = data.postos; })
+      .catch(() => { window.USER_EMAIL = null; window.USER_POSTOS = []; });
+  </script>
+  <script src="/js/chat.js?v=20260401"></script>
+
+  <style>
+    html { font-size: 16px; zoom: 1; }
+    body {
+      font-size: 1rem;
+      -webkit-text-size-adjust: 100%;
+      -webkit-font-smoothing: antialiased;
+      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    body.text-sm { font-size: 1rem; }
+    .text-sm .btn, .text-sm .form-control, .text-sm .nav-link, .text-sm .card-title { font-size: 1rem; }
+    h1,h2,h3 { margin-top:0; margin-bottom:.5rem; font-weight:600; line-height:1.25; }
+    h1 { font-size:2rem; } h2 { font-size:1.5rem; } h3,.card-title { font-size:1.15rem; font-weight:600; }
+
+    .ad-banner {
+      background: linear-gradient(135deg, #0f1923 0%, #1a2940 50%, #0f2333 100%);
+      border-radius: 12px; padding: 20px 24px; margin-bottom: 0;
+      color: #e0f0ff; position: relative; overflow: hidden;
+    }
+    .ad-banner h1 { color: #fff; font-size: 1.6rem; margin: 0; }
+    .ad-banner p { color: #8ab4d8; margin: 4px 0 0; font-size: .95rem; }
+
+    /* Filtros */
+    .filtros-card { background: #f4f6f9; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+    .filtros-row { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+    .filtros-row label { font-size: .85rem; font-weight: 600; color: #495057; margin-bottom: 2px; display:block; }
+    .posto-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+    .posto-tabs .ptab {
+      border: 1px solid #ced4da; background: #fff; color: #495057;
+      border-radius: 14px; padding: 2px 11px; font-size: .85rem; font-weight: 600; cursor: pointer;
+    }
+    .posto-tabs .ptab.active { background: #007bff; border-color: #007bff; color: #fff; }
+    .grp-btns .btn { font-size: .82rem; padding: 2px 12px; }
+    .grp-btns .btn.active { background: #343a40; color: #fff; }
+
+    /* KPI cards */
+    .kpi-row { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+    .kpi-card { flex: 1; min-width: 150px; background: #fff; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 4px rgba(0,0,0,.08); text-align: center; }
+    .kpi-card .kpi-val { font-size: 1.7rem; font-weight: 700; line-height: 1.1; }
+    .kpi-card .kpi-sub { font-size: .8rem; color: #20c997; font-weight: 600; }
+    .kpi-card .kpi-lbl { font-size: .82rem; color: #6c757d; margin-top: 4px; }
+
+    .badge { font-size: .78rem; padding: 3px 9px; border-radius: 12px; font-weight: 600; }
+    .badge-adimplente  { background: #28a745; color: #fff; }
+    .badge-atrasado    { background: #fd7e14; color: #fff; }
+    .badge-inadimplente{ background: #dc3545; color: #fff; }
+    .badge-cancelado   { background: #6c757d; color: #fff; }
+    .badge-sem-info    { background: #adb5bd; color: #fff; }
+    .badge-sim         { background: #28a745; color: #fff; }
+    .badge-matant      { background: #6f42c1; color: #fff; cursor: pointer; }
+    .badge-matant:hover{ background: #59359a; }
+
+    #tblVG th { position: sticky; top: 0; background: #343a40; color: #fff; font-size: .8rem; white-space: nowrap; z-index: 2; }
+    #tblVG td { font-size: .84rem; vertical-align: middle; white-space: nowrap; }
+    .table-container { max-height: 65vh; overflow: auto; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+    .chart-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+    .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(255,255,255,.7); z-index: 9999; align-items: center; justify-content: center; }
+    .loading-overlay.active { display: flex; }
+    .spinner-lg { width: 48px; height: 48px; }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini text-sm">
+<div class="wrapper">
+
+  <!-- NAVBAR -->
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav"><li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li></ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+      <span class="ml-2">Quem tem saúde é mais feliz!</span>
+    </span>
+    <div class="ml-auto"><span id="ia-anchor"></span></div>
+  </nav>
+
+  <!-- SIDEBAR -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a></li>
+          <li class="nav-item"><a href="monitorarrobos.html" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Monitorar Robôs</p></a></li>
+          {% if USER_IS_ADMIN %}
+          <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+          {% endif %}
+          <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i class="nav-icon fas fa-book-open"></i><p>Leia-me</p></a></li>
+          <li class="nav-item"><a href="alimentacao.html" class="nav-link"><i class="nav-icon fas fa-utensils"></i><p>KPI Custo Alimentação</p></a></li>
+          <li class="nav-item"><a href="medicos.html" class="nav-link"><i class="nav-icon fas fa-notes-medical"></i><p>KPI Custo Médico</p></a></li>
+          <li class="nav-item"><a href="ctrlq_relatorio.html" class="nav-link"><i class="nav-icon fas fa-user-md"></i><p>KPI Médicos (Qualidade)</p></a></li>
+          <li class="nav-item"><a href="kpi_v2.html" class="nav-link"><i class="nav-icon fas fa-chart-line"></i><p>KPI Mensalidades</p></a></li>
+          <li class="nav-item"><a href="kpi_vendas.html" class="nav-link"><i class="nav-icon fas fa-shopping-cart"></i><p>KPI Vendas</p></a></li>
+          <li class="nav-item"><a href="clientes.html" class="nav-link"><i class="nav-icon fas fa-users"></i><p>KPI Clientes</p></a></li>
+          <li class="nav-item"><a href="KPI_prescricao.html" class="nav-link"><i class="nav-icon fas fa-prescription-bottle-alt"></i><p>KPI Prescrições</p></a></li>
+          <li class="nav-item"><a href="kpi_fidelizacao_cliente.html" class="nav-link"><i class="nav-icon fas fa-handshake"></i><p>KPI Fidelização Churn</p></a></li>
+          <li class="nav-item"><a href="kpi_governo.html" class="nav-link"><i class="nav-icon fas fa-landmark"></i><p>KPI Índices Oficiais</p></a></li>
+          <li class="nav-item"><a href="kpi_liberty.html" class="nav-link"><i class="nav-icon fas fa-passport"></i><p>KPI CAMIM Liberty</p></a></li>
+          <li class="nav-item"><a href="kpi_receita_despesa.html" class="nav-link"><i class="nav-icon fas fa-balance-scale"></i><p>KPI Receitas x Despesas</p></a></li>
+          <li class="nav-item"><a href="kpi_receita_despesa_rateio.html" class="nav-link"><i class="nav-icon fas fa-balance-scale"></i><p>KPI R x D com Rateio</p></a></li>
+          <li class="nav-item"><a href="kpi_consultas_status.html" class="nav-link"><i class="nav-icon fas fa-stethoscope"></i><p>KPI Consultas (Status)</p></a></li>
+          <li class="nav-item"><a href="kpi_notas_rps.html" class="nav-link"><i class="nav-icon fas fa-file-invoice"></i><p>KPI Notas x RPS</p></a></li>
+          <li class="nav-item"><a href="kpi_metas_vendas_mensalidades.html" class="nav-link"><i class="nav-icon fas fa-bullseye"></i><p>KPI Metas (Mens/Vendas)</p></a></li>
+          <li class="nav-item"><a href="agenda_dia.html" class="nav-link"><i class="nav-icon fas fa-calendar-check"></i><p>Agenda do Dia</p></a></li>
+          <li class="nav-item"><a href="indicadores_vg.html" class="nav-link active"><i class="nav-icon fas fa-user-check"></i><p>Indicadores Vinícius Gama</p></a></li>
+          <li class="nav-item">
+            <a href="/acesso_avancado" class="nav-link">
+              <i class="nav-icon fas fa-user-shield" style="color:#c0392b"></i>
+              <p>Acesso Avançado</p>
+            </a>
+          </li>
+          <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+          <li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline">
+              <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                <i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p>
+              </button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="content-wrapper">
+
+    <!-- Banner -->
+    <div class="ad-banner">
+      <h1><i class="fas fa-user-check mr-2"></i>Indicadores Vinícius Gama — Situação dos Clientes</h1>
+      <p>Clientes admitidos: uso do plano no dia da adesão, consultas futuras, dependentes e matrículas anteriores</p>
+      <span id="geradoEm" style="position:absolute;top:12px;right:18px;font-size:.8rem;color:#8ab4d8"></span>
+    </div>
+
+    <!-- Filtros -->
+    <div class="filtros-card">
+      <div class="filtros-row mb-2">
+        <div>
+          <label>Postos</label>
+          <div class="d-flex align-items-center" style="gap:10px">
+            <div class="btn-group grp-btns">
+              <button id="btnGrupoTodos" class="btn btn-outline-dark active">Todos</button>
+              <button id="btnGrupoAltamiro" class="btn btn-outline-dark" title="A B G I N R X Y">Altamiro</button>
+              <button id="btnGrupoCouto" class="btn btn-outline-dark" title="C D J M P">Couto</button>
+            </div>
+            <div class="posto-tabs" id="postoTabs"></div>
+          </div>
+        </div>
+      </div>
+      <div class="filtros-row">
+        <div>
+          <label>Admissão de</label>
+          <input type="date" id="dtIni" class="form-control form-control-sm" style="width:160px" />
+        </div>
+        <div>
+          <label>Até</label>
+          <input type="date" id="dtFim" class="form-control form-control-sm" style="width:160px" />
+        </div>
+        <div>
+          <label>Situação</label>
+          <select id="selSituacao" class="custom-select custom-select-sm" style="width:170px">
+            <option value="">Todas</option>
+          </select>
+        </div>
+        <div>
+          <label>Usou plano no dia</label>
+          <select id="selUsoDia" class="custom-select custom-select-sm" style="width:130px">
+            <option value="">Todos</option>
+            <option value="sim">Sim</option>
+            <option value="nao">Não</option>
+          </select>
+        </div>
+        <div>
+          <label>Consulta futura</label>
+          <select id="selFutura" class="custom-select custom-select-sm" style="width:130px">
+            <option value="">Todos</option>
+            <option value="sim">Sim</option>
+            <option value="nao">Não</option>
+          </select>
+        </div>
+        <div>
+          <label>Matrículas anteriores</label>
+          <select id="selMatAnt" class="custom-select custom-select-sm" style="width:130px">
+            <option value="">Todos</option>
+            <option value="sim">Com</option>
+            <option value="nao">Sem</option>
+          </select>
+        </div>
+        <div>
+          <label>Buscar</label>
+          <input type="text" id="inpBusca" class="form-control form-control-sm" placeholder="Nome, matrícula ou CPF..." style="width:210px" />
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <div>
+            <button id="btnCarregar" class="btn btn-sm btn-primary"><i class="fas fa-search mr-1"></i>Consultar</button>
+            <button id="btnCsv" class="btn btn-sm btn-outline-secondary" title="Exporta as linhas filtradas"><i class="fas fa-file-csv mr-1"></i>CSV</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-row" id="kpiRow" style="display:none">
+      <div class="kpi-card"><div class="kpi-val" id="kAdm">0</div><div class="kpi-lbl">Admissões</div></div>
+      <div class="kpi-card"><div class="kpi-val text-success" id="kUsoDia">0</div><div class="kpi-sub" id="kUsoDiaPct"></div><div class="kpi-lbl">Usaram o plano no dia da adesão</div></div>
+      <div class="kpi-card"><div class="kpi-val text-primary" id="kFutura">0</div><div class="kpi-sub" id="kFuturaPct"></div><div class="kpi-lbl">Com consulta futura marcada</div></div>
+      <div class="kpi-card"><div class="kpi-val" id="kMatAnt" style="color:#6f42c1">0</div><div class="kpi-sub" id="kMatAntPct"></div><div class="kpi-lbl">Com matrículas anteriores</div></div>
+      <div class="kpi-card"><div class="kpi-val text-info" id="kDeps">0</div><div class="kpi-sub" id="kDepsMed"></div><div class="kpi-lbl">Dependentes (total)</div></div>
+      <div class="kpi-card"><div class="kpi-val" id="kPago" style="color:#20c997">R$ 0</div><div class="kpi-lbl">Valor pago (soma)</div></div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="row mt-2" id="chartsRow" style="display:none">
+      <div class="col-md-4">
+        <div class="chart-card">
+          <h3 class="card-title">Situação cadastral</h3>
+          <canvas id="chartSituacao"></canvas>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="chart-card">
+          <h3 class="card-title">Admissões por mês</h3>
+          <canvas id="chartMes"></canvas>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="chart-card">
+          <h3 class="card-title">Matrículas anteriores</h3>
+          <canvas id="chartMatAnt"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabela -->
+    <div class="table-container mt-3" id="tblContainer" style="display:none">
+      <table class="table table-sm table-bordered table-hover mb-0" id="tblVG">
+        <thead>
+          <tr>
+            <th>Admissão</th>
+            <th>Posto</th>
+            <th>Matrícula</th>
+            <th>Nome</th>
+            <th>Situação</th>
+            <th>Clube</th>
+            <th>Idade</th>
+            <th>Sexo</th>
+            <th>Responsável</th>
+            <th>V. Devido</th>
+            <th>V. Pago</th>
+            <th>WhatsApp</th>
+            <th>Celular</th>
+            <th>Dep.</th>
+            <th title="Consultas no dia da adesão">Cons. adesão</th>
+            <th title="Consultas marcadas de hoje pra frente (não faturadas)">Cons. futuras</th>
+            <th title="Matrículas anteriores (titular + dependentes, todos os postos)">Matr. ant.</th>
+          </tr>
+        </thead>
+        <tbody id="tblBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Mensagem vazia -->
+    <div id="msgVazio" class="text-center text-muted py-5" style="display:none">
+      <i class="fas fa-user-slash fa-3x mb-3"></i>
+      <p class="h5">Nenhuma admissão encontrada para os filtros selecionados.</p>
+    </div>
+
+  </div><!-- content-wrapper -->
+</div><!-- wrapper -->
+
+<!-- Modal Matrículas Anteriores -->
+<div class="modal fade" id="modalMatAnt" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalMatAntTitulo">Matrículas anteriores</h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div id="modalMatAntLoading" class="text-center py-3"><div class="spinner-border text-primary"></div></div>
+        <table class="table table-sm table-bordered" id="tblMatAnt" style="display:none">
+          <thead class="thead-dark">
+            <tr>
+              <th>Pessoa (na matrícula nova)</th>
+              <th>CPF</th>
+              <th>Papel na anterior</th>
+              <th>Matrícula anterior</th>
+              <th>Posto</th>
+              <th>Nome na anterior</th>
+              <th>Admissão</th>
+              <th>Desativada?</th>
+            </tr>
+          </thead>
+          <tbody id="tblMatAntBody"></tbody>
+        </table>
+        <div id="modalMatAntVazio" class="text-muted text-center py-3" style="display:none">Nenhuma matrícula anterior registrada.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner-border spinner-lg text-primary" role="status"><span class="sr-only">Carregando...</span></div>
+</div>
+
+<script>
+(function(){
+  let DATA = [];          // linhas cruas vindas da API (já restritas à ACL)
+  let selPostos = 'ALL';  // 'ALL' ou Set de letras
+  let POSTOS = [];        // postos do usuário
+  let chartSituacao, chartMes, chartMatAnt;
+
+  const NOMES_POSTOS = {
+    A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho', G:'Campo Grande',
+    I:'Nova Iguaçu', J:'Jacarepaguá', M:'Madureira', N:'Nilópolis',
+    P:'Rio das Pedras', R:'Realengo', X:'X Campo Grande', Y:'Y Campo Grande'
+  };
+  const GRUPOS = {
+    altamiro: ['A','B','G','I','N','R','X','Y'],
+    couto:    ['C','D','J','M','P']
+  };
+
+  function $id(s){ return document.getElementById(s); }
+  function escHtml(s){ return $('<span>').text(s==null?'':s).html(); }
+  function fmtData(iso){
+    if (!iso) return '—';
+    const [y,m,d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  }
+  function fmtMoeda(v){
+    return (v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+  }
+
+  // ── Init ──
+  function init(){
+    const hoje = new Date();
+    const primeiro = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    $id('dtIni').value = primeiro.toISOString().slice(0,10);
+    $id('dtFim').value = hoje.toISOString().slice(0,10);
+
+    const waitPostos = setInterval(() => {
+      if (window.USER_POSTOS && window.USER_POSTOS.length) {
+        clearInterval(waitPostos);
+        POSTOS = window.USER_POSTOS.slice().sort();
+        montarPostoTabs();
+        carregar();
+      }
+    }, 100);
+    setTimeout(() => clearInterval(waitPostos), 5000);
+
+    $id('btnCarregar').addEventListener('click', carregar);
+    $id('btnCsv').addEventListener('click', exportarCsv);
+    ['selSituacao','selUsoDia','selFutura','selMatAnt'].forEach(s =>
+      $id(s).addEventListener('change', render));
+    $id('inpBusca').addEventListener('input', render);
+
+    $id('btnGrupoTodos').addEventListener('click', () => { selPostos = 'ALL'; pintarPostos(); render(); });
+    $id('btnGrupoAltamiro').addEventListener('click', () => {
+      selPostos = new Set(GRUPOS.altamiro.filter(p => POSTOS.includes(p)));
+      pintarPostos(); render();
+    });
+    $id('btnGrupoCouto').addEventListener('click', () => {
+      selPostos = new Set(GRUPOS.couto.filter(p => POSTOS.includes(p)));
+      pintarPostos(); render();
+    });
+
+    // Clique no badge de matrículas anteriores → modal
+    $('#tblBody').on('click', '.badge-matant', function(){
+      abrirModalMatAnt(this.dataset.posto, this.dataset.id, this.dataset.nome);
+    });
+  }
+
+  function montarPostoTabs(){
+    const box = $id('postoTabs');
+    box.innerHTML = '';
+    POSTOS.forEach(p => {
+      const b = document.createElement('button');
+      b.className = 'ptab active';
+      b.dataset.posto = p;
+      b.textContent = p;
+      b.title = NOMES_POSTOS[p] || p;
+      b.addEventListener('click', () => {
+        let s = selPostos === 'ALL' ? new Set(POSTOS) : new Set(selPostos);
+        if (s.has(p)) s.delete(p); else s.add(p);
+        selPostos = (s.size === 0 || s.size === POSTOS.length) ? 'ALL' : s;
+        pintarPostos(); render();
+      });
+      box.appendChild(b);
+    });
+    pintarPostos();
+  }
+
+  function pintarPostos(){
+    document.querySelectorAll('#postoTabs .ptab').forEach(b => {
+      const ativo = (selPostos === 'ALL') || selPostos.has(b.dataset.posto);
+      b.classList.toggle('active', ativo);
+    });
+    const isAll = selPostos === 'ALL';
+    const eq = (g) => !isAll && g.filter(p => POSTOS.includes(p)).length === selPostos.size &&
+                      g.filter(p => POSTOS.includes(p)).every(p => selPostos.has(p));
+    $id('btnGrupoTodos').classList.toggle('active', isAll);
+    $id('btnGrupoAltamiro').classList.toggle('active', eq(GRUPOS.altamiro));
+    $id('btnGrupoCouto').classList.toggle('active', eq(GRUPOS.couto));
+  }
+
+  // ── Carregar da API ──
+  function carregar(){
+    const de = $id('dtIni').value, ate = $id('dtFim').value;
+    if (!de || !ate) return;
+
+    $id('loadingOverlay').classList.add('active');
+    $id('msgVazio').style.display = 'none';
+
+    fetch(`/api/vg/situacao_clientes?de=${de}&ate=${ate}&postos=todos`, { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(res => {
+        $id('loadingOverlay').classList.remove('active');
+        if (!res.ok) { alert(res.error || 'Erro ao consultar'); return; }
+        DATA = res.clientes || [];
+        if (res.gerado_em) {
+          try { $id('geradoEm').textContent = 'ETL: ' + new Date(res.gerado_em).toLocaleString('pt-BR'); }
+          catch(e) { $id('geradoEm').textContent = 'ETL: ' + res.gerado_em; }
+        }
+        popularSituacoes();
+        render();
+      })
+      .catch(() => {
+        $id('loadingOverlay').classList.remove('active');
+        alert('Erro de conexão');
+      });
+  }
+
+  function popularSituacoes(){
+    const sel = $id('selSituacao');
+    const atual = sel.value;
+    const set = new Set();
+    DATA.forEach(c => { if (c.situacao) set.add(c.situacao); });
+    sel.innerHTML = '<option value="">Todas</option>';
+    [...set].sort((a,b) => a.localeCompare(b,'pt-BR')).forEach(s => {
+      const o = document.createElement('option');
+      o.value = s; o.textContent = s;
+      sel.appendChild(o);
+    });
+    sel.value = atual && set.has(atual) ? atual : '';
+  }
+
+  // ── Filtro client-side ──
+  function filtrar(){
+    const sit   = $id('selSituacao').value;
+    const uso   = $id('selUsoDia').value;
+    const fut   = $id('selFutura').value;
+    const mant  = $id('selMatAnt').value;
+    const busca = ($id('inpBusca').value || '').toLowerCase().trim();
+
+    return DATA.filter(c => {
+      if (selPostos !== 'ALL' && !selPostos.has(c.posto)) return false;
+      if (sit && c.situacao !== sit) return false;
+      if (uso === 'sim' && !c.usou_plano_dia_adesao) return false;
+      if (uso === 'nao' &&  c.usou_plano_dia_adesao) return false;
+      if (fut === 'sim' && !c.tem_consulta_futura) return false;
+      if (fut === 'nao' &&  c.tem_consulta_futura) return false;
+      if (mant === 'sim' && !(c.matriculas_anteriores_qtd > 0)) return false;
+      if (mant === 'nao' &&  (c.matriculas_anteriores_qtd > 0)) return false;
+      if (busca) {
+        const alvo = `${c.nome||''} ${c.matricula||''} ${c.cpf||''}`.toLowerCase();
+        if (!alvo.includes(busca)) return false;
+      }
+      return true;
+    });
+  }
+
+  function render(){
+    const rows = filtrar();
+    if (!DATA.length || !rows.length) {
+      $id('kpiRow').style.display = 'none';
+      $id('chartsRow').style.display = 'none';
+      $id('tblContainer').style.display = 'none';
+      $id('msgVazio').style.display = 'block';
+      return;
+    }
+    $id('msgVazio').style.display = 'none';
+    renderCards(rows);
+    renderCharts(rows);
+    renderTable(rows);
+    $id('kpiRow').style.display = 'flex';
+    $id('chartsRow').style.display = 'flex';
+    $id('tblContainer').style.display = 'block';
+  }
+
+  // ── Cards ──
+  function renderCards(rows){
+    const n = rows.length;
+    const uso = rows.filter(c => c.usou_plano_dia_adesao).length;
+    const fut = rows.filter(c => c.tem_consulta_futura).length;
+    const mant = rows.filter(c => c.matriculas_anteriores_qtd > 0).length;
+    const deps = rows.reduce((s,c) => s + (c.dependentes_qtd||0), 0);
+    const pago = rows.reduce((s,c) => s + (c.valor_pago||0), 0);
+    const pct = (x) => n ? (100*x/n).toFixed(1).replace('.',',') + '%' : '—';
+
+    $id('kAdm').textContent = n.toLocaleString('pt-BR');
+    $id('kUsoDia').textContent = uso.toLocaleString('pt-BR');
+    $id('kUsoDiaPct').textContent = pct(uso);
+    $id('kFutura').textContent = fut.toLocaleString('pt-BR');
+    $id('kFuturaPct').textContent = pct(fut);
+    $id('kMatAnt').textContent = mant.toLocaleString('pt-BR');
+    $id('kMatAntPct').textContent = pct(mant);
+    $id('kDeps').textContent = deps.toLocaleString('pt-BR');
+    $id('kDepsMed').textContent = n ? 'média ' + (deps/n).toFixed(2).replace('.',',') : '';
+    $id('kPago').textContent = fmtMoeda(pago);
+  }
+
+  // ── Charts ──
+  function renderCharts(rows){
+    // Situação
+    const sitCount = {};
+    rows.forEach(c => { const s = c.situacao || '(sem info)'; sitCount[s] = (sitCount[s]||0)+1; });
+    const sitLabels = Object.keys(sitCount).sort();
+    const sitColors = sitLabels.map(s => {
+      const v = s.toLowerCase();
+      if (v.includes('adimplente') && !v.includes('inadimplente')) return '#28a745';
+      if (v.includes('atrasad')) return '#fd7e14';
+      if (v.includes('inadimplente')) return '#dc3545';
+      if (v.includes('cancelad')) return '#6c757d';
+      return '#adb5bd';
+    });
+    if (chartSituacao) chartSituacao.destroy();
+    chartSituacao = new Chart($id('chartSituacao').getContext('2d'), {
+      type: 'doughnut',
+      data: { labels: sitLabels, datasets: [{ data: sitLabels.map(l => sitCount[l]), backgroundColor: sitColors }] },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    // Admissões por mês
+    const mesCount = {};
+    rows.forEach(c => {
+      const m = (c.data_admissao||'').slice(0,7);
+      if (m) mesCount[m] = (mesCount[m]||0)+1;
+    });
+    const meses = Object.keys(mesCount).sort();
+    if (chartMes) chartMes.destroy();
+    chartMes = new Chart($id('chartMes').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: meses.map(m => { const [y,mm] = m.split('-'); return `${mm}/${y}`; }),
+        datasets: [{ label: 'Admissões', data: meses.map(m => mesCount[m]), backgroundColor: '#007bff' }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+
+    // Matrículas anteriores: 0 / 1 / 2+
+    const m0 = rows.filter(c => !c.matriculas_anteriores_qtd).length;
+    const m1 = rows.filter(c => c.matriculas_anteriores_qtd === 1).length;
+    const m2 = rows.filter(c => c.matriculas_anteriores_qtd >= 2).length;
+    if (chartMatAnt) chartMatAnt.destroy();
+    chartMatAnt = new Chart($id('chartMatAnt').getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Primeira matrícula', '1 anterior', '2+ anteriores'],
+        datasets: [{ data: [m0, m1, m2], backgroundColor: ['#28a745', '#fd7e14', '#6f42c1'] }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+  }
+
+  // ── Tabela ──
+  function badgeSituacao(val){
+    if (!val) return '<span class="badge badge-sem-info">—</span>';
+    const v = val.toLowerCase();
+    if (v.includes('adimplente') && !v.includes('inadimplente')) return `<span class="badge badge-adimplente">${escHtml(val)}</span>`;
+    if (v.includes('atrasad'))      return `<span class="badge badge-atrasado">${escHtml(val)}</span>`;
+    if (v.includes('inadimplente')) return `<span class="badge badge-inadimplente">${escHtml(val)}</span>`;
+    if (v.includes('cancelad'))     return `<span class="badge badge-cancelado">${escHtml(val)}</span>`;
+    return `<span class="badge badge-sem-info">${escHtml(val)}</span>`;
+  }
+
+  function renderTable(rows){
+    const tbody = $id('tblBody');
+    const html = rows.map(c => {
+      const nomeAttr = escHtml(c.nome).replace(/"/g, '&quot;');
+      const matAnt = c.matriculas_anteriores_qtd > 0
+        ? `<span class="badge badge-matant" data-posto="${c.posto}" data-id="${c.id_cliente}" data-nome="${nomeAttr}" title="Clique para ver o detalhe">${c.matriculas_anteriores_qtd} <i class="fas fa-search-plus ml-1"></i></span>`
+        : '—';
+      return `<tr>
+        <td>${fmtData(c.data_admissao)}</td>
+        <td class="text-center" title="${escHtml(NOMES_POSTOS[c.posto]||c.posto)}">${escHtml(c.posto)}</td>
+        <td>${escHtml(c.matricula||'—')}</td>
+        <td>${escHtml(c.nome||'—')}</td>
+        <td>${badgeSituacao(c.situacao)}</td>
+        <td>${escHtml(c.situacao_clube||'—')}</td>
+        <td class="text-center">${c.idade!=null?c.idade:'—'}</td>
+        <td class="text-center">${escHtml(c.sexo||'—')}</td>
+        <td>${escHtml(c.responsavel||'—')}</td>
+        <td class="text-right">${fmtMoeda(c.valor_devido)}</td>
+        <td class="text-right">${fmtMoeda(c.valor_pago)}</td>
+        <td>${escHtml(c.telefone_whatsapp||'—')}</td>
+        <td>${escHtml(c.telefone_celular||'—')}</td>
+        <td class="text-center">${c.dependentes_qtd||0}</td>
+        <td class="text-center">${c.consultas_dia_adesao_qtd ? `<span class="badge badge-sim">${c.consultas_dia_adesao_qtd}</span>` : '—'}</td>
+        <td class="text-center">${c.consultas_futuras_qtd ? `<span class="badge badge-sim">${c.consultas_futuras_qtd}</span>` : '—'}</td>
+        <td class="text-center">${matAnt}</td>
+      </tr>`;
+    }).join('');
+    tbody.innerHTML = html;
+  }
+
+  // ── Modal matrículas anteriores ──
+  function abrirModalMatAnt(posto, idCliente, nome){
+    $id('modalMatAntTitulo').textContent = `Matrículas anteriores — ${nome} (${posto})`;
+    $id('modalMatAntLoading').style.display = 'block';
+    $id('tblMatAnt').style.display = 'none';
+    $id('modalMatAntVazio').style.display = 'none';
+    $('#modalMatAnt').modal('show');
+
+    fetch(`/api/vg/situacao_clientes/${posto}/${idCliente}/matriculas`, { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(res => {
+        $id('modalMatAntLoading').style.display = 'none';
+        if (!res.ok) { $id('modalMatAntVazio').textContent = res.error || 'Erro'; $id('modalMatAntVazio').style.display = 'block'; return; }
+        const rows = res.matriculas || [];
+        if (!rows.length) { $id('modalMatAntVazio').style.display = 'block'; return; }
+        $id('tblMatAntBody').innerHTML = rows.map(m => `<tr>
+          <td>${escHtml(m.pessoa_nome||'—')} <span class="text-muted">(${escHtml(m.papel_na_nova)})</span></td>
+          <td>${escHtml(m.cpf||'—')}</td>
+          <td>${escHtml(m.papel_anterior||'—')}</td>
+          <td>${escHtml(m.matricula_anterior||'—')}</td>
+          <td title="${escHtml(NOMES_POSTOS[m.posto_anterior]||'')}">${escHtml(m.posto_anterior||'—')}</td>
+          <td>${escHtml(m.nome_anterior||'—')}</td>
+          <td>${fmtData(m.data_admissao_anterior)}</td>
+          <td class="text-center">${m.desativado_anterior === true ? '<span class="badge badge-cancelado">Sim</span>' : (m.desativado_anterior === false ? 'Não' : '—')}</td>
+        </tr>`).join('');
+        $id('tblMatAnt').style.display = 'table';
+      })
+      .catch(() => {
+        $id('modalMatAntLoading').style.display = 'none';
+        $id('modalMatAntVazio').textContent = 'Erro de conexão';
+        $id('modalMatAntVazio').style.display = 'block';
+      });
+  }
+
+  // ── Export CSV ──
+  function exportarCsv(){
+    const rows = filtrar();
+    if (!rows.length) { alert('Nada pra exportar com os filtros atuais.'); return; }
+    const cols = [
+      ['data_admissao','Admissão'], ['posto','Posto'], ['matricula','Matrícula'],
+      ['nome','Nome'], ['cpf','CPF'], ['situacao','Situação'], ['situacao_clube','Situação Clube'],
+      ['idade','Idade'], ['sexo','Sexo'], ['responsavel','Responsável'],
+      ['valor_devido','Valor Devido'], ['valor_pago','Valor Pago'],
+      ['telefone_whatsapp','WhatsApp'], ['telefone_celular','Celular'],
+      ['dependentes_qtd','Dependentes'],
+      ['consultas_dia_adesao_qtd','Consultas no dia da adesão'],
+      ['consultas_futuras_qtd','Consultas futuras'],
+      ['matriculas_anteriores_qtd','Matrículas anteriores'],
+      ['mat_ant_titular_qtd','Como titular'], ['mat_ant_dependente_qtd','Como dependente'],
+      ['mat_ant_responsavel_qtd','Como responsável'],
+    ];
+    const esc = (v) => {
+      let s = v == null ? '' : String(v);
+      if (s.includes(';') || s.includes('"') || s.includes('\n')) s = '"' + s.replace(/"/g,'""') + '"';
+      return s;
+    };
+    const linhas = [cols.map(c => c[1]).join(';')];
+    rows.forEach(c => {
+      linhas.push(cols.map(([k]) => {
+        if (k === 'data_admissao') return fmtData(c[k]);
+        if (k === 'valor_devido' || k === 'valor_pago') return String(c[k]||0).replace('.',',');
+        return esc(c[k]);
+      }).join(';'));
+    });
+    const blob = new Blob(["﻿" + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `indicadores_vg_${$id('dtIni').value}_${$id('dtFim').value}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+
+<script src="/js/etl_status.js"></script>
+<script>
+ETLStatus.init({
+  metaUrl: '/json_consolidado/_etl_meta_export_vg_situacao_clientes.json'
+});
+</script>
+
+</body>
+</html>
