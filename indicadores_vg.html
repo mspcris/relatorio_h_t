@@ -488,9 +488,31 @@
     $('#modalConsultas').modal('show');
   }
   // Modal da dívida anterior — parcelas vencidas já vêm na linha (JSON), sem fetch
+  // "MM/YYYY" -> número YYYYMM (pra ordenar por mês)
+  function mesKey(mes){
+    if (!mes) return 0;
+    const p = String(mes).split('/');
+    return p.length === 2 ? (parseInt(p[1],10)||0)*100 + (parseInt(p[0],10)||0) : 0;
+  }
+  // Dívida POR MATRÍCULA (não por parcela): 1 valor por matrícula (a mensalidade),
+  // pega a parcela de mês mais recente entre as do detalhe; ordena por mês desc.
+  function dividaPorMatricula(c){
+    const json = (c && c.mat_ant_vencidas_json) || [];
+    const byMat = {};
+    json.forEach(x => {
+      const key = `${x.posto}|${x.matricula}`;
+      const k = mesKey(x.mes);
+      if (!byMat[key] || k > byMat[key]._k){
+        byMat[key] = { posto:x.posto, matricula:x.matricula, nome:x.nome,
+                       mes:x.mes, valor:x.valor, id_receita:x.id_receita, _k:k };
+      }
+    });
+    return Object.values(byMat).sort((a,b) => b._k - a._k);
+  }
+
   function abrirModalDivida(posto, id){
     const c = DATA.find(x => x.posto === posto && String(x.id_cliente) === String(id));
-    const lista = (c && c.mat_ant_vencidas_json) || [];
+    const lista = (c && c._divida_lista) || [];
     $id('modalDividaTitulo').textContent =
       'Parcelas vencidas — matrículas anteriores' + (c && c.nome ? ` — ${c.nome}` : '');
     const body = $id('tblDividaBody');
@@ -643,6 +665,14 @@
         $id('loadingOverlay').classList.remove('active');
         if (!res.ok) { alert(res.error || 'Erro ao consultar'); return; }
         DATA = res.clientes || [];
+        // Dívida ant. é POR MATRÍCULA (não por parcela): recomputa qtd/valor do
+        // detalhe (1 mensalidade por matrícula), sobrescrevendo o agregado do ETL.
+        DATA.forEach(c => {
+          const dpm = dividaPorMatricula(c);
+          c._divida_lista = dpm;
+          c.mat_ant_vencidas_qtd = dpm.length;
+          c.mat_ant_vencidas_valor = +dpm.reduce((s,x) => s + (x.valor||0), 0).toFixed(2);
+        });
         if (res.gerado_em) {
           try { $id('geradoEm').textContent = 'ETL: ' + new Date(res.gerado_em).toLocaleString('pt-BR'); }
           catch(e) { $id('geradoEm').textContent = 'ETL: ' + res.gerado_em; }
@@ -923,7 +953,7 @@
         <td class="text-center">${c.consultas_futuras_qtd ? `<span class="badge badge-consultas" data-posto="${c.posto}" data-id="${c.id_cliente}" data-tipo="futuras" title="Ver médico, data e hora">${c.consultas_futuras_qtd} <i class="fas fa-search-plus ml-1"></i></span>` : '—'}</td>
         <td class="text-center">${matAnt}</td>
         <td class="text-right">${c.mat_ant_vencidas_qtd > 0
-          ? `<span class="badge badge-divida" data-posto="${c.posto}" data-id="${c.id_cliente}" title="Ver parcelas vencidas">${c.mat_ant_vencidas_qtd} · ${fmtMoeda(c.mat_ant_vencidas_valor)} <i class="fas fa-search-plus ml-1"></i></span>`
+          ? `<span class="badge badge-divida" data-posto="${c.posto}" data-id="${c.id_cliente}" title="Dívida por matrícula — clique para ver">${c.mat_ant_vencidas_qtd} · ${fmtMoeda(c.mat_ant_vencidas_valor)} <i class="fas fa-search-plus ml-1"></i></span>`
           : '—'}</td>
       </tr>`;
     }).join('');
