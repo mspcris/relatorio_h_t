@@ -618,7 +618,7 @@ def montar_rows(clientes_iter, p, matches_por_cpf, vencidas_det):
             mat_ant, nome_ant = info_ant.get(t, (None, None))
             for d in det:
                 venc_json.append({
-                    "id_receita": d["id_receita"], "matricula": mat_ant,
+                    "id_receita": d["id_receita"], "posto": t[0], "matricula": mat_ant,
                     "nome": nome_ant, "mes": d["mes"], "valor": d["valor"],
                 })
             venc_qtd += len(det)
