@@ -527,14 +527,31 @@
       b.textContent = p;
       b.title = NOMES_POSTOS[p] || p;
       b.addEventListener('click', () => {
-        let s = selPostos === 'ALL' ? new Set(POSTOS) : new Set(selPostos);
-        if (s.has(p)) s.delete(p); else s.add(p);
-        selPostos = (s.size === 0 || s.size === POSTOS.length) ? 'ALL' : s;
+        // Se a seleção atual é "bulk" (Todos ou grupo Altamiro/Couto), clicar
+        // num posto zera tudo e seleciona só ele. Já numa seleção individual,
+        // alterna esse posto (clico A→{A}, clico B→{A,B}).
+        if (selecaoEhBulk()) {
+          selPostos = new Set([p]);
+        } else {
+          const s = new Set(selPostos);
+          if (s.has(p)) s.delete(p); else s.add(p);
+          selPostos = (s.size === 0 || s.size === POSTOS.length) ? 'ALL' : s;
+        }
         pintarPostos(); render();
       });
       box.appendChild(b);
     });
     pintarPostos();
+  }
+
+  // Seleção atual é "em bloco" (Todos OU exatamente um grupo Altamiro/Couto)?
+  function selecaoEhBulk(){
+    if (selPostos === 'ALL') return true;
+    const eqG = (g) => {
+      const gg = g.filter(p => POSTOS.includes(p));
+      return gg.length === selPostos.size && gg.every(p => selPostos.has(p));
+    };
+    return eqG(GRUPOS.altamiro) || eqG(GRUPOS.couto);
   }
 
   function pintarPostos(){
