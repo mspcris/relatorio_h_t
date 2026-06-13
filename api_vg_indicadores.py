@@ -83,7 +83,7 @@ def vg_listar_clientes():
             return jsonify({"ok": False, "error": "nenhum posto solicitado está autorizado"}), 403
 
     sql = """
-        SELECT posto, id_cliente, matricula, nome, cpf,
+        SELECT posto, id_cliente, matricula, nome, nome_social, cpf,
                to_char(data_admissao, 'YYYY-MM-DD') AS data_admissao,
                situacao, situacao_clube, idade, sexo, responsavel,
                telefone_whatsapp, telefone_celular,

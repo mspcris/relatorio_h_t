@@ -77,6 +77,7 @@ SELECT r.idcliente,
        c.sexo,
        c.responsavel,
        c.nome,
+       c.NomeSocial,
        r.[Valor devido],
        r.[Valor pago],
        c.TelefoneWhatsApp,
@@ -217,6 +218,7 @@ CREATE TABLE IF NOT EXISTS kpi_vg_situacao_clientes (
     id_cliente                INTEGER       NOT NULL,
     matricula                 VARCHAR(20),
     nome                      VARCHAR(200),
+    nome_social               VARCHAR(200),
     cpf                       VARCHAR(20),
     data_admissao             DATE,
     situacao                  VARCHAR(80),
@@ -245,6 +247,7 @@ CREATE TABLE IF NOT EXISTS kpi_vg_situacao_clientes (
     UNIQUE (posto, id_cliente)
 );
 ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mensalidade NUMERIC(14,2);
+ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS nome_social VARCHAR(200);
 ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mat_ant_vencidas_qtd INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mat_ant_vencidas_valor NUMERIC(14,2) NOT NULL DEFAULT 0;
 ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS consultas_adesao_json  JSONB NOT NULL DEFAULT '[]'::jsonb;
@@ -278,7 +281,7 @@ CREATE INDEX IF NOT EXISTS ix_vg_mat_ant_cliente ON kpi_vg_matriculas_anteriores
 """
 
 COLS_PRINCIPAL = [
-    "posto", "id_cliente", "matricula", "nome", "cpf", "data_admissao",
+    "posto", "id_cliente", "matricula", "nome", "nome_social", "cpf", "data_admissao",
     "situacao", "situacao_clube", "idade", "sexo", "responsavel",
     "telefone_whatsapp", "telefone_celular", "valor_devido", "valor_pago",
     "mensalidade", "receitas_qtd", "dependentes_qtd",
@@ -374,6 +377,14 @@ def cpf_pesquisavel(cpf):
     return True
 
 
+def nome_social_valido(v):
+    """Nome social só vale se tiver letra (cadastro tem lixo tipo '.', '-')."""
+    s = clean_str(v, 200)
+    if not s or not any(ch.isalpha() for ch in s):
+        return None
+    return s
+
+
 def run_query(engine, sql, params=()):
     with engine.connect() as conn:
         cur = conn.exec_driver_sql(sql, params)
@@ -397,7 +408,7 @@ def carregar_posto(engine, posto, adm_inicio_str, hoje_str):
     rows = run_query(engine, SQL_BASE, (adm_inicio_str,))
     clientes = {}
     for r in rows:
-        (idc, dataadm, situacao, sitclube, idade, sexo, resp, nome,
+        (idc, dataadm, situacao, sitclube, idade, sexo, resp, nome, nomesoc,
          vdev, vpago, telwpp, telcel) = r
         if idc is None:
             continue
@@ -407,6 +418,7 @@ def carregar_posto(engine, posto, adm_inicio_str, hoje_str):
             cli = clientes[idc] = {
                 "posto": posto, "id_cliente": idc,
                 "matricula": None, "nome": clean_str(nome, 200),
+                "nome_social": nome_social_valido(nomesoc),
                 "cpf": None,
                 "data_admissao": to_date(dataadm),
                 "situacao": clean_str(situacao, 80),
@@ -625,7 +637,7 @@ def montar_rows(clientes_iter, p, matches_por_cpf, vencidas_det):
             venc_val += sum(d["valor"] for d in det)
         venc_val = round(venc_val, 2)
         rows_principal.append((
-            p, cli["id_cliente"], cli["matricula"], cli["nome"], cli["cpf"],
+            p, cli["id_cliente"], cli["matricula"], cli["nome"], cli["nome_social"], cli["cpf"],
             cli["data_admissao"], cli["situacao"], cli["situacao_clube"],
             cli["idade"], cli["sexo"], cli["responsavel"],
             cli["telefone_whatsapp"], cli["telefone_celular"],
