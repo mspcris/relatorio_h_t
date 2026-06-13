@@ -296,8 +296,7 @@
             <th data-key="posto">Posto</th>
             <th data-key="matricula">Matrícula</th>
             <th data-key="nome">Nome</th>
-            <th data-key="situacao">Situação</th>
-            <th data-key="situacao_clube">Clube</th>
+            <th data-key="situacao" title="Matrícula com mais de 6 dígitos é CPF (Clube de benefícios) — mostra a situação do clube; senão, a situação CAMIM">Situação</th>
             <th data-key="idade" data-num="1">Idade</th>
             <th data-key="sexo">Sexo</th>
             <th data-key="responsavel">Responsável</th>
@@ -520,7 +519,7 @@
   function popularSituacoes(){
     const anteriores = SEL_SITUACOES === 'ALL' ? null : SEL_SITUACOES;
     const set = new Set();
-    DATA.forEach(c => { if (c.situacao) set.add(c.situacao); });
+    DATA.forEach(c => { const s = situacaoEfetiva(c); if (s) set.add(s); });
     SITUACOES = [...set].sort((a,b) => a.localeCompare(b,'pt-BR'));
 
     const menu = $id('ddSituacaoMenu');
@@ -574,6 +573,7 @@
   // Valor da célula como exibido (usado por filtro de coluna)
   function cellVal(c, k){
     if (k === 'data_admissao') return fmtData(c[k]);
+    if (k === 'situacao') return situacaoEfetiva(c);
     if (k === 'mensalidade' || k === 'mat_ant_vencidas_valor') return fmtMoeda(c[k]);
     const v = c[k];
     return v == null ? '' : String(v);
@@ -589,7 +589,7 @@
 
     return DATA.filter(c => {
       if (selPostos !== 'ALL' && !selPostos.has(c.posto)) return false;
-      if (SEL_SITUACOES !== 'ALL' && !SEL_SITUACOES.has(c.situacao || '')) return false;
+      if (SEL_SITUACOES !== 'ALL' && !SEL_SITUACOES.has(situacaoEfetiva(c))) return false;
       if (uso === 'sim' && !c.usou_plano_dia_adesao) return false;
       if (uso === 'nao' &&  c.usou_plano_dia_adesao) return false;
       if (fut === 'sim' && !c.tem_consulta_futura) return false;
@@ -616,7 +616,8 @@
     const { key, dir } = SORT;
     const num = NUM_KEYS.has(key);
     return rows.slice().sort((a, b) => {
-      const va = a[key], vb = b[key];
+      const va = key === 'situacao' ? situacaoEfetiva(a) : a[key];
+      const vb = key === 'situacao' ? situacaoEfetiva(b) : b[key];
       if (va == null && vb == null) return 0;
       if (va == null) return 1;   // nulos sempre no fim
       if (vb == null) return -1;
@@ -686,7 +687,7 @@
   function renderCharts(rows){
     // Situação
     const sitCount = {};
-    rows.forEach(c => { const s = c.situacao || '(sem info)'; sitCount[s] = (sitCount[s]||0)+1; });
+    rows.forEach(c => { const s = situacaoEfetiva(c) || '(sem info)'; sitCount[s] = (sitCount[s]||0)+1; });
     const sitLabels = Object.keys(sitCount).sort();
     const sitColors = sitLabels.map(s => {
       const v = s.toLowerCase();
@@ -735,6 +736,15 @@
     });
   }
 
+  // Situação efetiva: matrícula com >6 dígitos é CPF (Clube de benefícios) →
+  // vale a situação do clube; até 6 dígitos é matrícula CAMIM normal → situação.
+  // Os dois campos divergem (são informações distintas), então a coluna mostra
+  // o que faz sentido pra cada caso.
+  function situacaoEfetiva(c){
+    const dig = String(c.matricula || '').replace(/\D/g, '');
+    return (dig.length > 6 ? c.situacao_clube : c.situacao) || '';
+  }
+
   // ── Tabela ──
   function badgeSituacao(val){
     if (!val) return '<span class="badge badge-sem-info">—</span>';
@@ -760,8 +770,7 @@
         <td class="text-center" title="${escHtml(NOMES_POSTOS[c.posto]||c.posto)}">${escHtml(c.posto)}</td>
         <td>${escHtml(c.matricula||'—')}</td>
         <td>${escHtml(c.nome||'—')}</td>
-        <td>${badgeSituacao(c.situacao)}</td>
-        <td>${escHtml(c.situacao_clube||'—')}</td>
+        <td>${badgeSituacao(situacaoEfetiva(c))}</td>
         <td class="text-center">${c.idade!=null?c.idade:'—'}</td>
         <td class="text-center">${escHtml(c.sexo||'—')}</td>
         <td>${escHtml(c.responsavel||'—')}</td>
@@ -822,7 +831,7 @@
     if (!rows.length) { alert('Nada pra exportar com os filtros atuais.'); return; }
     const cols = [
       ['data_admissao','Admissão'], ['posto','Posto'], ['matricula','Matrícula'],
-      ['nome','Nome'], ['cpf','CPF'], ['situacao','Situação'], ['situacao_clube','Situação Clube'],
+      ['nome','Nome'], ['cpf','CPF'], ['situacao','Situação'],
       ['idade','Idade'], ['sexo','Sexo'], ['responsavel','Responsável'],
       ['mensalidade','Mensalidade'],
       ['telefone_whatsapp','WhatsApp'], ['telefone_celular','Celular'],
@@ -844,6 +853,7 @@
     rows.forEach(c => {
       linhas.push(cols.map(([k]) => {
         if (k === 'data_admissao') return fmtData(c[k]);
+        if (k === 'situacao') return esc(situacaoEfetiva(c));
         if (k === 'mensalidade' || k === 'mat_ant_vencidas_valor') return String(c[k]||0).replace('.',',');
         return esc(c[k]);
       }).join(';'));

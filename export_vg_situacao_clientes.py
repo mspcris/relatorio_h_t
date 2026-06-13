@@ -20,11 +20,17 @@ idcontatipo=5 + vw_cad_cliente), enriquecida com:
                                 direto no SQL Server pra evitar ~dezenas de
                                 milhares de chamadas HTTP por run)
 
-Full rebuild: "consultas futuras" é relativo a HOJE, então o ETL recalcula a
-janela inteira a cada execução (DELETE por posto + INSERT). Não é incremental.
+Dois modos (a busca de matrículas anteriores por CPF cruza os 13 bancos e é a
+parte cara; o resto é leitura barata single-bank por posto):
+  --modo full  (cron 5h): recalcula o posto inteiro — DELETE+INSERT, busca CPF
+                de TODOS os clientes. "consultas futuras" é relativa a HOJE.
+  --modo light (cron 8-18h, de hora em hora): UPDATE só das colunas leves de
+                quem já existe + busca CPF (cara) APENAS dos clientes NOVOS
+                (sem linha ainda = admitidos desde o último full). Não toca nas
+                matrículas anteriores de quem já estava na tabela.
 
-Cron sugerido: 1x/dia de madrugada. Leitura pura no SQL Server; escrita só no
-Postgres do KPI. Sem efeitos colaterais com custo (sem WhatsApp/SMS/INSERT CAMIM).
+Leitura pura no SQL Server; escrita só no Postgres do KPI. Sem efeitos colaterais
+com custo (sem WhatsApp/SMS/INSERT CAMIM).
 
 DDL: sql_camim_fin/vg_situacao_clientes_pg_ddl.sql (o ETL aplica o CREATE
 TABLE IF NOT EXISTS sozinho; o INSERT em `servicos` é manual).
@@ -32,8 +38,9 @@ TABLE IF NOT EXISTS sozinho; o INSERT em `servicos` é manual).
 Credenciais: DB_HOST_* / PG_RDS_* no /opt/relatorio_h_t/.env.
 
 Uso:
-    python3 export_vg_situacao_clientes.py             # run completo
-    python3 export_vg_situacao_clientes.py --dry-run   # não escreve no Postgres
+    python3 export_vg_situacao_clientes.py --modo full      # rebuild completo (5h)
+    python3 export_vg_situacao_clientes.py --modo light     # incremental (8-18h)
+    python3 export_vg_situacao_clientes.py --modo light --dry-run
     python3 export_vg_situacao_clientes.py --inicio 01/03/2026
 """
 import argparse
@@ -246,6 +253,17 @@ COLS_DETALHE = [
     "mens_vencidas_qtd", "mens_vencidas_valor",
 ]
 
+# Colunas derivadas da busca CARA (CPF cross-bank). No run leve só são gravadas
+# para clientes NOVOS; nas linhas já existentes ficam intocadas.
+HEAVY_COLS = [
+    "matriculas_anteriores_qtd", "mat_ant_titular_qtd",
+    "mat_ant_dependente_qtd", "mat_ant_responsavel_qtd",
+    "mat_ant_vencidas_qtd", "mat_ant_vencidas_valor",
+]
+
+# Colunas atualizadas no run leve (tudo menos a chave e as pesadas acima).
+LIGHT_COLS = [c for c in COLS_PRINCIPAL if c not in ("posto", "id_cliente", *HEAVY_COLS)]
+
 
 def pg_conn():
     return psycopg2.connect(
@@ -439,20 +457,16 @@ def buscar_cpfs_no_posto(engine, posto_alvo, cpfs):
 # usuário 2026-06-12): a página vai sendo atualizada posto a posto, e uma
 # falha no meio não atrasa os postos já concluídos.
 
-def processar_posto(p, engines, pg, adm_inicio_str, hoje_str, meta, dry_run):
-    """Carrega o posto p, busca matrículas anteriores dos CPFs dele em TODOS
-    os bancos, consulta vencidas e grava no Postgres. Retorna (rc, n_clientes)."""
+def buscar_anteriores(engines, p, hoje_str, cpf_set, meta):
+    """Pesquisa os CPFs de `cpf_set` em TODOS os bancos (titular/dependente/
+    responsável) + mensalidades vencidas das matrículas achadas. É a parte CARA
+    do ETL (cross-bank). Retorna (matches_por_cpf, vencidas, rc)."""
     rc = 0
-    clientes = carregar_posto(engines[p], p, adm_inicio_str, hoje_str)
-    print(f"[{p}] base OK  clientes={len(clientes)}", flush=True)
-
-    cpf_set = set()
-    for cli in clientes.values():
-        for cpf, _papel, _nome in cli["cpfs"]:
-            cpf_set.add(cpf)
-
-    # busca dos CPFs deste posto em todos os bancos
     matches_por_cpf = defaultdict(list)
+    vencidas = {}  # (posto, idcliente) -> (qtd, valor)
+    if not cpf_set:
+        return matches_por_cpf, vencidas, rc
+
     t0 = time.time()
     for q in POSTOS_ORDER:
         if q not in engines:
@@ -473,7 +487,6 @@ def processar_posto(p, engines, pg, adm_inicio_str, hoje_str, meta, dry_run):
     for lst in matches_por_cpf.values():
         for m in lst:
             ids_ant_por_posto[m[8]].add(m[2])
-    vencidas = {}  # (posto, idcliente) -> (qtd, valor)
     t0 = time.time()
     for q, ids in sorted(ids_ant_por_posto.items()):
         if q not in engines:
@@ -489,11 +502,16 @@ def processar_posto(p, engines, pg, adm_inicio_str, hoje_str, meta, dry_run):
             traceback.print_exc()
             meta.error(q, f"[{p}] mens vencidas no banco {q}: {e}")
     print(f"[{p}] mens vencidas OK  elapsed={time.time()-t0:.1f}s", flush=True)
+    return matches_por_cpf, vencidas, rc
 
-    # montar linhas
+
+def montar_rows(clientes_iter, p, matches_por_cpf, vencidas):
+    """Monta (rows_principal, rows_detalhe) para os clientes dados. Quando
+    `matches_por_cpf`/`vencidas` vêm vazios (UPDATE leve de quem já existe), as
+    colunas de matrícula anterior saem zeradas — e o chamador as descarta."""
     rows_principal = []
     rows_detalhe = []
-    for cli in clientes.values():
+    for cli in clientes_iter:
         vistos_detalhe = set()
         for cpf, papel_novo, pessoa_nome in cli["cpfs"]:
             for (mcpf, papel_ant, idc_ant, iddep_ant, mat_ant, nome_ant,
@@ -533,34 +551,120 @@ def processar_posto(p, engines, pg, adm_inicio_str, hoje_str, meta, dry_run):
             len(cli["mat_ant"]["responsavel"]),
             venc_qtd, venc_val,
         ))
+    return rows_principal, rows_detalhe
 
-    if dry_run:
-        print(f"[{p}] [dry-run] principal={len(rows_principal)}  detalhe={len(rows_detalhe)}", flush=True)
+
+def _upsert_principal(cur, rows, set_cols):
+    """INSERT ... ON CONFLICT (posto, id_cliente) DO UPDATE só das `set_cols`.
+    Colunas fora de `set_cols` (ex.: as pesadas, no run leve) ficam intocadas."""
+    if not rows:
+        return
+    set_clause = ", ".join(f"{col}=EXCLUDED.{col}" for col in set_cols)
+    set_clause += ", atualizado_em=now()"
+    execute_values(
+        cur,
+        f"INSERT INTO kpi_vg_situacao_clientes ({', '.join(COLS_PRINCIPAL)}) VALUES %s "
+        f"ON CONFLICT (posto, id_cliente) DO UPDATE SET {set_clause}",
+        rows, page_size=1000,
+    )
+
+
+def _ids_existentes(pg, posto):
+    with pg.cursor() as c:
+        c.execute("SELECT id_cliente FROM kpi_vg_situacao_clientes WHERE posto = %s", (posto,))
+        return {int(r[0]) for r in c.fetchall()}
+
+
+def processar_posto(p, engines, pg, adm_inicio_str, hoje_str, meta, dry_run, modo):
+    """modo='full': recalcula o posto inteiro (DELETE+INSERT, busca CPF de todos).
+    modo='light': UPDATE só das colunas leves de quem já existe + busca CPF (cara)
+    apenas dos clientes NOVOS (sem linha ainda). Retorna (rc, n_clientes)."""
+    rc = 0
+    clientes = carregar_posto(engines[p], p, adm_inicio_str, hoje_str)
+    print(f"[{p}] base OK  clientes={len(clientes)}  modo={modo}", flush=True)
+
+    if modo == "full":
+        cpf_set = set()
+        for cli in clientes.values():
+            for cpf, _papel, _nome in cli["cpfs"]:
+                cpf_set.add(cpf)
+        matches, vencidas, rc = buscar_anteriores(engines, p, hoje_str, cpf_set, meta)
+        rows_principal, rows_detalhe = montar_rows(clientes.values(), p, matches, vencidas)
+
+        if dry_run:
+            print(f"[{p}] [dry-run full] principal={len(rows_principal)}  detalhe={len(rows_detalhe)}", flush=True)
+            return rc, len(clientes)
+
+        # grava o posto (delete + insert numa transação) e segue pro próximo
+        try:
+            with pg.cursor() as c:
+                c.execute("DELETE FROM kpi_vg_matriculas_anteriores WHERE posto = %s", (p,))
+                c.execute("DELETE FROM kpi_vg_situacao_clientes WHERE posto = %s", (p,))
+                if rows_principal:
+                    execute_values(
+                        c,
+                        f"INSERT INTO kpi_vg_situacao_clientes ({', '.join(COLS_PRINCIPAL)}) VALUES %s",
+                        rows_principal, page_size=1000,
+                    )
+                if rows_detalhe:
+                    execute_values(
+                        c,
+                        f"INSERT INTO kpi_vg_matriculas_anteriores ({', '.join(COLS_DETALHE)}) VALUES %s",
+                        rows_detalhe, page_size=1000,
+                    )
+            pg.commit()
+            print(f"[{p}] GRAVADO (full)  principal={len(rows_principal)}  detalhe={len(rows_detalhe)}", flush=True)
+        except Exception:
+            pg.rollback()
+            raise
         return rc, len(clientes)
 
-    # grava o posto (delete + insert numa transação) e segue pro próximo
+    # ── modo light ──────────────────────────────────────────────────────────
+    existentes_ids = _ids_existentes(pg, p)
+    novos      = [cli for idc, cli in clientes.items() if idc not in existentes_ids]
+    existentes = [cli for idc, cli in clientes.items() if idc in existentes_ids]
+
+    # busca CARA só dos CPFs dos clientes NOVOS
+    cpf_novos = set()
+    for cli in novos:
+        for cpf, _papel, _nome in cli["cpfs"]:
+            cpf_novos.add(cpf)
+    matches, vencidas, rc = buscar_anteriores(engines, p, hoje_str, cpf_novos, meta)
+
+    rows_novos, rows_detalhe_novos = montar_rows(novos, p, matches, vencidas)
+    # existentes: colunas pesadas saem zeradas, mas o ON CONFLICT só grava LIGHT_COLS
+    rows_existentes, _ = montar_rows(existentes, p, {}, {})
+
+    if dry_run:
+        print(f"[{p}] [dry-run light] update_leve={len(rows_existentes)}  "
+              f"novos={len(novos)} (busca CPF + insert)  detalhe_novos={len(rows_detalhe_novos)}", flush=True)
+        return rc, len(clientes)
+
     try:
         with pg.cursor() as c:
-            c.execute("DELETE FROM kpi_vg_matriculas_anteriores WHERE posto = %s", (p,))
-            c.execute("DELETE FROM kpi_vg_situacao_clientes WHERE posto = %s", (p,))
-            if rows_principal:
-                execute_values(
-                    c,
-                    f"INSERT INTO kpi_vg_situacao_clientes ({', '.join(COLS_PRINCIPAL)}) VALUES %s",
-                    rows_principal, page_size=1000,
+            # quem já existe: atualiza só as colunas leves (preserva matr. anteriores)
+            _upsert_principal(c, rows_existentes, LIGHT_COLS)
+            # novos: insere linha completa (leve + pesado)
+            _upsert_principal(c, rows_novos, LIGHT_COLS + HEAVY_COLS)
+            # detalhe só dos novos (não toca no detalhe de quem já existe)
+            if novos:
+                ids_novos = [cli["id_cliente"] for cli in novos]
+                c.execute(
+                    "DELETE FROM kpi_vg_matriculas_anteriores WHERE posto = %s AND id_cliente = ANY(%s)",
+                    (p, ids_novos),
                 )
-            if rows_detalhe:
+            if rows_detalhe_novos:
                 execute_values(
                     c,
                     f"INSERT INTO kpi_vg_matriculas_anteriores ({', '.join(COLS_DETALHE)}) VALUES %s",
-                    rows_detalhe, page_size=1000,
+                    rows_detalhe_novos, page_size=1000,
                 )
         pg.commit()
-        print(f"[{p}] GRAVADO  principal={len(rows_principal)}  detalhe={len(rows_detalhe)}", flush=True)
+        print(f"[{p}] GRAVADO (light)  update_leve={len(rows_existentes)}  "
+              f"novos={len(rows_novos)}  detalhe_novos={len(rows_detalhe_novos)}", flush=True)
     except Exception:
         pg.rollback()
         raise
-
     return rc, len(clientes)
 
 
@@ -572,10 +676,16 @@ def main():
                     help="não escreve no Postgres, só loga o que faria")
     ap.add_argument("--inicio", default=ADMISSAO_INICIO_DEFAULT,
                     help="data de admissão inicial em DD/MM/YYYY (default 01/01/2026)")
+    ap.add_argument("--modo", choices=["full", "light"], default="full",
+                    help="full: rebuild completo (cron 5h). "
+                         "light: UPDATE leve + busca CPF só de novos (cron 8-18h)")
     args = ap.parse_args()
 
+    modo = args.modo
     adm_inicio_str = args.inicio
     hoje_str = date.today().strftime("%d/%m/%Y")  # DD/MM/YYYY — view
+    print(f"== export_vg_situacao_clientes  modo={modo}  inicio={adm_inicio_str}"
+          f"{'  [dry-run]' if args.dry_run else ''} ==", flush=True)
 
     meta = ETLMeta("export_vg_situacao_clientes", "json_consolidado")
     conns = build_conns_from_env()
@@ -588,12 +698,14 @@ def main():
         else:
             print(f"[{p}] sem conn no .env — pulando", flush=True)
 
+    # light precisa do Postgres pra ler quem já existe (mesmo em dry-run, só leitura).
     pg = None
-    if not args.dry_run:
+    if not args.dry_run or modo == "light":
         pg = pg_conn()
-        with pg.cursor() as c:
-            c.execute(DDL)
-        pg.commit()
+        if not args.dry_run:
+            with pg.cursor() as c:
+                c.execute(DDL)
+            pg.commit()
 
     try:
         for p in POSTOS_ORDER:
@@ -602,7 +714,7 @@ def main():
             t0 = time.time()
             try:
                 rc_p, n_cli = processar_posto(
-                    p, engines, pg, adm_inicio_str, hoje_str, meta, args.dry_run)
+                    p, engines, pg, adm_inicio_str, hoje_str, meta, args.dry_run, modo)
                 rc = max(rc, rc_p)
                 meta.ok(p, clientes=n_cli)
                 print(f"[{p}] POSTO CONCLUÍDO  clientes={n_cli}  elapsed={time.time()-t0:.1f}s", flush=True)
