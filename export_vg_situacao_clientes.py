@@ -135,24 +135,38 @@ ORDER BY ls.[Data e hora]
 # até 2019). Cliente ativo (CanceladoANS=0): sem cap.
 # NB: usa CanceladoANS + DataCancelamento* — colunas presentes em TODOS os 13
 # bancos. (CancelamentoANS_Calculada só existe no banco A, não dá pra usar.)
+# Detalhe das 2 mensalidades vencidas MAIS ANTIGAS (por vencimento asc) de cada
+# matrícula — mesmo que haja 200 em aberto, só as 2 mais antigas entram. Devolve
+# id_receita, referência (mês da parcela) e valor (pro modal da Dívida ant.);
+# qtd/valor são derivados em Python. ROW_NUMBER particiona por cliente; o resto
+# dos filtros (PJ fora, cap no cancelamento) fica na subquery.
 SQL_MENS_VENCIDAS = """
-SELECT r.idCliente, COUNT(*) AS qtd, SUM(r.[Valor devido]) AS total
-FROM vw_Fin_Receita r
-JOIN cad_cliente c WITH (NOLOCK) ON c.idCliente = r.idCliente
-WHERE r.idCliente IN ({ids})
-  AND r.idContaTipo = 5
-  AND r.[Valor pago] IS NULL
-  AND r.[Data de cancelamento] IS NULL
-  AND r.[Data de vencimento] < ?
-  AND (c.tipo IS NULL OR c.tipo <> 'J')   -- plano PJ: dívida é do empregador
-  AND (
-        ISNULL(c.CanceladoANS, 0) = 0
-        OR COALESCE(c.DataCancelamentoANS, c.dataCanceladoANSmanual,
-                    c.DataCancelamentoANSabi, c.DataCancelamentoAuto) IS NULL
-        OR r.[Data de vencimento] <= COALESCE(c.DataCancelamentoANS, c.dataCanceladoANSmanual,
-                    c.DataCancelamentoANSabi, c.DataCancelamentoAuto)
-      )
-GROUP BY r.idCliente
+SELECT t.idCliente, t.id_receita, t.referencia, t.valor
+FROM (
+  SELECT r.idCliente,
+         r.idReceita AS id_receita,
+         r.[Data referencia] AS referencia,
+         r.[Valor devido] AS valor,
+         ROW_NUMBER() OVER (PARTITION BY r.idCliente
+                            ORDER BY r.[Data de vencimento] ASC) AS rn
+  FROM vw_Fin_Receita r
+  JOIN cad_cliente c WITH (NOLOCK) ON c.idCliente = r.idCliente
+  WHERE r.idCliente IN ({ids})
+    AND r.idContaTipo = 5
+    AND r.[Valor pago] IS NULL
+    AND r.[Data de cancelamento] IS NULL
+    AND r.[Data de vencimento] < ?
+    AND (c.tipo IS NULL OR c.tipo <> 'J')   -- plano PJ: dívida é do empregador
+    AND (
+          ISNULL(c.CanceladoANS, 0) = 0
+          OR COALESCE(c.DataCancelamentoANS, c.dataCanceladoANSmanual,
+                      c.DataCancelamentoANSabi, c.DataCancelamentoAuto) IS NULL
+          OR r.[Data de vencimento] <= COALESCE(c.DataCancelamentoANS, c.dataCanceladoANSmanual,
+                      c.DataCancelamentoANSabi, c.DataCancelamentoAuto)
+        )
+) t
+WHERE t.rn <= 2
+ORDER BY t.idCliente, t.referencia
 """
 
 # Busca de matrículas por CPF — espelha as 3 queries do endpoint
@@ -235,6 +249,7 @@ ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mat_ant_vencidas_q
 ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mat_ant_vencidas_valor NUMERIC(14,2) NOT NULL DEFAULT 0;
 ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS consultas_adesao_json  JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS consultas_futuras_json JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mat_ant_vencidas_json  JSONB NOT NULL DEFAULT '[]'::jsonb;
 CREATE INDEX IF NOT EXISTS ix_vg_sit_cli_data_admissao ON kpi_vg_situacao_clientes (data_admissao);
 CREATE INDEX IF NOT EXISTS ix_vg_sit_cli_posto ON kpi_vg_situacao_clientes (posto);
 CREATE TABLE IF NOT EXISTS kpi_vg_matriculas_anteriores (
@@ -273,6 +288,7 @@ COLS_PRINCIPAL = [
     "mat_ant_dependente_qtd", "mat_ant_responsavel_qtd",
     "mat_ant_vencidas_qtd", "mat_ant_vencidas_valor",
     "consultas_adesao_json", "consultas_futuras_json",
+    "mat_ant_vencidas_json",
 ]
 
 COLS_DETALHE = [
@@ -289,6 +305,7 @@ HEAVY_COLS = [
     "matriculas_anteriores_qtd", "mat_ant_titular_qtd",
     "mat_ant_dependente_qtd", "mat_ant_responsavel_qtd",
     "mat_ant_vencidas_qtd", "mat_ant_vencidas_valor",
+    "mat_ant_vencidas_json",
 ]
 
 # Colunas atualizadas no run leve (tudo menos a chave e as pesadas acima).
@@ -511,9 +528,9 @@ def buscar_anteriores(engines, p, hoje_str, cpf_set, meta):
     do ETL (cross-bank). Retorna (matches_por_cpf, vencidas, rc)."""
     rc = 0
     matches_por_cpf = defaultdict(list)
-    vencidas = {}  # (posto, idcliente) -> (qtd, valor)
+    vencidas_det = defaultdict(list)  # (posto, idcliente) -> [{id_receita, mes, valor}]
     if not cpf_set:
-        return matches_por_cpf, vencidas, rc
+        return matches_por_cpf, vencidas_det, rc
 
     t0 = time.time()
     for q in POSTOS_ORDER:
@@ -542,25 +559,33 @@ def buscar_anteriores(engines, p, hoje_str, cpf_set, meta):
         try:
             for chunk in chunked(sorted(ids)):
                 ids_sql = ",".join(str(i) for i in chunk)
-                for idc, qtd, total in run_query(
+                for idc, idrec, ref, valor in run_query(
                         engines[q], SQL_MENS_VENCIDAS.format(ids=ids_sql), (hoje_str,)):
-                    vencidas[(q, int(idc))] = (int(qtd or 0), float(total or 0))
+                    vencidas_det[(q, int(idc))].append({
+                        "id_receita": int(idrec) if idrec is not None else None,
+                        "mes": ref.strftime("%m/%Y") if hasattr(ref, "strftime") else None,
+                        "valor": float(valor or 0),
+                    })
         except Exception as e:
             rc = 2
             traceback.print_exc()
             meta.error(q, f"[{p}] mens vencidas no banco {q}: {e}")
     print(f"[{p}] mens vencidas OK  elapsed={time.time()-t0:.1f}s", flush=True)
-    return matches_por_cpf, vencidas, rc
+    return matches_por_cpf, vencidas_det, rc
 
 
-def montar_rows(clientes_iter, p, matches_por_cpf, vencidas):
+def montar_rows(clientes_iter, p, matches_por_cpf, vencidas_det):
     """Monta (rows_principal, rows_detalhe) para os clientes dados. Quando
-    `matches_por_cpf`/`vencidas` vêm vazios (UPDATE leve de quem já existe), as
-    colunas de matrícula anterior saem zeradas — e o chamador as descarta."""
+    `matches_por_cpf`/`vencidas_det` vêm vazios (UPDATE leve de quem já existe),
+    as colunas de matrícula anterior saem zeradas — e o chamador as descarta.
+
+    `vencidas_det`: (posto, idc) -> lista de {id_receita, mes, valor} (as 2
+    parcelas vencidas mais antigas, já sem PJ e capadas no cancelamento)."""
     rows_principal = []
     rows_detalhe = []
     for cli in clientes_iter:
         vistos_detalhe = set()
+        info_ant = {}  # (posto_ant, idc_ant) -> (mat_ant, nome_ant) p/ montar o json sem duplicar
         for cpf, papel_novo, pessoa_nome in cli["cpfs"]:
             for (mcpf, papel_ant, idc_ant, iddep_ant, mat_ant, nome_ant,
                  adm_ant, desat_ant, posto_ant, dcanc_ant, tipo_ant) in matches_por_cpf.get(cpf, ()):
@@ -568,23 +593,37 @@ def montar_rows(clientes_iter, p, matches_por_cpf, vencidas):
                 if posto_ant == p and idc_ant == cli["id_cliente"]:
                     continue
                 cli["mat_ant"][papel_ant].add((posto_ant, idc_ant))
+                info_ant[(posto_ant, idc_ant)] = (mat_ant, nome_ant)
                 key = (cpf, papel_ant, posto_ant, idc_ant, iddep_ant)
                 if key in vistos_detalhe:
                     continue
                 vistos_detalhe.add(key)
-                # plano PJ (tipo J): dívida é do empregador, não do beneficiário
+                # plano PJ (tipo J): dívida é do empregador — sem parcelas
                 ehpj = (tipo_ant or "").strip().upper() == "J"
-                vq, vv = (0, 0.0) if ehpj else vencidas.get((posto_ant, idc_ant), (0, 0.0))
+                det = [] if ehpj else vencidas_det.get((posto_ant, idc_ant), [])
                 rows_detalhe.append((
                     p, cli["id_cliente"], cpf, pessoa_nome, papel_novo,
                     posto_ant, idc_ant, iddep_ant, mat_ant, papel_ant,
                     nome_ant, adm_ant, desat_ant, dcanc_ant,
-                    vq, round(vv, 2),
+                    len(det), round(sum(d["valor"] for d in det), 2),
                 ))
 
         todas = cli["mat_ant"]["titular"] | cli["mat_ant"]["dependente"] | cli["mat_ant"]["responsavel"]
-        venc_qtd = sum(vencidas.get(t, (0, 0.0))[0] for t in todas)
-        venc_val = round(sum(vencidas.get(t, (0, 0.0))[1] for t in todas), 2)
+        # Dívida agregada (parcelas das 2 mais antigas de cada matrícula anterior)
+        venc_json = []
+        venc_qtd = 0
+        venc_val = 0.0
+        for t in todas:
+            det = vencidas_det.get(t, [])  # PJ não está no dict (query exclui)
+            mat_ant, nome_ant = info_ant.get(t, (None, None))
+            for d in det:
+                venc_json.append({
+                    "id_receita": d["id_receita"], "matricula": mat_ant,
+                    "nome": nome_ant, "mes": d["mes"], "valor": d["valor"],
+                })
+            venc_qtd += len(det)
+            venc_val += sum(d["valor"] for d in det)
+        venc_val = round(venc_val, 2)
         rows_principal.append((
             p, cli["id_cliente"], cli["matricula"], cli["nome"], cli["cpf"],
             cli["data_admissao"], cli["situacao"], cli["situacao_clube"],
@@ -601,6 +640,7 @@ def montar_rows(clientes_iter, p, matches_por_cpf, vencidas):
             len(cli["mat_ant"]["responsavel"]),
             venc_qtd, venc_val,
             Json(cli["consultas_adesao"]), Json(cli["consultas_futuras"]),
+            Json(venc_json),
         ))
     return rows_principal, rows_detalhe
 

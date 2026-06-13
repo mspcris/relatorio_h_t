@@ -90,6 +90,8 @@
     .badge-matant:hover{ background: #59359a; }
     .badge-consultas      { background: #28a745; color: #fff; cursor: pointer; }
     .badge-consultas:hover{ background: #1e7e34; }
+    .badge-divida      { background: #dc3545; color: #fff; cursor: pointer; }
+    .badge-divida:hover{ background: #b02a37; }
 
     #tblVG th { position: sticky; top: 0; background: #343a40; color: #fff; font-size: .8rem; white-space: nowrap; z-index: 2; }
     #tblVG td { font-size: .84rem; vertical-align: middle; white-space: nowrap; }
@@ -390,6 +392,34 @@
   </div>
 </div>
 
+<!-- Modal Dívida anterior (parcelas vencidas) -->
+<div class="modal fade" id="modalDivida" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalDividaTitulo">Parcelas vencidas — matrículas anteriores</h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <table class="table table-sm table-bordered" id="tblDivida">
+          <thead class="thead-dark">
+            <tr>
+              <th>ID Receita</th>
+              <th>Matrícula</th>
+              <th>Nome do cliente</th>
+              <th>Mês da parcela</th>
+              <th class="text-right">Valor da parcela</th>
+            </tr>
+          </thead>
+          <tbody id="tblDividaBody"></tbody>
+          <tfoot><tr class="font-weight-bold"><td colspan="4" class="text-right">Total</td><td class="text-right" id="tblDividaTotal">—</td></tr></tfoot>
+        </table>
+        <div id="modalDividaVazio" class="text-muted text-center py-3" style="display:none">Nenhuma parcela vencida registrada.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Loading -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="spinner-border spinner-lg text-primary" role="status"><span class="sr-only">Carregando...</span></div>
@@ -457,6 +487,32 @@
     }
     $('#modalConsultas').modal('show');
   }
+  // Modal da dívida anterior — parcelas vencidas já vêm na linha (JSON), sem fetch
+  function abrirModalDivida(posto, id){
+    const c = DATA.find(x => x.posto === posto && String(x.id_cliente) === String(id));
+    const lista = (c && c.mat_ant_vencidas_json) || [];
+    $id('modalDividaTitulo').textContent =
+      'Parcelas vencidas — matrículas anteriores' + (c && c.nome ? ` — ${c.nome}` : '');
+    const body = $id('tblDividaBody');
+    if (!lista.length){
+      body.innerHTML = '';
+      $id('tblDivida').style.display = 'none';
+      $id('modalDividaVazio').style.display = 'block';
+    } else {
+      $id('tblDivida').style.display = '';
+      $id('modalDividaVazio').style.display = 'none';
+      body.innerHTML = lista.map(x => `<tr>
+        <td>${escHtml(x.id_receita != null ? x.id_receita : '—')}</td>
+        <td>${escHtml(x.matricula || '—')}</td>
+        <td>${escHtml(x.nome || '—')}</td>
+        <td>${escHtml(x.mes || '—')}</td>
+        <td class="text-right">${fmtMoeda(x.valor)}</td>
+      </tr>`).join('');
+      const total = lista.reduce((s, x) => s + (x.valor || 0), 0);
+      $id('tblDividaTotal').textContent = fmtMoeda(total);
+    }
+    $('#modalDivida').modal('show');
+  }
 
   // ── Init ──
   function init(){
@@ -510,6 +566,11 @@
     // Clique no badge de consultas (adesão/futuras) → modal com médico/data/hora
     $('#tblBody').on('click', '.badge-consultas', function(){
       abrirModalConsultas(this.dataset.posto, this.dataset.id, this.dataset.tipo);
+    });
+
+    // Clique na dívida anterior → modal com as parcelas vencidas
+    $('#tblBody').on('click', '.badge-divida', function(){
+      abrirModalDivida(this.dataset.posto, this.dataset.id);
     });
 
     // Aba Gráficos: desenha quando ela fica visível (canvas oculto sai com tamanho 0)
@@ -862,7 +923,7 @@
         <td class="text-center">${c.consultas_futuras_qtd ? `<span class="badge badge-consultas" data-posto="${c.posto}" data-id="${c.id_cliente}" data-tipo="futuras" title="Ver médico, data e hora">${c.consultas_futuras_qtd} <i class="fas fa-search-plus ml-1"></i></span>` : '—'}</td>
         <td class="text-center">${matAnt}</td>
         <td class="text-right">${c.mat_ant_vencidas_qtd > 0
-          ? `<span class="badge badge-inadimplente" title="${c.mat_ant_vencidas_qtd} mensalidade(s) vencida(s) em aberto">${c.mat_ant_vencidas_qtd} · ${fmtMoeda(c.mat_ant_vencidas_valor)}</span>`
+          ? `<span class="badge badge-divida" data-posto="${c.posto}" data-id="${c.id_cliente}" title="Ver parcelas vencidas">${c.mat_ant_vencidas_qtd} · ${fmtMoeda(c.mat_ant_vencidas_valor)} <i class="fas fa-search-plus ml-1"></i></span>`
           : '—'}</td>
       </tr>`;
     }).join('');

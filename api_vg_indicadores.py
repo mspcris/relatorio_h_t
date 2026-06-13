@@ -97,7 +97,7 @@ def vg_listar_clientes():
                mat_ant_dependente_qtd, mat_ant_responsavel_qtd,
                mat_ant_vencidas_qtd,
                mat_ant_vencidas_valor::float8 AS mat_ant_vencidas_valor,
-               consultas_adesao_json, consultas_futuras_json
+               consultas_adesao_json, consultas_futuras_json, mat_ant_vencidas_json
         FROM kpi_vg_situacao_clientes
         WHERE posto = ANY(%s)
           AND data_admissao BETWEEN %s AND %s
