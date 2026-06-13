@@ -406,13 +406,14 @@
             <tr>
               <th>ID Receita</th>
               <th>Matrícula</th>
-              <th>Nome do cliente</th>
+              <th>Nome na matrícula</th>
+              <th>Papel</th>
               <th>Mês da parcela</th>
               <th class="text-right">Valor da parcela</th>
             </tr>
           </thead>
           <tbody id="tblDividaBody"></tbody>
-          <tfoot><tr class="font-weight-bold"><td colspan="4" class="text-right">Total</td><td class="text-right" id="tblDividaTotal">—</td></tr></tfoot>
+          <tfoot><tr class="font-weight-bold"><td colspan="5" class="text-right">Total</td><td class="text-right" id="tblDividaTotal">—</td></tr></tfoot>
         </table>
         <div id="modalDividaVazio" class="text-muted text-center py-3" style="display:none">Nenhuma parcela vencida registrada.</div>
       </div>
@@ -515,25 +516,41 @@
     const lista = (c && c._divida_lista) || [];
     $id('modalDividaTitulo').textContent =
       'Parcelas vencidas — matrículas anteriores' + (c && c.nome ? ` — ${c.nome}` : '');
+    $('#modalDivida').modal('show');
+    // papel (titular/dependente/responsável) da pessoa em cada matrícula anterior
+    // vem do detalhe de matrículas (cruzado por posto+matrícula).
+    fetch(`/api/vg/situacao_clientes/${posto}/${id}/matriculas`, { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(res => {
+        const papel = {};
+        (res.matriculas || []).forEach(m => { papel[`${m.posto_anterior}|${m.matricula_anterior}`] = m.papel_anterior; });
+        renderDivida(lista, papel);
+      })
+      .catch(() => renderDivida(lista, {}));
+  }
+
+  function renderDivida(lista, papelMap){
     const body = $id('tblDividaBody');
     if (!lista.length){
       body.innerHTML = '';
       $id('tblDivida').style.display = 'none';
       $id('modalDividaVazio').style.display = 'block';
-    } else {
-      $id('tblDivida').style.display = '';
-      $id('modalDividaVazio').style.display = 'none';
-      body.innerHTML = lista.map(x => `<tr>
+      return;
+    }
+    $id('tblDivida').style.display = '';
+    $id('modalDividaVazio').style.display = 'none';
+    body.innerHTML = lista.map(x => {
+      const papel = (papelMap && papelMap[`${x.posto}|${x.matricula}`]) || '—';
+      return `<tr>
         <td>${escHtml(x.id_receita != null ? x.id_receita : '—')}</td>
         <td>${escHtml(x.matricula || '—')}${x.posto ? ` <span class="badge badge-secondary" title="${escHtml(NOMES_POSTOS[x.posto]||x.posto)}">${escHtml(x.posto)}</span>` : ''}</td>
         <td>${escHtml(x.nome || '—')}</td>
+        <td>${escHtml(papel)}</td>
         <td>${escHtml(x.mes || '—')}</td>
         <td class="text-right">${fmtMoeda(x.valor)}</td>
-      </tr>`).join('');
-      const total = lista.reduce((s, x) => s + (x.valor || 0), 0);
-      $id('tblDividaTotal').textContent = fmtMoeda(total);
-    }
-    $('#modalDivida').modal('show');
+      </tr>`;
+    }).join('');
+    $id('tblDividaTotal').textContent = fmtMoeda(lista.reduce((s, x) => s + (x.valor || 0), 0));
   }
 
   // ── Init ──
