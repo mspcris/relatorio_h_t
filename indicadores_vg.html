@@ -88,6 +88,8 @@
     .badge-sim         { background: #28a745; color: #fff; }
     .badge-matant      { background: #6f42c1; color: #fff; cursor: pointer; }
     .badge-matant:hover{ background: #59359a; }
+    .badge-consultas      { background: #28a745; color: #fff; cursor: pointer; }
+    .badge-consultas:hover{ background: #1e7e34; }
 
     #tblVG th { position: sticky; top: 0; background: #343a40; color: #fff; font-size: .8rem; white-space: nowrap; z-index: 2; }
     #tblVG td { font-size: .84rem; vertical-align: middle; white-space: nowrap; }
@@ -361,6 +363,32 @@
   </div>
 </div>
 
+<!-- Modal Consultas (adesão / futuras) -->
+<div class="modal fade" id="modalConsultas" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalConsultasTitulo">Consultas</h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <table class="table table-sm table-bordered" id="tblConsultas">
+          <thead class="thead-dark">
+            <tr>
+              <th>Data e hora</th>
+              <th>Médico</th>
+              <th>Especialização</th>
+              <th>Serviço</th>
+            </tr>
+          </thead>
+          <tbody id="tblConsultasBody"></tbody>
+        </table>
+        <div id="modalConsultasVazio" class="text-muted text-center py-3" style="display:none">Nenhuma consulta registrada.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Loading -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="spinner-border spinner-lg text-primary" role="status"><span class="sr-only">Carregando...</span></div>
@@ -398,6 +426,35 @@
   }
   function fmtMoeda(v){
     return (v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+  }
+  function fmtDataHora(s){
+    if (!s) return '—';
+    const [d, h] = String(s).split(' ');
+    const p = (d||'').split('-');
+    return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}${h ? ' ' + h : ''}` : s;
+  }
+  // Modal de consultas (adesão/futuras) — dados já vêm na linha (JSON), sem fetch
+  function abrirModalConsultas(posto, id, tipo){
+    const c = DATA.find(x => x.posto === posto && String(x.id_cliente) === String(id));
+    const lista = !c ? [] : (tipo === 'adesao' ? (c.consultas_adesao_json || []) : (c.consultas_futuras_json || []));
+    $id('modalConsultasTitulo').textContent =
+      (tipo === 'adesao' ? 'Consultas no dia da adesão' : 'Consultas futuras') + (c && c.nome ? ` — ${c.nome}` : '');
+    const body = $id('tblConsultasBody');
+    if (!lista.length){
+      body.innerHTML = '';
+      $id('tblConsultas').style.display = 'none';
+      $id('modalConsultasVazio').style.display = 'block';
+    } else {
+      $id('tblConsultas').style.display = '';
+      $id('modalConsultasVazio').style.display = 'none';
+      body.innerHTML = lista.map(x => `<tr>
+        <td>${escHtml(fmtDataHora(x.data_hora))}</td>
+        <td>${escHtml(x.medico || '—')}</td>
+        <td>${escHtml(x.especializacao || '—')}</td>
+        <td>${escHtml(x.servico || '—')}</td>
+      </tr>`).join('');
+    }
+    $('#modalConsultas').modal('show');
   }
 
   // ── Init ──
@@ -447,6 +504,11 @@
     // Clique no badge de matrículas anteriores → modal
     $('#tblBody').on('click', '.badge-matant', function(){
       abrirModalMatAnt(this.dataset.posto, this.dataset.id, this.dataset.nome);
+    });
+
+    // Clique no badge de consultas (adesão/futuras) → modal com médico/data/hora
+    $('#tblBody').on('click', '.badge-consultas', function(){
+      abrirModalConsultas(this.dataset.posto, this.dataset.id, this.dataset.tipo);
     });
 
     // Aba Gráficos: desenha quando ela fica visível (canvas oculto sai com tamanho 0)
@@ -778,8 +840,8 @@
         <td>${escHtml(c.telefone_whatsapp||'—')}</td>
         <td>${escHtml(c.telefone_celular||'—')}</td>
         <td class="text-center">${c.dependentes_qtd||0}</td>
-        <td class="text-center">${c.consultas_dia_adesao_qtd ? `<span class="badge badge-sim">${c.consultas_dia_adesao_qtd}</span>` : '—'}</td>
-        <td class="text-center">${c.consultas_futuras_qtd ? `<span class="badge badge-sim">${c.consultas_futuras_qtd}</span>` : '—'}</td>
+        <td class="text-center">${c.consultas_dia_adesao_qtd ? `<span class="badge badge-consultas" data-posto="${c.posto}" data-id="${c.id_cliente}" data-tipo="adesao" title="Ver médico, data e hora">${c.consultas_dia_adesao_qtd} <i class="fas fa-search-plus ml-1"></i></span>` : '—'}</td>
+        <td class="text-center">${c.consultas_futuras_qtd ? `<span class="badge badge-consultas" data-posto="${c.posto}" data-id="${c.id_cliente}" data-tipo="futuras" title="Ver médico, data e hora">${c.consultas_futuras_qtd} <i class="fas fa-search-plus ml-1"></i></span>` : '—'}</td>
         <td class="text-center">${matAnt}</td>
         <td class="text-right">${c.mat_ant_vencidas_qtd > 0
           ? `<span class="badge badge-inadimplente" title="${c.mat_ant_vencidas_qtd} mensalidade(s) vencida(s) em aberto">${c.mat_ant_vencidas_qtd} · ${fmtMoeda(c.mat_ant_vencidas_valor)}</span>`

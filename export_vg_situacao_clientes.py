@@ -55,7 +55,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 import psycopg2
-from psycopg2.extras import execute_values
+from psycopg2.extras import execute_values, Json
 
 from export_governanca import build_conns_from_env, make_engine
 from etl_meta import ETLMeta
@@ -101,40 +101,56 @@ FROM cad_clientedependente d WITH (NOLOCK)
 WHERE d.idcliente IN ({ids})
 """
 
+# Consultas futuras (>= hoje, não faturado) — DETALHE (data/hora, médico, etc.).
+# A qtd é derivada do len em Python; o detalhe vira JSON na linha (modal do front).
 SQL_CONSULTAS_FUTURAS = """
-SELECT ls.idcliente, COUNT(*) AS qtd
+SELECT ls.idcliente, ls.[Data e hora], ls.[Médico], ls.[Especialização], ls.[Servico]
 FROM vw_Cad_LancamentoServicos ls
 WHERE ls.[Situação] = 'normal'
   AND ls.LancadoNoFaturamento = 'Não'
   AND ls.classe LIKE 'consult%'
   AND ls.[Data e hora] >= ?
   AND ls.idcliente IN ({ids})
-GROUP BY ls.idcliente
+ORDER BY ls.[Data e hora]
 """
 
-# Consultas por dia desde o início da janela — comparadas em Python com a
-# dataadmissao de cada cliente. SEM filtro LancadoNoFaturamento: consulta
-# passada já faturada continua contando como "usou o plano no dia da adesão".
+# Consultas desde o início da janela — DETALHE; filtradas em Python pelo dia da
+# admissão de cada cliente. SEM filtro LancadoNoFaturamento: consulta passada já
+# faturada continua contando como "usou o plano no dia da adesão".
 SQL_CONSULTAS_POR_DIA = """
-SELECT ls.idcliente, CONVERT(date, ls.[Data e hora]) AS dia, COUNT(*) AS qtd
+SELECT ls.idcliente, ls.[Data e hora], ls.[Médico], ls.[Especialização], ls.[Servico]
 FROM vw_Cad_LancamentoServicos ls
 WHERE ls.[Situação] = 'normal'
   AND ls.classe LIKE 'consult%'
   AND ls.[Data e hora] >= ?
   AND ls.idcliente IN ({ids})
-GROUP BY ls.idcliente, CONVERT(date, ls.[Data e hora])
+ORDER BY ls.[Data e hora]
 """
 
 # Mensalidades vencidas EM ABERTO de uma matrícula (qualquer posto):
-# vencimento já passou, sem pagamento e não cancelada.
+# vencimento já passou, sem pagamento e a própria mensalidade não cancelada.
+# CLIENTE CANCELADO: a dívida só vai até a data de cancelamento — mensalidades
+# geradas DEPOIS do cancelamento não deveriam existir e não entram na conta
+# (ex.: Guilherme cancelou 25/09/2018; conta até a ref. que venceu 02/09, não
+# até 2019). Cliente ativo (CanceladoANS=0): sem cap.
+# NB: usa CanceladoANS + DataCancelamento* — colunas presentes em TODOS os 13
+# bancos. (CancelamentoANS_Calculada só existe no banco A, não dá pra usar.)
 SQL_MENS_VENCIDAS = """
 SELECT r.idCliente, COUNT(*) AS qtd, SUM(r.[Valor devido]) AS total
 FROM vw_Fin_Receita r
+JOIN cad_cliente c WITH (NOLOCK) ON c.idCliente = r.idCliente
 WHERE r.idCliente IN ({ids})
   AND r.idContaTipo = 5
   AND r.[Valor pago] IS NULL
   AND r.[Data de cancelamento] IS NULL
   AND r.[Data de vencimento] < ?
+  AND (
+        ISNULL(c.CanceladoANS, 0) = 0
+        OR COALESCE(c.DataCancelamentoANS, c.dataCanceladoANSmanual,
+                    c.DataCancelamentoANSabi, c.DataCancelamentoAuto) IS NULL
+        OR r.[Data de vencimento] <= COALESCE(c.DataCancelamentoANS, c.dataCanceladoANSmanual,
+                    c.DataCancelamentoANSabi, c.DataCancelamentoAuto)
+      )
 GROUP BY r.idCliente
 """
 
@@ -207,6 +223,8 @@ CREATE TABLE IF NOT EXISTS kpi_vg_situacao_clientes (
 ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mensalidade NUMERIC(14,2);
 ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mat_ant_vencidas_qtd INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS mat_ant_vencidas_valor NUMERIC(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS consultas_adesao_json  JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE kpi_vg_situacao_clientes ADD COLUMN IF NOT EXISTS consultas_futuras_json JSONB NOT NULL DEFAULT '[]'::jsonb;
 CREATE INDEX IF NOT EXISTS ix_vg_sit_cli_data_admissao ON kpi_vg_situacao_clientes (data_admissao);
 CREATE INDEX IF NOT EXISTS ix_vg_sit_cli_posto ON kpi_vg_situacao_clientes (posto);
 CREATE TABLE IF NOT EXISTS kpi_vg_matriculas_anteriores (
@@ -243,6 +261,7 @@ COLS_PRINCIPAL = [
     "matriculas_anteriores_qtd", "mat_ant_titular_qtd",
     "mat_ant_dependente_qtd", "mat_ant_responsavel_qtd",
     "mat_ant_vencidas_qtd", "mat_ant_vencidas_valor",
+    "consultas_adesao_json", "consultas_futuras_json",
 ]
 
 COLS_DETALHE = [
@@ -333,6 +352,16 @@ def run_query(engine, sql, params=()):
         return cur.fetchall()
 
 
+def _consulta_dict(dh, med, esp, serv):
+    """Linha de consulta (adesão ou futura) pro JSON do modal."""
+    return {
+        "data_hora": dh.strftime("%Y-%m-%d %H:%M") if hasattr(dh, "strftime") else (str(dh) if dh else None),
+        "medico": clean_str(med, 200),
+        "especializacao": clean_str(esp, 120),
+        "servico": clean_str(serv, 200),
+    }
+
+
 # ── Fase 1: base por posto ──────────────────────────────────────────────────
 
 def carregar_posto(engine, posto, adm_inicio_str, hoje_str):
@@ -363,6 +392,7 @@ def carregar_posto(engine, posto, adm_inicio_str, hoje_str):
                 "receitas_qtd": 0,
                 "dependentes_qtd": 0,
                 "consultas_dia_adesao_qtd": 0, "consultas_futuras_qtd": 0,
+                "consultas_adesao": [], "consultas_futuras": [],
                 "mat_ant": {"titular": set(), "dependente": set(), "responsavel": set()},
                 "cpfs": [],  # (cpf, papel_na_nova, pessoa_nome)
             }
@@ -404,21 +434,25 @@ def carregar_posto(engine, posto, adm_inicio_str, hoje_str):
             if cpf_pesquisavel(dcpf):
                 cli["cpfs"].append((dcpf, "dependente", clean_str(dnome, 200)))
 
-    # consultas futuras (>= hoje, não faturado)
+    # consultas futuras (>= hoje, não faturado) — detalhe
     for chunk in chunked(ids):
         ids_sql = ",".join(str(i) for i in chunk)
-        for idc, qtd in run_query(engine, SQL_CONSULTAS_FUTURAS.format(ids=ids_sql), (hoje_str,)):
+        for idc, dh, med, esp, serv in run_query(engine, SQL_CONSULTAS_FUTURAS.format(ids=ids_sql), (hoje_str,)):
             cli = clientes.get(int(idc))
             if cli:
-                cli["consultas_futuras_qtd"] = int(qtd or 0)
+                cli["consultas_futuras"].append(_consulta_dict(dh, med, esp, serv))
 
-    # consultas no dia da adesão
+    # consultas no dia da adesão — detalhe (filtra pelo dia da admissão)
     for chunk in chunked(ids):
         ids_sql = ",".join(str(i) for i in chunk)
-        for idc, dia, qtd in run_query(engine, SQL_CONSULTAS_POR_DIA.format(ids=ids_sql), (adm_inicio_str,)):
+        for idc, dh, med, esp, serv in run_query(engine, SQL_CONSULTAS_POR_DIA.format(ids=ids_sql), (adm_inicio_str,)):
             cli = clientes.get(int(idc))
-            if cli and cli["data_admissao"] and to_date(dia) == cli["data_admissao"]:
-                cli["consultas_dia_adesao_qtd"] += int(qtd or 0)
+            if cli and cli["data_admissao"] and to_date(dh) == cli["data_admissao"]:
+                cli["consultas_adesao"].append(_consulta_dict(dh, med, esp, serv))
+
+    for cli in clientes.values():
+        cli["consultas_futuras_qtd"] = len(cli["consultas_futuras"])
+        cli["consultas_dia_adesao_qtd"] = len(cli["consultas_adesao"])
 
     return clientes
 
@@ -550,6 +584,7 @@ def montar_rows(clientes_iter, p, matches_por_cpf, vencidas):
             len(cli["mat_ant"]["dependente"]),
             len(cli["mat_ant"]["responsavel"]),
             venc_qtd, venc_val,
+            Json(cli["consultas_adesao"]), Json(cli["consultas_futuras"]),
         ))
     return rows_principal, rows_detalhe
 
