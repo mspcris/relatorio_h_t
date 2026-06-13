@@ -144,6 +144,7 @@ WHERE r.idCliente IN ({ids})
   AND r.[Valor pago] IS NULL
   AND r.[Data de cancelamento] IS NULL
   AND r.[Data de vencimento] < ?
+  AND (c.tipo IS NULL OR c.tipo <> 'J')   -- plano PJ: dívida é do empregador
   AND (
         ISNULL(c.CanceladoANS, 0) = 0
         OR COALESCE(c.DataCancelamentoANS, c.dataCanceladoANSmanual,
@@ -161,27 +162,36 @@ GROUP BY r.idCliente
 # Anchieta também existe no banco de Campinho). O JOIN sis_empresa filtra
 # cada banco só pras matrículas da PRÓPRIA filial (emp.idEndereco =
 # c.idendereco) — sem ele, a mesma matrícula aparece 13x, uma por banco.
+# Cada query traz também a data de cancelamento (COALESCE das variantes) e o
+# `tipo` da MATRÍCULA anterior (F=física, J=jurídica). Em PJ a dívida é do
+# empregador, não do beneficiário — zerada na montagem.
+_CANCEL_COALESCE = ("COALESCE(c.DataCancelamentoANS, c.dataCanceladoANSmanual, "
+                    "c.DataCancelamentoANSabi, c.DataCancelamentoAuto)")
+
 SQL_CPF_TITULAR = """
-SELECT c.cpf, c.idcliente, c.matricula, c.nome, c.dataadmissao, c.desativado
+SELECT c.cpf, c.idcliente, c.matricula, c.nome, c.dataadmissao, c.desativado,
+       {cancel} AS data_cancel, c.tipo
 FROM cad_cliente c WITH (NOLOCK)
 JOIN sis_empresa emp ON emp.idEndereco = c.idendereco
-WHERE c.cpf IN ({cpfs})
-"""
+WHERE c.cpf IN ({{cpfs}})
+""".format(cancel=_CANCEL_COALESCE)
 
 SQL_CPF_DEPENDENTE = """
-SELECT d.cpf, d.idcliente, d.iddependente, c.matricula, d.nome, d.dataadmissao, d.desativado
+SELECT d.cpf, d.idcliente, d.iddependente, c.matricula, d.nome, d.dataadmissao, d.desativado,
+       {cancel} AS data_cancel, c.tipo
 FROM cad_clientedependente d WITH (NOLOCK)
 JOIN cad_cliente c WITH (NOLOCK) ON c.idcliente = d.idcliente
 JOIN sis_empresa emp ON emp.idEndereco = c.idendereco
-WHERE d.cpf IN ({cpfs})
-"""
+WHERE d.cpf IN ({{cpfs}})
+""".format(cancel=_CANCEL_COALESCE)
 
 SQL_CPF_RESPONSAVEL = """
-SELECT c.responsavelcpf AS cpf, c.idcliente, c.matricula, c.nome, c.dataadmissao, c.desativado
+SELECT c.responsavelcpf AS cpf, c.idcliente, c.matricula, c.nome, c.dataadmissao, c.desativado,
+       {cancel} AS data_cancel, c.tipo
 FROM cad_cliente c WITH (NOLOCK)
 JOIN sis_empresa emp ON emp.idEndereco = c.idendereco
-WHERE c.responsavelcpf IN ({cpfs})
-"""
+WHERE c.responsavelcpf IN ({{cpfs}})
+""".format(cancel=_CANCEL_COALESCE)
 
 
 # ── Postgres ────────────────────────────────────────────────────────────────
@@ -248,6 +258,7 @@ CREATE TABLE IF NOT EXISTS kpi_vg_matriculas_anteriores (
 );
 ALTER TABLE kpi_vg_matriculas_anteriores ADD COLUMN IF NOT EXISTS mens_vencidas_qtd INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE kpi_vg_matriculas_anteriores ADD COLUMN IF NOT EXISTS mens_vencidas_valor NUMERIC(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE kpi_vg_matriculas_anteriores ADD COLUMN IF NOT EXISTS data_cancelamento_anterior DATE;
 CREATE INDEX IF NOT EXISTS ix_vg_mat_ant_cliente ON kpi_vg_matriculas_anteriores (posto, id_cliente);
 """
 
@@ -268,7 +279,7 @@ COLS_DETALHE = [
     "posto", "id_cliente", "cpf", "pessoa_nome", "papel_na_nova",
     "posto_anterior", "id_cliente_anterior", "id_dependente_anterior",
     "matricula_anterior", "papel_anterior", "nome_anterior",
-    "data_admissao_anterior", "desativado_anterior",
+    "data_admissao_anterior", "desativado_anterior", "data_cancelamento_anterior",
     "mens_vencidas_qtd", "mens_vencidas_valor",
 ]
 
@@ -462,27 +473,30 @@ def carregar_posto(engine, posto, adm_inicio_str, hoje_str):
 def buscar_cpfs_no_posto(engine, posto_alvo, cpfs):
     """Roda as 3 queries (titular/dependente/responsável) pro conjunto de CPFs.
     Retorna lista de matches: (cpf, papel, idcliente, iddependente, matricula,
-    nome, dataadmissao, desativado, posto_alvo)."""
+    nome, dataadmissao, desativado, posto_alvo, data_cancel, tipo)."""
     matches = []
     for chunk in chunked(sorted(cpfs)):
         marks = ",".join("?" for _ in chunk)
         params = tuple(chunk)
-        for cpf, idc, mat, nome, adm, desat in run_query(
+        for cpf, idc, mat, nome, adm, desat, dcanc, tipo in run_query(
                 engine, SQL_CPF_TITULAR.format(cpfs=marks), params):
             matches.append((clean_str(cpf, 20), "titular", int(idc), None,
                             clean_str(mat, 20), clean_str(nome, 200),
-                            to_date(adm), to_bool(desat), posto_alvo))
-        for cpf, idc, iddep, mat, nome, adm, desat in run_query(
+                            to_date(adm), to_bool(desat), posto_alvo,
+                            to_date(dcanc), clean_str(tipo, 4)))
+        for cpf, idc, iddep, mat, nome, adm, desat, dcanc, tipo in run_query(
                 engine, SQL_CPF_DEPENDENTE.format(cpfs=marks), params):
             matches.append((clean_str(cpf, 20), "dependente", int(idc),
                             int(iddep) if iddep is not None else None,
                             clean_str(mat, 20), clean_str(nome, 200),
-                            to_date(adm), to_bool(desat), posto_alvo))
-        for cpf, idc, mat, nome, adm, desat in run_query(
+                            to_date(adm), to_bool(desat), posto_alvo,
+                            to_date(dcanc), clean_str(tipo, 4)))
+        for cpf, idc, mat, nome, adm, desat, dcanc, tipo in run_query(
                 engine, SQL_CPF_RESPONSAVEL.format(cpfs=marks), params):
             matches.append((clean_str(cpf, 20), "responsavel", int(idc), None,
                             clean_str(mat, 20), clean_str(nome, 200),
-                            to_date(adm), to_bool(desat), posto_alvo))
+                            to_date(adm), to_bool(desat), posto_alvo,
+                            to_date(dcanc), clean_str(tipo, 4)))
     return matches
 
 
@@ -549,7 +563,7 @@ def montar_rows(clientes_iter, p, matches_por_cpf, vencidas):
         vistos_detalhe = set()
         for cpf, papel_novo, pessoa_nome in cli["cpfs"]:
             for (mcpf, papel_ant, idc_ant, iddep_ant, mat_ant, nome_ant,
-                 adm_ant, desat_ant, posto_ant) in matches_por_cpf.get(cpf, ()):
+                 adm_ant, desat_ant, posto_ant, dcanc_ant, tipo_ant) in matches_por_cpf.get(cpf, ()):
                 # exclui a própria matrícula nova
                 if posto_ant == p and idc_ant == cli["id_cliente"]:
                     continue
@@ -558,11 +572,13 @@ def montar_rows(clientes_iter, p, matches_por_cpf, vencidas):
                 if key in vistos_detalhe:
                     continue
                 vistos_detalhe.add(key)
-                vq, vv = vencidas.get((posto_ant, idc_ant), (0, 0.0))
+                # plano PJ (tipo J): dívida é do empregador, não do beneficiário
+                ehpj = (tipo_ant or "").strip().upper() == "J"
+                vq, vv = (0, 0.0) if ehpj else vencidas.get((posto_ant, idc_ant), (0, 0.0))
                 rows_detalhe.append((
                     p, cli["id_cliente"], cpf, pessoa_nome, papel_novo,
                     posto_ant, idc_ant, iddep_ant, mat_ant, papel_ant,
-                    nome_ant, adm_ant, desat_ant,
+                    nome_ant, adm_ant, desat_ant, dcanc_ant,
                     vq, round(vv, 2),
                 ))
 

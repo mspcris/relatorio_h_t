@@ -140,11 +140,12 @@ def vg_matriculas_anteriores(posto, id_cliente):
                matricula_anterior, papel_anterior, nome_anterior,
                to_char(data_admissao_anterior, 'YYYY-MM-DD') AS data_admissao_anterior,
                desativado_anterior,
+               to_char(data_cancelamento_anterior, 'YYYY-MM-DD') AS data_cancelamento_anterior,
                mens_vencidas_qtd,
                mens_vencidas_valor::float8 AS mens_vencidas_valor
         FROM kpi_vg_matriculas_anteriores
         WHERE posto = %s AND id_cliente = %s
-        ORDER BY pessoa_nome, papel_anterior, data_admissao_anterior
+        ORDER BY data_cancelamento_anterior DESC NULLS LAST, pessoa_nome, matricula_anterior
     """
     try:
         conn = _pg()
