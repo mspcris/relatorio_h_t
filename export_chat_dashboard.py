@@ -77,6 +77,7 @@ pela Camila por ociosidade" = matriz_bf[inbound_atendido_humano][auto_timeout]
 """
 
 import json
+import math
 import os
 import re
 import sys
@@ -130,14 +131,36 @@ def fetch(c, sql, params=None):
         return cur.fetchall()
 
 
+def _clean_nan(o):
+    """Troca float NaN/Inf por None recursivamente.
+
+    json.dump(default=str) NÃO intercepta floats NaN/Inf (só tipos desconhecidos),
+    e escreve os literais `NaN`/`Infinity` — válidos pro json do Python, mas
+    REJEITADOS pelo JSON.parse do navegador (não são JSON válido). Resultado:
+    o fetch baixa 200 OK, o r.json() estoura e o front cai no fallback → 404
+    enganoso. Saneamos no ponto único de escrita. (numpy.float64 é subclasse de
+    float, então isinstance pega np.nan também.)
+    """
+    if isinstance(o, float):
+        return None if (math.isnan(o) or math.isinf(o)) else o
+    if isinstance(o, dict):
+        return {k: _clean_nan(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_clean_nan(v) for v in o]
+    return o
+
+
 def atomic_write_json(path, payload, compact=False):
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    payload = _clean_nan(payload)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         if compact:
-            json.dump(payload, f, ensure_ascii=False, separators=(",", ":"), default=str)
+            json.dump(payload, f, ensure_ascii=False, separators=(",", ":"),
+                      default=str, allow_nan=False)
         else:
-            json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
+            json.dump(payload, f, ensure_ascii=False, indent=2,
+                      default=str, allow_nan=False)
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
