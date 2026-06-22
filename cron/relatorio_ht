@@ -109,6 +109,10 @@ TZ=America/Sao_Paulo
 # Regenera o JSON inteiro (12 meses passado + 90 dias futuro) varrendo os 13 postos em paralelo.
 30   2 * * * root flock -n /opt/relatorio_h_t/locks/preagendamento.lock  /opt/relatorio_h_t/export_preagendamento.sh >>/var/log/relatorio_h_t/preagendamento.log 2>&1
 
+# Custos com IA — snapshot horário do custo da OpenAI por projeto (Costs API; só GET, sem custo) — criado em 2026-06-22
+# Mês fechado não é sobrescrito. Requer OPENAI_ADMIN_KEY (sk-admin) + CUSTOS_IA_DIR no /opt/relatorio_h_t/.env.
+17   * * * * root flock -n /opt/relatorio_h_t/locks/export_custos_ia.lock /opt/relatorio_h_t/export_custos_ia.sh >>/var/log/relatorio_h_t/export_custos_ia.log 2>&1
+
 # Painel monitorarrobos — pré-agrega push/email/tef/wpp num único JSON — */5 min — criado em 2026-04-26
 # Substitui a agregação ao vivo no Flask (que estava timing out a 73s na tabela ind_email de 268k linhas).
 */5  * * * * root flock -n /opt/relatorio_h_t/locks/indicadores_painel.lock /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/export_indicadores_painel.py >>/var/log/relatorio_h_t/indicadores_painel.log 2>&1
