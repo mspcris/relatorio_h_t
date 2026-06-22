@@ -321,7 +321,7 @@ jobs:
           set -euxo pipefail
           DEST=/opt/camim-auth
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
-          for f in app.py auth_db.py auth_routes.py servicos_db.py migrate_usuarios.py ia_router_openai.py llm_client_openai.py llm_client_anthropic.py llm_client.py ia_context_builder.py wpp_cobranca_routes.py wpp_cobranca_db.py wpp_cobranca_sql.py alarmes_db.py alarmes_routes.py kpi_receita_despesa_api.py kpi_registry.py api_fin_despesas.py medico_novo_routes.py medico_falta_routes.py api_vg_indicadores.py; do
+          for f in app.py auth_db.py auth_routes.py servicos_db.py migrate_usuarios.py ia_router_openai.py llm_client_openai.py llm_client_anthropic.py llm_client.py ia_context_builder.py wpp_cobranca_routes.py wpp_cobranca_db.py wpp_cobranca_sql.py alarmes_db.py alarmes_routes.py kpi_receita_despesa_api.py kpi_registry.py api_fin_despesas.py medico_novo_routes.py medico_falta_routes.py api_vg_indicadores.py custos_ia.py custos_ia_routes.py; do
             if [ -f "$f" ]; then
               echo "Copiando $f → $DEST"
               rsync -rlvz \
@@ -758,3 +758,52 @@ jobs:
             sudo systemctl restart ia-groq.service
             sudo systemctl status ia-groq.service --no-pager || true
           "
+
+      # ================================================================
+      # 11) Limpeza LEVE de disco (roda em TODO deploy)
+      # ================================================================
+      # NOTA: este projeto NÃO usa Docker — o deploy é rsync + venvs + systemd
+      # + nginx. Portanto NÃO há imagens/containers/build-cache pra limpar
+      # (nada de `docker images dangling`/`docker builder prune`). Os reais
+      # acumuladores de disco aqui são:
+      #   (a) o cache de wheels do pip — todo deploy roda `pip install` em
+      #       4 venvs (/opt/relatorio_h_t/.venv, /opt/camim-auth/venv,
+      #       /opt/wpp-campanhas/venv, /opt/agenda_f3/venv), e o pip guarda
+      #       os downloads em ~/.cache/pip de cada usuário que instala.
+      #   (b) os logs do journald dos serviços (camim-auth, wpp-campanhas,
+      #       agenda_f3, ia-groq, nginx), que crescem sem limite.
+      #
+      # Tudo com `|| true` / best-effort: limpeza NUNCA pode quebrar o deploy.
+      # NÃO removemos venvs, .env, JSONs do ETL nem dados — só caches/logs
+      # que são regenerados sob demanda (equivalente seguro ao que seria a
+      # limpeza "leve" de Docker em outros projetos; nada de apagar volumes).
+      # ================================================================
+      - name: Limpeza leve de disco (cache pip + journald)
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "
+            echo '--- Limpeza leve de disco ---'
+
+            # (a) Cache de wheels do pip do usuário de deploy (regenerado
+            #     no próximo pip install conforme necessário). Cobre os venvs
+            #     instalados como \$SSH_USER (relatorio_h_t, camim-auth, wpp).
+            rm -rf ~/.cache/pip/* 2>/dev/null || true
+
+            # (a') Cache do pip do www-data (agenda_f3 instala como www-data).
+            #      Best-effort: só limpa se o deploy user tiver sudo -n.
+            sudo -n rm -rf /var/www/.cache/pip/* 2>/dev/null || true
+
+            # (b) Mantém só 14 dias de log do journald, libera o resto.
+            #     Requer privilégio — best-effort via sudo -n; se faltar
+            #     NOPASSWD, apenas avisa e segue (não quebra o deploy).
+            sudo -n journalctl --vacuum-time=14d 2>/dev/null \
+              && echo 'journald vacuum OK (14d)' \
+              || echo 'WARN: journald vacuum requer sudo NOPASSWD — rode manualmente: sudo journalctl --vacuum-time=14d'
+
+            # Mostra o espaço livre depois da limpeza (referência rápida nos logs).
+            df -h / | tail -n +1 || true
+            echo '--- Limpeza concluída ---'
+          " || true

@@ -91,6 +91,13 @@ except Exception as _e:
     import logging
     logging.getLogger(__name__).error("vg_indicadores_bp não carregado: %s", _e)
 
+try:
+    from custos_ia_routes import custos_ia_bp
+    app.register_blueprint(custos_ia_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("custos_ia_bp não carregado: %s", _e)
+
 PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
 
 # Mapeamento page_key → template para controle de acesso por página
@@ -163,6 +170,11 @@ _TEMPLATE_TO_PAGINA = {
     "acesso_avancado.html":             "acesso_avancado",
     "acesso_avancado":                  "acesso_avancado",
     "/acesso_avancado":                 "acesso_avancado",
+    # Custos com IA — mesmo padrão do acesso_avancado: page_key PROPOSITALMENTE
+    # fora de public.servicos → só all_pages acessa, e admin não pode liberar avulso.
+    "custos_ia.html":                   "custos_ia",
+    "custos_ia":                        "custos_ia",
+    "/custos_ia":                       "custos_ia",
     # Itens de mais_servicos.html (internos)
     "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
     "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",
@@ -1011,6 +1023,7 @@ def render_protected_page(page_name, **extra_vars):
         USER_EMAIL=email,
         USER_POSTOS=json.dumps(postos),
         USER_IS_ADMIN=is_admin,
+        USER_ALL_PAGES=all_pages,
         USER_HAS_OPENAI=has_openai,
         **extra_vars,
     )
@@ -1359,6 +1372,13 @@ def h_acesso_avancado():
     # Restrito a all_pages: o page_key 'acesso_avancado' nunca está em paginas
     # de usuários comuns, então render_protected_page já devolve 403 pra eles.
     return render_protected_page("acesso_avancado.html")
+
+@app.get('/custos_ia')
+@app.get('/custos_ia.html')
+def h_custos_ia():
+    # Restrito a all_pages (mesmo mecanismo do acesso_avancado): page_key
+    # 'custos_ia' fora do catálogo → 403 para quem não tem all_pages.
+    return render_protected_page("custos_ia.html")
 
 @app.get('/higienizacao.html')
 def h_higienizacao():
