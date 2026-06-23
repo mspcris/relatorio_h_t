@@ -259,6 +259,34 @@ def api_sub_invoice_del(sub_id):
     return jsonify({"ok": True, "month": month})
 
 
+@custos_ia_bp.get("/api/custos-ia/limits")
+def api_limits_get():
+    if not _require_admin():
+        return _deny()
+    limits = custos_ia.load_limits()
+    # rótulos de projeto (lógicos) dos últimos meses, para o editor
+    labels = custos_ia.project_matrix(custos_ia.DEFAULT_HISTORY_MONTHS)["labels"]
+    # inclui projetos que já têm limite mesmo que não apareçam na janela
+    for k in limits["projects"]:
+        if k not in labels:
+            labels.append(k)
+    return jsonify({"ok": True, "providers": limits["providers"],
+                    "projects": limits["projects"], "project_labels": labels})
+
+
+@custos_ia_bp.post("/api/custos-ia/limits")
+def api_limits_set():
+    if not _require_admin():
+        return _deny()
+    body = request.get_json(silent=True) or {}
+    providers = body.get("providers") or {}
+    projects = body.get("projects") or {}
+    if not isinstance(providers, dict) or not isinstance(projects, dict):
+        return jsonify({"ok": False, "error": "envie 'providers' e 'projects' como objetos"}), 400
+    saved = custos_ia.save_limits(providers, projects)
+    return jsonify({"ok": True, "limits": saved})
+
+
 @custos_ia_bp.post("/api/custos-ia/month/close")
 def api_month_close():
     email = _require_admin()

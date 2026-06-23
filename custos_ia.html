@@ -42,6 +42,12 @@
     .cell-zero { color:#cbd3da; }
     .editor-box { background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:.75rem; }
     .month-inline { width:auto; display:inline-block; }
+    .ci-lim { opacity:.92; font-size:.78rem; display:block; }
+    .lim-over { box-shadow:0 0 0 3px #dc3545 !important; }
+    .lim-near { box-shadow:0 0 0 3px #ffc107 !important; }
+    tr.row-over td { background:#fdecef !important; }
+    .pill-over { background:#dc3545; color:#fff; font-size:.7rem; padding:.05rem .4rem; border-radius:999px; }
+    .pill-ok { color:#28a745; }
   </style>
 </head>
 
@@ -94,6 +100,7 @@
                 <button id="btnBackfill" class="btn btn-sm btn-outline-primary" title="Buscar os últimos 6 meses da OpenAI">
                   <i class="fas fa-history"></i><span class="ci-spin"><i class="fas fa-spinner fa-spin"></i></span> 6 meses
                 </button>
+                <button id="btnLimits" class="btn btn-sm btn-outline-danger" title="Definir tetos de gasto"><i class="fas fa-bell"></i> Limites</button>
                 <button id="btnClose" class="btn btn-sm btn-outline-secondary"></button>
               </div>
             </div>
@@ -105,30 +112,31 @@
         <div class="container-fluid">
 
           <div id="globalMsg"></div>
+          <div id="alertsBanner"></div>
 
           <!-- Resumo -->
           <div class="row">
             <div class="col-lg-3 col-6">
-              <div class="small-box bg-gradient-success ci-card">
-                <div class="inner"><h3 class="ci-money" id="cardTotal">US$ 0,00</h3><p>Total do mês</p></div>
+              <div class="small-box bg-gradient-success ci-card" id="cardTotalBox">
+                <div class="inner"><h3 class="ci-money" id="cardTotal">US$ 0,00</h3><p>Total do mês</p><small class="ci-lim" id="limTotal"></small></div>
                 <div class="icon"><i class="fas fa-coins"></i></div>
               </div>
             </div>
             <div class="col-lg-3 col-6">
-              <div class="small-box bg-gradient-info ci-card">
-                <div class="inner"><h3 class="ci-money" id="cardOpenai">US$ 0,00</h3><p>OpenAI (API)</p></div>
+              <div class="small-box bg-gradient-info ci-card" id="cardOpenaiBox">
+                <div class="inner"><h3 class="ci-money" id="cardOpenai">US$ 0,00</h3><p>OpenAI (API)</p><small class="ci-lim" id="limOpenai"></small></div>
                 <div class="icon"><i class="fas fa-robot"></i></div>
               </div>
             </div>
             <div class="col-lg-3 col-6">
-              <div class="small-box bg-gradient-warning ci-card">
-                <div class="inner"><h3 class="ci-money" id="cardGroq">US$ 0,00</h3><p id="cardGroqLbl">Groq</p></div>
+              <div class="small-box bg-gradient-warning ci-card" id="cardGroqBox">
+                <div class="inner"><h3 class="ci-money" id="cardGroq">US$ 0,00</h3><p id="cardGroqLbl">Groq</p><small class="ci-lim" id="limGroq"></small></div>
                 <div class="icon"><i class="fas fa-bolt"></i></div>
               </div>
             </div>
             <div class="col-lg-3 col-6">
-              <div class="small-box bg-gradient-secondary ci-card">
-                <div class="inner"><h3 class="ci-money" id="cardSubs">US$ 0,00</h3><p>Assinaturas</p></div>
+              <div class="small-box bg-gradient-secondary ci-card" id="cardSubsBox">
+                <div class="inner"><h3 class="ci-money" id="cardSubs">US$ 0,00</h3><p>Assinaturas</p><small class="ci-lim" id="limSubs"></small></div>
                 <div class="icon"><i class="fas fa-receipt"></i></div>
               </div>
             </div>
@@ -149,9 +157,9 @@
             <div class="card-body">
               <p class="ci-muted mb-2">Junta OpenAI + Groq pelo nome unificado. Projetos zerados ocultos. <a href="#" id="lnkVinculo">Editar vínculos OpenAI ↔ Groq</a>.</p>
               <table class="table table-sm table-hover ci-tbl mb-0">
-                <thead><tr><th>Projeto</th><th class="text-right">OpenAI</th><th class="text-right">Groq</th><th class="text-right">Total</th></tr></thead>
+                <thead><tr><th>Projeto</th><th class="text-right">OpenAI</th><th class="text-right">Groq</th><th class="text-right">Total</th><th class="text-right">Limite</th></tr></thead>
                 <tbody id="uniRows"></tbody>
-                <tfoot><tr><td>Total</td><td class="text-right ci-money" id="uniOpenai">—</td><td class="text-right ci-money" id="uniGroq">—</td><td class="text-right ci-money" id="uniTotal">—</td></tr></tfoot>
+                <tfoot><tr><td>Total</td><td class="text-right ci-money" id="uniOpenai">—</td><td class="text-right ci-money" id="uniGroq">—</td><td class="text-right ci-money" id="uniTotal">—</td><td></td></tr></tfoot>
               </table>
             </div>
           </div>
@@ -164,6 +172,25 @@
               <table class="table table-sm ci-tbl"><thead><tr><th>Fornecedor</th><th>Projeto (original)</th><th>Nome unificado</th></tr></thead><tbody id="vincRows"></tbody></table>
               <button class="btn btn-sm btn-success" id="btnSaveVinc"><i class="fas fa-save"></i> Salvar vínculos</button>
               <button class="btn btn-sm btn-link text-muted" id="btnCloseVinc">fechar</button>
+            </div>
+          </div>
+
+          <!-- Editor de limites (oculto) -->
+          <div class="card ci-card card-outline card-danger" id="cardLimits" style="display:none">
+            <div class="card-header"><h3 class="card-title"><i class="fas fa-bell text-danger"></i> Limites / tetos de gasto (US$/mês)</h3></div>
+            <div class="card-body">
+              <h6>Por provedor</h6>
+              <div class="form-row">
+                <div class="form-group col-md-3"><label class="ci-muted mb-0">Total (geral)</label><input type="number" step="1" min="0" class="form-control form-control-sm" id="limProvTotal" placeholder="ex.: 600"></div>
+                <div class="form-group col-md-3"><label class="ci-muted mb-0">OpenAI</label><input type="number" step="1" min="0" class="form-control form-control-sm" id="limProvOpenai" placeholder="ex.: 400"></div>
+                <div class="form-group col-md-3"><label class="ci-muted mb-0">Groq</label><input type="number" step="1" min="0" class="form-control form-control-sm" id="limProvGroq" placeholder="ex.: 150"></div>
+                <div class="form-group col-md-3"><label class="ci-muted mb-0">Assinaturas</label><input type="number" step="1" min="0" class="form-control form-control-sm" id="limProvSubs" placeholder="ex.: 250"></div>
+              </div>
+              <h6 class="mt-2">Por projeto (mês)</h6>
+              <p class="ci-muted mb-1">Deixe em branco para "sem teto". Use o nome unificado (ex.: CRM = US$ 20).</p>
+              <table class="table table-sm ci-tbl mb-1" style="max-width:520px"><tbody id="limProjRows"></tbody></table>
+              <button class="btn btn-sm btn-danger" id="btnSaveLimits"><i class="fas fa-save"></i> Salvar limites</button>
+              <button class="btn btn-sm btn-link text-muted" id="btnCloseLimits">fechar</button>
             </div>
           </div>
 
@@ -318,19 +345,46 @@ function renderUnified(rows){
   const tb = $("uniRows"); tb.innerHTML = "";
   const vis = (rows||[]).filter(r => !isZero(r.total_usd));
   let so=0, sg=0, st=0;
-  if(!vis.length) tb.innerHTML = `<tr><td colspan="4" class="ci-muted">— sem dados —</td></tr>`;
+  if(!vis.length) tb.innerHTML = `<tr><td colspan="5" class="ci-muted">— sem dados —</td></tr>`;
   else for(const r of vis){
     so+=r.openai_usd; sg+=r.groq_usd; st+=r.total_usd;
+    const limCell = (r.limit!=null)
+      ? `<span class="${r.over?'pill-over':''}">${fmtUSD(r.limit)}${r.over?' ⚠':''}</span>`
+      : `<span class="ci-muted">—</span>`;
     const tr = document.createElement("tr");
+    if(r.over) tr.className = "row-over";
     tr.innerHTML = `<td>${escapeHtml(r.label)}</td>
       <td class="text-right ci-money ${isZero(r.openai_usd)?'cell-zero':''}">${isZero(r.openai_usd)?'–':fmtUSD(r.openai_usd)}</td>
       <td class="text-right ci-money ${isZero(r.groq_usd)?'cell-zero':''}">${isZero(r.groq_usd)?'–':fmtUSD(r.groq_usd)}</td>
-      <td class="text-right ci-money"><b>${fmtUSD(r.total_usd)}</b></td>`;
+      <td class="text-right ci-money"><b>${fmtUSD(r.total_usd)}</b></td>
+      <td class="text-right">${limCell}</td>`;
     tb.appendChild(tr);
   }
   $("uniOpenai").textContent = fmtUSD(so);
   $("uniGroq").textContent = fmtUSD(sg);
   $("uniTotal").textContent = fmtUSD(st);
+}
+
+function setCardLimit(boxId, smallId, st){
+  const box = $(boxId), sm = $(smallId);
+  box.classList.remove("lim-over","lim-near");
+  if(!st || st.limit==null){ sm.textContent = ""; return; }
+  sm.textContent = `limite ${fmtUSD(st.limit)} · ${st.pct}%` + (st.over ? "  ⚠ ESTOUROU" : "");
+  if(st.over) box.classList.add("lim-over");
+  else if(st.near) box.classList.add("lim-near");
+}
+function renderProviderLimits(p){
+  if(!p){ ["limTotal","limOpenai","limGroq","limSubs"].forEach(i=>$(i).textContent=""); return; }
+  setCardLimit("cardTotalBox","limTotal",p.total);
+  setCardLimit("cardOpenaiBox","limOpenai",p.openai);
+  setCardLimit("cardGroqBox","limGroq",p.groq);
+  setCardLimit("cardSubsBox","limSubs",p.subs);
+}
+function renderAlerts(alerts){
+  const b = $("alertsBanner");
+  if(!alerts || !alerts.length){ b.innerHTML = ""; return; }
+  const lis = alerts.map(a=>`<li><b>${escapeHtml(a.name)}</b> (${a.scope}): gastou <b>${fmtUSD(a.spent)}</b> · teto ${fmtUSD(a.limit)}</li>`).join("");
+  b.innerHTML = `<div class="alert alert-danger py-2 px-3"><i class="fas fa-exclamation-triangle"></i> <b>${alerts.length} estouro(s) de limite neste mês:</b><ul class="mb-0">${lis}</ul></div>`;
 }
 
 function renderMatrix(mx){
@@ -408,6 +462,8 @@ function renderDashboard(d){
   msg($("groqBanner"), (!g.projects||!g.projects.length)&&g.error ? `<i class="fas fa-image"></i> ${escapeHtml(g.error)}` : "", "");
 
   renderUnified(d.unified);
+  renderProviderLimits((d.limits||{}).providers);
+  renderAlerts(d.alerts);
   renderMatrix(d.matrix || {months:[],labels:[],cells:{},totals:{}});
   renderHistory(d.history || [], d.month);
   renderSubs(s.edit || []);
@@ -537,6 +593,46 @@ $("btnSaveVinc").addEventListener("click", async ()=>{
   });
   try{ await api("/mapping",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({labels})});
     $("cardVinculo").style.display="none"; msg($("globalMsg"),"Vínculos salvos.","ok"); await load(CUR_MONTH);
+  }catch(e){ msg($("globalMsg"),"Erro: "+escapeHtml(e.message),"err"); }
+});
+
+// ── Limites ──
+$("btnLimits").addEventListener("click", openLimits);
+$("btnCloseLimits").addEventListener("click", ()=>{$("cardLimits").style.display="none";});
+async function openLimits(){
+  try{
+    const j = await api("/limits");
+    $("limProvTotal").value  = j.providers.total  ?? "";
+    $("limProvOpenai").value = j.providers.openai ?? "";
+    $("limProvGroq").value   = j.providers.groq   ?? "";
+    $("limProvSubs").value   = j.providers.subs   ?? "";
+    const tb = $("limProjRows"); tb.innerHTML="";
+    const labels = j.project_labels || [];
+    if(!labels.length) tb.innerHTML = `<tr><td class="ci-muted">Sem projetos ainda.</td></tr>`;
+    for(const lab of labels){
+      const tr=document.createElement("tr"); tr.className="lim-proj-row"; tr.dataset.label=lab;
+      tr.innerHTML = `<td>${escapeHtml(lab)}</td>
+        <td style="width:140px"><input type="number" step="0.01" min="0" class="form-control form-control-sm text-right lp-val" value="${j.projects[lab]??''}" placeholder="sem teto"></td>`;
+      tb.appendChild(tr);
+    }
+    $("cardLimits").style.display="block";
+    $("cardLimits").scrollIntoView({behavior:"smooth"});
+  }catch(e){ msg($("globalMsg"),"Erro: "+escapeHtml(e.message),"err"); }
+}
+$("btnSaveLimits").addEventListener("click", async ()=>{
+  const providers = {
+    total:  $("limProvTotal").value,
+    openai: $("limProvOpenai").value,
+    groq:   $("limProvGroq").value,
+    subs:   $("limProvSubs").value,
+  };
+  const projects = {};
+  document.querySelectorAll("#limProjRows .lim-proj-row").forEach(r=>{
+    const v = r.querySelector(".lp-val").value;
+    if(v!=="") projects[r.dataset.label] = v;
+  });
+  try{ await api("/limits",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({providers,projects})});
+    $("cardLimits").style.display="none"; msg($("globalMsg"),"Limites salvos.","ok"); await load(CUR_MONTH);
   }catch(e){ msg($("globalMsg"),"Erro: "+escapeHtml(e.message),"err"); }
 });
 

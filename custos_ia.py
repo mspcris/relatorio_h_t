@@ -696,6 +696,50 @@ def _sub_months_with_data() -> set:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Limites / tetos (por provedor e por projeto lógico) — alerta ao estourar
+# ─────────────────────────────────────────────────────────────────────────────
+def _limits_path() -> str:
+    return _path("limits.json")
+
+
+def load_limits() -> dict:
+    """{"providers": {"openai": 400, "groq": null, "subs": null, "total": null},
+        "projects": {"crm": 20, ...}}  — valores em US$/mês; null/ausente = sem teto."""
+    d = _read_json(_limits_path()) or {}
+    return {"providers": d.get("providers", {}) or {}, "projects": d.get("projects", {}) or {}}
+
+
+def _num_or_none(v):
+    try:
+        return round(float(v), 4) if v not in (None, "", "null") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def save_limits(providers: dict, projects: dict) -> dict:
+    data = {
+        "providers": {k: _num_or_none(v) for k, v in (providers or {}).items()
+                      if _num_or_none(v) is not None},
+        "projects": {str(k): _num_or_none(v) for k, v in (projects or {}).items()
+                     if _num_or_none(v) is not None},
+    }
+    _write_json_atomic(_limits_path(), data)
+    return data
+
+
+def _limit_status(spent: float, limit) -> dict:
+    spent = round(float(spent or 0.0), 4)
+    lim = limit if isinstance(limit, (int, float)) else None
+    return {
+        "spent": spent,
+        "limit": lim,
+        "pct": round(spent / lim * 100, 1) if lim else None,
+        "over": bool(lim is not None and spent > lim),
+        "near": bool(lim is not None and not (spent > lim) and spent >= 0.8 * lim),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Dashboard
 # ─────────────────────────────────────────────────────────────────────────────
 def _empty_openai(month: str) -> dict:
@@ -764,7 +808,37 @@ def load_dashboard(month: Optional[str] = None) -> dict:
     groq = load_groq_snapshot(month) or _empty_groq(month)
     subs = subscriptions_for(month)
     subs_t = round(sum(float(s.get("amount_usd") or 0.0) for s in subs), 4)
-    total = round((openai.get("total_usd") or 0.0) + (groq.get("total_usd") or 0.0) + subs_t, 4)
+    openai_t = round(float(openai.get("total_usd") or 0.0), 4)
+    groq_t = round(float(groq.get("total_usd") or 0.0), 4)
+    total = round(openai_t + groq_t + subs_t, 4)
+
+    limits = load_limits()
+    plim = limits["providers"]
+    provider_limits = {
+        "openai": _limit_status(openai_t, plim.get("openai")),
+        "groq": _limit_status(groq_t, plim.get("groq")),
+        "subs": _limit_status(subs_t, plim.get("subs")),
+        "total": _limit_status(total, plim.get("total")),
+    }
+
+    unified = unify_month(month)
+    projlim = limits["projects"]
+    alerts = []
+    for row in unified:
+        lim = projlim.get(row["label"])
+        st = _limit_status(row["total_usd"], lim)
+        row["limit"] = st["limit"]
+        row["over"] = st["over"]
+        row["near"] = st["near"]
+        if st["over"]:
+            alerts.append({"scope": "projeto", "name": row["label"],
+                           "spent": row["total_usd"], "limit": st["limit"]})
+    _PROV_LABEL = {"openai": "OpenAI", "groq": "Groq", "subs": "Assinaturas", "total": "Total"}
+    for k, st in provider_limits.items():
+        if st["over"]:
+            alerts.append({"scope": "provedor", "name": _PROV_LABEL[k],
+                           "spent": st["spent"], "limit": st["limit"]})
+
     return {
         "generated_at": _now_iso(),
         "month": month,
@@ -775,9 +849,11 @@ def load_dashboard(month: Optional[str] = None) -> dict:
         "providers": {"openai": openai, "groq": groq},
         "subscriptions": {"items": subs, "total_usd": subs_t,
                           "edit": subscriptions_edit(month)},
-        "unified": unify_month(month),
+        "unified": unified,
         "matrix": project_matrix(DEFAULT_HISTORY_MONTHS),
         "history": monthly_history(DEFAULT_HISTORY_MONTHS),
+        "limits": {"providers": provider_limits, "raw": limits},
+        "alerts": alerts,
     }
 
 
