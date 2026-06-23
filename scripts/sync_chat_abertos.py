@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
 """Gera o JSON enxuto dos tickets de chat em aberto para o widget da home.
 
-Lê o export completo do relatorio_h_t (chat_dashboard.json) e escreve um arquivo
-pequeno com só os tickets ABERTOS, do mais antigo para o mais novo, contendo
-apenas os campos que o widget mostra (número, cliente, fila, data de abertura).
+Lê um export do relatorio_h_t e escreve um JSON pequeno com só os tickets
+ABERTOS, do mais antigo para o mais novo, contendo apenas os campos que o widget
+mostra (número, cliente, fila, data de abertura).
+
+Aceita os DOIS formatos de export (e prefere o leve, mais fresco):
+  - ETL leve  chat_abertos.json    -> {"meta":{...}, "abertos":[{n,c,f,b,d}, ...]}
+    (roda a cada 15 min; é a fonte preferida)
+  - ETL pesado chat_dashboard.json -> {"meta":{...}, "tickets_index":{id:{n,c,f,b,d,z}}}
+    (roda a cada 2h; usado como fallback se o leve não existir)
 
 O widget da intranet lê o resultado same-origin em /media/chat_abertos.json.
-Como o kpi.camim.com.br roda em outra VM, rode este script onde o export existe
-(ou após copiá-lo) e entregue o --out no volume `media` da intranet.
-
-Uso típico (cron):
-    python3 sync_chat_abertos.py \
-        --src /opt/relatorio_h_t/json_consolidado/chat_dashboard.json \
-        --out /opt/intranet/media/chat_abertos.json
-
-Campos do export (tickets_index[id]):
-    n=número  c=cliente  f=fila  d=abertura "DD/MM/YYYY HH:MM"  z=fechamento
-    z == "aberto"  ->  ticket ainda aberto.
+Como o kpi roda em outra VM, este script roda no KPI (via SSH forced-command) e
+devolve o JSON no stdout (--out -).
 """
 import argparse
 import json
@@ -40,8 +37,10 @@ def parse_br(s):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--src", default="/opt/relatorio_h_t/json_consolidado/chat_dashboard.json",
-                    help="export completo do chat (chat_dashboard.json)")
+    ap.add_argument("--src", default="/opt/relatorio_h_t/json_consolidado/chat_abertos.json",
+                    help="JSON leve de abertos (ETL */15) — fonte preferida")
+    ap.add_argument("--fallback-src", default="/opt/relatorio_h_t/json_consolidado/chat_dashboard.json",
+                    help="export completo (ETL 2h); usado se --src não existir")
     ap.add_argument("--out", default="-",
                     help="JSON enxuto de saída ('-' = stdout, default)")
     ap.add_argument("--limit", type=int, default=80,
@@ -50,18 +49,24 @@ def main():
                     help="inclui também tickets outbound (default: só inbound)")
     args = ap.parse_args()
 
+    src = args.src if os.path.exists(args.src) else args.fallback_src
     try:
-        with open(args.src, encoding="utf-8") as fh:
+        with open(src, encoding="utf-8") as fh:
             data = json.load(fh)
     except (OSError, ValueError) as e:
-        print(f"erro lendo {args.src}: {e}", file=sys.stderr)
+        print(f"erro lendo {src}: {e}", file=sys.stderr)
         return 1
 
-    idx = data.get("tickets_index") or {}
+    # ETL leve já entrega só os abertos numa lista; o pesado traz tudo em
+    # tickets_index (dict) e precisa do filtro z == "aberto".
+    if isinstance(data.get("abertos"), list):
+        candidates = data["abertos"]
+    else:
+        idx = data.get("tickets_index") or {}
+        candidates = [t for t in idx.values() if t.get("z") == "aberto"]
+
     abertos = []
-    for t in idx.values():
-        if t.get("z") != "aberto":
-            continue
+    for t in candidates:
         if not args.include_outbound and not str(t.get("b") or "").startswith("inbound_"):
             continue
         ts = parse_br(t.get("d"))
