@@ -3,7 +3,7 @@
 export_chat_dashboard.py — Dashboard do chat camim_chat_production.
 
 Janela: últimos 90 dias (env CHAT_DASH_DIAS).
-Cron:   a cada 120 min.
+Cron:   a cada 15 min (/etc/cron.d/relatorio_ht; era 120 min até 2026-06-23).
 Saída:  json_consolidado/chat_dashboard.json
 
 ═══════════════════════════════════════════════════════════════════════════════
