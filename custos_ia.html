@@ -43,8 +43,14 @@
     .editor-box { background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:.75rem; }
     .month-inline { width:auto; display:inline-block; }
     .ci-lim { opacity:.92; font-size:.78rem; display:block; }
+    .lim-chip { display:inline-block; padding:.05rem .4rem; border-radius:5px; font-weight:700; font-size:.72rem; margin-right:.3rem; }
+    .lim-chip.over { background:#dc3545; color:#fff; }
+    .lim-chip.near { background:#fff3cd; color:#7a5c00; border:1px solid #e0a800; }
+    .lim-chip.ok   { background:rgba(255,255,255,.85); color:#1e7e34; }
+    .lim-sub { opacity:.9; }
+    /* anel: vermelho (estouro) visível em qualquer card; "perto" usa laranja escuro */
     .lim-over { box-shadow:0 0 0 3px #dc3545 !important; }
-    .lim-near { box-shadow:0 0 0 3px #ffc107 !important; }
+    .lim-near { box-shadow:0 0 0 3px #c77800 !important; }
     tr.row-over td { background:#fdecef !important; }
     .pill-over { background:#dc3545; color:#fff; font-size:.7rem; padding:.05rem .4rem; border-radius:999px; }
     .pill-ok { color:#28a745; }
@@ -373,10 +379,17 @@ function renderUnified(rows){
 function setCardLimit(boxId, smallId, st){
   const box = $(boxId), sm = $(smallId);
   box.classList.remove("lim-over","lim-near");
-  if(!st || st.limit==null){ sm.textContent = ""; return; }
-  sm.textContent = `limite ${fmtUSD(st.limit)} · ${st.pct}%` + (st.over ? "  ⚠ ESTOUROU" : "");
-  if(st.over) box.classList.add("lim-over");
-  else if(st.near) box.classList.add("lim-near");
+  if(!st || st.limit==null){ sm.innerHTML = ""; return; }
+  const teto = `<span class="lim-sub">teto ${fmtUSD(st.limit)} · ${st.pct}%</span>`;
+  if(st.over){
+    sm.innerHTML = `<span class="lim-chip over">⚠ ESTOUROU</span> ${teto}`;
+    box.classList.add("lim-over");
+  } else if(st.near){
+    sm.innerHTML = `<span class="lim-chip near">⚠ perto do teto</span> ${teto}`;
+    box.classList.add("lim-near");
+  } else {
+    sm.innerHTML = `<span class="lim-chip ok">✓ dentro</span> ${teto}`;
+  }
 }
 function renderProviderLimits(p){
   if(!p){ ["limTotal","limOpenai","limGroq","limSubs"].forEach(i=>$(i).textContent=""); return; }
