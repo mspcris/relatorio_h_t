@@ -364,6 +364,59 @@ def extract_groq_from_image(image_bytes: bytes, mime: str = "image/png",
     return _groq_snapshot(projetos, source="print", month=valid_month(month))
 
 
+_GROQ_AMOUNT_RE = re.compile(r"\$\s*([\d][\d.,]*)\s*USD", re.I)
+_GROQ_DATE_RE = re.compile(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b")
+_GROQ_TIME_RE = re.compile(r"\b\d{1,2}:\d{2}(:\d{2})?\b")
+_GROQ_SKIP_EXACT = {
+    "projects", "create new project", "view", "name", "created at",
+    "monthly spend", "rate limits",
+}
+
+
+def parse_groq_text(text: str) -> list[dict]:
+    """Extrai [{name, amount_usd}] do TEXTO copiado da tela Projects da Groq.
+
+    Tolerante ao formato bagunçado do copia-e-cola: nome e gasto costumam vir
+    em linhas separadas (nome numa linha; 'dd/mm/aaaa, hh:mm:ss \\t $X.XX USD'
+    em outra). Casa cada valor com o nome imediatamente anterior; se nome e
+    valor vierem na mesma linha, separa pelo que vem antes da data.
+    """
+    projetos: list[dict] = []
+    last_name: Optional[str] = None
+    for raw in (text or "").splitlines():
+        l = raw.strip()
+        if not l:
+            continue
+        low = l.lower()
+        if low in _GROQ_SKIP_EXACT or low.startswith("projects allow"):
+            continue
+        if "monthly spend" in low or "created at" in low:
+            continue
+        m = _GROQ_AMOUNT_RE.search(l)
+        if m:
+            try:
+                amount = round(float(m.group(1).replace(",", "")), 4)
+            except ValueError:
+                amount = 0.0
+            pre = _GROQ_TIME_RE.sub("", _GROQ_DATE_RE.sub("", l[:m.start()]))
+            pre = pre.replace(",", " ").strip(" \t:")
+            name = pre if pre and pre.lower() != "view" else (last_name or "—")
+            projetos.append({"id": name, "name": name, "amount_usd": amount})
+            last_name = None
+            continue
+        if _GROQ_DATE_RE.search(l):  # linha só de data, sem valor → ignora
+            continue
+        last_name = l  # candidato a nome do próximo projeto
+    return projetos
+
+
+def save_groq_text(text: str, month: Optional[str] = None) -> dict:
+    """Faz parse do texto colado da Groq e grava o snapshot do mês."""
+    projetos = parse_groq_text(text)
+    snap = _groq_snapshot(projetos, source="texto", month=valid_month(month))
+    return save_groq_snapshot(snap)
+
+
 def save_groq_snapshot(snap: dict) -> dict:
     month = valid_month(snap.get("month"))
     _write_json_atomic(_provider_path("groq", month), snap)

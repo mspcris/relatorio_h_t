@@ -157,12 +157,23 @@
                   <h3 class="card-title ci-prov-head"><i class="fas fa-bolt text-warning"></i> Groq <span class="ci-muted" id="groqUpdated"></span></h3>
                   <div class="card-tools">
                     <button class="btn btn-xs btn-outline-warning" id="btnGroqPrint"><i class="fas fa-image"></i> Enviar print</button>
+                    <button class="btn btn-xs btn-outline-info" id="btnGroqText"><i class="fas fa-paste"></i> Colar texto</button>
                     <button class="btn btn-xs btn-outline-secondary" id="btnGroqManual"><i class="fas fa-keyboard"></i> Digitar</button>
                   </div>
                 </div>
                 <div class="card-body">
                   <div id="groqBanner"></div>
                   <input type="file" id="groqFile" accept="image/*" style="display:none">
+
+                  <!-- Modo colar texto (oculto até clicar Colar texto) -->
+                  <div id="groqTextBox" style="display:none">
+                    <p class="ci-muted mb-1">Cole aqui o conteúdo da tela <b>Projects</b> da Groq (Ctrl+A, Ctrl+C na página deles → Ctrl+V aqui). Eu reconheço os projetos e os valores automaticamente.</p>
+                    <textarea id="groqTextArea" class="form-control form-control-sm" rows="6" placeholder="Default Project&#10;04/07/2025, 11:40:41&#9;$0.00 USD&#10;..."></textarea>
+                    <div class="mt-2">
+                      <button class="btn btn-xs btn-info" id="btnSaveText"><i class="fas fa-magic"></i> Processar e salvar</button>
+                      <button class="btn btn-xs btn-link text-muted" id="btnCancelText">cancelar</button>
+                    </div>
+                  </div>
 
                   <!-- Modo manual (oculto até clicar Digitar) -->
                   <div id="groqManualBox" style="display:none">
@@ -361,6 +372,7 @@ function addManualRow(name, val){
   $("groqManualRows").appendChild(tr);
 }
 $("btnGroqManual").addEventListener("click", () => {
+  $("groqTextBox").style.display = "none";
   $("groqManualBox").style.display = "block";
   $("groqView").style.display = "none";
   $("groqManualRows").innerHTML = "";
@@ -381,6 +393,31 @@ $("btnSaveManual").addEventListener("click", async () => {
     msg($("globalMsg"), "Groq salvo manualmente.", "ok");
     await load(CUR_MONTH);
   }catch(e){ msg($("globalMsg"), "Erro ao salvar Groq: " + escapeHtml(e.message), "err"); }
+});
+
+// Groq — colar texto
+function closeGroqEditors(){
+  $("groqManualBox").style.display = "none";
+  $("groqTextBox").style.display = "none";
+  $("groqView").style.display = "";
+}
+$("btnGroqText").addEventListener("click", () => {
+  $("groqManualBox").style.display = "none";
+  $("groqTextBox").style.display = "block";
+  $("groqView").style.display = "none";
+  $("groqTextArea").value = "";
+  $("groqTextArea").focus();
+});
+$("btnCancelText").addEventListener("click", closeGroqEditors);
+$("btnSaveText").addEventListener("click", async () => {
+  const text = $("groqTextArea").value;
+  if(!text.trim()){ alert("Cole o texto da tela Projects da Groq."); return; }
+  try{
+    const j = await api("/groq/text", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({month: CUR_MONTH, text})});
+    closeGroqEditors();
+    msg($("globalMsg"), `Groq lido do texto colado (${(j.groq.projects||[]).length} projetos, total ${fmtUSD(j.groq.total_usd)}).`, "ok");
+    await load(CUR_MONTH);
+  }catch(e){ msg($("globalMsg"), "Erro ao processar o texto: " + escapeHtml(e.message), "err"); }
 });
 
 // Início

@@ -132,6 +132,25 @@ def api_groq_manual():
     return jsonify({"ok": True, "saved": True, "groq": snap})
 
 
+@custos_ia_bp.post("/api/custos-ia/groq/text")
+def api_groq_text():
+    if not _require_admin():
+        return _deny()
+    body = request.get_json(silent=True) or {}
+    text = body.get("text") or ""
+    if not text.strip():
+        return jsonify({"ok": False, "error": "cole o texto da tela Projects da Groq"}), 400
+    month = _month_arg(body)
+    try:
+        snap = custos_ia.save_groq_text(text, month=month)
+    except Exception as e:  # noqa: BLE001
+        log.exception("custos-ia groq text")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    if not snap.get("projects"):
+        return jsonify({"ok": False, "error": "nenhum projeto reconhecido no texto colado"}), 422
+    return jsonify({"ok": True, "saved": True, "groq": snap})
+
+
 @custos_ia_bp.post("/api/custos-ia/month/close")
 def api_month_close():
     email = _require_admin()
