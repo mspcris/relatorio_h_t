@@ -21,8 +21,9 @@ de visão da OpenAI (centavos), disparada à mão pelo admin — nunca em lote.
 from __future__ import annotations
 
 import logging
+import os
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 
 import custos_ia
 
@@ -30,7 +31,8 @@ log = logging.getLogger(__name__)
 
 custos_ia_bp = Blueprint("custos_ia_api", __name__)
 
-_MAX_IMG_BYTES = 8 * 1024 * 1024  # 8 MB
+_MAX_IMG_BYTES = 8 * 1024 * 1024   # 8 MB
+_MAX_PDF_BYTES = 15 * 1024 * 1024  # 15 MB
 _ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp", "image/gif"}
 
 
@@ -201,9 +203,60 @@ def api_subs_set():
     body = request.get_json(silent=True) or {}
     items = body.get("items")
     if not isinstance(items, list):
-        return jsonify({"ok": False, "error": "envie 'items': [{name, monthly_usd, since?, provider?, active?}]"}), 400
-    saved = custos_ia.save_subscriptions(items)
+        return jsonify({"ok": False, "error": "envie 'items': [{name, ..., month_amount?, obs?}]"}), 400
+    month = custos_ia.valid_month(body.get("month")) if body.get("month") else None
+    saved = custos_ia.save_subscriptions(items, month=month)
     return jsonify({"ok": True, "items": saved})
+
+
+@custos_ia_bp.post("/api/custos-ia/subscriptions/<sub_id>/invoice")
+def api_sub_invoice_upload(sub_id):
+    if not _require_admin():
+        return _deny()
+    f = request.files.get("pdf")
+    if not f:
+        return jsonify({"ok": False, "error": "envie o arquivo no campo 'pdf'"}), 400
+    data = f.read()
+    if not data:
+        return jsonify({"ok": False, "error": "arquivo vazio"}), 400
+    if len(data) > _MAX_PDF_BYTES:
+        return jsonify({"ok": False, "error": "PDF maior que 15 MB"}), 413
+    mime = (f.mimetype or "").lower()
+    if "pdf" not in mime and not f.filename.lower().endswith(".pdf"):
+        return jsonify({"ok": False, "error": "envie um PDF"}), 415
+    month = custos_ia.valid_month(request.form.get("month"))
+    path = custos_ia.invoice_path(sub_id, month)
+    with open(path, "wb") as out:
+        out.write(data)
+    custos_ia.set_sub_invoice(sub_id, month, f"{month}.pdf")
+    return jsonify({"ok": True, "month": month})
+
+
+@custos_ia_bp.get("/api/custos-ia/subscriptions/<sub_id>/invoice")
+def api_sub_invoice_get(sub_id):
+    if not _require_admin():
+        return _deny()
+    month = custos_ia.valid_month(request.args.get("month"))
+    path = custos_ia.invoice_path(sub_id, month)
+    if not os.path.exists(path):
+        return jsonify({"ok": False, "error": "sem fatura para este mês"}), 404
+    return send_file(path, mimetype="application/pdf",
+                     download_name=f"fatura_{sub_id}_{month}.pdf")
+
+
+@custos_ia_bp.delete("/api/custos-ia/subscriptions/<sub_id>/invoice")
+def api_sub_invoice_del(sub_id):
+    if not _require_admin():
+        return _deny()
+    month = custos_ia.valid_month(request.args.get("month"))
+    path = custos_ia.invoice_path(sub_id, month)
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except OSError:
+        pass
+    custos_ia.set_sub_invoice(sub_id, month, None)
+    return jsonify({"ok": True, "month": month})
 
 
 @custos_ia_bp.post("/api/custos-ia/month/close")

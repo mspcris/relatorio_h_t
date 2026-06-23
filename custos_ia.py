@@ -539,19 +539,84 @@ def project_matrix(n: int = DEFAULT_HISTORY_MONTHS) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Assinaturas de IA (mensalidades fixas: Anthropic, ChatGPT Plus, etc.)
+# Assinaturas de IA (mensalidades fixas: Anthropic, ChatGPT, etc.)
+#
+# Cada assinatura tem dados-base (nome, fornecedor, desde, ativa) e um HISTÓRICO
+# POR MÊS em sub_months.json: { "entries": { sub_id: { "YYYY-MM": {
+#     "amount_usd": float|None,   # valor naquele mês; None = "não mudou"
+#     "obs": str,                 # observação do mês (ex.: "entrou Ronald")
+#     "invoice": "arquivo.pdf"|None  # fatura anexada do mês
+# }}}}
+# O valor é "carry-forward": vale o último mês <= alvo que teve amount definido;
+# se nenhum, usa monthly_usd base. OBS e fatura são sempre por mês (não carregam).
+# Faturas ficam em CUSTOS_IA_DIR/invoices/<sub_id>/<mês>.pdf.
 # ─────────────────────────────────────────────────────────────────────────────
 def _subs_path() -> str:
     return _path("subscriptions.json")
+
+
+def _sub_months_path() -> str:
+    return _path("sub_months.json")
 
 
 def load_subscriptions() -> list[dict]:
     return (_read_json(_subs_path()) or {}).get("items", [])
 
 
-def save_subscriptions(items: list[dict]) -> list[dict]:
+def load_sub_months() -> dict:
+    return (_read_json(_sub_months_path()) or {}).get("entries", {})
+
+
+def _save_sub_months(entries: dict) -> None:
+    _write_json_atomic(_sub_months_path(), {"entries": entries})
+
+
+def _sub_entry(sub_id: str, month: str) -> dict:
+    return (load_sub_months().get(str(sub_id), {}) or {}).get(valid_month(month), {}) or {}
+
+
+def set_sub_month(sub_id: str, month: str, amount_usd, obs: str = "") -> dict:
+    """Grava valor/OBS de um mês para uma assinatura (preserva a fatura)."""
+    sub_id, month = str(sub_id), valid_month(month)
+    entries = load_sub_months()
+    cur = entries.setdefault(sub_id, {}).get(month, {}) or {}
+    amt = None
+    if amount_usd not in (None, "", "null"):
+        try:
+            amt = round(float(amount_usd), 4)
+        except (TypeError, ValueError):
+            amt = None
+    obs = (str(obs or "")).strip()
+    invoice = cur.get("invoice")
+    if amt is None and not obs and not invoice:
+        entries[sub_id].pop(month, None)            # nada a guardar
+    else:
+        entries[sub_id][month] = {"amount_usd": amt, "obs": obs, "invoice": invoice}
+    _save_sub_months(entries)
+    return entries.get(sub_id, {}).get(month, {})
+
+
+def set_sub_invoice(sub_id: str, month: str, filename: Optional[str]) -> None:
+    sub_id, month = str(sub_id), valid_month(month)
+    entries = load_sub_months()
+    cur = entries.setdefault(sub_id, {}).setdefault(month, {"amount_usd": None, "obs": ""})
+    cur["invoice"] = filename
+    if filename is None and cur.get("amount_usd") is None and not cur.get("obs"):
+        entries[sub_id].pop(month, None)
+    _save_sub_months(entries)
+
+
+def invoice_path(sub_id: str, month: str) -> str:
+    d = os.path.join(_data_dir(), "invoices", str(sub_id))
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, f"{valid_month(month)}.pdf")
+
+
+def save_subscriptions(items: list[dict], month: Optional[str] = None) -> list[dict]:
+    """Salva os dados-base e, se `month` informado, o valor/OBS daquele mês."""
     norm = []
-    for it in (items or []):
+    base = int(time.time() * 1000)
+    for idx, it in enumerate(items or []):
         name = (str(it.get("name") or "")).strip()
         if not name:
             continue
@@ -560,34 +625,74 @@ def save_subscriptions(items: list[dict]) -> list[dict]:
         except (TypeError, ValueError):
             val = 0.0
         since = it.get("since")
+        sid = str(it.get("id") or f"sub_{base}_{idx}")
         norm.append({
-            "id": str(it.get("id") or int(time.time() * 1000)),
-            "name": name,
+            "id": sid, "name": name,
             "provider": (str(it.get("provider") or "")).strip(),
             "monthly_usd": val,
             "since": valid_month(since) if since else None,
             "active": bool(it.get("active", True)),
         })
+        if month is not None and ("month_amount" in it or "obs" in it):
+            set_sub_month(sid, month, it.get("month_amount"), it.get("obs", ""))
     _write_json_atomic(_subs_path(), {"items": norm})
     return norm
 
 
+def effective_amount(sub: dict, month: str) -> float:
+    """Valor da assinatura no mês (carry-forward do último mês com valor)."""
+    month = valid_month(month)
+    entries = load_sub_months().get(str(sub.get("id")), {}) or {}
+    best = None
+    for m, e in entries.items():
+        if m <= month and e.get("amount_usd") is not None:
+            if best is None or m > best[0]:
+                best = (m, float(e["amount_usd"]))
+    if best:
+        return round(best[1], 4)
+    return round(float(sub.get("monthly_usd") or 0.0), 4)
+
+
 def subscriptions_for(month: Optional[str] = None) -> list[dict]:
-    """Assinaturas ativas que valem para o mês (since <= mês)."""
+    """Assinaturas ativas no mês (since <= mês), já com valor efetivo/OBS/fatura."""
     month = valid_month(month)
     out = []
     for s in load_subscriptions():
         if not s.get("active"):
             continue
-        since = s.get("since")
-        if since and since > month:
+        if s.get("since") and s["since"] > month:
             continue
-        out.append(s)
+        e = _sub_entry(s["id"], month)
+        out.append({**s, "amount_usd": effective_amount(s, month),
+                    "obs": e.get("obs", ""), "has_invoice": bool(e.get("invoice"))})
+    return out
+
+
+def subscriptions_edit(month: Optional[str] = None) -> list[dict]:
+    """TODAS as assinaturas-base + o que tem no mês (para o editor)."""
+    month = valid_month(month)
+    out = []
+    for s in load_subscriptions():
+        e = _sub_entry(s["id"], month)
+        out.append({**s, "month_amount": e.get("amount_usd"), "obs": e.get("obs", ""),
+                    "has_invoice": bool(e.get("invoice")),
+                    "effective_usd": effective_amount(s, month)})
     return out
 
 
 def subs_total(month: Optional[str] = None) -> float:
-    return round(sum(float(s.get("monthly_usd") or 0.0) for s in subscriptions_for(month)), 4)
+    return round(sum(s["amount_usd"] for s in subscriptions_for(month)), 4)
+
+
+def _sub_months_with_data() -> set:
+    """Meses citados em assinaturas (since) ou no histórico — para o seletor."""
+    months: set = set()
+    for s in load_subscriptions():
+        if s.get("since"):
+            months.add(s["since"])
+    for _sid, by_month in load_sub_months().items():
+        months.update(by_month.keys())
+    return months
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -632,9 +737,11 @@ def monthly_history(n: int = DEFAULT_HISTORY_MONTHS) -> list[dict]:
 
 
 def available_months() -> list[str]:
-    """Últimos 6 meses ∪ meses com dado, desc — para o seletor (permite colar
-    Groq de meses passados mesmo sem dado ainda)."""
-    return sorted(set(recent_months(DEFAULT_HISTORY_MONTHS)) | set(list_months()), reverse=True)
+    """Últimos 6 meses ∪ meses com dado ∪ meses de assinaturas, desc."""
+    return sorted(
+        set(recent_months(DEFAULT_HISTORY_MONTHS)) | set(list_months()) | _sub_months_with_data(),
+        reverse=True,
+    )
 
 
 def load_dashboard(month: Optional[str] = None) -> dict:
@@ -643,7 +750,7 @@ def load_dashboard(month: Optional[str] = None) -> dict:
     openai = load_openai_snapshot(month) or _empty_openai(month)
     groq = load_groq_snapshot(month) or _empty_groq(month)
     subs = subscriptions_for(month)
-    subs_t = round(sum(float(s.get("monthly_usd") or 0.0) for s in subs), 4)
+    subs_t = round(sum(float(s.get("amount_usd") or 0.0) for s in subs), 4)
     total = round((openai.get("total_usd") or 0.0) + (groq.get("total_usd") or 0.0) + subs_t, 4)
     return {
         "generated_at": _now_iso(),
@@ -654,7 +761,7 @@ def load_dashboard(month: Optional[str] = None) -> dict:
         "total_usd": total,
         "providers": {"openai": openai, "groq": groq},
         "subscriptions": {"items": subs, "total_usd": subs_t,
-                          "all": load_subscriptions()},
+                          "edit": subscriptions_edit(month)},
         "unified": unify_month(month),
         "matrix": project_matrix(DEFAULT_HISTORY_MONTHS),
         "history": monthly_history(DEFAULT_HISTORY_MONTHS),

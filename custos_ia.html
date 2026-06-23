@@ -250,16 +250,25 @@
 
           <!-- Assinaturas de IA -->
           <div class="card ci-card card-outline card-secondary">
-            <div class="card-header"><h3 class="card-title"><i class="fas fa-receipt"></i> Assinaturas de IA (mensalidades fixas)</h3></div>
+            <div class="card-header"><h3 class="card-title"><i class="fas fa-receipt"></i> Assinaturas de IA — mês <span id="subsMonth"></span></h3></div>
             <div class="card-body">
-              <p class="ci-muted mb-2">Mensalidades fixas (ex.: Anthropic US$ 100, ChatGPT Plus US$ 20). Entram no total a partir do mês <b>"Desde"</b>.</p>
+              <p class="ci-muted mb-2">Mensalidades fixas (Anthropic, ChatGPT…). <b>Valor, OBS e fatura são por mês.</b> O valor "carrega" do mês anterior até você mudar — então só edite quando mudar (e explique na OBS). Entram no total a partir do mês <b>"Desde"</b>.</p>
               <table class="table table-sm ci-tbl mb-1">
-                <thead><tr><th>Nome</th><th>Fornecedor</th><th class="text-right" style="width:120px">US$/mês</th><th style="width:130px">Desde</th><th style="width:70px">Ativa</th><th style="width:40px"></th></tr></thead>
+                <thead><tr>
+                  <th>Nome</th><th>Fornecedor</th>
+                  <th class="text-right" style="width:110px">Valor (mês)</th>
+                  <th>OBS do mês</th>
+                  <th style="width:120px">Desde</th>
+                  <th style="width:55px">Ativa</th>
+                  <th style="width:150px">Fatura PDF</th>
+                  <th style="width:30px"></th>
+                </tr></thead>
                 <tbody id="subsRows"></tbody>
               </table>
               <button class="btn btn-xs btn-light" id="btnAddSub"><i class="fas fa-plus"></i> assinatura</button>
               <button class="btn btn-xs btn-success" id="btnSaveSubs"><i class="fas fa-save"></i> Salvar assinaturas</button>
-              <span class="ci-muted ml-2">Total ativo no mês <b id="subsMonth"></b>: <b class="ci-money" id="subsTotalLbl">US$ 0,00</b></span>
+              <span class="ci-muted ml-2">Total ativo no mês: <b class="ci-money" id="subsTotalLbl">US$ 0,00</b></span>
+              <input type="file" id="subInvoiceFile" accept="application/pdf" style="display:none">
             </div>
           </div>
 
@@ -388,7 +397,7 @@ function renderDashboard(d){
   renderUnified(d.unified);
   renderMatrix(d.matrix || {months:[],labels:[],cells:{},totals:{}});
   renderHistory(d.history || [], d.month);
-  renderSubs(s.all || []);
+  renderSubs(s.edit || []);
   $("subsTotalLbl").textContent = fmtUSD(s.total_usd);
 
   const stat = $("monthStatus");
@@ -413,34 +422,79 @@ async function load(month){
   }catch(e){ msg($("globalMsg"), "Erro ao carregar: " + escapeHtml(e.message), "err"); }
 }
 
-// ── Assinaturas ──
+// ── Assinaturas (valor/OBS/fatura por mês) ──
+function subInvoiceCell(s){
+  if(!s.id) return `<span class="ci-muted">salve primeiro</span>`;
+  const url = `${API}/subscriptions/${encodeURIComponent(s.id)}/invoice?month=${CUR_MONTH}`;
+  if(s.has_invoice)
+    return `<a href="${url}" target="_blank" rel="noopener" class="btn btn-xs btn-outline-success"><i class="fas fa-file-pdf"></i> ver</a>
+            <button class="btn btn-xs btn-link text-danger s-inv-del" title="remover fatura">&times;</button>`;
+  return `<button class="btn btn-xs btn-outline-secondary s-inv-up"><i class="fas fa-paperclip"></i> anexar</button>`;
+}
 function addSubRow(s){
-  s = s || {name:"",provider:"",monthly_usd:"",since:CUR_MONTH,active:true};
+  s = s || {id:"",name:"",provider:"",monthly_usd:0,since:CUR_MONTH,active:true,month_amount:null,obs:"",effective_usd:0,has_invoice:false};
   const tr = document.createElement("tr"); tr.className = "sub-row";
+  tr.dataset.id = s.id || ""; tr.dataset.base = (s.monthly_usd!=null?s.monthly_usd:0);
+  const ph = (s.effective_usd!=null? Number(s.effective_usd).toFixed(2) : "0.00");
   tr.innerHTML = `
-    <td><input class="form-control form-control-sm s-name" value="${escapeHtml(s.name||'')}" placeholder="Anthropic Claude"></td>
-    <td><input class="form-control form-control-sm s-prov" value="${escapeHtml(s.provider||'')}" placeholder="anthropic"></td>
-    <td><input type="number" step="0.01" min="0" class="form-control form-control-sm s-val text-right" value="${s.monthly_usd!=null?s.monthly_usd:''}" placeholder="100.00"></td>
+    <td><input class="form-control form-control-sm s-name" value="${escapeHtml(s.name||'')}" placeholder="OpenAI ChatGPT"></td>
+    <td><input class="form-control form-control-sm s-prov" value="${escapeHtml(s.provider||'')}" placeholder="openai"></td>
+    <td><input type="number" step="0.01" min="0" class="form-control form-control-sm s-val text-right" value="${s.month_amount!=null?s.month_amount:''}" placeholder="${ph}" title="vazio = herda do mês anterior (${ph})"></td>
+    <td><input class="form-control form-control-sm s-obs" value="${escapeHtml(s.obs||'')}" placeholder="ex.: entrou Ronald (3 contas)"></td>
     <td><input type="month" class="form-control form-control-sm s-since" value="${escapeHtml(s.since||CUR_MONTH||'')}"></td>
     <td class="text-center"><input type="checkbox" class="s-active" ${s.active!==false?'checked':''}></td>
+    <td class="s-inv">${subInvoiceCell(s)}</td>
     <td><button class="btn btn-xs btn-link text-danger s-del">&times;</button></td>`;
   tr.querySelector(".s-del").addEventListener("click", ()=>tr.remove());
+  const up = tr.querySelector(".s-inv-up"); if(up) up.addEventListener("click", ()=>uploadInvoice(s.id));
+  const del = tr.querySelector(".s-inv-del"); if(del) del.addEventListener("click", ()=>deleteInvoice(s.id));
   $("subsRows").appendChild(tr);
 }
 function renderSubs(items){ $("subsRows").innerHTML=""; (items||[]).forEach(addSubRow); }
 $("btnAddSub").addEventListener("click", ()=>addSubRow());
+
+function collectSubs(){
+  return [...document.querySelectorAll("#subsRows .sub-row")].map(r=>{
+    const val = r.querySelector(".s-val").value.trim();
+    const id = r.dataset.id || "";
+    return {
+      id: id || undefined,
+      name: r.querySelector(".s-name").value.trim(),
+      provider: r.querySelector(".s-prov").value.trim(),
+      // base: mantém o existente; em nova linha, semeia com o valor digitado
+      monthly_usd: id ? parseFloat(r.dataset.base)||0 : (parseFloat(val)||0),
+      month_amount: val === "" ? null : (parseFloat(val)||0),
+      obs: r.querySelector(".s-obs").value.trim(),
+      since: r.querySelector(".s-since").value||null,
+      active: r.querySelector(".s-active").checked,
+    };
+  }).filter(x=>x.name);
+}
 $("btnSaveSubs").addEventListener("click", async ()=>{
-  const items = [...document.querySelectorAll("#subsRows .sub-row")].map(r=>({
-    name:r.querySelector(".s-name").value.trim(),
-    provider:r.querySelector(".s-prov").value.trim(),
-    monthly_usd:parseFloat(r.querySelector(".s-val").value)||0,
-    since:r.querySelector(".s-since").value||null,
-    active:r.querySelector(".s-active").checked,
-  })).filter(x=>x.name);
-  try{ await api("/subscriptions", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items})});
+  try{ await api("/subscriptions", {method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({month:CUR_MONTH, items:collectSubs()})});
     msg($("globalMsg"),"Assinaturas salvas.","ok"); await load(CUR_MONTH);
   }catch(e){ msg($("globalMsg"),"Erro: "+escapeHtml(e.message),"err"); }
 });
+
+// fatura PDF (precisa da assinatura já salva, p/ ter id)
+let _invSubId = null;
+function uploadInvoice(subId){ _invSubId = subId; $("subInvoiceFile").click(); }
+$("subInvoiceFile").addEventListener("change", async (e)=>{
+  const f=e.target.files[0]; if(!f||!_invSubId) return;
+  const fd=new FormData(); fd.append("pdf",f); fd.append("month",CUR_MONTH);
+  try{ await fetch(`${API}/subscriptions/${encodeURIComponent(_invSubId)}/invoice`,{method:"POST",body:fd})
+        .then(r=>r.json()).then(j=>{ if(j.ok===false) throw new Error(j.error); });
+    msg($("globalMsg"),`Fatura anexada (${CUR_MONTH}).`,"ok"); await load(CUR_MONTH);
+  }catch(err){ msg($("globalMsg"),"Falha no upload: "+escapeHtml(err.message),"err"); }
+  finally{ e.target.value=""; _invSubId=null; }
+});
+async function deleteInvoice(subId){
+  if(!confirm(`Remover a fatura de ${CUR_MONTH}?`)) return;
+  try{ await fetch(`${API}/subscriptions/${encodeURIComponent(subId)}/invoice?month=${CUR_MONTH}`,{method:"DELETE"});
+    await load(CUR_MONTH);
+  }catch(e){ msg($("globalMsg"),"Erro: "+escapeHtml(e.message),"err"); }
+}
 
 // ── Vínculos ──
 $("lnkVinculo").addEventListener("click",(e)=>{e.preventDefault(); openVinculo();});
