@@ -1568,6 +1568,100 @@ def _egide_conn():
     )
 
 
+# ── Chat (camim_chat_production) — conversa de 1 ticket p/ o modal do dashboard ──
+# Mesmas credenciais do ETL export_chat_dashboard.py (CHAT_MYSQL_*).
+# Precisam estar em /etc/camim-auth.env (www-data não lê /opt/relatorio_h_t/.env).
+_CHAT_CAMILA_USER_ID = "cmg8cum8g0519jbbm6r9l93f7"  # bot Camila.ai
+
+
+def _chat_conn():
+    import pymysql, pymysql.cursors
+    return pymysql.connect(
+        host=os.environ["CHAT_MYSQL_HOST"],
+        port=int(os.environ.get("CHAT_MYSQL_PORT", 3306)),
+        user=os.environ["CHAT_MYSQL_USER"],
+        password=os.environ["CHAT_MYSQL_PASSWORD"],
+        database=os.environ.get("CHAT_MYSQL_DATABASE", "camim_chat_production"),
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+        connect_timeout=15,
+        read_timeout=60,
+    )
+
+
+_CHAT_CONVERSA_SQL = """
+SELECT m.body, m.createdAt, m.customerId, m.userProfileId,
+       u.id AS user_id, u.name AS user_name, u.sector AS user_sector,
+       c.name AS customer_name
+FROM Message m
+JOIN Ticket t ON t.id = m.ticketId
+LEFT JOIN UserProfile up ON up.id = m.userProfileId
+LEFT JOIN User u  ON u.id = up.userId
+LEFT JOIN Customer c ON c.id = m.customerId
+WHERE t.deletedAt IS NULL AND m.deletedAt IS NULL
+  AND m.ticketId = %s
+ORDER BY m.createdAt ASC
+LIMIT %s
+"""
+
+
+@app.get('/api/chat_dashboard/conversa')
+def api_chat_dashboard_conversa():
+    """Mensagens de 1 ticket para a prévia no modal do Dashboard Chat."""
+    email, _ = decode_user()
+    if not email:
+        return jsonify({"erro": "Não autorizado"}), 401
+
+    tid = (request.args.get("id") or "").strip()
+    # ticketId é um cuid (alfanumérico minúsculo). Valida p/ evitar abuso.
+    if not re.match(r"^[a-z0-9]{8,40}$", tid):
+        return jsonify({"erro": "id inválido"}), 400
+    try:
+        limit = max(1, min(int(request.args.get("limit", 300)), 1000))
+    except Exception:
+        limit = 300
+
+    try:
+        c = _chat_conn()
+        try:
+            with c.cursor() as cur:
+                cur.execute(_CHAT_CONVERSA_SQL, (tid, limit))
+                rows = cur.fetchall()
+        finally:
+            c.close()
+    except KeyError:
+        # CHAT_MYSQL_* ausente no ambiente do serviço
+        return jsonify({"erro": "Conexão do chat não configurada no servidor"}), 503
+    except Exception as e:
+        return jsonify({"erro": "Falha ao consultar a conversa", "detalhe": str(e)[:200]}), 502
+
+    msgs = []
+    for r in rows:
+        up = r.get("userProfileId")
+        uid = r.get("user_id")
+        sector = (r.get("user_sector") or "")
+        if up:
+            if uid == _CHAT_CAMILA_USER_ID or sector == "IA":
+                quem, nome = "bot", (r.get("user_name") or "Camila.ai")
+            else:
+                quem, nome = "humano", (r.get("user_name") or "Equipe")
+        elif r.get("customerId"):
+            quem, nome = "cliente", (r.get("customer_name") or "Cliente")
+        else:
+            quem, nome = "sistema", "Sistema"
+        body = r.get("body")
+        body = (str(body) if body is not None else "").strip()[:2000]
+        em = r.get("createdAt")
+        msgs.append({
+            "quem": quem,
+            "nome": nome,
+            "body": body,
+            "em": em.strftime("%d/%m/%Y %H:%M") if hasattr(em, "strftime") else (str(em) if em else ""),
+        })
+
+    return jsonify({"id": tid, "total": len(msgs), "mensagens": msgs})
+
+
 def _egide_rows_where(metric: str, de: str, ate: str, include_canc: bool,
                       filter_by: str = "paid") -> tuple[str, list]:
     """Monta cláusula WHERE para a consulta de registros da Égide.

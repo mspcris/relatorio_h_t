@@ -74,6 +74,21 @@ perguntas como "quantos tickets foram transferidos a humanos mas finalizados
 pela Camila por ociosidade" = matriz_bf[inbound_atendido_humano][auto_timeout]
                              + matriz_bf[inbound_atendido_humano][auto_inatividade]
                              + matriz_bf[inbound_transferido_sem_humano][auto_*]
+
+═══════════════════════════════════════════════════════════════════════════════
+tickets_index — campos por ticket (keys curtas p/ reduzir o JSON)
+═══════════════════════════════════════════════════════════════════════════════
+  n  ticketNumber          d  abertura  (dd/mm/aaaa hh:mm)   s  nota (eval_score)
+  c  cliente               e  fechamento(dd/mm/aaaa hh:mm)   o  obs da avaliação
+  f  fila efetiva          h  dono humano (nome)
+  b  bucket                z  fechamento (tipo; "aberto" se sem closedAt)
+
+Campos brutos p/ reagregar por período no FRONT (filtro de período recalcula
+TUDO, inclusive tempos). Omitidos quando vazios/nulos:
+  src source        dr delta_camila_responde (seg)   dh delta_humano_resolve
+  hu  human_userId  dc delta_camila_classifica       dt delta_total
+  hs  human_sector  de delta_espera_humano
+  lh  last_human_userId (quem falou por último — p/ atribuir "fechou sozinho")
 """
 
 import json
@@ -584,11 +599,20 @@ def build_payload(tickets, msgs, transf, evals, humans, last, last_human):
             return ""
         return s[:maxlen] if maxlen else s
 
+    def _di(v):
+        """Delta (segundos) → int arredondado, ou None. Usado p/ reagregar no front."""
+        if v is None or pd.isna(v):
+            return None
+        try:
+            return int(round(float(v)))
+        except (TypeError, ValueError):
+            return None
+
     tickets_index = {}
     for _, r in df.iterrows():
         cr = r.get("createdAt")
         cl = r.get("closedAt")
-        tickets_index[str(r["id"])] = {
+        rec = {
             "n": int(r["ticketNumber"]) if pd.notna(r.get("ticketNumber")) else None,
             "c": _s(r.get("customer_nome"), 60),
             "f": _s(r.get("fila_efetiva")),
@@ -600,6 +624,24 @@ def build_payload(tickets, msgs, transf, evals, humans, last, last_human):
             "s": int(r["eval_score"]) if pd.notna(r.get("eval_score")) else None,
             "o": _s(r.get("eval_obs"), 200),
         }
+        # ── Campos brutos por ticket p/ reagregação por período no front ──
+        # (filtro de período recalcula TUDO, inclusive tempos do funil).
+        # Omitidos quando vazios/nulos para conter o tamanho do JSON.
+        extra = {
+            "src": _s(r.get("source")),
+            "hu":  _s(r.get("human_userId")),
+            "hs":  _s(r.get("human_sector")),
+            "lh":  _s(r.get("last_human_userId")),
+            "dr":  _di(r.get("delta_camila_responde")),
+            "dc":  _di(r.get("delta_camila_classifica")),
+            "de":  _di(r.get("delta_espera_humano")),
+            "dh":  _di(r.get("delta_humano_resolve")),
+            "dt":  _di(r.get("delta_total")),
+        }
+        for k, v in extra.items():
+            if v not in (None, ""):
+                rec[k] = v
+        tickets_index[str(r["id"])] = rec
 
     # IDs agrupados por bucket e por tipo de fechamento
     bucket_ids = {

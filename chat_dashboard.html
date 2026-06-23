@@ -234,6 +234,55 @@
 
       <div id="mainContent" style="display:none;">
 
+        <!-- ============================================================ -->
+        <!-- Filtro de período (global) — re-fatia tudo no front            -->
+        <!-- ============================================================ -->
+        <div class="card mb-3" id="periodoCard">
+          <div class="card-body py-2">
+            <div class="d-flex flex-wrap align-items-end" style="gap:.75rem;">
+              <div>
+                <label class="mb-0 small text-muted d-block">De</label>
+                <input type="date" id="periodoIni" class="form-control form-control-sm" style="width:160px;">
+              </div>
+              <div>
+                <label class="mb-0 small text-muted d-block">Até</label>
+                <input type="date" id="periodoFim" class="form-control form-control-sm" style="width:160px;">
+              </div>
+              <div class="btn-group btn-group-sm" role="group" id="periodoPresets">
+                <button type="button" class="btn btn-outline-primary" data-preset="sexta">Desde sexta</button>
+                <button type="button" class="btn btn-outline-secondary" data-preset="7">7d</button>
+                <button type="button" class="btn btn-outline-secondary" data-preset="30">30d</button>
+                <button type="button" class="btn btn-outline-secondary" data-preset="90">90d (tudo)</button>
+              </div>
+              <div class="ml-auto small text-muted" id="periodoInfo"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- Abas                                                          -->
+        <!-- ============================================================ -->
+        <ul class="nav nav-tabs mb-3" id="chatTabs" role="tablist">
+          <li class="nav-item">
+            <a class="nav-link active" id="tab-atendimento-link" data-toggle="tab" href="#tabAtendimento" role="tab">
+              <i class="fas fa-chart-line mr-1"></i> Atendimento
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="tab-abertos-link" data-toggle="tab" href="#tabAbertos" role="tab">
+              <i class="fas fa-hourglass-half mr-1"></i> Tickets em aberto <span class="badge badge-secondary ml-1" id="badgeAbertos">0</span>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="tab-24h-link" data-toggle="tab" href="#tab24h" role="tab">
+              <i class="fas fa-exclamation-triangle mr-1"></i> Abertos +24h <span class="badge badge-danger ml-1" id="badge24h">0</span>
+            </a>
+          </li>
+        </ul>
+
+        <div class="tab-content">
+        <div class="tab-pane fade show active" id="tabAtendimento" role="tabpanel">
+
         <div class="info-box cinza">
           <div class="info-title"><i class="fas fa-book-open"></i> Como ler esta página (em uma respirada)</div>
           Cada conversa do chat vira um <b>ticket</b>. A página classifica cada ticket de duas maneiras ao mesmo tempo:
@@ -700,6 +749,65 @@
           </div>
         </div>
 
+        </div><!-- /tabAtendimento -->
+
+        <!-- ============================================================ -->
+        <!-- Aba: Tickets em aberto (mais antigos + por fila)              -->
+        <!-- ============================================================ -->
+        <div class="tab-pane fade" id="tabAbertos" role="tabpanel">
+          <div class="alert alert-warning py-2 px-3 mb-3" style="font-size:.85rem;">
+            <i class="fas fa-hourglass-half mr-1"></i>
+            Tickets <b>ainda abertos</b> (sem fechamento) cuja abertura cai no período selecionado. Ordenados do mais antigo para o mais novo.
+            <label class="float-right mb-0" style="font-weight:400; cursor:pointer;">
+              <input type="checkbox" id="tglOutbAbertos" class="tgl-outbound"> incluir outbound/marketing
+            </label>
+          </div>
+
+          <div class="row">
+            <div class="col-lg-7 mb-3">
+              <div class="card h-100">
+                <div class="card-header py-2"><b>Os mais antigos abertos</b> <span class="text-muted small" id="abertosAntigosCount"></span></div>
+                <div class="card-body p-0" style="max-height:560px; overflow:auto;">
+                  <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
+                    <thead class="thead-light" style="position:sticky; top:0; z-index:1;">
+                      <tr><th>Ticket</th><th>Cliente</th><th>Fila</th><th class="text-right">Aberto há</th><th>Desde</th><th></th></tr>
+                    </thead>
+                    <tbody id="abertosMaisAntigos"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-5 mb-3">
+              <div class="card h-100">
+                <div class="card-header py-2"><b>Por fila</b> <span class="text-muted small">(abertos + mais antigo)</span></div>
+                <div class="card-body p-0" style="max-height:560px; overflow:auto;">
+                  <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
+                    <thead class="thead-light" style="position:sticky; top:0; z-index:1;">
+                      <tr><th>Fila</th><th class="text-right">Abertos</th><th>Mais antigo</th></tr>
+                    </thead>
+                    <tbody id="abertosPorFila"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div><!-- /tabAbertos -->
+
+        <!-- ============================================================ -->
+        <!-- Aba: Abertos +24h por fila (clique → prévia da conversa)      -->
+        <!-- ============================================================ -->
+        <div class="tab-pane fade" id="tab24h" role="tabpanel">
+          <div class="alert alert-danger py-2 px-3 mb-3" style="font-size:.85rem;">
+            <i class="fas fa-exclamation-triangle mr-1"></i>
+            Tickets abertos há <b>mais de 24 horas</b> (não fechados), agrupados por fila. Clique num ticket para ver a prévia da conversa e ir direto ao chat.
+            <label class="float-right mb-0" style="font-weight:400; cursor:pointer;">
+              <input type="checkbox" id="tglOutb24h" class="tgl-outbound"> incluir outbound/marketing
+            </label>
+          </div>
+          <div id="lista24h"></div>
+        </div><!-- /tab24h -->
+
+        </div><!-- /tab-content -->
       </div><!-- /mainContent -->
     </section>
   </div>
@@ -757,6 +865,51 @@
     </div>
   </div>
 </div>
+
+<!-- ================================================================ -->
+<!-- Modal: prévia da conversa de 1 ticket (+ ir para o chat)         -->
+<!-- ================================================================ -->
+<div class="modal fade" id="conversaModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#0f766e; color:#fff;">
+        <h5 class="modal-title"><i class="fas fa-comments mr-2"></i><span id="convTitle">Conversa</span></h5>
+        <button type="button" class="close" style="color:#fff; opacity:.9;" data-dismiss="modal" aria-label="Fechar"><span>&times;</span></button>
+      </div>
+      <div class="modal-body" id="convBody" style="max-height:62vh; overflow-y:auto; background:#f3f4f6;">
+        <div class="text-muted text-center py-4"><i class="fas fa-spinner fa-spin"></i> Carregando conversa…</div>
+      </div>
+      <div class="modal-footer">
+        <span class="text-muted small mr-auto" id="convMeta"></span>
+        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Fechar</button>
+        <a href="#" target="_blank" rel="noopener" class="btn btn-success btn-sm" id="convGoChat">
+          <i class="fas fa-external-link-alt mr-1"></i> IR PARA O CHAT
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  #conversaModal .conv-msg { margin-bottom:.5rem; display:flex; }
+  #conversaModal .conv-msg .bubble { max-width:78%; padding:.45rem .7rem; border-radius:12px; font-size:.85rem; box-shadow:0 1px 2px rgba(0,0,0,.08); white-space:pre-wrap; word-break:break-word; }
+  #conversaModal .conv-msg .who { font-size:.68rem; font-weight:600; opacity:.7; margin-bottom:2px; }
+  #conversaModal .conv-msg .when { font-size:.62rem; opacity:.55; margin-top:2px; text-align:right; }
+  /* cliente à esquerda, equipe/bot à direita */
+  #conversaModal .conv-cliente { justify-content:flex-start; }
+  #conversaModal .conv-cliente .bubble { background:#fff; border:1px solid #e5e7eb; }
+  #conversaModal .conv-humano  { justify-content:flex-end; }
+  #conversaModal .conv-humano .bubble { background:#d1fae5; border:1px solid #a7f3d0; }
+  #conversaModal .conv-bot     { justify-content:flex-end; }
+  #conversaModal .conv-bot .bubble { background:#dbeafe; border:1px solid #bfdbfe; }
+  #conversaModal .conv-sistema { justify-content:center; }
+  #conversaModal .conv-sistema .bubble { background:#f3f4f6; border:1px dashed #cbd5e1; font-style:italic; opacity:.85; }
+  /* abas de tickets abertos */
+  .fila-grupo { margin-bottom:1rem; }
+  .fila-grupo .fila-head { background:#fef2f2; border-left:4px solid #dc2626; padding:.4rem .7rem; font-weight:600; border-radius:4px; display:flex; justify-content:space-between; align-items:center; }
+  .tk24-row { cursor:pointer; }
+  .tk24-row:hover { background:#fff7ed; }
+</style>
 
 <script>
 (async () => {
@@ -1136,6 +1289,27 @@
   }
   // Expõe globalmente pra handlers inline
   window._openDrill = openDrill;
+
+  // ============================================================
+  // ESTADO DE VIEW (período) + render reativo
+  // ============================================================
+  let V = data;                          // view ativa (data = janela inteira 90d)
+  const META_FULL = data.meta || {};
+  // "agora" de referência = momento do snapshot do ETL (não o relógio do browser)
+  const NOW_REF = (function () {
+    const t = META_FULL.gerado_em ? Date.parse(META_FULL.gerado_em) : NaN;
+    return isNaN(t) ? Date.now() : t;
+  })();
+  const dashPane = document.getElementById('tabAtendimento');
+  const PRISTINE_DASH = dashPane.innerHTML;   // template limpo p/ reset a cada render
+
+  function renderDashboard() {
+  const data = V;                          // shadow: corpo abaixo lê da view ativa
+  const meta = V.meta || META_FULL;        // shadow do meta (janela do período)
+  dashPane.innerHTML = PRISTINE_DASH;      // reset → evita listeners/append duplicados
+  const TICKETS_IDX = data.tickets_index || {};   // subset filtrado (ids do período)
+  const BUCKET_IDS  = data.bucket_ids || {};
+  const FECH_IDS    = data.fechamento_ids || {};
 
   // ============================================================
   // KPIs
@@ -1681,6 +1855,347 @@
   // Inicializa tooltips Bootstrap (opt-in)
   // ============================================================
   $('[data-toggle="tooltip"]').tooltip({ html: true, container: 'body', boundary: 'viewport' });
+  } // ─────────────────────── fim renderDashboard() ───────────────────────
+
+  // ============================================================
+  // recomputeView — reagrega o tickets_index filtrado por período
+  // Espelha export_chat_dashboard.py:build_payload (mesma forma/estatísticas).
+  // ============================================================
+  function _mean(a){ const x=a.filter(v=>v!=null&&!isNaN(v)); return x.length? x.reduce((s,v)=>s+v,0)/x.length : null; }
+  function _median(a){ const x=a.filter(v=>v!=null&&!isNaN(v)).sort((p,q)=>p-q); if(!x.length) return null; const m=Math.floor(x.length/2); return x.length%2? x[m] : (x[m-1]+x[m])/2; }
+  function _p95(a){ const x=a.filter(v=>v!=null&&!isNaN(v)).sort((p,q)=>p-q); if(!x.length) return null; const idx=(x.length-1)*0.95, lo=Math.floor(idx), hi=Math.ceil(idx); return lo===hi? x[lo] : x[lo]+(x[hi]-x[lo])*(idx-lo); }
+  const _r1=v=>v==null?null:Math.round(v*10)/10;
+  const _r2=v=>v==null?null:Math.round(v*100)/100;
+  function _statsArr(a){ const x=a.filter(v=>v!=null&&!isNaN(v)); return x.length? {n:x.length, media:_r1(_mean(x)), p50:_r1(_median(x)), p95:_r1(_p95(x))} : {n:0,media:null,p50:null,p95:null}; }
+  const _AUTO=['auto_timeout','auto_inatividade'];
+
+  function recomputeView(iniMs, fimMs) {
+    const idx = data.tickets_index || {};
+    // acumuladores
+    const sub = {};                 // tickets_index filtrado
+    const buckets={}, fech={}, matriz={}, matrizIds={}, bucketIds={}, fechIds={};
+    const filas={}, users={}, sources={}, dias={}, heat={}, notas={};
+    const arrDr=[], arrDc=[];                         // funil (todos)
+    const ihDe=[], ihDh=[], ihDt=[], ihAutoDt=[], ihHumDt=[];  // inbound_atendido_humano
+    let total=0, avaliados=0; const notaArr=[]; const coms=[];
+    const ob={total:0, sem_reply:0, com_reply:0, ids_sem_reply:[], ids_com_reply:[], filas:{}};
+
+    for (const id in idx) {
+      const t = idx[id];
+      const dm = parseBRDate(t.d);
+      if (!dm || dm < iniMs || dm > fimMs) continue;
+      sub[id] = t;
+      total++;
+      const b=t.b||'', z=t.z||'', f=t.f||'';
+      buckets[b]=(buckets[b]||0)+1;
+      fech[z]=(fech[z]||0)+1;
+      (bucketIds[b]=bucketIds[b]||[]).push(id);
+      (fechIds[z]=fechIds[z]||[]).push(id);
+      (matriz[b]=matriz[b]||{})[z]=(matriz[b][z]||0)+1;
+      ((matrizIds[b]=matrizIds[b]||{})[z]=matrizIds[b][z]||[]).push(id);
+      if (t.s!=null){ avaliados++; notaArr.push(+t.s); }
+      // funil (todos)
+      if (t.dr!=null) arrDr.push(t.dr);
+      if (t.dc!=null) arrDc.push(t.dc);
+      const isIH = b==='inbound_atendido_humano';
+      if (isIH){
+        if (t.de!=null) ihDe.push(t.de);
+        if (t.dh!=null) ihDh.push(t.dh);
+        if (t.dt!=null){ ihDt.push(t.dt);
+          if (_AUTO.includes(z)) ihAutoDt.push(t.dt);
+          if (z==='humano') ihHumDt.push(t.dt);
+        }
+      }
+      // por fila
+      if (f){
+        const g = filas[f] || (filas[f]={fila:f, tickets:0, atendidos_humano:0, de:[], dh:[], dt:[], fechado_auto:0, fechado_bot_outro:0, fechado_cli_abandono:0, fechado_humano:0, abertos:0, notas:[], ids:[]});
+        g.tickets++; g.ids.push(id);
+        if (isIH){ g.atendidos_humano++; if(t.de!=null)g.de.push(t.de); if(t.dh!=null)g.dh.push(t.dh); if(t.dt!=null)g.dt.push(t.dt); }
+        if (_AUTO.includes(z)) g.fechado_auto++;
+        else if (z==='bot_sem_conclusao') g.fechado_bot_outro++;
+        else if (z==='cliente_sem_retorno') g.fechado_cli_abandono++;
+        else if (z==='humano') g.fechado_humano++;
+        if (z==='aberto') g.abertos++;
+        if (t.s!=null) g.notas.push(+t.s);
+      }
+      // por usuário (dono humano)
+      const uid = t.hu||'';
+      if (uid){
+        const u = users[uid] || (users[uid]={userId:uid, nome:t.h||'', sector:t.hs||'', tickets:0, fechou_sozinho:0, passou_pra_outro:0, camila_encerrou:0, cli_abandonou:0, bot_residual:0, abertos:0, de:[], dtFechou:[], dtCamila:[], notas:[], ids:[], ids_fechou_sozinho:[], ids_passou_pra_outro:[], ids_camila_encerrou:[], ids_cli_abandonou:[], ids_bot_residual:[], ids_abertos:[]});
+        u.tickets++; u.ids.push(id);
+        if (!u.nome && t.h) u.nome=t.h;
+        if (isIH && t.de!=null) u.de.push(t.de);
+        if (z==='humano'){
+          if (t.lh===uid){ u.fechou_sozinho++; u.ids_fechou_sozinho.push(id); if(t.dt!=null)u.dtFechou.push(t.dt); }
+          else if (t.lh){ u.passou_pra_outro++; u.ids_passou_pra_outro.push(id); }
+        } else if (_AUTO.includes(z)){ u.camila_encerrou++; u.ids_camila_encerrou.push(id); if(t.dt!=null)u.dtCamila.push(t.dt); }
+        else if (z==='cliente_sem_retorno'){ u.cli_abandonou++; u.ids_cli_abandonou.push(id); }
+        else if (z==='bot_sem_conclusao'){ u.bot_residual++; u.ids_bot_residual.push(id); }
+        if (z==='aberto'){ u.abertos++; u.ids_abertos.push(id); }
+        if (t.s!=null) u.notas.push(+t.s);
+      }
+      // por source
+      const src = t.src || '(null)';
+      const sg = sources[src] || (sources[src]={source:src, tickets:0, buckets:{}, ids:[]});
+      sg.tickets++; sg.ids.push(id); sg.buckets[b]=(sg.buckets[b]||0)+1;
+      // série diária (ISO)
+      const mm=/^(\d{2})\/(\d{2})\/(\d{4})/.exec(t.d);
+      if (mm){
+        const iso = mm[3]+'-'+mm[2]+'-'+mm[1];
+        const dg = dias[iso] || (dias[iso]={data:iso, data_br:mm[1]+'/'+mm[2]+'/'+mm[3], total:0, inbound_camila:0, inbound_humano:0, inbound_pendente:0, outbound_sem_reply:0, outbound_com_reply:0, dt:[], ids:[]});
+        dg.total++; dg.ids.push(id);
+        if (b==='inbound_resolvido_camila') dg.inbound_camila++;
+        else if (isIH){ dg.inbound_humano++; if(t.dt!=null)dg.dt.push(t.dt); }
+        else if (b==='inbound_transferido_sem_humano') dg.inbound_pendente++;
+        else if (b==='outbound_sem_reply') dg.outbound_sem_reply++;
+        else if (b==='outbound_com_reply') dg.outbound_com_reply++;
+      }
+      // heatmap (dow 0=seg, hora)
+      const dt0 = new Date(dm);
+      const dow = (dt0.getDay()+6)%7, hora = dt0.getHours();
+      const hk = dow+'_'+hora;
+      const hg = heat[hk] || (heat[hk]={hora, dow, tickets:0, ids:[]});
+      hg.tickets++; hg.ids.push(id);
+      // notas dist
+      if (t.s!=null){ const ns=+t.s; (notas[ns]=notas[ns]||{nota:ns, n:0, ids:[]}); notas[ns].n++; notas[ns].ids.push(id); }
+      // comentários
+      if (t.o && String(t.o).trim()) coms.push({id, ticket:t.n, nota:t.s, obs:String(t.o).slice(0,300), fila:f, data:t.d, _ts:dm});
+      // outbound
+      if (b==='outbound_sem_reply' || b==='outbound_com_reply'){
+        ob.total++;
+        const og = ob.filas[f] || (ob.filas[f]={fila:f, total:0, sem_reply:0, com_reply:0, ids:[], ids_sem_reply:[], ids_com_reply:[]});
+        og.total++; og.ids.push(id);
+        if (b==='outbound_sem_reply'){ ob.sem_reply++; ob.ids_sem_reply.push(id); og.sem_reply++; og.ids_sem_reply.push(id); }
+        else { ob.com_reply++; ob.ids_com_reply.push(id); og.com_reply++; og.ids_com_reply.push(id); }
+      }
+    }
+
+    const por_fila = Object.values(filas).map(g=>({
+      fila:g.fila, tickets:g.tickets, atendidos_humano:g.atendidos_humano,
+      espera_humano_med:_r1(_mean(g.de)), humano_resolve_med:_r1(_mean(g.dh)), resolucao_med:_r1(_mean(g.dt)),
+      fechado_auto:g.fechado_auto, fechado_bot_outro:g.fechado_bot_outro, fechado_cli_abandono:g.fechado_cli_abandono,
+      fechado_humano:g.fechado_humano, abertos:g.abertos,
+      nota_media:g.notas.length?_r2(_mean(g.notas)):null, n_avaliacoes:g.notas.length, ids:g.ids,
+    })).sort((a,b)=>b.tickets-a.tickets);
+
+    const por_usuario = Object.values(users).map(u=>({
+      userId:u.userId, nome:u.nome, sector:u.sector, tickets:u.tickets,
+      fechou_sozinho:u.fechou_sozinho, efetividade_pct:u.tickets?_r1(u.fechou_sozinho/u.tickets*100):null,
+      passou_pra_outro:u.passou_pra_outro, camila_encerrou:u.camila_encerrou, cli_abandonou:u.cli_abandonou,
+      bot_residual:u.bot_residual, abertos:u.abertos,
+      primeira_resposta_med:_r1(_mean(u.de)), tempo_resolucao_humano_med:_r1(_median(u.dtFechou)), tempo_ate_camila_fechar_med:_r1(_median(u.dtCamila)),
+      nota_media:u.notas.length?_r2(_mean(u.notas)):null, n_avaliacoes:u.notas.length,
+      ids:u.ids, ids_fechou_sozinho:u.ids_fechou_sozinho, ids_passou_pra_outro:u.ids_passou_pra_outro,
+      ids_camila_encerrou:u.ids_camila_encerrou, ids_cli_abandonou:u.ids_cli_abandonou, ids_bot_residual:u.ids_bot_residual, ids_abertos:u.ids_abertos,
+    })).sort((a,b)=>b.tickets-a.tickets);
+
+    const por_source = Object.values(sources).sort((a,b)=>b.tickets-a.tickets);
+    const serie = Object.values(dias).map(d=>({...d, tempo_total_med:_r1(_mean(d.dt))})).sort((a,b)=>a.data<b.data?-1:1);
+    const heatmap = Object.values(heat);
+    const notas_dist = Object.values(notas).sort((a,b)=>a.nota-b.nota);
+    coms.sort((a,b)=>b._ts-a._ts);
+    const comentarios = coms.slice(0,20).map(c=>({id:c.id, ticket:c.ticket, nota:c.nota, obs:c.obs, fila:c.fila, data:c.data}));
+    const outbound = { total:ob.total, sem_reply:ob.sem_reply, com_reply:ob.com_reply, ids_sem_reply:ob.ids_sem_reply, ids_com_reply:ob.ids_com_reply,
+      por_fila: Object.values(ob.filas).map(g=>({fila:g.fila, total:g.total, sem_reply:g.sem_reply, com_reply:g.com_reply, taxa_reply:g.total?_r1(g.com_reply/g.total*100):0, ids:g.ids, ids_sem_reply:g.ids_sem_reply, ids_com_reply:g.ids_com_reply})).sort((a,b)=>b.total-a.total) };
+
+    return {
+      meta: { gerado_em: META_FULL.gerado_em, gerado_em_br: META_FULL.gerado_em_br, janela_dias: Math.max(1, Math.round((fimMs-iniMs)/86400000)) },
+      kpis: { total_tickets:total, buckets, fechamento:fech, matriz_bf:matriz, avaliados, nota_media: notaArr.length?_r2(_mean(notaArr)):null },
+      funil_segundos: {
+        camila_responde:_statsArr(arrDr), camila_classifica:_statsArr(arrDc),
+        espera_humano:_statsArr(ihDe), humano_resolve:_statsArr(ihDh), total:_statsArr(ihDt),
+        total_auto_fechado:_statsArr(ihAutoDt), total_humano_fechado:_statsArr(ihHumDt),
+      },
+      por_fila, por_usuario, por_source, serie_30d:serie, heatmap, notas_dist,
+      comentarios_recentes:comentarios, outbound,
+      tickets_index:sub, bucket_ids:bucketIds, fechamento_ids:fechIds, matriz_bf_ids:matrizIds,
+    };
+  }
+
+  // ============================================================
+  // Barra de período
+  // ============================================================
+  const elIni = document.getElementById('periodoIni');
+  const elFim = document.getElementById('periodoFim');
+  const elInfo = document.getElementById('periodoInfo');
+  const refDate = new Date(NOW_REF);
+  const ymd = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const startMs = s => { const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s); return m? new Date(+m[1],+m[2]-1,+m[3],0,0,0,0).getTime() : null; };
+  const endMs   = s => { const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s); return m? new Date(+m[1],+m[2]-1,+m[3],23,59,59,999).getTime() : null; };
+  // defaults: últimos 90d
+  const d90 = new Date(NOW_REF - 90*86400000);
+  elIni.value = ymd(d90); elFim.value = ymd(refDate);
+  let periodo = { iniMs: startMs(elIni.value), fimMs: endMs(elFim.value) };
+  let incluirOutbound = false;
+  let inicial = true;
+
+  function lastFridayYMD(){
+    const d = new Date(NOW_REF);
+    // weekday: 5 = sexta. recua até a sexta mais recente (inclui hoje se for sexta)
+    let back = (d.getDay() - 5 + 7) % 7;
+    d.setDate(d.getDate() - back);
+    return ymd(d);
+  }
+  function applyPeriodo(){
+    periodo = { iniMs: startMs(elIni.value), fimMs: endMs(elFim.value) };
+    if (periodo.iniMs==null || periodo.fimMs==null || periodo.iniMs>periodo.fimMs){
+      elInfo.textContent = 'intervalo inválido'; return;
+    }
+    // dashboard: na carga inicial mantém a view do ETL (série 30d original);
+    // a partir de qualquer interação, recalcula tudo (inclui tempos) pelo período.
+    V = inicial ? data : recomputeView(periodo.iniMs, periodo.fimMs);
+    renderDashboard();
+    renderOpenTabs();
+    const di = new Date(periodo.iniMs), dfim = new Date(periodo.fimMs);
+    elInfo.innerHTML = '<i class="fas fa-filter mr-1"></i>'
+      + di.toLocaleDateString('pt-BR') + ' → ' + dfim.toLocaleDateString('pt-BR')
+      + (inicial ? ' · <span title="dashboard na janela cheia do ETL">janela inteira</span>' : '');
+  }
+  elIni.addEventListener('change', ()=>{ inicial=false; applyPeriodo(); });
+  elFim.addEventListener('change', ()=>{ inicial=false; applyPeriodo(); });
+  document.getElementById('periodoPresets').addEventListener('click', (e)=>{
+    const btn = e.target.closest('button[data-preset]'); if(!btn) return;
+    const p = btn.dataset.preset;
+    inicial = false;
+    if (p==='sexta') elIni.value = lastFridayYMD();
+    else elIni.value = ymd(new Date(NOW_REF - (+p)*86400000));
+    elFim.value = ymd(refDate);
+    document.querySelectorAll('#periodoPresets button').forEach(b=>{ b.classList.remove('btn-primary','btn-secondary'); b.classList.add(b===btn?'btn-primary':(b.dataset.preset==='sexta'?'btn-outline-primary':'btn-outline-secondary')); });
+    btn.classList.remove('btn-outline-primary','btn-outline-secondary'); btn.classList.add('btn-primary');
+    applyPeriodo();
+  });
+
+  // ============================================================
+  // Abas de tickets em aberto (mais antigos / por fila / +24h)
+  // ============================================================
+  function fmtDur(ms){
+    if (ms==null || ms<0) return '—';
+    const h = ms/3600000;
+    if (h < 1) return Math.round(ms/60000)+'min';
+    if (h < 24) return Math.floor(h)+'h';
+    const d = Math.floor(h/24), rh = Math.round(h%24);
+    return d+'d '+String(rh).padStart(2,'0')+'h';
+  }
+  function abertosNoPeriodo(){
+    const idx = data.tickets_index || {};
+    const out = [];
+    for (const id in idx){
+      const t = idx[id];
+      if (t.z !== 'aberto') continue;
+      const dm = parseBRDate(t.d);
+      if (!dm || dm < periodo.iniMs || dm > periodo.fimMs) continue;
+      if (!incluirOutbound && !(t.b||'').startsWith('inbound_')) continue;
+      out.push({ id, ...t, _ts: dm, _aberto_ms: NOW_REF - dm });
+    }
+    out.sort((a,b)=>a._ts-b._ts); // mais antigo primeiro
+    return out;
+  }
+  function renderOpenTabs(){
+    const abertos = abertosNoPeriodo();
+    const d24 = abertos.filter(t=>t._aberto_ms > 24*3600000);
+    document.getElementById('badgeAbertos').textContent = abertos.length;
+    document.getElementById('badge24h').textContent = d24.length;
+    // sincroniza toggles
+    document.querySelectorAll('.tgl-outbound').forEach(c=>{ c.checked = incluirOutbound; });
+
+    // ── Mais antigos abertos ──
+    document.getElementById('abertosAntigosCount').textContent = '(' + abertos.length + ' abertos)';
+    const tbA = document.getElementById('abertosMaisAntigos');
+    tbA.innerHTML = abertos.length ? abertos.map(t=>{
+      const url = CHAT_URL(t.n);
+      return `<tr class="tk24-row" data-id="${t.id}" data-n="${t.n!=null?t.n:''}" data-c="${escapeHtml(t.c||'')}">
+        <td><b>#${t.n!=null?t.n:'?'}</b></td>
+        <td>${escapeHtml(t.c||'—')}</td>
+        <td>${escapeHtml(t.f||'—')}</td>
+        <td class="text-right text-danger font-weight-bold">${fmtDur(t._aberto_ms)}</td>
+        <td>${escapeHtml(t.d||'—')}</td>
+        <td class="text-center"><a href="${url}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success" title="Ir para o chat" onclick="event.stopPropagation();"><i class="fas fa-external-link-alt"></i></a></td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="6" class="text-muted text-center py-3">Nenhum ticket aberto no período.</td></tr>';
+
+    // ── Por fila ──
+    const porFila = {};
+    abertos.forEach(t=>{ const f=t.f||'(sem fila)'; const g=porFila[f]||(porFila[f]={fila:f,n:0,oldest:t._ts}); g.n++; if(t._ts<g.oldest)g.oldest=t._ts; });
+    const filaArr = Object.values(porFila).sort((a,b)=>b.n-a.n);
+    const tbF = document.getElementById('abertosPorFila');
+    tbF.innerHTML = filaArr.length ? filaArr.map(g=>{
+      const od = new Date(g.oldest);
+      const odbr = String(od.getDate()).padStart(2,'0')+'/'+String(od.getMonth()+1).padStart(2,'0')+'/'+od.getFullYear()+' '+String(od.getHours()).padStart(2,'0')+':'+String(od.getMinutes()).padStart(2,'0');
+      return `<tr><td>${escapeHtml(g.fila)}</td><td class="text-right"><b>${g.n}</b></td><td class="small text-muted">${odbr} <span class="text-danger">(${fmtDur(NOW_REF-g.oldest)})</span></td></tr>`;
+    }).join('') : '<tr><td colspan="3" class="text-muted text-center py-3">—</td></tr>';
+
+    // ── Abertos +24h por fila ──
+    const g24 = {};
+    d24.forEach(t=>{ const f=t.f||'(sem fila)'; (g24[f]=g24[f]||[]).push(t); });
+    const grupos = Object.entries(g24).sort((a,b)=>b[1].length-a[1].length);
+    const box = document.getElementById('lista24h');
+    box.innerHTML = grupos.length ? grupos.map(([fila,lst])=>{
+      lst.sort((a,b)=>a._ts-b._ts);
+      const oldest = lst[0];
+      const rows = lst.map(t=>`
+        <tr class="tk24-row" data-id="${t.id}" data-n="${t.n!=null?t.n:''}" data-c="${escapeHtml(t.c||'')}">
+          <td style="width:120px;"><b>#${t.n!=null?t.n:'?'}</b></td>
+          <td>${escapeHtml(t.c||'—')}</td>
+          <td class="text-right text-danger font-weight-bold" style="width:120px;">${fmtDur(t._aberto_ms)}</td>
+          <td class="small text-muted" style="width:150px;">${escapeHtml(t.d||'')}</td>
+          <td class="text-center" style="width:60px;"><i class="fas fa-comments text-muted" title="Ver prévia"></i></td>
+        </tr>`).join('');
+      return `<div class="fila-grupo">
+        <div class="fila-head"><span><i class="fas fa-layer-group mr-1"></i>${escapeHtml(fila)}</span>
+          <span class="badge badge-danger">${lst.length} aberto${lst.length>1?'s':''} · mais antigo ${fmtDur(oldest._aberto_ms)}</span></div>
+        <table class="table table-sm table-hover mb-0" style="font-size:.85rem;"><tbody>${rows}</tbody></table>
+      </div>`;
+    }).join('') : '<div class="text-muted text-center py-4">Nenhum ticket aberto há mais de 24h no período. 🎉</div>';
+  }
+
+  // clique nas linhas de ticket aberto → modal de conversa
+  document.addEventListener('click', (e)=>{
+    const tr = e.target.closest('.tk24-row'); if(!tr) return;
+    if (e.target.closest('a')) return; // botão "ir para o chat" já navega
+    openConversa(tr.dataset.id, tr.dataset.n, tr.dataset.c);
+  });
+  // toggles outbound (sincronizados)
+  document.querySelectorAll('.tgl-outbound').forEach(c=>{
+    c.addEventListener('change', ()=>{ incluirOutbound = c.checked; renderOpenTabs(); });
+  });
+
+  // ============================================================
+  // Modal: prévia da conversa de 1 ticket
+  // ============================================================
+  async function openConversa(id, n, cliente){
+    document.getElementById('convTitle').textContent = '#'+(n||'?') + (cliente ? ' · '+cliente : '');
+    const go = document.getElementById('convGoChat');
+    go.href = CHAT_URL(n);
+    document.getElementById('convMeta').textContent = '';
+    const body = document.getElementById('convBody');
+    body.innerHTML = '<div class="text-muted text-center py-4"><i class="fas fa-spinner fa-spin"></i> Carregando conversa…</div>';
+    $('#conversaModal').modal('show');
+    try {
+      const r = await fetch('/api/chat_dashboard/conversa?id='+encodeURIComponent(id), { credentials:'same-origin', cache:'no-store' });
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      const j = await r.json();
+      const msgs = j.mensagens || [];
+      if (!msgs.length){ body.innerHTML = '<div class="text-muted text-center py-4">Sem mensagens nesta conversa.</div>'; return; }
+      const rotulo = { cliente:'Cliente', humano:'Equipe', bot:'Camila.ai', sistema:'Sistema' };
+      body.innerHTML = msgs.map(m=>`
+        <div class="conv-msg conv-${m.quem}">
+          <div class="bubble">
+            <div class="who">${escapeHtml(rotulo[m.quem]||m.quem)}${m.nome && m.quem!=='sistema' ? ' · '+escapeHtml(m.nome) : ''}</div>
+            <div>${escapeHtml(m.body||'') || '<i class="text-muted">(mídia / sem texto)</i>'}</div>
+            <div class="when">${escapeHtml(m.em||'')}</div>
+          </div>
+        </div>`).join('');
+      document.getElementById('convMeta').textContent = j.total + ' mensagem' + (j.total>1?'s':'');
+      body.scrollTop = 0;
+    } catch (err) {
+      body.innerHTML = '<div class="alert alert-danger m-3">Não foi possível carregar a conversa: '+escapeHtml(String(err.message||err))+'<br><small>Abra direto no chat pelo botão abaixo.</small></div>';
+    }
+  }
+
+  // ============================================================
+  // Render inicial
+  // ============================================================
+  applyPeriodo();   // dashboard (view do ETL) + abas + período
 
   function escapeHtml(s) {
     if (s == null) return '';
