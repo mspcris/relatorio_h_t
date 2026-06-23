@@ -727,6 +727,32 @@ def save_limits(providers: dict, projects: dict) -> dict:
     return data
 
 
+def _overage_path() -> str:
+    return _path("overage_notes.json")
+
+
+def load_overage_notes(month: Optional[str] = None) -> dict:
+    """{mês: {"escopo::nome": "motivo"}} — ou só o mês se informado."""
+    d = _read_json(_overage_path()) or {}
+    return d if month is None else (d.get(valid_month(month), {}) or {})
+
+
+def set_overage_note(month: str, key: str, note: str) -> str:
+    """Grava (ou apaga, se vazio) a justificativa de um estouro no mês."""
+    month, key = valid_month(month), str(key)
+    d = _read_json(_overage_path()) or {}
+    bucket = d.setdefault(month, {})
+    note = (str(note or "")).strip()
+    if note:
+        bucket[key] = note
+    else:
+        bucket.pop(key, None)
+    if not bucket:
+        d.pop(month, None)
+    _write_json_atomic(_overage_path(), d)
+    return note
+
+
 def _limit_status(spent: float, limit) -> dict:
     spent = round(float(spent or 0.0), 4)
     lim = limit if isinstance(limit, (int, float)) else None
@@ -838,6 +864,12 @@ def load_dashboard(month: Optional[str] = None) -> dict:
         if st["over"]:
             alerts.append({"scope": "provedor", "name": _PROV_LABEL[k],
                            "spent": st["spent"], "limit": st["limit"]})
+
+    # justificativas (diário) por mês para cada estouro
+    onotes = load_overage_notes(month)
+    for a in alerts:
+        a["key"] = f'{a["scope"]}::{a["name"]}'
+        a["note"] = onotes.get(a["key"], "")
 
     return {
         "generated_at": _now_iso(),

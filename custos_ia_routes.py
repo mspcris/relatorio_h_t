@@ -287,6 +287,19 @@ def api_limits_set():
     return jsonify({"ok": True, "limits": saved})
 
 
+@custos_ia_bp.post("/api/custos-ia/overage-note")
+def api_overage_note():
+    if not _require_admin():
+        return _deny()
+    body = request.get_json(silent=True) or {}
+    key = (body.get("key") or "").strip()
+    if not key:
+        return jsonify({"ok": False, "error": "'key' do estouro é obrigatória"}), 400
+    month = custos_ia.valid_month(body.get("month"))
+    note = custos_ia.set_overage_note(month, key, body.get("note", ""))
+    return jsonify({"ok": True, "note": note})
+
+
 @custos_ia_bp.post("/api/custos-ia/month/close")
 def api_month_close():
     email = _require_admin()

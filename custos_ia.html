@@ -48,6 +48,11 @@
     tr.row-over td { background:#fdecef !important; }
     .pill-over { background:#dc3545; color:#fff; font-size:.7rem; padding:.05rem .4rem; border-radius:999px; }
     .pill-ok { color:#28a745; }
+    #alertsBanner a { color:#fff; text-decoration:underline; font-weight:600; }
+    #alertsBanner .ovn { margin-top:.15rem; }
+    #alertsBanner .ovn-text { font-style:italic; opacity:.95; }
+    #alertsBanner .ovn-input { color:#212529; }
+    #alertsBanner li { margin-bottom:.35rem; }
   </style>
 </head>
 
@@ -383,8 +388,40 @@ function renderProviderLimits(p){
 function renderAlerts(alerts){
   const b = $("alertsBanner");
   if(!alerts || !alerts.length){ b.innerHTML = ""; return; }
-  const lis = alerts.map(a=>`<li><b>${escapeHtml(a.name)}</b> (${a.scope}): gastou <b>${fmtUSD(a.spent)}</b> · teto ${fmtUSD(a.limit)}</li>`).join("");
-  b.innerHTML = `<div class="alert alert-danger py-2 px-3"><i class="fas fa-exclamation-triangle"></i> <b>${alerts.length} estouro(s) de limite neste mês:</b><ul class="mb-0">${lis}</ul></div>`;
+  const lis = alerts.map((a,i)=>{
+    const noteShown = a.note
+      ? `<span class="ovn-text">💬 ${escapeHtml(a.note)}</span> <a href="#" class="ovn-edit" data-i="${i}">editar</a>`
+      : `<a href="#" class="ovn-edit" data-i="${i}">+ explicar o motivo</a>`;
+    return `<li data-key="${escapeHtml(a.key||'')}" data-i="${i}">
+      <b>${escapeHtml(a.name)}</b> (${a.scope}): gastou <b>${fmtUSD(a.spent)}</b> · teto ${fmtUSD(a.limit)}
+      <div class="ovn">${noteShown}
+        <span class="ovn-form" style="display:none">
+          <input class="ovn-input form-control form-control-sm d-inline-block" style="width:55%;max-width:520px" value="${escapeHtml(a.note||'')}" placeholder="por que estourou? (opcional — vira histórico)">
+          <button class="btn btn-xs btn-light ovn-save" data-i="${i}">salvar</button>
+          <a href="#" class="ovn-cancel" data-i="${i}">cancelar</a>
+        </span>
+      </div></li>`;
+  }).join("");
+  b.innerHTML = `<div class="alert alert-danger py-2 px-3"><i class="fas fa-exclamation-triangle"></i>
+      <b>${alerts.length} estouro(s) de limite neste mês</b>
+      <span style="opacity:.85">— clique em "explicar" para registrar o motivo (vira histórico)</span>
+      <ul class="mb-0 mt-1">${lis}</ul></div>`;
+  b.querySelectorAll(".ovn-edit").forEach(el=>el.addEventListener("click",e=>{e.preventDefault(); toggleOvn(el.dataset.i,true);}));
+  b.querySelectorAll(".ovn-cancel").forEach(el=>el.addEventListener("click",e=>{e.preventDefault(); toggleOvn(el.dataset.i,false);}));
+  b.querySelectorAll(".ovn-save").forEach(el=>el.addEventListener("click",e=>{e.preventDefault(); saveOvn(el.dataset.i);}));
+}
+function _ovnLi(i){ return $("alertsBanner").querySelector(`li[data-i="${i}"]`); }
+function toggleOvn(i, show){
+  const li = _ovnLi(i); if(!li) return;
+  li.querySelector(".ovn-form").style.display = show ? "inline-block" : "none";
+  if(show){ const inp=li.querySelector(".ovn-input"); inp.focus(); inp.select(); }
+}
+async function saveOvn(i){
+  const li = _ovnLi(i); if(!li) return;
+  try{ await api("/overage-note",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({month:CUR_MONTH, key:li.dataset.key, note:li.querySelector(".ovn-input").value})});
+    msg($("globalMsg"),"Motivo registrado.","ok"); await load(CUR_MONTH);
+  }catch(e){ msg($("globalMsg"),"Erro: "+escapeHtml(e.message),"err"); }
 }
 
 function renderMatrix(mx){
