@@ -1059,6 +1059,16 @@
     return;
   }
 
+  // ── JSON LEVE de tickets abertos (ETL próprio, a cada 15 min) ──
+  // As abas de abertos usam ESTE arquivo (fresco), não o tickets_index do
+  // dashboard completo (que roda em cadência mais lenta). Fallback: deriva
+  // do tickets_index se o leve ainda não existir.
+  let abertosData = null;
+  try {
+    const ra = await fetch('/json_consolidado/chat_abertos.json', { cache: 'no-store', credentials: 'same-origin' });
+    if (ra.ok) abertosData = await ra.json();
+  } catch (e) { /* fallback abaixo */ }
+
   loading.style.display = 'none';
   main.style.display = 'block';
 
@@ -1301,6 +1311,18 @@
   const NOW_REF = (function () {
     const t = META_FULL.gerado_em ? Date.parse(META_FULL.gerado_em) : NaN;
     return isNaN(t) ? Date.now() : t;
+  })();
+  // ── Abertos: vêm do ETL leve (chat_abertos.json, a cada 15 min). Fallback:
+  //    deriva do tickets_index do dashboard completo. ──
+  const ABERTOS = (abertosData && Array.isArray(abertosData.abertos))
+    ? abertosData.abertos
+    : Object.entries(data.tickets_index || {})
+        .filter(([,t]) => t.z === 'aberto')
+        .map(([id,t]) => ({ id, n:t.n, c:t.c, f:t.f, b:t.b, d:t.d }));
+  const NOW_REF_ABERTOS = (function () {
+    const g = abertosData && abertosData.meta && abertosData.meta.gerado_em;
+    const t = g ? Date.parse(g) : NaN;
+    return isNaN(t) ? NOW_REF : t;
   })();
   const dashPane = document.getElementById('tabAtendimento');
   const PRISTINE_DASH = dashPane.innerHTML;   // template limpo p/ reset a cada render
@@ -2079,15 +2101,12 @@
     return d+'d '+String(rh).padStart(2,'0')+'h';
   }
   function abertosNoPeriodo(){
-    const idx = data.tickets_index || {};
     const out = [];
-    for (const id in idx){
-      const t = idx[id];
-      if (t.z !== 'aberto') continue;
+    for (const t of ABERTOS){
       const dm = parseBRDate(t.d);
       if (!dm || dm < periodo.iniMs || dm > periodo.fimMs) continue;
       if (!incluirOutbound && !(t.b||'').startsWith('inbound_')) continue;
-      out.push({ id, ...t, _ts: dm, _aberto_ms: NOW_REF - dm });
+      out.push({ ...t, _ts: dm, _aberto_ms: NOW_REF_ABERTOS - dm });
     }
     out.sort((a,b)=>a._ts-b._ts); // mais antigo primeiro
     return out;
@@ -2105,7 +2124,7 @@
     // "Atualizado em DD/MM/AAAA - HHhMMmSSs" — momento do snapshot do ETL (NOW_REF)
     (function(){
       const el = document.getElementById('abertosAtualizado'); if (!el) return;
-      const dt = new Date(NOW_REF), p = n => String(n).padStart(2,'0');
+      const dt = new Date(NOW_REF_ABERTOS), p = n => String(n).padStart(2,'0');
       el.innerHTML = '<i class="fas fa-sync-alt mr-1"></i>Atualizado em '
         + p(dt.getDate())+'/'+p(dt.getMonth()+1)+'/'+dt.getFullYear()
         + ' - '+p(dt.getHours())+'h'+p(dt.getMinutes())+'m'+p(dt.getSeconds())+'s';

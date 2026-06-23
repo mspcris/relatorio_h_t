@@ -3,7 +3,8 @@
 export_chat_dashboard.py — Dashboard do chat camim_chat_production.
 
 Janela: últimos 90 dias (env CHAT_DASH_DIAS).
-Cron:   a cada 15 min (/etc/cron.d/relatorio_ht; era 120 min até 2026-06-23).
+Cron:   ETL completo (pesado, ~3,5min) a cada 2h. Os tickets ABERTOS, que
+        precisam de frescor de 15 min, vêm do ETL leve export_chat_abertos.py.
 Saída:  json_consolidado/chat_dashboard.json
 
 ═══════════════════════════════════════════════════════════════════════════════
