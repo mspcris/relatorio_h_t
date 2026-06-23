@@ -366,11 +366,12 @@ function renderHistory(hist, selMonth){
     ]},
     options: { responsive:true, plugins:{legend:{position:"bottom"},
       tooltip:{callbacks:{
-        // ao apontar a barra "Assinaturas", lista o valor de cada uma
+        // lista cada projeto/assinatura ao apontar a barra do respectivo segmento
         afterLabel:(it)=>{
-          if(it.dataset.label !== "Assinaturas") return;
-          const items = (byMonth[it.label]||{}).subs_items || [];
-          if(!items.length) return "  (sem assinaturas)";
+          const key = {OpenAI:"openai_items", Groq:"groq_items", Assinaturas:"subs_items"}[it.dataset.label];
+          if(!key) return;
+          const items = (byMonth[it.label]||{})[key] || [];
+          if(!items.length) return "  (sem itens)";
           return items.map(s=>"  • "+s.name+": "+fmtUSD(s.amount_usd));
         },
         footer:(it)=>"Total: "+fmtUSD(it.reduce((a,b)=>a+b.parsed.y,0)),

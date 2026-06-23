@@ -726,14 +726,23 @@ def monthly_history(n: int = DEFAULT_HISTORY_MONTHS) -> list[dict]:
         gt = float(g.get("total_usd") or 0.0)
         subs = subscriptions_for(m)
         st = round(sum(s["amount_usd"] for s in subs), 4)
-        subs_items = [{"name": s["name"], "amount_usd": s["amount_usd"]}
-                      for s in subs if s["amount_usd"] > 0]
+
+        def _items(projs):
+            its = [{"name": p.get("name") or p.get("id"),
+                    "amount_usd": round(float(p.get("amount_usd") or 0.0), 4)}
+                   for p in (projs or []) if (p.get("amount_usd") or 0) > 0]
+            its.sort(key=lambda x: x["amount_usd"], reverse=True)
+            return its
+
         hist.append({
             "month": m,
             "openai_usd": round(ot, 4),
             "groq_usd": round(gt, 4),
             "subs_usd": st,
-            "subs_items": subs_items,
+            "openai_items": _items(o.get("projects")),
+            "groq_items": _items(g.get("projects")),
+            "subs_items": [{"name": s["name"], "amount_usd": s["amount_usd"]}
+                           for s in subs if s["amount_usd"] > 0],
             "total_usd": round(ot + gt + st, 4),
             "closed": is_closed(m),
         })
