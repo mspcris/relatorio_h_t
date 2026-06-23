@@ -177,7 +177,37 @@ def main():
         os.fsync(f.fileno())
     os.replace(tmp, OUT_PATH)
 
+    # Publica DIRETO em /var/www (onde o nginx serve) sem esperar o sync_www
+    # (que roda a cada 5 min). Como este ETL roda a cada 1 min, isso é o que
+    # mantém a aba de abertos em "quase tempo real". Best-effort: se o destino
+    # não existir (ambiente de dev) ou faltar permissão, só ignora.
+    publish_www()
+
     print(f"  ✔ {OUT_PATH}  ({len(abertos)} abertos)  ⏱ {time.time() - t0:.1f}s")
+
+
+def publish_www():
+    """Copia o chat_abertos.json para /var/www/json_consolidado/ atomicamente."""
+    www_dir = os.environ.get("WWW_JSON_DIR", "/var/www/json_consolidado")
+    if not os.path.isdir(www_dir):
+        return
+    import shutil
+    dst = os.path.join(www_dir, "chat_abertos.json")
+    tmp = dst + ".tmp"
+    try:
+        shutil.copy2(OUT_PATH, tmp)
+        os.replace(tmp, dst)
+        try:
+            os.chmod(dst, 0o644)
+        except OSError:
+            pass
+        print(f"  ↳ publicado em {dst}")
+    except OSError as e:
+        print(f"  ! falha ao publicar em www: {e}")
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
