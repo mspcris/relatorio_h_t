@@ -325,6 +325,12 @@ const API = "/api/custos-ia";
 let CUR_MONTH = null, CUR = null, chartHistory = null;
 
 const fmtUSD = (v) => "US$ " + (Number(v||0)).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2});
+function fmtDT(iso){
+  if(!iso) return "";
+  const d = new Date(iso);
+  if(isNaN(d)) return iso;
+  return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", {hour:"2-digit", minute:"2-digit"});
+}
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const isZero = (v) => Math.abs(Number(v||0)) < 0.005;
 
@@ -498,7 +504,7 @@ function renderDashboard(d){
   $("subsMonth").textContent = d.month;
 
   renderProvRows($("openaiRows"), o.projects, $("openaiTotal"), o.total_usd);
-  $("openaiUpdated").textContent = o.updated_at ? ("· " + o.updated_at) : "";
+  $("openaiUpdated").textContent = o.updated_at ? ("· atualizado " + fmtDT(o.updated_at)) : "";
   if(o.error && (!o.projects || !o.projects.length)){
     let extra = "";
     if(/ADMIN_KEY|api.usage.read|permissão/i.test(o.error))
@@ -507,7 +513,7 @@ function renderDashboard(d){
   } else msg($("openaiBanner"), "", "");
 
   renderProvRows($("groqRows"), g.projects, $("groqTotal"), g.total_usd);
-  $("groqUpdated").textContent = g.updated_at ? ("· " + g.updated_at + (g.source ? " ("+g.source+")" : "")) : "";
+  $("groqUpdated").textContent = g.updated_at ? ("· atualizado " + fmtDT(g.updated_at) + (g.source ? " ("+g.source+")" : "")) : "";
   $("groqNote").textContent = g.period_note || "";
   msg($("groqBanner"), (!g.projects||!g.projects.length)&&g.error ? `<i class="fas fa-image"></i> ${escapeHtml(g.error)}` : "", "");
 
