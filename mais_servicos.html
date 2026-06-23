@@ -278,19 +278,20 @@
                                 </div>
                                 <h5 class="card-title">{{ s.label }}</h5>
                                 <p class="card-text flex-grow-1">{{ s.descricao or '' }}</p>
+                                {% set _btn_cor = s.cor or '#283593' %}
                                 {% if s.key == 'gpt_kpi_manus' %}
                                   {% if USER_HAS_OPENAI %}
-                                    <a href="{{ s.href }}" target="_blank" rel="noopener" class="btn btn-acessar mt-3" style="background:{{ s.cor }}; border-color:{{ s.cor }}; color:#fff;">
+                                    <a href="{{ s.href }}" target="_blank" rel="noopener" class="btn btn-acessar mt-3" style="background:{{ _btn_cor }}; border-color:{{ _btn_cor }}; color:#fff;">
                                         <i class="fas fa-external-link-alt mr-1"></i> Acessar
                                     </a>
                                   {% else %}
-                                    <button type="button" onclick="abrirModalSemAcessoOpenAI()" class="btn btn-acessar mt-3" style="background:{{ s.cor }}; border-color:{{ s.cor }}; color:#fff;">
+                                    <button type="button" onclick="abrirModalSemAcessoOpenAI()" class="btn btn-acessar mt-3" style="background:{{ _btn_cor }}; border-color:{{ _btn_cor }}; color:#fff;">
                                         <i class="fas fa-lock mr-1"></i> Acessar
                                     </button>
                                   {% endif %}
                                 {% else %}
                                   {% set is_external = s.href.startswith('http://') or s.href.startswith('https://') %}
-                                  <a href="{{ s.href }}" {% if is_external %}target="_blank" rel="noopener"{% endif %} class="btn btn-acessar mt-3" style="background:{{ s.cor }}; border-color:{{ s.cor }}; color:#fff;">
+                                  <a href="{{ s.href }}" {% if is_external %}target="_blank" rel="noopener"{% endif %} class="btn btn-acessar mt-3" style="background:{{ _btn_cor }}; border-color:{{ _btn_cor }}; color:#fff;">
                                     <i class="fas {% if is_external %}fa-external-link-alt{% else %}fa-arrow-right{% endif %} mr-1"></i> Acessar
                                   </a>
                                 {% endif %}
@@ -346,7 +347,8 @@
                                 <h5 class="card-title">{{ s.label }}</h5>
                                 <p class="card-text flex-grow-1">{{ s.descricao or '' }}</p>
                                 {% set is_external = s.href.startswith('http://') or s.href.startswith('https://') %}
-                                <a href="{{ s.href }}" {% if is_external %}target="_blank" rel="noopener"{% endif %} class="btn btn-acessar mt-3" style="background:{{ s.cor }}; border-color:{{ s.cor }}; color:#fff;">
+                                {% set _btn_cor = s.cor or '#283593' %}
+                                <a href="{{ s.href }}" {% if is_external %}target="_blank" rel="noopener"{% endif %} class="btn btn-acessar mt-3" style="background:{{ _btn_cor }}; border-color:{{ _btn_cor }}; color:#fff;">
                                     <i class="fas {% if is_external %}fa-external-link-alt{% else %}fa-arrow-right{% endif %} mr-1"></i> Acessar
                                 </a>
                             </div>
