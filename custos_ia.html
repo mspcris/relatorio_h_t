@@ -18,7 +18,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <style>
-    .small-box .inner h3 { font-size: 1.7rem; }
+    .small-box .inner h3 { font-size: 1.6rem; }
     .ci-money { font-variant-numeric: tabular-nums; }
     .ci-card { border-radius: 10px; }
     .ci-banner { border-left: 4px solid #ffc107; background: #fff8e1; }
@@ -30,17 +30,24 @@
     .ci-pill { font-size: .72rem; padding: .15rem .5rem; border-radius: 999px; }
     .ci-pill.closed { background: #6c757d; color: #fff; }
     .ci-pill.open { background: #d4edda; color: #155724; }
-    .ci-prov-head { display:flex; align-items:center; gap:.5rem; }
-    .ci-manual-row input { font-size:.85rem; }
+    .ci-prov-head { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
     .ci-spin { display:none; }
     .ci-loading .ci-spin { display:inline-block; }
+    .ci-prov-badge { font-size:.68rem; padding:.1rem .4rem; border-radius:4px; color:#fff; }
+    .ci-prov-badge.openai { background:#10a37f; }
+    .ci-prov-badge.groq { background:#f59e0b; }
+    .matrix-wrap { overflow-x:auto; }
+    table.matrix th:first-child, table.matrix td:first-child { position:sticky; left:0; background:#fff; z-index:1; }
+    table.matrix td.num, table.matrix th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .cell-zero { color:#cbd3da; }
+    .editor-box { background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:.75rem; }
+    .month-inline { width:auto; display:inline-block; }
   </style>
 </head>
 
 <body class="hold-transition sidebar-mini layout-fixed">
   <div class="wrapper">
 
-    <!-- Topbar -->
     <nav class="main-header navbar navbar-expand navbar-white navbar-light">
       <ul class="navbar-nav">
         <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li>
@@ -51,7 +58,6 @@
       </ul>
     </nav>
 
-    <!-- Sidebar -->
     <aside class="main-sidebar sidebar-dark-primary elevation-4">
       <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
       <div class="sidebar">
@@ -69,22 +75,24 @@
       </div>
     </aside>
 
-    <!-- Content -->
     <div class="content-wrapper">
       <section class="content-header">
         <div class="container-fluid">
           <div class="row align-items-center">
-            <div class="col-sm-6">
+            <div class="col-sm-5">
               <h1 class="m-0"><i class="fas fa-coins text-success"></i> Custos com IA</h1>
-              <span class="ci-muted">Custo real por projeto — OpenAI (API) + Groq (print/manual)</span>
+              <span class="ci-muted">Custo real por projeto — OpenAI + Groq + assinaturas</span>
             </div>
-            <div class="col-sm-6">
+            <div class="col-sm-7">
               <div class="d-flex justify-content-sm-end align-items-center flex-wrap" style="gap:.5rem">
                 <label class="mb-0 ci-muted">Mês:</label>
-                <select id="selMonth" class="form-control form-control-sm" style="width:auto"></select>
+                <select id="selMonth" class="form-control form-control-sm month-inline"></select>
                 <span id="monthStatus"></span>
-                <button id="btnRefresh" class="btn btn-sm btn-outline-primary" title="Re-buscar a Costs API da OpenAI agora">
-                  <i class="fas fa-sync"></i> <span class="ci-spin"><i class="fas fa-spinner fa-spin"></i></span> Atualizar OpenAI
+                <button id="btnRefresh" class="btn btn-sm btn-outline-primary" title="Re-buscar a Costs API da OpenAI para este mês">
+                  <i class="fas fa-sync"></i><span class="ci-spin"><i class="fas fa-spinner fa-spin"></i></span> OpenAI
+                </button>
+                <button id="btnBackfill" class="btn btn-sm btn-outline-primary" title="Buscar os últimos 6 meses da OpenAI">
+                  <i class="fas fa-history"></i><span class="ci-spin"><i class="fas fa-spinner fa-spin"></i></span> 6 meses
                 </button>
                 <button id="btnClose" class="btn btn-sm btn-outline-secondary"></button>
               </div>
@@ -98,7 +106,7 @@
 
           <div id="globalMsg"></div>
 
-          <!-- Cards de resumo -->
+          <!-- Resumo -->
           <div class="row">
             <div class="col-lg-3 col-6">
               <div class="small-box bg-gradient-success ci-card">
@@ -108,7 +116,7 @@
             </div>
             <div class="col-lg-3 col-6">
               <div class="small-box bg-gradient-info ci-card">
-                <div class="inner"><h3 class="ci-money" id="cardOpenai">US$ 0,00</h3><p>OpenAI</p></div>
+                <div class="inner"><h3 class="ci-money" id="cardOpenai">US$ 0,00</h3><p>OpenAI (API)</p></div>
                 <div class="icon"><i class="fas fa-robot"></i></div>
               </div>
             </div>
@@ -119,31 +127,64 @@
               </div>
             </div>
             <div class="col-lg-3 col-6">
-              <div class="small-box bg-gradient-light ci-card">
-                <div class="inner"><h3 style="font-size:1rem" id="cardUpdated">—</h3><p>Atualizado</p></div>
-                <div class="icon"><i class="fas fa-clock"></i></div>
+              <div class="small-box bg-gradient-secondary ci-card">
+                <div class="inner"><h3 class="ci-money" id="cardSubs">US$ 0,00</h3><p>Assinaturas</p></div>
+                <div class="icon"><i class="fas fa-receipt"></i></div>
               </div>
             </div>
           </div>
 
-          <!-- Evolução mensal -->
+          <!-- Evolução 6 meses -->
           <div class="card ci-card">
-            <div class="card-header"><h3 class="card-title"><i class="fas fa-chart-bar"></i> Evolução mensal (US$)</h3></div>
+            <div class="card-header">
+              <h3 class="card-title"><i class="fas fa-chart-bar"></i> Evolução — últimos 6 meses (US$)</h3>
+              <span class="ci-muted ml-2">visão geral; independe do filtro de mês — o mês selecionado fica destacado</span>
+            </div>
             <div class="card-body"><canvas id="chartHistory" height="80"></canvas></div>
+          </div>
+
+          <!-- Custo por projeto (unificado) -->
+          <div class="card ci-card card-outline card-success">
+            <div class="card-header"><h3 class="card-title"><i class="fas fa-layer-group text-success"></i> Custo por projeto (unificado) — <span id="uniMonth"></span></h3></div>
+            <div class="card-body">
+              <p class="ci-muted mb-2">Junta OpenAI + Groq pelo nome unificado. Projetos zerados ocultos. <a href="#" id="lnkVinculo">Editar vínculos OpenAI ↔ Groq</a>.</p>
+              <table class="table table-sm table-hover ci-tbl mb-0">
+                <thead><tr><th>Projeto</th><th class="text-right">OpenAI</th><th class="text-right">Groq</th><th class="text-right">Total</th></tr></thead>
+                <tbody id="uniRows"></tbody>
+                <tfoot><tr><td>Total</td><td class="text-right ci-money" id="uniOpenai">—</td><td class="text-right ci-money" id="uniGroq">—</td><td class="text-right ci-money" id="uniTotal">—</td></tr></tfoot>
+              </table>
+            </div>
+          </div>
+
+          <!-- Editor de vínculos (oculto) -->
+          <div class="card ci-card" id="cardVinculo" style="display:none">
+            <div class="card-header"><h3 class="card-title"><i class="fas fa-link"></i> Vínculos de projeto (OpenAI ↔ Groq)</h3></div>
+            <div class="card-body">
+              <p class="ci-muted">Dê o mesmo <b>nome unificado</b> aos projetos que são o mesmo nos dois fornecedores (ex.: <code>camila.ai</code> e <code>Camila Atendimento</code> → "Camila"). Deixe igual ao original para não unir.</p>
+              <table class="table table-sm ci-tbl"><thead><tr><th>Fornecedor</th><th>Projeto (original)</th><th>Nome unificado</th></tr></thead><tbody id="vincRows"></tbody></table>
+              <button class="btn btn-sm btn-success" id="btnSaveVinc"><i class="fas fa-save"></i> Salvar vínculos</button>
+              <button class="btn btn-sm btn-link text-muted" id="btnCloseVinc">fechar</button>
+            </div>
+          </div>
+
+          <!-- Matriz projeto × mês -->
+          <div class="card ci-card">
+            <div class="card-header"><h3 class="card-title"><i class="fas fa-table"></i> Projeto × mês (últimos 6 meses, US$)</h3></div>
+            <div class="card-body matrix-wrap">
+              <table class="table table-sm table-bordered ci-tbl matrix mb-0" id="matrixTbl"></table>
+            </div>
           </div>
 
           <div class="row">
             <!-- OpenAI -->
             <div class="col-lg-6">
               <div class="card ci-card card-outline card-info">
-                <div class="card-header">
-                  <h3 class="card-title ci-prov-head"><i class="fas fa-robot text-info"></i> OpenAI <span class="ci-muted" id="openaiUpdated"></span></h3>
-                </div>
+                <div class="card-header"><h3 class="card-title ci-prov-head"><i class="fas fa-robot text-info"></i> OpenAI <span class="ci-muted" id="openaiUpdated"></span></h3></div>
                 <div class="card-body">
                   <div id="openaiBanner"></div>
                   <table class="table table-sm table-hover ci-tbl mb-0">
                     <thead><tr><th>Projeto</th><th class="text-right">Custo (US$)</th></tr></thead>
-                    <tbody id="openaiRows"><tr><td colspan="2" class="ci-muted">Carregando…</td></tr></tbody>
+                    <tbody id="openaiRows"></tbody>
                     <tfoot><tr><td>Total</td><td class="text-right ci-money" id="openaiTotal">—</td></tr></tfoot>
                   </table>
                 </div>
@@ -156,7 +197,7 @@
                 <div class="card-header">
                   <h3 class="card-title ci-prov-head"><i class="fas fa-bolt text-warning"></i> Groq <span class="ci-muted" id="groqUpdated"></span></h3>
                   <div class="card-tools">
-                    <button class="btn btn-xs btn-outline-warning" id="btnGroqPrint"><i class="fas fa-image"></i> Enviar print</button>
+                    <button class="btn btn-xs btn-outline-warning" id="btnGroqPrint"><i class="fas fa-image"></i> Print</button>
                     <button class="btn btn-xs btn-outline-info" id="btnGroqText"><i class="fas fa-paste"></i> Colar texto</button>
                     <button class="btn btn-xs btn-outline-secondary" id="btnGroqManual"><i class="fas fa-keyboard"></i> Digitar</button>
                   </div>
@@ -165,20 +206,32 @@
                   <div id="groqBanner"></div>
                   <input type="file" id="groqFile" accept="image/*" style="display:none">
 
-                  <!-- Modo colar texto (oculto até clicar Colar texto) -->
-                  <div id="groqTextBox" style="display:none">
-                    <p class="ci-muted mb-1">Cole aqui o conteúdo da tela <b>Projects</b> da Groq (Ctrl+A, Ctrl+C na página deles → Ctrl+V aqui). Eu reconheço os projetos e os valores automaticamente.</p>
-                    <textarea id="groqTextArea" class="form-control form-control-sm" rows="6" placeholder="Default Project&#10;04/07/2025, 11:40:41&#9;$0.00 USD&#10;..."></textarea>
+                  <!-- Print box -->
+                  <div id="groqPrintBox" class="editor-box mb-2" style="display:none">
+                    <label class="ci-muted mb-1">Mês destes dados:</label>
+                    <input type="month" id="groqPrintMonth" class="form-control form-control-sm month-inline ml-1">
+                    <button class="btn btn-xs btn-warning ml-2" id="btnChooseImg"><i class="fas fa-image"></i> Escolher imagem…</button>
+                    <button class="btn btn-xs btn-link text-muted" id="btnCancelPrint">cancelar</button>
+                    <div class="ci-muted mt-1">A imagem é lida por visão da OpenAI (gasta centavos).</div>
+                  </div>
+
+                  <!-- Colar texto box -->
+                  <div id="groqTextBox" class="editor-box mb-2" style="display:none">
+                    <div class="mb-1"><label class="ci-muted mb-0">Mês destes dados:</label>
+                      <input type="month" id="groqTextMonth" class="form-control form-control-sm month-inline ml-1"></div>
+                    <p class="ci-muted mb-1">Cole o conteúdo da tela <b>Projects</b> da Groq (Ctrl+A/Ctrl+C lá → Ctrl+V aqui).</p>
+                    <textarea id="groqTextArea" class="form-control form-control-sm" rows="5" placeholder="Camila Atendimento&#10;12/09/2025, 10:37:09&#9;$63.49 USD&#10;..."></textarea>
                     <div class="mt-2">
                       <button class="btn btn-xs btn-info" id="btnSaveText"><i class="fas fa-magic"></i> Processar e salvar</button>
                       <button class="btn btn-xs btn-link text-muted" id="btnCancelText">cancelar</button>
                     </div>
                   </div>
 
-                  <!-- Modo manual (oculto até clicar Digitar) -->
-                  <div id="groqManualBox" style="display:none">
-                    <p class="ci-muted mb-1">Digite os projetos e o gasto do mês (US$). Copie do painel da Groq.</p>
-                    <table class="table table-sm ci-tbl"><tbody id="groqManualRows"></tbody></table>
+                  <!-- Digitar box -->
+                  <div id="groqManualBox" class="editor-box mb-2" style="display:none">
+                    <div class="mb-1"><label class="ci-muted mb-0">Mês destes dados:</label>
+                      <input type="month" id="groqManualMonth" class="form-control form-control-sm month-inline ml-1"></div>
+                    <table class="table table-sm ci-tbl mb-1"><tbody id="groqManualRows"></tbody></table>
                     <button class="btn btn-xs btn-light" id="btnAddRow"><i class="fas fa-plus"></i> linha</button>
                     <button class="btn btn-xs btn-success" id="btnSaveManual"><i class="fas fa-save"></i> Salvar Groq</button>
                     <button class="btn btn-xs btn-link text-muted" id="btnCancelManual">cancelar</button>
@@ -186,7 +239,7 @@
 
                   <table class="table table-sm table-hover ci-tbl mb-0" id="groqView">
                     <thead><tr><th>Projeto</th><th class="text-right">Custo (US$)</th></tr></thead>
-                    <tbody id="groqRows"><tr><td colspan="2" class="ci-muted">Carregando…</td></tr></tbody>
+                    <tbody id="groqRows"></tbody>
                     <tfoot><tr><td>Total</td><td class="text-right ci-money" id="groqTotal">—</td></tr></tfoot>
                   </table>
                   <p class="ci-muted mt-2 mb-0" id="groqNote"></p>
@@ -195,232 +248,316 @@
             </div>
           </div>
 
+          <!-- Assinaturas de IA -->
+          <div class="card ci-card card-outline card-secondary">
+            <div class="card-header"><h3 class="card-title"><i class="fas fa-receipt"></i> Assinaturas de IA (mensalidades fixas)</h3></div>
+            <div class="card-body">
+              <p class="ci-muted mb-2">Mensalidades fixas (ex.: Anthropic US$ 100, ChatGPT Plus US$ 20). Entram no total a partir do mês <b>"Desde"</b>.</p>
+              <table class="table table-sm ci-tbl mb-1">
+                <thead><tr><th>Nome</th><th>Fornecedor</th><th class="text-right" style="width:120px">US$/mês</th><th style="width:130px">Desde</th><th style="width:70px">Ativa</th><th style="width:40px"></th></tr></thead>
+                <tbody id="subsRows"></tbody>
+              </table>
+              <button class="btn btn-xs btn-light" id="btnAddSub"><i class="fas fa-plus"></i> assinatura</button>
+              <button class="btn btn-xs btn-success" id="btnSaveSubs"><i class="fas fa-save"></i> Salvar assinaturas</button>
+              <span class="ci-muted ml-2">Total ativo no mês <b id="subsMonth"></b>: <b class="ci-money" id="subsTotalLbl">US$ 0,00</b></span>
+            </div>
+          </div>
+
         </div>
       </section>
     </div>
 
     <footer class="main-footer text-sm">
-      <strong>CAMIM</strong> — Custos com IA. <span class="ci-muted">Valores em dólar (US$). Groq sem API: print/manual.</span>
+      <strong>CAMIM</strong> — Custos com IA. <span class="ci-muted">Valores em dólar (US$). Groq sem API: print/texto/manual.</span>
     </footer>
   </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 const API = "/api/custos-ia";
-let CUR_MONTH = null;
-let CUR = null;            // dashboard atual
-let chartHistory = null;
+let CUR_MONTH = null, CUR = null, chartHistory = null;
 
 const fmtUSD = (v) => "US$ " + (Number(v||0)).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2});
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const isZero = (v) => Math.abs(Number(v||0)) < 0.005;
 
 function msg(target, html, kind){
   const cls = kind === "err" ? "ci-banner err" : (kind === "ok" ? "ci-banner ok" : "ci-banner");
   target.innerHTML = html ? `<div class="alert ${cls} py-2 px-3 mb-2">${html}</div>` : "";
 }
-
 async function api(path, opts){
   const r = await fetch(API + path, Object.assign({headers:{}}, opts));
   let j = null; try { j = await r.json(); } catch(e){}
-  if(!r.ok || (j && j.ok === false)){
-    throw new Error((j && j.error) || ("HTTP " + r.status));
-  }
+  if(!r.ok || (j && j.ok === false)) throw new Error((j && j.error) || ("HTTP " + r.status));
   return j;
 }
 
-function renderRows(tbody, projects, totalEl){
+// ── render por provedor (oculta zerados) ──
+function renderProvRows(tbody, projects, totalEl, total){
   tbody.innerHTML = "";
-  if(!projects || !projects.length){
-    tbody.innerHTML = `<tr><td colspan="2" class="ci-muted">— sem dados —</td></tr>`;
-  } else {
-    for(const p of projects){
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${escapeHtml(p.name||p.id||"—")}</td><td class="text-right ci-money">${fmtUSD(p.amount_usd)}</td>`;
-      tbody.appendChild(tr);
-    }
+  const vis = (projects||[]).filter(p => !isZero(p.amount_usd));
+  if(!vis.length){ tbody.innerHTML = `<tr><td colspan="2" class="ci-muted">— sem dados —</td></tr>`; }
+  else for(const p of vis){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHtml(p.name||p.id||"—")}</td><td class="text-right ci-money">${fmtUSD(p.amount_usd)}</td>`;
+    tbody.appendChild(tr);
   }
+  if(totalEl) totalEl.textContent = fmtUSD(total);
 }
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-function renderHistory(hist){
+function renderUnified(rows){
+  const tb = $("uniRows"); tb.innerHTML = "";
+  const vis = (rows||[]).filter(r => !isZero(r.total_usd));
+  let so=0, sg=0, st=0;
+  if(!vis.length) tb.innerHTML = `<tr><td colspan="4" class="ci-muted">— sem dados —</td></tr>`;
+  else for(const r of vis){
+    so+=r.openai_usd; sg+=r.groq_usd; st+=r.total_usd;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHtml(r.label)}</td>
+      <td class="text-right ci-money ${isZero(r.openai_usd)?'cell-zero':''}">${isZero(r.openai_usd)?'–':fmtUSD(r.openai_usd)}</td>
+      <td class="text-right ci-money ${isZero(r.groq_usd)?'cell-zero':''}">${isZero(r.groq_usd)?'–':fmtUSD(r.groq_usd)}</td>
+      <td class="text-right ci-money"><b>${fmtUSD(r.total_usd)}</b></td>`;
+    tb.appendChild(tr);
+  }
+  $("uniOpenai").textContent = fmtUSD(so);
+  $("uniGroq").textContent = fmtUSD(sg);
+  $("uniTotal").textContent = fmtUSD(st);
+}
+
+function renderMatrix(mx){
+  const t = $("matrixTbl");
+  const months = mx.months||[], labels = mx.labels||[];
+  let head = `<thead><tr><th>Projeto</th>${months.map(m=>`<th class="num">${m}</th>`).join("")}</tr></thead>`;
+  let body = "<tbody>";
+  if(!labels.length){ body += `<tr><td colspan="${months.length+1}" class="ci-muted">— sem dados (use "6 meses" pra puxar histórico) —</td></tr>`; }
+  for(const lab of labels){
+    body += `<tr><td>${escapeHtml(lab)}</td>` + months.map(m=>{
+      const v = (mx.cells[lab]||{})[m] || 0;
+      return `<td class="num ${isZero(v)?'cell-zero':''}">${isZero(v)?'–':fmtUSD(v)}</td>`;
+    }).join("") + "</tr>";
+  }
+  body += "</tbody>";
+  let foot = `<tfoot><tr><td>Total</td>${months.map(m=>`<td class="num ci-money"><b>${fmtUSD((mx.totals||{})[m]||0)}</b></td>`).join("")}</tr></tfoot>`;
+  t.innerHTML = head + body + foot;
+}
+
+function renderHistory(hist, selMonth){
   const labels = hist.map(h => h.month);
-  const data = hist.map(h => h.total_usd);
+  const idx = labels.indexOf(selMonth);
+  const border = labels.map((_,i)=> i===idx ? "#111" : "rgba(0,0,0,0)");
+  const bw = labels.map((_,i)=> i===idx ? 2 : 0);
   if(chartHistory) chartHistory.destroy();
   chartHistory = new Chart($("chartHistory"), {
     type: "bar",
-    data: { labels, datasets: [{ label: "Total US$", data, backgroundColor: "#20c997" }] },
-    options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+    data: { labels, datasets: [
+      { label:"OpenAI", data: hist.map(h=>h.openai_usd), backgroundColor:"#36a2eb", borderColor:border, borderWidth:bw, stack:"s" },
+      { label:"Groq", data: hist.map(h=>h.groq_usd), backgroundColor:"#f59e0b", borderColor:border, borderWidth:bw, stack:"s" },
+      { label:"Assinaturas", data: hist.map(h=>h.subs_usd), backgroundColor:"#9ca3af", borderColor:border, borderWidth:bw, stack:"s" },
+    ]},
+    options: { responsive:true, plugins:{legend:{position:"bottom"},
+      tooltip:{callbacks:{footer:(it)=>"Total: "+fmtUSD(it.reduce((a,b)=>a+b.parsed.y,0))}}},
+      scales:{x:{stacked:true},y:{stacked:true, beginAtZero:true}} }
   });
 }
 
 function renderDashboard(d){
-  CUR = d;
-  CUR_MONTH = d.month;
-  const o = d.providers.openai, g = d.providers.groq;
+  CUR = d; CUR_MONTH = d.month;
+  const o = d.providers.openai, g = d.providers.groq, s = d.subscriptions;
 
   $("cardTotal").textContent = fmtUSD(d.total_usd);
   $("cardOpenai").textContent = fmtUSD(o.total_usd);
   $("cardGroq").textContent = fmtUSD(g.total_usd);
-  $("cardUpdated").textContent = (o.updated_at || g.updated_at || "—");
+  $("cardSubs").textContent = fmtUSD(s.total_usd);
+  $("uniMonth").textContent = d.month;
+  $("subsMonth").textContent = d.month;
 
-  // OpenAI
-  renderRows($("openaiRows"), o.projects, null);
-  $("openaiTotal").textContent = fmtUSD(o.total_usd);
+  renderProvRows($("openaiRows"), o.projects, $("openaiTotal"), o.total_usd);
   $("openaiUpdated").textContent = o.updated_at ? ("· " + o.updated_at) : "";
   if(o.error && (!o.projects || !o.projects.length)){
     let extra = "";
-    if(/ADMIN_KEY|api.usage.read|permissão/i.test(o.error)){
-      extra = `<br><small>Crie uma <b>Admin key</b> (sk-admin-…) em
-        <a href="https://platform.openai.com/settings/organization/admin-keys" target="_blank" rel="noopener">platform.openai.com → Admin keys</a>
-        e coloque em <code>OPENAI_ADMIN_KEY</code> no servidor.</small>`;
-    }
+    if(/ADMIN_KEY|api.usage.read|permissão/i.test(o.error))
+      extra = `<br><small>Crie uma <b>Admin key</b> em <a href="https://platform.openai.com/settings/organization/admin-keys" target="_blank" rel="noopener">platform.openai.com → Admin keys</a> → <code>OPENAI_ADMIN_KEY</code>.</small>`;
     msg($("openaiBanner"), `<i class="fas fa-exclamation-triangle"></i> ${escapeHtml(o.error)}${extra}`, "err");
-  } else if(o.last_error){
-    msg($("openaiBanner"), `<i class="fas fa-info-circle"></i> Última tentativa falhou (${escapeHtml(o.last_error)}), mostrando dado anterior.`, "");
-  } else { msg($("openaiBanner"), "", ""); }
+  } else msg($("openaiBanner"), "", "");
 
-  // Groq
-  renderRows($("groqRows"), g.projects, null);
-  $("groqTotal").textContent = fmtUSD(g.total_usd);
+  renderProvRows($("groqRows"), g.projects, $("groqTotal"), g.total_usd);
   $("groqUpdated").textContent = g.updated_at ? ("· " + g.updated_at + (g.source ? " ("+g.source+")" : "")) : "";
   $("groqNote").textContent = g.period_note || "";
-  if((!g.projects || !g.projects.length) && g.error){
-    msg($("groqBanner"), `<i class="fas fa-image"></i> ${escapeHtml(g.error)}`, "");
-  } else { msg($("groqBanner"), "", ""); }
+  msg($("groqBanner"), (!g.projects||!g.projects.length)&&g.error ? `<i class="fas fa-image"></i> ${escapeHtml(g.error)}` : "", "");
 
-  // Mês: status + botão fechar
+  renderUnified(d.unified);
+  renderMatrix(d.matrix || {months:[],labels:[],cells:{},totals:{}});
+  renderHistory(d.history || [], d.month);
+  renderSubs(s.all || []);
+  $("subsTotalLbl").textContent = fmtUSD(s.total_usd);
+
   const stat = $("monthStatus");
-  stat.innerHTML = d.closed
-    ? `<span class="ci-pill closed">FECHADO</span>`
-    : `<span class="ci-pill open">aberto</span>`;
+  stat.innerHTML = d.closed ? `<span class="ci-pill closed">FECHADO</span>` : `<span class="ci-pill open">aberto</span>`;
   const bc = $("btnClose");
-  if(d.closed){
-    bc.className = "btn btn-sm btn-outline-secondary";
-    bc.innerHTML = `<i class="fas fa-lock-open"></i> Reabrir mês`;
-  } else {
-    bc.className = "btn btn-sm btn-outline-danger";
-    bc.innerHTML = `<i class="fas fa-lock"></i> Fechar mês`;
-  }
+  bc.className = d.closed ? "btn btn-sm btn-outline-secondary" : "btn btn-sm btn-outline-danger";
+  bc.innerHTML = d.closed ? `<i class="fas fa-lock-open"></i> Reabrir` : `<i class="fas fa-lock"></i> Fechar`;
   $("btnRefresh").disabled = d.closed;
-
-  renderHistory(d.history || []);
 }
 
 async function load(month){
   try{
     const j = await api("/dashboard?month=" + encodeURIComponent(month || ""));
     const d = j.data;
-    // popular seletor de meses
-    const sel = $("selMonth");
-    const months = d.available_months || [d.month];
-    if(sel.options.length !== months.length || sel.dataset.m !== months.join(",")){
-      sel.innerHTML = "";
-      for(const m of months){ const op = document.createElement("option"); op.value=m; op.textContent=m; sel.appendChild(op); }
+    const sel = $("selMonth"), months = d.available_months || [d.month];
+    if(sel.dataset.m !== months.join(",")){
+      sel.innerHTML = ""; months.forEach(m=>{ const op=document.createElement("option"); op.value=m; op.textContent=m; sel.appendChild(op); });
       sel.dataset.m = months.join(",");
     }
     sel.value = d.month;
     renderDashboard(d);
-  }catch(e){
-    msg($("globalMsg"), "Erro ao carregar: " + escapeHtml(e.message), "err");
-  }
+  }catch(e){ msg($("globalMsg"), "Erro ao carregar: " + escapeHtml(e.message), "err"); }
 }
 
-// ── Ações ────────────────────────────────────────────────────────────────
-$("selMonth").addEventListener("change", e => load(e.target.value));
+// ── Assinaturas ──
+function addSubRow(s){
+  s = s || {name:"",provider:"",monthly_usd:"",since:CUR_MONTH,active:true};
+  const tr = document.createElement("tr"); tr.className = "sub-row";
+  tr.innerHTML = `
+    <td><input class="form-control form-control-sm s-name" value="${escapeHtml(s.name||'')}" placeholder="Anthropic Claude"></td>
+    <td><input class="form-control form-control-sm s-prov" value="${escapeHtml(s.provider||'')}" placeholder="anthropic"></td>
+    <td><input type="number" step="0.01" min="0" class="form-control form-control-sm s-val text-right" value="${s.monthly_usd!=null?s.monthly_usd:''}" placeholder="100.00"></td>
+    <td><input type="month" class="form-control form-control-sm s-since" value="${escapeHtml(s.since||CUR_MONTH||'')}"></td>
+    <td class="text-center"><input type="checkbox" class="s-active" ${s.active!==false?'checked':''}></td>
+    <td><button class="btn btn-xs btn-link text-danger s-del">&times;</button></td>`;
+  tr.querySelector(".s-del").addEventListener("click", ()=>tr.remove());
+  $("subsRows").appendChild(tr);
+}
+function renderSubs(items){ $("subsRows").innerHTML=""; (items||[]).forEach(addSubRow); }
+$("btnAddSub").addEventListener("click", ()=>addSubRow());
+$("btnSaveSubs").addEventListener("click", async ()=>{
+  const items = [...document.querySelectorAll("#subsRows .sub-row")].map(r=>({
+    name:r.querySelector(".s-name").value.trim(),
+    provider:r.querySelector(".s-prov").value.trim(),
+    monthly_usd:parseFloat(r.querySelector(".s-val").value)||0,
+    since:r.querySelector(".s-since").value||null,
+    active:r.querySelector(".s-active").checked,
+  })).filter(x=>x.name);
+  try{ await api("/subscriptions", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items})});
+    msg($("globalMsg"),"Assinaturas salvas.","ok"); await load(CUR_MONTH);
+  }catch(e){ msg($("globalMsg"),"Erro: "+escapeHtml(e.message),"err"); }
+});
 
-$("btnRefresh").addEventListener("click", async () => {
-  const b = $("btnRefresh"); b.classList.add("ci-loading"); b.disabled = true;
+// ── Vínculos ──
+$("lnkVinculo").addEventListener("click",(e)=>{e.preventDefault(); openVinculo();});
+$("btnCloseVinc").addEventListener("click",()=>{$("cardVinculo").style.display="none";});
+async function openVinculo(){
   try{
-    const j = await api("/openai/refresh", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({month: CUR_MONTH})});
-    msg($("globalMsg"), "OpenAI atualizado.", "ok");
-    await load(CUR_MONTH);
-  }catch(e){ msg($("globalMsg"), "Falha ao atualizar OpenAI: " + escapeHtml(e.message), "err"); }
+    const j = await api("/mapping");
+    const tb = $("vincRows"); tb.innerHTML="";
+    if(!j.projects.length) tb.innerHTML=`<tr><td colspan="3" class="ci-muted">Sem projetos ainda.</td></tr>`;
+    for(const p of j.projects){
+      const tr=document.createElement("tr"); tr.className="vinc-row";
+      tr.dataset.provider=p.provider; tr.dataset.name=p.name;
+      tr.innerHTML=`<td><span class="ci-prov-badge ${p.provider}">${p.provider}</span></td>
+        <td>${escapeHtml(p.name)}</td>
+        <td><input class="form-control form-control-sm v-label" value="${escapeHtml(p.label)}"></td>`;
+      tb.appendChild(tr);
+    }
+    $("cardVinculo").style.display="block";
+    $("cardVinculo").scrollIntoView({behavior:"smooth"});
+  }catch(e){ msg($("globalMsg"),"Erro: "+escapeHtml(e.message),"err"); }
+}
+$("btnSaveVinc").addEventListener("click", async ()=>{
+  const labels={};
+  document.querySelectorAll("#vincRows .vinc-row").forEach(r=>{
+    const v=r.querySelector(".v-label").value.trim();
+    if(v) labels[`${r.dataset.provider}::${r.dataset.name}`]=v;
+  });
+  try{ await api("/mapping",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({labels})});
+    $("cardVinculo").style.display="none"; msg($("globalMsg"),"Vínculos salvos.","ok"); await load(CUR_MONTH);
+  }catch(e){ msg($("globalMsg"),"Erro: "+escapeHtml(e.message),"err"); }
+});
+
+// ── Mês / fechar / refresh / backfill ──
+$("selMonth").addEventListener("change", e => load(e.target.value));
+$("btnRefresh").addEventListener("click", async () => {
+  const b=$("btnRefresh"); b.classList.add("ci-loading"); b.disabled=true;
+  try{ await api("/openai/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({month:CUR_MONTH})});
+    msg($("globalMsg"),"OpenAI atualizado.","ok"); await load(CUR_MONTH);
+  }catch(e){ msg($("globalMsg"),"Falha OpenAI: "+escapeHtml(e.message),"err"); }
   finally{ b.classList.remove("ci-loading"); }
 });
-
+$("btnBackfill").addEventListener("click", async () => {
+  const b=$("btnBackfill"); b.classList.add("ci-loading"); b.disabled=true;
+  try{ const j=await api("/openai/backfill",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({months:6})});
+    const oks=(j.result||[]).filter(x=>x.ok).length;
+    msg($("globalMsg"),`Histórico OpenAI atualizado (${oks}/6 meses).`,"ok"); await load(CUR_MONTH);
+  }catch(e){ msg($("globalMsg"),"Falha no histórico: "+escapeHtml(e.message),"err"); }
+  finally{ b.classList.remove("ci-loading"); b.disabled=false; }
+});
 $("btnClose").addEventListener("click", async () => {
   const closing = !CUR.closed;
-  if(closing && !confirm(`Fechar o mês ${CUR_MONTH}? O ETL para de sobrescrever (congela o registro). Você pode reabrir depois.`)) return;
-  try{
-    await api(closing ? "/month/close" : "/month/reopen", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({month: CUR_MONTH})});
-    await load(CUR_MONTH);
-  }catch(e){ msg($("globalMsg"), "Erro: " + escapeHtml(e.message), "err"); }
+  if(closing && !confirm(`Fechar o mês ${CUR_MONTH}? Congela o registro (o ETL para de sobrescrever). Pode reabrir depois.`)) return;
+  try{ await api(closing?"/month/close":"/month/reopen",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({month:CUR_MONTH})}); await load(CUR_MONTH); }
+  catch(e){ msg($("globalMsg"),"Erro: "+escapeHtml(e.message),"err"); }
 });
 
-// Groq — print
-$("btnGroqPrint").addEventListener("click", () => $("groqFile").click());
-$("groqFile").addEventListener("change", async (e) => {
-  const f = e.target.files[0]; if(!f) return;
-  msg($("groqBanner"), `<i class="fas fa-spinner fa-spin"></i> Lendo o print com visão da OpenAI…`, "");
-  const fd = new FormData();
-  fd.append("image", f);
-  fd.append("month", CUR_MONTH);
-  try{
-    const j = await api("/groq/print", {method:"POST", body: fd});
-    msg($("globalMsg"), `Groq lido do print (${(j.groq.projects||[]).length} projetos).`, "ok");
+// ── Groq: 3 editores, cada um com seu mês ──
+function closeGroqEditors(){ ["groqPrintBox","groqTextBox","groqManualBox"].forEach(i=>$(i).style.display="none"); $("groqView").style.display=""; }
+function openGroqBox(boxId, monthInputId){
+  ["groqPrintBox","groqTextBox","groqManualBox"].forEach(i=>$(i).style.display = i===boxId?"block":"none");
+  $("groqView").style.display="none";
+  $(monthInputId).value = CUR_MONTH;
+}
+// print
+$("btnGroqPrint").addEventListener("click", ()=>openGroqBox("groqPrintBox","groqPrintMonth"));
+$("btnCancelPrint").addEventListener("click", closeGroqEditors);
+$("btnChooseImg").addEventListener("click", ()=>$("groqFile").click());
+$("groqFile").addEventListener("change", async (e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const month=$("groqPrintMonth").value||CUR_MONTH;
+  msg($("groqBanner"), `<i class="fas fa-spinner fa-spin"></i> Lendo o print (visão da OpenAI)…`, "");
+  const fd=new FormData(); fd.append("image",f); fd.append("month",month);
+  try{ const j=await api("/groq/print",{method:"POST",body:fd});
+    closeGroqEditors(); msg($("globalMsg"),`Groq lido do print (${(j.groq.projects||[]).length} projetos) para ${month}.`,"ok");
     await load(CUR_MONTH);
-  }catch(err){ msg($("groqBanner"), "Falha ao ler o print: " + escapeHtml(err.message), "err"); }
-  finally{ e.target.value = ""; }
+  }catch(err){ msg($("groqBanner"),"Falha ao ler o print: "+escapeHtml(err.message),"err"); }
+  finally{ e.target.value=""; }
 });
-
-// Groq — manual
-function addManualRow(name, val){
-  const tr = document.createElement("tr"); tr.className = "ci-manual-row";
-  tr.innerHTML = `<td><input class="form-control form-control-sm m-name" placeholder="nome do projeto" value="${escapeHtml(name||'')}"></td>
+// colar texto
+$("btnGroqText").addEventListener("click", ()=>{ openGroqBox("groqTextBox","groqTextMonth"); $("groqTextArea").value=""; $("groqTextArea").focus(); });
+$("btnCancelText").addEventListener("click", closeGroqEditors);
+$("btnSaveText").addEventListener("click", async ()=>{
+  const text=$("groqTextArea").value, month=$("groqTextMonth").value||CUR_MONTH;
+  if(!text.trim()){ alert("Cole o texto da tela Projects da Groq."); return; }
+  try{ const j=await api("/groq/text",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({month,text})});
+    closeGroqEditors(); msg($("globalMsg"),`Groq lido do texto (${(j.groq.projects||[]).length} projetos) para ${month}.`,"ok");
+    await load(CUR_MONTH);
+  }catch(e){ msg($("globalMsg"),"Erro ao processar: "+escapeHtml(e.message),"err"); }
+});
+// digitar
+function addManualRow(name,val){
+  const tr=document.createElement("tr"); tr.className="ci-manual-row";
+  tr.innerHTML=`<td><input class="form-control form-control-sm m-name" placeholder="nome do projeto" value="${escapeHtml(name||'')}"></td>
     <td style="width:120px"><input type="number" step="0.01" min="0" class="form-control form-control-sm m-val text-right" placeholder="0.00" value="${val!=null?val:''}"></td>
     <td style="width:30px"><button class="btn btn-xs btn-link text-danger m-del">&times;</button></td>`;
-  tr.querySelector(".m-del").addEventListener("click", () => tr.remove());
+  tr.querySelector(".m-del").addEventListener("click",()=>tr.remove());
   $("groqManualRows").appendChild(tr);
 }
-$("btnGroqManual").addEventListener("click", () => {
-  $("groqTextBox").style.display = "none";
-  $("groqManualBox").style.display = "block";
-  $("groqView").style.display = "none";
-  $("groqManualRows").innerHTML = "";
-  const cur = (CUR && CUR.providers.groq.projects) || [];
-  if(cur.length){ cur.forEach(p => addManualRow(p.name, p.amount_usd)); }
-  else { addManualRow("", ""); addManualRow("", ""); }
+$("btnGroqManual").addEventListener("click", ()=>{
+  openGroqBox("groqManualBox","groqManualMonth");
+  $("groqManualRows").innerHTML="";
+  const cur=(CUR&&CUR.providers.groq.projects)||[];
+  if(cur.length) cur.forEach(p=>addManualRow(p.name,p.amount_usd)); else { addManualRow("",""); addManualRow("",""); }
 });
-$("btnCancelManual").addEventListener("click", () => { $("groqManualBox").style.display="none"; $("groqView").style.display=""; });
-$("btnAddRow").addEventListener("click", () => addManualRow("", ""));
-$("btnSaveManual").addEventListener("click", async () => {
-  const rows = [...document.querySelectorAll("#groqManualRows .ci-manual-row")];
-  const projects = rows.map(r => ({ name: r.querySelector(".m-name").value.trim(), amount_usd: parseFloat(r.querySelector(".m-val").value)||0 }))
-                       .filter(p => p.name);
+$("btnCancelManual").addEventListener("click", closeGroqEditors);
+$("btnAddRow").addEventListener("click", ()=>addManualRow("",""));
+$("btnSaveManual").addEventListener("click", async ()=>{
+  const month=$("groqManualMonth").value||CUR_MONTH;
+  const projects=[...document.querySelectorAll("#groqManualRows .ci-manual-row")]
+    .map(r=>({name:r.querySelector(".m-name").value.trim(), amount_usd:parseFloat(r.querySelector(".m-val").value)||0}))
+    .filter(p=>p.name);
   if(!projects.length){ alert("Adicione pelo menos um projeto."); return; }
-  try{
-    await api("/groq/manual", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({month: CUR_MONTH, projects})});
-    $("groqManualBox").style.display="none"; $("groqView").style.display="";
-    msg($("globalMsg"), "Groq salvo manualmente.", "ok");
-    await load(CUR_MONTH);
-  }catch(e){ msg($("globalMsg"), "Erro ao salvar Groq: " + escapeHtml(e.message), "err"); }
+  try{ await api("/groq/manual",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({month,projects})});
+    closeGroqEditors(); msg($("globalMsg"),`Groq salvo manualmente para ${month}.`,"ok"); await load(CUR_MONTH);
+  }catch(e){ msg($("globalMsg"),"Erro ao salvar Groq: "+escapeHtml(e.message),"err"); }
 });
 
-// Groq — colar texto
-function closeGroqEditors(){
-  $("groqManualBox").style.display = "none";
-  $("groqTextBox").style.display = "none";
-  $("groqView").style.display = "";
-}
-$("btnGroqText").addEventListener("click", () => {
-  $("groqManualBox").style.display = "none";
-  $("groqTextBox").style.display = "block";
-  $("groqView").style.display = "none";
-  $("groqTextArea").value = "";
-  $("groqTextArea").focus();
-});
-$("btnCancelText").addEventListener("click", closeGroqEditors);
-$("btnSaveText").addEventListener("click", async () => {
-  const text = $("groqTextArea").value;
-  if(!text.trim()){ alert("Cole o texto da tela Projects da Groq."); return; }
-  try{
-    const j = await api("/groq/text", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({month: CUR_MONTH, text})});
-    closeGroqEditors();
-    msg($("globalMsg"), `Groq lido do texto colado (${(j.groq.projects||[]).length} projetos, total ${fmtUSD(j.groq.total_usd)}).`, "ok");
-    await load(CUR_MONTH);
-  }catch(e){ msg($("globalMsg"), "Erro ao processar o texto: " + escapeHtml(e.message), "err"); }
-});
-
-// Início
 load("");
 </script>
 </body>

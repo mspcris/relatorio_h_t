@@ -151,6 +151,61 @@ def api_groq_text():
     return jsonify({"ok": True, "saved": True, "groq": snap})
 
 
+@custos_ia_bp.post("/api/custos-ia/openai/backfill")
+def api_openai_backfill():
+    if not _require_admin():
+        return _deny()
+    body = request.get_json(silent=True) or {}
+    try:
+        n = int(body.get("months") or custos_ia.DEFAULT_HISTORY_MONTHS)
+    except (TypeError, ValueError):
+        n = custos_ia.DEFAULT_HISTORY_MONTHS
+    n = max(1, min(n, 12))
+    res = custos_ia.backfill_openai(n, force=bool(body.get("force")))
+    ok = any(r.get("ok") for r in res)
+    return jsonify({"ok": ok, "result": res})
+
+
+@custos_ia_bp.get("/api/custos-ia/mapping")
+def api_mapping_get():
+    if not _require_admin():
+        return _deny()
+    return jsonify({"ok": True,
+                    "projects": custos_ia.distinct_projects(),
+                    "labels": custos_ia.load_mapping().get("labels", {})})
+
+
+@custos_ia_bp.post("/api/custos-ia/mapping")
+def api_mapping_set():
+    if not _require_admin():
+        return _deny()
+    body = request.get_json(silent=True) or {}
+    labels = body.get("labels")
+    if not isinstance(labels, dict):
+        return jsonify({"ok": False, "error": "envie 'labels': {\"provider::nome\": \"Rótulo\"}"}), 400
+    custos_ia.save_mapping(labels)
+    return jsonify({"ok": True})
+
+
+@custos_ia_bp.get("/api/custos-ia/subscriptions")
+def api_subs_get():
+    if not _require_admin():
+        return _deny()
+    return jsonify({"ok": True, "items": custos_ia.load_subscriptions()})
+
+
+@custos_ia_bp.post("/api/custos-ia/subscriptions")
+def api_subs_set():
+    if not _require_admin():
+        return _deny()
+    body = request.get_json(silent=True) or {}
+    items = body.get("items")
+    if not isinstance(items, list):
+        return jsonify({"ok": False, "error": "envie 'items': [{name, monthly_usd, since?, provider?, active?}]"}), 400
+    saved = custos_ia.save_subscriptions(items)
+    return jsonify({"ok": True, "items": saved})
+
+
 @custos_ia_bp.post("/api/custos-ia/month/close")
 def api_month_close():
     email = _require_admin()

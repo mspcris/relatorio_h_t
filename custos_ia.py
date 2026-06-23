@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -400,7 +401,9 @@ def parse_groq_text(text: str) -> list[dict]:
                 amount = 0.0
             pre = _GROQ_TIME_RE.sub("", _GROQ_DATE_RE.sub("", l[:m.start()]))
             pre = pre.replace(",", " ").strip(" \t:")
-            name = pre if pre and pre.lower() != "view" else (last_name or "—")
+            # só trata 'pre' como nome se tiver letra (evita pegar data/hora soltas)
+            name = pre if (pre and pre.lower() != "view"
+                           and re.search(r"[A-Za-zÀ-ÿ]", pre)) else (last_name or "—")
             projetos.append({"id": name, "name": name, "amount_usd": amount})
             last_name = None
             continue
@@ -428,6 +431,166 @@ def load_groq_snapshot(month: Optional[str] = None) -> Optional[dict]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Meses recentes / backfill
+# ─────────────────────────────────────────────────────────────────────────────
+DEFAULT_HISTORY_MONTHS = 6
+
+
+def recent_months(n: int = DEFAULT_HISTORY_MONTHS) -> list[str]:
+    """Últimos n meses (corrente + anteriores), em ordem crescente."""
+    y, m = (int(x) for x in month_now().split("-"))
+    out = []
+    for _ in range(n):
+        out.append(f"{y:04d}-{m:02d}")
+        m -= 1
+        if m == 0:
+            m = 12
+            y -= 1
+    return list(reversed(out))
+
+
+def backfill_openai(n_months: int = DEFAULT_HISTORY_MONTHS, *, force: bool = False) -> list[dict]:
+    """Busca e grava o snapshot da OpenAI para cada um dos últimos n meses.
+    Mês fechado é pulado (salvo force=True). Só faz GET (sem custo)."""
+    res = []
+    for m in recent_months(n_months):
+        snap = save_openai_snapshot(m, force=force)
+        res.append({"month": m, "ok": snap.get("ok"),
+                    "total_usd": snap.get("total_usd"), "error": snap.get("error")})
+    return res
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Projetos lógicos (vínculo OpenAI ↔ Groq)
+# ─────────────────────────────────────────────────────────────────────────────
+def _mapping_path() -> str:
+    return _path("mapping.json")
+
+
+def load_mapping() -> dict:
+    """{"labels": {"openai::camila.ai": "Camila", "groq::Camila Atendimento": "Camila"}}"""
+    return _read_json(_mapping_path()) or {"labels": {}}
+
+
+def save_mapping(labels: dict) -> dict:
+    clean = {str(k): str(v).strip() for k, v in (labels or {}).items() if str(v).strip()}
+    data = {"labels": clean}
+    _write_json_atomic(_mapping_path(), data)
+    return data
+
+
+def distinct_projects(months: Optional[list[str]] = None) -> list[dict]:
+    """Todos os projetos distintos (por provedor) vistos nos meses dados,
+    com o rótulo unificado atual. Alimenta o editor de vínculos."""
+    months = months or list_months()
+    labels = load_mapping().get("labels", {})
+    seen: dict = {}
+    for m in months:
+        for prov, snap in (("openai", load_openai_snapshot(m)), ("groq", load_groq_snapshot(m))):
+            for p in (snap or {}).get("projects", []):
+                nm = p.get("name") or p.get("id")
+                if nm:
+                    seen[(prov, nm)] = True
+    out = []
+    for (prov, name) in sorted(seen, key=lambda x: (x[0], x[1].lower())):
+        out.append({"provider": prov, "name": name,
+                    "label": labels.get(f"{prov}::{name}") or name})
+    return out
+
+
+def unify_month(month: Optional[str] = None) -> list[dict]:
+    """Custo por projeto LÓGICO no mês: junta OpenAI + Groq pelo rótulo unificado."""
+    month = valid_month(month)
+    labels = load_mapping().get("labels", {})
+    agg: dict = {}
+    for prov, snap in (("openai", load_openai_snapshot(month)), ("groq", load_groq_snapshot(month))):
+        key = f"{prov}_usd"
+        for p in (snap or {}).get("projects", []):
+            nm = p.get("name") or p.get("id")
+            lab = labels.get(f"{prov}::{nm}") or nm
+            row = agg.setdefault(lab, {"openai_usd": 0.0, "groq_usd": 0.0})
+            row[key] += float(p.get("amount_usd") or 0.0)
+    rows = []
+    for lab, v in agg.items():
+        rows.append({
+            "label": lab,
+            "openai_usd": round(v["openai_usd"], 4),
+            "groq_usd": round(v["groq_usd"], 4),
+            "total_usd": round(v["openai_usd"] + v["groq_usd"], 4),
+        })
+    rows.sort(key=lambda x: x["total_usd"], reverse=True)
+    return rows
+
+
+def project_matrix(n: int = DEFAULT_HISTORY_MONTHS) -> dict:
+    """Matriz projeto (lógico) × mês, últimos n meses."""
+    months = recent_months(n)
+    cells: dict = {}
+    ordem: dict = {}
+    for m in months:
+        for row in unify_month(m):
+            lab = row["label"]
+            cells.setdefault(lab, {})[m] = row["total_usd"]
+            ordem[lab] = ordem.get(lab, 0.0) + row["total_usd"]
+    # oculta projetos zerados em todos os meses
+    labels = sorted([l for l in ordem if ordem[l] > 0], key=lambda l: ordem[l], reverse=True)
+    totals = {m: round(sum(cells.get(l, {}).get(m, 0.0) for l in labels), 4) for m in months}
+    return {"months": months, "labels": labels, "cells": cells, "totals": totals}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Assinaturas de IA (mensalidades fixas: Anthropic, ChatGPT Plus, etc.)
+# ─────────────────────────────────────────────────────────────────────────────
+def _subs_path() -> str:
+    return _path("subscriptions.json")
+
+
+def load_subscriptions() -> list[dict]:
+    return (_read_json(_subs_path()) or {}).get("items", [])
+
+
+def save_subscriptions(items: list[dict]) -> list[dict]:
+    norm = []
+    for it in (items or []):
+        name = (str(it.get("name") or "")).strip()
+        if not name:
+            continue
+        try:
+            val = round(float(it.get("monthly_usd") or 0.0), 4)
+        except (TypeError, ValueError):
+            val = 0.0
+        since = it.get("since")
+        norm.append({
+            "id": str(it.get("id") or int(time.time() * 1000)),
+            "name": name,
+            "provider": (str(it.get("provider") or "")).strip(),
+            "monthly_usd": val,
+            "since": valid_month(since) if since else None,
+            "active": bool(it.get("active", True)),
+        })
+    _write_json_atomic(_subs_path(), {"items": norm})
+    return norm
+
+
+def subscriptions_for(month: Optional[str] = None) -> list[dict]:
+    """Assinaturas ativas que valem para o mês (since <= mês)."""
+    month = valid_month(month)
+    out = []
+    for s in load_subscriptions():
+        if not s.get("active"):
+            continue
+        since = s.get("since")
+        if since and since > month:
+            continue
+        out.append(s)
+    return out
+
+
+def subs_total(month: Optional[str] = None) -> float:
+    return round(sum(float(s.get("monthly_usd") or 0.0) for s in subscriptions_for(month)), 4)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Dashboard
 # ─────────────────────────────────────────────────────────────────────────────
 def _empty_openai(month: str) -> dict:
@@ -448,23 +611,30 @@ def _empty_groq(month: str) -> dict:
     }
 
 
-def monthly_history() -> list[dict]:
-    """Resumo por mês (total OpenAI + Groq), para o gráfico de evolução."""
+def monthly_history(n: int = DEFAULT_HISTORY_MONTHS) -> list[dict]:
+    """Resumo por mês (OpenAI + Groq + assinaturas), últimos n meses — gráfico."""
     hist = []
-    for m in list_months():
+    for m in recent_months(n):
         o = load_openai_snapshot(m) or {}
         g = load_groq_snapshot(m) or {}
         ot = float(o.get("total_usd") or 0.0)
         gt = float(g.get("total_usd") or 0.0)
+        st = subs_total(m)
         hist.append({
             "month": m,
             "openai_usd": round(ot, 4),
             "groq_usd": round(gt, 4),
-            "total_usd": round(ot + gt, 4),
+            "subs_usd": round(st, 4),
+            "total_usd": round(ot + gt + st, 4),
             "closed": is_closed(m),
         })
-    hist.sort(key=lambda x: x["month"])
     return hist
+
+
+def available_months() -> list[str]:
+    """Últimos 6 meses ∪ meses com dado, desc — para o seletor (permite colar
+    Groq de meses passados mesmo sem dado ainda)."""
+    return sorted(set(recent_months(DEFAULT_HISTORY_MONTHS)) | set(list_months()), reverse=True)
 
 
 def load_dashboard(month: Optional[str] = None) -> dict:
@@ -472,16 +642,22 @@ def load_dashboard(month: Optional[str] = None) -> dict:
     month = valid_month(month)
     openai = load_openai_snapshot(month) or _empty_openai(month)
     groq = load_groq_snapshot(month) or _empty_groq(month)
-    total = round((openai.get("total_usd") or 0.0) + (groq.get("total_usd") or 0.0), 4)
+    subs = subscriptions_for(month)
+    subs_t = round(sum(float(s.get("monthly_usd") or 0.0) for s in subs), 4)
+    total = round((openai.get("total_usd") or 0.0) + (groq.get("total_usd") or 0.0) + subs_t, 4)
     return {
         "generated_at": _now_iso(),
         "month": month,
         "is_current_month": (month == month_now()),
         "closed": is_closed(month),
-        "available_months": list_months(),
+        "available_months": available_months(),
         "total_usd": total,
         "providers": {"openai": openai, "groq": groq},
-        "history": monthly_history(),
+        "subscriptions": {"items": subs, "total_usd": subs_t,
+                          "all": load_subscriptions()},
+        "unified": unify_month(month),
+        "matrix": project_matrix(DEFAULT_HISTORY_MONTHS),
+        "history": monthly_history(DEFAULT_HISTORY_MONTHS),
     }
 
 
