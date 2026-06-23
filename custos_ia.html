@@ -122,7 +122,7 @@
             </div>
             <div class="col-lg-3 col-6">
               <div class="small-box bg-gradient-warning ci-card">
-                <div class="inner"><h3 class="ci-money" id="cardGroq">US$ 0,00</h3><p>Groq</p></div>
+                <div class="inner"><h3 class="ci-money" id="cardGroq">US$ 0,00</h3><p id="cardGroqLbl">Groq</p></div>
                 <div class="icon"><i class="fas fa-bolt"></i></div>
               </div>
             </div>
@@ -352,6 +352,7 @@ function renderMatrix(mx){
 
 function renderHistory(hist, selMonth){
   const labels = hist.map(h => h.month);
+  const byMonth = {}; hist.forEach(h => byMonth[h.month] = h);
   const idx = labels.indexOf(selMonth);
   const border = labels.map((_,i)=> i===idx ? "#111" : "rgba(0,0,0,0)");
   const bw = labels.map((_,i)=> i===idx ? 2 : 0);
@@ -364,7 +365,16 @@ function renderHistory(hist, selMonth){
       { label:"Assinaturas", data: hist.map(h=>h.subs_usd), backgroundColor:"#9ca3af", borderColor:border, borderWidth:bw, stack:"s" },
     ]},
     options: { responsive:true, plugins:{legend:{position:"bottom"},
-      tooltip:{callbacks:{footer:(it)=>"Total: "+fmtUSD(it.reduce((a,b)=>a+b.parsed.y,0))}}},
+      tooltip:{callbacks:{
+        // ao apontar a barra "Assinaturas", lista o valor de cada uma
+        afterLabel:(it)=>{
+          if(it.dataset.label !== "Assinaturas") return;
+          const items = (byMonth[it.label]||{}).subs_items || [];
+          if(!items.length) return "  (sem assinaturas)";
+          return items.map(s=>"  • "+s.name+": "+fmtUSD(s.amount_usd));
+        },
+        footer:(it)=>"Total: "+fmtUSD(it.reduce((a,b)=>a+b.parsed.y,0)),
+      }}},
       scales:{x:{stacked:true},y:{stacked:true, beginAtZero:true}} }
   });
 }
@@ -376,6 +386,8 @@ function renderDashboard(d){
   $("cardTotal").textContent = fmtUSD(d.total_usd);
   $("cardOpenai").textContent = fmtUSD(o.total_usd);
   $("cardGroq").textContent = fmtUSD(g.total_usd);
+  const gsrc = {texto:"texto colado", manual:"manual", print:"print"}[g.source] || "sem API";
+  $("cardGroqLbl").textContent = `Groq (${gsrc})`;
   $("cardSubs").textContent = fmtUSD(s.total_usd);
   $("uniMonth").textContent = d.month;
   $("subsMonth").textContent = d.month;

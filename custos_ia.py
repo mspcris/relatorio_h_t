@@ -724,12 +724,16 @@ def monthly_history(n: int = DEFAULT_HISTORY_MONTHS) -> list[dict]:
         g = load_groq_snapshot(m) or {}
         ot = float(o.get("total_usd") or 0.0)
         gt = float(g.get("total_usd") or 0.0)
-        st = subs_total(m)
+        subs = subscriptions_for(m)
+        st = round(sum(s["amount_usd"] for s in subs), 4)
+        subs_items = [{"name": s["name"], "amount_usd": s["amount_usd"]}
+                      for s in subs if s["amount_usd"] > 0]
         hist.append({
             "month": m,
             "openai_usd": round(ot, 4),
             "groq_usd": round(gt, 4),
-            "subs_usd": round(st, 4),
+            "subs_usd": st,
+            "subs_items": subs_items,
             "total_usd": round(ot + gt + st, 4),
             "closed": is_closed(m),
         })
