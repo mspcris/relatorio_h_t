@@ -113,6 +113,16 @@ JANELA_DIAS = int(os.getenv("CHAT_DASH_DIAS", "90"))
 # userId da Camila.ai — concentra ~97% das mensagens de bot
 CAMILA_USER_ID = "cmg8cum8g0519jbbm6r9l93f7"
 
+# O banco do chat grava timestamps em UTC; a página usa horário de Brasília.
+# Brasil = UTC-3 fixo (sem horário de verão desde 2019) → convertemos UTC→BRT.
+BRT_OFFSET = pd.Timedelta(hours=-3)
+
+# Colunas de data que são convertidas UTC→BRT (todas juntas, para os deltas —
+# que são diferenças — continuarem corretos e os horários exibidos baterem).
+_DT_COLS_BRT = ["createdAt", "closedAt", "first_msg", "last_msg",
+                "first_customer_at", "first_user_at", "first_camila_at",
+                "first_human_at", "last_human_at", "first_transfer_at"]
+
 # Regex para detectar fechamento automático por INATIVIDADE (dois templates conhecidos)
 RE_AUTO_INATIVIDADE = re.compile(
     r"Notamos que seu atendimento ainda est[áa] em andamento"
@@ -476,6 +486,11 @@ def build_payload(tickets, msgs, transf, evals, humans, last, last_human):
         return "inbound_transferido_sem_humano"
 
     df["bucket"] = df.apply(classify, axis=1)
+
+    # ── UTC → BRT (todas as datas de uma vez; deltas abaixo ficam inalterados) ──
+    for _c in _DT_COLS_BRT:
+        if _c in df.columns:
+            df[_c] = df[_c] + BRT_OFFSET
 
     # ── DELTAS (segundos) ──
     def delta(a, b):

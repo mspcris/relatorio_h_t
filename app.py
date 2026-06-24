@@ -1652,11 +1652,16 @@ def api_chat_dashboard_conversa():
         body = r.get("body")
         body = (str(body) if body is not None else "").strip()[:2000]
         em = r.get("createdAt")
+        # createdAt vem em UTC (banco do chat); converte p/ BRT (UTC-3 fixo).
+        if hasattr(em, "strftime"):
+            em_str = (em - timedelta(hours=3)).strftime("%d/%m/%Y %H:%M")
+        else:
+            em_str = str(em) if em else ""
         msgs.append({
             "quem": quem,
             "nome": nome,
             "body": body,
-            "em": em.strftime("%d/%m/%Y %H:%M") if hasattr(em, "strftime") else (str(em) if em else ""),
+            "em": em_str,
         })
 
     return jsonify({"id": tid, "total": len(msgs), "mensagens": msgs})

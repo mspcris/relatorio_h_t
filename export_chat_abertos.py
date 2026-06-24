@@ -37,6 +37,16 @@ JANELA_DIAS = int(os.getenv("CHAT_DASH_DIAS", "90"))
 # userId da Camila.ai (bot) — mesmo do ETL completo
 CAMILA_USER_ID = "cmg8cum8g0519jbbm6r9l93f7"
 
+# O banco do chat (camim_chat_production) grava timestamps em UTC. A página e o
+# "Atualizado em" usam horário de Brasília. Brasil = UTC-3 fixo (sem horário de
+# verão desde 2019), então convertemos UTC→BRT subtraindo 3h ao formatar.
+BRT_OFFSET = timedelta(hours=-3)
+
+
+def to_brt(dt):
+    """datetime UTC (naive, vindo do MySQL) → naive em horário de Brasília."""
+    return (dt + BRT_OFFSET) if hasattr(dt, "strftime") else None
+
 
 def conn():
     load_dotenv(os.path.join(BASE_DIR, ".env"))
@@ -144,14 +154,14 @@ def main():
         has_human = m.get("first_human_at") is not None
         bucket = classify(nc, nu, m.get("first_customer_at"), m.get("first_user_at"), n_tr, has_human)
         fila = tr_last.get(tid) or t.get("queue_nome") or ""
-        cr = t.get("createdAt")
+        cr = to_brt(t.get("createdAt"))   # UTC → BRT
         abertos.append({
             "id": str(tid),
             "n": int(t["ticketNumber"]) if t.get("ticketNumber") is not None else None,
             "c": (t.get("customer_nome") or "")[:60],
             "f": fila,
             "b": bucket,
-            "d": cr.strftime("%d/%m/%Y %H:%M") if hasattr(cr, "strftime") else "",
+            "d": cr.strftime("%d/%m/%Y %H:%M") if cr else "",
         })
 
     # mais antigos primeiro
