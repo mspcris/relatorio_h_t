@@ -333,6 +333,22 @@
     }
 
     // =========================
+    // Objetivo (teto mensal de NF) por categoria — vem de sis_empresa no JSON do posto
+    // =========================
+    const ORIGEM_TO_OBJ = {
+      'Clinica':        'clinica',
+      'OperadoraCamim': 'camim',
+      'OperadoraSDM':   'sdm',
+      'Laboratorio':    'laboratorio'
+    };
+    function objetivoForRow(row, objetivos){
+      if (!objetivos) return null;
+      const k = ORIGEM_TO_OBJ[String(row.origem || '')];
+      const v = k ? objetivos[k] : null;
+      return (v == null) ? null : num(v);
+    }
+
+    // =========================
     // Agregação por posto (mantém o código)
     // =========================
     function aggNotasForPosto(payload){
@@ -407,7 +423,8 @@
         r.qtd += ar.qtd; r.total += ar.total;
 
         // mantém código + empresa (granularidade)
-        (an.byEmpresa||[]).forEach(row => notasRowsDetailed.push({ codigo: p, ...row }));
+        const objs = payload.objetivos;
+        (an.byEmpresa||[]).forEach(row => notasRowsDetailed.push({ codigo: p, ...row, _objetivo: objetivoForRow(row, objs) }));
         (ar.byEmpresa||[]).forEach(row => rpsRowsDetailed.push({ codigo: p, ...row }));
       }
 
@@ -427,7 +444,8 @@
             qtd_notas_canceladas: 0,
             valor_notas_canceladas: 0,
             qtd_notas_contabilizadas: 0,
-            valor_notas_contabilizadas: 0
+            valor_notas_contabilizadas: 0,
+            objetivo: null
         };
 
         cur.qtd_notas += num(row.qtd_notas);
@@ -436,6 +454,8 @@
         cur.valor_notas_canceladas += num(row.valor_notas_canceladas);
         cur.qtd_notas_contabilizadas += num(row.qtd_notas_contabilizadas);
         cur.valor_notas_contabilizadas += num(row.valor_notas_contabilizadas);
+        // teto mensal: constante por (posto, categoria) — não soma, só fixa
+        if (row._objetivo != null) cur.objetivo = row._objetivo;
 
         notasMap.set(key, cur);
         }
@@ -565,6 +585,7 @@
             <td class="text-right">R$ ${fmt2.format(r.valor_notas_canceladas)}</td>
             <td class="text-right">${fmtInt.format(r.qtd_notas_contabilizadas)}</td>
             <td class="text-right">R$ ${fmt2.format(r.valor_notas_contabilizadas)}</td>
+            <td class="text-right">${r.objetivo != null ? 'R$ ' + fmt2.format(r.objetivo) : '—'}</td>
           </tr>`);
       });
 
@@ -1152,6 +1173,7 @@
                     <th class="text-right small-td">Val Canc</th>
                     <th class="text-right small-td">Cont</th>
                     <th class="text-right small-td">Val Cont</th>
+                    <th class="text-right small-td" title="Teto mensal de emissão de NF deste CNPJ/categoria (sis_empresa)">Objetivo</th>
                   </tr>
                 </thead>
                 <tbody id="tblNotas"></tbody>

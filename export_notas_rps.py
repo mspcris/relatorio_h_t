@@ -33,6 +33,7 @@ SQL_NOTAS_PATH     = os.path.join(SQL_DIR, "notas_emitidas.sql")
 SQL_NOTAS_DIA_PATH = os.path.join(SQL_DIR, "notas_emitidas_diario.sql")
 SQL_RPS_PATH       = os.path.join(SQL_DIR, "rps_pendentes.sql")
 SQL_IND_PATH       = os.path.join(SQL_DIR, "notas_individuais.sql")
+SQL_OBJ_PATH       = os.path.join(SQL_DIR, "objetivos.sql")
 
 OUT_JSON_DIR = os.path.join(BASE_DIR, "json_notas_rps")
 os.makedirs(OUT_JSON_DIR, exist_ok=True)
@@ -183,9 +184,28 @@ def run_query(engine, sql_txt: str, ini: date, fim: date, retries: int = 4) -> p
                 _sleep_backoff(attempt)
     raise last_err
 
+def build_objetivos(df_obj: pd.DataFrame) -> dict:
+    """Extrai os tetos mensais de NF por categoria (1 linha por posto)."""
+    def f(x):
+        try:
+            return float(x) if pd.notna(x) else None
+        except (TypeError, ValueError):
+            return None
+    if df_obj is None or df_obj.empty:
+        return {"camim": None, "clinica": None, "sdm": None, "laboratorio": None}
+    r = df_obj.iloc[0]
+    return {
+        "camim":       f(r.get("objetivo_camim")),
+        "clinica":     f(r.get("objetivo_clinica")),
+        "sdm":         f(r.get("objetivo_sdm")),
+        "laboratorio": f(r.get("objetivo_laboratorio")),
+    }
+
+
 def write_outputs(posto: str, ym: str, ini: date, fim: date,
                   df_notas: pd.DataFrame, df_rps: pd.DataFrame,
-                  df_notas_dia: pd.DataFrame, df_ind: pd.DataFrame):
+                  df_notas_dia: pd.DataFrame, df_ind: pd.DataFrame,
+                  objetivos: dict):
     # converte data_emissao para string ISO
     for df_ref in [df_notas_dia, df_ind]:
         if "data_emissao" in df_ref.columns:
@@ -195,6 +215,7 @@ def write_outputs(posto: str, ym: str, ini: date, fim: date,
     payload = {
         "posto": posto,
         "periodo": {"ym": ym, "ini": ini.isoformat(), "fim": fim.isoformat()},
+        "objetivos": objetivos,
         "notas_emitidas": df_notas.to_dict(orient="records"),
         "notas_por_dia": df_notas_dia.to_dict(orient="records"),
         "rps_pendentes": df_rps.to_dict(orient="records"),
@@ -223,7 +244,7 @@ def write_outputs(posto: str, ym: str, ini: date, fim: date,
 def run_incremental_all_postos(postos=None, force_months=None):
     meta = ETLMeta('export_notas_rps', 'json_notas_rps')
 
-    for p in [SQL_NOTAS_PATH, SQL_NOTAS_DIA_PATH, SQL_RPS_PATH, SQL_IND_PATH]:
+    for p in [SQL_NOTAS_PATH, SQL_NOTAS_DIA_PATH, SQL_RPS_PATH, SQL_IND_PATH, SQL_OBJ_PATH]:
         if not os.path.exists(p):
             raise FileNotFoundError(f"SQL não encontrado: {p}")
 
@@ -231,8 +252,9 @@ def run_incremental_all_postos(postos=None, force_months=None):
     sql_notas_dia = load_sql_strip_go(SQL_NOTAS_DIA_PATH)
     sql_rps       = load_sql_strip_go(SQL_RPS_PATH)
     sql_ind       = load_sql_strip_go(SQL_IND_PATH)
+    sql_obj       = load_sql_strip_go(SQL_OBJ_PATH)
     for sql, path in [(sql_notas, SQL_NOTAS_PATH), (sql_notas_dia, SQL_NOTAS_DIA_PATH),
-                      (sql_rps, SQL_RPS_PATH), (sql_ind, SQL_IND_PATH)]:
+                      (sql_rps, SQL_RPS_PATH), (sql_ind, SQL_IND_PATH), (sql_obj, SQL_OBJ_PATH)]:
         if not sql:
             raise RuntimeError(f"SQL vazio: {path}")
 
@@ -295,8 +317,16 @@ def run_incremental_all_postos(postos=None, force_months=None):
                 meta.error(posto, str(e))
                 continue
 
+            # Objetivos (tetos mensais por categoria) — constante por posto; não usa :ini/:fim
             try:
-                write_outputs(posto, ym, ini, fim, df_notas, df_rps, df_notas_dia, df_ind)
+                df_obj = run_query(engine, sql_obj, ini, fim, retries=4)
+                objetivos = build_objetivos(df_obj)
+            except Exception as e:
+                print(f"[{posto}] WARN objetivos {ym}: {e} (segue sem objetivos)")
+                objetivos = build_objetivos(None)
+
+            try:
+                write_outputs(posto, ym, ini, fim, df_notas, df_rps, df_notas_dia, df_ind, objetivos)
                 meta.ok(posto)
             except Exception as e:
                 print(f"[{posto}] ERRO salvar {ym}: {e} (pulando)")
