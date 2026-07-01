@@ -430,6 +430,28 @@ def load_groq_snapshot(month: Optional[str] = None) -> Optional[dict]:
     return _read_json(_provider_path("groq", valid_month(month)))
 
 
+def latest_groq_project_names(month: Optional[str] = None) -> list[str]:
+    """Nomes de projeto do snapshot Groq mais recente com dados (<= month).
+
+    Serve para pré-preencher o editor "Digitar" com os projetos já conhecidos,
+    para o usuário só informar o valor fechado do mês — sem redigitar nomes.
+    """
+    month = valid_month(month)
+    for m in [mm for mm in list_months() if mm <= month]:  # list_months() é desc
+        snap = load_groq_snapshot(m)
+        names = [str(p.get("name") or "").strip()
+                 for p in (snap or {}).get("projects", [])]
+        names = [n for n in names if n and n != "—"]
+        if names:
+            # preserva a ordem do snapshot (já vem ordenado por valor desc)
+            seen, out = set(), []
+            for n in names:
+                if n not in seen:
+                    seen.add(n); out.append(n)
+            return out
+    return []
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Meses recentes / backfill
 # ─────────────────────────────────────────────────────────────────────────────
@@ -832,6 +854,9 @@ def load_dashboard(month: Optional[str] = None) -> dict:
     month = valid_month(month)
     openai = load_openai_snapshot(month) or _empty_openai(month)
     groq = load_groq_snapshot(month) or _empty_groq(month)
+    # nomes dos projetos conhecidos (mês atual ou carry-forward do último snapshot),
+    # para pré-preencher o editor "Digitar" sem redigitar nomes
+    groq["suggested_projects"] = latest_groq_project_names(month)
     subs = subscriptions_for(month)
     subs_t = round(sum(float(s.get("amount_usd") or 0.0) for s in subs), 4)
     openai_t = round(float(openai.get("total_usd") or 0.0), 4)

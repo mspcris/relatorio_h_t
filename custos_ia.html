@@ -41,6 +41,8 @@
     table.matrix td.num, table.matrix th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
     .cell-zero { color:#cbd3da; }
     .editor-box { background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:.75rem; }
+    .ci-paste-zone { border:1px dashed #f0ad4e; border-radius:6px; padding:.6rem .75rem; color:#8a6d3b; background:#fffdf6; cursor:pointer; font-size:.85rem; outline:none; transition:background .12s,border-color .12s; }
+    .ci-paste-zone:focus, .ci-paste-zone.dragover { background:#fff3cd; border-color:#e0a800; }
     .month-inline { width:auto; display:inline-block; }
     .ci-lim { opacity:.92; font-size:.78rem; display:block; }
     .lim-chip { display:inline-block; padding:.05rem .4rem; border-radius:5px; font-weight:700; font-size:.72rem; margin-right:.3rem; }
@@ -250,6 +252,9 @@
                     <input type="month" id="groqPrintMonth" class="form-control form-control-sm month-inline ml-1">
                     <button class="btn btn-xs btn-warning ml-2" id="btnChooseImg"><i class="fas fa-image"></i> Escolher imagem…</button>
                     <button class="btn btn-xs btn-link text-muted" id="btnCancelPrint">cancelar</button>
+                    <div id="groqPasteZone" tabindex="0" class="ci-paste-zone mt-2">
+                      <i class="fas fa-paste"></i> Ou <b>cole o print aqui</b> (Ctrl+V) — ou arraste a imagem pra cá.
+                    </div>
                     <div class="ci-muted mt-1">A imagem é lida por visão da OpenAI (gasta centavos).</div>
                   </div>
 
@@ -724,20 +729,40 @@ function openGroqBox(boxId, monthInputId){
   $(monthInputId).value = CUR_MONTH;
 }
 // print
-$("btnGroqPrint").addEventListener("click", ()=>openGroqBox("groqPrintBox","groqPrintMonth"));
-$("btnCancelPrint").addEventListener("click", closeGroqEditors);
-$("btnChooseImg").addEventListener("click", ()=>$("groqFile").click());
-$("groqFile").addEventListener("change", async (e)=>{
-  const f=e.target.files[0]; if(!f) return;
+async function sendGroqImage(file){
+  if(!file || !file.type || !file.type.startsWith("image/")){ msg($("groqBanner"),"Isso não é uma imagem. Cole ou escolha um print.","err"); return; }
   const month=$("groqPrintMonth").value||CUR_MONTH;
   msg($("groqBanner"), `<i class="fas fa-spinner fa-spin"></i> Lendo o print (visão da OpenAI)…`, "");
-  const fd=new FormData(); fd.append("image",f); fd.append("month",month);
+  const fd=new FormData(); fd.append("image",file,file.name||"print.png"); fd.append("month",month);
   try{ const j=await api("/groq/print",{method:"POST",body:fd});
     closeGroqEditors(); msg($("globalMsg"),`Groq lido do print (${(j.groq.projects||[]).length} projetos) para ${month}.`,"ok");
     await load(CUR_MONTH);
   }catch(err){ msg($("groqBanner"),"Falha ao ler o print: "+escapeHtml(err.message),"err"); }
-  finally{ e.target.value=""; }
+}
+$("btnGroqPrint").addEventListener("click", ()=>{ openGroqBox("groqPrintBox","groqPrintMonth"); $("groqPasteZone").focus(); });
+$("btnCancelPrint").addEventListener("click", closeGroqEditors);
+$("btnChooseImg").addEventListener("click", ()=>$("groqFile").click());
+$("groqFile").addEventListener("change", async (e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{ await sendGroqImage(f); } finally{ e.target.value=""; }
 });
+// colar print do clipboard (Ctrl+V) — só quando o box de Print está aberto
+function groqPrintOpen(){ return $("groqPrintBox").style.display!=="none"; }
+function imgFromClipboard(items){
+  for(const it of (items||[])){ if(it.type && it.type.startsWith("image/")) return it.getAsFile(); }
+  return null;
+}
+document.addEventListener("paste", (e)=>{
+  if(!groqPrintOpen()) return;
+  const img=imgFromClipboard(e.clipboardData && e.clipboardData.items);
+  if(img){ e.preventDefault(); sendGroqImage(img); }
+});
+// arrastar e soltar a imagem na zona
+const gpz=$("groqPasteZone");
+["dragenter","dragover"].forEach(ev=>gpz.addEventListener(ev,(e)=>{ e.preventDefault(); gpz.classList.add("dragover"); }));
+["dragleave","dragend","drop"].forEach(ev=>gpz.addEventListener(ev,()=>gpz.classList.remove("dragover")));
+gpz.addEventListener("drop",(e)=>{ e.preventDefault(); const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) sendGroqImage(f); });
+gpz.addEventListener("click",()=>gpz.focus());
 // colar texto
 $("btnGroqText").addEventListener("click", ()=>{ openGroqBox("groqTextBox","groqTextMonth"); $("groqTextArea").value=""; $("groqTextArea").focus(); });
 $("btnCancelText").addEventListener("click", closeGroqEditors);
@@ -761,8 +786,17 @@ function addManualRow(name,val){
 $("btnGroqManual").addEventListener("click", ()=>{
   openGroqBox("groqManualBox","groqManualMonth");
   $("groqManualRows").innerHTML="";
-  const cur=(CUR&&CUR.providers.groq.projects)||[];
-  if(cur.length) cur.forEach(p=>addManualRow(p.name,p.amount_usd)); else { addManualRow("",""); addManualRow("",""); }
+  const g=(CUR&&CUR.providers.groq)||{};
+  const cur=g.projects||[];
+  if(cur.length){
+    // mês já tem dados → nome + valor pra revisar
+    cur.forEach(p=>addManualRow(p.name,p.amount_usd));
+  }else if((g.suggested_projects||[]).length){
+    // mês sem dados → carrega os nomes já conhecidos, valor em branco pra preencher
+    g.suggested_projects.forEach(n=>addManualRow(n,""));
+  }else{
+    addManualRow("",""); addManualRow("","");
+  }
 });
 $("btnCancelManual").addEventListener("click", closeGroqEditors);
 $("btnAddRow").addEventListener("click", ()=>addManualRow("",""));
