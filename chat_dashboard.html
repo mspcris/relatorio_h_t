@@ -56,17 +56,51 @@
     .com-card { background:#f9fafb; border-left:3px solid #d1d5db; padding:10px 12px; margin-bottom:8px; border-radius:4px; font-size:.85rem; }
     .com-card .com-meta { color:#6b7280; font-size:.75rem; margin-top:4px; }
 
-    /* Funil */
-    .funil-row { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #f1f5f9; }
-    .funil-row:last-child { border-bottom:0; }
-    .funil-row .funil-lbl { width:340px; font-weight:600; color:#374151; font-size:.88rem; }
-    .funil-row .funil-lbl .funil-desc {
+    /* Funil — grade com colunas alinhadas: Etapa | Mediana (barra) | Média | P95 | Amostra */
+    .funil-scroll { overflow-x:auto; }
+    .funil-grid {
+      display:grid;
+      grid-template-columns:minmax(240px,330px) minmax(220px,1fr) 90px 90px 80px;
+      column-gap:18px; min-width:760px;
+    }
+    .funil-grid .fg-head {
+      font-size:.68rem; font-weight:700; color:#6b7280; text-transform:uppercase;
+      letter-spacing:.04em; padding-bottom:7px; border-bottom:2px solid #e5e7eb;
+      white-space:nowrap; align-self:end;
+    }
+    .funil-grid .fg-head.fg-num { text-align:right; }
+    .funil-grid .fg-cell {
+      display:flex; align-items:center; padding:12px 0;
+      border-bottom:1px solid #f1f5f9; align-self:stretch;
+    }
+    .funil-grid .fg-cell.fg-last { border-bottom:0; }
+    .funil-grid .fg-lbl {
+      flex-direction:column; align-items:flex-start; justify-content:center;
+      font-weight:600; color:#374151; font-size:.88rem;
+    }
+    .funil-grid .funil-desc {
       display:block; font-weight:400; font-size:.74rem; color:#6b7280;
       margin-top:2px; line-height:1.35;
     }
-    .funil-row .funil-bar { flex:1; height:18px; background:#f3f4f6; border-radius:9px; overflow:hidden; position:relative; }
-    .funil-row .funil-bar > div { height:100%; background:linear-gradient(90deg,#0ea5e9,#0369a1); }
-    .funil-row .funil-val { width:200px; text-align:right; font-size:.83rem; color:#374151; }
+    .funil-grid .fg-cell.fg-num {
+      justify-content:flex-end; font-variant-numeric:tabular-nums;
+      font-size:.86rem; color:#374151;
+    }
+    .funil-grid .fg-cell.fg-n { font-size:.78rem; color:#9ca3af; }
+    .funil-grid .fg-med { gap:10px; }
+    .funil-grid .funil-bar {
+      flex:1; height:12px; background:#f3f4f6; border-radius:6px;
+      overflow:hidden; position:relative;
+    }
+    .funil-grid .funil-bar > div {
+      height:100%; min-width:3px; border-radius:6px;
+      background:linear-gradient(90deg,#0ea5e9,#0369a1);
+    }
+    .funil-grid .funil-med-val {
+      font-size:.92rem; font-weight:700; color:#111827;
+      font-variant-numeric:tabular-nums; white-space:nowrap;
+      min-width:56px; text-align:right;
+    }
 
     .badge-bucket { font-weight:600; font-size:.7rem; padding:3px 7px; border-radius:10px; }
     .b-camila    { background:#dbeafe; color:#1e40af; }
@@ -402,10 +436,9 @@
              title="Mostra <b>quanto tempo cada etapa demora</b> numa conversa típica: cliente fala → Camila responde → Camila manda pra fila → humano atende → fecha. Só conta conversas que passaram por humano (o funil completo)."></i>
         </h2>
         <p class="section-subtitle">
-          <b>med</b> = média ·
-          <b>p50</b> = mediana (metade dos tickets demora menos) ·
-          <b>p95</b> = 95º percentil (os 5% mais lentos demoram mais que isso) ·
-          <b>n</b> = tamanho da amostra.
+          A barra mostra a <b>mediana</b> — o caso típico: metade das conversas resolve essa etapa
+          em menos tempo que isso. Passe o mouse nos ícones
+          <i class="fas fa-question-circle hint-ico"></i> dos cabeçalhos pra entender cada medida.
         </p>
         <div class="card mb-3"><div class="card-body" id="funilBox"></div></div>
 
@@ -1426,27 +1459,39 @@
      'Mesmo "cliente abriu → fechado", mas <b>só</b> dos tickets que a <b>Camila fechou sozinha</b> (timeout 1h/3h ou varredura de madrugada). É quanto tempo o cliente ficou no vácuo antes do robô desistir.'],
   ];
   const funilBox = document.getElementById('funilBox');
-  // Escala: maior p95 vira 100% da barra
-  let maxP95 = 0;
-  funilOrdem.forEach(([_, key]) => { const v = (funil[key] || {}).p95; if (v > maxP95) maxP95 = v; });
-  funilOrdem.forEach(([label, key, desc]) => {
+  // Escala: maior mediana vira 100% da barra (a barra codifica o caso típico,
+  // não o p95 — senão o "Total" de dezenas de horas esmaga as etapas rápidas)
+  let maxP50 = 0;
+  funilOrdem.forEach(([_, key]) => { const v = (funil[key] || {}).p50; if (v > maxP50) maxP50 = v; });
+  let funilHtml = `
+    <div class="fg-head">Etapa</div>
+    <div class="fg-head">Mediana — caso típico${hi('p50')}</div>
+    <div class="fg-head fg-num">Média${hi('med')}</div>
+    <div class="fg-head fg-num">P95${hi('p95')}</div>
+    <div class="fg-head fg-num">Amostra${hi('n')}</div>`;
+  funilOrdem.forEach(([label, key, desc], i) => {
     const v = funil[key] || {};
-    const barW = v.p95 ? (v.p95 / maxP95 * 100) : 0;
-    funilBox.insertAdjacentHTML('beforeend',
-      `<div class="funil-row">
-         <div class="funil-lbl">
-           ${label}
-           <span class="funil-desc">${desc}</span>
-         </div>
-         <div class="funil-bar"><div style="width:${barW.toFixed(1)}%"></div></div>
-         <div class="funil-val">
-           med${hi('med')} <b>${fmtSec(v.media)}</b> ·
-           p50${hi('p50')} ${fmtSec(v.p50)} ·
-           p95${hi('p95')} ${fmtSec(v.p95)}
-           <div style="font-size:.7rem;color:#9ca3af">n${hi('n')}=${fmtInt(v.n)}</div>
-         </div>
-       </div>`);
+    const barW = (v.p50 != null && maxP50) ? (v.p50 / maxP50 * 100) : 0;
+    const last = (i === funilOrdem.length - 1) ? ' fg-last' : '';
+    const barTip = (v.p50 != null)
+      ? `Metade das conversas levou até <b>${fmtSec(v.p50)}</b> nesta etapa. `
+        + `As 5% mais lentas passaram de <b>${fmtSec(v.p95)}</b>. `
+        + `Amostra: ${fmtInt(v.n)} conversas.`
+      : 'Sem dados no período.';
+    funilHtml += `
+      <div class="fg-cell fg-lbl${last}">${label}<span class="funil-desc">${desc}</span></div>
+      <div class="fg-cell fg-med${last}">
+        <div class="funil-bar" data-toggle="tooltip" data-html="true"
+             title="${barTip.replace(/"/g, '&quot;')}">${
+          v.p50 != null ? `<div style="width:${barW.toFixed(1)}%"></div>` : ''
+        }</div>
+        <span class="funil-med-val">${fmtSec(v.p50)}</span>
+      </div>
+      <div class="fg-cell fg-num${last}">${fmtSec(v.media)}</div>
+      <div class="fg-cell fg-num${last}">${fmtSec(v.p95)}</div>
+      <div class="fg-cell fg-num fg-n${last}">${fmtInt(v.n)}</div>`;
   });
+  funilBox.innerHTML = `<div class="funil-scroll"><div class="funil-grid">${funilHtml}</div></div>`;
 
   // ============================================================
   // Donut buckets
