@@ -221,6 +221,23 @@ def derivar_canal(row):
     return "F6"  # CtrlF6=1 OU todos 0/null
 
 
+# Origem do cancelamento, em codigo de 1 letra. O JSON tem ~50-80MB e um campo
+# novo multiplica por ~200 mil linhas, entao nao vale gravar a frase inteira.
+#   R = robo de pre-agendamento cancelou (nao confirmou na janela 5-2d)
+#   A = o proprio cliente cancelou pelo site/app
+#   O = outro cancelamento qualquer
+#   "" = nao foi cancelado
+_ORIGEM_CANCEL = {
+    "Pré agendamento não confirmado": "R",
+    "Cliente no APP":                 "A",
+    "Outros":                         "O",
+}
+
+
+def derivar_origem_cancelamento(row):
+    return _ORIGEM_CANCEL.get(_str(row.get("origem_cancelamento")), "")
+
+
 def transformar(rows, posto):
     out = []
     for r in rows:
@@ -240,6 +257,7 @@ def transformar(rows, posto):
             "dif": int(r.get("dif_dias") or 0),
             "at":  _str(r.get("atendido")),
             "des": _bool_int(r.get("desistencia")),
+            "oc":  derivar_origem_cancelamento(r),
             "can": derivar_canal(r),
             "vp":  _to_float(r.get("valor_pago")),
             "tal": _str(r.get("talao")),

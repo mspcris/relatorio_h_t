@@ -180,6 +180,40 @@ Adicionado em **2026-04-26**. Mede o impacto da regra de confirmação obrigató
 - `Não Atendido` → falta SE >1h após `DataConsulta + HoraPrevistaConsulta`; senão pendente
 - Outros → fallback "falta"
 
+**REGRA — o foco desta página é saber QUEM FALTOU** (decidido 2026-07-21)
+
+Não é um prontuário. Status que descrevem pendência administrativa não interessam
+aqui e não devem ser reintroduzidos:
+
+- `PENDÊNCIA DE GUIA`, `PENDÊNCIA DE PAGAMENTO`, `PENDÊNCIA RECEPÇÃO` — **não
+  calcular**. Todos os três viram `Faltou`/`Ausente`/`Não atendido`, que é onde
+  já caíam na categorização do dashboard.
+- `PENDÊNCIA RECEPÇÃO` especificamente = cliente que marcou e ficou inadimplente.
+  O Cristiano trata isso como **exceção no balcão**, não por dashboard. Não pedir
+  para reativar, não sugerir card/gráfico para isso.
+- `Médico faltou` **continua fora** da análise. No CASE do SQL a ordem é
+  `Atendido` → `Médico faltou` → `Aguardando`, e cada posição tem motivo:
+  - ganha de `Aguardando` — na view original `Aguardando` vinha primeiro, então
+    um lançamento com falta do médico era contado como *compareceu*;
+  - **perde** para `Atendido` — `StatusAtendimento=1` é fato registrado (médico
+    substituto, falta lançada errado). Excluir isso jogaria fora atendimento
+    real. Decidido em 2026-07-21 sobre 1 caso medido em 11.012 linhas.
+
+Isso vale para `sql/preagendamento.sql` e para a página `preagendamento.html`.
+**Não vale** para `kpi_consultas_status.html` / `export_consultas_mensal_json.py`,
+que são um KPI independente, ainda leem a view e mantêm o balde `pend_recepcao`
+de propósito (cards e série de gráfico próprios).
+
+**Coluna `origem_cancelamento`** (adicionada 2026-07-21, sugestão do Léo Carneiro).
+No JSON vai como `oc`, código de 1 letra para não inchar 50-80MB:
+- `R` — robô de pré-agendamento cancelou (não confirmou na janela 5-2d)
+- `A` — o próprio cliente cancelou pelo site/app
+- `O` — outro cancelamento
+- `""` — não foi cancelado
+
+Quem foi cancelado pelo robô **não é falta** — foi cancelado, não deixou de
+comparecer. É a mesma população que a página `/cancelados_robo` lista ao vivo.
+
 **Canal de marcação:**
 - `MarcadoViaWeb=1` → WEB (App Camim ou Égide)
 - `MarcadoViaAgendaUnificada=1` → ASU (central de atendimento)
@@ -192,7 +226,24 @@ Adicionado em **2026-04-26**. Mede o impacto da regra de confirmação obrigató
 - Saída: `json_consolidado/preagendamento.json` (~50-80MB; sob gzip nginx ~10-15MB)
 - Frontend: `preagendamento.html` carrega 1 vez e processa em JS (Chart.js)
 - Inclui ambas populações (desistência 0 e 1) — frontend filtra
-- View `vw_Cad_LancamentoProntuarioComDesistencia` é pesada: query usa `READ UNCOMMITTED` + `NOLOCK` para acelerar
+- **A query NÃO usa mais `vw_Cad_LancamentoProntuarioComDesistencia`** (desde 2026-07-21) —
+  lê as tabelas base. Medido em abr-jun/2026: posto B 8,1s→3,9s, posto G 10,6s→5,1s.
+  Repetindo a medição o ganho oscilou entre 2,1x e 3,4x conforme a carga do
+  servidor — conte com ~2x no pior caso.
+  O que a view custava e a query nova não paga:
+  a UDF escalar `dbo.PossuiGuia()` chamada linha a linha (PENDÊNCIA DE GUIA),
+  o join em `Fin_Receita` (PENDÊNCIA DE PAGAMENTO) e o join na view aninhada
+  `vw_Cad_ClienteDiasInadimplenciaANSview` (PENDÊNCIA RECEPÇÃO).
+  Validado com dry-run: conjunto de `idLancamento` idêntico, e `paciente`,
+  `medico`, `especialidade`, `dif_dias`, `desistencia`, `matricula` batendo
+  100% com a view. Só 10 linhas em ~7.000 mudaram de status, sem mexer em
+  nenhum balde do dashboard.
+- **Ao mexer nessa query, replicar os filtros do WHERE da view**: `Codigo > 0`,
+  `DataEstorno IS NULL` e `(ExibenoProntuarioF3 = 1 OR PermitirAgendamentoF6eCTRLF6 = 1)`.
+  Sem eles entram estornos e serviços que não aparecem no F3 (foi o que fez a
+  primeira versão devolver 3 linhas a mais por posto).
+- **Nada de literal de hora com dois-pontos no .sql** — o `text()` do SQLAlchemy
+  lê `'23:59'` como bind param. Use `DATEPART(hour/minute, ...)`.
 
 ---
 
