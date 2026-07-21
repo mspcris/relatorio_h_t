@@ -234,16 +234,39 @@ comparecer. É a mesma população que a página `/cancelados_robo` lista ao viv
   a UDF escalar `dbo.PossuiGuia()` chamada linha a linha (PENDÊNCIA DE GUIA),
   o join em `Fin_Receita` (PENDÊNCIA DE PAGAMENTO) e o join na view aninhada
   `vw_Cad_ClienteDiasInadimplenciaANSview` (PENDÊNCIA RECEPÇÃO).
-  Validado com dry-run: conjunto de `idLancamento` idêntico, e `paciente`,
-  `medico`, `especialidade`, `dif_dias`, `desistencia`, `matricula` batendo
-  100% com a view. Só 10 linhas em ~7.000 mudaram de status, sem mexer em
-  nenhum balde do dashboard.
+  Validado com dry-run (abr-jun, postos B e G, ~20 mil linhas): conjunto de
+  linhas idêntico, e `paciente`, `medico`, `especialidade`, `dif_dias`,
+  `desistencia`, `matricula` batendo 100% com a view. Zero mudança nos baldes
+  compareceu/falta/pendente/medico_faltou.
 - **Ao mexer nessa query, replicar os filtros do WHERE da view**: `Codigo > 0`,
   `DataEstorno IS NULL` e `(ExibenoProntuarioF3 = 1 OR PermitirAgendamentoF6eCTRLF6 = 1)`.
   Sem eles entram estornos e serviços que não aparecem no F3 (foi o que fez a
   primeira versão devolver 3 linhas a mais por posto).
 - **Nada de literal de hora com dois-pontos no .sql** — o `text()` do SQLAlchemy
   lê `'23:59'` como bind param. Use `DATEPART(hour/minute, ...)`.
+
+**Ao comparar duas versões desta query (ou de qualquer coisa sobre lançamentos):
+a chave da linha é `idLancamentoServico`, NUNCA `idLancamento`.**
+Um lançamento tem N serviços. Chavear um dict por `idLancamento` colapsa os
+irmãos e a última linha de cada resultado ganha — como a ordem de retorno muda
+entre duas queries diferentes, aparecem "divergências" que são só o dict
+sobrescrevendo. Foi assim que 2 linhas `Faltou → Atendido` apareceram do nada
+num dry-run e sumiram ao trocar a chave. Se um diff acusar poucas linhas
+estranhas, suspeitar da chave antes de suspeitar da query.
+
+**Pendências conhecidas (2026-07-21):**
+- `/cancelados_robo` ([cancelados_robo_routes.py](cancelados_robo_routes.py)) ainda
+  usa `vw_Cad_LancamentoProntuarioComDesistencia` (~1,8s/posto no balcão). Cabe o
+  mesmo tratamento, mas ela precisa de `Paciente`, `TelefoneResidencial`,
+  `NomeMedico` e `idadePaciente` — remapear para as tabelas base dá mais trabalho
+  do que o ETL e não foi validado por dry-run.
+- A coluna `origem_cancelamento` deu **exatamente 72 "Pré agendamento não
+  confirmado" em B e 72 em G** em julho/2026. Número idêntico em dois postos
+  cheira a teto/limite do robô, não a coincidência. Conferir contra a lista ao
+  vivo do `/cancelados_robo` antes de usar esse número em qualquer relatório.
+- Primeira execução do cron com a query nova: **02:30 de 2026-07-22**. Conferir
+  tempo total em `logs/export_preagendamento_*.log` (o benchmark foi só 2 postos
+  / 3 meses) e o tamanho do `preagendamento.json` com o campo `oc` novo.
 
 ---
 
