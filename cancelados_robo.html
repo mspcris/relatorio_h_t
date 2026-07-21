@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>CAMIM — Cancelados pelo Robô</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- KPI Metadata -->
+  <meta name="kpi-id" content="cancelados_robo" />
+  <meta name="kpi-title" content="Cancelados pelo Robô" />
+  <meta name="kpi-description" content="Lista operacional de pré-agendamentos cancelados automaticamente por falta de confirmação. Para a recepção preparar o atendimento." />
+  <meta name="kpi-category" content="Operacional" />
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&family=Inter:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="/css/style2.css?v=20260721">
+  <link rel="stylesheet" href="/css/style_kpi.css?v=20260721">
+  <link rel="shortcut icon" href="images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <!-- JS BASE -->
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+  <script>
+    window.USER_EMAIL  = {{ USER_EMAIL | tojson }};
+    window.USER_POSTOS = {{ USER_POSTOS | safe }};
+  </script>
+
+  <style>
+    html { font-size: 16px; }
+    body {
+      font-size: 1rem;
+      -webkit-font-smoothing: antialiased;
+      font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    body.text-sm { font-size: 1rem; }
+
+    .page-head {
+      background: linear-gradient(135deg, #b93a2b 0%, #d9534f 100%);
+      color: #fff; border-radius: .5rem; padding: 1rem 1.25rem; margin-bottom: 1rem;
+    }
+    .page-head h1 { font-size: 1.5rem; font-weight: 700; margin: 0; }
+    .page-head p  { margin: .35rem 0 0; opacity: .92; font-size: .95rem; }
+
+    .aviso {
+      background:#fff8e6; border-left:4px solid #f0ad4e; border-radius:.35rem;
+      padding:.7rem .9rem; margin-bottom:1rem; font-size:.92rem; color:#6b4d05;
+    }
+
+    .barra { background:#fff; border-radius:.5rem; padding:.9rem 1rem; margin-bottom:1rem;
+             box-shadow:0 1px 3px rgba(0,0,0,.08); }
+    .chip {
+      display:inline-block; padding:.25rem .7rem; margin:.15rem .2rem .15rem 0;
+      border:1px solid #ccd3da; border-radius:1rem; background:#fff; cursor:pointer;
+      font-size:.85rem; font-weight:600; color:#4a5560; user-select:none;
+    }
+    .chip.on { background:#28a745; border-color:#28a745; color:#fff; }
+
+    .tile { background:#fff; border-radius:.5rem; padding:.85rem 1rem; text-align:center;
+            box-shadow:0 1px 3px rgba(0,0,0,.08); border-left:4px solid #ced4da; }
+    .tile .n { font-size:1.7rem; font-weight:700; line-height:1.1; }
+    .tile .l { font-size:.82rem; color:#6c757d; }
+    .tile.total     { border-left-color:#d9534f; }
+    .tile.pendente  { border-left-color:#f0ad4e; }
+    .tile.tratado   { border-left-color:#28a745; }
+
+    table.lista { width:100%; background:#fff; border-radius:.5rem; overflow:hidden;
+                  box-shadow:0 1px 3px rgba(0,0,0,.08); }
+    table.lista thead th {
+      background:#f4f6f8; font-size:.78rem; text-transform:uppercase; letter-spacing:.03em;
+      color:#5a6672; padding:.6rem .7rem; border-bottom:2px solid #e3e7eb; white-space:nowrap;
+    }
+    table.lista tbody td { padding:.6rem .7rem; border-bottom:1px solid #eef1f4; vertical-align:middle; }
+    table.lista tbody tr:hover { background:#fafbfc; }
+    table.lista tbody tr.ok { background:#f2fbf4; }
+    table.lista tbody tr.ok .paciente { text-decoration:line-through; opacity:.6; }
+
+    .hora     { font-weight:700; font-size:1.05rem; color:#212529; white-space:nowrap; }
+    .paciente { font-weight:600; color:#212529; }
+    .sub      { font-size:.8rem; color:#7a838d; }
+    .posto-badge { display:inline-block; min-width:1.6rem; text-align:center; font-weight:700;
+                   background:#37474f; color:#fff; border-radius:.25rem; padding:.05rem .35rem;
+                   font-size:.8rem; }
+    .tel a { color:#128c7e; font-weight:600; text-decoration:none; white-space:nowrap; }
+    .tel a:hover { text-decoration:underline; }
+    .tel .sep { color:#ccc; margin:0 .25rem; }
+
+    .vazio { background:#fff; border-radius:.5rem; padding:3rem 1rem; text-align:center;
+             color:#8a939c; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+
+    @media print {
+      .main-sidebar, .main-header, .barra, .no-print, .page-head p { display:none !important; }
+      .content-wrapper { margin-left:0 !important; }
+      body { background:#fff; }
+      table.lista { box-shadow:none; }
+      table.lista thead th { background:#eee !important; -webkit-print-color-adjust:exact; }
+    }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini layout-fixed text-sm">
+<div class="wrapper">
+
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li>
+    </ul>
+    <ul class="navbar-nav ml-auto">
+      <li class="nav-item"><a class="nav-link no-print" href="#" onclick="window.print();return false"><i class="fas fa-print"></i> Imprimir</a></li>
+    </ul>
+  </nav>
+
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="index.html" class="brand-link">
+      <img src="images/Logo Camim-01_200px.png" alt="CAMIM" class="brand-image img-circle elevation-3" style="opacity:.9">
+      <span class="brand-text font-weight-light">CAMIM</span>
+    </a>
+    <div class="sidebar">
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a></li>
+          <li class="nav-item"><a href="monitorarrobos.html" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Monitorar Robôs</p></a></li>
+          {% if USER_IS_ADMIN %}
+          <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+          {% endif %}
+          <li class="nav-item"><a href="kpi_home.html" class="nav-link"><i class="nav-icon fas fa-book-open"></i><p>Leia-me</p></a></li>
+          <li class="nav-item"><a href="agenda_dia.html" class="nav-link"><i class="nav-icon fas fa-calendar-check"></i><p>Agenda do Dia</p></a></li>
+          <li class="nav-item"><a href="/preagendamento" class="nav-link"><i class="nav-icon fas fa-clipboard-check"></i><p>Pré-Agendamento</p></a></li>
+          <li class="nav-item"><a href="/cancelados_robo" class="nav-link active"><i class="nav-icon fas fa-user-clock"></i><p>Cancelados pelo Robô</p></a></li>
+          <li class="nav-item"><a href="/qualidade_agenda" class="nav-link"><i class="nav-icon fas fa-calendar-check"></i><p>Qualidade da Agenda</p></a></li>
+          <li class="nav-item"><a href="/acesso_avancado" class="nav-link"><i class="nav-icon fas fa-user-shield" style="color:#c0392b"></i><p>Acesso Avançado</p></a></li>
+          <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+          <li class="nav-item">
+            <form method="POST" action="/session/logout" style="display:inline">
+              <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
+                <i class="nav-icon fas fa-sign-out-alt"></i><p>Sair</p>
+              </button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="content-wrapper" style="background:#f2f4f6">
+    <section class="content pt-3">
+      <div class="container-fluid">
+
+        <div class="page-head">
+          <h1><i class="fas fa-user-clock"></i> Cancelados pelo Robô</h1>
+          <p>Pré-agendamentos cancelados automaticamente por falta de confirmação na janela de 5 a 2 dias.
+             Estas pessoas normalmente <strong>não sabem que foram canceladas</strong> e podem aparecer no horário marcado.</p>
+        </div>
+
+        <div class="aviso no-print">
+          <i class="fas fa-info-circle"></i>
+          O robô corta com cerca de <strong>24h de antecedência</strong>, e a lista muda ao longo do dia —
+          por isso ela é consultada ao vivo no banco de cada posto (atualiza sozinha a cada 2 minutos).
+          Só entram aqui os cancelamentos do <strong>robô de pré-agendamento</strong>: quem cancelou sozinho
+          pelo app não aparece, porque sabe que cancelou.
+        </div>
+
+        <div class="barra no-print">
+          <div class="form-row align-items-end">
+            <div class="col-auto mb-2">
+              <label class="mb-1" style="font-size:.8rem;font-weight:700;color:#5a6672">DATA DA CONSULTA</label>
+              <input type="date" id="fData" class="form-control form-control-sm">
+            </div>
+            <div class="col-auto mb-2">
+              <button class="btn btn-sm btn-outline-secondary" onclick="setDia(0)">Hoje</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="setDia(1)">Amanhã</button>
+            </div>
+            <div class="col-auto mb-2">
+              <label class="mb-1" style="font-size:.8rem;font-weight:700;color:#5a6672">ESPECIALIDADE</label>
+              <select id="fEsp" class="form-control form-control-sm"><option value="">Todas</option></select>
+            </div>
+            <div class="col-auto mb-2">
+              <label class="mb-1" style="font-size:.8rem;font-weight:700;color:#5a6672">MÉDICO</label>
+              <select id="fMed" class="form-control form-control-sm"><option value="">Todos</option></select>
+            </div>
+            <div class="col-auto mb-2">
+              <button class="btn btn-sm btn-danger" onclick="carregar()"><i class="fas fa-sync"></i> Atualizar</button>
+            </div>
+          </div>
+          <div id="chipsPosto" style="margin-top:.25rem"></div>
+          <div class="mt-2">
+            <label class="mb-0" style="font-size:.88rem;cursor:pointer">
+              <input type="checkbox" id="fPend"> Mostrar só os que ainda não foram tratados
+            </label>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-4"><div class="tile total"><div class="n" id="tTotal">—</div><div class="l">Cancelados no dia</div></div></div>
+          <div class="col-4"><div class="tile pendente"><div class="n" id="tPend">—</div><div class="l">A tratar</div></div></div>
+          <div class="col-4"><div class="tile tratado"><div class="n" id="tOk">—</div><div class="l">Já tratados</div></div></div>
+        </div>
+
+        <div id="alerta"></div>
+
+        <div id="wrapLista">
+          <div class="vazio"><i class="fas fa-spinner fa-spin fa-2x"></i><div class="mt-2">Consultando os postos…</div></div>
+        </div>
+
+        <p class="text-muted mt-2" style="font-size:.8rem" id="rodape"></p>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let DADOS = [];
+let POSTOS_SEL = new Set();
+let timer = null;
+
+function hojeISO(off = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + off);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function setDia(off) { $('#fData').value = hojeISO(off); carregar(); }
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtTel(n) {
+  // 55 DD 9XXXX XXXX  →  (DD) 9XXXX-XXXX
+  const m = String(n).match(/^55(\d{2})(\d{4,5})(\d{4})$/);
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : n;
+}
+
+async function carregar() {
+  const data = $('#fData').value || hojeISO();
+  $('#wrapLista').innerHTML =
+    '<div class="vazio"><i class="fas fa-spinner fa-spin fa-2x"></i><div class="mt-2">Consultando os postos…</div></div>';
+  try {
+    const r = await fetch('/api/cancelados_robo?data=' + encodeURIComponent(data), { credentials: 'same-origin' });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.error || ('HTTP ' + r.status));
+    }
+    const d = await r.json();
+    DADOS = d.cancelados || [];
+
+    // Posto fora do ar não pode passar despercebido: a recepção precisa saber
+    // que a lista está incompleta, senão confia num total que não é o total.
+    const errs = Object.entries(d.postos_erro || {});
+    $('#alerta').innerHTML = errs.length
+      ? `<div class="alert alert-warning py-2"><i class="fas fa-exclamation-triangle"></i>
+         <strong>Lista incompleta.</strong> Não consegui consultar: ${errs.map(([p, m]) => `posto ${esc(p)}`).join(', ')}.
+         Os demais postos estão abaixo.</div>`
+      : '';
+
+    montarFiltros();
+    render();
+    $('#rodape').textContent =
+      'Postos consultados: ' + (d.postos || []).join(', ') +
+      ' · atualizado às ' + new Date().toLocaleTimeString('pt-BR');
+  } catch (e) {
+    $('#wrapLista').innerHTML =
+      `<div class="vazio text-danger"><i class="fas fa-times-circle fa-2x"></i><div class="mt-2">${esc(e.message)}</div></div>`;
+  }
+}
+
+function montarFiltros() {
+  const postos = [...new Set(DADOS.map(x => x.posto))].sort();
+  if (POSTOS_SEL.size === 0) postos.forEach(p => POSTOS_SEL.add(p));
+  $('#chipsPosto').innerHTML = postos.length
+    ? '<span style="font-size:.8rem;font-weight:700;color:#5a6672;margin-right:.4rem">POSTO</span>' +
+      postos.map(p => `<span class="chip ${POSTOS_SEL.has(p) ? 'on' : ''}" onclick="togglePosto('${p}')">${p}</span>`).join('')
+    : '';
+
+  const enche = (sel, campo) => {
+    const el = $(sel), atual = el.value;
+    const vals = [...new Set(DADOS.map(x => x[campo]).filter(Boolean))].sort();
+    el.innerHTML = `<option value="">${campo === 'especialidade' ? 'Todas' : 'Todos'}</option>` +
+      vals.map(v => `<option ${v === atual ? 'selected' : ''}>${esc(v)}</option>`).join('');
+  };
+  enche('#fEsp', 'especialidade');
+  enche('#fMed', 'medico');
+}
+function togglePosto(p) {
+  POSTOS_SEL.has(p) ? POSTOS_SEL.delete(p) : POSTOS_SEL.add(p);
+  montarFiltros(); render();
+}
+
+function filtrados() {
+  const esp = $('#fEsp').value, med = $('#fMed').value, sopend = $('#fPend').checked;
+  return DADOS.filter(x =>
+    POSTOS_SEL.has(x.posto) &&
+    (!esp || x.especialidade === esp) &&
+    (!med || x.medico === med) &&
+    (!sopend || !x.tratado));
+}
+
+function render() {
+  const L = filtrados();
+  const ok = L.filter(x => x.tratado).length;
+  $('#tTotal').textContent = L.length;
+  $('#tOk').textContent = ok;
+  $('#tPend').textContent = L.length - ok;
+
+  if (!L.length) {
+    $('#wrapLista').innerHTML =
+      '<div class="vazio"><i class="fas fa-check-circle fa-2x text-success"></i>' +
+      '<div class="mt-2">Nenhum cancelamento do robô para os filtros selecionados.</div></div>';
+    return;
+  }
+
+  $('#wrapLista').innerHTML = `
+    <table class="lista">
+      <thead><tr>
+        <th>Hora</th><th>Posto</th><th>Paciente</th><th>Especialidade</th>
+        <th>Médico</th><th>Telefone</th><th>Cancelado em</th><th class="text-center">Tratado</th>
+      </tr></thead>
+      <tbody>${L.map(linha).join('')}</tbody>
+    </table>`;
+}
+
+function linha(x) {
+  const tels = (x.telefones || []).length
+    ? x.telefones.map(t =>
+        `<a href="https://wa.me/${t}" target="_blank" rel="noopener" title="Abrir WhatsApp">
+           <i class="fab fa-whatsapp"></i> ${fmtTel(t)}</a>`).join('<span class="sep">·</span>')
+    : `<span class="sub">${x.telefone_exibicao ? esc(x.telefone_exibicao) : 'sem telefone'}</span>`;
+  const canc = (x.data_desistencia || '').replace('T', ' ').slice(0, 16);
+  const idade = x.idade != null ? ` · ${x.idade} anos` : '';
+  return `
+    <tr class="${x.tratado ? 'ok' : ''}">
+      <td class="hora">${esc(x.hora_consulta || '—')}</td>
+      <td><span class="posto-badge">${esc(x.posto)}</span></td>
+      <td><div class="paciente">${esc(x.paciente)}</div>
+          <div class="sub">mat. ${esc(x.matricula)}${idade}</div></td>
+      <td>${esc(x.especialidade)}</td>
+      <td>${esc(x.medico)}</td>
+      <td class="tel">${tels}</td>
+      <td class="sub">${esc(canc)}</td>
+      <td class="text-center">
+        <input type="checkbox" ${x.tratado ? 'checked' : ''}
+               onchange="marcar('${x.posto}', ${x.id_lancamento_servico}, this)">
+        ${x.tratado ? `<div class="sub" title="${esc(x.tratado_por)}">${esc((x.tratado_por || '').split('@')[0])}</div>` : ''}
+      </td>
+    </tr>`;
+}
+
+async function marcar(posto, id, el) {
+  const tratado = el.checked;
+  el.disabled = true;
+  try {
+    const r = await fetch('/api/cancelados_robo/tratado', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ posto, id_lancamento_servico: id, tratado })
+    });
+    if (!r.ok) throw new Error('falhou');
+    const item = DADOS.find(x => x.posto === posto && x.id_lancamento_servico === id);
+    if (item) {
+      item.tratado = tratado;
+      item.tratado_por = tratado ? (window.USER_EMAIL || '') : '';
+    }
+    render();
+  } catch (e) {
+    el.checked = !tratado;
+    alert('Não consegui salvar a marcação. Tente de novo.');
+  } finally {
+    el.disabled = false;
+  }
+}
+
+['#fEsp', '#fMed', '#fPend'].forEach(s => document.addEventListener('change', ev => {
+  if (ev.target.matches(s)) render();
+}));
+$('#fData').addEventListener('change', carregar);
+
+$('#fData').value = hojeISO();
+carregar();
+// Auto-refresh: o robô roda a cada ~20 min, então 2 min mantém o balcão em dia
+// sem martelar o banco (a API ainda tem cache de 60s por posto).
+timer = setInterval(carregar, 120000);
+</script>
+</body>
+</html>

@@ -64,6 +64,13 @@ except Exception as _e:
     logging.getLogger(__name__).error("medico_falta_bp não carregado: %s", _e)
 
 try:
+    from cancelados_robo_routes import cancelados_robo_bp
+    app.register_blueprint(cancelados_robo_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("cancelados_robo_bp não carregado: %s", _e)
+
+try:
     from kpi_receita_despesa_api import receita_despesa_bp
     app.register_blueprint(receita_despesa_bp)
 except Exception as _e:
@@ -154,6 +161,9 @@ _TEMPLATE_TO_PAGINA = {
     "preagendamento.html":              "preagendamento",
     "preagendamento":                   "preagendamento",
     "/preagendamento":                  "preagendamento",
+    "cancelados_robo.html":             "cancelados_robo",
+    "cancelados_robo":                  "cancelados_robo",
+    "/cancelados_robo":                 "cancelados_robo",
     "medico_novo.html":                 "medico_novo",
     "medico_novo":                      "medico_novo",
     "/medico_novo":                     "medico_novo",
@@ -1355,6 +1365,11 @@ def h_indicadores_vg():
 @app.get('/preagendamento.html')
 def h_preagendamento():
     return render_protected_page("preagendamento.html")
+
+@app.get('/cancelados_robo')
+@app.get('/cancelados_robo.html')
+def h_cancelados_robo():
+    return render_protected_page("cancelados_robo.html")
 
 @app.get('/medico_novo')
 @app.get('/medico_novo.html')

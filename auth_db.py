@@ -113,6 +113,31 @@ class LoginHistory(Base):
     user       = relationship("User", back_populates="login_history")
 
 
+class CanceladoRoboTratado(Base):
+    """Marcação 'a recepção já tratou este caso' da página de cancelados pelo robô.
+
+    Fica aqui no SQLite de propósito: é controle operacional nosso, não é dado
+    clínico. Gravar no CAMIM exigiria INSERT em Sis_Historico com o idUsuario do
+    posto, e não vale o risco para um checkbox de balcão.
+
+    Chave de negócio = (posto, id_lancamento_servico) — o idLancamentoServico só
+    é único dentro do banco de cada filial.
+    """
+    __tablename__ = "cancelado_robo_tratado"
+
+    id                    = Column(Integer, primary_key=True)
+    posto                 = Column(String(2),   nullable=False)
+    id_lancamento_servico = Column(Integer,     nullable=False)
+    tratado_por           = Column(String(200), nullable=False)
+    observacao            = Column(String(300), nullable=True)
+    tratado_em            = Column(DateTime, default=lambda: datetime.now(_BRT), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("posto", "id_lancamento_servico", name="uq_cancelado_robo_tratado"),
+        Index("ix_cancelado_robo_posto", "posto"),
+    )
+
+
 class PageUsagePing(Base):
     """Pings de 1 minuto por usuário/página. Cada ping = 1 minuto arredondado para baixo.
 
