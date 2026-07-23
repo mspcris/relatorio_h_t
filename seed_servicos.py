@@ -86,6 +86,7 @@ SERVICOS_SEED: list[dict] = [
     {"key": "central",                    "label": "Central",                                  "group_name": "mais", "href": "https://central.camim.com.br/",                 "lock": "verde", "ordem": 120},
     {"key": "agenda_dia",                 "label": "Agenda do Dia (F3)",                       "group_name": "mais", "href": "/agenda_dia",                                   "lock": "verde", "ordem": 130},
     {"key": "preagendamento",             "label": "Dashboard Pré-Agendamento",                "group_name": "mais", "href": "/preagendamento",                               "lock": "verde", "ordem": 140},
+    {"key": "cancelados_robo",            "label": "Cancelados pelo Robô",                     "group_name": "mais", "href": "/cancelados_robo",                              "lock": "verde", "ordem": 145},
     {"key": "iot_monitor",                "label": "Monitor IoT (Ar Condicionado)",            "group_name": "mais", "href": "https://iot.propagacaodigital.com.br/",         "lock": "verde", "ordem": 150},
     {"key": "camila_funcionarios",        "label": "Camila dos Funcionários",                  "group_name": "mais", "href": "https://camila.camim.com.br/",                  "lock": "verde", "ordem": 160},
     {"key": "medico_novo",                "label": "Médico - Inclusão Agenda Temporária",      "group_name": "mais", "href": "/medico_novo",                                  "lock": "verde", "ordem": 170},
