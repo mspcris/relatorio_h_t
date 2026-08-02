@@ -340,6 +340,11 @@ do mês. Lançamento manual no mesmo centro **soma por cima**, então não relan
   - **A Meta não devolve `cost` para WABA que usa linha de crédito de Solution
     Partner.** A conta da CAMIM é paga direto no cartão (Visa ···· 6852, moeda
     USD), então vem — mas se um dia migrar para BSP, o custo some da API.
+  - **O WABA ID não é o número que a tela de Cobrança mostra ao lado de "camim"**
+    (`1855125718445969` → "Object does not exist"). O certo é o `asset_id=` da URL
+    do billing_hub: **`25859435250382411`**. Descobrir por
+    `/{business-id}/owned_whatsapp_business_accounts` exige `business_management`,
+    que o token de produção não tem — bata direto em `GET /{candidato}?fields=id,name,currency`.
   - `testar_credencial()` lê `id,name,currency` da WABA e traduz os códigos de
     erro (190 = token inválido; 10/200/803 = falta permissão ou a WABA não foi
     atribuída ao System User). É o botão "Testar conexão" da tela — separa
