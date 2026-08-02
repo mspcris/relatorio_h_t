@@ -335,10 +335,12 @@ FATOR_CUSTO_VAGA_ALTO = 2.0
 # Elas continuam no JSON, num grupo próprio (tipo_agenda), e ficam fora das
 # estatísticas de médico — decisão do Cristiano.
 #
-# PROVISÓRIO: R$ 50 é o corte que separou limpo o que apareceu nos dados. O
-# Cristiano vai informar o piso que a CAMIM usa na prática — quando informar,
-# é só trocar aqui.
-PISO_PLANTAO_REMUNERADO = 50.00
+# Piso definido pelo Cristiano em 2026-08-02: "menos de R$ 200 é estranho
+# demais; 200 já é muito estranho, mas passa". Então o corte é >= 200,00.
+# Ele derruba junto as agendas por sessão (fono, psicologia, psicopedagogia,
+# terapia ABA — que apareciam com R$ 60 a R$ 80 por jornada de 9h, ou seja
+# R$ 6,67/hora), sem precisar de regra por especialidade.
+PISO_PLANTAO_REMUNERADO = 200.00
 
 
 def _mediana(vals: list[float]) -> float | None:
@@ -371,7 +373,21 @@ def analisar(linhas: list[dict]) -> dict:
 
     referencias = {}
     for esp, todas in por_esp.items():
-        ls = [l for l in todas if _vale(l)] or todas
+        # SEM fallback para `todas`: quando NENHUMA linha da especialidade é
+        # plantão remunerado (fono, psicologia, eletroencefalograma — todas por
+        # sessão), a especialidade simplesmente não tem referência. O `or todas`
+        # que estava aqui anulava o filtro justamente nesses casos e devolvia
+        # mediana de R$ 0,30 com spread de 16.000%.
+        ls = [l for l in todas if _vale(l)]
+        if not ls:
+            referencias[esp] = {
+                "mediana_hora": None, "mediana_custo_vaga": None,
+                "medicos": len({(l["posto"], l["id_medico"]) for l in todas}),
+                "linhas_ignoradas": len(todas), "postos": [],
+                "hora_por_posto": {}, "spread_postos": None, "spread_pct": None,
+                "sem_plantao_remunerado": True,
+            }
+            continue
         med_hora = _mediana([l["valor_hora"] for l in ls])
         med_vaga = _mediana([l["custo_por_vaga"] for l in ls])
         # diferença de preço da MESMA especialidade entre postos
@@ -391,12 +407,21 @@ def analisar(linhas: list[dict]) -> dict:
             "spread_postos": round(max(validas) - min(validas), 2) if len(validas) > 1 else None,
             "spread_pct": round((max(validas) / min(validas) - 1) * 100, 1)
                           if len(validas) > 1 and min(validas) else None,
+            "sem_plantao_remunerado": False,
         }
 
     hoje = datetime.now(_BRT).date().isoformat()
     for l in linhas:
         ref = referencias[l["especialidade"]]
         alertas = []
+        # linha fora do plantão remunerado não é comparável com ninguém
+        if l["tipo_agenda"] != "plantao":
+            l["alertas"] = []
+            l["motivos_suspeita"] = [
+                f"plantão de R$ {l['valor_plantao']:.2f} — abaixo do piso de "
+                f"R$ {PISO_PLANTAO_REMUNERADO:.0f}; agenda de exame, "
+                "equipamento ou pagamento por sessão"]
+            continue
 
         mh = ref["mediana_hora"]
         if mh and l["valor_hora"] and l["valor_hora"] > mh * FATOR_FORA_DA_CURVA:
@@ -419,9 +444,6 @@ def analisar(linhas: list[dict]) -> dict:
             motivos.append("recebe por comissão — o valor fixo não é o custo real")
         if l["valor_hora"] and l["valor_hora"] > 2000:
             motivos.append("valor/hora fora de qualquer padrão")
-        if l["tipo_agenda"] == "sem_custo_plantao":
-            motivos.append(f"plantão de R$ {l['valor_plantao']:.2f} — agenda de "
-                           "exame/equipamento, não jornada remunerada")
         if motivos:
             alertas.append("cadastro_suspeito")
         l["motivos_suspeita"] = motivos
@@ -480,7 +502,7 @@ def main() -> int:
             "fator_fora_da_curva": FATOR_FORA_DA_CURVA,
             "fator_custo_vaga_alto": FATOR_CUSTO_VAGA_ALTO,
             "piso_plantao_remunerado": PISO_PLANTAO_REMUNERADO,
-            "piso_provisorio": True,
+            "piso_provisorio": False,
             "limite_jornada_longa_h": LIMITE_JORNADA_LONGA_H,
         },
         "resumo": {
