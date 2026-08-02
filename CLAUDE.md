@@ -496,6 +496,29 @@ plantão remunerado agora fica com referência **nula** e o selo
 Depois do conserto os spreads viraram achado de negócio: NEUROLOGIA varia
 **219% entre 10 postos**, CARDIOLOGIA 151% entre 12, GERIATRIA 108%.
 
+### Todo selo tem que dizer POR QUÊ (2026-08-02)
+
+O `+46%` do selo é **sobre a mediana de R$/hora da especialidade na REDE** —
+não sobre o próprio médico, não sobre o posto, não sobre a média. Cristiano
+perguntou "46% de quê?" olhando a tela, e a resposta só existia num `title` de
+hover. Sinal que precisa de hover para ser entendido não serve para decidir.
+
+Ao clicar o médico, o bloco `explicacao()` (função em `medico_custo.html`) abre
+com a conta inteira de cada agenda que disparou o sinal: hora contratada ÷
+mediana da especialidade − 1, o limite (mediana × 1,30), de quantas agendas e
+postos saiu essa mediana, e a diferença em reais por hora. Para `conferir`, lista
+qual agenda e qual motivo. **Ao criar sinal novo nesta página, criar junto o
+bloco que explica a conta** — o selo sozinho é acusação sem prova.
+
+Dois avisos que o bloco dá e não podem sumir:
+- mediana apoiada em **menos de 3 postos** → comparação frágil, dito na tela;
+- com o botão "pagar almoço" ligado, o sinal continua sendo calculado sobre a
+  hora **líquida** — sem esse aviso o R$/hora da tabela não bate com o do bloco.
+
+Para isso o ETL passou a publicar `linhas_base` em `referencias` (agendas que
+sustentam a mediana) e `pct_acima_mediana_vaga` na linha. A tela degrada sozinha
+se o JSON ainda for o antigo.
+
 ### NUNCA escrever nome de posto à mão
 
 Os nomes dos 13 postos estão em **`cad_endereco`** (`Codigo` → `Descricao`,

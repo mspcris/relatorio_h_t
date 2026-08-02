@@ -432,6 +432,9 @@ def analisar(linhas: list[dict]) -> dict:
             referencias[esp] = {
                 "mediana_hora": None, "mediana_custo_vaga": None,
                 "medicos": len({(l["posto"], l["id_medico"]) for l in todas}),
+                # quantas agendas sustentam a mediana — nenhuma, aqui. A tela
+                # precisa desse número para dizer de onde saiu a comparação.
+                "linhas_base": 0,
                 "linhas_ignoradas": len(todas), "postos": [],
                 "hora_por_posto": {}, "spread_postos": None, "spread_pct": None,
                 "sem_plantao_remunerado": True,
@@ -450,6 +453,10 @@ def analisar(linhas: list[dict]) -> dict:
             "mediana_hora": round(med_hora, 2) if med_hora else None,
             "mediana_custo_vaga": round(med_vaga, 2) if med_vaga else None,
             "medicos": len({(l["posto"], l["id_medico"]) for l in todas}),
+            # base da mediana: agendas de plantão remunerado que entraram no
+            # cálculo. Com 2 ou 3 agendas a mediana é frágil e a tela avisa —
+            # sem esse número ela não teria como saber.
+            "linhas_base": len(ls),
             "linhas_ignoradas": len(todas) - len(ls),
             "postos": sorted(por_posto),
             "hora_por_posto": {p: round(v, 2) for p, v in medianas_posto.items() if v},
@@ -485,6 +492,7 @@ def analisar(linhas: list[dict]) -> dict:
         mv = ref["mediana_custo_vaga"]
         if mv and l["custo_por_vaga"] and l["custo_por_vaga"] > mv * FATOR_CUSTO_VAGA_ALTO:
             alertas.append("caro_por_vaga")
+            l["pct_acima_mediana_vaga"] = round((l["custo_por_vaga"] / mv - 1) * 100, 1)
 
         # cadastro suspeito: cada motivo é um item, para a tela explicar
         motivos = []

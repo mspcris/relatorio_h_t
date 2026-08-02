@@ -182,6 +182,26 @@ tr.detalhe th { background: var(--bg); }
 .selo.grave { background: var(--danger-soft); color: var(--danger); }
 .selo.neutro { background: var(--bg); color: var(--ink-3); border-color: var(--line); }
 
+/* ── por que este médico está marcado ────────────────────────────────────── */
+.porque { padding: .95rem 1.1rem 1rem; background: var(--surface); border-bottom: 1px solid var(--line); }
+.porque h4 {
+  margin: 0 0 .65rem; font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--ink-3); font-weight: 600;
+}
+.porque .bloco { border-left: 3px solid var(--line); padding-left: .8rem; margin-bottom: .85rem; }
+.porque .bloco:last-child { margin-bottom: 0; }
+/* NÃO usar as classes .grave/.alerta aqui: `.alerta` é o card de cima (caixa,
+   sombra e cursor de clique) e vazava para dentro deste bloco. */
+.porque .bloco.b-grave { border-left-color: var(--danger); }
+.porque .bloco.b-aviso { border-left-color: var(--warn); }
+.porque .regra { font-size: .82rem; color: var(--ink-2); margin: .2rem 0 .45rem; line-height: 1.5; }
+.porque ul { margin: 0; padding-left: 1.05rem; display: grid; gap: .45rem; }
+.porque li { font-size: .82rem; line-height: 1.5; color: var(--ink-2); }
+.porque li b { color: var(--ink); }
+.porque .conta { font-size: .76rem; color: var(--ink-3); margin-top: .2rem; line-height: 1.45; }
+.porque .obs { font-size: .76rem; color: var(--ink-3); margin-top: .5rem; line-height: 1.45; }
+.porque .mais { color: var(--danger); }
+
 /* ── alertas ─────────────────────────────────────────────────────────────── */
 .alertas { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 1rem; }
 .alerta {
@@ -483,7 +503,7 @@ function tabelaSimples(id, cols, linhas) {
 const ROT_ALERTA = {
   fora_da_curva: ['Acima da própria especialidade',
     `hora mais de ${Math.round((DADOS_FATOR() - 1) * 100)}% acima da mediana da especialidade na rede`],
-  caro_por_vaga: ['Caro por consulta', 'custo por vaga muito acima do normal da especialidade'],
+  caro_por_vaga: ['Caro por consulta', 'custo por vaga acima do dobro da mediana da especialidade'],
   cadastro_suspeito: ['Cadastro para conferir', 'sem horário, jornada impossível, agenda vencida ou por comissão'],
 };
 function DADOS_FATOR() { return (DADOS && DADOS.parametros.fator_fora_da_curva) || 1.3; }
@@ -519,6 +539,19 @@ function alertas(todos) {
   });
 }
 
+/* Mediana da especialidade na rede — é contra ela que tudo é comparado.
+   Devolve o objeto do ETL; a tela nunca recalcula mediana. */
+const refDe = l => (DADOS.referencias || {})[l.especialidade] || {};
+
+/* "mediana de 34 agendas em 9 postos" — de onde saiu o número da comparação.
+   linhas_base é campo novo (2026-08-02): JSON antigo cai no texto curto. */
+function baseRef(ref) {
+  const p = (ref.postos || []).length;
+  if (!p) return '';
+  const ag = ref.linhas_base ? `${num(ref.linhas_base)} agenda(s) em ` : '';
+  return `${ag}${num(p)} posto(s)`;
+}
+
 function selos(l) {
   const s = [];
   const mod = { ordem_chegada: ['oc','ordem de chegada'], misto: ['misto','misto'], agendado: ['agendado','agendado'] }[l.modalidade];
@@ -526,12 +559,105 @@ function selos(l) {
   if (l.agenda_quinzenal) s.push('<span class="selo neutro">quinzenal</span>');
   if (l.temporario) s.push('<span class="selo neutro">temporário</span>');
   if (l.recebe_por_comissao) s.push('<span class="selo alerta">comissão</span>');
-  if ((l.alertas || []).includes('fora_da_curva'))
-    s.push(`<span class="selo grave" title="${l.pct_acima_mediana}% acima da mediana da especialidade">+${Math.round(l.pct_acima_mediana)}%</span>`);
+  /* "+46%" sozinho não diz de quê. O rótulo agora carrega a referência e o
+     título traz a conta inteira — a explicação longa fica no bloco de cima. */
+  if ((l.alertas || []).includes('fora_da_curva')) {
+    const mh = refDe(l).mediana_hora;
+    s.push(`<span class="selo grave" title="hora de ${brl(l.valor_hora)} contra a mediana de `
+      + `${mh ? brl(mh) : '—'} da ${esc(l.especialidade)} na rede: +${num(l.pct_acima_mediana, 1)}%">`
+      + `+${Math.round(l.pct_acima_mediana)}% vs. mediana</span>`);
+  }
+  if ((l.alertas || []).includes('caro_por_vaga')) {
+    const mv = refDe(l).mediana_custo_vaga;
+    s.push(`<span class="selo alerta" title="custo por consulta de ${brl(l.custo_por_vaga)} contra a `
+      + `mediana de ${mv ? brl(mv) : '—'} da ${esc(l.especialidade)} na rede">caro por consulta</span>`);
+  }
   if ((l.alertas || []).includes('cadastro_suspeito'))
     s.push(`<span class="selo alerta" title="${esc((l.motivos_suspeita||[]).join(' · '))}">conferir</span>`);
   return s.join(' ');
 }
+
+/* ── Por que este médico está marcado ─────────────────────────────────────────
+   O selo sozinho não serve para decidir nada: quem abre a linha precisa ver a
+   CONTA — qual agenda disparou, contra qual mediana, e de quanto foi o excesso.
+   Tudo aqui é releitura do que o ETL gravou (pct_acima_mediana, motivos_suspeita,
+   referencias); nenhuma estatística é refeita no navegador.
+   ────────────────────────────────────────────────────────────────────────── */
+function explicacao(m) {
+  const onde = l => `${esc(l.posto)} · ${esc(l.especialidade)} · ${esc(l.dia_semana || 'dia não cadastrado')}`;
+  const fator = DADOS_FATOR();
+  const blocos = [];
+
+  const fdc = m.linhas.filter(l => (l.alertas || []).includes('fora_da_curva'));
+  if (fdc.length) {
+    const frageis = new Set();
+    const itens = fdc.map(l => {
+      const ref = refDe(l);
+      const mh = ref.mediana_hora;
+      const lim = mh ? mh * fator : null;
+      if ((ref.postos || []).length < 3) frageis.add(l.especialidade);
+      return `<li><b>${onde(l)}</b> — hora de <b>${brl(l.valor_hora)}</b>,
+        mediana da ${esc(l.especialidade)} na rede <b>${mh ? brl(mh) : '—'}</b>
+        ${baseRef(ref) ? `(${baseRef(ref)})` : ''},
+        limite <b>${lim ? brl(lim) : '—'}</b> = mediana × ${num(fator, 2)}
+        → <b class="mais">+${num(l.pct_acima_mediana, 1)}%</b>
+        <div class="conta">O <b>+${num(l.pct_acima_mediana, 1)}%</b> é sobre a mediana da
+          <b>especialidade na rede</b>, não sobre o próprio médico nem sobre o posto:
+          ${brl(l.valor_hora)} ÷ ${mh ? brl(mh) : '—'} − 1 = ${num(l.pct_acima_mediana, 1)}%.
+          ${l.pct_acima_mediana != null && mh
+            ? `Em reais, ${brl(l.valor_hora - mh)} a mais por hora contratada.` : ''}</div></li>`;
+    });
+    blocos.push(`<div class="bloco b-grave">
+      <span class="selo grave">fora da curva</span>
+      <div class="regra">A hora contratada passa de <b>${Math.round((fator - 1) * 100)}%</b> acima da
+        <b>mediana da própria especialidade na rede inteira</b>. Mediana, e não média, porque um único
+        plantão caríssimo puxaria a média e esconderia justamente o que se quer achar.</div>
+      <ul>${itens.join('')}</ul>
+      ${frageis.size ? `<div class="obs">⚠ A mediana de <b>${[...frageis].map(esc).join(', ')}</b>
+        vem de menos de 3 postos — comparação frágil, confira antes de cobrar explicação de alguém.</div>` : ''}
+      ${estado.almocoPago ? `<div class="obs">O sinal é calculado sobre a hora <b>sem</b> almoço pago
+        (padrão da casa), mesmo com o botão “pagar almoço” ligado — por isso o R$/hora da tabela
+        abaixo está menor que o daqui.</div>` : ''}
+      <div class="obs">Fora da curva não quer dizer erro: quer dizer <b>preço acima do que a rede
+        paga na mesma especialidade</b>. Pode ter motivo (plantão difícil de preencher, médico
+        antigo, posto sem substituto) — o que a página faz é apontar para justificar.</div>
+    </div>`);
+  }
+
+  const cpv = m.linhas.filter(l => (l.alertas || []).includes('caro_por_vaga'));
+  if (cpv.length) {
+    blocos.push(`<div class="bloco b-aviso">
+      <span class="selo alerta">caro por consulta</span>
+      <div class="regra">O custo por vaga passa do <b>dobro</b> da mediana da especialidade.
+        Só vale onde há vaga contada — em ordem de chegada e em agenda mista não existe denominador.</div>
+      <ul>${cpv.map(l => {
+        const mv = refDe(l).mediana_custo_vaga;
+        return `<li><b>${onde(l)}</b> — <b>${brl(l.custo_por_vaga)}</b> por consulta
+          (${num(l.vagas_efetivas)} vaga(s) para ${brl(l.valor_plantao, 0)}) contra a mediana de
+          <b>${mv ? brl(mv) : '—'}</b> da ${esc(l.especialidade)}
+          ${l.pct_acima_mediana_vaga != null
+            ? `→ <b class="mais">+${num(l.pct_acima_mediana_vaga, 1)}%</b>` : ''}</li>`;
+      }).join('')}</ul></div>`);
+  }
+
+  const susp = m.linhas.filter(l => (l.motivos_suspeita || []).length);
+  if (susp.length) {
+    blocos.push(`<div class="bloco b-aviso">
+      <span class="selo alerta">conferir</span>
+      <div class="regra">Não é o preço que está estranho — é o <b>cadastro</b>. Enquanto isso não for
+        corrigido, o custo calculado para estas agendas não é confiável.</div>
+      <ul>${susp.map(l => `<li><b>${onde(l)}</b> — ${esc((l.motivos_suspeita || []).join(' · '))}</li>`).join('')}</ul>
+      <div class="obs">Onde conferir: cadastro do médico e da especialidade no posto
+        (horário, almoço, validade da agenda e forma de pagamento).</div>
+    </div>`);
+  }
+
+  if (!blocos.length) return '';
+  return `<div class="porque"><h4>Por que este médico está marcado</h4>${blocos.join('')}</div>`;
+}
+
+const nFora = m => m.linhas.filter(l => (l.alertas || []).includes('fora_da_curva')).length;
+const nSusp = m => m.linhas.filter(l => (l.motivos_suspeita || []).length).length;
 
 function tabelaMedicos(ls) {
   const meds = porMedico(ls);
@@ -560,10 +686,15 @@ function tabelaMedicos(ls) {
       <td class="num">${brl(m.semanal, 0)}</td>
       <td class="num"><strong>${brl(m.mensal, 0)}</strong></td>
       <td class="num">${m.hora ? brl(m.hora) : '—'}</td>
-      <td>${[...m.alertas].includes('fora_da_curva') ? '<span class="selo grave">fora da curva</span>' : ''}
-          ${[...m.alertas].includes('cadastro_suspeito') ? '<span class="selo alerta">conferir</span>' : ''}</td>
+      <td>${[...m.alertas].includes('fora_da_curva')
+            ? `<span class="selo grave" title="${nFora(m)} de ${m.linhas.length} agenda(s) com a hora acima da mediana da especialidade — clique para ver a conta">fora da curva</span>` : ''}
+          ${[...m.alertas].includes('caro_por_vaga')
+            ? `<span class="selo alerta" title="custo por consulta acima do dobro da mediana da especialidade — clique para ver a conta">caro por consulta</span>` : ''}
+          ${[...m.alertas].includes('cadastro_suspeito')
+            ? `<span class="selo alerta" title="${nSusp(m)} agenda(s) com problema de cadastro — clique para ver qual">conferir</span>` : ''}</td>
     </tr>
     <tr class="detalhe" hidden data-det="${esc(m.chave)}"><td colspan="8">
+      ${explicacao(m)}
       <table><thead><tr>
         <th>Posto</th><th>Especialidade</th><th>Dia</th><th>Horário</th>
         <th class="num">Horas</th><th class="num">Valor</th><th class="num">R$/hora</th>
