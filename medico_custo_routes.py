@@ -90,7 +90,7 @@ def snapshot():
 
     try:
         import medico_custo_hist as hist
-        from export_medico_custo import montar_payload, nome_posto
+        from export_medico_custo import montar_payload
         linhas, meta = hist.linhas_em(alvo)
     except Exception as e:  # noqa: BLE001
         log.exception("falha ao reconstruir snapshot")
@@ -104,7 +104,11 @@ def snapshot():
     # foto está incompleta — número menor por falha de ETL parece economia.
     falhos = {p for p in (meta["postos_falhos"] or "").split(",") if p}
     postos = sorted({l["posto"] for l in linhas} | falhos)
-    status = {p: {"posto": p, "nome": nome_posto(p),
+    # Nome do posto vem das PRÓPRIAS linhas guardadas, não de nome_posto(): o
+    # cache NOMES_POSTOS do ETL só é preenchido durante a coleta e aqui estaria
+    # vazio, devolvendo a letra em vez de "Anchieta".
+    nomes = {l["posto"]: l.get("posto_nome") for l in linhas}
+    status = {p: {"posto": p, "nome": nomes.get(p) or p,
                   "linhas": sum(1 for l in linhas if l["posto"] == p),
                   "erro": "posto sem coleta nesta data" if p in falhos else None}
               for p in postos}
