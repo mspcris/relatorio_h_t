@@ -358,6 +358,23 @@ pode colar o histórico inteiro toda vez.
 `ti_forma_pagamento` (bandeira + 4 últimos dígitos, que são `UNIQUE`), e a
 importação reporta o que criou.
 
+### Página com modal PRECISA carregar o Bootstrap
+
+O `adminlte.min.js` do AdminLTE 3 **não embute o Bootstrap**. Sem
+`bootstrap.bundle@4.6.2`, `$.fn.modal` não existe: o clique estoura TypeError
+dentro do handler, o modal nunca abre e **nada aparece em log de servidor** —
+o erro fica só no console do browser. Em 2026-08-02 isso deixou a seção inteira
+inutilizável (Lançar despesa, Nova conta, Importar Meta, Novo centro, Nova
+forma) sem nenhum sinal em lugar nenhum.
+
+Já está no `_custos_ti_head.html`, junto do guard `tiModal()`, que avisa na tela
+se o Bootstrap não vier em vez de morrer mudo. **Toda abertura de modal desta
+seção deve passar por `tiModal()`, nunca por `$(...).modal()` direto.**
+
+Quando o sintoma for "cliquei e não aconteceu nada": olhar
+`/var/log/nginx/*access*.log` na VM. Se o request não está lá, o problema é
+JavaScript — não adianta ler o Python.
+
 ### Cores dos centros de custo
 
 `custos_ti.PALETA` (Python) e `TI_PALETA` (JS, em `_custos_ti_head.html`) são a
