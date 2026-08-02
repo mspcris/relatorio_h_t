@@ -842,15 +842,17 @@ def importar_meta_texto(sess, texto: str, *, centro_key: str = "comunicacao",
 
 def importar_meta_api(sess, competencia: str, *, centro_key: str = "comunicacao",
                       salvar: bool = True, email: Optional[str] = None) -> dict:
-    """Custo ESTIMADO das conversas do mês, via Graph API, como lançamento previsto.
+    """Custo ESTIMADO das mensagens do mês, via Graph API, como lançamento previsto.
 
     Entra com origem 'meta_api' e status 'previsto' — não se mistura com a
     cobrança real do cartão (origem 'meta_texto'), que é o que fecha o mês.
+    O external_id é fixo por mês, então re-sincronizar ATUALIZA a linha em vez
+    de criar outra.
     """
     import custos_ti_meta as meta
 
     competencia = valid_month(competencia)
-    dados = meta.fetch_conversation_analytics(competencia)
+    dados = meta.fetch_custo_mensagens(competencia)
     if not dados.get("ok"):
         return {"ok": False, "error": dados.get("error"), "analytics": dados}
 
@@ -858,7 +860,7 @@ def importar_meta_api(sess, competencia: str, *, centro_key: str = "comunicacao"
     if not centro:
         raise ValueError(f"centro de custo '{centro_key}' não existe")
 
-    ext = f"conversation_analytics::{competencia}"
+    ext = f"meta_analytics::{competencia}"
     if salvar and dados["total"] > 0:
         existente = (sess.query(Lancamento)
                      .filter(Lancamento.origem == "meta_api",
@@ -866,12 +868,12 @@ def importar_meta_api(sess, competencia: str, *, centro_key: str = "comunicacao"
         payload = {
             "id": existente.id if existente else None,
             "centro_id": centro.id, "competencia": competencia,
-            "descricao": f"WhatsApp — custo estimado de conversas ({competencia})",
+            "descricao": f"WhatsApp — custo estimado de mensagens ({competencia})",
             "fornecedor": "Meta Platforms",
             "valor": dados["total"],
             "moeda": dados.get("moeda") or "USD",
             "status": "previsto", "origem": "meta_api", "external_id": ext,
-            "obs": "Estimativa da Graph API (conversation_analytics). "
+            "obs": f"Estimativa da Graph API ({dados.get('fonte')}). "
                    "A cobrança real do cartão entra pela importação do extrato.",
         }
         salvar_lancamento(sess, payload, email=email)

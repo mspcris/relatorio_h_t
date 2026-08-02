@@ -326,12 +326,24 @@ do mês. Lançamento manual no mesmo centro **soma por cima**, então não relan
   só existe para conta em linha de crédito/faturamento mensal, não para cartão.
   → entra por **texto colado** (`parse_payment_activity`), mesmo molde do import
   por texto da Groq. Parsing local, zero chamada a LLM, zero custo.
-- **Custo estimado por conversa**: **tem API** —
-  `GET /{waba-id}?fields=conversation_analytics(...)` com
-  `metric_types=[COST,CONVERSATION]`. Precisa de `META_WABA_ID` +
-  `META_ACCESS_TOKEN` (System User com `whatsapp_business_management`) no `.env`.
-  Entra como lançamento **previsto**, origem `meta_api` — não se mistura com a
-  cobrança real (`meta_texto`), que é o que fecha o mês.
+- **Custo estimado das mensagens**: **tem API**. Precisa de `META_WABA_ID` +
+  `META_ACCESS_TOKEN` (System User com `whatsapp_business_management`, e a WABA
+  atribuída a ele em Ativos) no `.env` do `/opt/relatorio_h_t/` + restart do
+  camim-auth. Entra como lançamento **previsto**, origem `meta_api` — não se
+  mistura com a cobrança real (`meta_texto`), que é o que fecha o mês.
+  - `pricing_analytics` — **o certo hoje**, alinhado ao modelo POR MENSAGEM
+    (vigente desde jul/2025). `metric_types=[COST,VOLUME]`,
+    `dimensions=[PRICING_CATEGORY,TIER]`.
+  - `conversation_analytics` — modelo antigo, por conversa. Fica de reserva:
+    `fetch_custo_mensagens()` tenta o novo e cai no antigo se vier zero, e
+    registra em `fonte` qual respondeu.
+  - **A Meta não devolve `cost` para WABA que usa linha de crédito de Solution
+    Partner.** A conta da CAMIM é paga direto no cartão (Visa ···· 6852, moeda
+    USD), então vem — mas se um dia migrar para BSP, o custo some da API.
+  - `testar_credencial()` lê `id,name,currency` da WABA e traduz os códigos de
+    erro (190 = token inválido; 10/200/803 = falta permissão ou a WABA não foi
+    atribuída ao System User). É o botão "Testar conexão" da tela — separa
+    "credencial errada" de "não houve gasto no mês".
 
 **Dedupe:** `UNIQUE(origem, external_id)` em `ti_lancamento`. O `external_id` é o
 ID da transação da Meta, então colar o mesmo extrato de novo não duplica nada —

@@ -382,11 +382,14 @@
           <div class="tab-pane fade" id="tabApi">
             <div id="metaApiStatus" class="ti-muted">Verificando…</div>
             <div class="form-row mt-3 align-items-end">
-              <div class="form-group col-md-4">
+              <div class="form-group col-md-3">
                 <label>Mês</label>
                 <input type="month" class="form-control" id="metaApiMes">
               </div>
-              <div class="form-group col-md-8">
+              <div class="form-group col-md-9">
+                <button class="btn btn-sm btn-outline-secondary" id="btnMetaTestar">
+                  <i class="fas fa-plug"></i> Testar conexão
+                </button>
                 <button class="btn btn-sm btn-outline-primary" id="btnMetaApi">
                   <i class="fas fa-cloud-download-alt"></i> Buscar custo estimado
                 </button>
@@ -765,26 +768,48 @@ async function metaConferir(salvar) {
   } finally { btnC.disabled = false; }
 }
 
-async function metaStatus() {
+async function metaStatus(testar) {
+  const el = document.getElementById('metaApiStatus');
   try {
-    const r = await tiApi('/api/custos-ti/meta/status');
+    const r = await tiApi('/api/custos-ti/meta/status' + (testar ? '?testar=1' : ''));
     const d = r.data;
-    document.getElementById('metaApiStatus').innerHTML = d.api_disponivel
-      ? `<div class="ti-msg ok">Integração ligada — WABA <code>${tiEsc(d.waba_id)}</code> (Graph ${tiEsc(d.graph_version)}).<br>
-         <span class="ti-muted">${tiEsc(d.nota)}</span></div>`
-      : `<div class="ti-msg warn">
-           <strong>Integração não configurada.</strong> ${tiEsc(d.nota)}<br>
-           Para ligar, defina <code>META_WABA_ID</code> e <code>META_ACCESS_TOKEN</code>
-           (token de System User com <code>whatsapp_business_management</code>) no
-           <code>.env</code> da VM e reinicie o serviço. Enquanto isso, use a aba
-           <em>Colar extrato</em> — ela traz a cobrança real do cartão, que a API não expõe.
-         </div>`;
+    let html;
+    if (!d.api_disponivel) {
+      html = `<div class="ti-msg warn">
+          <strong>Integração não configurada.</strong> ${tiEsc(d.nota)}<br><br>
+          Para ligar, no <code>.env</code> da VM (<code>/opt/relatorio_h_t/.env</code>):<br>
+          <code>META_WABA_ID=…</code> · <code>META_ACCESS_TOKEN=…</code>
+          (token de System User com <code>whatsapp_business_management</code>, e a
+          conta do WhatsApp atribuída a ele em Ativos). Depois
+          <code>systemctl restart camim-auth</code>.<br><br>
+          Enquanto isso use a aba <em>Colar extrato</em> — ela traz a cobrança real
+          do cartão, que a API não expõe de jeito nenhum.
+        </div>`;
+    } else {
+      const t = d.teste;
+      const linhaTeste = !t ? ''
+        : t.ok
+          ? `<br><span style="color:#12633a">✓ Conexão OK — ${tiEsc(t.waba.nome || '')}
+             (moeda ${tiEsc(t.waba.moeda || '—')}, status ${tiEsc(t.waba.status || '—')}).</span>`
+          : `<br><span style="color:#a01722">✗ ${tiEsc(t.error)}</span>`;
+      html = `<div class="ti-msg ${t && !t.ok ? 'err' : 'ok'}">
+          Integração ligada — WABA <code>${tiEsc(d.waba_id)}</code> (Graph ${tiEsc(d.graph_version)}).
+          ${linhaTeste}<br>
+          <span class="ti-muted">${tiEsc(d.nota)}</span>
+        </div>`;
+    }
+    el.innerHTML = html;
     document.getElementById('btnMetaApi').disabled = !d.api_disponivel;
+    document.getElementById('btnMetaTestar').disabled = !d.api_disponivel;
   } catch (e) {
-    document.getElementById('metaApiStatus').innerHTML =
-      `<div class="ti-msg err">${tiEsc(e.message)}</div>`;
+    el.innerHTML = `<div class="ti-msg err">${tiEsc(e.message)}</div>`;
   }
 }
+
+const ROT_FONTE = {
+  pricing_analytics: 'pricing_analytics (modelo por mensagem)',
+  conversation_analytics: 'conversation_analytics (modelo por conversa)',
+};
 
 async function metaApiBuscar(salvar) {
   const btn = document.getElementById('btnMetaApi');
@@ -799,15 +824,24 @@ async function metaApiBuscar(salvar) {
     });
     const a = r.analytics;
     const cats = Object.entries(a.por_categoria || {});
+    const tiers = Object.entries(a.por_tier || {});
     document.getElementById('metaApiResultado').innerHTML = `
-      <div class="ti-msg ok">
+      <div class="ti-msg ${a.total ? 'ok' : 'warn'}">
         Custo estimado de ${tiEsc(a.competencia)}: <strong>${tiFmtUSD(a.total)}</strong>
-        em ${a.conversas} conversa(s).
+        em ${a.volume} mensagem(ns).
         ${salvar ? ' Salvo como lançamento previsto.' : ''}
+        <br><span class="ti-muted">Fonte: ${tiEsc(ROT_FONTE[a.fonte] || a.fonte || '—')}.
+        ${a.nota ? tiEsc(a.nota) : ''}
+        ${a.error ? tiEsc(a.error) : ''}</span>
       </div>
-      ${cats.length ? `<table class="ti-tbl">
-        <thead><tr><th>Categoria</th><th class="num">Custo</th></tr></thead>
+      ${cats.length ? `<table class="ti-tbl mb-3">
+        <thead><tr><th>Categoria de preço</th><th class="num">Custo</th></tr></thead>
         <tbody>${cats.map(([k, v]) =>
+          `<tr><td>${tiEsc(k)}</td><td class="num">${tiFmtUSD(v)}</td></tr>`).join('')}</tbody>
+      </table>` : ''}
+      ${tiers.length > 1 ? `<table class="ti-tbl">
+        <thead><tr><th>Tier de volume</th><th class="num">Custo</th></tr></thead>
+        <tbody>${tiers.map(([k, v]) =>
           `<tr><td>${tiEsc(k)}</td><td class="num">${tiFmtUSD(v)}</td></tr>`).join('')}</tbody>
       </table>` : ''}`;
     document.getElementById('btnMetaApiSalvar').disabled = salvar || !a.total;
@@ -872,9 +906,10 @@ document.addEventListener('DOMContentLoaded', () => {
     tiMsg(document.getElementById('metaMsg'), '');
     document.getElementById('metaPreview').innerHTML = '';
     document.getElementById('metaApiResultado').innerHTML = '';
-    metaStatus();
+    metaStatus(false);
     $('#mdMeta').modal('show');
   });
+  document.getElementById('btnMetaTestar').addEventListener('click', () => metaStatus(true));
   document.getElementById('btnMetaConferir').addEventListener('click', () => metaConferir(false));
   document.getElementById('btnMetaImportar').addEventListener('click', () => metaConferir(true));
   document.getElementById('btnMetaApi').addEventListener('click', () => metaApiBuscar(false));

@@ -281,11 +281,13 @@ def api_cotacao_set():
 # ─────────────────────────────────────────────────────────────────────────────
 @custos_ti_bp.get("/api/custos-ti/meta/status")
 def api_meta_status():
+    """Diz se a integração está configurada. Com ?testar=1, bate na Graph API
+    de verdade para validar o token — é o botão 'Testar conexão' da tela."""
     if not _require_admin():
         return _deny()
     import custos_ti_meta as meta
     cfg = meta.meta_config()
-    return jsonify({"ok": True, "data": {
+    data = {
         "api_disponivel": meta.meta_api_disponivel(),
         "waba_id": cfg["waba_id"] or None,
         "business_id": cfg["business_id"] or None,
@@ -293,10 +295,13 @@ def api_meta_status():
         "graph_version": meta.GRAPH_VERSION,
         "nota": (
             "A cobrança do cartão (Atividade de pagamento) NÃO tem API pública "
-            "na Meta — ela entra por texto colado. A Graph API só devolve o "
-            "custo estimado por conversa (conversation_analytics)."
+            "na Meta — ela entra por texto colado. A Graph API devolve o custo "
+            "estimado das mensagens (pricing_analytics)."
         ),
-    }})
+    }
+    if request.args.get("testar") in ("1", "true") and data["api_disponivel"]:
+        data["teste"] = meta.testar_credencial()
+    return jsonify({"ok": True, "data": data})
 
 
 @custos_ti_bp.post("/api/custos-ti/meta/importar")

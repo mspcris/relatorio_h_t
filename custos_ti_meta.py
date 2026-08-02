@@ -12,13 +12,20 @@ Dois caminhos, porque a Meta expõe DUAS coisas diferentes e só uma tem API:
    import por texto da Groq (custos_ia.parse_groq_text), e de graça: parsing
    local, nenhuma chamada a LLM.
 
-2) CUSTO ESTIMADO POR CONVERSA  →  TEM API.
-   `GET /{waba-id}?fields=conversation_analytics(...)` com metric_types=[COST,
-   CONVERSATION] devolve gasto por dia/categoria na moeda da WABA. Precisa de um
-   token de System User com `whatsapp_business_management`.
-   Serve para EXPLICAR o mês (quanto foi marketing vs utility vs serviço), não
-   para fechar a conta — o valor cobrado no cartão inclui ajustes, créditos e
-   impostos que não aparecem aqui.
+2) CUSTO ESTIMADO DAS MENSAGENS  →  TEM API.
+   `GET /{waba-id}?fields=pricing_analytics(...)` com metric_types=[COST,VOLUME]
+   devolve o gasto aproximado por dia, categoria de preço e tier, na moeda da
+   WABA. É o endpoint alinhado ao modelo POR MENSAGEM (vigente desde jul/2025);
+   `conversation_analytics` é o modelo antigo, por conversa, e fica de reserva.
+   Precisa de token de System User com `whatsapp_business_management`.
+
+   Atenção: a Meta não devolve `cost` para WABA que usa a linha de crédito de um
+   Solution Partner. A conta da CAMIM é paga direto no cartão (Visa ···· 6852,
+   moeda USD), então o custo vem.
+
+   Serve para EXPLICAR o mês (quanto foi marketing vs utility vs autenticação),
+   não para fechar a conta — o valor cobrado no cartão inclui ajustes, créditos
+   e impostos que não aparecem aqui.
 
 Os dois viram `ti_lancamento` com `origem` distinta ('meta_texto' e 'meta_api')
 e nunca se misturam: a home soma só os lançamentos de cobrança real. O que vem
@@ -274,35 +281,18 @@ def _bounds_utc(competencia: str) -> tuple[int, int]:
     return int(ini.timestamp()), int(fim.timestamp())
 
 
-def fetch_conversation_analytics(competencia: str,
-                                 granularity: str = "DAILY") -> dict:
-    """Custo estimado das conversas do mês, por categoria, via Graph API.
+_SEM_CREDENCIAL = (
+    "Integração da Meta não configurada. Defina META_WABA_ID e META_ACCESS_TOKEN "
+    "(token de System User com a permissão whatsapp_business_management) no "
+    ".env da VM e reinicie o camim-auth."
+)
 
-    Só GET. Devolve sempre um dict (nunca levanta) no formato:
-      {ok, error, competencia, total, moeda, por_categoria: {cat: valor},
-       diario: [{data, valor, conversas}], conversas}
-    """
-    out = {
-        "ok": False, "error": None, "competencia": competencia,
-        "total": 0.0, "moeda": "USD", "conversas": 0,
-        "por_categoria": {}, "diario": [],
-    }
+
+def _graph_analytics(campo: str, raiz: str) -> tuple[Optional[list], Optional[str]]:
+    """GET num campo de analytics da WABA. Devolve (data_points, erro)."""
     cfg = meta_config()
     if not cfg["waba_id"] or not cfg["token"]:
-        out["error"] = (
-            "Integração da Meta não configurada. Defina META_WABA_ID e "
-            "META_ACCESS_TOKEN (token de System User com a permissão "
-            "whatsapp_business_management) no .env da VM."
-        )
-        return out
-
-    ini, fim = _bounds_utc(competencia)
-    campo = (
-        f"conversation_analytics.start({ini}).end({fim})"
-        f".granularity({granularity})"
-        f'.metric_types(["COST","CONVERSATION"])'
-        f'.dimensions(["CONVERSATION_CATEGORY"])'
-    )
+        return None, _SEM_CREDENCIAL
     try:
         r = requests.get(
             f"{GRAPH_BASE}/{cfg['waba_id']}",
@@ -312,31 +302,105 @@ def fetch_conversation_analytics(competencia: str,
         corpo = r.json() if r.content else {}
         if r.status_code != 200:
             erro = (corpo.get("error") or {}).get("message") or r.text[:300]
-            out["error"] = f"Graph API {r.status_code}: {erro}"
-            return out
+            return None, f"Graph API {r.status_code}: {erro}"
     except requests.RequestException as e:
-        out["error"] = f"Falha ao falar com a Graph API: {e}"
-        return out
+        return None, f"Falha ao falar com a Graph API: {e}"
+    except ValueError:
+        return None, "A Graph API respondeu algo que não é JSON."
 
     pontos = []
-    for bloco in (corpo.get("conversation_analytics", {}) or {}).get("data", []):
+    for bloco in (corpo.get(raiz, {}) or {}).get("data", []):
         pontos.extend(bloco.get("data_points", []) or [])
+    return pontos, None
+
+
+def _vazio(competencia: str, fonte: str) -> dict:
+    return {"ok": False, "error": None, "fonte": fonte, "competencia": competencia,
+            "total": 0.0, "moeda": "USD", "volume": 0,
+            "por_categoria": {}, "por_tier": {}, "diario": []}
+
+
+def fetch_pricing_analytics(competencia: str, granularity: str = "DAILY") -> dict:
+    """Custo aproximado das MENSAGENS do mês (modelo por mensagem, jul/2025+).
+
+    `GET /{waba-id}?fields=pricing_analytics.start().end().granularity()
+        .metric_types(["COST","VOLUME"]).dimensions(["PRICING_CATEGORY","TIER"])`
+
+    Só GET. Nunca levanta — devolve sempre um dict com `ok`/`error`.
+    """
+    out = _vazio(competencia, "pricing_analytics")
+    ini, fim = _bounds_utc(competencia)
+    campo = (
+        f"pricing_analytics.start({ini}).end({fim})"
+        f".granularity({granularity})"
+        f'.metric_types(["COST","VOLUME"])'
+        f'.dimensions(["PRICING_CATEGORY","TIER"])'
+    )
+    pontos, erro = _graph_analytics(campo, "pricing_analytics")
+    if erro:
+        out["error"] = erro
+        return out
 
     por_dia: dict[str, dict] = {}
-    for p in pontos:
+    for p in pontos or []:
         custo = float(p.get("cost") or 0.0)
-        conversas = int(p.get("conversation") or 0)
-        cat = p.get("conversation_category") or "—"
-        out["por_categoria"][cat] = round(
-            out["por_categoria"].get(cat, 0.0) + custo, 4)
+        volume = int(p.get("volume") or 0)
+        cat = p.get("pricing_category") or "—"
+        tier = p.get("tier") or "—"
+        out["por_categoria"][cat] = round(out["por_categoria"].get(cat, 0.0) + custo, 4)
+        out["por_tier"][tier] = round(out["por_tier"].get(tier, 0.0) + custo, 4)
         out["total"] += custo
-        out["conversas"] += conversas
+        out["volume"] += volume
         if p.get("start"):
             dia = datetime.fromtimestamp(int(p["start"]), tz=timezone.utc)\
                           .strftime("%Y-%m-%d")
-            slot = por_dia.setdefault(dia, {"data": dia, "valor": 0.0, "conversas": 0})
+            slot = por_dia.setdefault(dia, {"data": dia, "valor": 0.0, "volume": 0})
             slot["valor"] = round(slot["valor"] + custo, 4)
-            slot["conversas"] += conversas
+            slot["volume"] += volume
+
+    out["total"] = round(out["total"], 4)
+    out["diario"] = [por_dia[k] for k in sorted(por_dia)]
+    out["ok"] = True
+    if not pontos:
+        out["error"] = ("A Meta respondeu, mas não veio nenhum ponto de custo "
+                        "para este mês.")
+    return out
+
+
+def fetch_conversation_analytics(competencia: str,
+                                 granularity: str = "DAILY") -> dict:
+    """Custo por CONVERSA (modelo antigo, pré-jul/2025). Reserva do pricing_analytics.
+
+    Mantido porque WABA antiga pode continuar respondendo aqui e vir vazia no
+    pricing_analytics. Mesmo formato de saída, com `volume` = nº de conversas.
+    """
+    out = _vazio(competencia, "conversation_analytics")
+    ini, fim = _bounds_utc(competencia)
+    campo = (
+        f"conversation_analytics.start({ini}).end({fim})"
+        f".granularity({granularity})"
+        f'.metric_types(["COST","CONVERSATION"])'
+        f'.dimensions(["CONVERSATION_CATEGORY"])'
+    )
+    pontos, erro = _graph_analytics(campo, "conversation_analytics")
+    if erro:
+        out["error"] = erro
+        return out
+
+    por_dia: dict[str, dict] = {}
+    for p in pontos or []:
+        custo = float(p.get("cost") or 0.0)
+        conversas = int(p.get("conversation") or 0)
+        cat = p.get("conversation_category") or "—"
+        out["por_categoria"][cat] = round(out["por_categoria"].get(cat, 0.0) + custo, 4)
+        out["total"] += custo
+        out["volume"] += conversas
+        if p.get("start"):
+            dia = datetime.fromtimestamp(int(p["start"]), tz=timezone.utc)\
+                          .strftime("%Y-%m-%d")
+            slot = por_dia.setdefault(dia, {"data": dia, "valor": 0.0, "volume": 0})
+            slot["valor"] = round(slot["valor"] + custo, 4)
+            slot["volume"] += conversas
 
     out["total"] = round(out["total"], 4)
     out["diario"] = [por_dia[k] for k in sorted(por_dia)]
@@ -345,6 +409,62 @@ def fetch_conversation_analytics(competencia: str,
         out["error"] = ("A Meta respondeu, mas não há dados de custo para este "
                         "mês (WABA sem conversas ou janela fora do retido).")
     return out
+
+
+def fetch_custo_mensagens(competencia: str, granularity: str = "DAILY") -> dict:
+    """Custo do mês pela Graph API: tenta o modelo novo, cai no antigo se vier zero.
+
+    A escolha fica registrada em `fonte` para a tela dizer de onde veio o número.
+    """
+    novo = fetch_pricing_analytics(competencia, granularity)
+    if novo.get("ok") and novo.get("total"):
+        return novo
+    antigo = fetch_conversation_analytics(competencia, granularity)
+    if antigo.get("ok") and antigo.get("total"):
+        antigo["nota"] = ("Veio do conversation_analytics (modelo por conversa). "
+                          "O pricing_analytics não devolveu custo neste mês.")
+        return antigo
+    # Nenhum dos dois trouxe valor — devolve o do modelo atual, com o erro dele.
+    return novo
+
+
+def testar_credencial() -> dict:
+    """Valida o token lendo os dados básicos da WABA. Só GET, resposta pequena.
+
+    Serve para separar "token errado / sem permissão" de "não há custo no mês",
+    que na tela pareceriam o mesmo problema.
+    """
+    cfg = meta_config()
+    if not cfg["waba_id"] or not cfg["token"]:
+        return {"ok": False, "error": _SEM_CREDENCIAL}
+    try:
+        r = requests.get(
+            f"{GRAPH_BASE}/{cfg['waba_id']}",
+            params={"fields": "id,name,currency,timezone_id,account_review_status",
+                    "access_token": cfg["token"]},
+            timeout=_HTTP_TIMEOUT,
+        )
+        corpo = r.json() if r.content else {}
+    except requests.RequestException as e:
+        return {"ok": False, "error": f"Falha de rede: {e}"}
+    except ValueError:
+        return {"ok": False, "error": "A Graph API respondeu algo que não é JSON."}
+
+    if r.status_code != 200:
+        err = corpo.get("error") or {}
+        msg = err.get("message") or r.text[:300]
+        dica = ""
+        if err.get("code") == 190:
+            dica = " → token inválido ou expirado; gere outro no System User."
+        elif err.get("code") in (10, 200, 803):
+            dica = (" → o token existe mas não tem acesso a esta WABA. Confira se "
+                    "a permissão whatsapp_business_management está marcada E se a "
+                    "conta do WhatsApp foi atribuída ao System User em Ativos.")
+        return {"ok": False, "error": f"Graph API {r.status_code}: {msg}{dica}"}
+
+    return {"ok": True, "waba": {"id": corpo.get("id"), "nome": corpo.get("name"),
+                                 "moeda": corpo.get("currency"),
+                                 "status": corpo.get("account_review_status")}}
 
 
 def descobrir_wabas() -> dict:
