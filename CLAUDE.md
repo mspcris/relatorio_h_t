@@ -543,6 +543,22 @@ Em 2026-08-02 eu escrevi um dicionário letra→bairro deduzindo e **errei 9 dos
 `cad_endereco` (preferível, porque acompanha mudança de cadastro) ou reusar o
 `alarmes_db`. Nunca inventar.
 
+### Realizado do card "Nominal × realizado" — de onde sai
+
+Do **mesmo** `json_consolidado/consolidado_mensal_por_posto.json` que alimenta o
+KPI Custo Médico: soma do campo `medico` por posto, chave `"AAAA-MM"`. Julho/2026
+= R$ 2.219.216,89, que bate com o card daquela página.
+
+Era um `2219217` digitado no HTML com a palavra "julho" na frase — em setembro
+a tela ainda diria "julho" e o percentual estaria errado sem avisar. Agora a
+página escolhe sozinha o **último mês fechado** (nunca o corrente, que tem
+poucos dias lançados) e nomeia o mês que usou.
+
+O realizado só tem quebra **por posto e mês**. Então o card se desliga sozinho
+(mostra `—` e diz por quê) quando há filtro de **especialidade** ou **busca** —
+nesses casos o nominal encolhe e o realizado não, e a diferença seria inventada.
+Com filtro de posto ele soma só os postos que entraram no nominal.
+
 ### Outras decisões
 
 - **Consolidação por médico** (CPF/CRM) com abertura por posto: o mesmo médico

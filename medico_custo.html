@@ -444,13 +444,42 @@ function agrupa(ls, chave) {
 /* ═══════════════════════════════════════════════════════════════════════════
    Render
    ═══════════════════════════════════════════════════════════════════════════ */
+/* Realizado do mês fechado, do MESMO consolidado que alimenta o KPI Custo
+   Médico (soma de `medico` por posto). Antes era um 2219217 digitado à mão com
+   a palavra "julho" na frase: em setembro a tela ainda diria "julho" e o % já
+   estaria errado sem avisar ninguém.
+   Devolve null quando não dá para comparar — e o card diz por quê, em vez de
+   mostrar um número que parece certo. */
+function realizado(ls) {
+  if (!REAL) return { valor: null, nota: 'não consegui ler o consolidado mensal' };
+  // O realizado não tem quebra por especialidade nem por médico: só por posto e
+  // mês. Com esses filtros ligados o nominal encolhe e o realizado não —
+  // comparar daria uma diferença inventada.
+  if (estado.especialidade)
+    return { valor: null, nota: `sem comparação com o filtro de ${esc(estado.especialidade)}:
+      o realizado não é aberto por especialidade` };
+  if (estado.busca.trim())
+    return { valor: null, nota: 'sem comparação enquanto houver busca: o realizado é por posto, não por médico' };
+  // Só os postos que realmente entraram no nominal — se um posto falhou no ETL,
+  // somar o realizado dele infla o outro lado da conta.
+  const postos = [...new Set(ls.map(l => l.posto))];
+  const val = postos.reduce((t, p) => t + (REAL.por_posto[p] || 0), 0);
+  const faltam = postos.filter(p => REAL.por_posto[p] == null);
+  return {
+    valor: val || null,
+    nota: val ? `${REAL.mes_label} custou <b>${brl(val)}</b> de fato`
+              : `sem realizado para ${REAL.mes_label}`,
+    aviso: faltam.length ? `sem realizado para o posto ${faltam.join(', ')}` : '',
+  };
+}
+
 function tiles(ls) {
   const mensal = ls.reduce((t, l) => t + (l.custo_mensal || 0), 0);
   const semanal = ls.reduce((t, l) => t + (l.valor_plantao || 0), 0);
   const meds = new Set(ls.map(l => `${l.posto}|${l.id_medico}`)).size;
   const hs = ls.reduce((t, l) => t + (horas(l) || 0), 0);
   const hMed = hs ? mensal / (hs * DADOS.semanas_no_mes) : 0;
-  const real = DADOS.referencia_real;
+  const r = realizado(ls);
 
   document.getElementById('tiles').innerHTML = `
     <div class="tile"><div class="rot">Custo mensal nominal</div>
@@ -464,15 +493,17 @@ function tiles(ls) {
       <div class="sub">${estado.almocoPago ? 'com a hora de almoço paga' : 'sem pagar a hora de almoço'}</div></div>
     <div class="tile"><div class="rot">Nominal × realizado</div>
       <div class="fig" id="figGap">—</div>
-      <div class="sub">julho custou <b>${brl(real)}</b> de fato<br>a diferença é falta e ajuste</div></div>`;
+      <div class="sub">${r.nota}${r.valor ? '<br>a diferença é falta e ajuste' : ''}
+        ${r.aviso ? `<br><span style="color:var(--warn)">${esc(r.aviso)}</span>` : ''}</div></div>`;
   requestAnimationFrame(() => document.querySelectorAll('.tile').forEach((t, i) =>
     setTimeout(() => t.classList.add('on'), i * 70)));
 
   anima(document.getElementById('figMensal'), mensal, v => brl(v, 0));
   anima(document.getElementById('figMed'), meds, v => num(Math.round(v)));
   anima(document.getElementById('figHora'), hMed, v => brl(v));
-  const gap = real ? (mensal / real - 1) * 100 : 0;
-  anima(document.getElementById('figGap'), gap, v => (v >= 0 ? '+' : '') + num(v, 1) + '%');
+  if (!r.valor) { document.getElementById('figGap').textContent = '—'; return; }
+  anima(document.getElementById('figGap'), (mensal / r.valor - 1) * 100,
+        v => (v >= 0 ? '+' : '') + num(v, 1) + '%');
 }
 
 function barras(alvoId, itens, fmtNome, cor, aoClicar) {
@@ -788,6 +819,43 @@ function desenha() {
 /* ═══════════════════════════════════════════════════════════════════════════
    Início
    ═══════════════════════════════════════════════════════════════════════════ */
+const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho',
+               'agosto','setembro','outubro','novembro','dezembro'];
+
+/* Realizado: mesma fonte do KPI Custo Médico (`consolidado_mensal_por_posto`,
+   chave "AAAA-MM", campo `medico` por posto). Regras:
+   - só mês FECHADO. O mês corrente existe no arquivo com poucos dias lançados e
+     compararia o contrato mensal inteiro contra meia dúzia de dias;
+   - o mais recente que satisfaz isso, e não "o mês passado" fixo: o ETL daquela
+     página atrasa (a própria tela dele avisa "3 ciclos atrasado"), e assim a
+     comparação cai para o último mês que existe de verdade, dizendo qual é;
+   - falhou? REAL fica null e o card explica, em vez de inventar percentual. */
+let REAL = null;
+async function carregarRealizado() {
+  try {
+    const r = await fetch('/json_consolidado/consolidado_mensal_por_posto.json',
+                          { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const hoje = new Date();
+    const corrente = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+    const mes = Object.keys(d)
+      .filter(k => /^\d{4}-\d{2}$/.test(k) && k < corrente)
+      .sort().pop();
+    if (!mes) return;
+    const por_posto = {};
+    for (const [p, v] of Object.entries(d[mes] || {})) {
+      const n = Number(v && (v.medico ?? v.custo_medico));
+      if (Number.isFinite(n) && n > 0) por_posto[p] = n;
+    }
+    if (!Object.keys(por_posto).length) return;
+    const [a, m] = mes.split('-');
+    REAL = { mes, mes_label: `${MESES[+m - 1]}/${a}`, por_posto };
+  } catch (e) {
+    console.warn('realizado indisponível:', e.message);
+  }
+}
+
 async function iniciar() {
   try {
     const r = await fetch('/json_consolidado/medico_custo.json', { credentials: 'same-origin' });
@@ -799,7 +867,7 @@ async function iniciar() {
        O ETL roda de madrugada — se acabou de subir, aguarde a próxima execução.</div>`;
     return;
   }
-  DADOS.referencia_real = 2219217;   // julho/2026, informado pelo Cristiano
+  await carregarRealizado();
 
   document.getElementById('carimbo').textContent =
     `${num(DADOS.resumo.medicos)} médicos · ${num(DADOS.resumo.especialidades)} especialidades · `
