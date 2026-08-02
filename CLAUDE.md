@@ -414,6 +414,79 @@ cd /opt/relatorio_h_t && .venv/bin/python migrate_custos_ti.py
 
 ---
 
+## Médico · Custo Efetivo Nominal — regras de negócio (2026-08-02)
+
+Página nova (`medico_custo.html`), ETL dedicado `export_medico_custo.py` +
+`sql/medico_custo_efetivo.sql`. **Não** mexe no `export_custo_medico_ctrlq.py`,
+que alimenta outro botão e tem outro contrato.
+
+Fonte: `cad_medico` + `cad_especialidade` nos 13 postos. É CADASTRO, não
+movimento — a página é a foto do contratado hoje, sem histórico.
+
+### Modalidade de atendimento — três bits que convivem
+
+`<Dia>OrdemChegada`, `<Dia>Internet`, `<Dia>Telefone` em `cad_especialidade`:
+
+- **OC** = ordem de chegada / livre demanda. **Clínico geral é quase todo OC —
+  só ~1% tem agenda.**
+- **WWW** = agendamento pela internet · **TEL** = pela central.
+- **Os três convivem no mesmo dia**: o caso típico é *"10 números agendados e o
+  restante por ordem de chegada"*.
+
+Daí sai `modalidade` ∈ {`ordem_chegada`, `agendado`, `misto`}.
+
+**Custo por consulta só é calculado em `agendado` puro.** Em OC e em MISTO o
+denominador não existe (a demanda é aberta), então a métrica fica **vazia** com
+o selo da modalidade. Decidido pelo Cristiano: no misto as 10 vagas cobririam
+só parte da demanda e o número enganaria. Não inventar denominador.
+
+Ausência de vagas cadastradas **não** é dado faltando — é livre demanda.
+
+### Hora de almoço — o imbróglio
+
+**Padrão: a CAMIM não paga a hora de almoço.** Logo o valor/hora sai sobre a
+jornada TRABALHADA: `R$ 1.100` numa janela de 12h com 1h de almoço → 11h →
+**R$ 100/hora**. (Exemplo dado pelo próprio Cristiano.)
+
+Mas a realidade é misturada e por isso a página mostra as DUAS visões, com
+botão para alternar:
+
+- médicos **antigos**: a hora de almoço era paga, faz parte do pagamento;
+- médicos **novos**: paga-se só a hora trabalhada, **exceto plantão**;
+- quem faz **menos de 10h** não tem almoço na jornada.
+
+O ETL grava `valor_hora` (líquido, padrão), `valor_hora_bruto` (se o almoço
+fosse pago) e `delta_almoco_hora`.
+
+### Schema NÃO é igual entre os 13 postos
+
+`cad_especialidade.valorconsultaclube` **não existe em Nova Iguaçu** — nem todo
+posto atende clube. A query inteira falhava só naquele posto com "Nome de
+coluna inválido".
+
+Solução: placeholder `{{OPC:alias.coluna:tipo}}` no `.sql`, que o ETL resolve
+por posto via `COL_LENGTH()` — vira a coluna real onde existe e `NULL` onde não
+existe. **Ao acrescentar coluna que possa não existir em todo posto, usar o
+placeholder** em vez de removê-la de todos.
+
+### Outras decisões
+
+- **Consolidação por médico** (CPF/CRM) com abertura por posto: o mesmo médico
+  atende em vários. A pergunta principal é "quanto o Dr. X custa para a rede".
+- **Quinzenal** (`AgendaQuinzenal=1`) entra pela METADE na projeção mensal.
+- Projeção mensal usa **4,345 semanas/mês** (365,25/7/12). Usar 4 subestima ~8%.
+- `MedicoRecebePorComissao=1` → o valor fixo **não** é o custo real; sinalizar.
+- Turno que vira a madrugada (fim < início) soma 24h, senão dá negativo.
+
+### ARMADILHA — dois-pontos no .sql vale para COMENTÁRIO também
+
+O `text()` do SQLAlchemy varre a string inteira. Um `08:00` **dentro de um
+comentário** já estoura com *"A value is required for bind parameter '00'"*.
+Foi exatamente o comentário que avisava sobre a regra que quebrou a query na
+primeira execução. Escreva `8h30`, nunca `8` dois-pontos `30`.
+
+---
+
 ## Regras de desenvolvimento
 
 - Cada KPI é independente — nunca compartilha cálculos entre páginas
