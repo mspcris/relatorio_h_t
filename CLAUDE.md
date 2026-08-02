@@ -469,6 +469,33 @@ por posto via `COL_LENGTH()` — vira a coluna real onde existe e `NULL` onde n�
 existe. **Ao acrescentar coluna que possa não existir em todo posto, usar o
 placeholder** em vez de removê-la de todos.
 
+### Piso do plantão remunerado — R$ 200
+
+*"Menos de R$ 200 é estranho demais. 200 já é muito estranho, mas passa."*
+(Cristiano, 2026-08-02). Linha abaixo disso **não é jornada de médico** e sai
+das estatísticas — continua no JSON, num grupo próprio, com o MOTIVO:
+
+| motivo | linhas | o que é |
+|---|---|---|
+| `exame` | 113 | MAPA, Raio-X, USG, Holter... o "médico" é o aparelho ou a sala |
+| `comissao` | 46 | fono, psicologia, psicopedagogia, terapia ABA, fisioterapia — **recebem SÓ por comissão**, nunca por plantão |
+| `abaixo_do_piso` | 49 | o resto: pediatria e clínica geral com R$ 1 a R$ 120 — **estes valem conferir**, incluindo um "TESTE - PROFISSIONAL" em Anchieta |
+
+`ESPECIALIDADES_POR_COMISSAO` e `ESPECIALIDADES_EXAME` no ETL existem só para
+dar o motivo certo na tela — o corte quem faz é o piso.
+
+### ARMADILHA — `or todas` que anulava o próprio filtro
+
+`analisar()` tinha `ls = [l for l in todas if _vale(l)] or todas`. O `or` era
+para não gerar referência vazia, mas fazia o oposto do pretendido quando
+NENHUMA linha da especialidade passava: voltava a usar todas e publicava
+mediana de R$ 0,30 com spread de 16.230% para FONOAUDIOLOGIA. Especialidade sem
+plantão remunerado agora fica com referência **nula** e o selo
+`sem_plantao_remunerado`. São 28.
+
+Depois do conserto os spreads viraram achado de negócio: NEUROLOGIA varia
+**219% entre 10 postos**, CARDIOLOGIA 151% entre 12, GERIATRIA 108%.
+
 ### Outras decisões
 
 - **Consolidação por médico** (CPF/CRM) com abertura por posto: o mesmo médico

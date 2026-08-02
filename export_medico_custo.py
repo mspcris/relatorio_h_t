@@ -342,6 +342,24 @@ FATOR_CUSTO_VAGA_ALTO = 2.0
 # R$ 6,67/hora), sem precisar de regra por especialidade.
 PISO_PLANTAO_REMUNERADO = 200.00
 
+# Especialidades que a CAMIM remunera SÓ por comissão/sessão — nunca por
+# plantão (Cristiano, 2026-08-02). Elas caem abaixo do piso naturalmente, mas
+# a lista existe para a tela dizer o MOTIVO certo em vez de "abaixo do piso",
+# que sugeriria erro de cadastro.
+ESPECIALIDADES_POR_COMISSAO = {
+    "FONOAUDIOLOGIA", "FONOAUDIOLOGIA EXAME", "PSICOLOGIA", "NEUROPSICOLOGIA",
+    "PSICOPEDAGOGIA", "NEUROPSICOPEDAGOGIA", "PSICOMOTRICIDADE CLÍNICA",
+    "TERAPIA ABA", "TERAPIA ALIMENTAR", "FISIOTERAPIA", "BIOLOGIA",
+}
+# Agendas de exame/equipamento: o "médico" é o aparelho ou a sala.
+ESPECIALIDADES_EXAME = {
+    "MAPA", "HOLTER 24 HRS", "RAIO X", "RADIOLOGIA", "MAMOGRAFIA",
+    "DENSITOMETRIA", "ULTRASSONOGRAFIA", "ECOCARDIOGRAMA", "ENDOSCOPIA",
+    "COLONOSCOPIA", "ELETROENCEFALOGRAMA", "ELETRONEUROMIOGRAFIA",
+    "ESPIROMETRIA", "ECO DOPPLER VASCULAR", "RESSONANCIA MAGNETICA",
+    "TOMOGRAFIA COM CONTRASTE", "AGENDAMENTO DE EXAMES",
+}
+
 
 def _mediana(vals: list[float]) -> float | None:
     v = sorted(x for x in vals if x is not None)
@@ -417,10 +435,15 @@ def analisar(linhas: list[dict]) -> dict:
         # linha fora do plantão remunerado não é comparável com ninguém
         if l["tipo_agenda"] != "plantao":
             l["alertas"] = []
-            l["motivos_suspeita"] = [
-                f"plantão de R$ {l['valor_plantao']:.2f} — abaixo do piso de "
-                f"R$ {PISO_PLANTAO_REMUNERADO:.0f}; agenda de exame, "
-                "equipamento ou pagamento por sessão"]
+            l["motivos_suspeita"] = [{
+                "comissao": f"{l['especialidade'].title()} é remunerada por "
+                            "comissão, não por plantão — o valor cadastrado "
+                            f"(R$ {l['valor_plantao']:.2f}) não é o custo real",
+                "exame": f"agenda de exame/equipamento (R$ {l['valor_plantao']:.2f} "
+                         "é marcador, não preço)",
+            }.get(l["motivo_fora"],
+                  f"plantão de R$ {l['valor_plantao']:.2f}, abaixo do piso de "
+                  f"R$ {PISO_PLANTAO_REMUNERADO:.0f} — conferir cadastro")]
             continue
 
         mh = ref["mediana_hora"]
@@ -483,10 +506,17 @@ def main() -> int:
               + (f"  ERRO: {erro}" if erro else ""))
 
     for l in linhas:
-        l["tipo_agenda"] = ("plantao"
-                            if (l["valor_plantao"] or 0) >= PISO_PLANTAO_REMUNERADO
-                            else "sem_custo_plantao")
-        l["conta_como_medico"] = l["tipo_agenda"] == "plantao"
+        plantao = (l["valor_plantao"] or 0) >= PISO_PLANTAO_REMUNERADO
+        l["tipo_agenda"] = "plantao" if plantao else "sem_custo_plantao"
+        l["conta_como_medico"] = plantao
+        # POR QUE ficou de fora — o piso é só o detector; o motivo real muda a
+        # leitura. Fono e psico, por exemplo, recebem exclusivamente por
+        # comissão (Cristiano, 2026-08-02); não é agenda mal cadastrada.
+        l["motivo_fora"] = None if plantao else (
+            "comissao" if (l["recebe_por_comissao"]
+                           or l["especialidade"] in ESPECIALIDADES_POR_COMISSAO)
+            else "exame" if l["especialidade"] in ESPECIALIDADES_EXAME
+            else "abaixo_do_piso")
     referencias = analisar(linhas)
     plantoes = [l for l in linhas if l["tipo_agenda"] == "plantao"]
     outras = [l for l in linhas if l["tipo_agenda"] != "plantao"]
@@ -512,6 +542,9 @@ def main() -> int:
             "medicos": len(medicos),
             "por_comissao": len({(l["posto"], l["id_medico"]) for l in plantoes
                                  if l["recebe_por_comissao"]}),
+            "fora_por_motivo": {
+                m: sum(1 for l in outras if l["motivo_fora"] == m)
+                for m in ("comissao", "exame", "abaixo_do_piso")},
             "especialidades": len({l["especialidade"] for l in plantoes}),
             "custo_semanal": round(semanal, 2),
             "custo_mensal": round(mensal, 2),
