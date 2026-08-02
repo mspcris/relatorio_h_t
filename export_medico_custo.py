@@ -260,9 +260,11 @@ def coletar(posto: str, sql: str) -> tuple[list, str | None]:
                     "crm": _str(r.get("crm")) or _str(r.get("conselho_numero")),
                     "conselho": _str(r.get("conselho")),
                     "conselho_uf": _str(r.get("conselho_uf")),
-                    "cpf": _str(r.get("cpf")),
-                    "telefone": _str(r.get("telefone")) or _str(r.get("whatsapp")),
-                    "email": _str(r.get("email")),
+                    # CPF, telefone e e-mail NÃO entram no JSON (decisão do
+                    # Cristiano, 2026-08-02): a página é de custo e o JSON vai
+                    # inteiro para o navegador. Ele pretende dar contato dos
+                    # médicos a gestores mais adiante — quando for, reabilitar
+                    # aqui e revisar quem tem acesso à página ANTES.
                     "especializacao": _str(r.get("especializacao")),
                     "sexo": _str(r.get("sexo")),
                     "medico_desde": _data(r.get("medico_desde")),
@@ -313,6 +315,121 @@ def coletar(posto: str, sql: str) -> tuple[list, str | None]:
             pass
 
 
+# Um médico é "fora da curva" quando a hora dele passa deste múltiplo da
+# MEDIANA da própria especialidade na rede (confirmado pelo Cristiano: 30%).
+# Mediana e não média: um único plantão caríssimo puxaria a média e esconderia
+# justamente o que se quer achar.
+FATOR_FORA_DA_CURVA = 1.30
+# "caro com pouca vaga": custo por consulta acima do dobro da mediana da
+# especialidade. Só faz sentido onde há vaga contada (agendado puro).
+FATOR_CUSTO_VAGA_ALTO = 2.0
+# ── Piso do plantão remunerado ──────────────────────────────────────────────
+# Abaixo deste valor a linha NÃO é jornada de médico: é agenda de exame ou de
+# equipamento, com o valor servindo só de marcador para a agenda existir.
+# Medido em 2026-08-02: 183 das 776 linhas caem aqui — MAPA (com o "médico"
+# chamado MAPA, das 10h às 10h01), Raio-X, Ultrassonografia, Ecocardiograma,
+# Densitometria, Mamografia, Holter, Fisioterapia. Somam quase nada em reais
+# mas envenenavam tudo: entravam na contagem de médicos e criavam spread de
+# 2.400% entre postos.
+#
+# Elas continuam no JSON, num grupo próprio (tipo_agenda), e ficam fora das
+# estatísticas de médico — decisão do Cristiano.
+#
+# PROVISÓRIO: R$ 50 é o corte que separou limpo o que apareceu nos dados. O
+# Cristiano vai informar o piso que a CAMIM usa na prática — quando informar,
+# é só trocar aqui.
+PISO_PLANTAO_REMUNERADO = 50.00
+
+
+def _mediana(vals: list[float]) -> float | None:
+    v = sorted(x for x in vals if x is not None)
+    if not v:
+        return None
+    meio = len(v) // 2
+    return v[meio] if len(v) % 2 else (v[meio - 1] + v[meio]) / 2
+
+
+def analisar(linhas: list[dict]) -> dict:
+    """Marca cada linha com os alertas e devolve as referências usadas.
+
+    Roda depois de juntar TODOS os postos: a comparação é contra a rede, não
+    contra o posto — é assim que dá para ver diferença de preço entre postos.
+    """
+    por_esp: dict[str, list] = {}
+    for l in linhas:
+        por_esp.setdefault(l["especialidade"], []).append(l)
+
+    def _vale(l) -> bool:
+        """Linha que entra na estatística de PLANTÃO MÉDICO.
+
+        Fora: agenda de exame/equipamento (abaixo do piso) e médico por
+        comissão — no segundo caso o valor fixo não é o custo real, então a
+        hora dele não é comparável com a dos outros.
+        """
+        return (l["tipo_agenda"] == "plantao"
+                and not l["recebe_por_comissao"])
+
+    referencias = {}
+    for esp, todas in por_esp.items():
+        ls = [l for l in todas if _vale(l)] or todas
+        med_hora = _mediana([l["valor_hora"] for l in ls])
+        med_vaga = _mediana([l["custo_por_vaga"] for l in ls])
+        # diferença de preço da MESMA especialidade entre postos
+        por_posto = {}
+        for l in ls:
+            if l["valor_hora"]:
+                por_posto.setdefault(l["posto"], []).append(l["valor_hora"])
+        medianas_posto = {p: _mediana(v) for p, v in por_posto.items()}
+        validas = [v for v in medianas_posto.values() if v]
+        referencias[esp] = {
+            "mediana_hora": round(med_hora, 2) if med_hora else None,
+            "mediana_custo_vaga": round(med_vaga, 2) if med_vaga else None,
+            "medicos": len({(l["posto"], l["id_medico"]) for l in todas}),
+            "linhas_ignoradas": len(todas) - len(ls),
+            "postos": sorted(por_posto),
+            "hora_por_posto": {p: round(v, 2) for p, v in medianas_posto.items() if v},
+            "spread_postos": round(max(validas) - min(validas), 2) if len(validas) > 1 else None,
+            "spread_pct": round((max(validas) / min(validas) - 1) * 100, 1)
+                          if len(validas) > 1 and min(validas) else None,
+        }
+
+    hoje = datetime.now(_BRT).date().isoformat()
+    for l in linhas:
+        ref = referencias[l["especialidade"]]
+        alertas = []
+
+        mh = ref["mediana_hora"]
+        if mh and l["valor_hora"] and l["valor_hora"] > mh * FATOR_FORA_DA_CURVA:
+            alertas.append("fora_da_curva")
+            l["pct_acima_mediana"] = round((l["valor_hora"] / mh - 1) * 100, 1)
+
+        mv = ref["mediana_custo_vaga"]
+        if mv and l["custo_por_vaga"] and l["custo_por_vaga"] > mv * FATOR_CUSTO_VAGA_ALTO:
+            alertas.append("caro_por_vaga")
+
+        # cadastro suspeito: cada motivo é um item, para a tela explicar
+        motivos = []
+        if l["minutos_brutos"] is None:
+            motivos.append("sem horário cadastrado")
+        elif l["horas_brutas"] and l["horas_brutas"] > 16:
+            motivos.append(f"jornada de {l['horas_brutas']:.0f}h num dia só")
+        if l["exibe_ate"] and l["exibe_ate"] < hoje:
+            motivos.append(f"agenda vencida em {l['exibe_ate']}")
+        if l["recebe_por_comissao"]:
+            motivos.append("recebe por comissão — o valor fixo não é o custo real")
+        if l["valor_hora"] and l["valor_hora"] > 2000:
+            motivos.append("valor/hora fora de qualquer padrão")
+        if l["tipo_agenda"] == "sem_custo_plantao":
+            motivos.append(f"plantão de R$ {l['valor_plantao']:.2f} — agenda de "
+                           "exame/equipamento, não jornada remunerada")
+        if motivos:
+            alertas.append("cadastro_suspeito")
+        l["motivos_suspeita"] = motivos
+        l["alertas"] = alertas
+
+    return referencias
+
+
 def _gravar(caminho: str, payload: dict) -> None:
     os.makedirs(os.path.dirname(caminho), exist_ok=True)
     tmp = caminho + ".tmp"
@@ -343,17 +460,37 @@ def main() -> int:
         print(f"  {p} {POSTOS_NOMES.get(p, p):<16} {len(achadas):>5} linhas"
               + (f"  ERRO: {erro}" if erro else ""))
 
-    medicos = {(l["posto"], l["id_medico"]) for l in linhas}
-    semanal = sum(l["valor_plantao"] or 0 for l in linhas)
-    mensal = sum(l["custo_mensal"] or 0 for l in linhas)
+    for l in linhas:
+        l["tipo_agenda"] = ("plantao"
+                            if (l["valor_plantao"] or 0) >= PISO_PLANTAO_REMUNERADO
+                            else "sem_custo_plantao")
+        l["conta_como_medico"] = l["tipo_agenda"] == "plantao"
+    referencias = analisar(linhas)
+    plantoes = [l for l in linhas if l["tipo_agenda"] == "plantao"]
+    outras = [l for l in linhas if l["tipo_agenda"] != "plantao"]
+    medicos = {(l["posto"], l["id_medico"]) for l in plantoes}
+    semanal = sum(l["valor_plantao"] or 0 for l in plantoes)
+    mensal = sum(l["custo_mensal"] or 0 for l in plantoes)
     payload = {
         "gerado_em": datetime.now(_BRT).replace(microsecond=0).isoformat(),
         "semanas_no_mes": SEMANAS_NO_MES,
         "postos": list(status.values()),
+        "referencias": referencias,
+        "parametros": {
+            "fator_fora_da_curva": FATOR_FORA_DA_CURVA,
+            "fator_custo_vaga_alto": FATOR_CUSTO_VAGA_ALTO,
+            "piso_plantao_remunerado": PISO_PLANTAO_REMUNERADO,
+            "piso_provisorio": True,
+            "limite_jornada_longa_h": LIMITE_JORNADA_LONGA_H,
+        },
         "resumo": {
             "linhas": len(linhas),
+            "linhas_plantao": len(plantoes),
+            "linhas_sem_custo_plantao": len(outras),
             "medicos": len(medicos),
-            "especialidades": len({l["especialidade"] for l in linhas}),
+            "por_comissao": len({(l["posto"], l["id_medico"]) for l in plantoes
+                                 if l["recebe_por_comissao"]}),
+            "especialidades": len({l["especialidade"] for l in plantoes}),
             "custo_semanal": round(semanal, 2),
             "custo_mensal": round(mensal, 2),
             "postos_ok": sum(1 for s in status.values() if not s["erro"]),
