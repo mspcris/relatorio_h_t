@@ -177,6 +177,9 @@ _TEMPLATE_TO_PAGINA = {
     "medico_falta.html":                "medico_falta",
     "medico_falta":                     "medico_falta",
     "/medico_falta":                    "medico_falta",
+    "medico_custo.html":                "medico_custo",
+    "medico_custo":                     "medico_custo",
+    "/medico_custo":                    "medico_custo",
     "indicadores_vg.html":              "indicadores_vg",
     "indicadores_vg":                   "indicadores_vg",
     "/indicadores_vg":                  "indicadores_vg",
@@ -1482,6 +1485,15 @@ def h_custos_ia():
     # página é o centro de custo "IA" dentro dele.
     return render_protected_page("custos_ia.html",
                                  TI_CENTROS=_ti_centros(), TI_ATIVO="ia")
+
+@app.get('/medico_custo')
+@app.get('/medico_custo.html')
+def h_medico_custo():
+    """Custo nominal contratado dos médicos. Diferente do custos_ti, esta ENTRA
+    no catálogo public.servicos: o admin pode liberar por usuário. Enquanto
+    ninguém for marcado, só quem tem all_pages enxerga."""
+    return render_protected_page("medico_custo.html")
+
 
 @app.get('/higienizacao.html')
 def h_higienizacao():

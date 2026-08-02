@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>CAMIM — Médico · Custo Efetivo Nominal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   Página com identidade PRÓPRIA — não usa AdminLTE nem o style2.css do resto
+   do projeto, a pedido do Cristiano. Tudo em CSS moderno: grid, custom
+   properties, transições. Sem framework, sem build.
+   ═══════════════════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; }
+/* O atributo hidden vem do UA stylesheet e PERDE para qualquer display do
+   autor. Sem isto, o .carregando { display:grid } mantinha o spinner na tela
+   depois de eu marcar hidden=true — meia página de vazio embaixo do conteúdo. */
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-feature-settings: "cv05", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --line: #e7eaef;
+  --ink: #14181f;
+  --ink-2: #4a5260;
+  --ink-3: #8b94a3;
+  --accent: #2a78d6;
+  --accent-soft: #eaf2fd;
+  --warn: #b45309;
+  --warn-soft: #fef6e7;
+  --danger: #b02a37;
+  --danger-soft: #fdeef0;
+  --ok: #1b7a4b;
+  --ok-soft: #e9f6ef;
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(20,24,31,.05), 0 8px 24px -12px rgba(20,24,31,.12);
+  /* paleta categórica validada para daltonismo (mesma ordem do Custos de TI) */
+  --c1:#2a78d6; --c2:#eb6834; --c3:#1baf7a; --c4:#eda100;
+  --c5:#e87ba4; --c6:#008300; --c7:#4a3aa7; --c8:#e34948;
+}
+
+/* ── movimento: entra suave, e some inteiro para quem pede menos movimento ── */
+@keyframes surge { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform:none; } }
+@keyframes cresce { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* SEM fill-mode "both" de propósito: com ele, se a animação não chega a rodar
+   (o #conteudo nasce hidden e display:none congela animação), o elemento fica
+   preso na opacidade 0 e a seção some de vez. Sem fill, o estado normal é
+   visível e a animação é só enfeite — conteúdo nunca depende dela. */
+.surge { animation: surge .5s cubic-bezier(.2,.7,.3,1); }
+.surge:nth-of-type(1) { animation-delay: .02s; }
+.surge:nth-of-type(2) { animation-delay: .08s; }
+.surge:nth-of-type(3) { animation-delay: .14s; }
+.surge:nth-of-type(4) { animation-delay: .20s; }
+.surge:nth-of-type(5) { animation-delay: .26s; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:.001ms !important; transition-duration:.001ms !important; }
+}
+
+/* ── topo ────────────────────────────────────────────────────────────────── */
+.topo {
+  position: sticky; top: 0; z-index: 40;
+  background: rgba(255,255,255,.86);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.topo-in {
+  max-width: 1440px; margin: 0 auto; padding: .85rem 1.5rem;
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+}
+.marca { display: flex; align-items: baseline; gap: .6rem; margin-right: auto; }
+.marca h1 { margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: -.02em; }
+.marca span { font-size: .8rem; color: var(--ink-3); }
+.voltar { color: var(--ink-3); text-decoration: none; font-size: .82rem; }
+.voltar:hover { color: var(--accent); }
+
+.wrap { max-width: 1440px; margin: 0 auto; padding: 1.5rem; }
+
+/* ── filtros ─────────────────────────────────────────────────────────────── */
+.filtros {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: .85rem 1rem; margin-bottom: 1.25rem;
+  display: flex; gap: .6rem; align-items: center; flex-wrap: wrap;
+  box-shadow: var(--shadow);
+}
+.busca {
+  flex: 1 1 240px; min-width: 200px; padding: .5rem .8rem;
+  border: 1px solid var(--line); border-radius: 9px; font: inherit; font-size: .88rem;
+  background: var(--bg); transition: border-color .15s, background .15s;
+}
+.busca:focus { outline: none; border-color: var(--accent); background: #fff; }
+.chip {
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
+  padding: .42rem .8rem; border-radius: 999px; font: inherit; font-size: .82rem;
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.grupo { display: flex; gap: .35rem; flex-wrap: wrap; align-items: center; }
+.rot-filtro { font-size: .75rem; color: var(--ink-3); text-transform: uppercase; letter-spacing: .05em; }
+
+/* ── tiles ───────────────────────────────────────────────────────────────── */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px,1fr)); gap: 1rem; margin-bottom: 1.25rem; }
+.tile {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.1rem 1.2rem; box-shadow: var(--shadow); position: relative; overflow: hidden;
+}
+.tile::after {
+  content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--accent);
+  transform: scaleY(0); transform-origin: bottom; transition: transform .4s .1s;
+}
+.tile.on::after { transform: scaleY(1); }
+.tile .rot { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); font-weight: 600; }
+.tile .fig { font-size: 1.95rem; font-weight: 800; letter-spacing: -.035em; margin: .3rem 0 .15rem; line-height: 1.05; }
+.tile .sub { font-size: .78rem; color: var(--ink-2); }
+.tile .sub b { color: var(--ink); font-weight: 600; }
+
+/* ── cartões ─────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); margin-bottom: 1.25rem; overflow: hidden;
+}
+.card > header {
+  padding: .95rem 1.2rem; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+}
+.card > header h2 { margin: 0; font-size: .98rem; font-weight: 650; letter-spacing: -.01em; }
+.card > header .nota { font-size: .78rem; color: var(--ink-3); margin-left: auto; }
+.card .corpo { padding: 1.1rem 1.2rem; }
+.card .corpo.zero { padding: 0; }
+
+/* ── barras (desenhadas em CSS, não em canvas) ───────────────────────────── */
+.barras { display: grid; gap: .55rem; }
+.barra { display: grid; grid-template-columns: minmax(120px, 210px) 1fr auto; gap: .8rem; align-items: center; }
+.barra .nome { font-size: .84rem; color: var(--ink-2); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra .trilho { background: var(--bg); border-radius: 6px; height: 22px; position: relative; overflow: hidden; }
+.barra .fill { height: 100%; border-radius: 6px; transform-origin: left; animation: cresce .55s cubic-bezier(.2,.8,.3,1); }
+.barra .val { font-size: .82rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 96px; text-align: right; }
+.barra.clicavel { cursor: pointer; }
+.barra.clicavel:hover .trilho { box-shadow: inset 0 0 0 2px var(--accent); }
+
+/* ── tabela ──────────────────────────────────────────────────────────────── */
+.rolagem { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .855rem; }
+th, td { padding: .6rem .85rem; text-align: left; border-bottom: 1px solid var(--line); }
+th {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3);
+  font-weight: 600; position: sticky; top: 0; background: var(--surface); z-index: 1;
+  cursor: pointer; user-select: none; white-space: nowrap;
+}
+th:hover { color: var(--accent); }
+th .seta { opacity: .4; font-size: .7rem; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tbody tr { transition: background .12s; }
+tbody tr:hover { background: var(--accent-soft); }
+tr.expansivel { cursor: pointer; }
+tr.detalhe > td { background: var(--bg); padding: 0; }
+tr.detalhe table { font-size: .8rem; }
+tr.detalhe th { background: var(--bg); }
+
+/* ── selos ───────────────────────────────────────────────────────────────── */
+.selo {
+  display: inline-flex; align-items: center; gap: .28rem;
+  font-size: .68rem; font-weight: 600; padding: .12rem .48rem; border-radius: 999px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.selo.oc { background: var(--accent-soft); color: #1c5aa3; }
+.selo.misto { background: #f3eefb; color: #5b3fa8; }
+.selo.agendado { background: var(--ok-soft); color: var(--ok); }
+.selo.alerta { background: var(--warn-soft); color: var(--warn); }
+.selo.grave { background: var(--danger-soft); color: var(--danger); }
+.selo.neutro { background: var(--bg); color: var(--ink-3); border-color: var(--line); }
+
+/* ── alertas ─────────────────────────────────────────────────────────────── */
+.alertas { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 1rem; }
+.alerta {
+  border: 1px solid var(--line); border-radius: 11px; padding: .95rem 1rem;
+  background: var(--surface); cursor: pointer; transition: all .18s;
+}
+.alerta:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: var(--accent); }
+.alerta .n { font-size: 1.6rem; font-weight: 800; letter-spacing: -.03em; }
+.alerta .t { font-size: .84rem; font-weight: 600; margin: .1rem 0 .25rem; }
+.alerta .d { font-size: .76rem; color: var(--ink-3); line-height: 1.45; }
+.alerta[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+
+.vazio { text-align: center; padding: 2.5rem 1rem; color: var(--ink-3); font-size: .88rem; }
+.carregando { display: grid; place-items: center; min-height: 55vh; gap: .9rem; color: var(--ink-3); }
+.spin { width: 30px; height: 30px; border: 3px solid var(--line); border-top-color: var(--accent);
+        border-radius: 50%; animation: gira .8s linear infinite; }
+@keyframes gira { to { transform: rotate(360deg); } }
+
+.legenda { display: flex; flex-wrap: wrap; gap: .2rem 1rem; list-style: none; margin: 0 0 .7rem; padding: 0; }
+.legenda li { display: flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--ink-2); }
+.legenda .sw { width: 10px; height: 10px; border-radius: 3px; }
+
+.ver-tabela { background: none; border: 0; color: var(--accent); font: inherit; font-size: .78rem; cursor: pointer; padding: 0; }
+.ver-tabela:hover { text-decoration: underline; }
+.tbl-oculta { display: none; }
+.tbl-oculta.on { display: block; margin-top: .9rem; }
+
+@media (max-width: 720px) {
+  .wrap { padding: 1rem; }
+  .barra { grid-template-columns: 1fr; gap: .2rem; }
+  .barra .nome { text-align: left; }
+  .barra .val { text-align: left; min-width: 0; }
+}
+</style>
+</head>
+
+<body>
+<header class="topo">
+  <div class="topo-in">
+    <div class="marca">
+      <h1>Custo Efetivo Nominal</h1>
+      <span id="carimbo">carregando…</span>
+    </div>
+    <a class="voltar" href="/mais_servicos">← Mais Serviços</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="app" class="carregando">
+    <div class="spin"></div>
+    <div>lendo o cadastro dos 13 postos…</div>
+  </div>
+
+  <div id="conteudo" hidden>
+    <!-- filtros -->
+    <div class="filtros surge">
+      <input class="busca" id="busca" type="search" placeholder="Buscar médico, especialidade, CRM…" aria-label="Buscar">
+      <div class="grupo">
+        <span class="rot-filtro">Postos</span>
+        <span id="filtroPostos" class="grupo"></span>
+      </div>
+      <div class="grupo">
+        <span class="rot-filtro">Almoço</span>
+        <button class="chip" id="chipAlmoco" aria-pressed="false"
+                title="Padrão: a CAMIM não paga a hora de almoço, então o valor/hora sai sobre a jornada trabalhada. Ligue para ver quanto ficaria se o almoço fosse pago.">
+          pagar almoço
+        </button>
+      </div>
+    </div>
+
+    <div id="avisoFiltro"></div>
+
+    <!-- números grandes -->
+    <section class="tiles" id="tiles"></section>
+
+    <!-- alertas -->
+    <section class="card surge">
+      <header>
+        <h2>O que a página encontrou sozinha</h2>
+        <span class="nota">clique para filtrar a lista</span>
+      </header>
+      <div class="corpo"><div class="alertas" id="alertas"></div></div>
+    </section>
+
+    <!-- especialidades -->
+    <section class="card surge">
+      <header>
+        <h2>Custo mensal por especialidade</h2>
+        <button class="ver-tabela" data-tbl="tblEsp">ver tabela</button>
+        <span class="nota" id="notaEsp"></span>
+      </header>
+      <div class="corpo">
+        <div class="barras" id="barrasEsp"></div>
+        <div class="tbl-oculta" id="tblEsp"></div>
+      </div>
+    </section>
+
+    <!-- postos -->
+    <section class="card surge">
+      <header>
+        <h2>Custo mensal por posto</h2>
+        <button class="ver-tabela" data-tbl="tblPosto">ver tabela</button>
+      </header>
+      <div class="corpo">
+        <div class="barras" id="barrasPosto"></div>
+        <div class="tbl-oculta" id="tblPosto"></div>
+      </div>
+    </section>
+
+    <!-- médicos -->
+    <section class="card surge">
+      <header>
+        <h2>Médicos</h2>
+        <span class="nota" id="notaMed"></span>
+      </header>
+      <div class="corpo zero">
+        <div class="rolagem"><table id="tblMed">
+          <thead><tr>
+            <th data-ord="medico">Médico <span class="seta"></span></th>
+            <th data-ord="especialidades">Especialidade <span class="seta"></span></th>
+            <th data-ord="postos">Postos <span class="seta"></span></th>
+            <th class="num" data-ord="horas">Horas/sem <span class="seta"></span></th>
+            <th class="num" data-ord="semanal">Semanal <span class="seta"></span></th>
+            <th class="num" data-ord="mensal">Mensal <span class="seta"></span></th>
+            <th class="num" data-ord="hora">R$/hora <span class="seta"></span></th>
+            <th>Sinais</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <div class="vazio" id="medVazio" hidden>Nenhum médico com esses filtros.</div>
+      </div>
+    </section>
+
+    <!-- fora do plantão -->
+    <section class="card surge">
+      <header>
+        <h2>Fora do plantão remunerado</h2>
+        <span class="nota" id="notaFora"></span>
+      </header>
+      <div class="corpo zero">
+        <div class="rolagem"><table id="tblFora">
+          <thead><tr>
+            <th>Agenda</th><th>Especialidade</th><th>Posto</th>
+            <th class="num">Valor</th><th>Por quê está fora</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   Estado e utilidades
+   ═══════════════════════════════════════════════════════════════════════════ */
+const PALETA = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948'];
+const CINZA = '#9aa0a6';
+let DADOS = null;
+const estado = { postos: new Set(), busca: '', almocoPago: false, alerta: null,
+                 especialidade: null, ord: 'mensal', asc: false };
+
+const brl = (v, c = 2) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR',
+  { minimumFractionDigits: c, maximumFractionDigits: c });
+const num = (v, c = 0) => Number(v || 0).toLocaleString('pt-BR',
+  { minimumFractionDigits: c, maximumFractionDigits: c });
+const esc = s => String(s ?? '').replace(/[&<>"]/g, m =>
+  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
+
+/* Conta subindo — dá vida ao número principal sem enfeitar o resto. */
+function anima(el, alvo, fmt) {
+  const dur = 750, ini = performance.now();
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = fmt(alvo); return; }
+  (function passo(t) {
+    const p = Math.min(1, (t - ini) / dur);
+    el.textContent = fmt(alvo * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(passo);
+  })(ini);
+}
+
+/* Valor/hora conforme o botão do almoço. Os dois vêm congelados do ETL —
+   trocar aqui não recalcula nada, só escolhe o campo. */
+const vhora = l => estado.almocoPago ? l.valor_hora_bruto : l.valor_hora;
+const horas = l => estado.almocoPago ? l.horas_brutas : l.horas_liquidas;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Filtro
+   ═══════════════════════════════════════════════════════════════════════════ */
+function plantoes() {
+  const q = estado.busca.trim().toLowerCase();
+  return DADOS.linhas.filter(l => {
+    if (l.tipo_agenda !== 'plantao') return false;
+    if (estado.postos.size && !estado.postos.has(l.posto)) return false;
+    if (estado.especialidade && l.especialidade !== estado.especialidade) return false;
+    if (estado.alerta && !(l.alertas || []).includes(estado.alerta)) return false;
+    if (q) {
+      const alvo = `${l.medico} ${l.especialidade} ${l.crm || ''} ${l.posto_nome}`.toLowerCase();
+      if (!alvo.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+/* Consolida por médico (CPF/CRM não vêm no JSON: a chave é nome+CRM), com
+   abertura por posto — decisão do Cristiano. O mesmo médico atende em vários. */
+function porMedico(ls) {
+  const m = new Map();
+  ls.forEach(l => {
+    const k = `${l.medico}||${l.crm || ''}`;
+    if (!m.has(k)) m.set(k, { chave: k, medico: l.medico, crm: l.crm,
+      especialidades: new Set(), postos: new Set(), linhas: [],
+      semanal: 0, mensal: 0, horas: 0, alertas: new Set() });
+    const a = m.get(k);
+    a.especialidades.add(l.especialidade);
+    a.postos.add(l.posto);
+    a.linhas.push(l);
+    a.semanal += l.valor_plantao || 0;
+    a.mensal += l.custo_mensal || 0;
+    a.horas += horas(l) || 0;
+    (l.alertas || []).forEach(x => a.alertas.add(x));
+  });
+  return [...m.values()].map(a => ({ ...a,
+    hora: a.horas ? a.mensal / (a.horas * DADOS.semanas_no_mes) : null }));
+}
+
+function agrupa(ls, chave) {
+  const m = new Map();
+  ls.forEach(l => {
+    const k = chave(l);
+    if (!m.has(k)) m.set(k, { k, mensal: 0, semanal: 0, medicos: new Set(), horas: 0 });
+    const a = m.get(k);
+    a.mensal += l.custo_mensal || 0;
+    a.semanal += l.valor_plantao || 0;
+    a.horas += horas(l) || 0;
+    a.medicos.add(`${l.posto}|${l.id_medico}`);
+  });
+  return [...m.values()].sort((x, y) => y.mensal - x.mensal);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Render
+   ═══════════════════════════════════════════════════════════════════════════ */
+function tiles(ls) {
+  const mensal = ls.reduce((t, l) => t + (l.custo_mensal || 0), 0);
+  const semanal = ls.reduce((t, l) => t + (l.valor_plantao || 0), 0);
+  const meds = new Set(ls.map(l => `${l.posto}|${l.id_medico}`)).size;
+  const hs = ls.reduce((t, l) => t + (horas(l) || 0), 0);
+  const hMed = hs ? mensal / (hs * DADOS.semanas_no_mes) : 0;
+  const real = DADOS.referencia_real;
+
+  document.getElementById('tiles').innerHTML = `
+    <div class="tile"><div class="rot">Custo mensal nominal</div>
+      <div class="fig" id="figMensal">—</div>
+      <div class="sub">${brl(semanal)} por semana · ${num(DADOS.semanas_no_mes,3)} semanas/mês</div></div>
+    <div class="tile"><div class="rot">Médicos</div>
+      <div class="fig" id="figMed">—</div>
+      <div class="sub"><b>${num(hs,1)}h</b> contratadas por semana</div></div>
+    <div class="tile"><div class="rot">Hora média ponderada</div>
+      <div class="fig" id="figHora">—</div>
+      <div class="sub">${estado.almocoPago ? 'com a hora de almoço paga' : 'sem pagar a hora de almoço'}</div></div>
+    <div class="tile"><div class="rot">Nominal × realizado</div>
+      <div class="fig" id="figGap">—</div>
+      <div class="sub">julho custou <b>${brl(real)}</b> de fato<br>a diferença é falta e ajuste</div></div>`;
+  requestAnimationFrame(() => document.querySelectorAll('.tile').forEach((t, i) =>
+    setTimeout(() => t.classList.add('on'), i * 70)));
+
+  anima(document.getElementById('figMensal'), mensal, v => brl(v, 0));
+  anima(document.getElementById('figMed'), meds, v => num(Math.round(v)));
+  anima(document.getElementById('figHora'), hMed, v => brl(v));
+  const gap = real ? (mensal / real - 1) * 100 : 0;
+  anima(document.getElementById('figGap'), gap, v => (v >= 0 ? '+' : '') + num(v, 1) + '%');
+}
+
+function barras(alvoId, itens, fmtNome, cor, aoClicar) {
+  const max = Math.max(1, ...itens.map(i => i.mensal));
+  const el = document.getElementById(alvoId);
+  el.innerHTML = itens.map((i, n) => `
+    <div class="barra${aoClicar ? ' clicavel' : ''}" data-k="${esc(i.k)}"
+         ${aoClicar ? 'role="button" tabindex="0"' : ''}>
+      <div class="nome" title="${esc(fmtNome(i))}">${esc(fmtNome(i))}</div>
+      <div class="trilho"><div class="fill" style="width:${i.mensal / max * 100}%;
+        background:${cor(i, n)}; animation-delay:${Math.min(n * 45, 500)}ms"></div></div>
+      <div class="val">${brl(i.mensal, 0)}</div>
+    </div>`).join('');
+  if (aoClicar) el.querySelectorAll('.barra').forEach(b => {
+    const go = () => aoClicar(b.dataset.k);
+    b.addEventListener('click', go);
+    b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+  });
+}
+
+function tabelaSimples(id, cols, linhas) {
+  document.getElementById(id).innerHTML = `<div class="rolagem"><table>
+    <thead><tr>${cols.map((c,i) => `<th${i?' class="num"':''}>${esc(c)}</th>`).join('')}</tr></thead>
+    <tbody>${linhas.map(l => `<tr>${l.map((c,i) =>
+      `<td${i?' class="num"':''}>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+const ROT_ALERTA = {
+  fora_da_curva: ['Acima da própria especialidade',
+    `hora mais de ${Math.round((DADOS_FATOR() - 1) * 100)}% acima da mediana da especialidade na rede`],
+  caro_por_vaga: ['Caro por consulta', 'custo por vaga muito acima do normal da especialidade'],
+  cadastro_suspeito: ['Cadastro para conferir', 'sem horário, jornada impossível, agenda vencida ou por comissão'],
+};
+function DADOS_FATOR() { return (DADOS && DADOS.parametros.fator_fora_da_curva) || 1.3; }
+
+function alertas(todos) {
+  const cont = {};
+  todos.forEach(l => (l.alertas || []).forEach(a => cont[a] = (cont[a] || 0) + 1));
+  const spreads = Object.entries(DADOS.referencias)
+    .filter(([, r]) => r.spread_pct && r.spread_pct > 50 && r.postos.length > 2)
+    .sort((a, b) => b[1].spread_pct - a[1].spread_pct);
+
+  const cards = Object.entries(ROT_ALERTA).map(([k, [t, d]]) => `
+    <div class="alerta" role="button" tabindex="0" data-alerta="${k}"
+         aria-pressed="${estado.alerta === k}">
+      <div class="n" style="color:${cont[k] ? 'var(--warn)' : 'var(--ink-3)'}">${cont[k] || 0}</div>
+      <div class="t">${t}</div><div class="d">${d}</div>
+    </div>`);
+  cards.push(`
+    <div class="alerta" data-spread="1" style="cursor:default">
+      <div class="n" style="color:${spreads.length ? 'var(--warn)' : 'var(--ink-3)'}">${spreads.length}</div>
+      <div class="t">Mesmo serviço, preço diferente</div>
+      <div class="d">${spreads.length
+        ? spreads.slice(0,3).map(([e,r]) =>
+            `<b>${esc(e[0]+e.slice(1).toLowerCase())}</b> varia ${Math.round(r.spread_pct)}% entre ${r.postos.length} postos`).join('<br>')
+        : 'nenhuma especialidade com variação relevante'}</div>
+    </div>`);
+  document.getElementById('alertas').innerHTML = cards.join('');
+
+  document.querySelectorAll('[data-alerta]').forEach(el => {
+    const go = () => { estado.alerta = estado.alerta === el.dataset.alerta ? null : el.dataset.alerta; desenha(); };
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+  });
+}
+
+function selos(l) {
+  const s = [];
+  const mod = { ordem_chegada: ['oc','ordem de chegada'], misto: ['misto','misto'], agendado: ['agendado','agendado'] }[l.modalidade];
+  if (mod) s.push(`<span class="selo ${mod[0]}">${mod[1]}</span>`);
+  if (l.agenda_quinzenal) s.push('<span class="selo neutro">quinzenal</span>');
+  if (l.temporario) s.push('<span class="selo neutro">temporário</span>');
+  if (l.recebe_por_comissao) s.push('<span class="selo alerta">comissão</span>');
+  if ((l.alertas || []).includes('fora_da_curva'))
+    s.push(`<span class="selo grave" title="${l.pct_acima_mediana}% acima da mediana da especialidade">+${Math.round(l.pct_acima_mediana)}%</span>`);
+  if ((l.alertas || []).includes('cadastro_suspeito'))
+    s.push(`<span class="selo alerta" title="${esc((l.motivos_suspeita||[]).join(' · '))}">conferir</span>`);
+  return s.join(' ');
+}
+
+function tabelaMedicos(ls) {
+  const meds = porMedico(ls);
+  const ord = estado.ord, asc = estado.asc ? 1 : -1;
+  meds.sort((a, b) => {
+    const va = ord === 'medico' ? a.medico : ord === 'especialidades' ? [...a.especialidades][0]
+             : ord === 'postos' ? a.postos.size : a[ord];
+    const vb = ord === 'medico' ? b.medico : ord === 'especialidades' ? [...b.especialidades][0]
+             : ord === 'postos' ? b.postos.size : b[ord];
+    return typeof va === 'string' ? asc * va.localeCompare(vb, 'pt-BR') : asc * ((va || 0) - (vb || 0));
+  });
+
+  const tb = document.querySelector('#tblMed tbody');
+  document.getElementById('medVazio').hidden = meds.length > 0;
+  document.getElementById('notaMed').textContent =
+    `${meds.length} médico(s) · ${ls.length} agenda(s)`;
+
+  tb.innerHTML = meds.map((m, i) => {
+    const esp = [...m.especialidades];
+    const multi = m.postos.size > 1;
+    return `<tr class="expansivel" data-med="${esc(m.chave)}">
+      <td><strong>${esc(m.medico)}</strong>${m.crm ? ` <span style="color:var(--ink-3);font-size:.78rem">CRM ${esc(m.crm)}</span>` : ''}</td>
+      <td>${esc(esp[0])}${esp.length > 1 ? ` <span class="selo neutro">+${esp.length - 1}</span>` : ''}</td>
+      <td>${[...m.postos].join(' ')}${multi ? ` <span class="selo oc" title="atua em ${m.postos.size} postos">${m.postos.size} postos</span>` : ''}</td>
+      <td class="num">${num(m.horas, 1)}h</td>
+      <td class="num">${brl(m.semanal, 0)}</td>
+      <td class="num"><strong>${brl(m.mensal, 0)}</strong></td>
+      <td class="num">${m.hora ? brl(m.hora) : '—'}</td>
+      <td>${[...m.alertas].includes('fora_da_curva') ? '<span class="selo grave">fora da curva</span>' : ''}
+          ${[...m.alertas].includes('cadastro_suspeito') ? '<span class="selo alerta">conferir</span>' : ''}</td>
+    </tr>
+    <tr class="detalhe" hidden data-det="${esc(m.chave)}"><td colspan="8">
+      <table><thead><tr>
+        <th>Posto</th><th>Especialidade</th><th>Dia</th><th>Horário</th>
+        <th class="num">Horas</th><th class="num">Valor</th><th class="num">R$/hora</th>
+        <th class="num">Vagas</th><th class="num">R$/consulta</th><th>Sinais</th>
+      </tr></thead><tbody>
+      ${m.linhas.sort((a,b) => a.dia_ordem - b.dia_ordem).map(l => `
+        <tr>
+          <td title="${esc(l.posto_nome)}">${esc(l.posto)}</td>
+          <td>${esc(l.especialidade)}</td>
+          <td>${esc(l.dia_semana)}</td>
+          <td>${esc(l.hora_inicio || '—')}–${esc(l.hora_fim || '—')}${
+            l.minutos_almoco ? ` <span style="color:var(--ink-3)">(${l.minutos_almoco}min almoço)</span>` : ''}</td>
+          <td class="num">${horas(l) ? num(horas(l),1) + 'h' : '—'}</td>
+          <td class="num">${brl(l.valor_plantao, 0)}</td>
+          <td class="num">${vhora(l) ? brl(vhora(l)) : '—'}</td>
+          <td class="num">${l.ordem_chegada || l.modalidade === 'misto' ? '—' : num(l.vagas_efetivas)}</td>
+          <td class="num">${l.custo_por_vaga ? brl(l.custo_por_vaga) : '—'}</td>
+          <td>${selos(l)}</td>
+        </tr>`).join('')}
+      </tbody></table></td></tr>`;
+  }).join('');
+
+  tb.querySelectorAll('.expansivel').forEach(tr => tr.addEventListener('click', () => {
+    const d = tb.querySelector(`[data-det="${CSS.escape(tr.dataset.med)}"]`);
+    if (d) d.hidden = !d.hidden;
+  }));
+}
+
+function tabelaFora() {
+  const fora = DADOS.linhas.filter(l => l.tipo_agenda !== 'plantao'
+    && (!estado.postos.size || estado.postos.has(l.posto)));
+  const cont = DADOS.resumo.fora_por_motivo || {};
+  document.getElementById('notaFora').innerHTML =
+    `${fora.length} agendas · ${cont.exame || 0} exame/equipamento · `
+    + `${cont.comissao || 0} por comissão · ${cont.abaixo_do_piso || 0} a conferir`;
+  const ROT = { comissao: ['alerta','por comissão'], exame: ['neutro','exame/equipamento'],
+                abaixo_do_piso: ['grave','conferir cadastro'] };
+  document.querySelector('#tblFora tbody').innerHTML = fora
+    .sort((a, b) => (b.valor_plantao || 0) - (a.valor_plantao || 0))
+    .map(l => {
+      const r = ROT[l.motivo_fora] || ROT.abaixo_do_piso;
+      return `<tr>
+        <td>${esc(l.medico)}</td><td>${esc(l.especialidade)}</td>
+        <td title="${esc(l.posto_nome)}">${esc(l.posto)}</td>
+        <td class="num">${brl(l.valor_plantao)}</td>
+        <td><span class="selo ${r[0]}">${r[1]}</span>
+            <span style="color:var(--ink-3);font-size:.76rem">${esc((l.motivos_suspeita||[])[0] || '')}</span></td>
+      </tr>`;
+    }).join('');
+}
+
+function desenha() {
+  const ls = plantoes();
+  tiles(ls);
+  alertas(ls);
+
+  const esp = agrupa(ls, l => l.especialidade);
+  document.getElementById('notaEsp').textContent = estado.especialidade
+    ? `filtrando ${estado.especialidade} — clique de novo para limpar` : `${esp.length} especialidades`;
+  barras('barrasEsp', esp.slice(0, 14), i => i.k,
+    (i, n) => estado.especialidade && estado.especialidade !== i.k ? CINZA : PALETA[n % 8],
+    k => { estado.especialidade = estado.especialidade === k ? null : k; desenha(); });
+  tabelaSimples('tblEsp', ['Especialidade','Mensal','Semanal','Médicos','Horas/sem','R$/hora'],
+    esp.map(i => [esc(i.k), brl(i.mensal), brl(i.semanal), num(i.medicos.size),
+      num(i.horas,1)+'h', i.horas ? brl(i.mensal/(i.horas*DADOS.semanas_no_mes)) : '—']));
+
+  const post = agrupa(ls, l => l.posto_nome);
+  barras('barrasPosto', post, i => i.k, (_i, n) => PALETA[n % 8]);
+  tabelaSimples('tblPosto', ['Posto','Mensal','Semanal','Médicos','Horas/sem'],
+    post.map(i => [esc(i.k), brl(i.mensal), brl(i.semanal), num(i.medicos.size), num(i.horas,1)+'h']));
+
+  tabelaMedicos(ls);
+  tabelaFora();
+
+  const f = [];
+  if (estado.especialidade) f.push(`especialidade <b>${esc(estado.especialidade)}</b>`);
+  if (estado.alerta) f.push(`sinal <b>${ROT_ALERTA[estado.alerta][0]}</b>`);
+  if (estado.postos.size) f.push(`${estado.postos.size} posto(s)`);
+  document.getElementById('avisoFiltro').innerHTML = f.length
+    ? `<div style="background:var(--accent-soft);border-radius:10px;padding:.6rem .9rem;
+        margin-bottom:1rem;font-size:.85rem">Filtrando por ${f.join(' · ')}
+        <button class="ver-tabela" id="limpar" style="margin-left:.6rem">limpar</button></div>` : '';
+  const lp = document.getElementById('limpar');
+  if (lp) lp.addEventListener('click', () => {
+    estado.especialidade = estado.alerta = null; estado.postos.clear();
+    document.querySelectorAll('#filtroPostos .chip').forEach(c => c.setAttribute('aria-pressed','false'));
+    desenha();
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Início
+   ═══════════════════════════════════════════════════════════════════════════ */
+async function iniciar() {
+  try {
+    const r = await fetch('/json_consolidado/medico_custo.json', { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    DADOS = await r.json();
+  } catch (e) {
+    document.getElementById('app').innerHTML =
+      `<div class="vazio">Não consegui carregar os dados (${esc(e.message)}).<br>
+       O ETL roda de madrugada — se acabou de subir, aguarde a próxima execução.</div>`;
+    return;
+  }
+  DADOS.referencia_real = 2219217;   // julho/2026, informado pelo Cristiano
+
+  document.getElementById('carimbo').textContent =
+    `${num(DADOS.resumo.medicos)} médicos · ${num(DADOS.resumo.especialidades)} especialidades · `
+    + `cadastro de ${new Date(DADOS.gerado_em).toLocaleDateString('pt-BR')}`;
+
+  const postos = [...new Set(DADOS.linhas.map(l => l.posto))].sort();
+  document.getElementById('filtroPostos').innerHTML = postos.map(p => {
+    const nome = (DADOS.linhas.find(l => l.posto === p) || {}).posto_nome || p;
+    return `<button class="chip" data-posto="${p}" aria-pressed="false" title="${esc(nome)}">${p}</button>`;
+  }).join('');
+  document.querySelectorAll('[data-posto]').forEach(b => b.addEventListener('click', () => {
+    const p = b.dataset.posto;
+    estado.postos.has(p) ? estado.postos.delete(p) : estado.postos.add(p);
+    b.setAttribute('aria-pressed', estado.postos.has(p));
+    desenha();
+  }));
+
+  let t;
+  document.getElementById('busca').addEventListener('input', e => {
+    clearTimeout(t); t = setTimeout(() => { estado.busca = e.target.value; desenha(); }, 180);
+  });
+  document.getElementById('chipAlmoco').addEventListener('click', e => {
+    estado.almocoPago = !estado.almocoPago;
+    e.target.setAttribute('aria-pressed', estado.almocoPago);
+    desenha();
+  });
+  document.querySelectorAll('[data-tbl]').forEach(b => b.addEventListener('click', () => {
+    const box = document.getElementById(b.dataset.tbl);
+    box.classList.toggle('on');
+    b.textContent = box.classList.contains('on') ? 'ocultar tabela' : 'ver tabela';
+  }));
+  document.querySelectorAll('#tblMed th[data-ord]').forEach(th => th.addEventListener('click', () => {
+    const o = th.dataset.ord;
+    estado.asc = estado.ord === o ? !estado.asc : false;
+    estado.ord = o;
+    document.querySelectorAll('#tblMed th .seta').forEach(s => s.textContent = '');
+    th.querySelector('.seta').textContent = estado.asc ? '▲' : '▼';
+    desenha();
+  }));
+
+  document.getElementById('app').hidden = true;
+  document.getElementById('conteudo').hidden = false;
+  desenha();
+}
+iniciar();
+</script>
+</body>
+</html>
