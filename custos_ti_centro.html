@@ -148,9 +148,11 @@
             <div class="card-body p-0">
               <div style="overflow-x:auto">
                 <table class="ti-tbl" id="tblContas">
+                  <tfoot></tfoot>
                   <thead><tr>
                     <th>Conta</th><th>Fornecedor</th><th>Forma de pagamento</th>
-                    <th>Recorrência</th><th class="num">Previsto</th><th>Venc.</th><th></th>
+                    <th>Recorrência</th><th class="num">Previsto</th>
+                    <th class="num" id="thPrevBRL">Previsto (R$)</th><th>Venc.</th><th></th>
                   </tr></thead>
                   <tbody></tbody>
                 </table>
@@ -588,11 +590,32 @@ function pintaContas(d) {
       <td>${tiEsc(c.forma_rotulo || '—')}</td>
       <td>${ROT_RECORRENCIA[c.recorrencia] || c.recorrencia}</td>
       <td class="num">${c.valor_previsto ? (c.moeda === 'BRL' ? tiFmtBRL(c.valor_previsto) : tiFmtUSD(c.valor_previsto)) : '—'}</td>
+      <td class="num"${c.moeda === 'BRL' ? '' : ` title="convertido pela cotação de ${tiFmtMes(d.periodo.ate)}: US$ 1 = ${tiFmtBRL(d.cotacao)}"`}>${
+        c.valor_previsto
+          ? (c.moeda === 'BRL' ? tiFmtBRL(c.valor_previsto)
+                               : '≈ ' + tiFmtBRL(c.valor_previsto * d.cotacao))
+          : '—'}</td>
       <td>${c.dia_vencimento ? 'dia ' + c.dia_vencimento : '—'}</td>
       <td class="num"><button class="ti-linkish" data-editar-conta="${c.id}">editar</button></td>
     </tr>`).join('');
   tb.querySelectorAll('[data-editar-conta]').forEach(b =>
     b.addEventListener('click', () => abreConta(Number(b.dataset.editarConta))));
+
+  /* Rodapé: quanto as contas ativas custam por mês, nas duas moedas, dizendo
+     por qual cotação o real foi feito — senão o número não é auditável. */
+  const ativas = d.contas.filter(c => c.ativo && c.valor_previsto);
+  const somaUsd = ativas.reduce((t, c) =>
+    t + (c.moeda === 'BRL' ? c.valor_previsto / d.cotacao : c.valor_previsto), 0);
+  const somaBrl = ativas.reduce((t, c) =>
+    t + (c.moeda === 'BRL' ? c.valor_previsto : c.valor_previsto * d.cotacao), 0);
+  const tf = document.querySelector('#tblContas tfoot');
+  if (tf) tf.innerHTML = ativas.length ? `<tr>
+      <td colspan="4">${ativas.length} conta(s) ativa(s) — previsto por mês</td>
+      <td class="num">${tiFmtUSD(somaUsd)}</td>
+      <td class="num">${tiFmtBRL(somaBrl)}</td>
+      <td colspan="2" class="ti-muted" style="font-weight:400">
+        US$ 1 = ${tiFmtBRL(d.cotacao)} (${tiFmtMes(d.periodo.ate)})</td>
+    </tr>` : '';
 }
 
 /* True quando o valor exibido é o ORIGINAL da fatura (não passou por cotação). */
