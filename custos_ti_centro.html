@@ -626,7 +626,7 @@ function abreLanc(id) {
   document.querySelector('#mdLanc .modal-title').textContent = l ? 'Editar despesa' : 'Lançar despesa';
   tiMsg(document.getElementById('lancMsg'), '');
   atualizaConversao();
-  $('#mdLanc').modal('show');
+  tiModal('#mdLanc', 'show');
 }
 
 function atualizaConversao() {
@@ -660,7 +660,7 @@ async function salvarLanc() {
         obs: document.getElementById('lancObs').value,
       }),
     });
-    $('#mdLanc').modal('hide');
+    tiModal('#mdLanc', 'hide');
     recarrega();
   } catch (e) {
     tiMsg(document.getElementById('lancMsg'), e.message, 'err');
@@ -683,7 +683,7 @@ function abreConta(id) {
   document.getElementById('contaObs').value = c ? (c.obs || '') : '';
   document.getElementById('btnExcluirConta').style.display = c ? '' : 'none';
   tiMsg(document.getElementById('contaMsg'), '');
-  $('#mdConta').modal('show');
+  tiModal('#mdConta', 'show');
 }
 
 async function salvarConta() {
@@ -711,7 +711,7 @@ async function salvarConta() {
         obs: document.getElementById('contaObs').value,
       }),
     });
-    $('#mdConta').modal('hide');
+    tiModal('#mdConta', 'hide');
     recarrega();
   } catch (e) {
     tiMsg(document.getElementById('contaMsg'), e.message, 'err');
@@ -890,7 +890,7 @@ async function excluir(url, pergunta, modal) {
   if (!confirm(pergunta)) return;
   try {
     const r = await tiApi(url, { method: 'DELETE' });
-    $(modal).modal('hide');
+    tiModal(modal, 'hide');
     if (r.desativado) {
       tiMsg(document.getElementById('globalMsg'),
         `Tem ${r.lancamentos} lançamento(s) ligado(s) — em vez de apagar o histórico, o item foi desativado.`, 'warn');
@@ -924,7 +924,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('metaPreview').innerHTML = '';
     document.getElementById('metaApiResultado').innerHTML = '';
     metaStatus(false);
-    $('#mdMeta').modal('show');
+    tiModal('#mdMeta', 'show');
   });
   document.getElementById('btnMetaTestar').addEventListener('click', () => metaStatus(true));
   document.getElementById('metaTexto').addEventListener('input', () => {

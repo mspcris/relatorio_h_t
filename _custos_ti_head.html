@@ -11,6 +11,10 @@
 <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
 
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+{# Bootstrap é OBRIGATÓRIO aqui: o AdminLTE 3 NÃO o embute, e sem ele
+   $(...).modal() não existe — todo modal desta seção morre calado num
+   TypeError. Mesma versão do admin_usuarios.html e do alarmes_admin.html. #}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
@@ -164,6 +168,23 @@ function tiLigaTabela(btnId, boxId) {
     box.classList.toggle('show');
     btn.textContent = box.classList.contains('show') ? 'ocultar tabela' : 'ver tabela';
   });
+}
+
+/* Abre/fecha modal reclamando ALTO se o Bootstrap não estiver lá.
+   Sem isto, o clique estoura num TypeError dentro do handler e o usuário só vê
+   "não acontece nada" — foi exatamente assim que a seção inteira ficou
+   inutilizável sem ninguém perceber (2026-08-02). */
+function tiModal(seletor, acao) {
+  if (!window.jQuery || typeof window.jQuery.fn.modal !== 'function') {
+    const msg = 'Esta página não conseguiu carregar o Bootstrap (CDN bloqueada?). '
+              + 'Os formulários não abrem. Tente Ctrl+F5.';
+    const box = document.getElementById('globalMsg');
+    if (box) tiMsg(box, msg, 'err'); else alert(msg);
+    console.error('tiModal: jQuery.fn.modal indisponível — Bootstrap não carregou.');
+    return false;
+  }
+  window.jQuery(seletor).modal(acao);
+  return true;
 }
 
 async function tiApi(url, opts) {

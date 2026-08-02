@@ -344,7 +344,7 @@ function abreCentro(id) {
     ? `Página: ${c.url}` : 'A página será criada em /custos_ti/…';
   montaCores(c ? c.cor : proximaCorLivre());
   tiMsg(document.getElementById('centroMsg'), '');
-  $('#mdCentro').modal('show');
+  tiModal('#mdCentro', 'show');
 }
 
 async function salvarCentro() {
@@ -363,7 +363,7 @@ async function salvarCentro() {
         ativo: document.getElementById('centroAtivo').checked,
       }),
     });
-    $('#mdCentro').modal('hide');
+    tiModal('#mdCentro', 'hide');
     /* Recarrega a página inteira: o menu lateral é montado no servidor a partir
        dos centros, então um centro novo só aparece nele depois do reload. */
     location.reload();
@@ -395,7 +395,7 @@ function abreForma(id) {
   document.getElementById('btnExcluirForma').style.display = f ? '' : 'none';
   ajustaBlocoCartao();
   tiMsg(document.getElementById('formaMsg'), '');
-  $('#mdForma').modal('show');
+  tiModal('#mdForma', 'show');
 }
 
 async function salvarForma() {
@@ -417,7 +417,7 @@ async function salvarForma() {
         ativo: document.getElementById('formaAtivo').checked,
       }),
     });
-    $('#mdForma').modal('hide');
+    tiModal('#mdForma', 'hide');
     carregar();
   } catch (e) {
     tiMsg(document.getElementById('formaMsg'), e.message, 'err');
@@ -467,7 +467,7 @@ async function excluir(url, pergunta, modal) {
   if (!confirm(pergunta)) return;
   try {
     const r = await tiApi(url, { method: 'DELETE' });
-    $(modal).modal('hide');
+    tiModal(modal, 'hide');
     if (r.desativado) {
       tiMsg(document.getElementById('globalMsg'),
         `Tem ${r.lancamentos} lançamento(s) usando isso — em vez de apagar o histórico, foi desativado.`, 'warn');
