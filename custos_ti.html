@@ -51,12 +51,13 @@
           </div>
 
           <div id="globalMsg"></div>
+          <div id="avisoPrevisto"></div>
 
           <!-- Números-cabeçalho: o total é a manchete, não um gráfico de 1 barra -->
           <div class="row mb-3" id="tiles">
             <div class="col-lg-3 col-sm-6 mb-3">
               <div class="ti-tile">
-                <div class="rot">Total do período</div>
+                <div class="rot">Total pago no período</div>
                 <div class="fig" id="figTotal">—</div>
                 <div class="sub" id="subTotal">&nbsp;</div>
               </div>
@@ -244,6 +245,10 @@ function barraHorizontal(canvasId, labels, valores, cores, comRotulo) {
   });
 }
 
+const ROT_ORIGEM = { manual: 'lançamento manual', meta_texto: 'extrato da Meta',
+                     meta_api: 'estimativa da API da Meta',
+                     ia_snapshot: 'Custos com IA', import_csv: 'CSV' };
+
 function tiPct(v) {
   return Number(v || 0).toLocaleString('pt-BR',
     { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
@@ -284,10 +289,21 @@ function pintaTiles(d) {
   }
 
   document.getElementById('figQtd').textContent = d.qtd_lancamentos;
-  const prev = d.por_status.previsto || 0;
-  document.getElementById('subQtd').textContent = prev
-    ? `${tiFmtBRL(prev)} ainda previsto (não pago)`
+  document.getElementById('subQtd').textContent = d.qtd_previstos
+    ? `+ ${d.qtd_previstos} previsto(s), fora do total`
     : 'todos pagos';
+
+  // Previsto (conta a vencer, estimativa da API da Meta) NUNCA entra no total —
+  // aparece aqui à parte, dizendo de onde veio, para não virar custo fantasma.
+  const box = document.getElementById('avisoPrevisto');
+  if (!d.total_previsto_brl) { box.innerHTML = ''; return; }
+  const fontes = [...new Set(d.previstos.map(p => ROT_ORIGEM[p.origem] || p.origem))];
+  box.innerHTML = `<div class="ti-msg warn">
+      <strong>${tiFmtBRL(d.total_previsto_brl)}</strong> em ${d.qtd_previstos}
+      lançamento(s) marcado(s) como <em>previsto</em> — <strong>não</strong> estão
+      somados no total acima nem nos gráficos.
+      <span class="ti-muted">Origem: ${tiEsc(fontes.join(', '))}.</span>
+    </div>`;
 }
 
 /* Do 9º centro em diante agrupa em "Outros" — nunca gera cor nova. */

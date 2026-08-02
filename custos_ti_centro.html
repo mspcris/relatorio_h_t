@@ -74,7 +74,7 @@
           <div class="row mb-3">
             <div class="col-lg-4 col-sm-6 mb-3">
               <div class="ti-tile">
-                <div class="rot">Total do período</div>
+                <div class="rot">Total pago no período</div>
                 <div class="fig" id="figTotal">—</div>
                 <div class="sub" id="subTotal">&nbsp;</div>
               </div>
@@ -366,7 +366,7 @@
               <button class="btn btn-sm btn-outline-primary" id="btnMetaConferir">
                 <i class="fas fa-search"></i> Conferir
               </button>
-              <button class="btn btn-sm btn-primary" id="btnMetaImportar" disabled>
+              <button class="btn btn-sm btn-primary" id="btnMetaImportar">
                 <i class="fas fa-download"></i> Importar
               </button>
               <div class="custom-control custom-checkbox ml-2">
@@ -479,15 +479,17 @@ function tabelaSimples(boxId, colunas, linhas, total) {
 }
 
 const ROT_RECORRENCIA = { mensal: 'Mensal', anual: 'Anual', variavel: 'Variável', unica: 'Única' };
-const ROT_ORIGEM = { manual: 'manual', meta_texto: 'extrato Meta', meta_api: 'API Meta',
-                     ia_snapshot: 'Custos com IA', import_csv: 'CSV' };
+const ROT_ORIGEM = { manual: 'manual', meta_texto: 'extrato Meta',
+                     meta_api: 'estimativa API', ia_snapshot: 'Custos com IA',
+                     import_csv: 'CSV' };
 
 function pinta(d) {
   DADOS = d;
   document.getElementById('figTotal').textContent = tiFmtBRL(d.total_brl);
-  document.getElementById('subTotal').textContent = d.periodo.um_mes
-    ? tiFmtMes(d.periodo.de)
-    : `${tiFmtMes(d.periodo.de)} a ${tiFmtMes(d.periodo.ate)}`;
+  document.getElementById('subTotal').textContent =
+    (d.periodo.um_mes ? tiFmtMes(d.periodo.de)
+                      : `${tiFmtMes(d.periodo.de)} a ${tiFmtMes(d.periodo.ate)}`)
+    + (d.total_previsto_brl ? ` · ${tiFmtBRL(d.total_previsto_brl)} previsto, fora do total` : '');
   document.getElementById('figMedia').textContent = tiFmtBRL(d.media_mensal_brl);
   document.getElementById('subMedia').textContent =
     `${d.periodo.meses.length} ${d.periodo.meses.length === 1 ? 'mês' : 'meses'}`;
@@ -738,11 +740,21 @@ function tabelaPreview(res) {
       </table></div>` : ''}`;
 }
 
+/* Importar NÃO exige Conferir antes — Conferir é só a prévia opcional.
+   Botão desabilitado que não reage a clique é indistinguível de bug: quem cola
+   o extrato e aperta Importar tem que importar. */
 async function metaConferir(salvar) {
   const texto = document.getElementById('metaTexto').value;
   const btnC = document.getElementById('btnMetaConferir');
   const btnI = document.getElementById('btnMetaImportar');
+  const msg = document.getElementById('metaMsg');
+
+  if (!texto.trim()) {
+    tiMsg(msg, 'Cole o texto da tela Atividade de pagamento antes.', 'warn');
+    return;
+  }
   btnC.disabled = btnI.disabled = true;
+  tiMsg(msg, salvar ? 'Importando…' : 'Lendo o texto…', 'warn');
   try {
     const res = await tiApi('/api/custos-ti/meta/importar', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -753,19 +765,24 @@ async function metaConferir(salvar) {
       }),
     });
     document.getElementById('metaPreview').innerHTML = tabelaPreview(res);
-    tiMsg(document.getElementById('metaMsg'), '');
-    if (salvar) {
+    if (!salvar) {
+      tiMsg(msg, res.novos.length
+        ? `${res.novos.length} transação(ões) prontas para importar — clique em Importar.`
+        : 'Nada novo para importar: tudo nesse texto já foi importado antes.',
+        res.novos.length ? 'ok' : 'warn');
+    } else if (res.novos.length) {
       const extra = res.formas_criadas.length
         ? ` Cartão cadastrado: ${res.formas_criadas.map(f => f.rotulo).join(', ')}.` : '';
-      tiMsg(document.getElementById('metaMsg'),
-        `${res.novos.length} lançamento(s) importado(s).${extra}`, 'ok');
+      tiMsg(msg, `${res.novos.length} lançamento(s) importado(s).${extra}`, 'ok');
       recarrega();
+    } else {
+      tiMsg(msg, 'Nada importado: todas as transações desse texto já estavam aqui.', 'warn');
     }
-    btnI.disabled = salvar || !res.novos.length;
   } catch (e) {
-    tiMsg(document.getElementById('metaMsg'), e.message, 'err');
-    btnI.disabled = true;
-  } finally { btnC.disabled = false; }
+    tiMsg(msg, e.message, 'err');
+  } finally {
+    btnC.disabled = btnI.disabled = false;
+  }
 }
 
 async function metaStatus(testar) {
@@ -910,13 +927,14 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#mdMeta').modal('show');
   });
   document.getElementById('btnMetaTestar').addEventListener('click', () => metaStatus(true));
+  document.getElementById('metaTexto').addEventListener('input', () => {
+    document.getElementById('metaPreview').innerHTML = '';
+    tiMsg(document.getElementById('metaMsg'), '');
+  });
   document.getElementById('btnMetaConferir').addEventListener('click', () => metaConferir(false));
   document.getElementById('btnMetaImportar').addEventListener('click', () => metaConferir(true));
   document.getElementById('btnMetaApi').addEventListener('click', () => metaApiBuscar(false));
   document.getElementById('btnMetaApiSalvar').addEventListener('click', () => metaApiBuscar(true));
-  document.getElementById('metaTexto').addEventListener('input', () => {
-    document.getElementById('btnMetaImportar').disabled = true;
-  });
 
   const p = tiPeriodoInit(carregar);
   carregar(p.de, p.ate);

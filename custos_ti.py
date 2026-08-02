@@ -581,9 +581,18 @@ def resumo(sess, de: Optional[str] = None, ate: Optional[str] = None) -> dict:
     por_mes: dict[str, float] = {m: 0.0 for m in meses}
     por_status = {"pago": 0.0, "previsto": 0.0}
     por_origem: dict[str, float] = {}
+    previstos: list[dict] = []
 
     for l in lancs:
         v = float(l.valor_brl or 0.0)
+        por_status[l.status] = round(por_status.get(l.status, 0.0) + v, 2)
+        # REALIZADO vs PREVISTO: só o que foi pago entra nos totais e gráficos.
+        # Sem isso a estimativa da Graph API (que entra como 'previsto') somaria
+        # EM CIMA da cobrança real do cartão vinda do extrato — o mesmo gasto
+        # contado duas vezes, com um número que a própria Meta erra.
+        if l.status != "pago":
+            previstos.append(l.to_dict())
+            continue
         por_centro[l.centro_id] = round(por_centro.get(l.centro_id, 0.0) + v, 2)
         por_centro_mes.setdefault(l.centro_id, {})
         por_centro_mes[l.centro_id][l.competencia] = round(
@@ -593,7 +602,6 @@ def resumo(sess, de: Optional[str] = None, ate: Optional[str] = None) -> dict:
         rotulo = l.conta.nome if l.conta else (l.fornecedor or l.descricao)
         por_conta[rotulo] = round(por_conta.get(rotulo, 0.0) + v, 2)
         por_mes[l.competencia] = round(por_mes.get(l.competencia, 0.0) + v, 2)
-        por_status[l.status] = round(por_status.get(l.status, 0.0) + v, 2)
         por_origem[l.origem] = round(por_origem.get(l.origem, 0.0) + v, 2)
 
     # Centro de IA: o total NÃO vem de ti_lancamento, vem dos snapshots do
@@ -661,9 +669,14 @@ def resumo(sess, de: Optional[str] = None, ate: Optional[str] = None) -> dict:
                        sorted(por_conta.items(), key=lambda kv: kv[1], reverse=True)[:15]],
         "por_status": por_status,
         "por_origem": por_origem,
+        # Previstos ficam FORA de total_brl de propósito — são estimativa ou
+        # conta a vencer. Vão à parte para a tela mostrar sem misturar.
+        "previstos": previstos,
+        "total_previsto_brl": por_status.get("previsto", 0.0),
         "ia": {"detalhe": ia_detalhe,
                "centro_key": ia_centro.key if ia_centro else None},
-        "qtd_lancamentos": len(lancs),
+        "qtd_lancamentos": len(lancs) - len(previstos),
+        "qtd_previstos": len(previstos),
     }
 
 
@@ -704,8 +717,13 @@ def centro_payload(sess, key: str, de: Optional[str] = None,
 
     por_mes: dict[str, float] = {m: 0.0 for m in meses}
     por_conta: dict[str, float] = {}
+    total_previsto = 0.0
     for l in lancs:
         v = float(l.valor_brl or 0.0)
+        # Mesma regra da home: previsto não entra no realizado. Ver resumo().
+        if l.status != "pago":
+            total_previsto = round(total_previsto + v, 2)
+            continue
         por_mes[l.competencia] = round(por_mes.get(l.competencia, 0.0) + v, 2)
         rotulo = l.conta.nome if l.conta else (l.fornecedor or l.descricao)
         por_conta[rotulo] = round(por_conta.get(rotulo, 0.0) + v, 2)
@@ -734,6 +752,7 @@ def centro_payload(sess, key: str, de: Optional[str] = None,
         "periodo": {"de": de, "ate": ate, "meses": meses,
                     "mes_atual": mes_atual(), "um_mes": len(meses) == 1},
         "total_brl": total,
+        "total_previsto_brl": total_previsto,
         "media_mensal_brl": round(total / len(meses), 2) if meses else 0.0,
         "por_mes": [{"competencia": m, "total_brl": por_mes.get(m, 0.0)} for m in meses],
         "por_conta": [{"nome": k, "total_brl": v} for k, v in
