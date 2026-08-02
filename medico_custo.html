@@ -238,12 +238,65 @@ tr.detalhe th { background: var(--bg); }
 .tbl-oculta { display: none; }
 .tbl-oculta.on { display: block; margin-top: .9rem; }
 
+/* ── celular: tabela vira cartão ──────────────────────────────────────────────
+   Tabela de 8 colunas no celular é ilegível — rolagem horizontal e fonte
+   minúscula. Cada linha vira um cartão com rótulo à esquerda e valor à direita,
+   no mesmo formato do hesk. O rótulo sai do atributo data-r de cada célula, e
+   não de CSS decorado: assim a mesma marcação serve para as duas telas.
+   ────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 720px) {
-  .wrap { padding: 1rem; }
+  .wrap { padding: .75rem; }
   .barra { grid-template-columns: 1fr; gap: .2rem; }
   .barra .nome { text-align: left; }
   .barra .val { text-align: left; min-width: 0; }
+
+  .rolagem { overflow-x: visible; }
+  .cartoes thead { display: none; }
+  .cartoes, .cartoes tbody, .cartoes tr, .cartoes td { display: block; width: 100%; }
+  .cartoes tr.expansivel, .cartoes tbody > tr:not(.detalhe) {
+    border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+    margin: .6rem .75rem; padding: .2rem 0; box-shadow: var(--shadow); overflow: hidden;
+  }
+  .cartoes td {
+    display: flex; align-items: baseline; justify-content: space-between; gap: .8rem;
+    padding: .42rem .85rem; border: 0; text-align: left;
+    /* valor comprido (horário com almoço, lista de postos) desce em vez de
+       vazar para fora do cartão */
+    flex-wrap: wrap;
+  }
+  /* A célula do detalhe NÃO é par rótulo/valor: é o container da explicação e
+     da tabela de agendas. Como flex, ela punha as duas lado a lado numa tela
+     de 412px e cortava tudo. */
+  .cartoes tr.detalhe > td { display: block; padding: 0; }
+  .cartoes td.num { text-align: right; }
+  .cartoes td[data-r]::before {
+    content: attr(data-r); flex: 0 0 auto; color: var(--ink-3);
+    font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; font-weight: 600;
+  }
+  /* a primeira célula é o título do cartão: sem rótulo, ocupando a linha toda */
+  .cartoes td.cabeca { display: block; background: var(--bg); padding: .6rem .85rem; }
+  .cartoes td.cabeca::before { content: none; }
+  .cartoes td.vazia { display: none; }   /* célula sem valor não vira linha vazia */
+  .cartoes tbody tr:hover { background: var(--surface); }
+
+  tr.detalhe > td { padding: 0; }
+  .porque { padding: .8rem .85rem; }
+  .porque li { font-size: .8rem; }
+  .filtros { padding: .7rem .75rem; }
+  .tiles { grid-template-columns: 1fr 1fr; gap: .6rem; }
+  .tile { padding: .8rem .85rem; }
+  .tile .fig { font-size: 1.45rem; }
+  .alertas { grid-template-columns: 1fr; }
+  .card > header { padding: .8rem .85rem; }
+  .grupo-alerta { margin: 1rem .75rem .3rem; }
 }
+
+/* cabeçalho de grupo quando "agrupar por alerta" está ligado */
+.grupo-alerta td, .grupo-alerta {
+  background: var(--bg) !important; font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3);
+}
+.grupo-alerta:hover { background: var(--bg) !important; }
 </style>
 </head>
 
@@ -283,6 +336,11 @@ tr.detalhe th { background: var(--bg); }
                aria-label="Ver o cadastro como estava nesta data">
         <button class="chip" id="chipHoje" aria-pressed="true"
                 title="Voltar para o cadastro de hoje">hoje</button>
+      </div>
+      <div class="grupo">
+        <span class="rot-filtro">Ordem</span>
+        <button class="chip" id="chipAlerta" aria-pressed="false"
+                title="Junta em cima quem tem qualquer sinal: fora da curva, caro por consulta ou cadastro a conferir.">agrupar por alerta</button>
       </div>
       <div class="grupo">
         <span class="rot-filtro">Almoço</span>
@@ -340,7 +398,7 @@ tr.detalhe th { background: var(--bg); }
         <span class="nota" id="notaMed"></span>
       </header>
       <div class="corpo zero">
-        <div class="rolagem"><table id="tblMed">
+        <div class="rolagem"><table id="tblMed" class="cartoes">
           <thead><tr>
             <th data-ord="medico">Médico <span class="seta"></span></th>
             <th data-ord="especialidades">Especialidade <span class="seta"></span></th>
@@ -389,7 +447,7 @@ const DATA_HOJE = new Date().toISOString().slice(0, 10);
 /* estado.data = null significa HOJE. A página abre assim, sempre: dado nominal
    de hoje, sem pedir nada a ninguém. Escolher data é ato explícito. */
 const estado = { postos: new Set(), busca: '', almocoPago: false, alerta: null,
-                 especialidade: null, ord: 'mensal', asc: false, data: null };
+                 especialidade: null, ord: 'mensal', asc: false, data: null, agrupaAlerta: false };
 
 const brl = (v, c = 2) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR',
   { minimumFractionDigits: c, maximumFractionDigits: c });
@@ -832,7 +890,9 @@ function explicacao(m) {
   return `<div class="porque"><h4>Por que este médico está marcado</h4>${blocos.join('')}</div>`;
 }
 
-const nFora = m => m.linhas.filter(l => (l.alertas || []).includes('fora_da_curva')).length;
+const nFora = m => m.linhas.filter(l => l._fora).length;
+const temAlgumSinal = m => m.linhas.some(l =>
+  l._fora || l._caro || (l.motivos_suspeita || []).length);
 const nSusp = m => m.linhas.filter(l => (l.motivos_suspeita || []).length).length;
 
 function tabelaMedicos(ls) {
@@ -851,18 +911,36 @@ function tabelaMedicos(ls) {
   document.getElementById('notaMed').textContent =
     `${meds.length} médico(s) · ${ls.length} agenda(s)`;
 
+  // Agrupar por quem tem alerta: com sinal em cima, num bloco próprio. É a
+  // primeira pergunta de quem abre a página para cortar custo.
+  if (estado.agrupaAlerta) {
+    const peso = m => (temAlgumSinal(m) ? 0 : 1);
+    meds.sort((x, y) => peso(x) - peso(y) || (y.mensal || 0) - (x.mensal || 0));
+  }
+  let grupoAtual = null;
+
   tb.innerHTML = meds.map((m, i) => {
     const esp = [...m.especialidades];
     const multi = m.postos.size > 1;
-    return `<tr class="expansivel" data-med="${esc(m.chave)}">
-      <td><strong>${esc(m.medico)}</strong>${m.crm ? ` <span style="color:var(--ink-3);font-size:.78rem">CRM ${esc(m.crm)}</span>` : ''}</td>
-      <td>${esc(esp[0])}${esp.length > 1 ? ` <span class="selo neutro">+${esp.length - 1}</span>` : ''}</td>
-      <td>${[...m.postos].join(' ')}${multi ? ` <span class="selo oc" title="atua em ${m.postos.size} postos">${m.postos.size} postos</span>` : ''}</td>
-      <td class="num">${num(m.horas, 1)}h</td>
-      <td class="num">${brl(m.semanal, 0)}</td>
-      <td class="num"><strong>${brl(m.mensal, 0)}</strong></td>
-      <td class="num">${m.hora ? brl(m.hora) : '—'}</td>
-      <td>${[...m.alertas].includes('fora_da_curva')
+    let cab = '';
+    if (estado.agrupaAlerta) {
+      const g = temAlgumSinal(m) ? 'com' : 'sem';
+      if (g !== grupoAtual) {
+        grupoAtual = g;
+        const n = meds.filter(x => (temAlgumSinal(x) ? 'com' : 'sem') === g).length;
+        cab = `<tr class="grupo-alerta"><td colspan="8">${g === 'com'
+          ? `${n} médico(s) com sinal` : `${n} médico(s) sem sinal nenhum`}</td></tr>`;
+      }
+    }
+    return `${cab}<tr class="expansivel" data-med="${esc(m.chave)}">
+      <td class="cabeca"><strong>${esc(m.medico)}</strong>${m.crm ? ` <span style="color:var(--ink-3);font-size:.78rem">CRM ${esc(m.crm)}</span>` : ''}</td>
+      <td data-r="Especialidade">${esc(esp[0])}${esp.length > 1 ? ` <span class="selo neutro">+${esp.length - 1}</span>` : ''}</td>
+      <td data-r="Postos">${[...m.postos].join(' ')}${multi ? ` <span class="selo oc" title="atua em ${m.postos.size} postos">${m.postos.size} postos</span>` : ''}</td>
+      <td class="num" data-r="Horas/sem">${num(m.horas, 1)}h</td>
+      <td class="num" data-r="Semanal">${brl(m.semanal, 0)}</td>
+      <td class="num" data-r="Mensal"><strong>${brl(m.mensal, 0)}</strong></td>
+      <td class="num" data-r="R$/hora">${m.hora ? brl(m.hora) : '—'}</td>
+      <td data-r="Sinais" class="${temAlgumSinal(m) ? '' : 'vazia'}">${[...m.alertas].includes('fora_da_curva')
             ? `<span class="selo grave" title="${nFora(m)} de ${m.linhas.length} agenda(s) com a hora acima da mediana da especialidade — clique para ver a conta">fora da curva</span>` : ''}
           ${[...m.alertas].includes('caro_por_vaga')
             ? `<span class="selo alerta" title="custo por consulta acima do dobro da mediana da especialidade — clique para ver a conta">caro por consulta</span>` : ''}
@@ -871,24 +949,23 @@ function tabelaMedicos(ls) {
     </tr>
     <tr class="detalhe" hidden data-det="${esc(m.chave)}"><td colspan="8">
       ${explicacao(m)}
-      <table><thead><tr>
-        <th>Posto</th><th>Especialidade</th><th>Dia</th><th>Horário</th>
+      <table class="cartoes"><thead><tr>
+        <th>Posto · Especialidade · Dia</th><th>Horário</th>
         <th class="num">Horas</th><th class="num">Valor</th><th class="num">R$/hora</th>
         <th class="num">Vagas</th><th class="num">R$/consulta</th><th>Sinais</th>
       </tr></thead><tbody>
       ${m.linhas.sort((a,b) => a.dia_ordem - b.dia_ordem).map(l => `
         <tr>
-          <td title="${esc(l.posto_nome)}">${esc(l.posto)}</td>
-          <td>${esc(l.especialidade)}</td>
-          <td>${esc(l.dia_semana)}</td>
-          <td>${esc(l.hora_inicio || '—')}–${esc(l.hora_fim || '—')}${
+          <td class="cabeca" title="${esc(l.posto_nome)}"><strong>${esc(l.posto)} · ${esc(l.especialidade)}</strong>
+            <span style="color:var(--ink-3)"> · ${esc(l.dia_semana)}</span></td>
+          <td data-r="Horário">${esc(l.hora_inicio || '—')}–${esc(l.hora_fim || '—')}${
             l.minutos_almoco ? ` <span style="color:var(--ink-3)">(${l.minutos_almoco}min almoço)</span>` : ''}</td>
-          <td class="num">${horas(l) ? num(horas(l),1) + 'h' : '—'}</td>
-          <td class="num">${brl(l.valor_plantao, 0)}</td>
-          <td class="num">${vhora(l) ? brl(vhora(l)) : '—'}</td>
-          <td class="num">${l.ordem_chegada || l.modalidade === 'misto' ? '—' : num(l.vagas_efetivas)}</td>
-          <td class="num">${l.custo_por_vaga ? brl(l.custo_por_vaga) : '—'}</td>
-          <td>${selos(l)}</td>
+          <td class="num" data-r="Horas">${horas(l) ? num(horas(l),1) + 'h' : '—'}</td>
+          <td class="num" data-r="Valor">${brl(l.valor_plantao, 0)}</td>
+          <td class="num" data-r="R$/hora">${vhora(l) ? brl(vhora(l)) : '—'}</td>
+          <td class="num" data-r="Vagas">${l.ordem_chegada || l.modalidade === 'misto' ? '—' : num(l.vagas_efetivas)}</td>
+          <td class="num" data-r="R$/consulta">${l.custo_por_vaga ? brl(l.custo_por_vaga) : '—'}</td>
+          <td data-r="Sinais">${selos(l)}</td>
         </tr>`).join('')}
       </tbody></table></td></tr>`;
   }).join('');
@@ -1180,6 +1257,11 @@ async function iniciar() {
   let t;
   document.getElementById('busca').addEventListener('input', e => {
     clearTimeout(t); t = setTimeout(() => { estado.busca = e.target.value; desenha(); }, 180);
+  });
+  document.getElementById('chipAlerta').addEventListener('click', e => {
+    estado.agrupaAlerta = !estado.agrupaAlerta;
+    e.target.setAttribute('aria-pressed', estado.agrupaAlerta);
+    desenha();
   });
   document.getElementById('chipAlmoco').addEventListener('click', e => {
     estado.almocoPago = !estado.almocoPago;
