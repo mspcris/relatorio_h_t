@@ -50,12 +50,40 @@ _BRT = timezone(timedelta(hours=-3))
 # Média de semanas num mês (365,25 / 7 / 12). Usar 4 subestima ~8%.
 SEMANAS_NO_MES = 4.345
 
-POSTOS_NOMES = {
-    "A": "Anchieta", "N": "Nova Iguaçu", "X": "Caxias", "Y": "Campo Grande",
-    "B": "Bangu", "R": "Realengo", "P": "Padre Miguel", "C": "Centro",
-    "D": "Duque de Caxias", "G": "Guadalupe", "I": "Irajá", "M": "Madureira",
-    "J": "Jacarepaguá",
-}
+# NADA de nome de posto hardcoded aqui. Eu tinha escrito um dicionário
+# letra→bairro DEDUZINDO e errei 9 dos 13 (C não é "Centro", é Campinho; D não
+# é "Duque de Caxias", é Del Castilho; I não é "Irajá", é Nova Iguaçu…).
+# A verdade está em cad_endereco.Codigo/Descricao, que TODO posto tem completa.
+# Fallback só existe para o caso de a leitura falhar — e aí mostra a letra.
+NOMES_POSTOS: dict[str, dict] = {}
+
+
+def carregar_nomes_postos(con) -> dict:
+    """Lê cad_endereco e devolve {Codigo: {nome, bairro, cidade, ativo}}.
+
+    A tabela lista TODOS os postos da rede em qualquer base, então uma leitura
+    basta. Roda na primeira conexão que der certo.
+    """
+    from sqlalchemy import text as _t
+    try:
+        linhas = con.execute(_t(
+            "SELECT LTRIM(RTRIM(Codigo)) AS codigo, LTRIM(RTRIM(Descricao)) AS nome, "
+            "LTRIM(RTRIM(Bairro)) AS bairro, LTRIM(RTRIM(Cidade)) AS cidade, "
+            "ISNULL(Desativado, 0) AS desativado, "
+            "ISNULL(AtendimentoAtivoPosto, 1) AS atende "
+            "FROM cad_endereco WHERE Codigo IS NOT NULL"
+        )).mappings().all()
+    except Exception as e:  # noqa: BLE001
+        print(f"  (não consegui ler cad_endereco: {e})")
+        return {}
+    return {r["codigo"]: {"nome": r["nome"] or r["codigo"],
+                          "bairro": r["bairro"], "cidade": r["cidade"],
+                          "ativo": not r["desativado"] and bool(r["atende"])}
+            for r in linhas if r["codigo"]}
+
+
+def nome_posto(p: str) -> str:
+    return (NOMES_POSTOS.get(p) or {}).get("nome") or p
 
 
 def _env(k: str, d: str = "") -> str:
@@ -247,6 +275,8 @@ def coletar(posto: str, sql: str) -> tuple[list, str | None]:
         return [], "sem credenciais no .env"
     try:
         with eng.connect() as con:
+            if not NOMES_POSTOS:
+                NOMES_POSTOS.update(carregar_nomes_postos(con))
             res = con.execute(text(resolver_opcionais(con, sql)))
             cols = list(res.keys())
             linhas = []
@@ -254,7 +284,8 @@ def coletar(posto: str, sql: str) -> tuple[list, str | None]:
                 r = dict(zip(cols, tupla))
                 linha = {
                     "posto": posto,
-                    "posto_nome": POSTOS_NOMES.get(posto, posto),
+                    "posto_nome": nome_posto(posto),
+                    "posto_bairro": (NOMES_POSTOS.get(posto) or {}).get("bairro"),
                     "id_medico": _int(r.get("idMedico")),
                     "medico": _str(r.get("medico")),
                     "crm": _str(r.get("crm")) or _str(r.get("conselho_numero")),
@@ -499,10 +530,10 @@ def main() -> int:
             achadas, erro = coletar(p, sql)
         except Exception:  # noqa: BLE001
             achadas, erro = [], traceback.format_exc(limit=1).strip()[:200]
-        status[p] = {"posto": p, "nome": POSTOS_NOMES.get(p, p),
+        status[p] = {"posto": p, "nome": nome_posto(p),
                      "linhas": len(achadas), "erro": erro}
         linhas.extend(achadas)
-        print(f"  {p} {POSTOS_NOMES.get(p, p):<16} {len(achadas):>5} linhas"
+        print(f"  {p} {nome_posto(p):<16} {len(achadas):>5} linhas"
               + (f"  ERRO: {erro}" if erro else ""))
 
     for l in linhas:
@@ -527,6 +558,7 @@ def main() -> int:
         "gerado_em": datetime.now(_BRT).replace(microsecond=0).isoformat(),
         "semanas_no_mes": SEMANAS_NO_MES,
         "postos": list(status.values()),
+        "nomes_postos": NOMES_POSTOS,
         "referencias": referencias,
         "parametros": {
             "fator_fora_da_curva": FATOR_FORA_DA_CURVA,

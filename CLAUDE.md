@@ -496,6 +496,30 @@ plantão remunerado agora fica com referência **nula** e o selo
 Depois do conserto os spreads viraram achado de negócio: NEUROLOGIA varia
 **219% entre 10 postos**, CARDIOLOGIA 151% entre 12, GERIATRIA 108%.
 
+### NUNCA escrever nome de posto à mão
+
+Os nomes dos 13 postos estão em **`cad_endereco`** (`Codigo` → `Descricao`,
+mais `Bairro`, `Cidade`, `Desativado`, `AtendimentoAtivoPosto`). A tabela lista
+a rede INTEIRA em qualquer base, então uma leitura basta.
+
+Em 2026-08-02 eu escrevi um dicionário letra→bairro deduzindo e **errei 9 dos
+13**. Os que confundem:
+
+| Código | Nome real | O que NÃO é |
+|---|---|---|
+| `C` | Campinho (bairro Oswaldo Cruz) | Centro |
+| `D` | Del Castilho | Duque de Caxias |
+| `N` | Nilópolis | Nova Iguaçu |
+| `I` | Nova Iguaçu (bairro da Luz) | Irajá |
+| `G` | Campo Grande | Guadalupe |
+| `P` | Rio das Pedras | Padre Miguel |
+| `X` / `Y` | X Campo Grande / Y Campo Grande | Caxias / Campo Grande |
+| `J` | Jacarepaguá (Tanque) | — |
+
+`alarmes_db.POSTOS_NOMES` já tinha o mapa certo. Ao precisar do nome, ler de
+`cad_endereco` (preferível, porque acompanha mudança de cadastro) ou reusar o
+`alarmes_db`. Nunca inventar.
+
 ### Outras decisões
 
 - **Consolidação por médico** (CPF/CRM) com abertura por posto: o mesmo médico
