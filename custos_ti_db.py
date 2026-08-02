@@ -124,6 +124,10 @@ class CentroCusto(TiBase):
     ativo = Column(Boolean, nullable=False, default=True)
     # 'manual' → lançamentos desta tabela; 'ia' → total vem do custos_ia
     fonte = Column(String(20), nullable=False, default="manual")
+    # Integração externa DESTE centro ('meta' = WhatsApp/Meta), ou NULL.
+    # É o que decide onde aparecem o botão "Importar Meta" e o card de consumo
+    # por telefone — sem isso eles vazavam para todos os centros.
+    integracao = Column(String(20), nullable=True)
     # href customizado (só usado por centros fonte='ia' apontando p/ /custos_ia)
     href = Column(String(200), nullable=True)
     created_at = Column(DateTime, nullable=False, default=now_brt)
@@ -143,7 +147,7 @@ class CentroCusto(TiBase):
             "id": self.id, "key": self.key, "nome": self.nome,
             "descricao": self.descricao, "icone": self.icone, "cor": self.cor,
             "ordem": self.ordem, "ativo": self.ativo, "fonte": self.fonte,
-            "url": self.url,
+            "integracao": self.integracao, "url": self.url,
         }
 
 

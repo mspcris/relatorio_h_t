@@ -32,9 +32,11 @@
               <button class="btn btn-sm btn-outline-primary" id="btnNovaConta">
                 <i class="fas fa-file-invoice-dollar"></i> Nova conta
               </button>
+              {% if TI_CENTRO.integracao == 'meta' %}
               <button class="btn btn-sm btn-outline-secondary" id="btnImportar">
                 <i class="fab fa-facebook"></i> Importar Meta
               </button>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -161,6 +163,7 @@
 
 
           <!-- Detalhamento Meta: por telefone e por categoria de preço -->
+          {% if TI_CENTRO.integracao == 'meta' %}
           <div class="card ti-card mb-3" id="cardMeta" style="display:none">
             <div class="card-header">
               <h3 class="card-title"><i class="fab fa-whatsapp" style="color:#25d366"></i>
@@ -187,6 +190,7 @@
               <p class="ti-muted mt-2 mb-0" id="metaDetNota"></p>
             </div>
           </div>
+          {% endif %}
 
           <!-- Lançamentos -->
           <div class="card ti-card mb-4">
@@ -373,6 +377,7 @@
     </div></div>
   </div>
 
+  {% if TI_CENTRO.integracao == 'meta' %}
   <!-- Modal: importar Meta -->
   <div class="modal fade" id="mdMeta" tabindex="-1">
     <div class="modal-dialog modal-lg"><div class="modal-content">
@@ -439,8 +444,10 @@
       </div>
     </div></div>
   </div>
+  {% endif %}
 
 <script>
+const TI_CENTRO_INTEGRACAO = {{ (TI_CENTRO.integracao or '') | tojson }};
 const TI_CENTRO_KEY = {{ TI_CENTRO.key | tojson }};
 const TI_CENTRO_COR = {{ TI_CENTRO.cor | tojson }};
 const TI_CENTRO_FONTE = {{ TI_CENTRO.fonte | tojson }};
@@ -920,6 +927,7 @@ async function metaApiBuscar(salvar) {
 let META_DET = null;
 
 async function carregaMetaDetalhe(de, ate) {
+  if (TI_CENTRO_INTEGRACAO !== 'meta') return;
   const card = document.getElementById('cardMeta');
   if (!card) return;
   try {
@@ -1041,6 +1049,7 @@ document.addEventListener('DOMContentLoaded', () => {
     excluir(`/api/custos-ti/contas/${document.getElementById('contaId').value}`,
             'Excluir esta conta?', '#mdConta'));
 
+  if (TI_CENTRO_INTEGRACAO === 'meta') {
   document.getElementById('btnImportar').addEventListener('click', () => {
     document.getElementById('metaApiMes').value = document.getElementById('fltAte').value;
     tiMsg(document.getElementById('metaMsg'), '');
@@ -1054,10 +1063,14 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('metaPreview').innerHTML = '';
     tiMsg(document.getElementById('metaMsg'), '');
   });
+  document.getElementById('btnRecarregaMeta').addEventListener('click', () =>
+    carregaMetaDetalhe(document.getElementById('fltDe').value,
+                       document.getElementById('fltAte').value));
   document.getElementById('btnMetaConferir').addEventListener('click', () => metaConferir(false));
   document.getElementById('btnMetaImportar').addEventListener('click', () => metaConferir(true));
   document.getElementById('btnMetaApi').addEventListener('click', () => metaApiBuscar(false));
   document.getElementById('btnMetaApiSalvar').addEventListener('click', () => metaApiBuscar(true));
+  }
 
   tiMoedaInit(() => {
     desenha();

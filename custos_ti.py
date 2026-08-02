@@ -57,7 +57,7 @@ CENTROS_SEED = [
      "descricao": "OpenAI, Groq, Anthropic e assinaturas de IA. "
                   "Os valores vêm do painel Custos com IA."},
     {"key": "comunicacao", "nome": "Comunicação", "icone": "fab fa-whatsapp",
-     "cor": PALETA[1], "ordem": 20, "fonte": "manual",
+     "cor": PALETA[1], "ordem": 20, "fonte": "manual", "integracao": "meta",
      "descricao": "WhatsApp/Meta, SMS, e-mail transacional, telefonia."},
     {"key": "infra", "nome": "Infraestrutura", "icone": "fas fa-server",
      "cor": PALETA[2], "ordem": 30, "fonte": "manual",
@@ -181,6 +181,9 @@ def para_usd(valor: float, moeda: str, cotacao: float) -> float:
 # ─────────────────────────────────────────────────────────────────────────────
 # Centros de custo
 # ─────────────────────────────────────────────────────────────────────────────
+# Integrações que um centro pode ter. Só "meta" por enquanto; AWS entra aqui.
+INTEGRACOES = ("meta",)
+
 _SLUG_RE = re.compile(r"[^a-z0-9_]+")
 
 
@@ -234,6 +237,11 @@ def salvar_centro(sess, dados: dict) -> dict:
         centro.ordem = int(dados["ordem"])
     if dados.get("ativo") is not None:
         centro.ativo = bool(dados["ativo"])
+    if "integracao" in dados:
+        integ = (dados.get("integracao") or "").strip() or None
+        if integ and integ not in INTEGRACOES:
+            raise ValueError(f"integração inválida: {integ}")
+        centro.integracao = integ
     sess.add(centro)
     sess.commit()
     return centro.to_dict()

@@ -27,6 +27,9 @@ load_dotenv("/opt/relatorio_h_t/.env")
 # Colunas acrescentadas depois da criação original da tabela.
 # (tabela, coluna, DDL, expressão de backfill ou None)
 COLUNAS_NOVAS = [
+    ("ti_centro_custo", "integracao", "VARCHAR(20)",
+     # o centro de Comunicação é quem tem a integração da Meta
+     "integracao = 'meta' WHERE key = 'comunicacao'"),
     ("ti_lancamento", "valor_usd", "NUMERIC(14,4) NOT NULL DEFAULT 0",
      # Recalcula o dólar do que já existe: USD é o próprio valor; o resto
      # divide pela cotação que ficou congelada na linha.
