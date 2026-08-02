@@ -182,6 +182,15 @@ tr.detalhe th { background: var(--bg); }
 .selo.grave { background: var(--danger-soft); color: var(--danger); }
 .selo.neutro { background: var(--bg); color: var(--ink-3); border-color: var(--line); }
 
+/* ── faixa de aviso (data histórica, foto incompleta) ────────────────────── */
+.faixa {
+  background: var(--accent-soft); border-radius: 10px; padding: .6rem .9rem;
+  margin-bottom: 1rem; font-size: .85rem; color: var(--ink-2);
+}
+.faixa b { color: var(--ink); }
+.faixa.aviso { background: var(--warn-soft); color: #7c3d06; }
+.faixa.aviso b { color: #7c3d06; }
+
 /* ── por que este médico está marcado ────────────────────────────────────── */
 .porque { padding: .95rem 1.1rem 1rem; background: var(--surface); border-bottom: 1px solid var(--line); }
 .porque h4 {
@@ -261,7 +270,19 @@ tr.detalhe th { background: var(--bg); }
       <input class="busca" id="busca" type="search" placeholder="Buscar médico, especialidade, CRM…" aria-label="Buscar">
       <div class="grupo">
         <span class="rot-filtro">Postos</span>
+        <button class="chip" data-grupo="altamiro" aria-pressed="false" title="A B G I N R X Y">Altamiro</button>
+        <button class="chip" data-grupo="couto" aria-pressed="false" title="C D J M P">Couto</button>
+        <button class="chip" data-grupo="todos" aria-pressed="false">todos</button>
         <span id="filtroPostos" class="grupo"></span>
+      </div>
+      <!-- Seletor de data. Nasce escondido: só aparece quando existe histórico
+           coletado, e a página SEMPRE abre no dia de hoje. -->
+      <div class="grupo" id="grupoData" hidden>
+        <span class="rot-filtro">Cadastro de</span>
+        <input class="chip" type="date" id="dataRef" style="padding:.38rem .6rem"
+               aria-label="Ver o cadastro como estava nesta data">
+        <button class="chip" id="chipHoje" aria-pressed="true"
+                title="Voltar para o cadastro de hoje">hoje</button>
       </div>
       <div class="grupo">
         <span class="rot-filtro">Almoço</span>
@@ -272,6 +293,7 @@ tr.detalhe th { background: var(--bg); }
       </div>
     </div>
 
+    <div id="avisoData"></div>
     <div id="avisoFiltro"></div>
 
     <!-- números grandes -->
@@ -361,8 +383,13 @@ tr.detalhe th { background: var(--bg); }
 const PALETA = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948'];
 const CINZA = '#9aa0a6';
 let DADOS = null;
+let DADOS_HOJE = null;              // o JSON de hoje fica guardado: voltar é instantâneo
+let HISTORICO = { datas: [], primeira: null, ultima: null };
+const DATA_HOJE = new Date().toISOString().slice(0, 10);
+/* estado.data = null significa HOJE. A página abre assim, sempre: dado nominal
+   de hoje, sem pedir nada a ninguém. Escolher data é ato explícito. */
 const estado = { postos: new Set(), busca: '', almocoPago: false, alerta: null,
-                 especialidade: null, ord: 'mensal', asc: false };
+                 especialidade: null, ord: 'mensal', asc: false, data: null };
 
 const brl = (v, c = 2) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR',
   { minimumFractionDigits: c, maximumFractionDigits: c });
@@ -376,7 +403,10 @@ function anima(el, alvo, fmt) {
   const dur = 750, ini = performance.now();
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = fmt(alvo); return; }
   (function passo(t) {
-    const p = Math.min(1, (t - ini) / dur);
+    // clamp nos DOIS lados: um timestamp de rAF anterior ao performance.now()
+    // inicial deixa p negativo, e aí (1-p)³ > 1 faz o número aparecer NEGATIVO
+    // — "-40 médicos" piscando na tela. Raro, mas não custa nada travar.
+    const p = Math.max(0, Math.min(1, (t - ini) / dur));
     el.textContent = fmt(alvo * (1 - Math.pow(1 - p, 3)));
     if (p < 1) requestAnimationFrame(passo);
   })(ini);
@@ -390,13 +420,13 @@ const horas = l => estado.almocoPago ? l.horas_brutas : l.horas_liquidas;
 /* ═══════════════════════════════════════════════════════════════════════════
    Filtro
    ═══════════════════════════════════════════════════════════════════════════ */
-function plantoes() {
+function plantoes(ignorarSinal) {
   const q = estado.busca.trim().toLowerCase();
   return DADOS.linhas.filter(l => {
     if (l.tipo_agenda !== 'plantao') return false;
     if (estado.postos.size && !estado.postos.has(l.posto)) return false;
     if (estado.especialidade && l.especialidade !== estado.especialidade) return false;
-    if (estado.alerta && !(l.alertas || []).includes(estado.alerta)) return false;
+    if (!ignorarSinal && estado.alerta && !temSinal(l, estado.alerta)) return false;
     if (q) {
       const alvo = `${l.medico} ${l.especialidade} ${l.crm || ''} ${l.posto_nome}`.toLowerCase();
       if (!alvo.includes(q)) return false;
@@ -422,6 +452,9 @@ function porMedico(ls) {
     a.mensal += l.custo_mensal || 0;
     a.horas += horas(l) || 0;
     (l.alertas || []).forEach(x => a.alertas.add(x));
+    if (l._fora) a.alertas.add('fora_da_curva');
+    if (l._caro) a.alertas.add('caro_por_vaga');
+    else a.alertas.delete('caro_por_vaga');
   });
   return [...m.values()].map(a => ({ ...a,
     hora: a.horas ? a.mensal / (a.horas * DADOS.semanas_no_mes) : null }));
@@ -451,7 +484,12 @@ function agrupa(ls, chave) {
    Devolve null quando não dá para comparar — e o card diz por quê, em vez de
    mostrar um número que parece certo. */
 function realizado(ls) {
-  if (!REAL) return { valor: null, nota: 'não consegui ler o consolidado mensal' };
+  const R = mesRealizado(estado.data || DATA_HOJE);
+  if (!R) return { valor: null, nota: 'não consegui ler o consolidado mensal' };
+  // Realizado atrasado não vira percentual. Some o número e fica o motivo.
+  if (R.atrasado) return { valor: null, nota:
+    `sem comparação: o realizado mais novo é <b>${rotuloMes(R.mes)}</b> e falta
+     ${rotuloMes(R.esperado)} — o consolidado do KPI Custo Médico está atrasado` };
   // O realizado não tem quebra por especialidade nem por médico: só por posto e
   // mês. Com esses filtros ligados o nominal encolhe e o realizado não —
   // comparar daria uma diferença inventada.
@@ -463,12 +501,12 @@ function realizado(ls) {
   // Só os postos que realmente entraram no nominal — se um posto falhou no ETL,
   // somar o realizado dele infla o outro lado da conta.
   const postos = [...new Set(ls.map(l => l.posto))];
-  const val = postos.reduce((t, p) => t + (REAL.por_posto[p] || 0), 0);
-  const faltam = postos.filter(p => REAL.por_posto[p] == null);
+  const val = postos.reduce((t, p) => t + (R.por_posto[p] || 0), 0);
+  const faltam = postos.filter(p => R.por_posto[p] == null);
   return {
     valor: val || null,
-    nota: val ? `${REAL.mes_label} custou <b>${brl(val)}</b> de fato`
-              : `sem realizado para ${REAL.mes_label}`,
+    nota: val ? `${rotuloMes(R.mes)} custou <b>${brl(val)}</b> de fato`
+              : `sem realizado para ${rotuloMes(R.mes)}`,
     aviso: faltam.length ? `sem realizado para o posto ${faltam.join(', ')}` : '',
   };
 }
@@ -531,22 +569,28 @@ function tabelaSimples(id, cols, linhas) {
       `<td${i?' class="num"':''}>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
-const ROT_ALERTA = {
+/* FUNÇÃO, não constante: o texto cita o escopo da mediana ("na rede" / "nos 3
+   postos A, B, P"), que muda a cada filtro. Como objeto literal no topo do
+   arquivo ele era avaliado UMA vez, no load, e ficava dizendo "na rede" para
+   sempre — número certo com legenda errada, que é o pior tipo de erro. */
+const ROT_ALERTA = () => ({
   fora_da_curva: ['Acima da própria especialidade',
-    `hora mais de ${Math.round((DADOS_FATOR() - 1) * 100)}% acima da mediana da especialidade na rede`],
-  caro_por_vaga: ['Caro por consulta', 'custo por vaga acima do dobro da mediana da especialidade'],
+    `hora mais de ${Math.round((DADOS_FATOR() - 1) * 100)}% acima da mediana da especialidade ${escopoRef()}`],
+  caro_por_vaga: ['Caro por consulta',
+    `custo por vaga acima do dobro da mediana da especialidade ${escopoRef()}`],
   cadastro_suspeito: ['Cadastro para conferir', 'sem horário, jornada impossível, agenda vencida ou por comissão'],
-};
+});
 function DADOS_FATOR() { return (DADOS && DADOS.parametros.fator_fora_da_curva) || 1.3; }
 
 function alertas(todos) {
   const cont = {};
-  todos.forEach(l => (l.alertas || []).forEach(a => cont[a] = (cont[a] || 0) + 1));
-  const spreads = Object.entries(DADOS.referencias)
+  todos.forEach(l => ['fora_da_curva','caro_por_vaga','cadastro_suspeito']
+    .forEach(k => { if (temSinal(l, k)) cont[k] = (cont[k] || 0) + 1; }));
+  const spreads = Object.entries(REF)
     .filter(([, r]) => r.spread_pct && r.spread_pct > 50 && r.postos.length > 2)
     .sort((a, b) => b[1].spread_pct - a[1].spread_pct);
 
-  const cards = Object.entries(ROT_ALERTA).map(([k, [t, d]]) => `
+  const cards = Object.entries(ROT_ALERTA()).map(([k, [t, d]]) => `
     <div class="alerta" role="button" tabindex="0" data-alerta="${k}"
          aria-pressed="${estado.alerta === k}">
       <div class="n" style="color:${cont[k] ? 'var(--warn)' : 'var(--ink-3)'}">${cont[k] || 0}</div>
@@ -570,9 +614,107 @@ function alertas(todos) {
   });
 }
 
-/* Mediana da especialidade na rede — é contra ela que tudo é comparado.
-   Devolve o objeto do ETL; a tela nunca recalcula mediana. */
-const refDe = l => (DADOS.referencias || {})[l.especialidade] || {};
+/* ═══════════════════════════════════════════════════════════════════════════
+   Referência (mediana) — calculada SOBRE OS POSTOS SELECIONADOS
+   ───────────────────────────────────────────────────────────────────────────
+   Regra do Cristiano (2026-08-02): filtrou três postos, a mediana é a DESSES
+   TRÊS e a comparação acontece só entre eles. Comparar Anchieta com a mediana
+   da rede quando se está olhando só Anchieta responde outra pergunta.
+
+   Por isso o cálculo saiu do ETL e veio para cá. Sem filtro de posto o
+   resultado é idêntico ao que o Python publica em `referencias` — mesma regra,
+   mesma mediana (não média: um plantão caríssimo puxaria a média e esconderia
+   o que se procura).
+
+   A base é filtrada SÓ POR POSTO, de propósito:
+   - especialidade: filtrar não muda a mediana daquela especialidade;
+   - busca: buscar "Angelica" deixaria a mediana ser a dela mesma, e todo mundo
+     ficaria "na média" por construção;
+   - sinal: é o que se quer descobrir — não pode ser entrada do próprio cálculo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+let REF = {};
+
+const mediana = v => {
+  const s = v.filter(x => x != null).sort((a, b) => a - b);
+  if (!s.length) return null;
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+/* Linhas que sustentam a mediana: plantão remunerado dos postos selecionados.
+   Fora ficam agenda de exame/equipamento (abaixo do piso) e médico por
+   comissão — nos dois o valor fixo não é o custo real, então a hora não é
+   comparável com a dos outros. Mesmo critério do `_vale()` do ETL. */
+function baseReferencia() {
+  return DADOS.linhas.filter(l =>
+    l.tipo_agenda === 'plantao' && !l.recebe_por_comissao
+    && (!estado.postos.size || estado.postos.has(l.posto)));
+}
+
+function calcularReferencias() {
+  const fator = DADOS_FATOR();
+  const fatorVaga = (DADOS.parametros && DADOS.parametros.fator_custo_vaga_alto) || 2;
+  // Zera TODAS as linhas antes: uma linha que saiu do filtro não pode ficar
+  // com o sinal da rodada anterior grudado nela.
+  DADOS.linhas.forEach(l => { l._fora = false; l._pct = null; l._caro = false; l._pctVaga = null; });
+
+  const porEsp = new Map();
+  baseReferencia().forEach(l => {
+    if (!porEsp.has(l.especialidade)) porEsp.set(l.especialidade, []);
+    porEsp.get(l.especialidade).push(l);
+  });
+
+  const ref = {};
+  for (const [esp, ls] of porEsp) {
+    const mh = mediana(ls.map(l => l.valor_hora));
+    const mv = mediana(ls.map(l => l.custo_por_vaga));
+    const porPosto = {};
+    ls.forEach(l => { if (l.valor_hora) (porPosto[l.posto] = porPosto[l.posto] || []).push(l.valor_hora); });
+    const medPosto = {}, vals = [];
+    for (const [p, v] of Object.entries(porPosto)) {
+      const m = mediana(v);
+      if (m) { medPosto[p] = Math.round(m * 100) / 100; vals.push(m); }
+    }
+    ref[esp] = {
+      mediana_hora: mh ? Math.round(mh * 100) / 100 : null,
+      mediana_custo_vaga: mv ? Math.round(mv * 100) / 100 : null,
+      linhas_base: ls.length,
+      postos: Object.keys(porPosto).sort(),
+      hora_por_posto: medPosto,
+      spread_pct: vals.length > 1 && Math.min(...vals)
+        ? Math.round((Math.max(...vals) / Math.min(...vals) - 1) * 1000) / 10 : null,
+      sem_plantao_remunerado: false,
+    };
+    // marca as linhas com o sinal recalculado nesta base
+    ls.forEach(l => {
+      if (mh && l.valor_hora && l.valor_hora > mh * fator) {
+        l._fora = true;
+        l._pct = Math.round((l.valor_hora / mh - 1) * 1000) / 10;
+      }
+      if (mv && l.custo_por_vaga && l.custo_por_vaga > mv * fatorVaga) {
+        l._caro = true;
+        l._pctVaga = Math.round((l.custo_por_vaga / mv - 1) * 1000) / 10;
+      }
+    });
+  }
+  REF = ref;
+}
+
+/* Escopo em que a mediana foi medida — a frase da tela muda com ele. Dizer
+   "na rede" enquanto se olha 3 postos seria mentira com número certo. */
+function escopoRef() {
+  const n = estado.postos.size;
+  return n ? `${n === 1 ? 'no posto' : `nos ${n} postos`} ${[...estado.postos].sort().join(', ')}`
+           : 'na rede';
+}
+
+const refDe = l => REF[l.especialidade] || {};
+/* Sinais da linha JÁ recalculados no escopo atual. `cadastro_suspeito` não
+   entra aqui: problema de cadastro é da linha, não depende de com quem ela
+   está sendo comparada. */
+const temSinal = (l, k) => k === 'fora_da_curva' ? !!l._fora
+                        : k === 'caro_por_vaga' ? !!l._caro
+                        : (l.alertas || []).includes(k);
 
 /* "mediana de 34 agendas em 9 postos" — de onde saiu o número da comparação.
    linhas_base é campo novo (2026-08-02): JSON antigo cai no texto curto. */
@@ -592,16 +734,16 @@ function selos(l) {
   if (l.recebe_por_comissao) s.push('<span class="selo alerta">comissão</span>');
   /* "+46%" sozinho não diz de quê. O rótulo agora carrega a referência e o
      título traz a conta inteira — a explicação longa fica no bloco de cima. */
-  if ((l.alertas || []).includes('fora_da_curva')) {
+  if (l._fora) {
     const mh = refDe(l).mediana_hora;
     s.push(`<span class="selo grave" title="hora de ${brl(l.valor_hora)} contra a mediana de `
-      + `${mh ? brl(mh) : '—'} da ${esc(l.especialidade)} na rede: +${num(l.pct_acima_mediana, 1)}%">`
-      + `+${Math.round(l.pct_acima_mediana)}% vs. mediana</span>`);
+      + `${mh ? brl(mh) : '—'} da ${esc(l.especialidade)} ${escopoRef()}: +${num(l._pct, 1)}%">`
+      + `+${Math.round(l._pct)}% vs. mediana</span>`);
   }
-  if ((l.alertas || []).includes('caro_por_vaga')) {
+  if (l._caro) {
     const mv = refDe(l).mediana_custo_vaga;
     s.push(`<span class="selo alerta" title="custo por consulta de ${brl(l.custo_por_vaga)} contra a `
-      + `mediana de ${mv ? brl(mv) : '—'} da ${esc(l.especialidade)} na rede">caro por consulta</span>`);
+      + `mediana de ${mv ? brl(mv) : '—'} da ${esc(l.especialidade)} ${escopoRef()}">caro por consulta</span>`);
   }
   if ((l.alertas || []).includes('cadastro_suspeito'))
     s.push(`<span class="selo alerta" title="${esc((l.motivos_suspeita||[]).join(' · '))}">conferir</span>`);
@@ -619,7 +761,7 @@ function explicacao(m) {
   const fator = DADOS_FATOR();
   const blocos = [];
 
-  const fdc = m.linhas.filter(l => (l.alertas || []).includes('fora_da_curva'));
+  const fdc = m.linhas.filter(l => l._fora);
   if (fdc.length) {
     const frageis = new Set();
     const itens = fdc.map(l => {
@@ -628,34 +770,37 @@ function explicacao(m) {
       const lim = mh ? mh * fator : null;
       if ((ref.postos || []).length < 3) frageis.add(l.especialidade);
       return `<li><b>${onde(l)}</b> — hora de <b>${brl(l.valor_hora)}</b>,
-        mediana da ${esc(l.especialidade)} na rede <b>${mh ? brl(mh) : '—'}</b>
+        mediana da ${esc(l.especialidade)} ${escopoRef()} <b>${mh ? brl(mh) : '—'}</b>
         ${baseRef(ref) ? `(${baseRef(ref)})` : ''},
         limite <b>${lim ? brl(lim) : '—'}</b> = mediana × ${num(fator, 2)}
-        → <b class="mais">+${num(l.pct_acima_mediana, 1)}%</b>
-        <div class="conta">O <b>+${num(l.pct_acima_mediana, 1)}%</b> é sobre a mediana da
-          <b>especialidade na rede</b>, não sobre o próprio médico nem sobre o posto:
-          ${brl(l.valor_hora)} ÷ ${mh ? brl(mh) : '—'} − 1 = ${num(l.pct_acima_mediana, 1)}%.
-          ${l.pct_acima_mediana != null && mh
+        → <b class="mais">+${num(l._pct, 1)}%</b>
+        <div class="conta">O <b>+${num(l._pct, 1)}%</b> é sobre a mediana da
+          <b>especialidade ${escopoRef()}</b>, não sobre o próprio médico nem sobre o posto:
+          ${brl(l.valor_hora)} ÷ ${mh ? brl(mh) : '—'} − 1 = ${num(l._pct, 1)}%.
+          ${l._pct != null && mh
             ? `Em reais, ${brl(l.valor_hora - mh)} a mais por hora contratada.` : ''}</div></li>`;
     });
     blocos.push(`<div class="bloco b-grave">
       <span class="selo grave">fora da curva</span>
       <div class="regra">A hora contratada passa de <b>${Math.round((fator - 1) * 100)}%</b> acima da
-        <b>mediana da própria especialidade na rede inteira</b>. Mediana, e não média, porque um único
-        plantão caríssimo puxaria a média e esconderia justamente o que se quer achar.</div>
+        <b>mediana da própria especialidade ${escopoRef()}</b>${estado.postos.size
+          ? ' — com o filtro ligado, só esses postos entram na conta' : ''}.
+        Mediana, e não média, porque um único plantão caríssimo puxaria a média e esconderia
+        justamente o que se quer achar.</div>
       <ul>${itens.join('')}</ul>
       ${frageis.size ? `<div class="obs">⚠ A mediana de <b>${[...frageis].map(esc).join(', ')}</b>
         vem de menos de 3 postos — comparação frágil, confira antes de cobrar explicação de alguém.</div>` : ''}
       ${estado.almocoPago ? `<div class="obs">O sinal é calculado sobre a hora <b>sem</b> almoço pago
         (padrão da casa), mesmo com o botão “pagar almoço” ligado — por isso o R$/hora da tabela
         abaixo está menor que o daqui.</div>` : ''}
-      <div class="obs">Fora da curva não quer dizer erro: quer dizer <b>preço acima do que a rede
-        paga na mesma especialidade</b>. Pode ter motivo (plantão difícil de preencher, médico
+      <div class="obs">Fora da curva não quer dizer erro: quer dizer <b>preço acima do que
+        ${estado.postos.size ? 'os postos selecionados pagam' : 'a rede paga'} na mesma
+        especialidade</b>. Pode ter motivo (plantão difícil de preencher, médico
         antigo, posto sem substituto) — o que a página faz é apontar para justificar.</div>
     </div>`);
   }
 
-  const cpv = m.linhas.filter(l => (l.alertas || []).includes('caro_por_vaga'));
+  const cpv = m.linhas.filter(l => l._caro);
   if (cpv.length) {
     blocos.push(`<div class="bloco b-aviso">
       <span class="selo alerta">caro por consulta</span>
@@ -666,8 +811,8 @@ function explicacao(m) {
         return `<li><b>${onde(l)}</b> — <b>${brl(l.custo_por_vaga)}</b> por consulta
           (${num(l.vagas_efetivas)} vaga(s) para ${brl(l.valor_plantao, 0)}) contra a mediana de
           <b>${mv ? brl(mv) : '—'}</b> da ${esc(l.especialidade)}
-          ${l.pct_acima_mediana_vaga != null
-            ? `→ <b class="mais">+${num(l.pct_acima_mediana_vaga, 1)}%</b>` : ''}</li>`;
+          ${l._pctVaga != null
+            ? `→ <b class="mais">+${num(l._pctVaga, 1)}%</b>` : ''}</li>`;
       }).join('')}</ul></div>`);
   }
 
@@ -778,9 +923,20 @@ function tabelaFora() {
 }
 
 function desenha() {
+  // A referência sai da base filtrada só por POSTO e é calculada ANTES de
+  // aplicar os outros filtros — o sinal é o que se quer descobrir, não pode
+  // ser entrada do próprio cálculo.
+  calcularReferencias();
   const ls = plantoes();
+  // Os cards contam sobre a base SEM o filtro de sinal: senão, clicar em "fora
+  // da curva" zeraria os outros três e pareceria que sumiram.
+  const base = plantoes(true);
+  document.getElementById('carimbo').textContent =
+    `${num(DADOS.resumo.medicos)} médicos · ${num(DADOS.resumo.especialidades)} especialidades · `
+    + `cadastro de ${new Date(DADOS.gerado_em).toLocaleDateString('pt-BR')}`;
+  avisoData();
   tiles(ls);
-  alertas(ls);
+  alertas(base);
 
   const esp = agrupa(ls, l => l.especialidade);
   document.getElementById('notaEsp').textContent = estado.especialidade
@@ -802,7 +958,7 @@ function desenha() {
 
   const f = [];
   if (estado.especialidade) f.push(`especialidade <b>${esc(estado.especialidade)}</b>`);
-  if (estado.alerta) f.push(`sinal <b>${ROT_ALERTA[estado.alerta][0]}</b>`);
+  if (estado.alerta) f.push(`sinal <b>${ROT_ALERTA()[estado.alerta][0]}</b>`);
   if (estado.postos.size) f.push(`${estado.postos.size} posto(s)`);
   document.getElementById('avisoFiltro').innerHTML = f.length
     ? `<div style="background:var(--accent-soft);border-radius:10px;padding:.6rem .9rem;
@@ -811,7 +967,7 @@ function desenha() {
   const lp = document.getElementById('limpar');
   if (lp) lp.addEventListener('click', () => {
     estado.especialidade = estado.alerta = null; estado.postos.clear();
-    document.querySelectorAll('#filtroPostos .chip').forEach(c => c.setAttribute('aria-pressed','false'));
+    sincronizaChips();
     desenha();
   });
 }
@@ -819,6 +975,26 @@ function desenha() {
 /* ═══════════════════════════════════════════════════════════════════════════
    Início
    ═══════════════════════════════════════════════════════════════════════════ */
+/* Grupos de posto — os mesmos de growth.html, qualidade_agenda.html,
+   ctrlq_relatorio.html e tef_dashboard.html. Não deduzir: é divisão societária,
+   não geográfica. */
+const GRUPOS = { altamiro: ['A','B','G','I','N','R','X','Y'],
+                 couto:    ['C','D','J','M','P'] };
+
+/* Mantém os chips coerentes com estado.postos, venha a seleção de onde vier
+   (posto avulso, grupo, ou o botão limpar do aviso de filtro). */
+function sincronizaChips() {
+  document.querySelectorAll('[data-posto]').forEach(c =>
+    c.setAttribute('aria-pressed', estado.postos.has(c.dataset.posto)));
+  const sel = [...estado.postos].sort().join(',');
+  document.querySelectorAll('[data-grupo]').forEach(c => {
+    const g = c.dataset.grupo;
+    const alvo = g === 'todos' ? '' : GRUPOS[g].filter(
+      p => document.querySelector(`[data-posto="${p}"]`)).sort().join(',');
+    c.setAttribute('aria-pressed', g === 'todos' ? !sel : (!!sel && sel === alvo));
+  });
+}
+
 const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho',
                'agosto','setembro','outubro','novembro','dezembro'];
 
@@ -831,29 +1007,134 @@ const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho',
      comparação cai para o último mês que existe de verdade, dizendo qual é;
    - falhou? REAL fica null e o card explica, em vez de inventar percentual. */
 let REAL = null;
+const rotuloMes = m => `${MESES[+m.split('-')[1] - 1]}/${m.split('-')[0]}`;
+
+/* Mês fechado anterior à data de referência: "2026-08-02" → "2026-07". */
+function mesFechadoAntesDe(iso) {
+  const [a, m] = iso.split('-').map(Number);
+  const d = new Date(a, m - 1, 1); d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 async function carregarRealizado() {
   try {
     const r = await fetch('/json_consolidado/consolidado_mensal_por_posto.json',
                           { credentials: 'same-origin', cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
-    const hoje = new Date();
-    const corrente = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
-    const mes = Object.keys(d)
-      .filter(k => /^\d{4}-\d{2}$/.test(k) && k < corrente)
-      .sort().pop();
-    if (!mes) return;
-    const por_posto = {};
-    for (const [p, v] of Object.entries(d[mes] || {})) {
-      const n = Number(v && (v.medico ?? v.custo_medico));
-      if (Number.isFinite(n) && n > 0) por_posto[p] = n;
+    const meses = {};
+    for (const k of Object.keys(d)) {
+      if (!/^\d{4}-\d{2}$/.test(k)) continue;          // ignora chaves _meta
+      const por_posto = {};
+      for (const [p, v] of Object.entries(d[k] || {})) {
+        const n = Number(v && (v.medico ?? v.custo_medico));
+        if (Number.isFinite(n) && n > 0) por_posto[p] = n;
+      }
+      if (Object.keys(por_posto).length) meses[k] = por_posto;
     }
-    if (!Object.keys(por_posto).length) return;
-    const [a, m] = mes.split('-');
-    REAL = { mes, mes_label: `${MESES[+m - 1]}/${a}`, por_posto };
+    if (Object.keys(meses).length) REAL = { meses };
   } catch (e) {
     console.warn('realizado indisponível:', e.message);
   }
+}
+
+/* Qual mês do realizado vale para a data que está sendo olhada — e se ele está
+   em dia. Regra do Cristiano (2026-08-02): número que não é atualizado NÃO PODE
+   EXISTIR. Então, se o consolidado não tiver o último mês fechado, o card não
+   mostra percentual nenhum: mostra o atraso, com o nome do mês que falta.
+   O ETL daquela página atrasa de verdade — a tela dele avisa "3 ciclos
+   atrasado" —, e um percentual calculado sobre junho enquanto se olha agosto é
+   exatamente o tipo de número que parece certo e não é. */
+function mesRealizado(dataRef) {
+  if (!REAL) return null;
+  const esperado = mesFechadoAntesDe(dataRef);
+  const disponiveis = Object.keys(REAL.meses).filter(m => m <= esperado).sort();
+  const mes = disponiveis.pop();
+  if (!mes) return null;
+  return { mes, esperado, atrasado: mes !== esperado,
+           por_posto: REAL.meses[mes] };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Viagem no tempo — ver o cadastro como estava num dia
+   ───────────────────────────────────────────────────────────────────────────
+   A página abre em HOJE, lendo o JSON estático (nginx, com cache). Só quando o
+   usuário escolhe uma data é que o Flask remonta aquele dia das tabelas mc_*,
+   no MESMO formato — daí trocar DADOS e redesenhar basta.
+   O seletor só existe se houver histórico, e só aceita do PRIMEIRO registro em
+   diante: deixar escolher 2025 quando a coleta começou em agosto/2026 devolveria
+   uma tela vazia e sem explicação.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const dataBR = iso => iso.split('-').reverse().join('/');
+
+async function carregarHistorico() {
+  try {
+    const r = await fetch('/api/medico_custo/datas', { credentials: 'same-origin' });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.datas || !d.datas.length) return;   // ainda não há coleta: seletor nem aparece
+    HISTORICO = d;
+    const inp = document.getElementById('dataRef');
+    inp.min = d.primeira;
+    inp.max = DATA_HOJE < d.ultima ? d.ultima : DATA_HOJE;
+    inp.value = DATA_HOJE;
+    document.getElementById('grupoData').hidden = false;
+    inp.addEventListener('change', () => {
+      const v = inp.value;
+      if (!v || v >= DATA_HOJE) return voltarParaHoje();
+      if (v < d.primeira) {                    // trava do navegador não é garantia
+        inp.value = d.primeira;
+        return irParaData(d.primeira);
+      }
+      irParaData(v);
+    });
+    document.getElementById('chipHoje').addEventListener('click', voltarParaHoje);
+  } catch (e) {
+    console.warn('histórico indisponível:', e.message);
+  }
+}
+
+function voltarParaHoje() {
+  estado.data = null;
+  DADOS = DADOS_HOJE;
+  document.getElementById('dataRef').value = DATA_HOJE;
+  document.getElementById('chipHoje').setAttribute('aria-pressed', 'true');
+  desenha();
+}
+
+async function irParaData(iso) {
+  const box = document.getElementById('avisoData');
+  box.innerHTML = `<div class="faixa">carregando o cadastro de ${dataBR(iso)}…</div>`;
+  try {
+    const r = await fetch(`/api/medico_custo/snapshot?data=${iso}`, { credentials: 'same-origin' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || ('HTTP ' + r.status));
+    DADOS = d;
+    estado.data = d.historico.data;
+    document.getElementById('chipHoje').setAttribute('aria-pressed', 'false');
+    desenha();
+  } catch (e) {
+    box.innerHTML = `<div class="faixa aviso">Não consegui montar o cadastro de
+      ${dataBR(iso)}: ${esc(e.message)}. Mostrando o dia de hoje.</div>`;
+    setTimeout(voltarParaHoje, 2500);
+  }
+}
+
+/* A faixa que avisa que a tela NÃO está no presente. Sem ela, um custo menor
+   por causa da data vira "economia" na cabeça de quem olha. */
+function avisoData() {
+  const box = document.getElementById('avisoData');
+  const h = DADOS && DADOS.historico;
+  if (!h) { box.innerHTML = ''; return; }
+  const partes = [`Vendo o cadastro de <b>${dataBR(h.data)}</b> — não é o de hoje.`];
+  if (h.aproximada)
+    partes.push(`Não houve coleta em ${dataBR(h.pedida)}; esta é a data mais próxima antes dela.`);
+  if (!h.completa)
+    partes.push(`<b>Foto incompleta:</b> o posto ${esc(h.postos_falhos)} não respondeu
+      naquela madrugada, então o custo deste dia está menor do que foi de verdade.`);
+  box.innerHTML = `<div class="faixa ${h.completa ? '' : 'aviso'}">${partes.join(' ')}
+    <button class="ver-tabela" id="voltaHoje" style="margin-left:.5rem">voltar para hoje</button></div>`;
+  document.getElementById('voltaHoje').addEventListener('click', voltarParaHoje);
 }
 
 async function iniciar() {
@@ -867,11 +1148,9 @@ async function iniciar() {
        O ETL roda de madrugada — se acabou de subir, aguarde a próxima execução.</div>`;
     return;
   }
+  DADOS_HOJE = DADOS;
   await carregarRealizado();
-
-  document.getElementById('carimbo').textContent =
-    `${num(DADOS.resumo.medicos)} médicos · ${num(DADOS.resumo.especialidades)} especialidades · `
-    + `cadastro de ${new Date(DADOS.gerado_em).toLocaleDateString('pt-BR')}`;
+  await carregarHistorico();
 
   const postos = [...new Set(DADOS.linhas.map(l => l.posto))].sort();
   document.getElementById('filtroPostos').innerHTML = postos.map(p => {
@@ -882,6 +1161,19 @@ async function iniciar() {
     const p = b.dataset.posto;
     estado.postos.has(p) ? estado.postos.delete(p) : estado.postos.add(p);
     b.setAttribute('aria-pressed', estado.postos.has(p));
+    sincronizaChips();
+    desenha();
+  }));
+
+  // Grupos Altamiro / Couto — padrão de todas as páginas do projeto.
+  // Clicar de novo no grupo já selecionado limpa (volta a ser a rede toda).
+  document.querySelectorAll('[data-grupo]').forEach(b => b.addEventListener('click', () => {
+    const g = b.dataset.grupo;
+    const alvo = g === 'todos' ? [] : GRUPOS[g].filter(p => postos.includes(p));
+    const jaEra = alvo.length && alvo.length === estado.postos.size
+                  && alvo.every(p => estado.postos.has(p));
+    estado.postos = new Set(jaEra ? [] : alvo);
+    sincronizaChips();
     desenha();
   }));
 

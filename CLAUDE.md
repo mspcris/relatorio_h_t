@@ -543,6 +543,80 @@ Em 2026-08-02 eu escrevi um dicionário letra→bairro deduzindo e **errei 9 dos
 `cad_endereco` (preferível, porque acompanha mudança de cadastro) ou reusar o
 `alarmes_db`. Nunca inventar.
 
+### A mediana é dos POSTOS SELECIONADOS (2026-08-02)
+
+Filtrou 3 postos, a mediana é a **desses 3** e a comparação acontece só entre
+eles. Comparar Anchieta com a mediana da rede quando se está olhando só Anchieta
+responde outra pergunta.
+
+Por isso o cálculo **saiu do ETL e foi para a tela** (`calcularReferencias()` em
+`medico_custo.html`). Sem filtro o resultado é idêntico ao do Python — medido:
+31 especialidades, 0 divergência de mediana, as mesmas 50 linhas marcadas.
+`referencias` continua no JSON como referência de rede.
+
+A base da mediana é filtrada **só por posto**, de propósito:
+- especialidade — filtrar não muda a mediana daquela especialidade;
+- busca — buscar "Angelica" faria a mediana ser a dela, e todo mundo ficaria
+  "na média" por construção;
+- sinal — é o que se quer descobrir, não pode ser entrada do próprio cálculo.
+  (Por isso `plantoes(ignorarSinal)` e os cards contando sobre a base.)
+
+**O escopo tem que aparecer no texto.** `escopoRef()` devolve "na rede" / "nos 3
+postos A, B, P" / "no posto B", e toda frase que cita mediana usa isso. Número
+certo com legenda errada é pior que número errado. Foi o que aconteceu com
+`ROT_ALERTA`, que era objeto literal no topo do arquivo: avaliado uma vez no
+load, dizia "na rede" para sempre. Virou função.
+
+Exemplo real de por que isso muda decisão — ANGELA MARIA MAGALHAES, GINECOLOGIA
+em A, B e P:
+
+| Base | Mediana | Limite | Agendas dela fora da curva |
+|---|---|---|---|
+| Rede (12 postos) | R$ 132,88 | R$ 172,74 | **4 de 4** (+30 a +32%) |
+| Só A, B, P | R$ 136,00 | R$ 176,80 | nenhuma |
+
+`cadastro_suspeito` **não** entra nessa lógica: problema de cadastro é da linha,
+não depende de com quem ela está sendo comparada. Continua vindo do ETL.
+
+### Histórico diário — ver o cadastro de um dia passado
+
+**Não existe página de comparação** (decisão do Cristiano, 2026-08-02). O que
+existe é um seletor de data no topo da própria página: escolhe o dia e a tela
+inteira passa a mostrar como estava. A página **abre sempre em hoje**.
+
+Guarda MUDANÇA, não foto. Chave da agenda **medida** (776 chaves para 776
+linhas): `posto + id_medico + id_especialidade + dia_semana`. O **horário está
+fora da chave de propósito** — agenda que sai das 7h para as 8h é a mesma agenda
+alterada, não uma removida e outra criada.
+
+| Arquivo | Papel |
+|---|---|
+| `medico_custo_hist_db.py` | Models `mc_execucao`, `mc_agenda_versao`, `mc_mudanca` no RDS |
+| `medico_custo_hist.py` | `registrar()` (chamado pelo ETL) e `linhas_em(data)` |
+| `medico_custo_routes.py` | `/api/medico_custo/datas` e `/snapshot?data=` |
+| `migrate_medico_custo_hist.py` | Cria as tabelas (`--dry-run` disponível) |
+
+**REGRA DE OURO — posto que falhou no ETL não remove agenda nenhuma.** Se um
+posto der timeout, fechar as agendas dele grava "45 agendas removidas,
+−R$ 180 mil/mês". Economia falsa é pior que dado faltando: tem a cara exata do
+resultado que se está procurando. Só postos com `erro=None` são processados; os
+outros ficam congelados. Testado (`removidas == 0` com o posto em erro).
+
+**Hash só sobre `CAMPOS_CADASTRO`.** Nada de derivado (`valor_hora`,
+`custo_mensal`): mexer numa constante do ETL marcaria as 776 agendas como
+alteradas no mesmo dia e o histórico viraria lixo.
+
+**É `detectado_em`, não `alterado_em`** — o cadastro muda às 14h e o ETL só vê
+às 02:50 do dia seguinte. Não inventar precisão que o dado não tem.
+
+Dia reconstruído é remontado com a régua de HOJE (piso, fator) pelo mesmo
+`montar_payload()` do ETL — é isso que torna as datas comparáveis. A régua
+daquele dia fica em `mc_execucao.parametros`.
+
+`export_medico_custo.py` aceita `--dry-run` (não grava JSON nem histórico, só
+imprime o que faria) e `--sem-historico`. Falha do RDS **nunca** derruba o ETL:
+o JSON já foi gravado e perde-se um dia de histórico, não a página.
+
 ### Realizado do card "Nominal × realizado" — de onde sai
 
 Do **mesmo** `json_consolidado/consolidado_mensal_por_posto.json` que alimenta o

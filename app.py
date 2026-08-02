@@ -112,6 +112,13 @@ except Exception as _e:
     import logging
     logging.getLogger(__name__).error("custos_ti_bp não carregado: %s", _e)
 
+try:
+    from medico_custo_routes import medico_custo_bp
+    app.register_blueprint(medico_custo_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("medico_custo_bp não carregado: %s", _e)
+
 PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
 
 # Mapeamento page_key → template para controle de acesso por página

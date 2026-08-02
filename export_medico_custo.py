@@ -526,24 +526,8 @@ def _gravar(caminho: str, payload: dict) -> None:
     os.replace(tmp, caminho)
 
 
-def main() -> int:
-    load_dotenv(os.path.join(BASE_DIR, ".env"))
-    load_dotenv("/opt/relatorio_h_t/.env")
-    print("=== Médico · Custo Efetivo Nominal ===")
-
-    sql = open(SQL_PATH, encoding="utf-8").read()
-    linhas, status = [], {}
-    for p in POSTOS:
-        try:
-            achadas, erro = coletar(p, sql)
-        except Exception:  # noqa: BLE001
-            achadas, erro = [], traceback.format_exc(limit=1).strip()[:200]
-        status[p] = {"posto": p, "nome": nome_posto(p),
-                     "linhas": len(achadas), "erro": erro}
-        linhas.extend(achadas)
-        print(f"  {p} {nome_posto(p):<16} {len(achadas):>5} linhas"
-              + (f"  ERRO: {erro}" if erro else ""))
-
+def classificar(linhas: list[dict]) -> None:
+    """Separa plantão remunerado do resto e diz POR QUE cada linha ficou fora."""
     for l in linhas:
         plantao = (l["valor_plantao"] or 0) >= PISO_PLANTAO_REMUNERADO
         l["tipo_agenda"] = "plantao" if plantao else "sem_custo_plantao"
@@ -556,6 +540,22 @@ def main() -> int:
                            or l["especialidade"] in ESPECIALIDADES_POR_COMISSAO)
             else "exame" if l["especialidade"] in ESPECIALIDADES_EXAME
             else "abaixo_do_piso")
+
+
+def montar_payload(linhas: list[dict], status: dict,
+                   gerado_em: str | None = None) -> dict:
+    """Monta o JSON que a página consome.
+
+    Extraído do main() porque a rota de histórico (/api/medico_custo/snapshot)
+    reconstrói as linhas de um dia passado e precisa devolver EXATAMENTE o mesmo
+    formato. Duas montagens paralelas divergiriam no primeiro campo novo.
+
+    Nota: um dia passado é remontado com a régua de HOJE (piso, fator fora da
+    curva). É o que torna as datas comparáveis entre si — o que mudou na tela
+    foi o cadastro, não o critério. A régua daquele dia fica guardada em
+    mc_execucao.parametros para dar para conferir se algum dia ela mudar.
+    """
+    classificar(linhas)
     referencias = analisar(linhas)
     plantoes = [l for l in linhas if l["tipo_agenda"] == "plantao"]
     outras = [l for l in linhas if l["tipo_agenda"] != "plantao"]
@@ -563,7 +563,7 @@ def main() -> int:
     semanal = sum(l["valor_plantao"] or 0 for l in plantoes)
     mensal = sum(l["custo_mensal"] or 0 for l in plantoes)
     payload = {
-        "gerado_em": datetime.now(_BRT).replace(microsecond=0).isoformat(),
+        "gerado_em": gerado_em or datetime.now(_BRT).replace(microsecond=0).isoformat(),
         "semanas_no_mes": SEMANAS_NO_MES,
         "postos": list(status.values()),
         "nomes_postos": NOMES_POSTOS,
@@ -593,14 +593,83 @@ def main() -> int:
         },
         "linhas": linhas,
     }
-    _gravar(OUT_PATH, payload)
+    return payload
+
+
+def _historico(payload: dict, status: dict, dry_run: bool) -> None:
+    """Grava a foto do dia nas tabelas mc_*.
+
+    NUNCA derruba o ETL: se o RDS estiver fora, o JSON da página já foi gravado
+    e o histórico daquele dia simplesmente não existe — melhor perder um dia de
+    histórico do que a página inteira.
+    """
+    try:
+        import medico_custo_hist as hist
+    except Exception as e:  # noqa: BLE001
+        print(f"  histórico indisponível ({type(e).__name__}: {e}) — pulando")
+        return
+    try:
+        r = hist.registrar(payload["linhas"], status, payload["parametros"],
+                           payload["resumo"], dry_run=dry_run)
+    except Exception as e:  # noqa: BLE001
+        print(f"  ERRO ao gravar histórico: {type(e).__name__}: {str(e)[:200]}")
+        return
+
+    marca = "[DRY-RUN] " if dry_run else ""
+    if r["primeira_carga"]:
+        print(f"\n{marca}PRIMEIRA CARGA — {r['novas']} agendas viram a linha de "
+              "partida (isso não é alarme, é a baseline)")
+    else:
+        print(f"\n{marca}histórico {r['data']}: {r['novas']} nova(s) · "
+              f"{r['alteradas']} alterada(s) · {r['removidas']} removida(s)")
+    if r["postos_falhos"]:
+        print(f"{marca}postos congelados por erro (NÃO marcados como removidos): "
+              + ", ".join(r["postos_falhos"]))
+    for tipo, chave, medico, campo, par, delta in r["detalhe"][:40]:
+        det = f" {campo}: {par[0]} → {par[1]}" if par else ""
+        d = f"  ({delta:+,.2f}/mês)" if delta else ""
+        print(f"  {marca}{tipo:<9} {chave:<28} {(medico or '')[:26]:<26}{det}{d}")
+    if len(r["detalhe"]) > 40:
+        print(f"  {marca}… e mais {len(r['detalhe']) - 40} mudança(s)")
+
+
+def main() -> int:
+    load_dotenv(os.path.join(BASE_DIR, ".env"))
+    load_dotenv("/opt/relatorio_h_t/.env")
+    dry_run = "--dry-run" in sys.argv
+    sem_hist = "--sem-historico" in sys.argv
+    print("=== Médico · Custo Efetivo Nominal ==="
+          + ("  [DRY-RUN: nada será gravado]" if dry_run else ""))
+
+    sql = open(SQL_PATH, encoding="utf-8").read()
+    linhas, status = [], {}
+    for p in POSTOS:
+        try:
+            achadas, erro = coletar(p, sql)
+        except Exception:  # noqa: BLE001
+            achadas, erro = [], traceback.format_exc(limit=1).strip()[:200]
+        status[p] = {"posto": p, "nome": nome_posto(p),
+                     "linhas": len(achadas), "erro": erro}
+        linhas.extend(achadas)
+        print(f"  {p} {nome_posto(p):<16} {len(achadas):>5} linhas"
+              + (f"  ERRO: {erro}" if erro else ""))
+
+    payload = montar_payload(linhas, status)
     r = payload["resumo"]
+    if not dry_run:
+        _gravar(OUT_PATH, payload)
     print(f"\n{r['linhas']} linhas · {r['medicos']} médicos · "
           f"{r['especialidades']} especialidades")
     print(f"custo semanal R$ {r['custo_semanal']:,.2f} · "
           f"mensal projetado R$ {r['custo_mensal']:,.2f}")
     print(f"postos ok {r['postos_ok']} / erro {r['postos_erro']}")
-    print(f"→ {OUT_PATH} ({os.path.getsize(OUT_PATH) / 1024:.0f} KB)")
+    if dry_run:
+        print("[DRY-RUN] JSON não foi gravado")
+    else:
+        print(f"→ {OUT_PATH} ({os.path.getsize(OUT_PATH) / 1024:.0f} KB)")
+
+    if not sem_hist:
+        _historico(payload, status, dry_run)
     return 0 if r["postos_ok"] else 1
 
 
