@@ -30,6 +30,8 @@ COLUNAS_NOVAS = [
     ("ti_centro_custo", "integracao", "VARCHAR(20)",
      # o centro de Comunicação é quem tem a integração da Meta
      "integracao = 'meta' WHERE key = 'comunicacao'"),
+    ("ti_centro_custo", "forma_pagamento_id",
+     "INTEGER REFERENCES ti_forma_pagamento(id) ON DELETE SET NULL", None),
     ("ti_lancamento", "valor_usd", "NUMERIC(14,4) NOT NULL DEFAULT 0",
      # Recalcula o dólar do que já existe: USD é o próprio valor; o resto
      # divide pela cotação que ficou congelada na linha.

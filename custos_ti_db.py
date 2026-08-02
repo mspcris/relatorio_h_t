@@ -128,6 +128,13 @@ class CentroCusto(TiBase):
     # É o que decide onde aparecem o botão "Importar Meta" e o card de consumo
     # por telefone — sem isso eles vazavam para todos os centros.
     integracao = Column(String(20), nullable=True)
+    # Forma de pagamento PADRÃO do centro. Serve para dois casos:
+    #   1) centros cujo total não vem de ti_lancamento (fonte='ia', que lê os
+    #      snapshots do custos_ia) — sem isto o gasto some do gráfico "por forma
+    #      de pagamento" e ele deixa de fechar com o total;
+    #   2) pré-seleção ao lançar uma despesa nova no centro.
+    forma_pagamento_id = Column(Integer, ForeignKey("ti_forma_pagamento.id",
+                                                    ondelete="SET NULL"), nullable=True)
     # href customizado (só usado por centros fonte='ia' apontando p/ /custos_ia)
     href = Column(String(200), nullable=True)
     created_at = Column(DateTime, nullable=False, default=now_brt)
@@ -147,7 +154,8 @@ class CentroCusto(TiBase):
             "id": self.id, "key": self.key, "nome": self.nome,
             "descricao": self.descricao, "icone": self.icone, "cor": self.cor,
             "ordem": self.ordem, "ativo": self.ativo, "fonte": self.fonte,
-            "integracao": self.integracao, "url": self.url,
+            "integracao": self.integracao,
+            "forma_pagamento_id": self.forma_pagamento_id, "url": self.url,
         }
 
 

@@ -237,6 +237,8 @@ def salvar_centro(sess, dados: dict) -> dict:
         centro.ordem = int(dados["ordem"])
     if dados.get("ativo") is not None:
         centro.ativo = bool(dados["ativo"])
+    if "forma_pagamento_id" in dados:
+        centro.forma_pagamento_id = _int_ou_none(dados.get("forma_pagamento_id"))
     if "integracao" in dados:
         integ = (dados.get("integracao") or "").strip() or None
         if integ and integ not in INTEGRACOES:
@@ -654,6 +656,10 @@ def resumo(sess, de: Optional[str] = None, ate: Optional[str] = None) -> dict:
                 _soma(por_mes, m, brl, usd)
                 _soma(por_status, "pago", brl, usd)
                 _soma(por_origem, "ia_snapshot", brl, usd)
+                # sem isto o gasto de IA sumia do gráfico por forma de pagamento
+                # e ele não fechava com o total (medido: faltavam R$ 3.118,93
+                # em jul/26). Cai em "— sem forma —" se o centro não tiver uma.
+                _soma(por_forma, ia_centro.forma_pagamento_id, brl, usd)
             ia_detalhe.append({"competencia": m, "usd": usd, "brl": brl,
                                "cotacao": cot[m], "openai": d.get("openai", 0.0),
                                "groq": d.get("groq", 0.0), "subs": d.get("subs", 0.0)})

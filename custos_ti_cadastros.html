@@ -162,6 +162,15 @@
             gráficos e no menu, então evite repetir entre centros.
           </small>
         </div>
+        <div class="form-group">
+          <label>Forma de pagamento padrão</label>
+          <select class="form-control" id="centroForma"></select>
+          <small class="ti-muted">
+            Usada quando o gasto do centro não vem de um lançamento com forma própria
+            (é o caso do centro de IA, que lê o painel Custos com IA) e como
+            pré-seleção ao lançar uma despesa aqui.
+          </small>
+        </div>
         <div class="custom-control custom-switch">
           <input type="checkbox" class="custom-control-input" id="centroAtivo" checked>
           <label class="custom-control-label" for="centroAtivo">Ativo (aparece no menu)</label>
@@ -280,9 +289,7 @@ function pinta(d) {
       <td class="num">${c.ordem}</td>
       <td>${c.ativo ? '<span class="ti-pill pago">no menu</span>' : '<span class="ti-pill origem">fora do menu</span>'}</td>
       <td class="num">
-        ${c.fonte === 'ia'
-          ? '<span class="ti-muted" title="Centro fixo, alimentado pelo painel Custos com IA">fixo</span>'
-          : `<button class="ti-linkish" data-centro="${c.id}">editar</button>`}
+        <button class="ti-linkish" data-centro="${c.id}">editar</button>
       </td>
     </tr>`).join('');
   tb.querySelectorAll('[data-centro]').forEach(b =>
@@ -339,6 +346,11 @@ function abreCentro(id) {
   document.getElementById('centroIconePrev').className = c ? c.icone : 'fas fa-folder';
   document.getElementById('centroOrdem').value = c ? c.ordem : '';
   document.getElementById('centroAtivo').checked = c ? c.ativo : true;
+  document.getElementById('centroForma').innerHTML =
+    '<option value="">— nenhuma —</option>' + (DADOS.formas || [])
+      .filter(f => f.ativo)
+      .map(f => `<option value="${f.id}"${c && c.forma_pagamento_id === f.id ? ' selected' : ''}>${tiEsc(f.rotulo)}</option>`)
+      .join('');
   document.getElementById('btnExcluirCentro').style.display = c ? '' : 'none';
   document.getElementById('centroUrlHint').textContent = c
     ? `Página: ${c.url}` : 'A página será criada em /custos_ti/…';
@@ -361,6 +373,7 @@ async function salvarCentro() {
         cor: document.getElementById('centroCores').dataset.escolhida,
         ordem: document.getElementById('centroOrdem').value || null,
         ativo: document.getElementById('centroAtivo').checked,
+        forma_pagamento_id: document.getElementById('centroForma').value || null,
       }),
     });
     tiModal('#mdCentro', 'hide');
