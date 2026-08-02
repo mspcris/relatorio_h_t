@@ -304,6 +304,22 @@ def api_meta_status():
     return jsonify({"ok": True, "data": data})
 
 
+@custos_ti_bp.get("/api/custos-ti/meta/detalhe")
+def api_meta_detalhe():
+    """Custo da Meta no período quebrado por telefone e por categoria de preço.
+
+    Uma chamada GET à Graph API por mês do intervalo — só leitura, sem custo.
+    """
+    if not _require_admin():
+        return _deny()
+    try:
+        dados = custos_ti.meta_detalhe(_sess(), request.args.get("de"),
+                                       request.args.get("ate"))
+        return jsonify({"ok": True, "data": dados})
+    except Exception as e:  # noqa: BLE001
+        return _erro(e, "detalhe meta", 500)
+
+
 @custos_ti_bp.post("/api/custos-ti/meta/importar")
 def api_meta_importar():
     email = _require_admin()

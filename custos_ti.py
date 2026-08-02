@@ -844,6 +844,108 @@ def centro_payload(sess, key: str, de: Optional[str] = None,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Detalhamento Meta — por telefone e por categoria de preço
+# ─────────────────────────────────────────────────────────────────────────────
+# Rótulos das categorias da Meta. SERVICE aparece com custo 0 no modelo atual
+# (resposta dentro da janela de 24h), mas o volume dela importa: é o que mostra
+# quanto do tráfego é conversa de verdade e não disparo.
+CATEGORIAS_META = {
+    "MARKETING": "Marketing",
+    "UTILITY": "Utilidade",
+    "AUTHENTICATION": "Autenticação",
+    "SERVICE": "Serviço (resposta em 24h)",
+}
+
+
+def meta_detalhe(sess, de: Optional[str] = None, ate: Optional[str] = None) -> dict:
+    """Custo da Meta no período, quebrado por telefone e por categoria de preço.
+
+    Uma chamada à Graph API por mês (a API não aceita intervalo maior que o
+    mês com granularidade diária de forma confiável). Só GET, sem custo.
+    """
+    import custos_ti_meta as meta
+
+    de, ate = _periodo(de, ate)
+    meses = range_meses(de, ate)
+    cot = {m: get_cotacao(sess, m) for m in meses}
+
+    por_tel: dict[str, dict] = {}
+    por_cat: dict[str, dict] = {}
+    por_mes: list[dict] = []
+    total = {"usd": 0.0, "brl": 0.0, "volume": 0}
+    erros: list[str] = []
+
+    for m in meses:
+        d = meta.fetch_pricing_analytics(m)
+        if not d.get("ok"):
+            erros.append(f"{m}: {d.get('error')}")
+            continue
+        if d.get("error"):          # respondeu, mas sem ponto naquele mês
+            continue
+        usd = float(d["total"] or 0.0)
+        brl = round(usd * cot[m], 2)
+        total["usd"] = round(total["usd"] + usd, 2)
+        total["brl"] = round(total["brl"] + brl, 2)
+        total["volume"] += int(d.get("volume") or 0)
+        por_mes.append({"competencia": m, "usd": round(usd, 2), "brl": brl,
+                        "volume": int(d.get("volume") or 0), "cotacao": cot[m]})
+
+        for tel, linha in (d.get("por_telefone") or {}).items():
+            alvo = por_tel.setdefault(tel, {
+                "numero": tel, "rotulo": linha["rotulo"],
+                "usd": 0.0, "brl": 0.0, "volume": 0, "categorias": {}})
+            alvo["usd"] = round(alvo["usd"] + linha["total"], 2)
+            alvo["brl"] = round(alvo["brl"] + linha["total"] * cot[m], 2)
+            alvo["volume"] += linha["volume"]
+            for cat, c in linha["categorias"].items():
+                cc = alvo["categorias"].setdefault(cat, {"usd": 0.0, "brl": 0.0,
+                                                         "volume": 0})
+                cc["usd"] = round(cc["usd"] + c["custo"], 2)
+                cc["brl"] = round(cc["brl"] + c["custo"] * cot[m], 2)
+                cc["volume"] += c["volume"]
+
+        for cat, custo in (d.get("por_categoria") or {}).items():
+            alvo = por_cat.setdefault(cat, {"categoria": cat,
+                                            "rotulo": CATEGORIAS_META.get(cat, cat),
+                                            "usd": 0.0, "brl": 0.0, "volume": 0})
+            alvo["usd"] = round(alvo["usd"] + custo, 2)
+            alvo["brl"] = round(alvo["brl"] + custo * cot[m], 2)
+
+    # volume por categoria vem da soma dos telefones (a chave de categoria do
+    # payload da Meta traz só custo)
+    for linha in por_tel.values():
+        for cat, c in linha["categorias"].items():
+            if cat in por_cat:
+                por_cat[cat]["volume"] += c["volume"]
+
+    def _pct(v: float) -> float:
+        return round(v / total["usd"] * 100, 1) if total["usd"] else 0.0
+
+    telefones = sorted(por_tel.values(), key=lambda x: x["usd"], reverse=True)
+    for t in telefones:
+        t["pct"] = _pct(t["usd"])
+        t["categorias"] = [
+            {"categoria": c, "rotulo": CATEGORIAS_META.get(c, c), **v}
+            for c, v in sorted(t["categorias"].items(),
+                               key=lambda kv: kv[1]["usd"], reverse=True)
+        ]
+    categorias = sorted(por_cat.values(), key=lambda x: x["usd"], reverse=True)
+    for c in categorias:
+        c["pct"] = _pct(c["usd"])
+
+    return {
+        "periodo": {"de": de, "ate": ate, "meses": meses},
+        "total_usd": total["usd"], "total_brl": total["brl"],
+        "volume": total["volume"],
+        "telefones": telefones, "categorias": categorias, "por_mes": por_mes,
+        "erros": erros,
+        "nota": ("Estimativa da Graph API (pricing_analytics) — é o consumo das "
+                 "mensagens, não a cobrança do cartão. Serviço custa 0 no modelo "
+                 "atual, mas o volume conta."),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Importação Meta → lançamentos
 # ─────────────────────────────────────────────────────────────────────────────
 def importar_meta_texto(sess, texto: str, *, centro_key: str = "comunicacao",

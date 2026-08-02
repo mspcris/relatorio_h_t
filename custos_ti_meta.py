@@ -317,14 +317,60 @@ def _graph_analytics(campo: str, raiz: str) -> tuple[Optional[list], Optional[st
 def _vazio(competencia: str, fonte: str) -> dict:
     return {"ok": False, "error": None, "fonte": fonte, "competencia": competencia,
             "total": 0.0, "moeda": "USD", "volume": 0,
-            "por_categoria": {}, "por_tier": {}, "diario": []}
+            "por_categoria": {}, "por_tier": {}, "por_telefone": {}, "diario": []}
+
+
+_TELEFONES_CACHE: dict = {}
+
+
+def listar_telefones(forcar: bool = False) -> dict:
+    """{numero_normalizado: rótulo} dos telefones da WABA. Cacheado em memória.
+
+    O `pricing_analytics` devolve o número em `phone_number` (ex.: '552124559600');
+    isto traduz para '+55 21 2455-9600 — Central de Atendimento'.
+    """
+    if _TELEFONES_CACHE and not forcar:
+        return _TELEFONES_CACHE
+    cfg = meta_config()
+    if not cfg["waba_id"] or not cfg["token"]:
+        return {}
+    try:
+        r = requests.get(f"{GRAPH_BASE}/{cfg['waba_id']}/phone_numbers",
+                         params={"access_token": cfg["token"], "limit": 50},
+                         timeout=_HTTP_TIMEOUT)
+        if r.status_code != 200:
+            return {}
+        for p in (r.json() or {}).get("data", []):
+            mostrado = p.get("display_phone_number") or p.get("id") or ""
+            nome = (p.get("verified_name") or "").strip()
+            _TELEFONES_CACHE[_so_digitos(mostrado)] = (
+                f"{mostrado} — {nome}" if nome else mostrado)
+    except requests.RequestException:
+        return {}
+    return _TELEFONES_CACHE
+
+
+def _so_digitos(s: str) -> str:
+    return re.sub(r"\D", "", s or "")
+
+
+def rotulo_telefone(numero: str) -> str:
+    """Nome amigável do número, caindo no próprio número quando não conhecido."""
+    d = _so_digitos(numero)
+    mapa = listar_telefones()
+    return mapa.get(d) or mapa.get(d[-11:]) or (numero or "—")
 
 
 def fetch_pricing_analytics(competencia: str, granularity: str = "DAILY") -> dict:
     """Custo aproximado das MENSAGENS do mês (modelo por mensagem, jul/2025+).
 
-    `GET /{waba-id}?fields=pricing_analytics.start().end().granularity()
-        .metric_types(["COST","VOLUME"]).dimensions(["PRICING_CATEGORY","TIER"])`
+    `GET /{waba-id}?fields=pricing_analytics.start().end().granularity(DAILY)
+        .metric_types(["COST","VOLUME"])
+        .dimensions(["PHONE","PRICING_CATEGORY","TIER"])`
+
+    ATENÇÃO à granularidade: `MONTHLY` devolve **200 com data_points vazio** —
+    sem erro nenhum, medido em 2026-08-02 num mês que tinha US$ 1.100 de gasto.
+    Só `DAILY` traz dado. Não trocar para MONTHLY "para economizar pontos".
 
     Só GET. Nunca levanta — devolve sempre um dict com `ok`/`error`.
     """
@@ -334,7 +380,7 @@ def fetch_pricing_analytics(competencia: str, granularity: str = "DAILY") -> dic
         f"pricing_analytics.start({ini}).end({fim})"
         f".granularity({granularity})"
         f'.metric_types(["COST","VOLUME"])'
-        f'.dimensions(["PRICING_CATEGORY","TIER"])'
+        f'.dimensions(["PHONE","PRICING_CATEGORY","TIER"])'
     )
     pontos, erro = _graph_analytics(campo, "pricing_analytics")
     if erro:
@@ -347,8 +393,22 @@ def fetch_pricing_analytics(competencia: str, granularity: str = "DAILY") -> dic
         volume = int(p.get("volume") or 0)
         cat = p.get("pricing_category") or "—"
         tier = p.get("tier") or "—"
+        tel = _so_digitos(p.get("phone_number") or "") or "—"
+
         out["por_categoria"][cat] = round(out["por_categoria"].get(cat, 0.0) + custo, 4)
         out["por_tier"][tier] = round(out["por_tier"].get(tier, 0.0) + custo, 4)
+
+        # por telefone, quebrado por categoria — é o que responde
+        # "quanto o 2455 gastou de marketing?"
+        linha = out["por_telefone"].setdefault(tel, {
+            "numero": tel, "rotulo": rotulo_telefone(tel),
+            "total": 0.0, "volume": 0, "categorias": {}})
+        linha["total"] = round(linha["total"] + custo, 4)
+        linha["volume"] += volume
+        c = linha["categorias"].setdefault(cat, {"custo": 0.0, "volume": 0})
+        c["custo"] = round(c["custo"] + custo, 4)
+        c["volume"] += volume
+
         out["total"] += custo
         out["volume"] += volume
         if p.get("start"):

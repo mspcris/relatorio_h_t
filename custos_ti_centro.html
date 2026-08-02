@@ -159,6 +159,35 @@
             </div>
           </div>
 
+
+          <!-- Detalhamento Meta: por telefone e por categoria de preço -->
+          <div class="card ti-card mb-3" id="cardMeta" style="display:none">
+            <div class="card-header">
+              <h3 class="card-title"><i class="fab fa-whatsapp" style="color:#25d366"></i>
+                Consumo do WhatsApp por número e categoria</h3>
+              <div class="card-tools">
+                <span class="ti-muted" id="metaDetPeriodo"></span>
+                <button class="ti-linkish ml-2" id="btnRecarregaMeta">recarregar</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="metaDetAviso"></div>
+              <div class="row" id="metaDetTelefones"></div>
+              <div style="overflow-x:auto">
+                <table class="ti-tbl" id="tblMetaDet">
+                  <thead><tr>
+                    <th>Número</th><th>Categoria</th>
+                    <th class="num">Custo</th><th class="num">Mensagens</th>
+                    <th class="num">Custo médio</th><th class="num">% do total</th>
+                  </tr></thead>
+                  <tbody></tbody>
+                  <tfoot></tfoot>
+                </table>
+              </div>
+              <p class="ti-muted mt-2 mb-0" id="metaDetNota"></p>
+            </div>
+          </div>
+
           <!-- Lançamentos -->
           <div class="card ti-card mb-4">
             <div class="card-header">
@@ -884,6 +913,82 @@ async function metaApiBuscar(salvar) {
   } finally { btn.disabled = false; }
 }
 
+
+/* ── Detalhamento Meta (por telefone / categoria) ───────────────────────────
+   Só aparece quando a integração está ligada E o período tem consumo. É o que
+   responde "quanto o 2455 gastou de marketing?". */
+let META_DET = null;
+
+async function carregaMetaDetalhe(de, ate) {
+  const card = document.getElementById('cardMeta');
+  if (!card) return;
+  try {
+    const st = await tiApi('/api/custos-ti/meta/status');
+    if (!st.data.api_disponivel) { card.style.display = 'none'; return; }
+    const r = await tiApi(`/api/custos-ti/meta/detalhe?de=${de}&ate=${ate}`);
+    META_DET = r.data;
+    if (!META_DET.telefones.length) { card.style.display = 'none'; return; }
+    card.style.display = '';
+    pintaMetaDetalhe();
+  } catch (e) {
+    card.style.display = 'none';
+    console.warn('detalhe Meta indisponível:', e.message);
+  }
+}
+
+function pintaMetaDetalhe() {
+  const d = META_DET;
+  if (!d) return;
+  const val = (o) => TI_MOEDA === 'USD' ? o.usd : o.brl;
+
+  document.getElementById('metaDetPeriodo').textContent =
+    d.periodo.meses.length === 1 ? tiFmtMes(d.periodo.de)
+      : `${tiFmtMes(d.periodo.de)} a ${tiFmtMes(d.periodo.ate)}`;
+
+  /* um tile por número — a leitura de relance é "quem gastou mais" */
+  document.getElementById('metaDetTelefones').innerHTML = d.telefones.map((t, i) => `
+    <div class="col-md-6 mb-3">
+      <div class="ti-tile">
+        <div class="rot"><span class="swatch" style="background:${TI_PALETA[i % TI_PALETA.length]}"></span>${tiEsc(t.rotulo)}</div>
+        <div class="fig">${tiFmt(val(t))}</div>
+        <div class="sub">${t.volume.toLocaleString('pt-BR')} mensagens · ${tiPctD(t.pct)} do total
+          · ${t.categorias.filter(c => val(c) > 0).map(c =>
+              `${tiEsc(c.rotulo)} ${tiFmt(val(c))}`).join(' · ') || 'sem custo'}</div>
+      </div>
+    </div>`).join('');
+
+  const tb = document.querySelector('#tblMetaDet tbody');
+  const linhas = [];
+  d.telefones.forEach(t => {
+    t.categorias.forEach((c, idx) => {
+      linhas.push(`<tr>
+        <td>${idx === 0 ? '<strong>' + tiEsc(t.rotulo) + '</strong>' : ''}</td>
+        <td>${tiEsc(c.rotulo)}</td>
+        <td class="num">${tiFmt(val(c))}</td>
+        <td class="num">${c.volume.toLocaleString('pt-BR')}</td>
+        <td class="num">${c.volume ? tiFmt(val(c) / c.volume, 4) : '—'}</td>
+        <td class="num">${tiPctD(d.total_usd ? c.usd / d.total_usd * 100 : 0)}</td>
+      </tr>`);
+    });
+  });
+  tb.innerHTML = linhas.join('');
+  document.querySelector('#tblMetaDet tfoot').innerHTML = `<tr>
+      <td colspan="2">Total do período</td>
+      <td class="num">${tiFmt(TI_MOEDA === 'USD' ? d.total_usd : d.total_brl)}</td>
+      <td class="num">${d.volume.toLocaleString('pt-BR')}</td>
+      <td colspan="2"></td>
+    </tr>`;
+
+  document.getElementById('metaDetNota').textContent = d.nota;
+  document.getElementById('metaDetAviso').innerHTML = d.erros.length
+    ? `<div class="ti-msg warn">Alguns meses não vieram: ${tiEsc(d.erros.join(' · '))}</div>` : '';
+}
+
+function tiPctD(v) {
+  return Number(v || 0).toLocaleString('pt-BR',
+    { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+}
+
 /* ── Ciclo de vida ──────────────────────────────────────────────────────── */
 async function carregar(de, ate) {
   const alvo = document.querySelector('.content');
@@ -894,6 +999,7 @@ async function carregar(de, ate) {
     DADOS = r.data;
     desenha();
     tiAvisoCotacao(document.getElementById('avisoCotacao'), r.data);
+    carregaMetaDetalhe(de, ate);
   } catch (e) {
     tiMsg(document.getElementById('globalMsg'), 'Falha ao carregar: ' + e.message, 'err');
   } finally { alvo.classList.remove('ti-loading'); }
@@ -953,7 +1059,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnMetaApi').addEventListener('click', () => metaApiBuscar(false));
   document.getElementById('btnMetaApiSalvar').addEventListener('click', () => metaApiBuscar(true));
 
-  tiMoedaInit(() => { desenha(); tiAvisoCotacao(document.getElementById('avisoCotacao'), DADOS); });
+  tiMoedaInit(() => {
+    desenha();
+    tiAvisoCotacao(document.getElementById('avisoCotacao'), DADOS);
+    pintaMetaDetalhe();
+  });
+  document.getElementById('btnRecarregaMeta').addEventListener('click', () =>
+    carregaMetaDetalhe(document.getElementById('fltDe').value,
+                       document.getElementById('fltAte').value));
   const p = tiPeriodoInit(carregar);
   carregar(p.de, p.ate);
 });
