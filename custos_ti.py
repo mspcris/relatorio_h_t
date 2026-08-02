@@ -673,6 +673,19 @@ def ia_totais_usd(meses: list[str]) -> dict[str, dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Consolidação / payload das telas
 # ─────────────────────────────────────────────────────────────────────────────
+def ultimo_mes_com_dado(sess, centro_id: Optional[int] = None) -> Optional[str]:
+    """Competência mais recente que tem lançamento — o mês que vale abrir.
+
+    Existe porque no dia 2 o mês corrente está vazio e a tela parecia quebrada.
+    Voltar só um mês não bastaria: se o anterior também estiver vazio o problema
+    volta, então a tela pula direto para o último com movimento.
+    """
+    q = sess.query(func.max(Lancamento.competencia))
+    if centro_id:
+        q = q.filter(Lancamento.centro_id == int(centro_id))
+    return q.scalar()
+
+
 def _periodo(de: Optional[str], ate: Optional[str]) -> tuple[str, str]:
     """Default do filtro = mês atual, como pedido."""
     if not de and not ate:
@@ -875,6 +888,7 @@ def home_payload(sess, de: Optional[str] = None, ate: Optional[str] = None) -> d
             for c in evo["por_centro"]
         ],
     }
+    dados["ultimo_mes_com_dado"] = ultimo_mes_com_dado(sess)
     dados["centros"] = [c.to_dict() for c in listar_centros(sess)]
     dados["formas"] = [f.to_dict() for f in listar_formas(sess)]
     dados["gerado_em"] = _now().isoformat(timespec="seconds")
@@ -954,6 +968,7 @@ def centro_payload(sess, key: str, de: Optional[str] = None,
         "ia": ia,
         "cotacao": get_cotacao(sess, ate),
         "cotacoes": cotacoes_detalhe(sess, meses),
+        "ultimo_mes_com_dado": ultimo_mes_com_dado(sess, centro.id),
         "gerado_em": _now().isoformat(timespec="seconds"),
     }
 

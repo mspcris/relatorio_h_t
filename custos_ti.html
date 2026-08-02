@@ -41,6 +41,7 @@
               <input type="month" id="fltAte" class="form-control form-control-sm" aria-label="Competência final">
               <div class="btn-group btn-group-sm ml-2" role="group" aria-label="Atalhos de período">
                 <button type="button" class="btn btn-outline-secondary" data-atalho="1">Mês atual</button>
+                <button type="button" class="btn btn-outline-secondary" id="btnMesAnterior">Mês anterior</button>
                 <button type="button" class="btn btn-outline-secondary" data-atalho="3">3 meses</button>
                 <button type="button" class="btn btn-outline-secondary" data-atalho="6">6 meses</button>
                 <button type="button" class="btn btn-outline-secondary" data-atalho="12">12 meses</button>
@@ -210,7 +211,7 @@ const rotuloFimBarra = {
 };
 
 let chCentro = null, chForma = null, chEvo = null;
-let DADOS = null;
+let DADOS = null, PERIODO_INICIAL = {};
 
 /* Redesenha tudo com o payload que já está em memória. Trocar de moeda não
    refaz request: os dois valores já vieram congelados do servidor. */
@@ -473,6 +474,7 @@ async function carregar(de, ate) {
   try {
     const r = await tiApi(`/api/custos-ti/home?de=${de}&ate=${ate}`);
     DADOS = r.data;
+    if (tiFallbackMes(DADOS, PERIODO_INICIAL, carregar)) return;
     tiMsg(document.getElementById('globalMsg'), '');
     desenha();
   } catch (e) {
@@ -488,8 +490,8 @@ document.addEventListener('DOMContentLoaded', () => {
   tiLigaTabela('btnTblForma', 'tblFormaBox');
   tiLigaTabela('btnTblEvo', 'tblEvoBox');
   tiMoedaInit(desenha);
-  const p = tiPeriodoInit(carregar);
-  carregar(p.de, p.ate);
+  PERIODO_INICIAL = tiPeriodoInit(carregar);
+  carregar(PERIODO_INICIAL.de, PERIODO_INICIAL.ate);
 });
 </script>
 </body>

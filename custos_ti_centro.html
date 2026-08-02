@@ -53,6 +53,7 @@
               <input type="month" id="fltAte" class="form-control form-control-sm" aria-label="Competência final">
               <div class="btn-group btn-group-sm ml-2" role="group" aria-label="Atalhos de período">
                 <button type="button" class="btn btn-outline-secondary" data-atalho="1">Mês atual</button>
+                <button type="button" class="btn btn-outline-secondary" id="btnMesAnterior">Mês anterior</button>
                 <button type="button" class="btn btn-outline-secondary" data-atalho="3">3 meses</button>
                 <button type="button" class="btn btn-outline-secondary" data-atalho="6">6 meses</button>
                 <button type="button" class="btn btn-outline-secondary" data-atalho="12">12 meses</button>
@@ -451,7 +452,7 @@ const TI_CENTRO_INTEGRACAO = {{ (TI_CENTRO.integracao or '') | tojson }};
 const TI_CENTRO_KEY = {{ TI_CENTRO.key | tojson }};
 const TI_CENTRO_COR = {{ TI_CENTRO.cor | tojson }};
 const TI_CENTRO_FONTE = {{ TI_CENTRO.fonte | tojson }};
-let DADOS = null, chMes = null, chConta = null;
+let DADOS = null, chMes = null, chConta = null, PERIODO_INICIAL = {};
 
 /* Trocar de moeda só redesenha — os dois valores já vieram do servidor. */
 function desenha() { if (DADOS) pinta(DADOS); }
@@ -1005,6 +1006,7 @@ async function carregar(de, ate) {
     const r = await tiApi(`/api/custos-ti/centro/${TI_CENTRO_KEY}?de=${de}&ate=${ate}`);
     tiMsg(document.getElementById('globalMsg'), '');
     DADOS = r.data;
+    if (tiFallbackMes(DADOS, PERIODO_INICIAL, carregar)) return;
     desenha();
     tiAvisoCotacao(document.getElementById('avisoCotacao'), r.data);
     carregaMetaDetalhe(de, ate);
@@ -1077,8 +1079,8 @@ document.addEventListener('DOMContentLoaded', () => {
     tiAvisoCotacao(document.getElementById('avisoCotacao'), DADOS);
     pintaMetaDetalhe();
   });
-  const p = tiPeriodoInit(carregar);
-  carregar(p.de, p.ate);
+  PERIODO_INICIAL = tiPeriodoInit(carregar);
+  carregar(PERIODO_INICIAL.de, PERIODO_INICIAL.ate);
 });
 </script>
 </body>

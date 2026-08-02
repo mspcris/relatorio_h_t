@@ -300,12 +300,45 @@ function tiPeriodoInit(onChange) {
       aplica();
     });
   });
+  const btnAnterior = document.getElementById('btnMesAnterior');
+  if (btnAnterior) btnAnterior.addEventListener('click', () => {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    de.value = ate.value =
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    aplica();
+  });
+
   const btnAno = document.getElementById('btnAno');
   if (btnAno) btnAno.addEventListener('click', () => {
     de.value = `${hoje.getFullYear()}-01`;
     ate.value = mesAtual;
     aplica();
   });
-  return { de: de.value, ate: ate.value };
+  /* `escolhido` diz se o período veio da URL (escolha explícita do usuário).
+     Só quando NÃO veio é que a tela pode se mexer sozinha — ver tiFallbackMes. */
+  return { de: de.value, ate: ate.value, escolhido: q.has('de') || q.has('ate') };
+}
+
+/* Mês corrente vazio faz a tela parecer quebrada — no dia 2 não há nada nele.
+   Quando o usuário não pediu período explícito e o mês atual está zerado, pula
+   para o último mês COM lançamento (não só o anterior: ele também pode estar
+   vazio). Roda uma vez só, e avisa que se mexeu. */
+let _jaCaiuPraTras = false;
+function tiFallbackMes(dados, periodoInicial, recarregar) {
+  if (_jaCaiuPraTras || periodoInicial.escolhido) return false;
+  const alvo = dados.ultimo_mes_com_dado;
+  const vazio = !dados.total_brl && !dados.total_usd;
+  if (!vazio || !alvo || alvo >= dados.periodo.ate) return false;
+  _jaCaiuPraTras = true;
+  const de = document.getElementById('fltDe'), ate = document.getElementById('fltAte');
+  de.value = ate.value = alvo;
+  const url = new URL(location.href);
+  url.searchParams.set('de', alvo); url.searchParams.set('ate', alvo);
+  history.replaceState(null, '', url);
+  const box = document.getElementById('globalMsg');
+  if (box) tiMsg(box, `O mês atual ainda não tem lançamento — mostrando `
+    + `${tiFmtMes(alvo)}, o último com movimento.`, 'warn');
+  recarregar(alvo, alvo);
+  return true;
 }
 </script>
