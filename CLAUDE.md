@@ -308,11 +308,24 @@ centros em HTML nenhum — o sidebar destas telas é Jinja, montado a partir de
 `all_pages=True` entra e nenhum admin consegue liberar avulso. **Não** rodar
 `seed_servicos.py` para ele.
 
-**Moeda:** a home consolida em BRL. Cada lançamento guarda o valor ORIGINAL +
-moeda + a cotação usada + `valor_brl` **congelado** no momento do registro —
-mexer na cotação depois não reescreve o histórico. Cotação por competência em
-`ti_cotacao`, com carry-forward do mês anterior e fallback `CUSTOS_TI_USD_BRL`
-(default 5,40).
+**Moeda — os DOIS valores são congelados.** Cada lançamento guarda `valor` +
+`moeda` (original da fatura) e **`valor_brl` E `valor_usd`** calculados no
+momento do registro, mais a `cotacao` usada. A tela tem um switch US$ / R$
+(padrão **dólar**) que só escolhe qual campo mostrar — **não reconverte nada** e
+não faz request novo. Consequência: a despesa em dólar exibe o dólar EXATO da
+fatura, sem passar por cotação alguma; só o valor da moeda oposta é convertido.
+A tabela de lançamentos marca o convertido com `≈`.
+
+Cotação por competência em `ti_cotacao`, com carry-forward do mês anterior e
+fallback `CUSTOS_TI_USD_BRL` (default 5,40). **`cotacoes_detalhe()` devolve a
+PROCEDÊNCIA de cada mês** — própria / herdada de outro mês / padrão do sistema —
+e a tela avisa em amarelo quando o número em real saiu de um fallback. Sem isso
+o usuário não tem como saber se o valor convertido vale alguma coisa.
+
+Lição de 2026-08-02: eu semeei uma cotação de teste (5,42) direto na produção e
+os meses anteriores caíram no fallback de 5,40. Nenhum dos dois era a cotação
+real daquelas datas, e a tela não dizia isso. **Não semear cotação inventada** —
+deixar o mês sem cotação é melhor, porque aí a tela avisa.
 
 **Centro `fonte='ia'`:** o total dele NÃO vem de `ti_lancamento` — vem dos
 snapshots do `custos_ia` (OpenAI + Groq + assinaturas), convertidos pela cotação

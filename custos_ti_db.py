@@ -259,7 +259,11 @@ class Lancamento(TiBase):
     valor = Column(Numeric(14, 4), nullable=False, default=0)
     moeda = Column(String(3), nullable=False, default="BRL")
     cotacao = Column(Numeric(12, 6), nullable=True)     # USD→BRL usada
+    # Os DOIS congelados no registro. Assim a despesa em dólar mostra o dólar
+    # EXATO da fatura — sem passar por cotação nenhuma — e a despesa em real
+    # mostra o real exato. Só o valor da moeda oposta é convertido.
     valor_brl = Column(Numeric(14, 4), nullable=False, default=0)
+    valor_usd = Column(Numeric(14, 4), nullable=False, default=0)
     status = Column(String(12), nullable=False, default="pago")
     origem = Column(String(20), nullable=False, default="manual")
     external_id = Column(String(120), nullable=True)
@@ -297,6 +301,10 @@ class Lancamento(TiBase):
             "forma_rotulo": self.forma.rotulo if self.forma else None,
             "valor": _f(self.valor), "moeda": self.moeda,
             "cotacao": _f(self.cotacao), "valor_brl": _f(self.valor_brl),
+            "valor_usd": _f(self.valor_usd),
+            # True quando o valor daquela moeda é o ORIGINAL da fatura (não
+            # passou por conversão) — a tela marca os convertidos com "≈".
+            "exato_brl": self.moeda == "BRL", "exato_usd": self.moeda == "USD",
             "status": self.status, "origem": self.origem,
             "external_id": self.external_id, "obs": self.obs,
             "created_by": self.created_by,

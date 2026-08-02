@@ -24,6 +24,35 @@ load_dotenv()
 load_dotenv("/opt/relatorio_h_t/.env")
 
 
+# Colunas acrescentadas depois da criação original da tabela.
+# (tabela, coluna, DDL, expressão de backfill ou None)
+COLUNAS_NOVAS = [
+    ("ti_lancamento", "valor_usd", "NUMERIC(14,4) NOT NULL DEFAULT 0",
+     # Recalcula o dólar do que já existe: USD é o próprio valor; o resto
+     # divide pela cotação que ficou congelada na linha.
+     "valor_usd = CASE WHEN moeda = 'USD' THEN valor "
+     "WHEN COALESCE(cotacao, 0) > 0 THEN ROUND(valor / cotacao, 4) ELSE 0 END"),
+]
+
+
+def _adiciona_colunas(db, insp) -> None:
+    from sqlalchemy import text
+    for tabela, coluna, ddl, backfill in COLUNAS_NOVAS:
+        if tabela not in insp.get_table_names():
+            continue
+        existentes = {c["name"] for c in insp.get_columns(tabela)}
+        if coluna in existentes:
+            print(f"  coluna {tabela}.{coluna}: já existe")
+            continue
+        with db.pg_engine.begin() as con:
+            con.execute(text(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {ddl}"))
+            if backfill:
+                r = con.execute(text(f"UPDATE {tabela} SET {backfill}"))
+                print(f"  coluna {tabela}.{coluna}: criada e {r.rowcount} linha(s) recalculada(s)")
+            else:
+                print(f"  coluna {tabela}.{coluna}: criada")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Migration do módulo Custos de TI")
     ap.add_argument("--dry-run", action="store_true",
@@ -63,6 +92,10 @@ def main() -> int:
 
     db.init_ti_db()
     print("Tabelas criadas/verificadas.")
+
+    # create_all() não adiciona coluna em tabela que já existe — colunas novas
+    # entram aqui, uma a uma, de forma idempotente.
+    _adiciona_colunas(db, insp)
 
     if args.sem_seed:
         print("--sem-seed: centros não foram semeados.")

@@ -169,6 +169,15 @@ def para_brl(valor: float, moeda: str, cotacao: float) -> float:
     return round(valor * float(cotacao or COTACAO_FALLBACK), 4)
 
 
+def para_usd(valor: float, moeda: str, cotacao: float) -> float:
+    """Converte para USD. Despesa já em USD passa direto — sem tocar em cotação."""
+    valor = float(valor or 0.0)
+    if (moeda or "BRL").upper() == "USD":
+        return round(valor, 4)
+    cot = float(cotacao or COTACAO_FALLBACK)
+    return round(valor / cot, 4) if cot else 0.0
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Centros de custo
 # ─────────────────────────────────────────────────────────────────────────────
@@ -466,8 +475,11 @@ def salvar_lancamento(sess, dados: dict, *, email: Optional[str] = None) -> dict
     lanc.forma_pagamento_id = _int_ou_none(dados.get("forma_pagamento_id"))
     lanc.valor = valor
     lanc.moeda = moeda
-    lanc.cotacao = cotacao if moeda != "BRL" else None
+    # A cotação fica registrada sempre — mesmo em BRL, porque é ela que gerou o
+    # valor_usd. Sem isso não dá para auditar de onde saiu o número convertido.
+    lanc.cotacao = cotacao
     lanc.valor_brl = para_brl(valor, moeda, cotacao)
+    lanc.valor_usd = para_usd(valor, moeda, cotacao)
     lanc.status = status
     lanc.obs = (dados.get("obs") or "").strip() or None
     if dados.get("external_id"):
@@ -574,18 +586,32 @@ def resumo(sess, de: Optional[str] = None, ate: Optional[str] = None) -> dict:
 
     lancs = listar_lancamentos(sess, de, ate)
 
-    por_centro: dict[int, float] = {}
-    por_centro_mes: dict[int, dict[str, float]] = {}
-    por_forma: dict[Optional[int], float] = {}
-    por_conta: dict[str, float] = {}
-    por_mes: dict[str, float] = {m: 0.0 for m in meses}
-    por_status = {"pago": 0.0, "previsto": 0.0}
-    por_origem: dict[str, float] = {}
+    # Cada balde acumula BRL e USD lado a lado. A tela escolhe qual mostrar, e
+    # nenhum dos dois é derivado do outro na hora de exibir — ambos vêm dos
+    # valores congelados no lançamento.
+    def _bal():
+        return {"brl": 0.0, "usd": 0.0}
+
+    def _soma(d: dict, chave, brl: float, usd: float):
+        b = d.setdefault(chave, _bal())
+        b["brl"] = round(b["brl"] + brl, 2)
+        b["usd"] = round(b["usd"] + usd, 2)
+
+    por_centro: dict[int, dict] = {}
+    por_centro_mes: dict[int, dict[str, dict]] = {}
+    por_forma: dict[Optional[int], dict] = {}
+    por_conta: dict[str, dict] = {}
+    por_mes: dict[str, dict] = {m: _bal() for m in meses}
+    por_status = {"pago": _bal(), "previsto": _bal()}
+    por_origem: dict[str, dict] = {}
     previstos: list[dict] = []
+    # quantos lançamentos daquela moeda são valor ORIGINAL (não convertido)
+    exatos = {"brl": 0, "usd": 0}
 
     for l in lancs:
-        v = float(l.valor_brl or 0.0)
-        por_status[l.status] = round(por_status.get(l.status, 0.0) + v, 2)
+        brl = float(l.valor_brl or 0.0)
+        usd = float(l.valor_usd or 0.0)
+        _soma(por_status, l.status, brl, usd)
         # REALIZADO vs PREVISTO: só o que foi pago entra nos totais e gráficos.
         # Sem isso a estimativa da Graph API (que entra como 'previsto') somaria
         # EM CIMA da cobrança real do cartão vinda do extrato — o mesmo gasto
@@ -593,91 +619,127 @@ def resumo(sess, de: Optional[str] = None, ate: Optional[str] = None) -> dict:
         if l.status != "pago":
             previstos.append(l.to_dict())
             continue
-        por_centro[l.centro_id] = round(por_centro.get(l.centro_id, 0.0) + v, 2)
-        por_centro_mes.setdefault(l.centro_id, {})
-        por_centro_mes[l.centro_id][l.competencia] = round(
-            por_centro_mes[l.centro_id].get(l.competencia, 0.0) + v, 2)
-        por_forma[l.forma_pagamento_id] = round(
-            por_forma.get(l.forma_pagamento_id, 0.0) + v, 2)
+        exatos["usd" if l.moeda == "USD" else "brl"] += 1
+        _soma(por_centro, l.centro_id, brl, usd)
+        _soma(por_centro_mes.setdefault(l.centro_id, {}), l.competencia, brl, usd)
+        _soma(por_forma, l.forma_pagamento_id, brl, usd)
         rotulo = l.conta.nome if l.conta else (l.fornecedor or l.descricao)
-        por_conta[rotulo] = round(por_conta.get(rotulo, 0.0) + v, 2)
-        por_mes[l.competencia] = round(por_mes.get(l.competencia, 0.0) + v, 2)
-        por_origem[l.origem] = round(por_origem.get(l.origem, 0.0) + v, 2)
+        _soma(por_conta, rotulo, brl, usd)
+        _soma(por_mes, l.competencia, brl, usd)
+        _soma(por_origem, l.origem, brl, usd)
 
     # Centro de IA: o total NÃO vem de ti_lancamento, vem dos snapshots do
-    # custos_ia (a fonte da verdade daquele painel). Somado por cima do que
-    # eventualmente foi lançado à mão no mesmo centro.
+    # custos_ia (a fonte da verdade daquele painel). Lá o valor nasce em USD,
+    # então o dólar é o exato e o real é que é convertido.
     ia_centro = next((c for c in centros if c.fonte == "ia"), None)
     ia_usd = ia_totais_usd(meses) if ia_centro else {}
     ia_detalhe = []
     if ia_centro:
         for m in meses:
             d = ia_usd.get(m, {})
-            brl = round(float(d.get("total") or 0.0) * cot[m], 2)
-            if brl:
-                por_centro[ia_centro.id] = round(por_centro.get(ia_centro.id, 0.0) + brl, 2)
-                por_centro_mes.setdefault(ia_centro.id, {})
-                por_centro_mes[ia_centro.id][m] = round(
-                    por_centro_mes[ia_centro.id].get(m, 0.0) + brl, 2)
-                por_mes[m] = round(por_mes.get(m, 0.0) + brl, 2)
-                por_status["pago"] = round(por_status["pago"] + brl, 2)
-                por_origem["ia_snapshot"] = round(
-                    por_origem.get("ia_snapshot", 0.0) + brl, 2)
-            ia_detalhe.append({"competencia": m, "usd": d.get("total", 0.0),
-                               "brl": brl, "openai": d.get("openai", 0.0),
+            usd = round(float(d.get("total") or 0.0), 2)
+            brl = round(usd * cot[m], 2)
+            if usd:
+                exatos["usd"] += 1
+                _soma(por_centro, ia_centro.id, brl, usd)
+                _soma(por_centro_mes.setdefault(ia_centro.id, {}), m, brl, usd)
+                _soma(por_mes, m, brl, usd)
+                _soma(por_status, "pago", brl, usd)
+                _soma(por_origem, "ia_snapshot", brl, usd)
+            ia_detalhe.append({"competencia": m, "usd": usd, "brl": brl,
+                               "cotacao": cot[m], "openai": d.get("openai", 0.0),
                                "groq": d.get("groq", 0.0), "subs": d.get("subs", 0.0)})
-        for m in meses:
-            por_conta_ia = ia_usd.get(m, {})
             for chave, rotulo in (("openai", "OpenAI (API)"), ("groq", "Groq"),
                                   ("subs", "Assinaturas de IA")):
-                brl = round(float(por_conta_ia.get(chave) or 0.0) * cot[m], 2)
-                if brl:
-                    por_conta[rotulo] = round(por_conta.get(rotulo, 0.0) + brl, 2)
+                u = round(float(d.get(chave) or 0.0), 2)
+                if u:
+                    _soma(por_conta, rotulo, round(u * cot[m], 2), u)
 
-    total_brl = round(sum(por_mes.values()), 2)
-    cot_media = round(sum(cot[m] for m in meses) / len(meses), 4) if meses else COTACAO_FALLBACK
+    total = {"brl": round(sum(b["brl"] for b in por_mes.values()), 2),
+             "usd": round(sum(b["usd"] for b in por_mes.values()), 2)}
+    n = len(meses) or 1
+
+    def _pct(b: dict) -> dict:
+        return {"brl": round(b["brl"] / total["brl"] * 100, 1) if total["brl"] else 0.0,
+                "usd": round(b["usd"] / total["usd"] * 100, 1) if total["usd"] else 0.0}
+
+    def _ordena(d: dict):
+        return sorted(d.items(), key=lambda kv: kv[1]["brl"], reverse=True)
 
     formas = {f.id: f for f in listar_formas(sess)}
     return {
         "periodo": {"de": de, "ate": ate, "meses": meses,
                     "mes_atual": mes_atual(), "um_mes": len(meses) == 1},
-        "cotacao": {"por_mes": cot, "media": cot_media,
-                    "fallback": COTACAO_FALLBACK},
-        "total_brl": total_brl,
-        "total_usd": round(total_brl / cot_media, 2) if cot_media else 0.0,
-        "media_mensal_brl": round(total_brl / len(meses), 2) if meses else 0.0,
+        "cotacao": {"por_mes": cot, "fallback": COTACAO_FALLBACK,
+                    "detalhe": cotacoes_detalhe(sess, meses)},
+        "total_brl": total["brl"], "total_usd": total["usd"],
+        "media_mensal_brl": round(total["brl"] / n, 2),
+        "media_mensal_usd": round(total["usd"] / n, 2),
+        # quantos lançamentos têm valor ORIGINAL em cada moeda — a tela usa para
+        # dizer se o número que está na frente do usuário é exato ou convertido
+        "exatos": exatos,
         "por_centro": [
             {"centro_id": cid, "key": por_id[cid].key, "nome": por_id[cid].nome,
              "cor": por_id[cid].cor, "icone": por_id[cid].icone,
              "url": por_id[cid].url, "fonte": por_id[cid].fonte,
-             "total_brl": v,
-             "pct": round(v / total_brl * 100, 1) if total_brl else 0.0,
-             "por_mes": por_centro_mes.get(cid, {})}
-            for cid, v in sorted(por_centro.items(), key=lambda kv: kv[1], reverse=True)
-            if cid in por_id
+             "total_brl": b["brl"], "total_usd": b["usd"],
+             "pct_brl": _pct(b)["brl"], "pct_usd": _pct(b)["usd"],
+             "por_mes_brl": {m: v["brl"] for m, v in por_centro_mes.get(cid, {}).items()},
+             "por_mes_usd": {m: v["usd"] for m, v in por_centro_mes.get(cid, {}).items()}}
+            for cid, b in _ordena(por_centro) if cid in por_id
         ],
-        "por_mes": [{"competencia": m, "total_brl": por_mes.get(m, 0.0)} for m in meses],
+        "por_mes": [{"competencia": m, "total_brl": por_mes[m]["brl"],
+                     "total_usd": por_mes[m]["usd"], "cotacao": cot[m]} for m in meses],
         "por_forma": [
             {"forma_id": fid,
              "rotulo": formas[fid].rotulo if fid in formas else "— sem forma —",
              "tipo": formas[fid].tipo if fid in formas else None,
-             "total_brl": v,
-             "pct": round(v / total_brl * 100, 1) if total_brl else 0.0}
-            for fid, v in sorted(por_forma.items(), key=lambda kv: kv[1], reverse=True)
+             "total_brl": b["brl"], "total_usd": b["usd"],
+             "pct_brl": _pct(b)["brl"], "pct_usd": _pct(b)["usd"]}
+            for fid, b in _ordena(por_forma)
         ],
-        "top_contas": [{"nome": k, "total_brl": v} for k, v in
-                       sorted(por_conta.items(), key=lambda kv: kv[1], reverse=True)[:15]],
-        "por_status": por_status,
+        "top_contas": [{"nome": k, "total_brl": b["brl"], "total_usd": b["usd"]}
+                       for k, b in _ordena(por_conta)[:15]],
+        "por_status": {k: v for k, v in por_status.items()},
         "por_origem": por_origem,
-        # Previstos ficam FORA de total_brl de propósito — são estimativa ou
-        # conta a vencer. Vão à parte para a tela mostrar sem misturar.
+        # Previstos ficam FORA do total de propósito — são estimativa ou conta a
+        # vencer. Vão à parte para a tela mostrar sem misturar.
         "previstos": previstos,
-        "total_previsto_brl": por_status.get("previsto", 0.0),
+        "total_previsto_brl": por_status["previsto"]["brl"],
+        "total_previsto_usd": por_status["previsto"]["usd"],
         "ia": {"detalhe": ia_detalhe,
                "centro_key": ia_centro.key if ia_centro else None},
         "qtd_lancamentos": len(lancs) - len(previstos),
         "qtd_previstos": len(previstos),
     }
+
+
+def cotacoes_detalhe(sess, meses: list[str]) -> list[dict]:
+    """Cotação de cada mês do período, dizendo de ONDE ela veio.
+
+    Sem isso o usuário não tem como saber se o número em real foi convertido por
+    uma cotação que alguém digitou, que veio de API, ou por um chute do sistema.
+    """
+    out = []
+    for m in meses:
+        row = sess.get(Cotacao, m)
+        if row:
+            out.append({"competencia": m, "usd_brl": float(row.usd_brl),
+                        "fonte": row.fonte or "manual", "propria": True,
+                        "definida_em": row.updated_at.isoformat(timespec="minutes")
+                        if row.updated_at else None})
+            continue
+        herdada = (sess.query(Cotacao).filter(Cotacao.competencia < m)
+                   .order_by(Cotacao.competencia.desc()).first())
+        if herdada:
+            out.append({"competencia": m, "usd_brl": float(herdada.usd_brl),
+                        "fonte": f"herdada de {herdada.competencia}",
+                        "propria": False, "definida_em": None})
+        else:
+            out.append({"competencia": m, "usd_brl": COTACAO_FALLBACK,
+                        "fonte": "padrão do sistema (não confiável)",
+                        "propria": False, "definida_em": None})
+    return out
 
 
 def home_payload(sess, de: Optional[str] = None, ate: Optional[str] = None) -> dict:
@@ -693,11 +755,10 @@ def home_payload(sess, de: Optional[str] = None, ate: Optional[str] = None) -> d
         "meses": meses_evo,
         "series": [
             {"key": c["key"], "nome": c["nome"], "cor": c["cor"],
-             "valores": [c["por_mes"].get(m, 0.0) for m in meses_evo]}
+             "valores_brl": [c["por_mes_brl"].get(m, 0.0) for m in meses_evo],
+             "valores_usd": [c["por_mes_usd"].get(m, 0.0) for m in meses_evo]}
             for c in evo["por_centro"]
         ],
-        "total": [next((x["total_brl"] for x in evo["por_mes"]
-                        if x["competencia"] == m), 0.0) for m in meses_evo],
     }
     dados["centros"] = [c.to_dict() for c in listar_centros(sess)]
     dados["formas"] = [f.to_dict() for f in listar_formas(sess)]
@@ -715,54 +776,69 @@ def centro_payload(sess, key: str, de: Optional[str] = None,
     meses = range_meses(de, ate)
     lancs = listar_lancamentos(sess, de, ate, centro_id=centro.id)
 
-    por_mes: dict[str, float] = {m: 0.0 for m in meses}
-    por_conta: dict[str, float] = {}
-    total_previsto = 0.0
+    def _bal():
+        return {"brl": 0.0, "usd": 0.0}
+
+    def _soma(d: dict, chave, brl: float, usd: float):
+        b = d.setdefault(chave, _bal())
+        b["brl"] = round(b["brl"] + brl, 2)
+        b["usd"] = round(b["usd"] + usd, 2)
+
+    por_mes: dict[str, dict] = {m: _bal() for m in meses}
+    por_conta: dict[str, dict] = {}
+    previsto = _bal()
+    cot = {m: get_cotacao(sess, m) for m in meses}
     for l in lancs:
-        v = float(l.valor_brl or 0.0)
+        brl, usd = float(l.valor_brl or 0.0), float(l.valor_usd or 0.0)
         # Mesma regra da home: previsto não entra no realizado. Ver resumo().
         if l.status != "pago":
-            total_previsto = round(total_previsto + v, 2)
+            previsto["brl"] = round(previsto["brl"] + brl, 2)
+            previsto["usd"] = round(previsto["usd"] + usd, 2)
             continue
-        por_mes[l.competencia] = round(por_mes.get(l.competencia, 0.0) + v, 2)
+        _soma(por_mes, l.competencia, brl, usd)
         rotulo = l.conta.nome if l.conta else (l.fornecedor or l.descricao)
-        por_conta[rotulo] = round(por_conta.get(rotulo, 0.0) + v, 2)
+        _soma(por_conta, rotulo, brl, usd)
 
     ia = None
     if centro.fonte == "ia":
-        cot = {m: get_cotacao(sess, m) for m in meses}
-        usd = ia_totais_usd(meses)
+        usd_mes = ia_totais_usd(meses)
         ia = []
         for m in meses:
-            d = usd.get(m, {})
-            brl = round(float(d.get("total") or 0.0) * cot[m], 2)
-            por_mes[m] = round(por_mes.get(m, 0.0) + brl, 2)
-            ia.append({"competencia": m, "usd": d.get("total", 0.0), "brl": brl,
+            d = usd_mes.get(m, {})
+            u = round(float(d.get("total") or 0.0), 2)
+            b = round(u * cot[m], 2)
+            _soma(por_mes, m, b, u)
+            ia.append({"competencia": m, "usd": u, "brl": b,
                        "openai": d.get("openai", 0.0), "groq": d.get("groq", 0.0),
                        "subs": d.get("subs", 0.0), "cotacao": cot[m]})
             for chave, rotulo in (("openai", "OpenAI (API)"), ("groq", "Groq"),
                                   ("subs", "Assinaturas de IA")):
-                b = round(float(d.get(chave) or 0.0) * cot[m], 2)
-                if b:
-                    por_conta[rotulo] = round(por_conta.get(rotulo, 0.0) + b, 2)
+                uu = round(float(d.get(chave) or 0.0), 2)
+                if uu:
+                    _soma(por_conta, rotulo, round(uu * cot[m], 2), uu)
 
-    total = round(sum(por_mes.values()), 2)
+    total = {"brl": round(sum(b["brl"] for b in por_mes.values()), 2),
+             "usd": round(sum(b["usd"] for b in por_mes.values()), 2)}
     return {
         "centro": centro.to_dict(),
         "periodo": {"de": de, "ate": ate, "meses": meses,
                     "mes_atual": mes_atual(), "um_mes": len(meses) == 1},
-        "total_brl": total,
-        "total_previsto_brl": total_previsto,
-        "media_mensal_brl": round(total / len(meses), 2) if meses else 0.0,
-        "por_mes": [{"competencia": m, "total_brl": por_mes.get(m, 0.0)} for m in meses],
-        "por_conta": [{"nome": k, "total_brl": v} for k, v in
-                      sorted(por_conta.items(), key=lambda kv: kv[1], reverse=True)],
+        "total_brl": total["brl"], "total_usd": total["usd"],
+        "total_previsto_brl": previsto["brl"], "total_previsto_usd": previsto["usd"],
+        "media_mensal_brl": round(total["brl"] / (len(meses) or 1), 2),
+        "media_mensal_usd": round(total["usd"] / (len(meses) or 1), 2),
+        "por_mes": [{"competencia": m, "total_brl": por_mes[m]["brl"],
+                     "total_usd": por_mes[m]["usd"], "cotacao": cot[m]} for m in meses],
+        "por_conta": [{"nome": k, "total_brl": b["brl"], "total_usd": b["usd"]}
+                      for k, b in sorted(por_conta.items(),
+                                         key=lambda kv: kv[1]["brl"], reverse=True)],
         "contas": [c.to_dict() for c in listar_contas(sess, centro.id)],
         "lancamentos": [l.to_dict() for l in lancs],
         "formas": [f.to_dict() for f in listar_formas(sess)],
         "centros": [c.to_dict() for c in listar_centros(sess)],
         "ia": ia,
         "cotacao": get_cotacao(sess, ate),
+        "cotacoes": cotacoes_detalhe(sess, meses),
         "gerado_em": _now().isoformat(timespec="seconds"),
     }
 

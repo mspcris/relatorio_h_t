@@ -94,20 +94,89 @@ const TI_SURFACE = '#ffffff';
 
 const _mesesCurto = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 
+/* ── Moeda de exibição ────────────────────────────────────────────────────────
+   Cada lançamento guarda valor_brl E valor_usd congelados no registro, então
+   trocar aqui NÃO reconverte nada: só escolhe qual dos dois números mostrar.
+   Padrão dólar — é como a maior parte destes custos é cobrada e medida. */
+let TI_MOEDA = (localStorage.getItem('ti_moeda') || 'USD').toUpperCase();
+if (TI_MOEDA !== 'BRL' && TI_MOEDA !== 'USD') TI_MOEDA = 'USD';
+
 function tiFmtBRL(v, casas) {
   return 'R$ ' + Number(v || 0).toLocaleString('pt-BR',
     { minimumFractionDigits: casas === undefined ? 2 : casas,
       maximumFractionDigits: casas === undefined ? 2 : casas });
 }
-function tiFmtUSD(v) {
+function tiFmtUSD(v, casas) {
   return 'US$ ' + Number(v || 0).toLocaleString('pt-BR',
-    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    { minimumFractionDigits: casas === undefined ? 2 : casas,
+      maximumFractionDigits: casas === undefined ? 2 : casas });
 }
+/* Formata na moeda ativa. */
+function tiFmt(v, casas) {
+  return TI_MOEDA === 'USD' ? tiFmtUSD(v, casas) : tiFmtBRL(v, casas);
+}
+/* Lê o campo da moeda ativa de um item agregado ({total_brl, total_usd}). */
+function tiVal(o, prefixo) {
+  if (!o) return 0;
+  return Number(o[(prefixo || 'total') + '_' + TI_MOEDA.toLowerCase()] || 0);
+}
+function tiSimbolo() { return TI_MOEDA === 'USD' ? 'US$' : 'R$'; }
+
 function tiFmtCompacto(v) {
-  const n = Number(v || 0);
-  if (Math.abs(n) >= 1000000) return 'R$ ' + (n / 1000000).toFixed(1).replace('.', ',') + 'M';
-  if (Math.abs(n) >= 1000) return 'R$ ' + (n / 1000).toFixed(1).replace('.', ',') + 'k';
-  return 'R$ ' + n.toFixed(0);
+  const n = Number(v || 0), s = tiSimbolo();
+  if (Math.abs(n) >= 1000000) return s + ' ' + (n / 1000000).toFixed(1).replace('.', ',') + 'M';
+  if (Math.abs(n) >= 1000) return s + ' ' + (n / 1000).toFixed(1).replace('.', ',') + 'k';
+  return s + ' ' + n.toFixed(0);
+}
+
+/* Liga o seletor US$ / R$. Persiste a escolha e redesenha. */
+function tiMoedaInit(aoTrocar) {
+  const box = document.getElementById('fltMoeda');
+  if (!box) return;
+  function pinta() {
+    box.querySelectorAll('[data-moeda]').forEach(b => {
+      const ativo = b.dataset.moeda === TI_MOEDA;
+      b.classList.toggle('btn-primary', ativo);
+      b.classList.toggle('btn-outline-secondary', !ativo);
+      b.setAttribute('aria-pressed', ativo ? 'true' : 'false');
+    });
+  }
+  box.querySelectorAll('[data-moeda]').forEach(b => {
+    b.addEventListener('click', () => {
+      if (b.dataset.moeda === TI_MOEDA) return;
+      TI_MOEDA = b.dataset.moeda;
+      localStorage.setItem('ti_moeda', TI_MOEDA);
+      pinta();
+      aoTrocar();
+    });
+  });
+  pinta();
+}
+
+/* Aviso de procedência: diz se o número na frente do usuário é o valor
+   original da fatura ou uma conversão, e por qual cotação. */
+function tiAvisoCotacao(el, dados) {
+  if (!el) return;
+  const cots = (dados.cotacao && dados.cotacao.detalhe) || dados.cotacoes || [];
+  const exatos = dados.exatos || {};
+  const convertidos = TI_MOEDA === 'USD' ? (exatos.brl || 0) : (exatos.usd || 0);
+  const duvidosas = cots.filter(c => !c.propria);
+
+  if (!convertidos) {                       // nada foi convertido: número exato
+    el.innerHTML = '';
+    return;
+  }
+  const faixa = [...new Set(cots.map(c => c.usd_brl))];
+  const txtCot = faixa.length === 1
+    ? `US$ 1 = ${tiFmtBRL(faixa[0])}`
+    : `cotação variando de ${tiFmtBRL(Math.min(...faixa))} a ${tiFmtBRL(Math.max(...faixa))}`;
+  const grave = duvidosas.some(c => c.fonte.includes('padrão do sistema'));
+  el.innerHTML = `<div class="ti-msg ${grave ? 'warn' : ''}" style="${grave ? '' : 'background:#eef1f5;border-left:4px solid #adb5bd'}">
+      ${convertidos} lançamento(s) deste total não estão em ${tiSimbolo()} na origem —
+      foram convertidos (${txtCot}).
+      ${grave ? '<strong>Alguns meses usam a cotação padrão do sistema, que não é confiável.</strong>' : ''}
+      <a href="/custos_ti_cadastros#cotacao" class="ti-linkish">ajustar cotações</a>
+    </div>`;
 }
 function tiFmtMes(comp) {
   if (!comp || comp.length < 7) return comp || '';

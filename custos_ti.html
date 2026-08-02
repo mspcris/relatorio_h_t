@@ -46,12 +46,18 @@
                 <button type="button" class="btn btn-outline-secondary" data-atalho="12">12 meses</button>
                 <button type="button" class="btn btn-outline-secondary" id="btnAno">Este ano</button>
               </div>
+              <span class="ti-muted ml-2"><i class="fas fa-coins"></i> Moeda:</span>
+              <div class="btn-group btn-group-sm" role="group" id="fltMoeda" aria-label="Moeda de exibição">
+                <button type="button" class="btn btn-primary" data-moeda="USD">US$</button>
+                <button type="button" class="btn btn-outline-secondary" data-moeda="BRL">R$</button>
+              </div>
               <span class="ml-auto ti-muted" id="infoCotacao"></span>
             </div>
           </div>
 
           <div id="globalMsg"></div>
           <div id="avisoPrevisto"></div>
+          <div id="avisoCotacao"></div>
 
           <!-- Números-cabeçalho: o total é a manchete, não um gráfico de 1 barra -->
           <div class="row mb-3" id="tiles">
@@ -159,7 +165,7 @@
             <div class="card-body p-0">
               <div style="overflow-x:auto">
                 <table class="ti-tbl" id="tblTop">
-                  <thead><tr><th>Conta / serviço</th><th class="num">Valor (R$)</th><th class="num">% do total</th></tr></thead>
+                  <thead><tr><th>Conta / serviço</th><th class="num" id="thTopValor">Valor</th><th class="num">% do total</th></tr></thead>
                   <tbody></tbody>
                 </table>
               </div>
@@ -191,7 +197,7 @@ const rotuloFimBarra = {
       chart.getDatasetMeta(di).data.forEach((barra, i) => {
         const v = ds.data[i];
         if (!v) return;
-        const txt = tiFmtBRL(v, 2);
+        const txt = tiFmt(v, 2);
         /* a escala reserva folga (suggestedMax abaixo), então o rótulo sempre
            cabe FORA da barra — nada de texto branco sobre cor clara */
         if (barra.x + 6 + ctx.measureText(txt).width <= chart.chartArea.right) {
@@ -204,6 +210,23 @@ const rotuloFimBarra = {
 };
 
 let chCentro = null, chForma = null, chEvo = null;
+let DADOS = null;
+
+/* Redesenha tudo com o payload que já está em memória. Trocar de moeda não
+   refaz request: os dois valores já vieram congelados do servidor. */
+function desenha() {
+  const d = DADOS;
+  if (!d) return;
+  pintaTiles(d);
+  pintaCentro(d);
+  pintaForma(d);
+  pintaEvolucao(d);
+  pintaTop(d);
+  tiAvisoCotacao(document.getElementById('avisoCotacao'), d);
+  const cot = d.cotacao.por_mes[d.periodo.ate];
+  document.getElementById('infoCotacao').innerHTML =
+    `US$ 1 = ${tiFmtBRL(cot, 2)} <a href="/custos_ti_cadastros#cotacao" class="ti-linkish">ajustar</a>`;
+}
 
 function barraHorizontal(canvasId, labels, valores, cores, comRotulo) {
   const base = tiChartBase();
@@ -227,7 +250,7 @@ function barraHorizontal(canvasId, labels, valores, cores, comRotulo) {
       indexAxis: 'y',
       plugins: Object.assign({}, base.plugins, {
         tooltip: Object.assign({}, base.plugins.tooltip, {
-          callbacks: { label: (c) => tiFmtBRL(c.parsed.x) },
+          callbacks: { label: (c) => tiFmt(c.parsed.x) },
         }),
         rotuloFimBarra: { ativo: !!comRotulo },
       }),
@@ -268,12 +291,13 @@ function tabelaSimples(boxId, colunas, linhas, total) {
 }
 
 function pintaTiles(d) {
-  document.getElementById('figTotal').textContent = tiFmtBRL(d.total_brl);
+  document.getElementById('figTotal').textContent = tiFmt(tiVal(d));
+  const outra = TI_MOEDA === 'USD' ? tiFmtBRL(d.total_brl) : tiFmtUSD(d.total_usd);
   document.getElementById('subTotal').textContent =
-    `${tiFmtUSD(d.total_usd)} · ${d.periodo.um_mes ? tiFmtMes(d.periodo.de)
+    `${outra} · ${d.periodo.um_mes ? tiFmtMes(d.periodo.de)
       : tiFmtMes(d.periodo.de) + ' a ' + tiFmtMes(d.periodo.ate)}`;
 
-  document.getElementById('figMedia').textContent = tiFmtBRL(d.media_mensal_brl);
+  document.getElementById('figMedia').textContent = tiFmt(tiVal(d, 'media_mensal'));
   document.getElementById('subMedia').textContent =
     `${d.periodo.meses.length} ${d.periodo.meses.length === 1 ? 'mês' : 'meses'} no período`;
 
@@ -282,7 +306,7 @@ function pintaTiles(d) {
   if (maior) {
     elMaior.innerHTML = `<span class="swatch" style="background:${maior.cor}"></span>${tiEsc(maior.nome)}`;
     document.getElementById('subMaior').textContent =
-      `${tiFmtBRL(maior.total_brl)} · ${tiPct(maior.pct)} do total`;
+      `${tiFmt(tiVal(maior))} · ${tiPct(TI_MOEDA === 'USD' ? maior.pct_usd : maior.pct_brl)} do total`;
   } else {
     elMaior.textContent = '—';
     document.getElementById('subMaior').textContent = 'sem custos no período';
@@ -299,7 +323,7 @@ function pintaTiles(d) {
   if (!d.total_previsto_brl) { box.innerHTML = ''; return; }
   const fontes = [...new Set(d.previstos.map(p => ROT_ORIGEM[p.origem] || p.origem))];
   box.innerHTML = `<div class="ti-msg warn">
-      <strong>${tiFmtBRL(d.total_previsto_brl)}</strong> em ${d.qtd_previstos}
+      <strong>${tiFmt(tiVal(d, 'total_previsto'))}</strong> em ${d.qtd_previstos}
       lançamento(s) marcado(s) como <em>previsto</em> — <strong>não</strong> estão
       somados no total acima nem nos gráficos.
       <span class="ti-muted">Origem: ${tiEsc(fontes.join(', '))}.</span>
@@ -311,16 +335,19 @@ function dobraEmOutros(itens) {
   if (itens.length <= 8) return itens;
   const cabeca = itens.slice(0, 7);
   const cauda = itens.slice(7);
+  const somaMes = (campo) => cauda.reduce((acc, x) => {
+    Object.entries(x[campo] || {}).forEach(([m, v]) => {
+      acc[m] = Math.round(((acc[m] || 0) + v) * 100) / 100;
+    });
+    return acc;
+  }, {});
   cabeca.push({
     key: '_outros', nome: `Outros (${cauda.length})`, cor: TI_CINZA,
-    total_brl: Math.round(cauda.reduce((s, x) => s + x.total_brl, 0) * 100) / 100,
-    pct: Math.round(cauda.reduce((s, x) => s + x.pct, 0) * 10) / 10,
-    por_mes: cauda.reduce((acc, x) => {
-      Object.entries(x.por_mes || {}).forEach(([m, v]) => {
-        acc[m] = Math.round(((acc[m] || 0) + v) * 100) / 100;
-      });
-      return acc;
-    }, {}),
+    total_brl: Math.round(cauda.reduce((s, x) => s + (x.total_brl || 0), 0) * 100) / 100,
+    total_usd: Math.round(cauda.reduce((s, x) => s + (x.total_usd || 0), 0) * 100) / 100,
+    pct_brl: Math.round(cauda.reduce((s, x) => s + (x.pct_brl || 0), 0) * 10) / 10,
+    pct_usd: Math.round(cauda.reduce((s, x) => s + (x.pct_usd || 0), 0) * 10) / 10,
+    por_mes_brl: somaMes('por_mes_brl'), por_mes_usd: somaMes('por_mes_usd'),
   });
   return cabeca;
 }
@@ -337,15 +364,16 @@ function pintaCentro(d) {
   }
   wrap.style.display = ''; vazio.style.display = 'none';
   chCentro = barraHorizontal('chCentro', itens.map(i => i.nome),
-    itens.map(i => i.total_brl), itens.map(i => i.cor), true);
+    itens.map(i => tiVal(i)), itens.map(i => i.cor), true);
 
-  tabelaSimples('tblCentroBox', ['Centro de custo', 'Valor (R$)', '% do total'],
-    itens.map(i => [tiEsc(i.nome), tiFmtBRL(i.total_brl), tiPct(i.pct)]),
-    ['Total', tiFmtBRL(d.total_brl), '100,0%']);
+  tabelaSimples('tblCentroBox', ['Centro de custo', `Valor (${tiSimbolo()})`, '% do total'],
+    itens.map(i => [tiEsc(i.nome), tiFmt(tiVal(i)),
+                    tiPct(TI_MOEDA === 'USD' ? i.pct_usd : i.pct_brl)]),
+    ['Total', tiFmt(tiVal(d)), '100,0%']);
 }
 
 function pintaForma(d) {
-  const itens = d.por_forma.filter(f => f.total_brl > 0);
+  const itens = d.por_forma.filter(f => tiVal(f) > 0);
   const vazio = document.getElementById('vazioForma');
   const wrap = document.querySelector('#chForma').parentElement;
   if (chForma) { chForma.destroy(); chForma = null; }
@@ -357,20 +385,25 @@ function pintaForma(d) {
   wrap.style.display = ''; vazio.style.display = 'none';
   /* categorias nominais numa série só → uma cor (slot 1) para todas as barras */
   chForma = barraHorizontal('chForma', itens.map(i => i.rotulo),
-    itens.map(i => i.total_brl), itens.map(() => TI_PALETA[0]), true);
+    itens.map(i => tiVal(i)), itens.map(() => TI_PALETA[0]), true);
 
-  tabelaSimples('tblFormaBox', ['Forma de pagamento', 'Valor (R$)', '% do total'],
-    itens.map(i => [tiEsc(i.rotulo), tiFmtBRL(i.total_brl), tiPct(i.pct)]),
-    ['Total', tiFmtBRL(d.total_brl), '100,0%']);
+  tabelaSimples('tblFormaBox', ['Forma de pagamento', `Valor (${tiSimbolo()})`, '% do total'],
+    itens.map(i => [tiEsc(i.rotulo), tiFmt(tiVal(i)),
+                    tiPct(TI_MOEDA === 'USD' ? i.pct_usd : i.pct_brl)]),
+    ['Total', tiFmt(tiVal(d)), '100,0%']);
 }
 
 function pintaEvolucao(d) {
   const meses = d.evolucao.meses;
   const series = dobraEmOutros(d.evolucao.series.map(s => ({
     key: s.key, nome: s.nome, cor: s.cor,
-    total_brl: s.valores.reduce((a, b) => a + b, 0), pct: 0,
-    por_mes: Object.fromEntries(meses.map((m, i) => [m, s.valores[i]])),
+    total_brl: s.valores_brl.reduce((a, b) => a + b, 0),
+    total_usd: s.valores_usd.reduce((a, b) => a + b, 0),
+    pct_brl: 0, pct_usd: 0,
+    por_mes_brl: Object.fromEntries(meses.map((m, i) => [m, s.valores_brl[i]])),
+    por_mes_usd: Object.fromEntries(meses.map((m, i) => [m, s.valores_usd[i]])),
   })));
+  const mesDa = (s) => (TI_MOEDA === 'USD' ? s.por_mes_usd : s.por_mes_brl) || {};
 
   if (chEvo) { chEvo.destroy(); chEvo = null; }
   const base = tiChartBase();
@@ -380,7 +413,7 @@ function pintaEvolucao(d) {
       labels: meses.map(tiFmtMes),
       datasets: series.map(s => ({
         label: s.nome,
-        data: meses.map(m => s.por_mes[m] || 0),
+        data: meses.map(m => mesDa(s)[m] || 0),
         backgroundColor: s.cor,
         borderColor: TI_SURFACE, borderWidth: 2,   /* folga de 2px entre segmentos */
         borderRadius: 4, borderSkipped: false,
@@ -391,8 +424,8 @@ function pintaEvolucao(d) {
       plugins: Object.assign({}, base.plugins, {
         tooltip: Object.assign({}, base.plugins.tooltip, {
           callbacks: {
-            label: (c) => `${c.dataset.label}: ${tiFmtBRL(c.parsed.y)}`,
-            footer: (its) => 'Total: ' + tiFmtBRL(
+            label: (c) => `${c.dataset.label}: ${tiFmt(c.parsed.y)}`,
+            footer: (its) => 'Total: ' + tiFmt(
               its.reduce((s, i) => s + (i.parsed.y || 0), 0)),
           },
         }),
@@ -409,12 +442,12 @@ function pintaEvolucao(d) {
 
   tabelaSimples('tblEvoBox', ['Mês'].concat(series.map(s => s.nome)).concat(['Total']),
     meses.map(m => [tiFmtMes(m)]
-      .concat(series.map(s => tiFmtBRL(s.por_mes[m] || 0)))
-      .concat([tiFmtBRL(series.reduce((a, s) => a + (s.por_mes[m] || 0), 0))])),
-    ['Total'].concat(series.map(s => tiFmtBRL(
-      meses.reduce((a, m) => a + (s.por_mes[m] || 0), 0))))
-      .concat([tiFmtBRL(series.reduce((a, s) =>
-        a + meses.reduce((x, m) => x + (s.por_mes[m] || 0), 0), 0))]));
+      .concat(series.map(s => tiFmt(mesDa(s)[m] || 0)))
+      .concat([tiFmt(series.reduce((a, s) => a + (mesDa(s)[m] || 0), 0))])),
+    ['Total'].concat(series.map(s => tiFmt(
+      meses.reduce((a, m) => a + (mesDa(s)[m] || 0), 0))))
+      .concat([tiFmt(series.reduce((a, s) =>
+        a + meses.reduce((x, m) => x + (mesDa(s)[m] || 0), 0), 0))]));
 }
 
 function pintaTop(d) {
@@ -424,11 +457,13 @@ function pintaTop(d) {
     tb.innerHTML = ''; vazio.style.display = ''; return;
   }
   vazio.style.display = 'none';
+  document.getElementById('thTopValor').textContent = `Valor (${tiSimbolo()})`;
+  const totalAtivo = tiVal(d);
   tb.innerHTML = d.top_contas.map(c => `
     <tr>
       <td>${tiEsc(c.nome)}</td>
-      <td class="num">${tiFmtBRL(c.total_brl)}</td>
-      <td class="num">${tiPct(d.total_brl ? c.total_brl / d.total_brl * 100 : 0)}</td>
+      <td class="num">${tiFmt(tiVal(c))}</td>
+      <td class="num">${tiPct(totalAtivo ? tiVal(c) / totalAtivo * 100 : 0)}</td>
     </tr>`).join('');
 }
 
@@ -437,16 +472,9 @@ async function carregar(de, ate) {
   alvo.classList.add('ti-loading');       /* segura o render anterior, sem flash */
   try {
     const r = await tiApi(`/api/custos-ti/home?de=${de}&ate=${ate}`);
-    const d = r.data;
+    DADOS = r.data;
     tiMsg(document.getElementById('globalMsg'), '');
-    pintaTiles(d);
-    pintaCentro(d);
-    pintaForma(d);
-    pintaEvolucao(d);
-    pintaTop(d);
-    const cot = d.cotacao.por_mes[d.periodo.ate] || d.cotacao.media;
-    document.getElementById('infoCotacao').innerHTML =
-      `US$ 1 = ${tiFmtBRL(cot, 2)} <a href="/custos_ti_cadastros#cotacao" class="ti-linkish">ajustar</a>`;
+    desenha();
   } catch (e) {
     tiMsg(document.getElementById('globalMsg'),
       'Não consegui carregar os custos: ' + e.message, 'err');
@@ -459,6 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
   tiLigaTabela('btnTblCentro', 'tblCentroBox');
   tiLigaTabela('btnTblForma', 'tblFormaBox');
   tiLigaTabela('btnTblEvo', 'tblEvoBox');
+  tiMoedaInit(desenha);
   const p = tiPeriodoInit(carregar);
   carregar(p.de, p.ate);
 });
