@@ -1,0 +1,55 @@
+{#
+  _custos_ti_sidebar.html — navbar + menu lateral das telas de Custos de TI.
+
+  O bloco "CUSTOS DE TI" é montado a partir de TI_CENTROS, que o app.py lê da
+  tabela ti_centro_custo. Cadastrar um centro de custo cria o item de menu e a
+  página dele — não tem lista fixa em HTML nenhum.
+
+  Variáveis esperadas: TI_CENTROS (lista de dicts), TI_ATIVO (key do item
+  corrente, ou '_home' / '_cadastros'), USER_IS_ADMIN, USER_EMAIL.
+#}
+<nav class="main-header navbar navbar-expand navbar-white navbar-light">
+  <ul class="navbar-nav">
+    <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li>
+    <li class="nav-item d-none d-sm-inline-block"><a href="/custos_ti" class="nav-link">Custos de TI</a></li>
+    <li class="nav-item d-none d-sm-inline-block"><a href="/mais_servicos" class="nav-link">Mais Serviços</a></li>
+  </ul>
+  <ul class="navbar-nav ml-auto">
+    <li class="nav-item"><span class="nav-link ti-muted">{{ USER_EMAIL }}</span></li>
+  </ul>
+</nav>
+
+<aside class="main-sidebar sidebar-dark-primary elevation-4">
+  <a href="/index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+  <div class="sidebar">
+    <nav class="mt-2">
+      <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
+        <li class="nav-item"><a href="/index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home</p></a></li>
+        {% if USER_IS_ADMIN %}
+        <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+        {% endif %}
+        <li class="nav-item"><a href="/kpi_home.html" class="nav-link"><i class="nav-icon fas fa-book"></i><p>KPI's</p></a></li>
+        <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th"></i><p>Mais Serviços</p></a></li>
+
+        <li class="nav-header">CUSTOS DE TI</li>
+        <li class="nav-item">
+          <a href="/custos_ti" class="nav-link{% if TI_ATIVO == '_home' %} active{% endif %}">
+            <i class="nav-icon fas fa-chart-pie" style="color:#2a78d6"></i><p>Visão geral</p>
+          </a>
+        </li>
+        {% for c in TI_CENTROS %}
+        <li class="nav-item">
+          <a href="{{ c.url }}" class="nav-link{% if TI_ATIVO == c.key %} active{% endif %}">
+            <i class="nav-icon {{ c.icone }}" style="color:{{ c.cor }}"></i><p>{{ c.nome }}</p>
+          </a>
+        </li>
+        {% endfor %}
+        <li class="nav-item">
+          <a href="/custos_ti_cadastros" class="nav-link{% if TI_ATIVO == '_cadastros' %} active{% endif %}">
+            <i class="nav-icon fas fa-sliders-h" style="color:#8a9199"></i><p>Cadastros</p>
+          </a>
+        </li>
+      </ul>
+    </nav>
+  </div>
+</aside>

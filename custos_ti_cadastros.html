@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — Custos de TI · Cadastros</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% include "_custos_ti_head.html" %}
+</head>
+
+<body class="hold-transition sidebar-mini layout-fixed">
+  <div class="wrapper">
+    {% include "_custos_ti_sidebar.html" %}
+
+    <div class="content-wrapper">
+      <section class="content-header">
+        <div class="container-fluid">
+          <h1 class="m-0"><i class="fas fa-sliders-h" style="color:#8a9199"></i> Cadastros</h1>
+          <span class="ti-muted">Centros de custo, formas de pagamento e cotação do dólar</span>
+        </div>
+      </section>
+
+      <section class="content">
+        <div class="container-fluid">
+          <div id="globalMsg"></div>
+
+          <!-- Centros de custo -->
+          <div class="card ti-card mb-3">
+            <div class="card-header">
+              <h3 class="card-title">Centros de custo</h3>
+              <div class="card-tools">
+                <button class="btn btn-sm btn-primary" id="btnNovoCentro">
+                  <i class="fas fa-plus"></i> Novo centro
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <p class="ti-muted">
+                Cada centro vira um item no menu à esquerda e ganha uma página própria,
+                onde você cadastra as contas e lança as despesas daquele tema.
+              </p>
+              <div style="overflow-x:auto">
+                <table class="ti-tbl" id="tblCentros">
+                  <thead><tr>
+                    <th style="width:34px"></th><th>Nome</th><th>Descrição</th>
+                    <th>Página</th><th class="num">Ordem</th><th>Status</th><th></th>
+                  </tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Formas de pagamento -->
+          <div class="card ti-card mb-3">
+            <div class="card-header">
+              <h3 class="card-title">Formas de pagamento</h3>
+              <div class="card-tools">
+                <button class="btn btn-sm btn-primary" id="btnNovaForma">
+                  <i class="fas fa-plus"></i> Nova forma
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <p class="ti-muted">
+                Em que cartão cai cada conta, quais são pagas em boleto, pix ou débito
+                automático. O importador da Meta cadastra o cartão sozinho quando
+                encontra um que ainda não existe aqui.
+              </p>
+              <div style="overflow-x:auto">
+                <table class="ti-tbl" id="tblFormas">
+                  <thead><tr>
+                    <th>Nome</th><th>Tipo</th><th>Cartão</th><th>Titular</th>
+                    <th>Venc.</th><th>Moeda</th><th>Status</th><th></th>
+                  </tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div id="vazioFormas" class="ti-empty" style="display:none">
+                <i class="fas fa-credit-card"></i>
+                Nenhuma forma de pagamento cadastrada ainda.
+              </div>
+            </div>
+          </div>
+
+          <!-- Cotação -->
+          <div class="card ti-card mb-4" id="cotacao">
+            <div class="card-header"><h3 class="card-title">Cotação do dólar</h3></div>
+            <div class="card-body">
+              <p class="ti-muted">
+                Usada para converter despesas em dólar (Meta, OpenAI, AWS) na hora do
+                lançamento. O valor fica <strong>congelado</strong> em cada lançamento —
+                mudar a cotação aqui não reescreve o histórico, só vale para o que vier
+                depois. Sem cotação no mês, herda a do mês anterior.
+              </p>
+              <div class="form-row align-items-end">
+                <div class="form-group col-md-3">
+                  <label>Mês</label>
+                  <input type="month" class="form-control" id="cotMes">
+                </div>
+                <div class="form-group col-md-3">
+                  <label>US$ 1 = R$</label>
+                  <input class="form-control" id="cotValor" inputmode="decimal" placeholder="5,40">
+                </div>
+                <div class="form-group col-md-6">
+                  <button class="btn btn-primary" id="btnSalvarCot">Salvar</button>
+                  <button class="btn btn-outline-secondary" id="btnBuscarCot">
+                    <i class="fas fa-sync"></i> Buscar cotação de hoje
+                  </button>
+                </div>
+              </div>
+              <div id="cotMsg"></div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Modal: centro de custo -->
+  <div class="modal fade" id="mdCentro" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Centro de custo</h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="centroMsg"></div>
+        <input type="hidden" id="centroId">
+        <div class="form-group">
+          <label>Nome *</label>
+          <input class="form-control" id="centroNome" maxlength="120" placeholder="Ex.: Banco de Dados">
+          <small class="ti-muted" id="centroUrlHint"></small>
+        </div>
+        <div class="form-group">
+          <label>Descrição</label>
+          <textarea class="form-control" id="centroDescricao" rows="2"
+            placeholder="O que entra neste centro"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-6">
+            <label>Ícone (Font Awesome 5)</label>
+            <div class="input-group">
+              <div class="input-group-prepend"><span class="input-group-text"><i id="centroIconePrev" class="fas fa-folder"></i></span></div>
+              <input class="form-control" id="centroIcone" placeholder="fas fa-database">
+            </div>
+            <small class="ti-muted">
+              <a href="https://fontawesome.com/v5/search?o=r&m=free" target="_blank" rel="noopener">ver ícones</a>
+            </small>
+          </div>
+          <div class="form-group col-6">
+            <label>Ordem no menu</label>
+            <input type="number" class="form-control" id="centroOrdem">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Cor</label>
+          <div id="centroCores" class="d-flex flex-wrap" style="gap:.4rem"></div>
+          <small class="ti-muted">
+            Paleta validada para daltonismo — a cor identifica o centro em todos os
+            gráficos e no menu, então evite repetir entre centros.
+          </small>
+        </div>
+        <div class="custom-control custom-switch">
+          <input type="checkbox" class="custom-control-input" id="centroAtivo" checked>
+          <label class="custom-control-label" for="centroAtivo">Ativo (aparece no menu)</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-danger mr-auto" id="btnExcluirCentro" style="display:none">
+          <i class="fas fa-trash"></i> Excluir
+        </button>
+        <button class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary" id="btnSalvarCentro">Salvar</button>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- Modal: forma de pagamento -->
+  <div class="modal fade" id="mdForma" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Forma de pagamento</h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="formaMsg"></div>
+        <input type="hidden" id="formaId">
+        <div class="form-row">
+          <div class="form-group col-7">
+            <label>Nome *</label>
+            <input class="form-control" id="formaNome" maxlength="120" placeholder="Ex.: Visa corporativo">
+          </div>
+          <div class="form-group col-5">
+            <label>Tipo</label>
+            <select class="form-control" id="formaTipo">
+              <option value="cartao_credito">Cartão de crédito</option>
+              <option value="cartao_debito">Cartão de débito</option>
+              <option value="boleto">Boleto</option>
+              <option value="pix">Pix</option>
+              <option value="debito_automatico">Débito automático</option>
+              <option value="transferencia">Transferência</option>
+              <option value="outro">Outro</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row" id="blocoCartao">
+          <div class="form-group col-6">
+            <label>Bandeira</label>
+            <input class="form-control" id="formaBandeira" placeholder="Visa" list="bandeiras">
+            <datalist id="bandeiras">
+              <option>Visa</option><option>Mastercard</option><option>Amex</option>
+              <option>Elo</option><option>Hipercard</option><option>Diners</option>
+            </datalist>
+          </div>
+          <div class="form-group col-6">
+            <label>4 últimos dígitos</label>
+            <input class="form-control" id="formaUlt4" maxlength="4" inputmode="numeric" placeholder="6852">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-5">
+            <label>Titular</label>
+            <input class="form-control" id="formaTitular" maxlength="120">
+          </div>
+          <div class="form-group col-3">
+            <label>Dia venc.</label>
+            <input type="number" min="1" max="31" class="form-control" id="formaDia">
+          </div>
+          <div class="form-group col-4">
+            <label>Moeda padrão</label>
+            <select class="form-control" id="formaMoeda">
+              <option value="BRL">BRL</option><option value="USD">USD</option><option value="EUR">EUR</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Observação</label>
+          <textarea class="form-control" id="formaObs" rows="2"></textarea>
+        </div>
+        <div class="custom-control custom-switch">
+          <input type="checkbox" class="custom-control-input" id="formaAtivo" checked>
+          <label class="custom-control-label" for="formaAtivo">Ativa</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-danger mr-auto" id="btnExcluirForma" style="display:none">
+          <i class="fas fa-trash"></i> Excluir
+        </button>
+        <button class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary" id="btnSalvarForma">Salvar</button>
+      </div>
+    </div></div>
+  </div>
+
+<script>
+let DADOS = null;
+
+const ROT_TIPO = {
+  cartao_credito: 'Cartão de crédito', cartao_debito: 'Cartão de débito',
+  boleto: 'Boleto', pix: 'Pix', debito_automatico: 'Débito automático',
+  transferencia: 'Transferência', outro: 'Outro',
+};
+
+function slugPrevia(nome) {
+  return (nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
+}
+
+function pinta(d) {
+  DADOS = d;
+  const tb = document.querySelector('#tblCentros tbody');
+  tb.innerHTML = d.centros.map(c => `
+    <tr${c.ativo ? '' : ' style="opacity:.55"'}>
+      <td><i class="${tiEsc(c.icone)}" style="color:${tiEsc(c.cor)}"></i></td>
+      <td><strong>${tiEsc(c.nome)}</strong></td>
+      <td class="ti-muted">${tiEsc(c.descricao || '—')}</td>
+      <td><a href="${tiEsc(c.url)}">${tiEsc(c.url)}</a></td>
+      <td class="num">${c.ordem}</td>
+      <td>${c.ativo ? '<span class="ti-pill pago">no menu</span>' : '<span class="ti-pill origem">fora do menu</span>'}</td>
+      <td class="num">
+        ${c.fonte === 'ia'
+          ? '<span class="ti-muted" title="Centro fixo, alimentado pelo painel Custos com IA">fixo</span>'
+          : `<button class="ti-linkish" data-centro="${c.id}">editar</button>`}
+      </td>
+    </tr>`).join('');
+  tb.querySelectorAll('[data-centro]').forEach(b =>
+    b.addEventListener('click', () => abreCentro(Number(b.dataset.centro))));
+
+  const tf = document.querySelector('#tblFormas tbody');
+  document.getElementById('vazioFormas').style.display = d.formas.length ? 'none' : '';
+  tf.innerHTML = d.formas.map(f => `
+    <tr${f.ativo ? '' : ' style="opacity:.55"'}>
+      <td><strong>${tiEsc(f.nome)}</strong></td>
+      <td>${ROT_TIPO[f.tipo] || f.tipo}</td>
+      <td>${f.ultimos4 ? tiEsc((f.bandeira || '') + ' ···· ' + f.ultimos4) : '—'}</td>
+      <td>${tiEsc(f.titular || '—')}</td>
+      <td>${f.dia_vencimento ? 'dia ' + f.dia_vencimento : '—'}</td>
+      <td>${tiEsc(f.moeda_padrao)}</td>
+      <td>${f.ativo ? '<span class="ti-pill pago">ativa</span>' : '<span class="ti-pill origem">inativa</span>'}</td>
+      <td class="num"><button class="ti-linkish" data-forma="${f.id}">editar</button></td>
+    </tr>`).join('');
+  tf.querySelectorAll('[data-forma]').forEach(b =>
+    b.addEventListener('click', () => abreForma(Number(b.dataset.forma))));
+
+  document.getElementById('cotValor').value =
+    String(d.cotacao_mes).replace('.', ',');
+}
+
+/* ── Centro ─────────────────────────────────────────────────────────────── */
+function montaCores(selecionada) {
+  const box = document.getElementById('centroCores');
+  const usadas = new Set((DADOS.centros || [])
+    .filter(c => c.cor !== selecionada).map(c => c.cor.toLowerCase()));
+  box.innerHTML = TI_PALETA.map((cor, i) => `
+    <button type="button" class="btn btn-sm" data-cor="${cor}"
+      title="Slot ${i + 1}${usadas.has(cor.toLowerCase()) ? ' — já usado por outro centro' : ''}"
+      style="background:${cor};width:34px;height:28px;border-radius:6px;
+             opacity:${usadas.has(cor.toLowerCase()) ? '.35' : '1'};
+             box-shadow:${cor.toLowerCase() === (selecionada || '').toLowerCase()
+               ? '0 0 0 3px #212529' : 'none'}"></button>`).join('');
+  box.querySelectorAll('[data-cor]').forEach(b =>
+    b.addEventListener('click', () => montaCores(b.dataset.cor)));
+  box.dataset.escolhida = selecionada || TI_PALETA[0];
+}
+
+function proximaCorLivre() {
+  const usadas = new Set((DADOS.centros || []).map(c => (c.cor || '').toLowerCase()));
+  return TI_PALETA.find(c => !usadas.has(c.toLowerCase())) || TI_PALETA[0];
+}
+
+function abreCentro(id) {
+  const c = id ? DADOS.centros.find(x => x.id === id) : null;
+  document.getElementById('centroId').value = c ? c.id : '';
+  document.getElementById('centroNome').value = c ? c.nome : '';
+  document.getElementById('centroDescricao').value = c ? (c.descricao || '') : '';
+  document.getElementById('centroIcone').value = c ? c.icone : 'fas fa-folder';
+  document.getElementById('centroIconePrev').className = c ? c.icone : 'fas fa-folder';
+  document.getElementById('centroOrdem').value = c ? c.ordem : '';
+  document.getElementById('centroAtivo').checked = c ? c.ativo : true;
+  document.getElementById('btnExcluirCentro').style.display = c ? '' : 'none';
+  document.getElementById('centroUrlHint').textContent = c
+    ? `Página: ${c.url}` : 'A página será criada em /custos_ti/…';
+  montaCores(c ? c.cor : proximaCorLivre());
+  tiMsg(document.getElementById('centroMsg'), '');
+  $('#mdCentro').modal('show');
+}
+
+async function salvarCentro() {
+  const btn = document.getElementById('btnSalvarCentro');
+  btn.disabled = true;
+  try {
+    const r = await tiApi('/api/custos-ti/centros', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: document.getElementById('centroId').value || null,
+        nome: document.getElementById('centroNome').value,
+        descricao: document.getElementById('centroDescricao').value,
+        icone: document.getElementById('centroIcone').value,
+        cor: document.getElementById('centroCores').dataset.escolhida,
+        ordem: document.getElementById('centroOrdem').value || null,
+        ativo: document.getElementById('centroAtivo').checked,
+      }),
+    });
+    $('#mdCentro').modal('hide');
+    /* Recarrega a página inteira: o menu lateral é montado no servidor a partir
+       dos centros, então um centro novo só aparece nele depois do reload. */
+    location.reload();
+    void r;
+  } catch (e) {
+    tiMsg(document.getElementById('centroMsg'), e.message, 'err');
+  } finally { btn.disabled = false; }
+}
+
+/* ── Forma ──────────────────────────────────────────────────────────────── */
+function ajustaBlocoCartao() {
+  const tipo = document.getElementById('formaTipo').value;
+  document.getElementById('blocoCartao').style.display =
+    tipo.startsWith('cartao') ? '' : 'none';
+}
+
+function abreForma(id) {
+  const f = id ? DADOS.formas.find(x => x.id === id) : null;
+  document.getElementById('formaId').value = f ? f.id : '';
+  document.getElementById('formaNome').value = f ? f.nome : '';
+  document.getElementById('formaTipo').value = f ? f.tipo : 'cartao_credito';
+  document.getElementById('formaBandeira').value = f ? (f.bandeira || '') : '';
+  document.getElementById('formaUlt4').value = f ? (f.ultimos4 || '') : '';
+  document.getElementById('formaTitular').value = f ? (f.titular || '') : '';
+  document.getElementById('formaDia').value = f && f.dia_vencimento ? f.dia_vencimento : '';
+  document.getElementById('formaMoeda').value = f ? f.moeda_padrao : 'BRL';
+  document.getElementById('formaObs').value = f ? (f.obs || '') : '';
+  document.getElementById('formaAtivo').checked = f ? f.ativo : true;
+  document.getElementById('btnExcluirForma').style.display = f ? '' : 'none';
+  ajustaBlocoCartao();
+  tiMsg(document.getElementById('formaMsg'), '');
+  $('#mdForma').modal('show');
+}
+
+async function salvarForma() {
+  const btn = document.getElementById('btnSalvarForma');
+  btn.disabled = true;
+  try {
+    await tiApi('/api/custos-ti/formas', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: document.getElementById('formaId').value || null,
+        nome: document.getElementById('formaNome').value,
+        tipo: document.getElementById('formaTipo').value,
+        bandeira: document.getElementById('formaBandeira').value,
+        ultimos4: document.getElementById('formaUlt4').value,
+        titular: document.getElementById('formaTitular').value,
+        dia_vencimento: document.getElementById('formaDia').value || null,
+        moeda_padrao: document.getElementById('formaMoeda').value,
+        obs: document.getElementById('formaObs').value,
+        ativo: document.getElementById('formaAtivo').checked,
+      }),
+    });
+    $('#mdForma').modal('hide');
+    carregar();
+  } catch (e) {
+    tiMsg(document.getElementById('formaMsg'), e.message, 'err');
+  } finally { btn.disabled = false; }
+}
+
+/* ── Cotação ────────────────────────────────────────────────────────────── */
+async function salvarCotacao(buscar) {
+  try {
+    const valor = (document.getElementById('cotValor').value || '')
+      .replace(/\./g, '').replace(',', '.');
+    const r = await tiApi('/api/custos-ti/cotacao', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mes: document.getElementById('cotMes').value,
+        usd_brl: valor, buscar: !!buscar,
+      }),
+    });
+    document.getElementById('cotValor').value = String(r.cotacao.usd_brl).replace('.', ',');
+    tiMsg(document.getElementById('cotMsg'),
+      `Cotação de ${r.cotacao.competencia}: US$ 1 = ${tiFmtBRL(r.cotacao.usd_brl)}`
+      + (buscar ? ' (buscada agora)' : ''), 'ok');
+  } catch (e) {
+    tiMsg(document.getElementById('cotMsg'), e.message, 'err');
+  }
+}
+
+async function carregaCotacaoDoMes() {
+  try {
+    const r = await tiApi('/api/custos-ti/cotacao?mes=' + document.getElementById('cotMes').value);
+    document.getElementById('cotValor').value = String(r.usd_brl).replace('.', ',');
+  } catch (e) { /* silencioso: o campo só fica com o valor anterior */ }
+}
+
+/* ── Ciclo de vida ──────────────────────────────────────────────────────── */
+async function carregar() {
+  try {
+    const r = await tiApi('/api/custos-ti/cadastros');
+    tiMsg(document.getElementById('globalMsg'), '');
+    pinta(r.data);
+  } catch (e) {
+    tiMsg(document.getElementById('globalMsg'), 'Falha ao carregar: ' + e.message, 'err');
+  }
+}
+
+async function excluir(url, pergunta, modal) {
+  if (!confirm(pergunta)) return;
+  try {
+    const r = await tiApi(url, { method: 'DELETE' });
+    $(modal).modal('hide');
+    if (r.desativado) {
+      tiMsg(document.getElementById('globalMsg'),
+        `Tem ${r.lancamentos} lançamento(s) usando isso — em vez de apagar o histórico, foi desativado.`, 'warn');
+      carregar();
+    } else {
+      location.reload();
+    }
+  } catch (e) { alert(e.message); }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const hoje = new Date();
+  document.getElementById('cotMes').value =
+    `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+
+  document.getElementById('btnNovoCentro').addEventListener('click', () => abreCentro(null));
+  document.getElementById('btnNovaForma').addEventListener('click', () => abreForma(null));
+  document.getElementById('btnSalvarCentro').addEventListener('click', salvarCentro);
+  document.getElementById('btnSalvarForma').addEventListener('click', salvarForma);
+  document.getElementById('formaTipo').addEventListener('change', ajustaBlocoCartao);
+  document.getElementById('centroIcone').addEventListener('input', (e) => {
+    document.getElementById('centroIconePrev').className = e.target.value || 'fas fa-folder';
+  });
+  document.getElementById('centroNome').addEventListener('input', (e) => {
+    if (!document.getElementById('centroId').value) {
+      document.getElementById('centroUrlHint').textContent =
+        e.target.value ? `Página: /custos_ti/${slugPrevia(e.target.value)}`
+                       : 'A página será criada em /custos_ti/…';
+    }
+  });
+  document.getElementById('btnExcluirCentro').addEventListener('click', () =>
+    excluir(`/api/custos-ti/centros/${document.getElementById('centroId').value}`,
+            'Excluir este centro de custo? A página e o item de menu somem.', '#mdCentro'));
+  document.getElementById('btnExcluirForma').addEventListener('click', () =>
+    excluir(`/api/custos-ti/formas/${document.getElementById('formaId').value}`,
+            'Excluir esta forma de pagamento?', '#mdForma'));
+  document.getElementById('btnSalvarCot').addEventListener('click', () => salvarCotacao(false));
+  document.getElementById('btnBuscarCot').addEventListener('click', () => salvarCotacao(true));
+  document.getElementById('cotMes').addEventListener('change', carregaCotacaoDoMes);
+
+  carregar();
+});
+</script>
+</body>
+</html>

@@ -105,6 +105,13 @@ except Exception as _e:
     import logging
     logging.getLogger(__name__).error("custos_ia_bp não carregado: %s", _e)
 
+try:
+    from custos_ti_routes import custos_ti_bp
+    app.register_blueprint(custos_ti_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("custos_ti_bp não carregado: %s", _e)
+
 PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
 
 # Mapeamento page_key → template para controle de acesso por página
@@ -185,6 +192,16 @@ _TEMPLATE_TO_PAGINA = {
     "custos_ia.html":                   "custos_ia",
     "custos_ia":                        "custos_ia",
     "/custos_ia":                       "custos_ia",
+    # Custos de TI — a camada que consolida TODOS os custos de tecnologia (o
+    # Custos com IA virou um centro de custo dentro dele). Mesmo padrão acima:
+    # page_key fora de public.servicos → só all_pages. As páginas dos centros
+    # (/custos_ti/<key>) são dinâmicas e herdam este mesmo page_key.
+    "custos_ti.html":                   "custos_ti",
+    "custos_ti_centro.html":            "custos_ti",
+    "custos_ti_cadastros.html":         "custos_ti",
+    "custos_ti":                        "custos_ti",
+    "/custos_ti":                       "custos_ti",
+    "/custos_ti_cadastros":             "custos_ti",
     # Itens de mais_servicos.html (internos)
     "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
     "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",
@@ -1388,12 +1405,83 @@ def h_acesso_avancado():
     # de usuários comuns, então render_protected_page já devolve 403 pra eles.
     return render_protected_page("acesso_avancado.html")
 
+# ===============================
+# CUSTOS DE TI
+# ===============================
+# O menu lateral destas páginas é montado a partir da tabela ti_centro_custo:
+# cadastrar um centro cria o item de menu E a página /custos_ti/<key>. Por isso
+# o sidebar é Jinja (não dá para ser HTML estático como o resto do projeto).
+_TI_CENTROS_CACHE: list | None = None
+_TI_CENTROS_CACHE_TS: float = 0.0
+_TI_CENTROS_TTL = 30.0
+
+
+def _ti_centros(force: bool = False) -> list:
+    """Centros ativos para o menu. Cache curto — criar centro é raro, mas o
+    usuário espera ver o item novo no menu logo depois de salvar."""
+    global _TI_CENTROS_CACHE, _TI_CENTROS_CACHE_TS
+    import time
+    now = time.time()
+    if (not force and _TI_CENTROS_CACHE is not None
+            and (now - _TI_CENTROS_CACHE_TS) < _TI_CENTROS_TTL):
+        return _TI_CENTROS_CACHE
+    centros = []
+    try:
+        import custos_ti
+        from custos_ti_db import TiSession
+        db = TiSession()
+        try:
+            centros = [c.to_dict() for c in custos_ti.listar_centros(db)]
+        finally:
+            db.close()
+    except Exception as _e:
+        # Sem RDS o menu fica só com "Visão geral" — a página ainda abre e o
+        # erro real aparece na chamada da API, com mensagem legível.
+        import logging
+        logging.getLogger(__name__).warning("custos_ti: centros indisponíveis: %s", _e)
+    _TI_CENTROS_CACHE, _TI_CENTROS_CACHE_TS = centros, now
+    return centros
+
+
+@app.get('/custos_ti')
+@app.get('/custos_ti.html')
+def h_custos_ti():
+    # Restrito a all_pages (mesmo mecanismo do acesso_avancado / custos_ia).
+    return render_protected_page("custos_ti.html",
+                                 TI_CENTROS=_ti_centros(), TI_ATIVO="_home")
+
+
+@app.get('/custos_ti_cadastros')
+def h_custos_ti_cadastros():
+    return render_protected_page("custos_ti_cadastros.html",
+                                 TI_CENTROS=_ti_centros(force=True),
+                                 TI_ATIVO="_cadastros")
+
+
+@app.get('/custos_ti/<key>')
+def h_custos_ti_centro(key):
+    """Página de um centro de custo. A rota é uma só; o conteúdo vem do banco."""
+    centros = _ti_centros(force=True)
+    centro = next((c for c in centros if c["key"] == key), None)
+    if not centro:
+        return render_protected_page("custos_ti.html",
+                                     TI_CENTROS=centros, TI_ATIVO="_home")
+    # Centro fonte='ia' mora na página que já existe (custos_ia.html).
+    if centro.get("fonte") == "ia" and centro.get("url") == "/custos_ia":
+        return redirect("/custos_ia")
+    return render_protected_page("custos_ti_centro.html", TI_CENTROS=centros,
+                                 TI_ATIVO=key, TI_CENTRO=centro)
+
+
 @app.get('/custos_ia')
 @app.get('/custos_ia.html')
 def h_custos_ia():
     # Restrito a all_pages (mesmo mecanismo do acesso_avancado): page_key
     # 'custos_ia' fora do catálogo → 403 para quem não tem all_pages.
-    return render_protected_page("custos_ia.html")
+    # Recebe TI_CENTROS porque agora usa o mesmo menu do Custos de TI — a
+    # página é o centro de custo "IA" dentro dele.
+    return render_protected_page("custos_ia.html",
+                                 TI_CENTROS=_ti_centros(), TI_ATIVO="ia")
 
 @app.get('/higienizacao.html')
 def h_higienizacao():

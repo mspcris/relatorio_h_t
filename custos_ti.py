@@ -1,0 +1,896 @@
+"""
+custos_ti.py — Núcleo do módulo "Custos de TI" (antigo "Custos com IA").
+
+O que muda em relação ao custos_ia:
+  o custos_ia continua existindo e continua sendo a fonte da verdade do gasto
+  com IA (Costs API da OpenAI, print/texto da Groq, assinaturas). Ele virou UM
+  centro de custo dentro do Custos de TI. Este módulo é a camada de cima:
+  centros de custo genéricos (Infra, Banco de Dados, Comunicação...), cadastro
+  de formas de pagamento, lançamento de despesas e a consolidação de tudo.
+
+Moeda: a home consolida em BRL, porque boleto/nota fiscal daqui é em real.
+Cada lançamento guarda o valor ORIGINAL + a moeda + a cotação usada, e o
+valor_brl congelado. Histórico não muda quando o dólar mexe.
+
+Nada aqui gasta dinheiro: só leitura de API (Graph da Meta, cotação) e CRUD no
+Postgres. O único ponto que custa centavos é a leitura de print por visão, que
+segue morando no custos_ia e é disparada à mão.
+"""
+from __future__ import annotations
+
+import logging
+import os
+import re
+from datetime import date, datetime, timedelta, timezone
+from typing import Optional
+
+from sqlalchemy import func
+
+import custos_ti_db as db
+from custos_ti_db import (
+    CentroCusto, Conta, Cotacao, FormaPagamento, Lancamento, TiSession,
+)
+
+log = logging.getLogger(__name__)
+
+_BRT = timezone(timedelta(hours=-3))
+_MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+# Cotação de partida quando o mês ainda não tem nenhuma definida e não existe
+# nenhum mês anterior de onde herdar. Só afeta o primeiro lançamento em USD.
+COTACAO_FALLBACK = float(os.environ.get("CUSTOS_TI_USD_BRL", "5.40") or 5.40)
+
+MESES_PADRAO = 12   # janela do gráfico de evolução
+
+# Paleta categórica validada para daltonismo (mesma ordem fixa do TI_PALETA no
+# front). A cor identifica o CENTRO em todos os gráficos e no menu, então é
+# atribuída na ordem dos slots e nunca reciclada — do 9º centro em diante o
+# gráfico agrupa em "Outros" em vez de inventar uma cor nova.
+PALETA = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100",
+          "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
+
+# Centros criados na primeira execução da migration. O 'ia' é especial: aponta
+# para a página que já existe e o total dele vem dos snapshots do custos_ia.
+CENTROS_SEED = [
+    {"key": "ia", "nome": "IA", "icone": "fas fa-robot", "cor": PALETA[0],
+     "ordem": 10, "fonte": "ia", "href": "/custos_ia",
+     "descricao": "OpenAI, Groq, Anthropic e assinaturas de IA. "
+                  "Os valores vêm do painel Custos com IA."},
+    {"key": "comunicacao", "nome": "Comunicação", "icone": "fab fa-whatsapp",
+     "cor": PALETA[1], "ordem": 20, "fonte": "manual",
+     "descricao": "WhatsApp/Meta, SMS, e-mail transacional, telefonia."},
+    {"key": "infra", "nome": "Infraestrutura", "icone": "fas fa-server",
+     "cor": PALETA[2], "ordem": 30, "fonte": "manual",
+     "descricao": "VMs, hospedagem, domínios, certificados, CDN, backup."},
+    {"key": "banco_dados", "nome": "Banco de Dados", "icone": "fas fa-database",
+     "cor": PALETA[3], "ordem": 40, "fonte": "manual",
+     "descricao": "RDS, instâncias SQL Server, storage e réplicas."},
+    {"key": "software", "nome": "Software e Licenças", "icone": "fas fa-box-open",
+     "cor": PALETA[4], "ordem": 50, "fonte": "manual",
+     "descricao": "SaaS, licenças, ferramentas de desenvolvimento."},
+]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datas / competências
+# ─────────────────────────────────────────────────────────────────────────────
+def mes_atual() -> str:
+    return datetime.now(_BRT).strftime("%Y-%m")
+
+
+def valid_month(m: Optional[str], default: Optional[str] = None) -> str:
+    m = (m or "").strip()
+    if _MONTH_RE.match(m):
+        return m
+    return default or mes_atual()
+
+
+def _add_meses(competencia: str, n: int) -> str:
+    ano, mes = (int(x) for x in competencia.split("-"))
+    total = ano * 12 + (mes - 1) + n
+    return f"{total // 12:04d}-{total % 12 + 1:02d}"
+
+
+def range_meses(de: str, ate: str) -> list[str]:
+    """Lista de competências de `de` até `ate`, inclusive, crescente."""
+    de, ate = valid_month(de), valid_month(ate)
+    if de > ate:
+        de, ate = ate, de
+    out, cur = [], de
+    while cur <= ate and len(out) < 120:   # teto de sanidade (10 anos)
+        out.append(cur)
+        cur = _add_meses(cur, 1)
+    return out
+
+
+def ultimos_meses(n: int = MESES_PADRAO, ate: Optional[str] = None) -> list[str]:
+    ate = valid_month(ate)
+    return range_meses(_add_meses(ate, -(max(1, n) - 1)), ate)
+
+
+def _now() -> datetime:
+    return db.now_brt()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cotação USD→BRL
+# ─────────────────────────────────────────────────────────────────────────────
+def get_cotacao(sess, competencia: str) -> float:
+    """Cotação do mês, com carry-forward do último mês definido antes dele."""
+    competencia = valid_month(competencia)
+    row = sess.get(Cotacao, competencia)
+    if row:
+        return float(row.usd_brl)
+    anterior = (sess.query(Cotacao)
+                .filter(Cotacao.competencia < competencia)
+                .order_by(Cotacao.competencia.desc())
+                .first())
+    if anterior:
+        return float(anterior.usd_brl)
+    return COTACAO_FALLBACK
+
+
+def set_cotacao(sess, competencia: str, usd_brl, fonte: str = "manual") -> dict:
+    competencia = valid_month(competencia)
+    # aceita "5,42" — o usuário digita em pt-BR e a API pode ser chamada direto
+    valor = _dec_ou_none(usd_brl)
+    if valor is None:
+        raise ValueError(f"cotação inválida: {usd_brl!r}")
+    valor = round(valor, 6)
+    if valor <= 0:
+        raise ValueError("cotação precisa ser maior que zero")
+    row = sess.get(Cotacao, competencia)
+    if row:
+        row.usd_brl, row.fonte = valor, fonte
+    else:
+        row = Cotacao(competencia=competencia, usd_brl=valor, fonte=fonte)
+        sess.add(row)
+    sess.commit()
+    return row.to_dict()
+
+
+def fetch_cotacao_usd_brl() -> dict:
+    """Cotação de hoje na AwesomeAPI (grátis, sem chave, só GET)."""
+    import requests
+    try:
+        r = requests.get("https://economia.awesomeapi.com.br/last/USD-BRL", timeout=12)
+        r.raise_for_status()
+        bid = float((r.json().get("USDBRL") or {}).get("bid"))
+        return {"ok": True, "usd_brl": round(bid, 6), "fonte": "awesomeapi"}
+    except Exception as e:  # noqa: BLE001 — cotação é conveniência, não pode derrubar a tela
+        return {"ok": False, "error": str(e), "usd_brl": None}
+
+
+def para_brl(valor: float, moeda: str, cotacao: float) -> float:
+    """Converte para BRL. EUR não tem cotação própria — cai em USD e avisa na UI."""
+    valor = float(valor or 0.0)
+    if (moeda or "BRL").upper() == "BRL":
+        return round(valor, 4)
+    return round(valor * float(cotacao or COTACAO_FALLBACK), 4)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Centros de custo
+# ─────────────────────────────────────────────────────────────────────────────
+_SLUG_RE = re.compile(r"[^a-z0-9_]+")
+
+
+def slugify(texto: str) -> str:
+    import unicodedata
+    base = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode()
+    slug = _SLUG_RE.sub("_", base.strip().lower()).strip("_")
+    return (slug or "centro")[:60]
+
+
+def _proxima_cor_livre(sess) -> str:
+    """Primeiro slot da paleta ainda não usado por outro centro."""
+    usadas = {(c.cor or "").lower() for c in sess.query(CentroCusto).all()}
+    return next((c for c in PALETA if c.lower() not in usadas), PALETA[0])
+
+
+def listar_centros(sess, incluir_inativos: bool = False) -> list[CentroCusto]:
+    q = sess.query(CentroCusto)
+    if not incluir_inativos:
+        q = q.filter(CentroCusto.ativo.is_(True))
+    return q.order_by(CentroCusto.ordem, CentroCusto.nome).all()
+
+
+def get_centro(sess, key: str) -> Optional[CentroCusto]:
+    return sess.query(CentroCusto).filter(CentroCusto.key == key).first()
+
+
+def salvar_centro(sess, dados: dict) -> dict:
+    """Cria ou atualiza um centro. Criar um centro = criar a página e o menu."""
+    cid = dados.get("id")
+    nome = (dados.get("nome") or "").strip()
+    if not nome:
+        raise ValueError("nome do centro de custo é obrigatório")
+
+    centro = sess.get(CentroCusto, int(cid)) if cid else None
+    if centro is None:
+        key = slugify(dados.get("key") or nome)
+        if get_centro(sess, key):
+            sufixo = 2
+            while get_centro(sess, f"{key}_{sufixo}"):
+                sufixo += 1
+            key = f"{key}_{sufixo}"
+        maior = sess.query(func.max(CentroCusto.ordem)).scalar() or 0
+        centro = CentroCusto(key=key, ordem=int(dados.get("ordem") or maior + 10))
+
+    centro.nome = nome
+    centro.descricao = (dados.get("descricao") or "").strip() or None
+    centro.icone = (dados.get("icone") or "").strip() or "fas fa-folder"
+    centro.cor = (dados.get("cor") or "").strip() or _proxima_cor_livre(sess)
+    if dados.get("ordem") is not None:
+        centro.ordem = int(dados["ordem"])
+    if dados.get("ativo") is not None:
+        centro.ativo = bool(dados["ativo"])
+    sess.add(centro)
+    sess.commit()
+    return centro.to_dict()
+
+
+def excluir_centro(sess, centro_id: int) -> dict:
+    """Remove um centro. Recusa se ainda tiver lançamento (não apaga histórico)."""
+    centro = sess.get(CentroCusto, int(centro_id))
+    if not centro:
+        raise ValueError("centro de custo não encontrado")
+    if centro.fonte == "ia":
+        raise ValueError("o centro de IA é fixo (a fonte é o painel Custos com IA)")
+    n = sess.query(func.count(Lancamento.id))\
+            .filter(Lancamento.centro_id == centro.id).scalar() or 0
+    if n:
+        raise ValueError(
+            f"este centro tem {n} lançamento(s). Desative-o em vez de excluir, "
+            "ou mova/exclua os lançamentos antes."
+        )
+    sess.query(Conta).filter(Conta.centro_id == centro.id).delete()
+    sess.delete(centro)
+    sess.commit()
+    return {"removido": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Formas de pagamento
+# ─────────────────────────────────────────────────────────────────────────────
+def listar_formas(sess, incluir_inativas: bool = True) -> list[FormaPagamento]:
+    q = sess.query(FormaPagamento)
+    if not incluir_inativas:
+        q = q.filter(FormaPagamento.ativo.is_(True))
+    return q.order_by(FormaPagamento.ativo.desc(), FormaPagamento.nome).all()
+
+
+def salvar_forma(sess, dados: dict) -> dict:
+    fid = dados.get("id")
+    nome = (dados.get("nome") or "").strip()
+    if not nome:
+        raise ValueError("nome da forma de pagamento é obrigatório")
+    tipo = (dados.get("tipo") or "cartao_credito").strip()
+    if tipo not in db.TIPOS_PAGAMENTO:
+        raise ValueError(f"tipo inválido: {tipo}")
+    moeda = (dados.get("moeda_padrao") or "BRL").upper()
+    if moeda not in db.MOEDAS:
+        raise ValueError(f"moeda inválida: {moeda}")
+
+    ultimos4 = re.sub(r"\D", "", str(dados.get("ultimos4") or ""))[-4:] or None
+    bandeira = (dados.get("bandeira") or "").strip() or None
+    dia = dados.get("dia_vencimento")
+    dia = int(dia) if str(dia or "").strip().isdigit() else None
+    if dia is not None and not (1 <= dia <= 31):
+        raise ValueError("dia de vencimento precisa estar entre 1 e 31")
+
+    forma = sess.get(FormaPagamento, int(fid)) if fid else None
+    if forma is None:
+        existente = _forma_por_cartao(sess, bandeira, ultimos4)
+        if existente:
+            raise ValueError(
+                f"já existe uma forma de pagamento {bandeira} ···· {ultimos4} "
+                f"({existente.nome})."
+            )
+        forma = FormaPagamento()
+
+    forma.nome = nome
+    forma.tipo = tipo
+    forma.bandeira = bandeira
+    forma.ultimos4 = ultimos4
+    forma.titular = (dados.get("titular") or "").strip() or None
+    forma.dia_vencimento = dia
+    forma.moeda_padrao = moeda
+    forma.obs = (dados.get("obs") or "").strip() or None
+    if dados.get("ativo") is not None:
+        forma.ativo = bool(dados["ativo"])
+    sess.add(forma)
+    sess.commit()
+    return forma.to_dict()
+
+
+def _forma_por_cartao(sess, bandeira: Optional[str],
+                      ultimos4: Optional[str]) -> Optional[FormaPagamento]:
+    if not ultimos4:
+        return None
+    return (sess.query(FormaPagamento)
+            .filter(FormaPagamento.ultimos4 == ultimos4,
+                    FormaPagamento.bandeira == bandeira)
+            .first())
+
+
+def excluir_forma(sess, forma_id: int) -> dict:
+    forma = sess.get(FormaPagamento, int(forma_id))
+    if not forma:
+        raise ValueError("forma de pagamento não encontrada")
+    n = sess.query(func.count(Lancamento.id))\
+            .filter(Lancamento.forma_pagamento_id == forma.id).scalar() or 0
+    if n:
+        # Apagar deixaria o histórico sem saber em que cartão foi pago.
+        forma.ativo = False
+        sess.commit()
+        return {"removido": False, "desativado": True, "lancamentos": n}
+    sess.query(Conta).filter(Conta.forma_pagamento_id == forma.id)\
+        .update({Conta.forma_pagamento_id: None})
+    sess.delete(forma)
+    sess.commit()
+    return {"removido": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Contas (serviços contratados dentro de um centro)
+# ─────────────────────────────────────────────────────────────────────────────
+def listar_contas(sess, centro_id: Optional[int] = None,
+                  incluir_inativas: bool = True) -> list[Conta]:
+    q = sess.query(Conta)
+    if centro_id:
+        q = q.filter(Conta.centro_id == int(centro_id))
+    if not incluir_inativas:
+        q = q.filter(Conta.ativo.is_(True))
+    return q.order_by(Conta.ativo.desc(), Conta.nome).all()
+
+
+def salvar_conta(sess, dados: dict) -> dict:
+    nome = (dados.get("nome") or "").strip()
+    if not nome:
+        raise ValueError("nome da conta é obrigatório")
+    centro_id = dados.get("centro_id")
+    conta = sess.get(Conta, int(dados["id"])) if dados.get("id") else None
+    if conta is None:
+        if not centro_id:
+            raise ValueError("centro de custo é obrigatório")
+        conta = Conta(centro_id=int(centro_id))
+    elif centro_id:
+        conta.centro_id = int(centro_id)
+
+    recorrencia = (dados.get("recorrencia") or "mensal").strip()
+    if recorrencia not in db.RECORRENCIAS:
+        raise ValueError(f"recorrência inválida: {recorrencia}")
+    moeda = (dados.get("moeda") or "BRL").upper()
+    if moeda not in db.MOEDAS:
+        raise ValueError(f"moeda inválida: {moeda}")
+
+    conta.nome = nome
+    conta.fornecedor = (dados.get("fornecedor") or "").strip() or None
+    conta.forma_pagamento_id = _int_ou_none(dados.get("forma_pagamento_id"))
+    conta.recorrencia = recorrencia
+    conta.valor_previsto = _dec_ou_none(dados.get("valor_previsto"))
+    conta.moeda = moeda
+    conta.dia_vencimento = _int_ou_none(dados.get("dia_vencimento"))
+    conta.desde = valid_month(dados.get("desde")) if dados.get("desde") else None
+    conta.ate = valid_month(dados.get("ate")) if dados.get("ate") else None
+    conta.url_painel = (dados.get("url_painel") or "").strip() or None
+    conta.obs = (dados.get("obs") or "").strip() or None
+    if dados.get("ativo") is not None:
+        conta.ativo = bool(dados["ativo"])
+    sess.add(conta)
+    sess.commit()
+    return conta.to_dict()
+
+
+def excluir_conta(sess, conta_id: int) -> dict:
+    conta = sess.get(Conta, int(conta_id))
+    if not conta:
+        raise ValueError("conta não encontrada")
+    n = sess.query(func.count(Lancamento.id))\
+            .filter(Lancamento.conta_id == conta.id).scalar() or 0
+    if n:
+        conta.ativo = False
+        sess.commit()
+        return {"removido": False, "desativado": True, "lancamentos": n}
+    sess.delete(conta)
+    sess.commit()
+    return {"removido": True}
+
+
+def _int_ou_none(v):
+    s = str(v if v is not None else "").strip()
+    return int(s) if s.lstrip("-").isdigit() else None
+
+
+def _dec_ou_none(v):
+    if v in (None, "", "null"):
+        return None
+    try:
+        return round(float(str(v).replace(",", ".")), 4)
+    except (TypeError, ValueError):
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Lançamentos
+# ─────────────────────────────────────────────────────────────────────────────
+def salvar_lancamento(sess, dados: dict, *, email: Optional[str] = None) -> dict:
+    """Cria ou atualiza um lançamento.
+
+    O objeto novo só entra na sessão DEPOIS de preenchido: get_cotacao() faz um
+    SELECT no meio do caminho e o autoflush do SQLAlchemy tentaria gravar a
+    linha ainda em branco, estourando NOT NULL em centro_id.
+    """
+    lanc = sess.get(Lancamento, int(dados["id"])) if dados.get("id") else None
+    novo = lanc is None
+    if novo:
+        lanc = Lancamento()
+        lanc.created_by = email
+        origem = (dados.get("origem") or "manual").strip()
+        if origem not in db.ORIGENS_LANC:
+            raise ValueError(f"origem inválida: {origem}")
+        lanc.origem = origem
+
+    descricao = (dados.get("descricao") or "").strip()
+    if not descricao:
+        raise ValueError("descrição é obrigatória")
+    centro_id = _int_ou_none(dados.get("centro_id")) or (lanc.centro_id if not novo else None)
+    if not centro_id:
+        raise ValueError("centro de custo é obrigatório")
+
+    moeda = (dados.get("moeda") or "BRL").upper()
+    if moeda not in db.MOEDAS:
+        raise ValueError(f"moeda inválida: {moeda}")
+    status = (dados.get("status") or "pago").strip()
+    if status not in db.STATUS_LANC:
+        raise ValueError(f"status inválido: {status}")
+
+    valor = _dec_ou_none(dados.get("valor"))
+    if valor is None:
+        raise ValueError("valor é obrigatório")
+
+    data_pag = _parse_date(dados.get("data_pagamento"))
+    # Competência default = mês do pagamento; é o que o extrato dá de graça.
+    competencia = valid_month(
+        dados.get("competencia") or (data_pag.strftime("%Y-%m") if data_pag else None)
+    )
+    cotacao = _dec_ou_none(dados.get("cotacao")) or get_cotacao(sess, competencia)
+
+    lanc.centro_id = int(centro_id)
+    lanc.conta_id = _int_ou_none(dados.get("conta_id"))
+    lanc.competencia = competencia
+    lanc.data_pagamento = data_pag
+    lanc.descricao = descricao[:240]
+    lanc.fornecedor = (dados.get("fornecedor") or "").strip() or None
+    lanc.forma_pagamento_id = _int_ou_none(dados.get("forma_pagamento_id"))
+    lanc.valor = valor
+    lanc.moeda = moeda
+    lanc.cotacao = cotacao if moeda != "BRL" else None
+    lanc.valor_brl = para_brl(valor, moeda, cotacao)
+    lanc.status = status
+    lanc.obs = (dados.get("obs") or "").strip() or None
+    if dados.get("external_id"):
+        lanc.external_id = str(dados["external_id"])[:120]
+    if novo:
+        sess.add(lanc)
+    sess.commit()
+    return lanc.to_dict()
+
+
+def excluir_lancamento(sess, lanc_id: int) -> dict:
+    lanc = sess.get(Lancamento, int(lanc_id))
+    if not lanc:
+        raise ValueError("lançamento não encontrado")
+    sess.delete(lanc)
+    sess.commit()
+    return {"removido": True}
+
+
+def _parse_date(v) -> Optional[date]:
+    s = str(v or "").strip()
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def listar_lancamentos(sess, de: str, ate: str, centro_id: Optional[int] = None,
+                       forma_id: Optional[int] = None) -> list[Lancamento]:
+    q = (sess.query(Lancamento)
+         .filter(Lancamento.competencia >= de, Lancamento.competencia <= ate))
+    if centro_id:
+        q = q.filter(Lancamento.centro_id == int(centro_id))
+    if forma_id:
+        q = q.filter(Lancamento.forma_pagamento_id == int(forma_id))
+    return q.order_by(Lancamento.competencia.desc(),
+                      Lancamento.data_pagamento.desc().nullslast(),
+                      Lancamento.id.desc()).all()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Integração com o painel Custos com IA (centro fonte='ia')
+# ─────────────────────────────────────────────────────────────────────────────
+def ia_totais_usd(meses: list[str]) -> dict[str, dict]:
+    """{competência: {openai, groq, subs, total}} em USD, lido do custos_ia.
+
+    Tolerante: se o módulo não carregar (dev sem a pasta de dados), devolve zeros
+    — a home continua funcionando, só sem a fatia de IA.
+    """
+    vazio = {m: {"openai": 0.0, "groq": 0.0, "subs": 0.0, "total": 0.0} for m in meses}
+    try:
+        import custos_ia
+    except Exception as e:  # noqa: BLE001
+        log.warning("custos_ia indisponível para o Custos de TI: %s", e)
+        return vazio
+
+    out = {}
+    for m in meses:
+        try:
+            o = custos_ia.load_openai_snapshot(m) or {}
+            g = custos_ia.load_groq_snapshot(m) or {}
+            subs = custos_ia.subs_total(m)
+            openai_t = float(o.get("total_usd") or 0.0)
+            groq_t = float(g.get("total_usd") or 0.0)
+            out[m] = {
+                "openai": round(openai_t, 4), "groq": round(groq_t, 4),
+                "subs": round(float(subs or 0.0), 4),
+                "total": round(openai_t + groq_t + float(subs or 0.0), 4),
+            }
+        except Exception as e:  # noqa: BLE001
+            log.warning("custos_ia falhou no mês %s: %s", m, e)
+            out[m] = vazio[m]
+    return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Consolidação / payload das telas
+# ─────────────────────────────────────────────────────────────────────────────
+def _periodo(de: Optional[str], ate: Optional[str]) -> tuple[str, str]:
+    """Default do filtro = mês atual, como pedido."""
+    if not de and not ate:
+        m = mes_atual()
+        return m, m
+    ate = valid_month(ate or de)
+    de = valid_month(de or ate)
+    return (de, ate) if de <= ate else (ate, de)
+
+
+def resumo(sess, de: Optional[str] = None, ate: Optional[str] = None) -> dict:
+    """Consolidação do período: total, por centro, por forma, por mês, top contas.
+
+    Tudo em BRL (valor_brl congelado no lançamento) e também em USD equivalente,
+    usando a cotação do mês de cada linha.
+    """
+    de, ate = _periodo(de, ate)
+    meses = range_meses(de, ate)
+    centros = listar_centros(sess, incluir_inativos=True)
+    por_id = {c.id: c for c in centros}
+    cot = {m: get_cotacao(sess, m) for m in meses}
+
+    lancs = listar_lancamentos(sess, de, ate)
+
+    por_centro: dict[int, float] = {}
+    por_centro_mes: dict[int, dict[str, float]] = {}
+    por_forma: dict[Optional[int], float] = {}
+    por_conta: dict[str, float] = {}
+    por_mes: dict[str, float] = {m: 0.0 for m in meses}
+    por_status = {"pago": 0.0, "previsto": 0.0}
+    por_origem: dict[str, float] = {}
+
+    for l in lancs:
+        v = float(l.valor_brl or 0.0)
+        por_centro[l.centro_id] = round(por_centro.get(l.centro_id, 0.0) + v, 2)
+        por_centro_mes.setdefault(l.centro_id, {})
+        por_centro_mes[l.centro_id][l.competencia] = round(
+            por_centro_mes[l.centro_id].get(l.competencia, 0.0) + v, 2)
+        por_forma[l.forma_pagamento_id] = round(
+            por_forma.get(l.forma_pagamento_id, 0.0) + v, 2)
+        rotulo = l.conta.nome if l.conta else (l.fornecedor or l.descricao)
+        por_conta[rotulo] = round(por_conta.get(rotulo, 0.0) + v, 2)
+        por_mes[l.competencia] = round(por_mes.get(l.competencia, 0.0) + v, 2)
+        por_status[l.status] = round(por_status.get(l.status, 0.0) + v, 2)
+        por_origem[l.origem] = round(por_origem.get(l.origem, 0.0) + v, 2)
+
+    # Centro de IA: o total NÃO vem de ti_lancamento, vem dos snapshots do
+    # custos_ia (a fonte da verdade daquele painel). Somado por cima do que
+    # eventualmente foi lançado à mão no mesmo centro.
+    ia_centro = next((c for c in centros if c.fonte == "ia"), None)
+    ia_usd = ia_totais_usd(meses) if ia_centro else {}
+    ia_detalhe = []
+    if ia_centro:
+        for m in meses:
+            d = ia_usd.get(m, {})
+            brl = round(float(d.get("total") or 0.0) * cot[m], 2)
+            if brl:
+                por_centro[ia_centro.id] = round(por_centro.get(ia_centro.id, 0.0) + brl, 2)
+                por_centro_mes.setdefault(ia_centro.id, {})
+                por_centro_mes[ia_centro.id][m] = round(
+                    por_centro_mes[ia_centro.id].get(m, 0.0) + brl, 2)
+                por_mes[m] = round(por_mes.get(m, 0.0) + brl, 2)
+                por_status["pago"] = round(por_status["pago"] + brl, 2)
+                por_origem["ia_snapshot"] = round(
+                    por_origem.get("ia_snapshot", 0.0) + brl, 2)
+            ia_detalhe.append({"competencia": m, "usd": d.get("total", 0.0),
+                               "brl": brl, "openai": d.get("openai", 0.0),
+                               "groq": d.get("groq", 0.0), "subs": d.get("subs", 0.0)})
+        for m in meses:
+            por_conta_ia = ia_usd.get(m, {})
+            for chave, rotulo in (("openai", "OpenAI (API)"), ("groq", "Groq"),
+                                  ("subs", "Assinaturas de IA")):
+                brl = round(float(por_conta_ia.get(chave) or 0.0) * cot[m], 2)
+                if brl:
+                    por_conta[rotulo] = round(por_conta.get(rotulo, 0.0) + brl, 2)
+
+    total_brl = round(sum(por_mes.values()), 2)
+    cot_media = round(sum(cot[m] for m in meses) / len(meses), 4) if meses else COTACAO_FALLBACK
+
+    formas = {f.id: f for f in listar_formas(sess)}
+    return {
+        "periodo": {"de": de, "ate": ate, "meses": meses,
+                    "mes_atual": mes_atual(), "um_mes": len(meses) == 1},
+        "cotacao": {"por_mes": cot, "media": cot_media,
+                    "fallback": COTACAO_FALLBACK},
+        "total_brl": total_brl,
+        "total_usd": round(total_brl / cot_media, 2) if cot_media else 0.0,
+        "media_mensal_brl": round(total_brl / len(meses), 2) if meses else 0.0,
+        "por_centro": [
+            {"centro_id": cid, "key": por_id[cid].key, "nome": por_id[cid].nome,
+             "cor": por_id[cid].cor, "icone": por_id[cid].icone,
+             "url": por_id[cid].url, "fonte": por_id[cid].fonte,
+             "total_brl": v,
+             "pct": round(v / total_brl * 100, 1) if total_brl else 0.0,
+             "por_mes": por_centro_mes.get(cid, {})}
+            for cid, v in sorted(por_centro.items(), key=lambda kv: kv[1], reverse=True)
+            if cid in por_id
+        ],
+        "por_mes": [{"competencia": m, "total_brl": por_mes.get(m, 0.0)} for m in meses],
+        "por_forma": [
+            {"forma_id": fid,
+             "rotulo": formas[fid].rotulo if fid in formas else "— sem forma —",
+             "tipo": formas[fid].tipo if fid in formas else None,
+             "total_brl": v,
+             "pct": round(v / total_brl * 100, 1) if total_brl else 0.0}
+            for fid, v in sorted(por_forma.items(), key=lambda kv: kv[1], reverse=True)
+        ],
+        "top_contas": [{"nome": k, "total_brl": v} for k, v in
+                       sorted(por_conta.items(), key=lambda kv: kv[1], reverse=True)[:15]],
+        "por_status": por_status,
+        "por_origem": por_origem,
+        "ia": {"detalhe": ia_detalhe,
+               "centro_key": ia_centro.key if ia_centro else None},
+        "qtd_lancamentos": len(lancs),
+    }
+
+
+def home_payload(sess, de: Optional[str] = None, ate: Optional[str] = None) -> dict:
+    """Payload da home: consolidação do período + evolução dos últimos 12 meses."""
+    de, ate = _periodo(de, ate)
+    dados = resumo(sess, de, ate)
+
+    # Evolução sempre olha 12 meses até o fim do período, independente do filtro —
+    # é o gráfico de tendência, não o do período.
+    meses_evo = ultimos_meses(MESES_PADRAO, ate)
+    evo = resumo(sess, meses_evo[0], meses_evo[-1])
+    dados["evolucao"] = {
+        "meses": meses_evo,
+        "series": [
+            {"key": c["key"], "nome": c["nome"], "cor": c["cor"],
+             "valores": [c["por_mes"].get(m, 0.0) for m in meses_evo]}
+            for c in evo["por_centro"]
+        ],
+        "total": [next((x["total_brl"] for x in evo["por_mes"]
+                        if x["competencia"] == m), 0.0) for m in meses_evo],
+    }
+    dados["centros"] = [c.to_dict() for c in listar_centros(sess)]
+    dados["formas"] = [f.to_dict() for f in listar_formas(sess)]
+    dados["gerado_em"] = _now().isoformat(timespec="seconds")
+    return dados
+
+
+def centro_payload(sess, key: str, de: Optional[str] = None,
+                   ate: Optional[str] = None) -> dict:
+    """Payload da página de um centro: contas cadastradas + lançamentos do período."""
+    centro = get_centro(sess, key)
+    if not centro:
+        raise ValueError(f"centro de custo '{key}' não existe")
+    de, ate = _periodo(de, ate)
+    meses = range_meses(de, ate)
+    lancs = listar_lancamentos(sess, de, ate, centro_id=centro.id)
+
+    por_mes: dict[str, float] = {m: 0.0 for m in meses}
+    por_conta: dict[str, float] = {}
+    for l in lancs:
+        v = float(l.valor_brl or 0.0)
+        por_mes[l.competencia] = round(por_mes.get(l.competencia, 0.0) + v, 2)
+        rotulo = l.conta.nome if l.conta else (l.fornecedor or l.descricao)
+        por_conta[rotulo] = round(por_conta.get(rotulo, 0.0) + v, 2)
+
+    ia = None
+    if centro.fonte == "ia":
+        cot = {m: get_cotacao(sess, m) for m in meses}
+        usd = ia_totais_usd(meses)
+        ia = []
+        for m in meses:
+            d = usd.get(m, {})
+            brl = round(float(d.get("total") or 0.0) * cot[m], 2)
+            por_mes[m] = round(por_mes.get(m, 0.0) + brl, 2)
+            ia.append({"competencia": m, "usd": d.get("total", 0.0), "brl": brl,
+                       "openai": d.get("openai", 0.0), "groq": d.get("groq", 0.0),
+                       "subs": d.get("subs", 0.0), "cotacao": cot[m]})
+            for chave, rotulo in (("openai", "OpenAI (API)"), ("groq", "Groq"),
+                                  ("subs", "Assinaturas de IA")):
+                b = round(float(d.get(chave) or 0.0) * cot[m], 2)
+                if b:
+                    por_conta[rotulo] = round(por_conta.get(rotulo, 0.0) + b, 2)
+
+    total = round(sum(por_mes.values()), 2)
+    return {
+        "centro": centro.to_dict(),
+        "periodo": {"de": de, "ate": ate, "meses": meses,
+                    "mes_atual": mes_atual(), "um_mes": len(meses) == 1},
+        "total_brl": total,
+        "media_mensal_brl": round(total / len(meses), 2) if meses else 0.0,
+        "por_mes": [{"competencia": m, "total_brl": por_mes.get(m, 0.0)} for m in meses],
+        "por_conta": [{"nome": k, "total_brl": v} for k, v in
+                      sorted(por_conta.items(), key=lambda kv: kv[1], reverse=True)],
+        "contas": [c.to_dict() for c in listar_contas(sess, centro.id)],
+        "lancamentos": [l.to_dict() for l in lancs],
+        "formas": [f.to_dict() for f in listar_formas(sess)],
+        "centros": [c.to_dict() for c in listar_centros(sess)],
+        "ia": ia,
+        "cotacao": get_cotacao(sess, ate),
+        "gerado_em": _now().isoformat(timespec="seconds"),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Importação Meta → lançamentos
+# ─────────────────────────────────────────────────────────────────────────────
+def importar_meta_texto(sess, texto: str, *, centro_key: str = "comunicacao",
+                        conta_id: Optional[int] = None,
+                        criar_forma: bool = True,
+                        salvar: bool = True,
+                        email: Optional[str] = None) -> dict:
+    """Lê o texto da Atividade de pagamento da Meta e vira lançamentos.
+
+    `salvar=False` só pré-visualiza (é o botão "Conferir" da tela).
+    Dedupe por external_id: reimportar o mesmo extrato não duplica nada, então
+    dá para colar o mês inteiro toda vez sem medo.
+    """
+    import custos_ti_meta as meta
+
+    parsed = meta.parse_payment_activity(texto)
+    itens = parsed["items"]
+    if not itens:
+        return {"ok": False, "error": "Nenhuma transação reconhecida no texto colado.",
+                "novos": [], "duplicados": [], "total": 0.0}
+
+    centro = get_centro(sess, centro_key)
+    if not centro:
+        raise ValueError(f"centro de custo '{centro_key}' não existe")
+
+    existentes = {
+        r[0] for r in sess.query(Lancamento.external_id)
+        .filter(Lancamento.origem == "meta_texto",
+                Lancamento.external_id.in_([i["external_id"] for i in itens])).all()
+    }
+
+    novos, duplicados, formas_criadas = [], [], []
+    for it in itens:
+        registro = {
+            "external_id": it["external_id"],
+            "data_pagamento": it["data"].isoformat() if it["data"] else None,
+            "competencia": it["data"].strftime("%Y-%m") if it["data"] else mes_atual(),
+            "valor": it["valor"], "moeda": it["moeda"],
+            "bandeira": it["bandeira"], "ultimos4": it["ultimos4"],
+            "status": it["status"],
+        }
+        if it["external_id"] in existentes:
+            duplicados.append(registro)
+            continue
+        novos.append(registro)
+
+    total_novos = round(sum(n["valor"] for n in novos), 2)
+    if not salvar:
+        return {"ok": True, "preview": True, "centro": centro.to_dict(),
+                "novos": novos, "duplicados": duplicados,
+                "total": total_novos, "moeda": parsed["moeda"],
+                "formas_criadas": []}
+
+    forma_cache: dict[tuple, Optional[int]] = {}
+    for n in novos:
+        chave = (n["bandeira"], n["ultimos4"])
+        if chave not in forma_cache:
+            forma = _forma_por_cartao(sess, n["bandeira"], n["ultimos4"])
+            if forma is None and criar_forma and n["ultimos4"]:
+                forma = FormaPagamento(
+                    nome=n["bandeira"] or "Cartão",
+                    tipo="cartao_credito",
+                    bandeira=n["bandeira"], ultimos4=n["ultimos4"],
+                    moeda_padrao=n["moeda"] if n["moeda"] in db.MOEDAS else "USD",
+                    obs="Criada automaticamente na importação da Meta.",
+                )
+                sess.add(forma)
+                sess.flush()
+                formas_criadas.append(forma.to_dict())
+            forma_cache[chave] = forma.id if forma else None
+
+        salvar_lancamento(sess, {
+            "centro_id": centro.id,
+            "conta_id": conta_id,
+            "competencia": n["competencia"],
+            "data_pagamento": n["data_pagamento"],
+            "descricao": f"WhatsApp Business (Meta) — {n['external_id'][:20]}…",
+            "fornecedor": "Meta Platforms",
+            "forma_pagamento_id": forma_cache[chave],
+            "valor": n["valor"], "moeda": n["moeda"],
+            "status": "pago" if n["status"] == "pago" else "previsto",
+            "origem": "meta_texto",
+            "external_id": n["external_id"],
+        }, email=email)
+
+    return {"ok": True, "preview": False, "centro": centro.to_dict(),
+            "novos": novos, "duplicados": duplicados,
+            "total": total_novos, "moeda": parsed["moeda"],
+            "formas_criadas": formas_criadas}
+
+
+def importar_meta_api(sess, competencia: str, *, centro_key: str = "comunicacao",
+                      salvar: bool = True, email: Optional[str] = None) -> dict:
+    """Custo ESTIMADO das conversas do mês, via Graph API, como lançamento previsto.
+
+    Entra com origem 'meta_api' e status 'previsto' — não se mistura com a
+    cobrança real do cartão (origem 'meta_texto'), que é o que fecha o mês.
+    """
+    import custos_ti_meta as meta
+
+    competencia = valid_month(competencia)
+    dados = meta.fetch_conversation_analytics(competencia)
+    if not dados.get("ok"):
+        return {"ok": False, "error": dados.get("error"), "analytics": dados}
+
+    centro = get_centro(sess, centro_key)
+    if not centro:
+        raise ValueError(f"centro de custo '{centro_key}' não existe")
+
+    ext = f"conversation_analytics::{competencia}"
+    if salvar and dados["total"] > 0:
+        existente = (sess.query(Lancamento)
+                     .filter(Lancamento.origem == "meta_api",
+                             Lancamento.external_id == ext).first())
+        payload = {
+            "id": existente.id if existente else None,
+            "centro_id": centro.id, "competencia": competencia,
+            "descricao": f"WhatsApp — custo estimado de conversas ({competencia})",
+            "fornecedor": "Meta Platforms",
+            "valor": dados["total"],
+            "moeda": dados.get("moeda") or "USD",
+            "status": "previsto", "origem": "meta_api", "external_id": ext,
+            "obs": "Estimativa da Graph API (conversation_analytics). "
+                   "A cobrança real do cartão entra pela importação do extrato.",
+        }
+        salvar_lancamento(sess, payload, email=email)
+
+    return {"ok": True, "analytics": dados, "centro": centro.to_dict(),
+            "salvo": bool(salvar and dados["total"] > 0)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bootstrap
+# ─────────────────────────────────────────────────────────────────────────────
+def seed_centros(sess) -> list[dict]:
+    """Cria os centros iniciais que ainda não existem (idempotente)."""
+    criados = []
+    for c in CENTROS_SEED:
+        if get_centro(sess, c["key"]):
+            continue
+        centro = CentroCusto(**c)
+        sess.add(centro)
+        criados.append(c["key"])
+    sess.commit()
+    return criados

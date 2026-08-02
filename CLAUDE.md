@@ -270,6 +270,103 @@ estranhas, suspeitar da chave antes de suspeitar da query.
 
 ---
 
+## Custos de TI (ex-"Custos com IA") — adicionado 2026-08-02
+
+Consolida **todos** os custos de tecnologia por centro de custo. O painel
+`Custos com IA` não sumiu: virou o centro de custo **IA** dentro deste módulo.
+
+**Arquitetura:**
+
+| Arquivo | Papel |
+|---|---|
+| `custos_ti_db.py` | Models SQLAlchemy no **Postgres RDS** (tabelas `ti_*`) |
+| `custos_ti.py` | Regras de negócio, agregações por período, câmbio, ponte com o `custos_ia` |
+| `custos_ti_meta.py` | Importação de custos da Meta (texto colado + Graph API) |
+| `custos_ti_routes.py` | Blueprint `/api/custos-ti/*` |
+| `custos_ti.html` | Home — consolidação gráfica do período (default = mês atual) |
+| `custos_ti_centro.html` | Página de um centro (contas + lançamentos + import) |
+| `custos_ti_cadastros.html` | Centros de custo, formas de pagamento, cotação |
+| `_custos_ti_sidebar.html` / `_custos_ti_head.html` | Menu e CSS/JS compartilhados |
+| `migrate_custos_ti.py` | Cria as tabelas + semeia os centros (idempotente) |
+
+**Por que Postgres e não JSON como o `custos_ia`:** o `custos_ia` guarda
+snapshots congelados por mês (bom para o que a Costs API devolveu). Aqui o dado
+é relacional e editado à mão (centro ↔ conta ↔ lançamento ↔ forma de pagamento),
+com dedupe por ID de transação. Isso é tabela.
+
+**Tabelas:** `ti_centro_custo`, `ti_forma_pagamento`, `ti_conta`,
+`ti_lancamento`, `ti_cotacao`. Só este projeto escreve (mesmo RDS do
+`public.servicos`).
+
+**Cadastrar um centro cria a página e o item de menu.** Não há lista fixa de
+centros em HTML nenhum — o sidebar destas telas é Jinja, montado a partir de
+`ti_centro_custo` (`app.py::_ti_centros()`, cache de 30s). A rota
+`/custos_ti/<key>` é uma só; o conteúdo vem do banco.
+
+**Controle de acesso:** page_key `custos_ti`, PROPOSITALMENTE fora de
+`public.servicos` — mesmo truque do `acesso_avancado` e do `custos_ia`: só
+`all_pages=True` entra e nenhum admin consegue liberar avulso. **Não** rodar
+`seed_servicos.py` para ele.
+
+**Moeda:** a home consolida em BRL. Cada lançamento guarda o valor ORIGINAL +
+moeda + a cotação usada + `valor_brl` **congelado** no momento do registro —
+mexer na cotação depois não reescreve o histórico. Cotação por competência em
+`ti_cotacao`, com carry-forward do mês anterior e fallback `CUSTOS_TI_USD_BRL`
+(default 5,40).
+
+**Centro `fonte='ia'`:** o total dele NÃO vem de `ti_lancamento` — vem dos
+snapshots do `custos_ia` (OpenAI + Groq + assinaturas), convertidos pela cotação
+do mês. Lançamento manual no mesmo centro **soma por cima**, então não relançar
+à mão o que já está no painel de IA (contaria duas vezes).
+
+### Meta / WhatsApp — o que tem API e o que não tem
+
+- **Cobrança real no cartão** (Business Manager → Cobrança e pagamentos →
+  Atividade de pagamento): **NÃO tem API pública**. `/{business-id}/business_invoices`
+  só existe para conta em linha de crédito/faturamento mensal, não para cartão.
+  → entra por **texto colado** (`parse_payment_activity`), mesmo molde do import
+  por texto da Groq. Parsing local, zero chamada a LLM, zero custo.
+- **Custo estimado por conversa**: **tem API** —
+  `GET /{waba-id}?fields=conversation_analytics(...)` com
+  `metric_types=[COST,CONVERSATION]`. Precisa de `META_WABA_ID` +
+  `META_ACCESS_TOKEN` (System User com `whatsapp_business_management`) no `.env`.
+  Entra como lançamento **previsto**, origem `meta_api` — não se mistura com a
+  cobrança real (`meta_texto`), que é o que fecha o mês.
+
+**Dedupe:** `UNIQUE(origem, external_id)` em `ti_lancamento`. O `external_id` é o
+ID da transação da Meta, então colar o mesmo extrato de novo não duplica nada —
+pode colar o histórico inteiro toda vez.
+
+**Cartão desconhecido no extrato** é cadastrado automaticamente em
+`ti_forma_pagamento` (bandeira + 4 últimos dígitos, que são `UNIQUE`), e a
+importação reporta o que criou.
+
+### Cores dos centros de custo
+
+`custos_ti.PALETA` (Python) e `TI_PALETA` (JS, em `_custos_ti_head.html`) são a
+MESMA lista de 8 hex, validada para daltonismo (`dataviz/scripts/validate_palette.js`,
+todos os checks PASS em superfície clara). A cor identifica a **entidade**, não a
+posição no ranking — filtrar não pode repintar os sobreviventes. Slot novo é
+atribuído na ordem; a partir do 9º centro o gráfico agrupa em "Outros" em vez de
+inventar cor. **Ao mexer na paleta, rodar o validador antes.**
+
+### Exclusões preservam histórico
+
+Forma de pagamento e conta com lançamento ligado são **desativadas**, não
+apagadas (senão o histórico perde em que cartão foi pago). Centro com lançamento
+recusa a exclusão com mensagem. O centro `ia` é fixo.
+
+### Migration
+
+```bash
+# local (dry-run, não grava nada)
+python migrate_custos_ti.py --dry-run
+# na VM
+cd /opt/relatorio_h_t && .venv/bin/python migrate_custos_ti.py
+```
+
+---
+
 ## Regras de desenvolvimento
 
 - Cada KPI é independente — nunca compartilha cálculos entre páginas

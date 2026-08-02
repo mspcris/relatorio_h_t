@@ -1,0 +1,221 @@
+{#
+  _custos_ti_head.html — CSS + helpers de JS comuns às telas de Custos de TI.
+  Incluído dentro do <head> de custos_ti.html, custos_ti_centro.html e
+  custos_ti_cadastros.html. Mantém a paleta e os formatadores num lugar só.
+#}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style2.css">
+<link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<style>
+  :root {
+    --ti-surface: #ffffff;
+    --ti-grid: #eef0f2;
+    --ti-ink: #212529;
+    --ti-ink-2: #52514e;
+    --ti-ink-3: #8a9199;
+  }
+  .ti-card { border-radius: 10px; border: 1px solid #e9ecef; box-shadow: none; }
+  .ti-card > .card-header { border-bottom: 1px solid var(--ti-grid); background: transparent; }
+  .ti-card > .card-header .card-title { font-weight: 600; font-size: 1rem; }
+  .ti-muted { color: var(--ti-ink-3); font-size: .85rem; }
+  .ti-money { font-variant-numeric: tabular-nums; }
+
+  /* Hero e stat tiles: figura proporcional (nada de tabular-nums em número grande) */
+  .ti-tile { background: #fff; border: 1px solid #e9ecef; border-radius: 10px; padding: 1rem 1.1rem; height: 100%; }
+  .ti-tile .rot { color: var(--ti-ink-3); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+  .ti-tile .fig { font-size: 1.9rem; font-weight: 700; line-height: 1.15; color: var(--ti-ink); font-variant-numeric: proportional-nums; }
+  .ti-tile .sub { color: var(--ti-ink-2); font-size: .82rem; }
+  .ti-tile .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: .35rem; }
+
+  .ti-filtros { background: #fff; border: 1px solid #e9ecef; border-radius: 10px; padding: .7rem .9rem; }
+  .ti-filtros .form-control-sm { width: auto; display: inline-block; }
+
+  .ti-chart-wrap { position: relative; }
+  .ti-tbl-view { display: none; margin-top: .75rem; }
+  .ti-tbl-view.show { display: block; }
+  table.ti-tbl { width: 100%; font-size: .86rem; }
+  table.ti-tbl th, table.ti-tbl td { padding: .35rem .55rem; border-bottom: 1px solid var(--ti-grid); }
+  table.ti-tbl th { color: var(--ti-ink-2); font-weight: 600; }
+  table.ti-tbl td.num, table.ti-tbl th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.ti-tbl tfoot td { font-weight: 700; border-top: 2px solid #dee2e6; border-bottom: none; }
+  .ti-linkish { background: none; border: 0; padding: 0; color: #007bff; font-size: .8rem; cursor: pointer; }
+  .ti-linkish:hover { text-decoration: underline; }
+
+  .ti-legend { display: flex; flex-wrap: wrap; gap: .15rem 1rem; margin: 0 0 .4rem; padding: 0; list-style: none; }
+  .ti-legend li { display: flex; align-items: center; gap: .35rem; font-size: .82rem; color: var(--ti-ink-2); }
+  .ti-legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+  .ti-pill { font-size: .7rem; padding: .1rem .45rem; border-radius: 999px; font-weight: 600; }
+  .ti-pill.pago { background: #e6f4ea; color: #12633a; }
+  .ti-pill.previsto { background: #fff4e0; color: #7a5c00; }
+  .ti-pill.origem { background: #eef1f5; color: #52514e; }
+
+  .ti-empty { text-align: center; color: var(--ti-ink-3); padding: 2rem 1rem; }
+  .ti-empty i { font-size: 2rem; opacity: .35; display: block; margin-bottom: .5rem; }
+
+  .ti-msg { border-radius: 8px; padding: .6rem .85rem; margin-bottom: .9rem; font-size: .9rem; }
+  .ti-msg.err { background: #fdecef; border-left: 4px solid #dc3545; }
+  .ti-msg.ok { background: #eafaf0; border-left: 4px solid #28a745; }
+  .ti-msg.warn { background: #fff8e1; border-left: 4px solid #ffc107; }
+
+  .ti-paste { width: 100%; min-height: 190px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+              font-size: .78rem; border: 1px dashed #adb5bd; border-radius: 8px; padding: .6rem; }
+  .ti-paste:focus { border-color: #007bff; border-style: solid; outline: none; }
+
+  /* Segura o render anterior enquanto recarrega — sem flash de esqueleto */
+  .ti-loading { opacity: .45; transition: opacity .15s; }
+
+  @media (max-width: 575px) {
+    .ti-tile .fig { font-size: 1.5rem; }
+  }
+</style>
+
+<script>
+/* ── Paleta categórica validada (ordem fixa, nunca ciclada) ───────────────────
+   Slots 1-8 na ordem do design system. Cor segue a ENTIDADE (o centro de custo
+   guarda a dele no banco), então filtrar não repinta os sobreviventes.
+   A partir do 9º centro o gráfico agrupa em "Outros" em vez de gerar cor nova. */
+const TI_PALETA = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100',
+                   '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
+const TI_CINZA  = '#9aa0a6';   /* "Outros" e séries sem identidade */
+const TI_SURFACE = '#ffffff';
+
+const _mesesCurto = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+
+function tiFmtBRL(v, casas) {
+  return 'R$ ' + Number(v || 0).toLocaleString('pt-BR',
+    { minimumFractionDigits: casas === undefined ? 2 : casas,
+      maximumFractionDigits: casas === undefined ? 2 : casas });
+}
+function tiFmtUSD(v) {
+  return 'US$ ' + Number(v || 0).toLocaleString('pt-BR',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function tiFmtCompacto(v) {
+  const n = Number(v || 0);
+  if (Math.abs(n) >= 1000000) return 'R$ ' + (n / 1000000).toFixed(1).replace('.', ',') + 'M';
+  if (Math.abs(n) >= 1000) return 'R$ ' + (n / 1000).toFixed(1).replace('.', ',') + 'k';
+  return 'R$ ' + n.toFixed(0);
+}
+function tiFmtMes(comp) {
+  if (!comp || comp.length < 7) return comp || '';
+  const [a, m] = comp.split('-');
+  return _mesesCurto[parseInt(m, 10) - 1] + '/' + a.slice(2);
+}
+function tiFmtData(iso) {
+  if (!iso) return '—';
+  const [a, m, d] = iso.split('-');
+  return `${d}/${m}/${a}`;
+}
+function tiEsc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/* Chart.js: marcas finas, grade discreta, sem dashes, tooltip sempre ligado. */
+function tiChartBase() {
+  Chart.defaults.font.family = "'Source Sans Pro', system-ui, sans-serif";
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = '#52514e';
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },   /* legenda é HTML, fora do canvas */
+      tooltip: {
+        backgroundColor: 'rgba(33,37,41,.94)', padding: 10, cornerRadius: 6,
+        titleFont: { weight: '600' }, bodySpacing: 5, displayColors: true,
+        boxWidth: 9, boxHeight: 9, boxPadding: 4,
+      },
+    },
+    scales: {
+      x: { grid: { display: false, drawBorder: false },
+           ticks: { color: '#8a9199' } },
+      y: { beginAtZero: true,
+           grid: { color: '#eef0f2', drawBorder: false, drawTicks: false },
+           ticks: { color: '#8a9199', maxRotation: 0, maxTicksLimit: 6,
+                    callback: (v) => tiFmtCompacto(v) } },
+    },
+  };
+}
+
+/* Legenda em HTML (identidade nunca é só cor: tem swatch + rótulo escrito). */
+function tiLegenda(el, itens) {
+  if (!el) return;
+  el.innerHTML = itens.map(i =>
+    `<li><span class="sw" style="background:${i.cor}"></span>${tiEsc(i.nome)}</li>`).join('');
+}
+
+/* Toggle "ver tabela" — todo gráfico tem a tabela equivalente. */
+function tiLigaTabela(btnId, boxId) {
+  const btn = document.getElementById(btnId), box = document.getElementById(boxId);
+  if (!btn || !box) return;
+  btn.addEventListener('click', () => {
+    box.classList.toggle('show');
+    btn.textContent = box.classList.contains('show') ? 'ocultar tabela' : 'ver tabela';
+  });
+}
+
+async function tiApi(url, opts) {
+  const r = await fetch(url, Object.assign({ credentials: 'same-origin' }, opts || {}));
+  let body = null;
+  try { body = await r.json(); } catch (e) { body = null; }
+  if (!r.ok || !body || body.ok === false) {
+    throw new Error((body && body.error) || `HTTP ${r.status}`);
+  }
+  return body;
+}
+
+function tiMsg(el, texto, tipo) {
+  if (!el) return;
+  if (!texto) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="ti-msg ${tipo || 'ok'}">${tiEsc(texto)}</div>`;
+}
+
+/* ── Filtro de período (uma linha só, acima de tudo que ele filtra) ────────── */
+function tiPeriodoInit(onChange) {
+  const de = document.getElementById('fltDe'), ate = document.getElementById('fltAte');
+  const q = new URLSearchParams(location.search);
+  const hoje = new Date();
+  const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+  de.value = q.get('de') || mesAtual;
+  ate.value = q.get('ate') || mesAtual;
+
+  function aplica() {
+    const url = new URL(location.href);
+    url.searchParams.set('de', de.value);
+    url.searchParams.set('ate', ate.value);
+    history.replaceState(null, '', url);
+    onChange(de.value, ate.value);
+  }
+  de.addEventListener('change', aplica);
+  ate.addEventListener('change', aplica);
+
+  document.querySelectorAll('[data-atalho]').forEach(b => {
+    b.addEventListener('click', () => {
+      const n = parseInt(b.dataset.atalho, 10);
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - (n - 1), 1);
+      de.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      ate.value = mesAtual;
+      aplica();
+    });
+  });
+  const btnAno = document.getElementById('btnAno');
+  if (btnAno) btnAno.addEventListener('click', () => {
+    de.value = `${hoje.getFullYear()}-01`;
+    ate.value = mesAtual;
+    aplica();
+  });
+  return { de: de.value, ate: ate.value };
+}
+</script>

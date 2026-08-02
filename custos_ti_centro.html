@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — Custos de TI · {{ TI_CENTRO.nome }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% include "_custos_ti_head.html" %}
+</head>
+
+<body class="hold-transition sidebar-mini layout-fixed">
+  <div class="wrapper">
+    {% include "_custos_ti_sidebar.html" %}
+
+    <div class="content-wrapper">
+      <section class="content-header">
+        <div class="container-fluid">
+          <div class="row align-items-center">
+            <div class="col-sm-7">
+              <h1 class="m-0">
+                <i class="{{ TI_CENTRO.icone }}" style="color:{{ TI_CENTRO.cor }}"></i>
+                {{ TI_CENTRO.nome }}
+              </h1>
+              <span class="ti-muted">
+                {{ TI_CENTRO.descricao or 'Centro de custo de TI' }}
+              </span>
+            </div>
+            <div class="col-sm-5 text-sm-right">
+              <button class="btn btn-sm btn-primary" id="btnNovoLanc">
+                <i class="fas fa-plus"></i> Lançar despesa
+              </button>
+              <button class="btn btn-sm btn-outline-primary" id="btnNovaConta">
+                <i class="fas fa-file-invoice-dollar"></i> Nova conta
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" id="btnImportar">
+                <i class="fab fa-facebook"></i> Importar Meta
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="content">
+        <div class="container-fluid">
+
+          <div class="ti-filtros mb-3">
+            <div class="d-flex flex-wrap align-items-center" style="gap:.5rem">
+              <span class="ti-muted"><i class="fas fa-calendar-alt"></i> Período:</span>
+              <input type="month" id="fltDe" class="form-control form-control-sm" aria-label="Competência inicial">
+              <span class="ti-muted">até</span>
+              <input type="month" id="fltAte" class="form-control form-control-sm" aria-label="Competência final">
+              <div class="btn-group btn-group-sm ml-2" role="group" aria-label="Atalhos de período">
+                <button type="button" class="btn btn-outline-secondary" data-atalho="1">Mês atual</button>
+                <button type="button" class="btn btn-outline-secondary" data-atalho="3">3 meses</button>
+                <button type="button" class="btn btn-outline-secondary" data-atalho="6">6 meses</button>
+                <button type="button" class="btn btn-outline-secondary" data-atalho="12">12 meses</button>
+                <button type="button" class="btn btn-outline-secondary" id="btnAno">Este ano</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="globalMsg"></div>
+
+          {% if TI_CENTRO.fonte == 'ia' %}
+          <div class="ti-msg warn">
+            <strong>Este centro é alimentado pelo painel Custos com IA.</strong>
+            Os valores de OpenAI, Groq e assinaturas vêm de lá (em dólar, convertidos
+            pela cotação do mês). Você ainda pode lançar despesas avulsas aqui —
+            só não lance de novo o que já está no painel, senão conta duas vezes.
+            <a href="/custos_ia">Abrir Custos com IA</a>
+          </div>
+          {% endif %}
+
+          <div class="row mb-3">
+            <div class="col-lg-4 col-sm-6 mb-3">
+              <div class="ti-tile">
+                <div class="rot">Total do período</div>
+                <div class="fig" id="figTotal">—</div>
+                <div class="sub" id="subTotal">&nbsp;</div>
+              </div>
+            </div>
+            <div class="col-lg-4 col-sm-6 mb-3">
+              <div class="ti-tile">
+                <div class="rot">Média mensal</div>
+                <div class="fig" id="figMedia">—</div>
+                <div class="sub" id="subMedia">&nbsp;</div>
+              </div>
+            </div>
+            <div class="col-lg-4 col-sm-6 mb-3">
+              <div class="ti-tile">
+                <div class="rot">Contas cadastradas</div>
+                <div class="fig" id="figContas">—</div>
+                <div class="sub" id="subContas">&nbsp;</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-lg-7 mb-3">
+              <div class="card ti-card h-100">
+                <div class="card-header">
+                  <h3 class="card-title">Gasto mês a mês</h3>
+                  <div class="card-tools"><button class="ti-linkish" id="btnTblMes">ver tabela</button></div>
+                </div>
+                <div class="card-body">
+                  <div class="ti-chart-wrap" style="height:280px"><canvas id="chMes"></canvas></div>
+                  <div id="vazioMes" class="ti-empty" style="display:none">
+                    <i class="fas fa-chart-bar"></i> Nenhum custo neste período.
+                  </div>
+                  <div class="ti-tbl-view" id="tblMesBox"></div>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-5 mb-3">
+              <div class="card ti-card h-100">
+                <div class="card-header">
+                  <h3 class="card-title">Por conta / serviço</h3>
+                  <div class="card-tools"><button class="ti-linkish" id="btnTblConta">ver tabela</button></div>
+                </div>
+                <div class="card-body">
+                  <div class="ti-chart-wrap" style="height:280px"><canvas id="chConta"></canvas></div>
+                  <div id="vazioConta" class="ti-empty" style="display:none">
+                    <i class="fas fa-inbox"></i> Nada lançado ainda.
+                  </div>
+                  <div class="ti-tbl-view" id="tblContaBox"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Contas cadastradas (o "cadastro das contas deste perfil") -->
+          <div class="card ti-card mb-3">
+            <div class="card-header">
+              <h3 class="card-title">Contas cadastradas</h3>
+              <div class="card-tools ti-muted">
+                O que é contratado neste centro — assinatura, fornecedor, em que cartão cai.
+              </div>
+            </div>
+            <div class="card-body p-0">
+              <div style="overflow-x:auto">
+                <table class="ti-tbl" id="tblContas">
+                  <thead><tr>
+                    <th>Conta</th><th>Fornecedor</th><th>Forma de pagamento</th>
+                    <th>Recorrência</th><th class="num">Previsto</th><th>Venc.</th><th></th>
+                  </tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div id="vazioContas" class="ti-empty" style="display:none">
+                <i class="fas fa-file-invoice-dollar"></i>
+                Nenhuma conta cadastrada neste centro.
+              </div>
+            </div>
+          </div>
+
+          <!-- Lançamentos -->
+          <div class="card ti-card mb-4">
+            <div class="card-header">
+              <h3 class="card-title">Lançamentos do período</h3>
+              <div class="card-tools"><span class="ti-muted" id="contaLanc"></span></div>
+            </div>
+            <div class="card-body p-0">
+              <div style="overflow-x:auto">
+                <table class="ti-tbl" id="tblLanc">
+                  <thead><tr>
+                    <th>Competência</th><th>Descrição</th><th>Conta</th>
+                    <th>Pagamento</th><th>Data</th>
+                    <th class="num">Valor</th><th class="num">R$</th>
+                    <th>Status</th><th></th>
+                  </tr></thead>
+                  <tbody></tbody>
+                  <tfoot></tfoot>
+                </table>
+              </div>
+              <div id="vazioLanc" class="ti-empty" style="display:none">
+                <i class="fas fa-receipt"></i>
+                Nenhuma despesa lançada neste período.
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Modal: lançamento -->
+  <div class="modal fade" id="mdLanc" tabindex="-1">
+    <div class="modal-dialog modal-lg"><div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Lançar despesa</h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="lancMsg"></div>
+        <input type="hidden" id="lancId">
+        <div class="form-row">
+          <div class="form-group col-md-8">
+            <label>Descrição *</label>
+            <input class="form-control" id="lancDescricao" maxlength="240" placeholder="Ex.: Fatura Contabo — VM principal">
+          </div>
+          <div class="form-group col-md-4">
+            <label>Competência *</label>
+            <input type="month" class="form-control" id="lancCompetencia">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label>Conta</label>
+            <select class="form-control" id="lancConta"></select>
+          </div>
+          <div class="form-group col-md-4">
+            <label>Fornecedor</label>
+            <input class="form-control" id="lancFornecedor" maxlength="120">
+          </div>
+          <div class="form-group col-md-4">
+            <label>Forma de pagamento</label>
+            <select class="form-control" id="lancForma"></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-3">
+            <label>Valor *</label>
+            <input class="form-control" id="lancValor" inputmode="decimal" placeholder="0,00">
+          </div>
+          <div class="form-group col-md-2">
+            <label>Moeda</label>
+            <select class="form-control" id="lancMoeda">
+              <option value="BRL">BRL</option><option value="USD">USD</option><option value="EUR">EUR</option>
+            </select>
+          </div>
+          <div class="form-group col-md-3">
+            <label>Data do pagamento</label>
+            <input type="date" class="form-control" id="lancData">
+          </div>
+          <div class="form-group col-md-2">
+            <label>Status</label>
+            <select class="form-control" id="lancStatus">
+              <option value="pago">Pago</option><option value="previsto">Previsto</option>
+            </select>
+          </div>
+          <div class="form-group col-md-2">
+            <label>Centro</label>
+            <select class="form-control" id="lancCentro"></select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Observação</label>
+          <textarea class="form-control" id="lancObs" rows="2"></textarea>
+        </div>
+        <p class="ti-muted mb-0" id="lancConversao"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-danger mr-auto" id="btnExcluirLanc" style="display:none">
+          <i class="fas fa-trash"></i> Excluir
+        </button>
+        <button class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary" id="btnSalvarLanc">Salvar</button>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- Modal: conta -->
+  <div class="modal fade" id="mdConta" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Conta do centro</h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="contaMsg"></div>
+        <input type="hidden" id="contaId">
+        <div class="form-group">
+          <label>Nome *</label>
+          <input class="form-control" id="contaNome" maxlength="160" placeholder="Ex.: Contabo VM principal">
+        </div>
+        <div class="form-row">
+          <div class="form-group col-6">
+            <label>Fornecedor</label>
+            <input class="form-control" id="contaFornecedor" maxlength="120">
+          </div>
+          <div class="form-group col-6">
+            <label>Forma de pagamento</label>
+            <select class="form-control" id="contaForma"></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-4">
+            <label>Recorrência</label>
+            <select class="form-control" id="contaRecorrencia">
+              <option value="mensal">Mensal</option><option value="anual">Anual</option>
+              <option value="variavel">Variável</option><option value="unica">Única</option>
+            </select>
+          </div>
+          <div class="form-group col-4">
+            <label>Valor previsto</label>
+            <input class="form-control" id="contaValor" inputmode="decimal" placeholder="0,00">
+          </div>
+          <div class="form-group col-4">
+            <label>Moeda</label>
+            <select class="form-control" id="contaMoeda">
+              <option value="BRL">BRL</option><option value="USD">USD</option><option value="EUR">EUR</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-4">
+            <label>Dia do venc.</label>
+            <input type="number" min="1" max="31" class="form-control" id="contaDia">
+          </div>
+          <div class="form-group col-4">
+            <label>Desde</label>
+            <input type="month" class="form-control" id="contaDesde">
+          </div>
+          <div class="form-group col-4 d-flex align-items-end">
+            <div class="custom-control custom-switch mb-2">
+              <input type="checkbox" class="custom-control-input" id="contaAtivo" checked>
+              <label class="custom-control-label" for="contaAtivo">Ativa</label>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Painel / URL</label>
+          <input class="form-control" id="contaUrl" placeholder="https://...">
+        </div>
+        <div class="form-group mb-0">
+          <label>Observação</label>
+          <textarea class="form-control" id="contaObs" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-danger mr-auto" id="btnExcluirConta" style="display:none">
+          <i class="fas fa-trash"></i> Excluir
+        </button>
+        <button class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary" id="btnSalvarConta">Salvar</button>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- Modal: importar Meta -->
+  <div class="modal fade" id="mdMeta" tabindex="-1">
+    <div class="modal-dialog modal-lg"><div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fab fa-whatsapp"></i> Importar custos da Meta</h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="metaMsg"></div>
+
+        <ul class="nav nav-tabs mb-3" role="tablist">
+          <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tabTexto">Colar extrato</a></li>
+          <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tabApi">API da Meta</a></li>
+        </ul>
+
+        <div class="tab-content">
+          <div class="tab-pane fade show active" id="tabTexto">
+            <p class="ti-muted">
+              Abra <em>Business Manager → Cobrança e pagamentos → Atividade de pagamento</em>,
+              selecione a tabela inteira, copie e cole aqui. O ID da transação é a chave:
+              colar o mesmo período de novo <strong>não duplica</strong> nada.
+            </p>
+            <textarea class="ti-paste" id="metaTexto"
+              placeholder="28011176295236020-28028364550183862&#10;1 de ago de 2026&#10;US$225,53&#10;Visa ···· 6852&#10;Pago&#10;..."></textarea>
+            <div class="mt-2 d-flex flex-wrap align-items-center" style="gap:.5rem">
+              <button class="btn btn-sm btn-outline-primary" id="btnMetaConferir">
+                <i class="fas fa-search"></i> Conferir
+              </button>
+              <button class="btn btn-sm btn-primary" id="btnMetaImportar" disabled>
+                <i class="fas fa-download"></i> Importar
+              </button>
+              <div class="custom-control custom-checkbox ml-2">
+                <input type="checkbox" class="custom-control-input" id="metaCriarForma" checked>
+                <label class="custom-control-label ti-muted" for="metaCriarForma">
+                  cadastrar o cartão automaticamente se ele ainda não existir
+                </label>
+              </div>
+            </div>
+            <div id="metaPreview" class="mt-3"></div>
+          </div>
+
+          <div class="tab-pane fade" id="tabApi">
+            <div id="metaApiStatus" class="ti-muted">Verificando…</div>
+            <div class="form-row mt-3 align-items-end">
+              <div class="form-group col-md-4">
+                <label>Mês</label>
+                <input type="month" class="form-control" id="metaApiMes">
+              </div>
+              <div class="form-group col-md-8">
+                <button class="btn btn-sm btn-outline-primary" id="btnMetaApi">
+                  <i class="fas fa-cloud-download-alt"></i> Buscar custo estimado
+                </button>
+                <button class="btn btn-sm btn-primary" id="btnMetaApiSalvar" disabled>
+                  Salvar como previsto
+                </button>
+              </div>
+            </div>
+            <div id="metaApiResultado"></div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+<script>
+const TI_CENTRO_KEY = {{ TI_CENTRO.key | tojson }};
+const TI_CENTRO_COR = {{ TI_CENTRO.cor | tojson }};
+const TI_CENTRO_FONTE = {{ TI_CENTRO.fonte | tojson }};
+let DADOS = null, chMes = null, chConta = null;
+
+function barraVertical(canvasId, labels, valores, cor) {
+  const base = tiChartBase();
+  return new Chart(document.getElementById(canvasId), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: valores, backgroundColor: cor,
+        borderColor: TI_SURFACE, borderWidth: 2,
+        borderRadius: 4, borderSkipped: 'start',
+        barPercentage: .68, categoryPercentage: .82, maxBarThickness: 44,
+      }],
+    },
+    options: Object.assign({}, base, {
+      plugins: Object.assign({}, base.plugins, {
+        tooltip: Object.assign({}, base.plugins.tooltip, {
+          callbacks: { label: (c) => tiFmtBRL(c.parsed.y) },
+        }),
+      }),
+    }),
+  });
+}
+
+function barraHorizontalSimples(canvasId, labels, valores, cor) {
+  const base = tiChartBase();
+  return new Chart(document.getElementById(canvasId), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: valores, backgroundColor: cor,
+        borderColor: TI_SURFACE, borderWidth: 2,
+        borderRadius: 4, borderSkipped: 'start',
+        barPercentage: .7, categoryPercentage: .82, maxBarThickness: 34,
+      }],
+    },
+    options: Object.assign({}, base, {
+      indexAxis: 'y',
+      plugins: Object.assign({}, base.plugins, {
+        tooltip: Object.assign({}, base.plugins.tooltip, {
+          callbacks: { label: (c) => tiFmtBRL(c.parsed.x) },
+        }),
+      }),
+      scales: {
+        x: { beginAtZero: true, grid: { color: '#eef0f2', drawBorder: false, drawTicks: false },
+             ticks: { color: '#8a9199', maxRotation: 0, maxTicksLimit: 6,
+                      callback: (v) => tiFmtCompacto(v) } },
+        y: { grid: { display: false, drawBorder: false },
+             ticks: { color: '#52514e', autoSkip: false } },
+      },
+    }),
+  });
+}
+
+function tabelaSimples(boxId, colunas, linhas, total) {
+  const box = document.getElementById(boxId);
+  box.innerHTML = `
+    <table class="ti-tbl">
+      <thead><tr>${colunas.map((c, i) =>
+        `<th${i ? ' class="num"' : ''}>${tiEsc(c)}</th>`).join('')}</tr></thead>
+      <tbody>${linhas.map(l => `<tr>${l.map((c, i) =>
+        `<td${i ? ' class="num"' : ''}>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+      ${total ? `<tfoot><tr>${total.map((c, i) =>
+        `<td${i ? ' class="num"' : ''}>${c}</td>`).join('')}</tr></tfoot>` : ''}
+    </table>`;
+}
+
+const ROT_RECORRENCIA = { mensal: 'Mensal', anual: 'Anual', variavel: 'Variável', unica: 'Única' };
+const ROT_ORIGEM = { manual: 'manual', meta_texto: 'extrato Meta', meta_api: 'API Meta',
+                     ia_snapshot: 'Custos com IA', import_csv: 'CSV' };
+
+function pinta(d) {
+  DADOS = d;
+  document.getElementById('figTotal').textContent = tiFmtBRL(d.total_brl);
+  document.getElementById('subTotal').textContent = d.periodo.um_mes
+    ? tiFmtMes(d.periodo.de)
+    : `${tiFmtMes(d.periodo.de)} a ${tiFmtMes(d.periodo.ate)}`;
+  document.getElementById('figMedia').textContent = tiFmtBRL(d.media_mensal_brl);
+  document.getElementById('subMedia').textContent =
+    `${d.periodo.meses.length} ${d.periodo.meses.length === 1 ? 'mês' : 'meses'}`;
+  const ativas = d.contas.filter(c => c.ativo).length;
+  document.getElementById('figContas').textContent = ativas;
+  document.getElementById('subContas').textContent = d.contas.length > ativas
+    ? `${d.contas.length - ativas} inativa(s)` : 'todas ativas';
+
+  // Gasto mês a mês — série única, cor do próprio centro
+  const meses = d.por_mes;
+  const temMes = meses.some(m => m.total_brl > 0);
+  document.querySelector('#chMes').parentElement.style.display = temMes ? '' : 'none';
+  document.getElementById('vazioMes').style.display = temMes ? 'none' : '';
+  if (chMes) { chMes.destroy(); chMes = null; }
+  if (temMes) {
+    chMes = barraVertical('chMes', meses.map(m => tiFmtMes(m.competencia)),
+      meses.map(m => m.total_brl), TI_CENTRO_COR);
+    tabelaSimples('tblMesBox', ['Mês', 'Valor (R$)'],
+      meses.map(m => [tiFmtMes(m.competencia), tiFmtBRL(m.total_brl)]),
+      ['Total', tiFmtBRL(d.total_brl)]);
+  }
+
+  // Por conta
+  const contas = d.por_conta.filter(c => c.total_brl > 0).slice(0, 12);
+  const temConta = contas.length > 0;
+  document.querySelector('#chConta').parentElement.style.display = temConta ? '' : 'none';
+  document.getElementById('vazioConta').style.display = temConta ? 'none' : '';
+  if (chConta) { chConta.destroy(); chConta = null; }
+  if (temConta) {
+    chConta = barraHorizontalSimples('chConta', contas.map(c => c.nome),
+      contas.map(c => c.total_brl), TI_PALETA[0]);
+    tabelaSimples('tblContaBox', ['Conta / serviço', 'Valor (R$)'],
+      d.por_conta.map(c => [tiEsc(c.nome), tiFmtBRL(c.total_brl)]),
+      ['Total', tiFmtBRL(d.total_brl)]);
+  }
+
+  pintaContas(d);
+  pintaLancamentos(d);
+  preencheSelects(d);
+}
+
+function pintaContas(d) {
+  const tb = document.querySelector('#tblContas tbody');
+  document.getElementById('vazioContas').style.display = d.contas.length ? 'none' : '';
+  tb.innerHTML = d.contas.map(c => `
+    <tr${c.ativo ? '' : ' style="opacity:.55"'}>
+      <td>${tiEsc(c.nome)}${c.url_painel ? ` <a href="${tiEsc(c.url_painel)}" target="_blank" rel="noopener" title="abrir painel"><i class="fas fa-external-link-alt ti-muted"></i></a>` : ''}</td>
+      <td>${tiEsc(c.fornecedor || '—')}</td>
+      <td>${tiEsc(c.forma_rotulo || '—')}</td>
+      <td>${ROT_RECORRENCIA[c.recorrencia] || c.recorrencia}</td>
+      <td class="num">${c.valor_previsto ? (c.moeda === 'BRL' ? tiFmtBRL(c.valor_previsto) : tiFmtUSD(c.valor_previsto)) : '—'}</td>
+      <td>${c.dia_vencimento ? 'dia ' + c.dia_vencimento : '—'}</td>
+      <td class="num"><button class="ti-linkish" data-editar-conta="${c.id}">editar</button></td>
+    </tr>`).join('');
+  tb.querySelectorAll('[data-editar-conta]').forEach(b =>
+    b.addEventListener('click', () => abreConta(Number(b.dataset.editarConta))));
+}
+
+function pintaLancamentos(d) {
+  const tb = document.querySelector('#tblLanc tbody');
+  const tf = document.querySelector('#tblLanc tfoot');
+  document.getElementById('vazioLanc').style.display =
+    (d.lancamentos.length || (d.ia || []).some(i => i.brl > 0)) ? 'none' : '';
+  document.getElementById('contaLanc').textContent =
+    `${d.lancamentos.length} lançamento(s)`;
+
+  let linhas = d.lancamentos.map(l => `
+    <tr>
+      <td>${tiFmtMes(l.competencia)}</td>
+      <td>${tiEsc(l.descricao)}${l.obs ? ` <i class="fas fa-comment-dots ti-muted" title="${tiEsc(l.obs)}"></i>` : ''}</td>
+      <td>${tiEsc(l.conta_nome || l.fornecedor || '—')}</td>
+      <td>${tiEsc(l.forma_rotulo || '—')}</td>
+      <td>${tiFmtData(l.data_pagamento)}</td>
+      <td class="num">${l.moeda === 'BRL' ? tiFmtBRL(l.valor) : tiFmtUSD(l.valor)}</td>
+      <td class="num">${tiFmtBRL(l.valor_brl)}</td>
+      <td><span class="ti-pill ${l.status}">${l.status === 'pago' ? 'Pago' : 'Previsto'}</span>
+          ${l.origem !== 'manual' ? `<span class="ti-pill origem">${ROT_ORIGEM[l.origem] || l.origem}</span>` : ''}</td>
+      <td class="num"><button class="ti-linkish" data-editar-lanc="${l.id}">editar</button></td>
+    </tr>`);
+
+  // Linhas do painel Custos com IA — informativas, não editáveis aqui
+  (d.ia || []).filter(i => i.brl > 0).forEach(i => {
+    linhas.unshift(`
+      <tr style="background:#f8f9fa">
+        <td>${tiFmtMes(i.competencia)}</td>
+        <td><i class="fas fa-robot ti-muted"></i> OpenAI ${tiFmtUSD(i.openai)} · Groq ${tiFmtUSD(i.groq)} · Assinaturas ${tiFmtUSD(i.subs)}</td>
+        <td>Custos com IA</td><td>—</td><td>—</td>
+        <td class="num">${tiFmtUSD(i.usd)}</td>
+        <td class="num">${tiFmtBRL(i.brl)}</td>
+        <td><span class="ti-pill origem">Custos com IA</span></td>
+        <td class="num"><a class="ti-linkish" href="/custos_ia">abrir</a></td>
+      </tr>`);
+  });
+
+  tb.innerHTML = linhas.join('');
+  tf.innerHTML = d.total_brl ? `<tr>
+      <td colspan="6">Total do período</td>
+      <td class="num">${tiFmtBRL(d.total_brl)}</td><td colspan="2"></td>
+    </tr>` : '';
+  tb.querySelectorAll('[data-editar-lanc]').forEach(b =>
+    b.addEventListener('click', () => abreLanc(Number(b.dataset.editarLanc))));
+}
+
+function preencheSelects(d) {
+  const optForma = '<option value="">— sem forma —</option>' +
+    d.formas.filter(f => f.ativo).map(f =>
+      `<option value="${f.id}">${tiEsc(f.rotulo)}</option>`).join('');
+  document.getElementById('lancForma').innerHTML = optForma;
+  document.getElementById('contaForma').innerHTML = optForma;
+
+  document.getElementById('lancConta').innerHTML = '<option value="">— sem conta —</option>' +
+    d.contas.map(c => `<option value="${c.id}">${tiEsc(c.nome)}</option>`).join('');
+  document.getElementById('lancCentro').innerHTML = d.centros.map(c =>
+    `<option value="${c.id}"${c.key === TI_CENTRO_KEY ? ' selected' : ''}>${tiEsc(c.nome)}</option>`).join('');
+}
+
+/* ── Modais ─────────────────────────────────────────────────────────────── */
+function abreLanc(id) {
+  const l = id ? DADOS.lancamentos.find(x => x.id === id) : null;
+  document.getElementById('lancId').value = l ? l.id : '';
+  document.getElementById('lancDescricao').value = l ? l.descricao : '';
+  document.getElementById('lancCompetencia').value = l ? l.competencia : document.getElementById('fltAte').value;
+  document.getElementById('lancConta').value = l && l.conta_id ? l.conta_id : '';
+  document.getElementById('lancFornecedor').value = l ? (l.fornecedor || '') : '';
+  document.getElementById('lancForma').value = l && l.forma_pagamento_id ? l.forma_pagamento_id : '';
+  document.getElementById('lancValor').value = l ? String(l.valor).replace('.', ',') : '';
+  document.getElementById('lancMoeda').value = l ? l.moeda : 'BRL';
+  document.getElementById('lancData').value = l ? (l.data_pagamento || '') : '';
+  document.getElementById('lancStatus').value = l ? l.status : 'pago';
+  document.getElementById('lancObs').value = l ? (l.obs || '') : '';
+  const cen = DADOS.centros.find(c => c.key === TI_CENTRO_KEY);
+  document.getElementById('lancCentro').value = l ? l.centro_id : (cen ? cen.id : '');
+  document.getElementById('btnExcluirLanc').style.display = l ? '' : 'none';
+  document.querySelector('#mdLanc .modal-title').textContent = l ? 'Editar despesa' : 'Lançar despesa';
+  tiMsg(document.getElementById('lancMsg'), '');
+  atualizaConversao();
+  $('#mdLanc').modal('show');
+}
+
+function atualizaConversao() {
+  const moeda = document.getElementById('lancMoeda').value;
+  const bruto = (document.getElementById('lancValor').value || '').replace(/\./g, '').replace(',', '.');
+  const v = parseFloat(bruto);
+  const el = document.getElementById('lancConversao');
+  if (moeda === 'BRL' || !v) { el.textContent = ''; return; }
+  el.textContent = `Convertido pela cotação do mês (US$ 1 = ${tiFmtBRL(DADOS.cotacao)}): ${tiFmtBRL(v * DADOS.cotacao)}`;
+}
+
+async function salvarLanc() {
+  const btn = document.getElementById('btnSalvarLanc');
+  btn.disabled = true;
+  try {
+    const valor = (document.getElementById('lancValor').value || '')
+      .replace(/\./g, '').replace(',', '.');
+    await tiApi('/api/custos-ti/lancamentos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: document.getElementById('lancId').value || null,
+        centro_id: document.getElementById('lancCentro').value,
+        conta_id: document.getElementById('lancConta').value || null,
+        competencia: document.getElementById('lancCompetencia').value,
+        descricao: document.getElementById('lancDescricao').value,
+        fornecedor: document.getElementById('lancFornecedor').value,
+        forma_pagamento_id: document.getElementById('lancForma').value || null,
+        valor, moeda: document.getElementById('lancMoeda').value,
+        data_pagamento: document.getElementById('lancData').value || null,
+        status: document.getElementById('lancStatus').value,
+        obs: document.getElementById('lancObs').value,
+      }),
+    });
+    $('#mdLanc').modal('hide');
+    recarrega();
+  } catch (e) {
+    tiMsg(document.getElementById('lancMsg'), e.message, 'err');
+  } finally { btn.disabled = false; }
+}
+
+function abreConta(id) {
+  const c = id ? DADOS.contas.find(x => x.id === id) : null;
+  document.getElementById('contaId').value = c ? c.id : '';
+  document.getElementById('contaNome').value = c ? c.nome : '';
+  document.getElementById('contaFornecedor').value = c ? (c.fornecedor || '') : '';
+  document.getElementById('contaForma').value = c && c.forma_pagamento_id ? c.forma_pagamento_id : '';
+  document.getElementById('contaRecorrencia').value = c ? c.recorrencia : 'mensal';
+  document.getElementById('contaValor').value = c && c.valor_previsto ? String(c.valor_previsto).replace('.', ',') : '';
+  document.getElementById('contaMoeda').value = c ? c.moeda : 'BRL';
+  document.getElementById('contaDia').value = c && c.dia_vencimento ? c.dia_vencimento : '';
+  document.getElementById('contaDesde').value = c ? (c.desde || '') : '';
+  document.getElementById('contaAtivo').checked = c ? c.ativo : true;
+  document.getElementById('contaUrl').value = c ? (c.url_painel || '') : '';
+  document.getElementById('contaObs').value = c ? (c.obs || '') : '';
+  document.getElementById('btnExcluirConta').style.display = c ? '' : 'none';
+  tiMsg(document.getElementById('contaMsg'), '');
+  $('#mdConta').modal('show');
+}
+
+async function salvarConta() {
+  const btn = document.getElementById('btnSalvarConta');
+  btn.disabled = true;
+  try {
+    const cen = DADOS.centros.find(c => c.key === TI_CENTRO_KEY);
+    const valor = (document.getElementById('contaValor').value || '')
+      .replace(/\./g, '').replace(',', '.');
+    await tiApi('/api/custos-ti/contas', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: document.getElementById('contaId').value || null,
+        centro_id: cen ? cen.id : null,
+        nome: document.getElementById('contaNome').value,
+        fornecedor: document.getElementById('contaFornecedor').value,
+        forma_pagamento_id: document.getElementById('contaForma').value || null,
+        recorrencia: document.getElementById('contaRecorrencia').value,
+        valor_previsto: valor || null,
+        moeda: document.getElementById('contaMoeda').value,
+        dia_vencimento: document.getElementById('contaDia').value || null,
+        desde: document.getElementById('contaDesde').value || null,
+        url_painel: document.getElementById('contaUrl').value,
+        ativo: document.getElementById('contaAtivo').checked,
+        obs: document.getElementById('contaObs').value,
+      }),
+    });
+    $('#mdConta').modal('hide');
+    recarrega();
+  } catch (e) {
+    tiMsg(document.getElementById('contaMsg'), e.message, 'err');
+  } finally { btn.disabled = false; }
+}
+
+/* ── Importação Meta ────────────────────────────────────────────────────── */
+function tabelaPreview(res) {
+  const linhas = res.novos.map(n => `
+    <tr>
+      <td>${tiFmtData(n.data_pagamento)}</td>
+      <td class="num">${tiFmtUSD(n.valor)}</td>
+      <td>${tiEsc((n.bandeira || '') + (n.ultimos4 ? ' ···· ' + n.ultimos4 : '') || '—')}</td>
+      <td class="ti-muted" style="font-size:.75rem">${tiEsc(n.external_id)}</td>
+    </tr>`).join('');
+  return `
+    <div class="ti-msg ${res.novos.length ? 'ok' : 'warn'}">
+      <strong>${res.novos.length}</strong> transação(ões) nova(s)
+      ${res.duplicados.length ? ` · <strong>${res.duplicados.length}</strong> já importada(s) antes (serão ignoradas)` : ''}
+      · total novo: <strong>${tiFmtUSD(res.total)}</strong>
+    </div>
+    ${res.novos.length ? `<div style="max-height:260px;overflow:auto">
+      <table class="ti-tbl">
+        <thead><tr><th>Data</th><th class="num">Valor</th><th>Cartão</th><th>Transação</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table></div>` : ''}`;
+}
+
+async function metaConferir(salvar) {
+  const texto = document.getElementById('metaTexto').value;
+  const btnC = document.getElementById('btnMetaConferir');
+  const btnI = document.getElementById('btnMetaImportar');
+  btnC.disabled = btnI.disabled = true;
+  try {
+    const res = await tiApi('/api/custos-ti/meta/importar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        texto, salvar,
+        centro_key: TI_CENTRO_KEY,
+        criar_forma: document.getElementById('metaCriarForma').checked,
+      }),
+    });
+    document.getElementById('metaPreview').innerHTML = tabelaPreview(res);
+    tiMsg(document.getElementById('metaMsg'), '');
+    if (salvar) {
+      const extra = res.formas_criadas.length
+        ? ` Cartão cadastrado: ${res.formas_criadas.map(f => f.rotulo).join(', ')}.` : '';
+      tiMsg(document.getElementById('metaMsg'),
+        `${res.novos.length} lançamento(s) importado(s).${extra}`, 'ok');
+      recarrega();
+    }
+    btnI.disabled = salvar || !res.novos.length;
+  } catch (e) {
+    tiMsg(document.getElementById('metaMsg'), e.message, 'err');
+    btnI.disabled = true;
+  } finally { btnC.disabled = false; }
+}
+
+async function metaStatus() {
+  try {
+    const r = await tiApi('/api/custos-ti/meta/status');
+    const d = r.data;
+    document.getElementById('metaApiStatus').innerHTML = d.api_disponivel
+      ? `<div class="ti-msg ok">Integração ligada — WABA <code>${tiEsc(d.waba_id)}</code> (Graph ${tiEsc(d.graph_version)}).<br>
+         <span class="ti-muted">${tiEsc(d.nota)}</span></div>`
+      : `<div class="ti-msg warn">
+           <strong>Integração não configurada.</strong> ${tiEsc(d.nota)}<br>
+           Para ligar, defina <code>META_WABA_ID</code> e <code>META_ACCESS_TOKEN</code>
+           (token de System User com <code>whatsapp_business_management</code>) no
+           <code>.env</code> da VM e reinicie o serviço. Enquanto isso, use a aba
+           <em>Colar extrato</em> — ela traz a cobrança real do cartão, que a API não expõe.
+         </div>`;
+    document.getElementById('btnMetaApi').disabled = !d.api_disponivel;
+  } catch (e) {
+    document.getElementById('metaApiStatus').innerHTML =
+      `<div class="ti-msg err">${tiEsc(e.message)}</div>`;
+  }
+}
+
+async function metaApiBuscar(salvar) {
+  const btn = document.getElementById('btnMetaApi');
+  btn.disabled = true;
+  try {
+    const r = await tiApi('/api/custos-ti/meta/sync', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mes: document.getElementById('metaApiMes').value,
+        centro_key: TI_CENTRO_KEY, salvar,
+      }),
+    });
+    const a = r.analytics;
+    const cats = Object.entries(a.por_categoria || {});
+    document.getElementById('metaApiResultado').innerHTML = `
+      <div class="ti-msg ok">
+        Custo estimado de ${tiEsc(a.competencia)}: <strong>${tiFmtUSD(a.total)}</strong>
+        em ${a.conversas} conversa(s).
+        ${salvar ? ' Salvo como lançamento previsto.' : ''}
+      </div>
+      ${cats.length ? `<table class="ti-tbl">
+        <thead><tr><th>Categoria</th><th class="num">Custo</th></tr></thead>
+        <tbody>${cats.map(([k, v]) =>
+          `<tr><td>${tiEsc(k)}</td><td class="num">${tiFmtUSD(v)}</td></tr>`).join('')}</tbody>
+      </table>` : ''}`;
+    document.getElementById('btnMetaApiSalvar').disabled = salvar || !a.total;
+    if (salvar) recarrega();
+  } catch (e) {
+    document.getElementById('metaApiResultado').innerHTML =
+      `<div class="ti-msg err">${tiEsc(e.message)}</div>`;
+  } finally { btn.disabled = false; }
+}
+
+/* ── Ciclo de vida ──────────────────────────────────────────────────────── */
+async function carregar(de, ate) {
+  const alvo = document.querySelector('.content');
+  alvo.classList.add('ti-loading');
+  try {
+    const r = await tiApi(`/api/custos-ti/centro/${TI_CENTRO_KEY}?de=${de}&ate=${ate}`);
+    tiMsg(document.getElementById('globalMsg'), '');
+    pinta(r.data);
+  } catch (e) {
+    tiMsg(document.getElementById('globalMsg'), 'Falha ao carregar: ' + e.message, 'err');
+  } finally { alvo.classList.remove('ti-loading'); }
+}
+
+function recarrega() {
+  carregar(document.getElementById('fltDe').value, document.getElementById('fltAte').value);
+}
+
+async function excluir(url, pergunta, modal) {
+  if (!confirm(pergunta)) return;
+  try {
+    const r = await tiApi(url, { method: 'DELETE' });
+    $(modal).modal('hide');
+    if (r.desativado) {
+      tiMsg(document.getElementById('globalMsg'),
+        `Tem ${r.lancamentos} lançamento(s) ligado(s) — em vez de apagar o histórico, o item foi desativado.`, 'warn');
+    }
+    recarrega();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  tiLigaTabela('btnTblMes', 'tblMesBox');
+  tiLigaTabela('btnTblConta', 'tblContaBox');
+
+  document.getElementById('btnNovoLanc').addEventListener('click', () => abreLanc(null));
+  document.getElementById('btnNovaConta').addEventListener('click', () => abreConta(null));
+  document.getElementById('btnSalvarLanc').addEventListener('click', salvarLanc);
+  document.getElementById('btnSalvarConta').addEventListener('click', salvarConta);
+  document.getElementById('lancMoeda').addEventListener('change', atualizaConversao);
+  document.getElementById('lancValor').addEventListener('input', atualizaConversao);
+  document.getElementById('btnExcluirLanc').addEventListener('click', () =>
+    excluir(`/api/custos-ti/lancamentos/${document.getElementById('lancId').value}`,
+            'Excluir este lançamento?', '#mdLanc'));
+  document.getElementById('btnExcluirConta').addEventListener('click', () =>
+    excluir(`/api/custos-ti/contas/${document.getElementById('contaId').value}`,
+            'Excluir esta conta?', '#mdConta'));
+
+  document.getElementById('btnImportar').addEventListener('click', () => {
+    document.getElementById('metaApiMes').value = document.getElementById('fltAte').value;
+    tiMsg(document.getElementById('metaMsg'), '');
+    document.getElementById('metaPreview').innerHTML = '';
+    document.getElementById('metaApiResultado').innerHTML = '';
+    metaStatus();
+    $('#mdMeta').modal('show');
+  });
+  document.getElementById('btnMetaConferir').addEventListener('click', () => metaConferir(false));
+  document.getElementById('btnMetaImportar').addEventListener('click', () => metaConferir(true));
+  document.getElementById('btnMetaApi').addEventListener('click', () => metaApiBuscar(false));
+  document.getElementById('btnMetaApiSalvar').addEventListener('click', () => metaApiBuscar(true));
+  document.getElementById('metaTexto').addEventListener('input', () => {
+    document.getElementById('btnMetaImportar').disabled = true;
+  });
+
+  const p = tiPeriodoInit(carregar);
+  carregar(p.de, p.ate);
+});
+</script>
+</body>
+</html>

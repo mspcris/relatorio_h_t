@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — Custos de TI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% include "_custos_ti_head.html" %}
+</head>
+
+<body class="hold-transition sidebar-mini layout-fixed">
+  <div class="wrapper">
+    {% include "_custos_ti_sidebar.html" %}
+
+    <div class="content-wrapper">
+      <section class="content-header">
+        <div class="container-fluid">
+          <div class="row align-items-center">
+            <div class="col-sm-6">
+              <h1 class="m-0"><i class="fas fa-chart-pie" style="color:#2a78d6"></i> Custos de TI</h1>
+              <span class="ti-muted">Todos os custos de tecnologia, agrupados por centro de custo</span>
+            </div>
+            <div class="col-sm-6 text-sm-right">
+              <a href="/custos_ti_cadastros" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-sliders-h"></i> Cadastros
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="content">
+        <div class="container-fluid">
+
+          <!-- Filtro: uma linha só, acima de tudo que ele filtra -->
+          <div class="ti-filtros mb-3">
+            <div class="d-flex flex-wrap align-items-center" style="gap:.5rem">
+              <span class="ti-muted"><i class="fas fa-calendar-alt"></i> Período:</span>
+              <input type="month" id="fltDe" class="form-control form-control-sm" aria-label="Competência inicial">
+              <span class="ti-muted">até</span>
+              <input type="month" id="fltAte" class="form-control form-control-sm" aria-label="Competência final">
+              <div class="btn-group btn-group-sm ml-2" role="group" aria-label="Atalhos de período">
+                <button type="button" class="btn btn-outline-secondary" data-atalho="1">Mês atual</button>
+                <button type="button" class="btn btn-outline-secondary" data-atalho="3">3 meses</button>
+                <button type="button" class="btn btn-outline-secondary" data-atalho="6">6 meses</button>
+                <button type="button" class="btn btn-outline-secondary" data-atalho="12">12 meses</button>
+                <button type="button" class="btn btn-outline-secondary" id="btnAno">Este ano</button>
+              </div>
+              <span class="ml-auto ti-muted" id="infoCotacao"></span>
+            </div>
+          </div>
+
+          <div id="globalMsg"></div>
+
+          <!-- Números-cabeçalho: o total é a manchete, não um gráfico de 1 barra -->
+          <div class="row mb-3" id="tiles">
+            <div class="col-lg-3 col-sm-6 mb-3">
+              <div class="ti-tile">
+                <div class="rot">Total do período</div>
+                <div class="fig" id="figTotal">—</div>
+                <div class="sub" id="subTotal">&nbsp;</div>
+              </div>
+            </div>
+            <div class="col-lg-3 col-sm-6 mb-3">
+              <div class="ti-tile">
+                <div class="rot">Média mensal</div>
+                <div class="fig" id="figMedia">—</div>
+                <div class="sub" id="subMedia">&nbsp;</div>
+              </div>
+            </div>
+            <div class="col-lg-3 col-sm-6 mb-3">
+              <div class="ti-tile">
+                <div class="rot">Maior centro de custo</div>
+                <div class="fig" id="figMaior">—</div>
+                <div class="sub" id="subMaior">&nbsp;</div>
+              </div>
+            </div>
+            <div class="col-lg-3 col-sm-6 mb-3">
+              <div class="ti-tile">
+                <div class="rot">Lançamentos</div>
+                <div class="fig" id="figQtd">—</div>
+                <div class="sub" id="subQtd">&nbsp;</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <!-- Custo por centro de custo -->
+            <div class="col-lg-6 mb-3">
+              <div class="card ti-card h-100">
+                <div class="card-header">
+                  <h3 class="card-title">Custo por centro de custo</h3>
+                  <div class="card-tools">
+                    <button class="ti-linkish" id="btnTblCentro">ver tabela</button>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="ti-chart-wrap" style="height:300px">
+                    <canvas id="chCentro"></canvas>
+                  </div>
+                  <div id="vazioCentro" class="ti-empty" style="display:none">
+                    <i class="fas fa-inbox"></i>
+                    Nenhum custo lançado neste período.
+                  </div>
+                  <div class="ti-tbl-view" id="tblCentroBox"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Por forma de pagamento -->
+            <div class="col-lg-6 mb-3">
+              <div class="card ti-card h-100">
+                <div class="card-header">
+                  <h3 class="card-title">Por forma de pagamento</h3>
+                  <div class="card-tools">
+                    <button class="ti-linkish" id="btnTblForma">ver tabela</button>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="ti-chart-wrap" style="height:300px">
+                    <canvas id="chForma"></canvas>
+                  </div>
+                  <div id="vazioForma" class="ti-empty" style="display:none">
+                    <i class="fas fa-credit-card"></i>
+                    Cadastre as formas de pagamento e lance as despesas para ver este gráfico.
+                  </div>
+                  <div class="ti-tbl-view" id="tblFormaBox"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Evolução -->
+          <div class="card ti-card mb-3">
+            <div class="card-header">
+              <h3 class="card-title">Evolução dos últimos 12 meses</h3>
+              <div class="card-tools">
+                <button class="ti-linkish" id="btnTblEvo">ver tabela</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <ul class="ti-legend" id="legEvo"></ul>
+              <div class="ti-chart-wrap" style="height:320px">
+                <canvas id="chEvo"></canvas>
+              </div>
+              <p class="ti-muted mt-2 mb-0">
+                A evolução ignora o filtro de período — ela sempre mostra os 12 meses até o fim do período escolhido.
+              </p>
+              <div class="ti-tbl-view" id="tblEvoBox"></div>
+            </div>
+          </div>
+
+          <!-- Maiores contas -->
+          <div class="card ti-card mb-4">
+            <div class="card-header">
+              <h3 class="card-title">Maiores contas do período</h3>
+            </div>
+            <div class="card-body p-0">
+              <div style="overflow-x:auto">
+                <table class="ti-tbl" id="tblTop">
+                  <thead><tr><th>Conta / serviço</th><th class="num">Valor (R$)</th><th class="num">% do total</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div id="vazioTop" class="ti-empty" style="display:none">
+                <i class="fas fa-list"></i> Sem lançamentos no período.
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </div>
+  </div>
+
+<script>
+/* Rótulo direto no fim da barra — é o "relevo" exigido pelas cores de baixo
+   contraste da paleta, e evita depender só do tooltip para ler o valor. */
+const rotuloFimBarra = {
+  id: 'rotuloFimBarra',
+  afterDatasetsDraw(chart, args, opts) {
+    if (!opts || opts.ativo === false) return;
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = "600 11px 'Source Sans Pro', sans-serif";
+    ctx.fillStyle = '#52514e';   /* texto em tinta, nunca na cor da série */
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    chart.data.datasets.forEach((ds, di) => {
+      chart.getDatasetMeta(di).data.forEach((barra, i) => {
+        const v = ds.data[i];
+        if (!v) return;
+        const txt = tiFmtBRL(v, 2);
+        /* a escala reserva folga (suggestedMax abaixo), então o rótulo sempre
+           cabe FORA da barra — nada de texto branco sobre cor clara */
+        if (barra.x + 6 + ctx.measureText(txt).width <= chart.chartArea.right) {
+          ctx.fillText(txt, barra.x + 6, barra.y);
+        }
+      });
+    });
+    ctx.restore();
+  }
+};
+
+let chCentro = null, chForma = null, chEvo = null;
+
+function barraHorizontal(canvasId, labels, valores, cores, comRotulo) {
+  const base = tiChartBase();
+  const maximo = Math.max(0, ...valores);
+  return new Chart(document.getElementById(canvasId), {
+    type: 'bar',
+    plugins: comRotulo ? [rotuloFimBarra] : [],
+    data: {
+      labels,
+      datasets: [{
+        data: valores,
+        backgroundColor: cores,
+        /* borda na cor da superfície = folga de 2px entre preenchimentos */
+        borderColor: TI_SURFACE, borderWidth: 2,
+        borderRadius: 4, borderSkipped: 'start',
+        barPercentage: .72, categoryPercentage: .82,
+        maxBarThickness: 34,   /* com poucas categorias, barra fina */
+      }],
+    },
+    options: Object.assign({}, base, {
+      indexAxis: 'y',
+      plugins: Object.assign({}, base.plugins, {
+        tooltip: Object.assign({}, base.plugins.tooltip, {
+          callbacks: { label: (c) => tiFmtBRL(c.parsed.x) },
+        }),
+        rotuloFimBarra: { ativo: !!comRotulo },
+      }),
+      scales: {
+        x: { beginAtZero: true,
+             /* folga à direita para o rótulo direto caber fora da barra */
+             suggestedMax: comRotulo ? maximo * 1.28 : undefined,
+             grid: { color: '#eef0f2', drawBorder: false, drawTicks: false },
+             ticks: { color: '#8a9199', maxRotation: 0, maxTicksLimit: 6,
+                      callback: (v) => tiFmtCompacto(v) } },
+        y: { grid: { display: false, drawBorder: false },
+             ticks: { color: '#52514e', autoSkip: false } },
+      },
+    }),
+  });
+}
+
+function tiPct(v) {
+  return Number(v || 0).toLocaleString('pt-BR',
+    { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+}
+
+function tabelaSimples(boxId, colunas, linhas, total) {
+  const box = document.getElementById(boxId);
+  box.innerHTML = `
+    <table class="ti-tbl">
+      <thead><tr>${colunas.map((c, i) =>
+        `<th${i ? ' class="num"' : ''}>${tiEsc(c)}</th>`).join('')}</tr></thead>
+      <tbody>${linhas.map(l => `<tr>${l.map((c, i) =>
+        `<td${i ? ' class="num"' : ''}>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+      ${total ? `<tfoot><tr>${total.map((c, i) =>
+        `<td${i ? ' class="num"' : ''}>${c}</td>`).join('')}</tr></tfoot>` : ''}
+    </table>`;
+}
+
+function pintaTiles(d) {
+  document.getElementById('figTotal').textContent = tiFmtBRL(d.total_brl);
+  document.getElementById('subTotal').textContent =
+    `${tiFmtUSD(d.total_usd)} · ${d.periodo.um_mes ? tiFmtMes(d.periodo.de)
+      : tiFmtMes(d.periodo.de) + ' a ' + tiFmtMes(d.periodo.ate)}`;
+
+  document.getElementById('figMedia').textContent = tiFmtBRL(d.media_mensal_brl);
+  document.getElementById('subMedia').textContent =
+    `${d.periodo.meses.length} ${d.periodo.meses.length === 1 ? 'mês' : 'meses'} no período`;
+
+  const maior = d.por_centro[0];
+  const elMaior = document.getElementById('figMaior');
+  if (maior) {
+    elMaior.innerHTML = `<span class="swatch" style="background:${maior.cor}"></span>${tiEsc(maior.nome)}`;
+    document.getElementById('subMaior').textContent =
+      `${tiFmtBRL(maior.total_brl)} · ${tiPct(maior.pct)} do total`;
+  } else {
+    elMaior.textContent = '—';
+    document.getElementById('subMaior').textContent = 'sem custos no período';
+  }
+
+  document.getElementById('figQtd').textContent = d.qtd_lancamentos;
+  const prev = d.por_status.previsto || 0;
+  document.getElementById('subQtd').textContent = prev
+    ? `${tiFmtBRL(prev)} ainda previsto (não pago)`
+    : 'todos pagos';
+}
+
+/* Do 9º centro em diante agrupa em "Outros" — nunca gera cor nova. */
+function dobraEmOutros(itens) {
+  if (itens.length <= 8) return itens;
+  const cabeca = itens.slice(0, 7);
+  const cauda = itens.slice(7);
+  cabeca.push({
+    key: '_outros', nome: `Outros (${cauda.length})`, cor: TI_CINZA,
+    total_brl: Math.round(cauda.reduce((s, x) => s + x.total_brl, 0) * 100) / 100,
+    pct: Math.round(cauda.reduce((s, x) => s + x.pct, 0) * 10) / 10,
+    por_mes: cauda.reduce((acc, x) => {
+      Object.entries(x.por_mes || {}).forEach(([m, v]) => {
+        acc[m] = Math.round(((acc[m] || 0) + v) * 100) / 100;
+      });
+      return acc;
+    }, {}),
+  });
+  return cabeca;
+}
+
+function pintaCentro(d) {
+  const itens = dobraEmOutros(d.por_centro);
+  const vazio = document.getElementById('vazioCentro');
+  const wrap = document.querySelector('#chCentro').parentElement;
+  if (chCentro) { chCentro.destroy(); chCentro = null; }
+  if (!itens.length) {
+    wrap.style.display = 'none'; vazio.style.display = '';
+    document.getElementById('tblCentroBox').innerHTML = '';
+    return;
+  }
+  wrap.style.display = ''; vazio.style.display = 'none';
+  chCentro = barraHorizontal('chCentro', itens.map(i => i.nome),
+    itens.map(i => i.total_brl), itens.map(i => i.cor), true);
+
+  tabelaSimples('tblCentroBox', ['Centro de custo', 'Valor (R$)', '% do total'],
+    itens.map(i => [tiEsc(i.nome), tiFmtBRL(i.total_brl), tiPct(i.pct)]),
+    ['Total', tiFmtBRL(d.total_brl), '100,0%']);
+}
+
+function pintaForma(d) {
+  const itens = d.por_forma.filter(f => f.total_brl > 0);
+  const vazio = document.getElementById('vazioForma');
+  const wrap = document.querySelector('#chForma').parentElement;
+  if (chForma) { chForma.destroy(); chForma = null; }
+  if (!itens.length) {
+    wrap.style.display = 'none'; vazio.style.display = '';
+    document.getElementById('tblFormaBox').innerHTML = '';
+    return;
+  }
+  wrap.style.display = ''; vazio.style.display = 'none';
+  /* categorias nominais numa série só → uma cor (slot 1) para todas as barras */
+  chForma = barraHorizontal('chForma', itens.map(i => i.rotulo),
+    itens.map(i => i.total_brl), itens.map(() => TI_PALETA[0]), true);
+
+  tabelaSimples('tblFormaBox', ['Forma de pagamento', 'Valor (R$)', '% do total'],
+    itens.map(i => [tiEsc(i.rotulo), tiFmtBRL(i.total_brl), tiPct(i.pct)]),
+    ['Total', tiFmtBRL(d.total_brl), '100,0%']);
+}
+
+function pintaEvolucao(d) {
+  const meses = d.evolucao.meses;
+  const series = dobraEmOutros(d.evolucao.series.map(s => ({
+    key: s.key, nome: s.nome, cor: s.cor,
+    total_brl: s.valores.reduce((a, b) => a + b, 0), pct: 0,
+    por_mes: Object.fromEntries(meses.map((m, i) => [m, s.valores[i]])),
+  })));
+
+  if (chEvo) { chEvo.destroy(); chEvo = null; }
+  const base = tiChartBase();
+  chEvo = new Chart(document.getElementById('chEvo'), {
+    type: 'bar',
+    data: {
+      labels: meses.map(tiFmtMes),
+      datasets: series.map(s => ({
+        label: s.nome,
+        data: meses.map(m => s.por_mes[m] || 0),
+        backgroundColor: s.cor,
+        borderColor: TI_SURFACE, borderWidth: 2,   /* folga de 2px entre segmentos */
+        borderRadius: 4, borderSkipped: false,
+        barPercentage: .68, categoryPercentage: .84,
+      })),
+    },
+    options: Object.assign({}, base, {
+      plugins: Object.assign({}, base.plugins, {
+        tooltip: Object.assign({}, base.plugins.tooltip, {
+          callbacks: {
+            label: (c) => `${c.dataset.label}: ${tiFmtBRL(c.parsed.y)}`,
+            footer: (its) => 'Total: ' + tiFmtBRL(
+              its.reduce((s, i) => s + (i.parsed.y || 0), 0)),
+          },
+        }),
+      }),
+      scales: {
+        x: Object.assign({ stacked: true }, base.scales.x),
+        y: Object.assign({ stacked: true }, base.scales.y),
+      },
+    }),
+  });
+
+  tiLegenda(document.getElementById('legEvo'),
+    series.map(s => ({ nome: s.nome, cor: s.cor })));
+
+  tabelaSimples('tblEvoBox', ['Mês'].concat(series.map(s => s.nome)).concat(['Total']),
+    meses.map(m => [tiFmtMes(m)]
+      .concat(series.map(s => tiFmtBRL(s.por_mes[m] || 0)))
+      .concat([tiFmtBRL(series.reduce((a, s) => a + (s.por_mes[m] || 0), 0))])),
+    ['Total'].concat(series.map(s => tiFmtBRL(
+      meses.reduce((a, m) => a + (s.por_mes[m] || 0), 0))))
+      .concat([tiFmtBRL(series.reduce((a, s) =>
+        a + meses.reduce((x, m) => x + (s.por_mes[m] || 0), 0), 0))]));
+}
+
+function pintaTop(d) {
+  const tb = document.querySelector('#tblTop tbody');
+  const vazio = document.getElementById('vazioTop');
+  if (!d.top_contas.length) {
+    tb.innerHTML = ''; vazio.style.display = ''; return;
+  }
+  vazio.style.display = 'none';
+  tb.innerHTML = d.top_contas.map(c => `
+    <tr>
+      <td>${tiEsc(c.nome)}</td>
+      <td class="num">${tiFmtBRL(c.total_brl)}</td>
+      <td class="num">${tiPct(d.total_brl ? c.total_brl / d.total_brl * 100 : 0)}</td>
+    </tr>`).join('');
+}
+
+async function carregar(de, ate) {
+  const alvo = document.querySelector('.content');
+  alvo.classList.add('ti-loading');       /* segura o render anterior, sem flash */
+  try {
+    const r = await tiApi(`/api/custos-ti/home?de=${de}&ate=${ate}`);
+    const d = r.data;
+    tiMsg(document.getElementById('globalMsg'), '');
+    pintaTiles(d);
+    pintaCentro(d);
+    pintaForma(d);
+    pintaEvolucao(d);
+    pintaTop(d);
+    const cot = d.cotacao.por_mes[d.periodo.ate] || d.cotacao.media;
+    document.getElementById('infoCotacao').innerHTML =
+      `US$ 1 = ${tiFmtBRL(cot, 2)} <a href="/custos_ti_cadastros#cotacao" class="ti-linkish">ajustar</a>`;
+  } catch (e) {
+    tiMsg(document.getElementById('globalMsg'),
+      'Não consegui carregar os custos: ' + e.message, 'err');
+  } finally {
+    alvo.classList.remove('ti-loading');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  tiLigaTabela('btnTblCentro', 'tblCentroBox');
+  tiLigaTabela('btnTblForma', 'tblFormaBox');
+  tiLigaTabela('btnTblEvo', 'tblEvoBox');
+  const p = tiPeriodoInit(carregar);
+  carregar(p.de, p.ate);
+});
+</script>
+</body>
+</html>
