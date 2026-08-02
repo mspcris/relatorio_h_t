@@ -105,8 +105,35 @@
                 <div class="form-group col-md-6">
                   <button class="btn btn-primary" id="btnSalvarCot">Salvar</button>
                   <button class="btn btn-outline-secondary" id="btnBuscarCot">
-                    <i class="fas fa-sync"></i> Buscar cotação de hoje
+                    <i class="fas fa-sync"></i> Buscar no Banco Central
                   </button>
+                </div>
+              </div>
+              <hr>
+              <p class="ti-muted">
+                <strong>Preencher o histórico:</strong> busca a PTAX de fechamento
+                de cada mês no Banco Central e grava. Meses que já têm cotação
+                definida à mão não são tocados.
+              </p>
+              <div class="form-row align-items-end">
+                <div class="form-group col-md-3">
+                  <label>De</label>
+                  <input type="month" class="form-control" id="cotDe">
+                </div>
+                <div class="form-group col-md-3">
+                  <label>Até</label>
+                  <input type="month" class="form-control" id="cotAte">
+                </div>
+                <div class="form-group col-md-6">
+                  <button class="btn btn-outline-primary" id="btnPreencherCot">
+                    <i class="fas fa-history"></i> Preencher com PTAX
+                  </button>
+                  <div class="custom-control custom-checkbox mt-2">
+                    <input type="checkbox" class="custom-control-input" id="cotRecalcular" checked>
+                    <label class="custom-control-label ti-muted" for="cotRecalcular">
+                      recalcular os valores convertidos dos lançamentos desses meses
+                    </label>
+                  </div>
                 </div>
               </div>
               <div id="cotMsg"></div>
@@ -458,6 +485,32 @@ async function salvarCotacao(buscar) {
   }
 }
 
+async function preencherCotacoes() {
+  const btn = document.getElementById('btnPreencherCot');
+  btn.disabled = true;
+  tiMsg(document.getElementById('cotMsg'),
+        'Buscando no Banco Central, um mês por vez…', 'warn');
+  try {
+    const r = await tiApi('/api/custos-ti/cotacao/preencher', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        de: document.getElementById('cotDe').value,
+        ate: document.getElementById('cotAte').value,
+        recalcular: document.getElementById('cotRecalcular').checked,
+      }),
+    });
+    const partes = [`${r.definidos.length} mês(es) preenchido(s)`];
+    if (r.pulados.length) partes.push(`${r.pulados.length} já tinham cotação`);
+    if (r.falhas.length) partes.push(`${r.falhas.length} sem PTAX`);
+    if (r.recalculo) partes.push(`${r.recalculo.recalculados} lançamento(s) recalculado(s)`);
+    tiMsg(document.getElementById('cotMsg'), partes.join(' · '),
+          r.falhas.length ? 'warn' : 'ok');
+    carregaCotacaoDoMes();
+  } catch (e) {
+    tiMsg(document.getElementById('cotMsg'), e.message, 'err');
+  } finally { btn.disabled = false; }
+}
+
 async function carregaCotacaoDoMes() {
   try {
     const r = await tiApi('/api/custos-ti/cotacao?mes=' + document.getElementById('cotMes').value);
@@ -493,8 +546,12 @@ async function excluir(url, pergunta, modal) {
 
 document.addEventListener('DOMContentLoaded', () => {
   const hoje = new Date();
-  document.getElementById('cotMes').value =
-    `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+  const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+  document.getElementById('cotMes').value = mesAtual;
+  document.getElementById('cotAte').value = mesAtual;
+  const d = new Date(hoje.getFullYear() - 1, hoje.getMonth(), 1);
+  document.getElementById('cotDe').value =
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
   document.getElementById('btnNovoCentro').addEventListener('click', () => abreCentro(null));
   document.getElementById('btnNovaForma').addEventListener('click', () => abreForma(null));
@@ -519,6 +576,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'Excluir esta forma de pagamento?', '#mdForma'));
   document.getElementById('btnSalvarCot').addEventListener('click', () => salvarCotacao(false));
   document.getElementById('btnBuscarCot').addEventListener('click', () => salvarCotacao(true));
+  document.getElementById('btnPreencherCot').addEventListener('click', preencherCotacoes);
   document.getElementById('cotMes').addEventListener('change', carregaCotacaoDoMes);
 
   carregar();

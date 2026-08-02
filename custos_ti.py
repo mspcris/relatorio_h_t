@@ -149,16 +149,117 @@ def set_cotacao(sess, competencia: str, usd_brl, fonte: str = "manual") -> dict:
     return row.to_dict()
 
 
-def fetch_cotacao_usd_brl() -> dict:
-    """Cotação de hoje na AwesomeAPI (grátis, sem chave, só GET)."""
+_PTAX_URL = ("https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/"
+             "CotacaoDolarPeriodo(dataInicial=@dataInicial,"
+             "dataFinalCotacao=@dataFinalCotacao)")
+
+
+def fetch_ptax(ate: date, dias_atras: int = 10) -> dict:
+    """PTAX de venda do Banco Central — a última disponível até `ate`.
+
+    É a cotação OFICIAL brasileira, a mesma usada para fins contábeis e fiscais.
+    Tem histórico, então serve para preencher mês passado (a AwesomeAPI só dá
+    a de hoje). Não publica em fim de semana e feriado: por isso a janela de
+    `dias_atras` e o "última disponível".
+    """
     import requests
+    ini = ate - timedelta(days=dias_atras)
+    try:
+        r = requests.get(_PTAX_URL, timeout=25, params={
+            "@dataInicial": f"'{ini.strftime('%m-%d-%Y')}'",
+            "@dataFinalCotacao": f"'{ate.strftime('%m-%d-%Y')}'",
+            "$format": "json",
+            "$select": "cotacaoVenda,dataHoraCotacao",
+        })
+        r.raise_for_status()
+        linhas = (r.json() or {}).get("value") or []
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"PTAX: {e}", "usd_brl": None}
+    if not linhas:
+        return {"ok": False, "usd_brl": None,
+                "error": f"PTAX sem cotação entre {ini} e {ate}."}
+    ultima = max(linhas, key=lambda x: x["dataHoraCotacao"])
+    dia = ultima["dataHoraCotacao"][:10]
+    return {"ok": True, "usd_brl": round(float(ultima["cotacaoVenda"]), 6),
+            "fonte": f"PTAX/BCB {dia}", "data": dia}
+
+
+def fetch_cotacao_usd_brl(ate: Optional[date] = None) -> dict:
+    """Cotação USD→BRL: PTAX do Banco Central, com AwesomeAPI de reserva.
+
+    PTAX primeiro porque é oficial e tem histórico. A AwesomeAPI só entra se o
+    BCB falhar E o alvo for hoje — ela não serve para data passada, e ainda por
+    cima devolve 429 quando se pede demais.
+    """
+    import requests
+    alvo = ate or datetime.now(_BRT).date()
+    ptax = fetch_ptax(alvo)
+    if ptax.get("ok"):
+        return ptax
+    if ate is not None:
+        return ptax          # data passada: sem reserva, PTAX é a fonte
     try:
         r = requests.get("https://economia.awesomeapi.com.br/last/USD-BRL", timeout=12)
         r.raise_for_status()
         bid = float((r.json().get("USDBRL") or {}).get("bid"))
         return {"ok": True, "usd_brl": round(bid, 6), "fonte": "awesomeapi"}
-    except Exception as e:  # noqa: BLE001 — cotação é conveniência, não pode derrubar a tela
-        return {"ok": False, "error": str(e), "usd_brl": None}
+    except Exception as e:  # noqa: BLE001 — cotação é conveniência, não derruba a tela
+        return {"ok": False, "usd_brl": None,
+                "error": f"{ptax.get('error')} · reserva AwesomeAPI: {e}"}
+
+
+def _fim_do_mes(competencia: str) -> date:
+    ano, mes = (int(x) for x in competencia.split("-"))
+    prox = date(ano + 1, 1, 1) if mes == 12 else date(ano, mes + 1, 1)
+    return prox - timedelta(days=1)
+
+
+def preencher_cotacoes(sess, de: str, ate: str, *, sobrescrever: bool = False) -> dict:
+    """Preenche a cotação de cada mês do período com a PTAX de fechamento.
+
+    Convenção: PTAX de venda do último dia útil do mês. É verificável — dá para
+    conferir no site do BCB. Mês corrente usa a última PTAX disponível.
+    Por padrão NÃO sobrescreve mês que já tem cotação definida à mão.
+    """
+    meses = range_meses(de, ate)
+    hoje = datetime.now(_BRT).date()
+    definidos, pulados, falhas = [], [], []
+    for m in meses:
+        if not sobrescrever and sess.get(Cotacao, m):
+            pulados.append(m)
+            continue
+        alvo = min(_fim_do_mes(m), hoje)
+        r = fetch_ptax(alvo)
+        if not r.get("ok"):
+            falhas.append({"competencia": m, "error": r.get("error")})
+            continue
+        set_cotacao(sess, m, r["usd_brl"], fonte=r["fonte"])
+        definidos.append({"competencia": m, "usd_brl": r["usd_brl"], "fonte": r["fonte"]})
+    return {"definidos": definidos, "pulados": pulados, "falhas": falhas}
+
+
+def recalcular_conversoes(sess, de: str, ate: str) -> dict:
+    """Recalcula valor_brl/valor_usd dos lançamentos com a cotação atual do mês.
+
+    O valor da moeda ORIGINAL nunca muda — só o convertido. Serve para consertar
+    lançamentos gravados quando o mês ainda não tinha cotação de verdade e caiu
+    no fallback do sistema.
+    """
+    meses = set(range_meses(de, ate))
+    cot = {m: get_cotacao(sess, m) for m in meses}
+    mexidos = 0
+    for l in (sess.query(Lancamento)
+              .filter(Lancamento.competencia.in_(meses)).all()):
+        nova = cot[l.competencia]
+        if l.cotacao is not None and abs(float(l.cotacao) - nova) < 1e-9:
+            continue
+        valor, moeda = float(l.valor or 0), l.moeda
+        l.cotacao = nova
+        l.valor_brl = para_brl(valor, moeda, nova)
+        l.valor_usd = para_usd(valor, moeda, nova)
+        mexidos += 1
+    sess.commit()
+    return {"recalculados": mexidos, "meses": sorted(meses)}
 
 
 def para_brl(valor: float, moeda: str, cotacao: float) -> float:

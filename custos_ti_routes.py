@@ -279,6 +279,26 @@ def api_cotacao_set():
 # ─────────────────────────────────────────────────────────────────────────────
 # Meta / WhatsApp
 # ─────────────────────────────────────────────────────────────────────────────
+@custos_ti_bp.post("/api/custos-ti/cotacao/preencher")
+def api_cotacao_preencher():
+    """Preenche as cotações do período com a PTAX do Banco Central e, se pedido,
+    recalcula os valores convertidos dos lançamentos daqueles meses."""
+    if not _require_admin():
+        return _deny()
+    body = _body()
+    try:
+        res = custos_ti.preencher_cotacoes(
+            _sess(), body.get("de"), body.get("ate"),
+            sobrescrever=bool(body.get("sobrescrever")))
+        if body.get("recalcular"):
+            res["recalculo"] = custos_ti.recalcular_conversoes(
+                _sess(), body.get("de"), body.get("ate"))
+        return jsonify({"ok": True, **res})
+    except Exception as e:  # noqa: BLE001
+        _sess().rollback()
+        return _erro(e, "preencher cotações")
+
+
 @custos_ti_bp.get("/api/custos-ti/meta/status")
 def api_meta_status():
     """Diz se a integração está configurada. Com ?testar=1, bate na Graph API
