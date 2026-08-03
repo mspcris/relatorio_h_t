@@ -96,7 +96,7 @@ SERVICOS_SEED: list[dict] = [
     {"key": "chat_dashboard",             "label": "Dashboard Chat (Camila.ai)",               "group_name": "mais", "href": "/chat_dashboard.html",                          "lock": "verde", "ordem": 200},
     {"key": "wpp_dashboard",              "label": "Dashboard WhatsApp (Meta)",                "group_name": "mais", "href": "/wpp_dashboard.html",                           "lock": "verde", "ordem": 210},
     {"key": "ctrlq_desbloqueio",          "label": "Médico - Desbloqueio de Agenda — CTRL-Q",  "group_name": "mais", "href": "/ctrlq_desbloqueio",                            "lock": "verde", "ordem": 220},
-    {"key": "qualidade_agenda",           "label": "Qualidade da Agenda Médica",               "group_name": "mais", "href": "/qualidade_agenda",                             "lock": "verde", "ordem": 230},
+    {"key": "qualidade_agenda",           "label": "Médico - Qualidade da Agenda",            "group_name": "mais", "href": "/qualidade_agenda",                             "lock": "verde", "ordem": 230},
     {"key": "higienizacao",               "label": "Higienização",                             "group_name": "mais", "href": "/higienizacao",                                 "lock": "verde", "ordem": 240},
     {"key": "monitor_avisos",             "label": "Monitor de Avisos",                        "group_name": "mais", "href": "https://avisos.camim.com.br/avisos",            "lock": "verde", "ordem": 250},
     {"key": "quadro_avisos_postos",       "label": "MURAL - Quadro de Avisos",                 "group_name": "mais", "href": "https://avisos.camim.com.br/",                  "lock": "verde", "ordem": 260},

@@ -141,6 +141,9 @@ def cmd_summarize() -> None:
         prev = existing.get(key)
         if prev and prev.get("html_hash") == _html_hash(page) and prev.get("summary"):
             print(f"[{i}/{len(pages)}] {key}: cache hit, pulando")
+            # Título/URL vêm SEMPRE do pages.json: renomear uma página não muda o
+            # HTML, então o cache guardava o nome antigo para sempre.
+            prev = {**prev, "title": page["title"], "url": page["url"], "type": page["type"]}
             out.append(prev)
             continue
         print(f"[{i}/{len(pages)}] {key} ({page['type']})... ", end="", flush=True)

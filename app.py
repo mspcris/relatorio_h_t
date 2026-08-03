@@ -2959,6 +2959,7 @@ def api_agenda_dia():
 # ===============================
 
 import math
+import unicodedata
 from functools import lru_cache
 
 _SEARCH_INDEX_PATH = os.path.join(os.path.dirname(__file__), "search_index", "embeddings.json")
@@ -3015,6 +3016,13 @@ def _user_paginas_permitidas(email: str) -> set | None:
         db.close()
 
 
+def _sem_acento(s: str) -> str:
+    """minúsculo e sem acento. Sem isso 'medic' não casa 'Médico' e metade das
+    páginas de médico sumia do autocomplete (visto em 2026-08-03)."""
+    s = unicodedata.normalize("NFD", (s or "").lower())
+    return "".join(c for c in s if unicodedata.category(c) != "Mn")
+
+
 @app.get("/api/search/suggest")
 def api_search_suggest():
     """Autocomplete instantâneo por substring em title/keywords. Sem chamada à OpenAI."""
@@ -3022,29 +3030,35 @@ def api_search_suggest():
     if not email:
         return jsonify({"ok": False, "error": "não autenticado"}), 401
 
-    q = (request.args.get("q") or "").strip().lower()
+    q_raw = (request.args.get("q") or "").strip()
+    q = _sem_acento(q_raw)
     if len(q) < 2:
-        return jsonify({"ok": True, "query": q, "results": []})
+        return jsonify({"ok": True, "query": q_raw, "results": []})
 
     limit = max(1, min(int(request.args.get("limit") or 8), 20))
     idx = _load_search_index()
     if not idx.get("pages"):
-        return jsonify({"ok": True, "query": q, "results": []})
+        return jsonify({"ok": True, "query": q_raw, "results": []})
 
     permitidas = _user_paginas_permitidas(email)
     out = []
     for page in idx["pages"]:
         if permitidas is not None and page["key"] not in permitidas:
             continue
-        title = (page.get("title") or "").lower()
-        kws = " ".join(page.get("keywords") or []).lower()
-        summary = (page.get("summary") or "").lower()
+        title = _sem_acento(page.get("title"))
+        kw_list = [_sem_acento(k) for k in (page.get("keywords") or [])]
+        kws = " ".join(kw_list)
+        summary = _sem_acento(page.get("summary"))
         score = 0.0
         if title.startswith(q):
             score = 4.0
         elif q in title:
             score = 3.0
-        elif any(kw.startswith(q) for kw in (page.get("keywords") or [])):
+        # "Médico - Custo Efetivo Nominal" começa com o prefixo do grupo, então
+        # buscar "custo" precisa casar a palavra no meio do título, não só o começo.
+        elif any(p.startswith(q) for p in title.split()):
+            score = 2.8
+        elif any(kw.startswith(q) for kw in kw_list):
             score = 2.5
         elif q in kws:
             score = 2.0
@@ -3058,8 +3072,8 @@ def api_search_suggest():
                 "type": page["type"],
                 "score": score,
             })
-    out.sort(key=lambda x: x["score"], reverse=True)
-    return jsonify({"ok": True, "query": q, "results": out[:limit]})
+    out.sort(key=lambda x: (-x["score"], x["title"]))
+    return jsonify({"ok": True, "query": q_raw, "results": out[:limit]})
 
 
 @app.get("/api/search")
