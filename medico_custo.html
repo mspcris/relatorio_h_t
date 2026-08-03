@@ -211,6 +211,39 @@ tr.detalhe th { background: var(--bg); }
 .porque .obs { font-size: .76rem; color: var(--ink-3); margin-top: .5rem; line-height: 1.45; }
 .porque .mais { color: var(--danger); }
 
+/* ── validar mediana ─────────────────────────────────────────────────────────
+   O selo diz "+57%". A conta diz de quê. Isto aqui mostra a LISTA que produziu
+   a mediana, do menor para o maior, com o meio destacado — é a prova, e sem ela
+   o número continua sendo palavra contra palavra. */
+.porque .acoes { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
+.btn-val {
+  font: inherit; font-size: .74rem; line-height: 1.2; cursor: pointer;
+  padding: .28rem .55rem; border-radius: 6px; color: var(--ink-2);
+  background: var(--bg); border: 1px solid var(--line);
+}
+.btn-val:hover { background: #eef1f5; border-color: var(--ink-3); color: var(--ink); }
+.btn-val[aria-expanded="true"] { border-color: var(--ink-3); color: var(--ink); font-weight: 600; }
+.val-box { margin-top: .5rem; }
+.val-box .val-cab { font-size: .76rem; color: var(--ink-3); margin-bottom: .35rem; line-height: 1.45; }
+.val-tab { width: 100%; border-collapse: collapse; font-size: .76rem; }
+.val-tab th {
+  text-align: left; font-weight: 600; color: var(--ink-3); font-size: .7rem;
+  text-transform: uppercase; letter-spacing: .04em; padding: .2rem .4rem;
+  border-bottom: 1px solid var(--line);
+}
+.val-tab td { padding: .22rem .4rem; border-bottom: 1px solid var(--line); color: var(--ink-2); }
+.val-tab td.num, .val-tab th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.val-tab tr.eu td { background: rgba(42,120,214,.10); }
+.val-tab tr.eu td:first-child { box-shadow: inset 2px 0 0 #2a78d6; }
+.val-tab tr.meio td { background: rgba(27,175,122,.14); font-weight: 600; color: var(--ink); }
+.val-tab tr.acima td.num { color: var(--danger); }
+.val-tab tr.corte td {
+  background: transparent; border-bottom: 0; padding: .3rem .4rem;
+  font-size: .74rem; font-weight: 600; color: #1baf7a;
+}
+.val-box .val-nota { font-size: .74rem; color: var(--ink-3); margin-top: .4rem; line-height: 1.45; }
+.val-scroll { max-height: 22rem; overflow: auto; }
+
 /* ── alertas ─────────────────────────────────────────────────────────────── */
 .alertas { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 1rem; }
 .alerta {
@@ -783,6 +816,85 @@ function baseRef(ref) {
   return `${ag}${num(p)} posto(s)`;
 }
 
+/* ── Validar a mediana ───────────────────────────────────────────────────────
+   Pedido do Cristiano (2026-08-03): o bloco explica a conta, mas quem lê tem de
+   poder CONFERIR a mediana, não só acreditar nela. O painel abre a mesma lista
+   que produziu o número — as agendas da especialidade no escopo atual, do menor
+   para o maior, com o meio destacado.
+
+   Duas honestidades que o painel precisa manter:
+   - a base é a MESMA de `calcularReferencias()` (`baseReferencia()` filtrado só
+     por posto). Se fosse a lista já filtrada por busca/sinal, a mediana da tela
+     não seria a mediana da conta;
+   - cada linha é uma AGENDA, não um médico. Um médico com 4 plantões pesa 4 na
+     mediana. Dizer "todos os médicos" e mostrar médico único mudaria o número.
+   A hora é sempre a LÍQUIDA (`valor_hora`), mesmo com "pagar almoço" ligado —
+   igual ao sinal. É o mesmo aviso que o bloco já dá. */
+const chaveMed = l => `${l.medico}||${l.crm || ''}`;
+
+function painelMediana(esp, tipo, chaveFoco) {
+  const campo = tipo === 'vaga' ? 'custo_por_vaga' : 'valor_hora';
+  const ls = baseReferencia()
+    .filter(l => l.especialidade === esp && l[campo])
+    .sort((a, b) => a[campo] - b[campo]);
+
+  if (!ls.length) return `<div class="val-nota">Nenhuma agenda de plantão remunerado de
+    <b>${esc(esp)}</b> ${escopoRef()} — sem base, não há mediana a conferir.</div>`;
+
+  const med = mediana(ls.map(l => l[campo]));
+  const fator = tipo === 'vaga'
+    ? ((DADOS.parametros && DADOS.parametros.fator_custo_vaga_alto) || 2)
+    : DADOS_FATOR();
+  const lim = med ? med * fator : null;
+  const n = ls.length, meio = n >> 1, par = n % 2 === 0;
+  const postos = new Set(ls.map(l => l.posto));
+  const oQue = tipo === 'vaga' ? 'R$/consulta' : 'R$/hora';
+
+  const corpo = ls.map((l, i) => {
+    const cls = [];
+    if (par ? (i === meio - 1 || i === meio) : i === meio) cls.push('meio');
+    if (chaveFoco && chaveMed(l) === chaveFoco) cls.push('eu');
+    if (lim && l[campo] > lim) cls.push('acima');
+    // Com n par a mediana não é nenhuma das linhas: é a média das duas do meio.
+    // A faixa entra ENTRE elas para o número não parecer que saiu de uma linha.
+    const corte = par && i === meio
+      ? `<tr class="corte"><td colspan="4">mediana = média das duas do meio = ${brl(med)}</td></tr>` : '';
+    return corte + `<tr class="${cls.join(' ')}">
+      <td class="num">${i + 1}</td>
+      <td title="${esc(l.posto_nome || '')}">${esc(l.posto)}</td>
+      <td>${esc(l.medico)}<span style="color:var(--ink-3)"> · ${esc(l.dia_semana || 'dia não cadastrado')}</span></td>
+      <td class="num">${brl(l[campo])}</td></tr>`;
+  }).join('');
+
+  return `<div class="val-cab">
+      <b>${num(n)} agenda(s)</b> de <b>${esc(esp)}</b> em ${num(postos.size)} posto(s) ${escopoRef()},
+      do menor para o maior. Mediana <b>${brl(med)}</b>${lim
+        ? ` · limite = mediana × ${num(fator, 2)} = <b>${brl(lim)}</b>` : ''}.
+    </div>
+    <div class="val-scroll"><table class="val-tab">
+      <thead><tr><th class="num">#</th><th>Posto</th><th>Médico · dia</th><th class="num">${oQue}</th></tr></thead>
+      <tbody>${corpo}</tbody>
+    </table></div>
+    <div class="val-nota">Verde = o meio da lista (a mediana). Azul = agenda deste médico.
+      Vermelho = acima do limite. Cada linha é uma <b>agenda</b>, não um médico: quem tem
+      quatro plantões pesa quatro na mediana${tipo === 'vaga' ? '' : ', e a hora é sempre a líquida (sem almoço pago), igual ao sinal'}.
+      Ficam de fora agenda de exame/equipamento e médico por comissão — nesses o valor fixo
+      não é o custo real.</div>`;
+}
+
+/* Botões de cada informativo: conferir a mediana e jogar a especialidade no
+   filtro da tabela. São duas perguntas diferentes — "de onde saiu esse número"
+   e "quem mais está nessa especialidade". */
+function acoesEsp(esp, tipo, chaveFoco) {
+  return `<div class="acoes">
+    <button type="button" class="btn-val" aria-expanded="false"
+      data-val-esp="${esc(esp)}" data-val-tipo="${tipo}" data-val-med="${esc(chaveFoco || '')}">
+      validar mediana</button>
+    <button type="button" class="btn-val" data-filtra-esp="${esc(esp)}">
+      ver só ${esc(esp)} na tabela</button>
+  </div><div class="val-box" hidden></div>`;
+}
+
 function selos(l) {
   const s = [];
   const mod = { ordem_chegada: ['oc','ordem de chegada'], misto: ['misto','misto'], agendado: ['agendado','agendado'] }[l.modalidade];
@@ -836,7 +948,8 @@ function explicacao(m) {
           <b>especialidade ${escopoRef()}</b>, não sobre o próprio médico nem sobre o posto:
           ${brl(l.valor_hora)} ÷ ${mh ? brl(mh) : '—'} − 1 = ${num(l._pct, 1)}%.
           ${l._pct != null && mh
-            ? `Em reais, ${brl(l.valor_hora - mh)} a mais por hora contratada.` : ''}</div></li>`;
+            ? `Em reais, ${brl(l.valor_hora - mh)} a mais por hora contratada.` : ''}</div>
+        ${acoesEsp(l.especialidade, 'hora', m.chave)}</li>`;
     });
     blocos.push(`<div class="bloco b-grave">
       <span class="selo grave">fora da curva</span>
@@ -870,7 +983,8 @@ function explicacao(m) {
           (${num(l.vagas_efetivas)} vaga(s) para ${brl(l.valor_plantao, 0)}) contra a mediana de
           <b>${mv ? brl(mv) : '—'}</b> da ${esc(l.especialidade)}
           ${l._pctVaga != null
-            ? `→ <b class="mais">+${num(l._pctVaga, 1)}%</b>` : ''}</li>`;
+            ? `→ <b class="mais">+${num(l._pctVaga, 1)}%</b>` : ''}
+          ${acoesEsp(l.especialidade, 'vaga', m.chave)}</li>`;
       }).join('')}</ul></div>`);
   }
 
@@ -973,6 +1087,27 @@ function tabelaMedicos(ls) {
   tb.querySelectorAll('.expansivel').forEach(tr => tr.addEventListener('click', () => {
     const d = tb.querySelector(`[data-det="${CSS.escape(tr.dataset.med)}"]`);
     if (d) d.hidden = !d.hidden;
+  }));
+
+  /* A lista da mediana é montada só quando o botão é clicado. Renderizar todas
+     de antemão significaria repetir as agendas de CLÍNICA GERAL dentro de cada
+     médico da especialidade — dezenas de milhares de <tr> escondidos. */
+  tb.querySelectorAll('.btn-val[data-val-esp]').forEach(b => b.addEventListener('click', () => {
+    const box = b.parentElement.nextElementSibling;
+    if (!box || !box.classList.contains('val-box')) return;
+    if (b.getAttribute('aria-expanded') === 'true') {
+      box.hidden = true; b.setAttribute('aria-expanded', 'false'); b.textContent = 'validar mediana';
+      return;
+    }
+    box.innerHTML = painelMediana(b.dataset.valEsp, b.dataset.valTipo, b.dataset.valMed || null);
+    box.hidden = false; b.setAttribute('aria-expanded', 'true'); b.textContent = 'ocultar a lista';
+  }));
+
+  tb.querySelectorAll('.btn-val[data-filtra-esp]').forEach(b => b.addEventListener('click', () => {
+    estado.especialidade = b.dataset.filtraEsp;
+    desenha();
+    const alvo = document.getElementById('tblMed');
+    if (alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }));
 }
 
