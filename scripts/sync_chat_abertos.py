@@ -47,7 +47,15 @@ def main():
                     help="máximo de linhas no arquivo (os mais antigos primeiro)")
     ap.add_argument("--include-outbound", action="store_true",
                     help="inclui também tickets outbound (default: só inbound)")
+    # Corretores atendem por outra plataforma e demoram dias para encerrar a
+    # conversa: esses tickets entupiam o topo do "em aberto há mais tempo" sem
+    # que ninguém aqui pudesse agir. Ficam fora da contagem e da lista.
+    ap.add_argument("--exclude-fila", default="corretor",
+                    help="filas fora do monitoramento: substrings separadas por "
+                         "vírgula, sem distinguir maiúsculas ('' desliga o filtro)")
     args = ap.parse_args()
+
+    ignoradas = [s.strip().lower() for s in (args.exclude_fila or "").split(",") if s.strip()]
 
     src = args.src if os.path.exists(args.src) else args.fallback_src
     try:
@@ -69,13 +77,16 @@ def main():
     for t in candidates:
         if not args.include_outbound and not str(t.get("b") or "").startswith("inbound_"):
             continue
+        fila = t.get("f") or ""
+        if any(x in fila.lower() for x in ignoradas):
+            continue
         ts = parse_br(t.get("d"))
         if ts is None:
             continue
         abertos.append((ts, {
             "n": t.get("n"),
             "c": t.get("c") or "",
-            "f": t.get("f") or "",
+            "f": fila,
             "d": t.get("d") or "",
         }))
 
