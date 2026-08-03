@@ -425,6 +425,9 @@ tr.detalhe th { background: var(--bg); }
     </section>
 
     <!-- médicos -->
+    <!-- O mesmo aviso de filtro do topo, repetido aqui: quem rola até a tabela
+         já perdeu o de cima de vista e precisa poder limpar sem subir. -->
+    <div id="avisoFiltroMed"></div>
     <section class="card surge">
       <header>
         <h2>Médicos</h2>
@@ -1172,16 +1175,22 @@ function desenha() {
   if (estado.especialidade) f.push(`especialidade <b>${esc(estado.especialidade)}</b>`);
   if (estado.alerta) f.push(`sinal <b>${ROT_ALERTA()[estado.alerta][0]}</b>`);
   if (estado.postos.size) f.push(`${estado.postos.size} posto(s)`);
-  document.getElementById('avisoFiltro').innerHTML = f.length
+  // O mesmo aviso aparece no topo e logo acima da tabela de médicos. Quem rolou
+  // até a tabela não vê mais o de cima — sem o segundo, limpar exige subir a
+  // página inteira. Por isso a classe, e não o id: são dois elementos iguais.
+  const aviso = f.length
     ? `<div style="background:var(--accent-soft);border-radius:10px;padding:.6rem .9rem;
         margin-bottom:1rem;font-size:.85rem">Filtrando por ${f.join(' · ')}
-        <button class="ver-tabela" id="limpar" style="margin-left:.6rem">limpar</button></div>` : '';
-  const lp = document.getElementById('limpar');
-  if (lp) lp.addEventListener('click', () => {
+        <button class="ver-tabela limpar-filtro" style="margin-left:.6rem">limpar</button></div>` : '';
+  ['avisoFiltro', 'avisoFiltroMed'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = aviso;
+  });
+  document.querySelectorAll('.limpar-filtro').forEach(b => b.addEventListener('click', () => {
     estado.especialidade = estado.alerta = null; estado.postos.clear();
     sincronizaChips();
     desenha();
-  });
+  }));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
