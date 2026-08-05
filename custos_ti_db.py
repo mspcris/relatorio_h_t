@@ -105,7 +105,7 @@ TIPOS_PAGAMENTO = (
 )
 RECORRENCIAS = ("mensal", "anual", "variavel", "unica")
 STATUS_LANC = ("previsto", "pago")
-ORIGENS_LANC = ("manual", "meta_texto", "meta_api", "ia_snapshot", "import_csv")
+ORIGENS_LANC = ("manual", "meta_texto", "meta_api", "ia_snapshot", "import_csv", "email")
 MOEDAS = ("BRL", "USD", "EUR")
 
 
@@ -336,6 +336,47 @@ class Cotacao(TiBase):
     def to_dict(self) -> dict:
         return {"competencia": self.competencia, "usd_brl": _f(self.usd_brl),
                 "fonte": self.fonte}
+
+
+STATUS_AUDITORIA = ("pendente", "lancado", "descartado")
+
+
+class EmailAuditoria(TiBase):
+    """E-mail de conta que chegou de um remetente confiável mas o parser NÃO
+    entendeu (conta nova, layout estranho, valor ilegível). Em vez de virar um
+    lançamento fantasma de valor 0 no meio do real, fica AQUI, e a página mostra
+    o menu 'Auditoria' piscando com os dados crus até o Cristiano lançar à mão
+    ou descartar. Nada de e-mail não reconhecido entra silenciosamente no custo.
+    """
+    __tablename__ = "ti_email_auditoria"
+
+    id = Column(Integer, primary_key=True)
+    message_id = Column(String(200), nullable=True)   # dedupe (mesmo do lançamento)
+    remetente = Column(String(160), nullable=False)
+    assunto = Column(String(300), nullable=True)
+    recebido_em = Column(DateTime, nullable=True)
+    corpo = Column(Text, nullable=True)               # texto plano, para revisar
+    anexos = Column(Text, nullable=True)              # nomes dos anexos, se houver
+    motivo = Column(String(200), nullable=True)       # por que não foi reconhecido
+    status = Column(String(12), nullable=False, default="pendente")
+    lancamento_id = Column(Integer, nullable=True)    # preenchido quando vira lançamento
+    created_at = Column(DateTime, nullable=False, default=now_brt)
+    updated_at = Column(DateTime, nullable=False, default=now_brt, onupdate=now_brt)
+
+    __table_args__ = (
+        CheckConstraint(f"status IN {STATUS_AUDITORIA}", name="ck_ti_audit_status"),
+        # Não guardar o mesmo e-mail duas vezes ao reprocessar a caixa.
+        UniqueConstraint("message_id", name="uq_ti_audit_msgid"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id, "message_id": self.message_id,
+            "remetente": self.remetente, "assunto": self.assunto,
+            "recebido_em": self.recebido_em.isoformat() if self.recebido_em else None,
+            "corpo": self.corpo, "anexos": self.anexos, "motivo": self.motivo,
+            "status": self.status, "lancamento_id": self.lancamento_id,
+        }
 
 
 def _f(v) -> float | None:
