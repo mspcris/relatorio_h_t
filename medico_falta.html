@@ -471,15 +471,124 @@
             <td>${f.qtd_pacientes != null ? f.qtd_pacientes : "—"}</td>
             <td>${f.usuario_cadastrou || "—"}</td>
             <td>${f.observacao || ""}</td>
-            <td><button class="btn btn-sm btn-outline-danger" data-id="${f.id_falta}" data-medico="${f.medico}" data-data="${f.data_falta}" title="Apagar falta (soft-delete + auditoria)"><i class="fas fa-trash"></i></button></td>`;
+            <td class="text-nowrap">
+              <button class="btn btn-sm btn-outline-primary mr-1" data-conversa="${f.id_falta}" title="Ver as respostas do cliente no chat"><i class="fas fa-comments"></i></button>
+              <button class="btn btn-sm btn-outline-danger" data-id="${f.id_falta}" data-medico="${f.medico}" data-data="${f.data_falta}" title="Apagar falta (soft-delete + auditoria)"><i class="fas fa-trash"></i></button>
+            </td>`;
           tbody.appendChild(tr);
         });
         // Liga o handler dos botões de apagar
         tbody.querySelectorAll("button[data-id]").forEach(btn => {
           btn.addEventListener("click", () => apagarFalta(btn));
         });
+        tbody.querySelectorAll("button[data-conversa]").forEach(btn => {
+          btn.addEventListener("click", () => alternarConversas(btn));
+        });
         $("#qtdFaltas").textContent = `${(d.faltas||[]).length} falta(s) no período`;
       });
+  }
+
+  // ---------- Conversas do chat por falta ----------
+  // O texto vem do WhatsApp do cliente: nunca injetar no innerHTML sem escapar.
+  function escTxt(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function horaBr(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return isNaN(d) ? iso : d.toLocaleString("pt-BR", {dateStyle: "short", timeStyle: "short"});
+  }
+
+  function alternarConversas(btn) {
+    const id = btn.dataset.conversa;
+    const tr = btn.closest("tr");
+    const aberta = tr.nextElementSibling;
+    if (aberta && aberta.dataset.conversaDe === id) { aberta.remove(); return; }
+    const linha = document.createElement("tr");
+    linha.dataset.conversaDe = id;
+    tr.parentNode.insertBefore(linha, tr.nextSibling);
+    carregarConversas(linha, id);
+  }
+
+  function carregarConversas(linha, id) {
+    linha.innerHTML = `<td colspan="11" class="bg-light">
+      <i class="fas fa-spinner fa-spin mr-1"></i>Buscando as respostas no chat…</td>`;
+    const url = `/api/medico_falta/conversas?posto=${encodeURIComponent(state.posto)}&id_falta=${encodeURIComponent(id)}`;
+    fetch(url, {credentials: "same-origin"})
+      .then(r => r.json())
+      .then(d => {
+        linha.innerHTML = `<td colspan="11" class="bg-light">${htmlConversas(d, id)}</td>`;
+        const rec = linha.querySelector("[data-recarregar]");
+        if (rec) rec.addEventListener("click", () => carregarConversas(linha, id));
+      })
+      .catch(e => {
+        linha.innerHTML = `<td colspan="11" class="bg-light text-danger">
+          Não deu para ler as conversas agora (${escTxt(e)}). Isso não afeta o envio já feito.</td>`;
+      });
+  }
+
+  function htmlConversas(d, id) {
+    if (d.error) return `<span class="text-danger">Erro: ${escTxt(d.error)}</span>`;
+    if (!d.pacientes || !d.pacientes.length) {
+      return "Nenhuma mensagem foi disparada para esta falta — não há conversa no chat.";
+    }
+    // O corte da meia-noite precisa estar escrito na tela, não só no código:
+    // sem isso o operador acha que a página perdeu respostas que na verdade
+    // já pertencem a outro ticket do dia seguinte.
+    let html = `<div class="alert alert-info py-2 mb-2">
+      <strong>Só entram aqui as respostas dadas até 00h do dia do envio.</strong>
+      Depois da meia-noite o chat segue a conversa em outro ticket, e o que
+      chegar lá não é registrado nesta falta — para ver, abra a conversa no chat.
+      <span class="ml-1">${d.responderam} de ${d.enviados} paciente(s) responderam dentro desse prazo.</span>
+    </div>`;
+    if (d.chat_indisponivel) {
+      html += `<div class="alert alert-warning py-2 mb-2">
+        <strong>O chat não respondeu à consulta.</strong> A ausência de respostas
+        abaixo pode ser falha de leitura, não silêncio do cliente. Confira pelo
+        próprio chat antes de concluir que ninguém respondeu.</div>`;
+    }
+    html += '<ul class="list-group mb-2">';
+    d.pacientes.forEach(p => {
+      const num = p.ticket_number ? `#${p.ticket_number}` : null;
+      const ticket = num
+        ? `<span class="badge badge-dark">ticket ${escTxt(num)}</span>`
+        : '<span class="badge badge-secondary" title="Envio sem ticket registrado no chat">sem ticket</span>';
+      const link = p.link_chat
+        ? `<a class="btn btn-sm btn-primary ml-2" target="_blank" rel="noopener" href="${escTxt(p.link_chat)}">
+             <i class="fas fa-external-link-alt mr-1"></i>ABRIR CONVERSA NO CHAT</a>`
+        : "";
+      // Quem não recebeu não pode ser lido como "não respondeu" — são coisas
+      // diferentes e a segunda faria o operador cobrar retorno de quem nunca
+      // foi avisado.
+      const resp = p.classe !== "enviado"
+        ? `<span class="badge badge-warning">${p.classe === "sem_telefone" ? "sem telefone — não recebeu" : "envio falhou — não recebeu"}</span>`
+        : (p.qtd_no_prazo
+            ? `<span class="badge badge-success">respondeu (${p.qtd_no_prazo})</span>`
+            : '<span class="badge badge-light border">sem resposta até 00h</span>');
+      const fora = p.qtd_apos_corte
+        ? `<span class="badge badge-warning" title="Chegaram depois da meia-noite — fora do registro desta falta">${p.qtd_apos_corte} após 00h</span>`
+        : "";
+      html += `<li class="list-group-item py-2">
+        <div><strong>${escTxt(p.paciente)}</strong> ${escTxt(p.telefone || "")}
+          ${ticket} ${resp} ${fora} ${link}</div>`;
+      if (p.respostas && p.respostas.length) {
+        html += '<div class="mt-2 small">';
+        p.respostas.forEach(m => {
+          html += `<div class="${m.no_prazo ? "" : "text-muted"}">
+            <span class="text-muted">${escTxt(horaBr(m.em))}</span> —
+            ${escTxt(m.texto)}${m.no_prazo ? "" : ' <em>(após 00h, fora do registro)</em>'}
+          </div>`;
+        });
+        html += "</div>";
+      }
+      html += "</li>";
+    });
+    html += "</ul>";
+    html += `<button class="btn btn-sm btn-outline-secondary" data-recarregar="${escTxt(id)}">
+      <i class="fas fa-sync mr-1"></i>Atualizar respostas</button>`;
+    return html;
   }
 
   function apagarFalta(btn) {
@@ -760,13 +869,75 @@
         return;
       }
       wppArea.innerHTML = `<div class="alert alert-info"><i class="fas fa-spinner fa-spin mr-1"></i>Disparando ${d.agendamentos.length} mensagens (api-chat + Meta API)…</div>`;
-      // Dispara WhatsApp
+
+      // Consulta o que REALMENTE saiu (tabela envios) quando a resposta do
+      // disparo não chega. Acompanha até o número parar de crescer: quando o
+      // nginx corta em 60s o backend continua enviando, então uma leitura
+      // única mostraria "8 de 15" e assustaria à toa.
+      const esperado = d.agendamentos.length;
+      function mostrarStatusReal(motivo, anterior, estaveis) {
+        anterior = anterior || -1; estaveis = estaveis || 0;
+        const url = `/api/medico_falta/wpp_status?posto=${encodeURIComponent(state.posto)}&id_falta=${encodeURIComponent(d.id_falta)}`;
+        fetch(url, {credentials: "same-origin"}).then(r => r.json()).then(s => {
+          if (s.error) throw new Error(s.error);
+          const parou = (s.total === anterior) ? estaveis + 1 : 0;
+          const terminou = s.total >= esperado || parou >= 2;
+          if (!terminou) {
+            wppArea.innerHTML = `<div class="alert alert-warning">
+              <i class="fas fa-spinner fa-spin mr-1"></i>
+              <strong>Envio em andamento no servidor — ${s.total} de ${esperado}.</strong><br>
+              ${motivo} As mensagens continuam saindo; <u>não clique em enviar de novo</u>.</div>`;
+            setTimeout(() => mostrarStatusReal(motivo, s.total, parou), 5000);
+            return;
+          }
+          const completo = s.total >= esperado;
+          let html = `<div class="alert alert-${completo ? "success" : "warning"}">
+            <strong>${s.enviados} mensagem(ns) enviada(s)${completo ? "" : ` — de ${esperado} pacientes`}.</strong>
+            ${s.falhados ? s.falhados + " falha(s) · " : ""}${s.sem_telefone ? s.sem_telefone + " sem telefone." : ""}<br>
+            <small>${motivo} O relatório detalhado (prontuário/CRM) não voltou, mas o envio está registrado em
+            <a href="https://camila1.ia.camim.com.br/wpp" target="_blank">camila1.ia.camim.com.br/wpp</a>.
+            ${completo ? "Reenviar cobraria de novo quem já recebeu." :
+              "Faltaram pacientes: confira a lista abaixo antes de qualquer reenvio."}</small></div>`;
+          if (!completo) {
+            html += `<button type="button" class="btn btn-warning mb-2" onclick="this.disabled=true;window.__dispararWppFalta(true)">
+              <i class="fas fa-paper-plane mr-1"></i>Enviar aos ${esperado - s.total} que faltaram
+            </button>
+            <div class="small text-muted mb-2">Quem já recebeu é pulado automaticamente — não haverá mensagem repetida.</div>`;
+          }
+          if (s.pacientes && s.pacientes.length) {
+            html += '<details class="mb-2"><summary><strong>Quem recebeu (' + s.pacientes.length + ')</strong></summary><ul class="list-group mt-2">';
+            s.pacientes.forEach(x => {
+              const cor = x.classe === "enviado" ? "success" : (x.classe === "sem_telefone" ? "warning" : "danger");
+              html += `<li class="list-group-item py-1"><strong>${x.paciente || ""}</strong> ${x.telefone || ""} <span class="badge badge-${cor}">${x.status}</span></li>`;
+            });
+            html += '</ul></details>';
+          }
+          wppArea.innerHTML = html;
+        }).catch(err => {
+          wppArea.innerHTML = `<div class="alert alert-danger">
+            <strong>Não deu para confirmar o envio.</strong> ${motivo}<br>
+            Não reenvie por esta tela sem antes conferir em
+            <a href="https://camila1.ia.camim.com.br/wpp" target="_blank">camila1.ia.camim.com.br/wpp</a>
+            quem já recebeu — cada mensagem repetida é cobrada. (${err})</div>`;
+        });
+      }
+
+      // Dispara WhatsApp. `forcar` só é usado pelo botão "enviar aos que
+      // faltaram" — o backend pula quem já recebeu, então não duplica.
+      window.__dispararWppFalta = function (forcar) {
+      if (forcar) {
+        wppArea.innerHTML = `<div class="alert alert-info"><i class="fas fa-spinner fa-spin mr-1"></i>Enviando aos pacientes que faltaram…</div>`;
+      }
       fetch("/api/medico_falta/enviar_wpp", {
         method: "POST",
         credentials: "same-origin",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({posto: state.posto, id_falta: d.id_falta}),
+        body: JSON.stringify({posto: state.posto, id_falta: d.id_falta, forcar: !!forcar}),
       }).then(r => r.json()).then(w => {
+        if (w.ja_enviado) {
+          mostrarStatusReal("Esta falta já teve disparo.");
+          return;
+        }
         if (w.error) {
           wppArea.innerHTML = `<div class="alert alert-danger"><strong>Erro no envio WhatsApp:</strong> ${w.error}<br>A falta foi gravada no banco normalmente.</div>`;
           return;
@@ -775,17 +946,27 @@
         let html = `
           <div class="alert alert-success">
             <strong>WhatsApp disparado pelo número ${numeroSaida}.</strong>
-            ${w.enviados} enviados · ${w.falhados} falhas · ${w.sem_telefone} sem telefone.<br>
+            ${w.enviados} enviados · ${w.falhados} falhas · ${w.sem_telefone} sem telefone${w.pulados ? ` · ${w.pulados} pulados (já haviam recebido)` : ""}.<br>
             <small>
               Prontuário (MotivoDesistencia) anotado em <strong>${w.observacoes_ok||0}/${w.enviados||0}</strong> ·
               CRM criado em <strong>${w.crms_ok||0}/${w.enviados||0}</strong> ·
-              campanha id=${w.campanha_id} no painel <a href="https://camila1.ia.camim.com.br/wpp" target="_blank">camila1.ia.camim.com.br/wpp</a>
+              campanha id=${w.campanha_id} no painel <a href="https://camila1.ia.camim.com.br/wpp" target="_blank">camila1.ia.camim.com.br/wpp</a><br>
+              As respostas do cliente ficam registradas nesta falta <strong>até 00h de hoje</strong>;
+              depois da meia-noite o chat continua a conversa em outro ticket.
+              Para acompanhar, use o botão de conversas na lista de faltas.
             </small>
           </div>`;
         if (w.detalhes_enviados && w.detalhes_enviados.length) {
           html += '<details class="mb-2"><summary class="text-success"><strong>Enviados (' + w.detalhes_enviados.length + ')</strong></summary><ul class="list-group mt-2">';
           w.detalhes_enviados.forEach(x => {
-            const ticket = x.ticket_id ? `<small class="text-muted">ticket-chat ${x.ticket_id}</small>` : '<small class="text-muted">sem ticket-chat</small>';
+            // Mostra o número humano (#107800) — é o que se busca no chat.
+            // O id interno só aparece quando o lookup do número falha.
+            const ticket = x.ticket_number
+              ? `<span class="badge badge-dark">ticket #${x.ticket_number}</span>
+                 <a class="btn btn-xs btn-primary py-0" target="_blank" rel="noopener"
+                    href="https://chat.camim.com.br/tickets/${x.ticket_number}">ABRIR CONVERSA NO CHAT</a>`
+              : (x.ticket_id ? `<small class="text-muted">ticket-chat ${escTxt(x.ticket_id)}</small>`
+                             : '<small class="text-muted">sem ticket-chat</small>');
             const obs = x.observacao_ok ? '<span class="badge badge-success">prontuário ✓</span>' : `<span class="badge badge-warning" title="${(x.observacao_erro||'').replace(/"/g,'&quot;')}">prontuário ✗</span>`;
             const crm = x.crm_ok ? `<span class="badge badge-success">CRM ${x.crm_protocolo||x.crm_id||'✓'}</span>` : `<span class="badge badge-warning" title="${(x.crm_erro||'').replace(/"/g,'&quot;')}">CRM ✗</span>`;
             html += `<li class="list-group-item py-1"><strong>${x.paciente}</strong> ${x.telefone||""} ${ticket} ${obs} ${crm}</li>`;
@@ -808,8 +989,15 @@
         }
         wppArea.innerHTML = html;
       }).catch(e => {
-        wppArea.innerHTML = `<div class="alert alert-danger"><strong>Falha ao chamar enviar_wpp:</strong> ${e}<br>A falta foi gravada normalmente; tente o disparo manual depois.</div>`;
+        // O envio leva ~5,5s por paciente e roda inteiro dentro do request:
+        // com uns 11 pacientes o nginx corta em 60s e devolve HTML, o que
+        // estoura aqui como "Unexpected token '<'" — mas o backend seguiu
+        // enviando. Dizer "falhou" fazia o operador reenviar e a Meta cobrar
+        // tudo de novo. Antes de acusar falha, perguntar o que de fato saiu.
+        mostrarStatusReal(`A resposta demorou demais e foi cortada (${e}).`);
       });
+      };
+      window.__dispararWppFalta(false);
     }).catch(e => { setLoading(false); $("#msgFalta").textContent = "Falha: " + e; });
   });
 })();

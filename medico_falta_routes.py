@@ -21,7 +21,7 @@ import os
 import re
 import uuid
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pyodbc
 import requests
@@ -195,16 +195,13 @@ def _camila3_create_crm(payload: dict) -> dict:
         return {"ok": False, "error": str(e)[:200]}
 
 
-def _chat_get_ticket_number(ticket_id: str) -> int | None:
-    """Resolve ticketNumber humano (#107800) a partir do id interno (cuid).
+def _chat_conn():
+    """Conexão com o MySQL do chat, ou None se o .env não tiver as chaves.
 
-    /webhooks/chat já devolve o id direto na resposta — esse helper só faz
-    a tradução id→ticketNumber via PK no MySQL do chat. Lookup leve, single
-    query, sem retry (o ticket existe no momento em que /webhooks/chat
-    devolveu HTTP 201).
+    Devolver None em vez de estourar é de propósito: o chat é leitura
+    acessória (número do ticket, respostas do cliente). Nada aqui pode
+    derrubar o envio da falta nem a tela.
     """
-    if not ticket_id:
-        return None
     host = os.getenv("CHAT_MYSQL_HOST", "")
     port = int(os.getenv("CHAT_MYSQL_PORT", "3306"))
     user = os.getenv("CHAT_MYSQL_USER", "")
@@ -218,24 +215,143 @@ def _chat_get_ticket_number(ticket_id: str) -> int | None:
         return None
     try:
         import pymysql
-        conn = pymysql.connect(
+        return pymysql.connect(
             host=host, port=port, user=user, password=pwd, database=db,
-            charset="utf8mb4", connect_timeout=5, read_timeout=5, autocommit=True,
+            charset="utf8mb4", connect_timeout=5, read_timeout=8, autocommit=True,
         )
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT ticketNumber FROM Ticket WHERE id = %s", (ticket_id,))
-                row = cur.fetchone()
-                if row and row[0] is not None:
-                    return int(row[0])
-                logger.warning("ticketNumber NULL/inexistente para id=%s", ticket_id)
-                return None
-        finally:
-            conn.close()
+    except Exception as e:
+        logger.warning("conexão com o MySQL do chat falhou: %s", str(e)[:200])
+        return None
+
+
+def _chat_get_ticket_number(ticket_id: str) -> int | None:
+    """Resolve ticketNumber humano (#107800) a partir do id interno (cuid).
+
+    /webhooks/chat já devolve o id direto na resposta — esse helper só faz
+    a tradução id→ticketNumber via PK no MySQL do chat. Lookup leve, single
+    query, sem retry (o ticket existe no momento em que /webhooks/chat
+    devolveu HTTP 201).
+    """
+    if not ticket_id:
+        return None
+    conn = _chat_conn()
+    if conn is None:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT ticketNumber FROM Ticket WHERE id = %s", (ticket_id,))
+            row = cur.fetchone()
+            if row and row[0] is not None:
+                return int(row[0])
+            logger.warning("ticketNumber NULL/inexistente para id=%s", ticket_id)
+            return None
     except Exception as e:
         logger.warning("lookup ticketNumber falhou (id=%s): %s",
                        ticket_id, str(e)[:200])
         return None
+    finally:
+        conn.close()
+
+
+# Fuso de Brasília. O MySQL do chat grava createdAt em UTC sem timezone
+# (mesmo pressuposto do wpp_cobranca_routes), e o corte que interessa aqui é
+# a meia-noite de quem está no balcão, não a de Greenwich.
+_TZ_BR = timezone(timedelta(hours=-3))
+
+CHAT_URL_TICKET = "https://chat.camim.com.br/tickets/{}"
+
+
+def _fim_do_dia_br(dt_utc: datetime) -> datetime:
+    """Meia-noite (00h) seguinte, no fuso de Brasília, devolvida em UTC."""
+    local = dt_utc.replace(tzinfo=timezone.utc).astimezone(_TZ_BR)
+    corte_local = (local.replace(hour=0, minute=0, second=0, microsecond=0)
+                   + timedelta(days=1))
+    return corte_local.astimezone(timezone.utc)
+
+
+def _chat_respostas(ticket_ids: list[str]) -> dict:
+    """Respostas do cliente em cada ticket, separadas pelo corte da meia-noite.
+
+    REGRA (decidida pelo Cristiano, 2026-08-05): só conta como resposta
+    registrada desta falta o que o cliente mandou ATÉ 00h do dia do envio.
+    Depois da virada o chat trabalha noutro ticket, então uma mensagem de
+    01h da manhã não pertence mais a este atendimento — mostrar ela aqui
+    daria ao operador a impressão de que a conversa continua neste ticket.
+    O que chega depois do corte não é escondido: vai contado à parte, com
+    o aviso de que está fora da janela.
+
+    Não agrega no SQL de propósito — o corte depende do dia de cada ticket,
+    e comparar data em MySQL com timezone exige CONVERT_TZ (tabelas de fuso
+    que nem sempre estão carregadas). São poucas mensagens por falta; o
+    corte sai em Python, onde dá pra conferir.
+    """
+    out: dict[str, dict] = {}
+    ids = [t for t in dict.fromkeys(ticket_ids) if t]
+    if not ids:
+        return out
+    conn = _chat_conn()
+    if conn is None:
+        return out
+    try:
+        import pymysql.cursors
+        marks = ",".join(["%s"] * len(ids))
+        with conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute(
+                f"SELECT id, ticketNumber, createdAt FROM Ticket "
+                f"WHERE id IN ({marks}) AND deletedAt IS NULL", ids)
+            for t in cur.fetchall():
+                out[t["id"]] = {
+                    "ticket_id": t["id"],
+                    "ticket_number": t["ticketNumber"],
+                    "link": (CHAT_URL_TICKET.format(t["ticketNumber"])
+                             if t["ticketNumber"] else None),
+                    "criado_em": (t["createdAt"].isoformat()
+                                  if t["createdAt"] else None),
+                    "corte_em": None, "respostas": [],
+                    "qtd_no_prazo": 0, "qtd_apos_corte": 0,
+                    "ultima_em": None,
+                    "_corte": (_fim_do_dia_br(t["createdAt"])
+                               if t["createdAt"] else None),
+                }
+            if not out:
+                return out
+            achados = list(out.keys())
+            marks = ",".join(["%s"] * len(achados))
+            # userProfileId NULL = mensagem do cliente (mesma regra usada na
+            # tela de respondentes da cobrança).
+            cur.execute(
+                f"SELECT ticketId, createdAt, body FROM Message "
+                f"WHERE ticketId IN ({marks}) AND deletedAt IS NULL "
+                f"  AND userProfileId IS NULL ORDER BY createdAt", achados)
+            msgs = cur.fetchall()
+    except Exception as e:
+        logger.warning("leitura de respostas no chat falhou: %s", str(e)[:200])
+        return out
+    finally:
+        conn.close()
+
+    for m in msgs:
+        dados = out.get(m["ticketId"])
+        if not dados or not m["createdAt"]:
+            continue
+        quando = m["createdAt"].replace(tzinfo=timezone.utc)
+        corte = dados["_corte"]
+        no_prazo = bool(corte and quando <= corte)
+        dados["qtd_no_prazo" if no_prazo else "qtd_apos_corte"] += 1
+        if no_prazo:
+            dados["ultima_em"] = quando.astimezone(_TZ_BR).isoformat()
+        dados["respostas"].append({
+            "em": quando.astimezone(_TZ_BR).isoformat(),
+            "texto": (m["body"] or "")[:400],
+            "no_prazo": no_prazo,
+        })
+
+    for dados in out.values():
+        corte = dados.pop("_corte", None)
+        dados["corte_em"] = corte.astimezone(_TZ_BR).isoformat() if corte else None
+        # As últimas primeiro — o operador quer a conversa mais recente.
+        dados["respostas"] = dados["respostas"][-20:][::-1]
+    return out
 
 
 def _limpar_telefone(raw: str | None) -> str | None:
@@ -450,9 +566,138 @@ def _registrar_envio_log(campanha_id: int, posto: str, telefone: str,
         return cur.lastrowid
 
 
+def _envios_da_falta(id_falta: int, posto: str) -> dict:
+    """O que já saiu de WhatsApp pra essa falta, lido de `envios`.
+
+    O envio de uma falta leva ~5,5s por paciente e roda inteiro dentro do
+    request. Com ~11 pacientes o nginx já devolve 504 pro browser enquanto o
+    backend segue enviando, e aos 120s o gunicorn mata o worker no meio do
+    loop. A tela via só o 504 e dizia "falha" pra um envio que tinha dado
+    certo — daí o operador reenviava e a Meta cobrava tudo de novo.
+
+    `envios` é gravado logo depois de cada mensagem sair (antes das etapas
+    lentas de prontuário/CRM), então é a única fonte confiável de quem
+    recebeu. Serve tanto pro guard anti-duplicata quanto pro status que a
+    tela consulta quando o fetch estoura.
+    """
+    import sqlite3
+    ref = f"falta {id_falta}{posto}"
+    out = {"ref": ref, "total": 0, "enviados": 0, "falhados": 0,
+           "sem_telefone": 0, "pacientes": [], "ultimo_em": None}
+    db_path = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
+    try:
+        with sqlite3.connect(db_path) as conn:
+            try:
+                rows = conn.execute(
+                    "SELECT nome, telefone, status, enviado_em, chat_ticket_id "
+                    "FROM envios WHERE ref = ? ORDER BY id", (ref,)
+                ).fetchall()
+            except sqlite3.OperationalError:
+                # Base antiga, sem a coluna do ticket. Cair fora aqui zeraria o
+                # resultado e o guard anti-duplicata leria "nunca enviei" —
+                # liberando reenvio cobrado. O ticket é acessório; quem
+                # recebeu, não.
+                logger.warning("envios sem coluna chat_ticket_id — seguindo sem ticket")
+                rows = [(*r, None) for r in conn.execute(
+                    "SELECT nome, telefone, status, enviado_em "
+                    "FROM envios WHERE ref = ? ORDER BY id", (ref,)
+                ).fetchall()]
+    except Exception:
+        logger.exception("leitura de envios da falta %s%s falhou", id_falta, posto)
+        return out
+    for nome, telefone, status, enviado_em, chat_ticket_id in rows:
+        status = status or ""
+        if status.startswith("accepted"):
+            classe = "enviado"
+        elif status == "erro:sem_telefone":
+            classe = "sem_telefone"
+        else:
+            classe = "falhado"
+        out[{"enviado": "enviados", "sem_telefone": "sem_telefone",
+             "falhado": "falhados"}[classe]] += 1
+        out["total"] += 1
+        out["pacientes"].append({"paciente": nome, "telefone": telefone,
+                                 "status": status, "classe": classe,
+                                 "enviado_em": enviado_em,
+                                 "ticket_id": chat_ticket_id or None})
+        if enviado_em and (out["ultimo_em"] or "") < enviado_em:
+            out["ultimo_em"] = enviado_em
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+
+@medico_falta_bp.get("/api/medico_falta/wpp_status")
+def api_wpp_status():
+    """O que já foi enviado pra uma falta. A tela chama quando o POST de
+    envio estoura (504) pra saber se as mensagens saíram mesmo assim."""
+    email, postos, _login = _check_admin()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    posto = (request.args.get("posto") or "").strip().upper()
+    erro = _require_posto_in_acl(posto, postos)
+    if erro:
+        return jsonify({"error": erro}), 400
+    try:
+        id_falta = int(request.args.get("id_falta") or 0)
+    except (TypeError, ValueError):
+        id_falta = 0
+    if not id_falta:
+        return jsonify({"error": "id_falta obrigatório"}), 400
+    return jsonify(_envios_da_falta(id_falta, posto))
+
+
+@medico_falta_bp.get("/api/medico_falta/conversas")
+def api_conversas():
+    """Quem respondeu no chat, por paciente desta falta.
+
+    Junta o que saiu (`envios`, fonte de quem recebeu) com o ticket do chat
+    e as mensagens do cliente. Só as respostas até 00h do dia do envio
+    contam como registradas nesta falta — ver `_chat_respostas`.
+    """
+    email, postos, _login = _check_admin()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    posto = (request.args.get("posto") or "").strip().upper()
+    erro = _require_posto_in_acl(posto, postos)
+    if erro:
+        return jsonify({"error": erro}), 400
+    try:
+        id_falta = int(request.args.get("id_falta") or 0)
+    except (TypeError, ValueError):
+        id_falta = 0
+    if not id_falta:
+        return jsonify({"error": "id_falta obrigatório"}), 400
+
+    envios = _envios_da_falta(id_falta, posto)
+    chat = _chat_respostas([p.get("ticket_id") for p in envios["pacientes"]])
+    # `chat_indisponivel` separa "ninguém respondeu" de "não consegui olhar o
+    # chat" — sem isso a tela mentiria silêncio para um chat fora do ar.
+    sem_chat = bool(envios["pacientes"]) and not chat and any(
+        p.get("ticket_id") for p in envios["pacientes"])
+
+    itens, responderam = [], 0
+    for p in envios["pacientes"]:
+        c = chat.get(p.get("ticket_id") or "", {})
+        if c.get("qtd_no_prazo"):
+            responderam += 1
+        itens.append({**p,
+                      "ticket_number": c.get("ticket_number"),
+                      "link_chat": c.get("link"),
+                      "corte_em": c.get("corte_em"),
+                      "criado_em": c.get("criado_em"),
+                      "qtd_no_prazo": c.get("qtd_no_prazo", 0),
+                      "qtd_apos_corte": c.get("qtd_apos_corte", 0),
+                      "ultima_em": c.get("ultima_em"),
+                      "respostas": c.get("respostas", [])})
+    return jsonify({"ref": envios["ref"], "total": envios["total"],
+                    "enviados": envios["enviados"],
+                    "responderam": responderam,
+                    "chat_indisponivel": sem_chat,
+                    "pacientes": itens})
 
 @medico_falta_bp.get("/api/medico_falta/lookups")
 def api_lookups():
@@ -965,6 +1210,20 @@ def api_enviar_wpp():
     if not id_falta:
         return jsonify({"error": "id_falta obrigatório"}), 400
 
+    # Guard anti-duplicata. Cada mensagem custa ~R$ 0,35 e não dá pra desfazer.
+    # Como o envio longo devolve 504 pro browser mesmo tendo funcionado, um
+    # segundo POST pra mesma falta é quase sempre o operador achando que
+    # falhou — e não um reenvio querido. Só passa com "forcar": true explícito.
+    ja_enviado = _envios_da_falta(id_falta, posto)
+    if ja_enviado["total"] and not data.get("forcar"):
+        return jsonify({
+            **ja_enviado,
+            "ja_enviado": True,
+            "error": (f"esta falta já teve disparo: {ja_enviado['enviados']} "
+                      f"mensagem(ns) enviada(s) em {ja_enviado['ultimo_em']}. "
+                      "Reenviar cobraria de novo os pacientes que já receberam."),
+        }), 409
+
     try:
         # Reusa função de envio do projeto wpp-cobrança
         import importlib
@@ -1097,7 +1356,13 @@ def api_enviar_wpp():
             phone_number_id_camp = None
         with _conn_for_posto(posto) as con:
             cur = con.cursor()
-            enviados, falhados, sem_telefone = [], [], []
+            enviados, falhados, sem_telefone, pulados = [], [], [], []
+            # Só quem REALMENTE recebeu é pulado no reenvio. Quem ficou como
+            # falha ou sem telefone tem que ser tentado de novo.
+            ja_recebeu = {
+                ((p.get("paciente") or "").strip().lower(), p.get("telefone") or "")
+                for p in ja_enviado["pacientes"] if p["classe"] == "enviado"
+            }
             for ag in agendamentos:
                 id_lancamento_servico, idcli, iddep, paciente_view, hora, tel_view, especialidade = ag
 
@@ -1135,6 +1400,17 @@ def api_enviar_wpp():
                     tel_wpp, tel_cel = tit_tel_wpp, tit_tel_cel
 
                 tel_limpo = _limpar_telefone(tel_wpp) or _limpar_telefone(tel_cel)
+
+                # Reenvio (forcar=true) só cobre quem ficou pra trás quando o
+                # worker morreu no meio do loop. Quem já recebeu é pulado —
+                # senão o reenvio parcial vira mensagem repetida cobrada.
+                # A chave é nome+telefone, não só telefone: dependentes da
+                # mesma família compartilham o número e cada um precisa do
+                # próprio aviso.
+                if (nome_paciente.strip().lower(), tel_limpo or "") in ja_recebeu:
+                    pulados.append({"paciente": nome_paciente, "telefone": tel_limpo})
+                    continue
+
                 if not tel_limpo:
                     sem_telefone.append({"paciente": nome_paciente})
                     _registrar_envio_log(
@@ -1317,6 +1593,8 @@ def api_enviar_wpp():
             "enviados": len(enviados),
             "falhados": len(falhados),
             "sem_telefone": len(sem_telefone),
+            "pulados": len(pulados),
+            "detalhes_pulados": pulados,
             "observacoes_ok": sum(1 for e in enviados if e.get("observacao_ok")),
             "crms_ok":        sum(1 for e in enviados if e.get("crm_ok")),
             "numero_saida":   numero_saida_str,
