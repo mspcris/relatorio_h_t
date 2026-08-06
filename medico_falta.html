@@ -460,12 +460,17 @@
             ? '<span class="badge badge-tot">Total</span>'
             : '<span class="badge badge-parc">Parcial</span>';
           const tr = document.createElement("tr");
+          // A coluna de ações fica na ponta direita da tabela e some atrás do
+          // scroll horizontal no celular. Sem isto o operador não tem como
+          // chegar nas conversas pelo telefone.
+          tr.dataset.conversa = f.id_falta;
+          tr.style.cursor = "pointer";
           tr.innerHTML = `
             <td><code>${f.id_falta}</code></td>
             <td>${f.data_falta || "—"}</td>
             <td>${f.hora_inicio || ""}–${f.hora_fim || ""}</td>
             <td>${tipo}</td>
-            <td>${f.medico}</td>
+            <td class="text-primary"><u>${f.medico}</u> <i class="fas fa-comments small"></i></td>
             <td>${f.especialidade || "—"}</td>
             <td>${f.motivo || "—"}</td>
             <td>${f.qtd_pacientes != null ? f.qtd_pacientes : "—"}</td>
@@ -475,6 +480,10 @@
               <button class="btn btn-sm btn-outline-primary mr-1" data-conversa="${f.id_falta}" title="Ver as respostas do cliente no chat"><i class="fas fa-comments"></i></button>
               <button class="btn btn-sm btn-outline-danger" data-id="${f.id_falta}" data-medico="${f.medico}" data-data="${f.data_falta}" title="Apagar falta (soft-delete + auditoria)"><i class="fas fa-trash"></i></button>
             </td>`;
+          tr.addEventListener("click", (ev) => {
+            if (ev.target.closest("button, a")) return;
+            alternarConversas(tr);
+          });
           tbody.appendChild(tr);
         });
         // Liga o handler dos botões de apagar
