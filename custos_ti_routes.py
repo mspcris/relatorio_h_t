@@ -466,7 +466,18 @@ def _conferir(sess, item, *, competencia=None, conta_id=None, fornecedor=None) -
     rec = custos_ti.reconhecer_conta(
         sess, " · ".join(filter(None, [item.assunto, item.anexo_nome])))
     conta = sess.get(tidb.Conta, int(conta_id)) if conta_id else rec["conta"]
+    # Fatura AGREGADA: sem conta nenhuma definida e com fornecedor reconhecido.
+    # Essa é a assinatura da nota que cobre vários contratos (a da Contabo paga
+    # as 17 VPS). Só nesse caso vale avisar que o mês já está detalhado — se a
+    # pessoa escolheu UMA conta, é a fatura daquele contrato e o aviso seria
+    # ruído em cima de todo lançamento legítimo do fornecedor.
+    detalhamento = None
+    if conta is None:
+        detalhamento = custos_ti.detalhamento_fornecedor(
+            sess, competencia=competencia,
+            fornecedor=(fornecedor or rec["fornecedor"]))
     return {
+        "detalhamento": detalhamento,
         "conta": conta.to_dict() if conta else None,
         "sugerida": not conta_id and rec["conta"] is not None,
         # Fornecedor reconhecido sem conta definida: a fatura da Contabo cobre
@@ -573,6 +584,18 @@ def api_auditoria_lancar(item_id):
             conf = _conferir(sess, item, competencia=dados.get("competencia"),
                              conta_id=dados.get("conta_id"),
                              fornecedor=dados.get("fornecedor"))
+            # Fatura agregada: o mês já está detalhado conta a conta. Lançar o
+            # total aqui soma o mesmo dinheiro duas vezes no painel.
+            det = conf.get("detalhamento")
+            if det:
+                return jsonify({
+                    "ok": False, "duplicata": True, "detalhamento": det,
+                    "semelhantes": conf["semelhantes"],
+                    "error": (f"as contas de {det['fornecedor']} já estão lançadas "
+                              f"uma a uma em {det['competencia']} "
+                              f"({det['lancamentos']} despesas, "
+                              f"R$ {det['total_brl']:.2f}) — lançar esta fatura "
+                              f"contaria o mesmo gasto duas vezes")}), 409
             if conf["semelhantes"]:
                 return jsonify({"ok": False, "duplicata": True,
                                 "semelhantes": conf["semelhantes"],
@@ -592,6 +615,58 @@ def api_auditoria_lancar(item_id):
         return _erro(e, "lançar item da auditoria")
 
 
+@custos_ti_bp.post("/api/custos-ti/auditoria/<int:item_id>/anexar")
+def api_auditoria_anexar(item_id):
+    """A fatura já está detalhada nas contas do fornecedor — guarda a nota, não
+    lança despesa.
+
+    É o destino da nota AGREGADA: a da Contabo cobre as 17 VPS, cada uma já
+    lançada. Ela não pode virar despesa (dobraria o mês) e não pode ser
+    descartada (descartar diz "não é custo", e é custo — só está detalhado em
+    outro lugar). Fica como prova, e o clipe das 17 despesas passa a servir
+    este PDF.
+    """
+    if not _require_admin():
+        return _deny()
+    sess = _sess()
+    try:
+        item = sess.get(tidb.EmailAuditoria, item_id)
+        if not item:
+            return jsonify({"ok": False, "error": "item não encontrado"}), 404
+        if item.status != "pendente":
+            return jsonify({"ok": False,
+                            "error": f"este item já está como '{item.status}'"}), 400
+        dados = _body()
+        competencia = (dados.get("competencia") or "").strip()
+        fornecedor = (dados.get("fornecedor") or "").strip()
+        if not fornecedor or not competencia:
+            # Sem os dois a nota vira órfã: ninguém acha o documento a partir
+            # da despesa da VPS, que é onde a pergunta nasce.
+            return jsonify({"ok": False,
+                            "error": "informe o fornecedor e a competência que "
+                                     "esta fatura cobre"}), 400
+        det = custos_ti.detalhamento_fornecedor(
+            sess, competencia=competencia, fornecedor=fornecedor)
+        if not det:
+            return jsonify({"ok": False,
+                            "error": (f"não há despesas de {fornecedor} lançadas "
+                                      f"em {competencia} — se a fatura ainda não "
+                                      f"está detalhada, ela precisa ser lançada, "
+                                      f"não anexada")}), 400
+        item.status = "anexado"
+        item.rateio_fornecedor = fornecedor[:120]
+        item.rateio_competencia = competencia[:7]
+        item.lancamento_id = None      # não é de UMA despesa, é de todas elas
+        item.motivo = (f"Fatura agregada: cobre {det['lancamentos']} despesas de "
+                       f"{det['fornecedor']} em {competencia} "
+                       f"(R$ {det['total_brl']:.2f})")[:200]
+        sess.commit()
+        return jsonify({"ok": True, "item": item.to_dict(), "detalhamento": det})
+    except Exception as e:  # noqa: BLE001
+        sess.rollback()
+        return _erro(e, "anexar fatura agregada")
+
+
 @custos_ti_bp.post("/api/custos-ti/auditoria/<int:item_id>/descartar")
 def api_auditoria_descartar(item_id):
     """Tira da fila sem lançar. O e-mail e o PDF continuam guardados — descartar
@@ -607,6 +682,10 @@ def api_auditoria_descartar(item_id):
             return jsonify({"ok": False,
                             "error": "já virou lançamento; exclua o lançamento primeiro"}), 400
         item.status = "descartado"
+        # Saiu de 'anexado': o vínculo com o fornecedor/mês tem que morrer
+        # junto, senão o clipe das despesas continua apontando para uma nota
+        # que alguém já disse não valer.
+        item.rateio_fornecedor = item.rateio_competencia = None
         sess.commit()
         return jsonify({"ok": True, "item": item.to_dict()})
     except Exception as e:  # noqa: BLE001
@@ -616,7 +695,7 @@ def api_auditoria_descartar(item_id):
 
 @custos_ti_bp.post("/api/custos-ti/auditoria/<int:item_id>/reabrir")
 def api_auditoria_reabrir(item_id):
-    """Volta para 'pendente' um item descartado por engano."""
+    """Volta para 'pendente' um item descartado — ou anexado — por engano."""
     if not _require_admin():
         return _deny()
     sess = _sess()
@@ -627,6 +706,7 @@ def api_auditoria_reabrir(item_id):
         if item.status == "lancado":
             return jsonify({"ok": False, "error": "item já lançado"}), 400
         item.status = "pendente"
+        item.rateio_fornecedor = item.rateio_competencia = None
         sess.commit()
         return jsonify({"ok": True, "item": item.to_dict()})
     except Exception as e:  # noqa: BLE001

@@ -56,6 +56,9 @@
               <div class="btn-group btn-group-sm mt-2" role="group">
                 <button class="btn btn-outline-primary active" data-filtro="pendente">Pendentes</button>
                 <button class="btn btn-outline-primary" data-filtro="lancado">Lançadas</button>
+                <button class="btn btn-outline-primary" data-filtro="anexado"
+                  title="Faturas que já estavam detalhadas conta a conta — a nota
+                         ficou guardada, sem virar despesa">Notas anexadas</button>
                 <button class="btn btn-outline-primary" data-filtro="descartado">Descartadas</button>
                 <button class="btn btn-outline-primary" data-filtro="todos">Todas</button>
               </div>
@@ -227,7 +230,9 @@ function pinta() {
       ? '<span class="aud-tag" style="background:#fff3cd;color:#7a5b00">esperando você</span>'
       : it.status === 'lancado'
         ? '<span class="aud-tag" style="background:#d8f5e8;color:#0d6e4a">lançada</span>'
-        : '<span class="aud-tag" style="background:#eceff1;color:#5c6670">descartada</span>';
+        : it.status === 'anexado'
+          ? '<span class="aud-tag" style="background:#e2ecfb;color:#1c4e8a">nota anexada</span>'
+          : '<span class="aud-tag" style="background:#eceff1;color:#5c6670">descartada</span>';
     const sug = it.valor_sugerido
       ? `<div class="aud-sug">${fmtValor(it.valor_sugerido, it.moeda_sugerida)}</div>
          <div class="ti-muted" style="font-size:11.5px">valor sugerido pelo robô</div>`
@@ -264,8 +269,11 @@ function pinta() {
                    <button class="btn btn-sm btn-outline-secondary ml-1" data-descartar="${it.id}"
                      title="Não é custo — some da fila, mas o e-mail fica guardado">
                      <i class="fas fa-times"></i></button>`
-        : it.status === 'descartado'
-          ? `<button class="btn btn-sm btn-outline-secondary ml-1" data-reabrir="${it.id}">
+        : (it.status === 'descartado' || it.status === 'anexado')
+          ? `${it.status === 'anexado' ? `<div class="ti-muted" style="font-size:12px">
+                       já detalhada em ${it.rateio_fornecedor || ''}
+                       ${it.rateio_competencia || ''}</div>` : ''}
+                     <button class="btn btn-sm btn-outline-secondary ml-1" data-reabrir="${it.id}">
                        <i class="fas fa-undo"></i> Reabrir</button>`
           : `<span class="ti-muted" style="font-size:12px">lançamento
                        #${it.lancamento_id || '?'}</span>`}
@@ -383,13 +391,53 @@ async function conferir(primeira) {
   pintaDuplicatas();
 }
 
+/* Fatura AGREGADA: a nota é uma só e cobre vários contratos do mesmo
+   fornecedor, todos já lançados um a um neste mês. A da Contabo paga as 17
+   VPS. Lançar aqui somaria o mesmo dinheiro duas vezes no painel — o caminho
+   certo é guardar a nota sem criar despesa. */
+function htmlDetalhamento() {
+  const d = CONFERE && CONFERE.detalhamento;
+  if (!d) return '';
+  const valor = leNumero(document.getElementById('lcValor').value);
+  const moeda = document.getElementById('lcMoeda').value;
+  // Bate ao centavo com o total já lançado? Então é o mesmo dinheiro, e dizer
+  // isso na tela vale mais que qualquer texto genérico de aviso.
+  const bate = valor && moeda === 'BRL'
+    && Math.abs(valor - d.total_brl) < 0.02;
+  const bateUsd = valor && moeda === 'USD' && d.total_usd
+    && Math.abs(valor - d.total_usd) < 0.02;
+  return `<div class="alert alert-danger py-2 px-2 mb-2" style="font-size:12.5px">
+    <b>Esta fatura parece ser o total de contas que já estão lançadas.</b><br>
+    ${d.fornecedor} tem ${d.contas_cadastradas} contas cadastradas, e
+    ${d.lancamentos} delas já estão lançadas em ${d.competencia}, somando
+    <b>${fmtDinheiro(d.total_brl, 'BRL')}</b>.
+    ${(bate || bateUsd) ? '<br><b>O valor desta nota bate ao centavo com esse total.</b>'
+      : ''}
+    <div class="mt-1 ti-muted" style="max-height:96px;overflow:auto">
+      ${d.itens.map(i => `#${i.id} ${(i.conta || '').slice(0, 34)} ·
+         ${fmtDinheiro(i.valor_brl, 'BRL')}`).join('<br>')}
+    </div>
+    <div class="mt-2">
+      <button class="btn btn-sm btn-primary" id="btAnexarAgregada">
+        <i class="fas fa-paperclip"></i> Já está detalhada — só guardar a nota</button>
+      <div class="ti-muted mt-1">Não cria despesa. A nota fica guardada e o clipe
+        das ${d.lancamentos} despesas passa a mostrar este PDF.</div>
+    </div>
+  </div>`;
+}
+
 function pintaDuplicatas() {
   const box = document.getElementById('lcDuplicata');
   const lista = (CONFERE && CONFERE.semelhantes) || [];
-  if (!lista.length) { box.innerHTML = ''; return; }
+  const agregada = htmlDetalhamento();
+  if (!lista.length) {
+    box.innerHTML = agregada;
+    if (agregada) ligaAnexar();
+    return;
+  }
   const valor = leNumero(document.getElementById('lcValor').value);
   const moeda = document.getElementById('lcMoeda').value;
-  box.innerHTML = `<div class="alert alert-warning py-2 px-2" style="font-size:12.5px">
+  box.innerHTML = agregada + `<div class="alert alert-warning py-2 px-2" style="font-size:12.5px">
     <b>Esta conta já pode estar lançada.</b> Complete a despesa que já existe — ela
     fica com o PDF desta nota anexado e nada é contado duas vezes. Só use
     "lançar assim mesmo" se for realmente uma <u>segunda fatura do mesmo mês</u>.
@@ -412,6 +460,38 @@ function pintaDuplicatas() {
   box.querySelectorAll('[data-completar]').forEach(b =>
     b.addEventListener('click', () => completar(+b.dataset.completar,
       !!box.querySelector(`[data-trocar="${b.dataset.completar}"]:checked`))));
+  ligaAnexar();
+}
+
+function ligaAnexar() {
+  const bt = document.getElementById('btAnexarAgregada');
+  if (bt) bt.addEventListener('click', anexarAgregada);
+}
+
+/* Guarda a nota agregada sem virar despesa. A competência e o fornecedor vão
+   junto: são eles que ligam este PDF às despesas que ele sustenta — sem os
+   dois a nota fica órfã e ninguém acha o documento a partir da VPS. */
+async function anexarAgregada() {
+  const d = CONFERE && CONFERE.detalhamento;
+  if (!d || !ATUAL) return;
+  const bt = document.getElementById('btAnexarAgregada');
+  const msg = document.getElementById('lcMsg');
+  bt.disabled = true;
+  try {
+    const r = await tiApi(`/api/custos-ti/auditoria/${ATUAL.id}/anexar`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fornecedor: d.fornecedor,
+                             competencia: d.competencia }),
+    });
+    alert(`Nota guardada. Ela cobre ${r.detalhamento.lancamentos} despesas de `
+      + `${r.detalhamento.fornecedor} em ${r.detalhamento.competencia} — `
+      + 'nenhuma despesa nova foi criada.');
+    tiModal('#mdLancar', 'hide');
+    carregar();
+  } catch (e) {
+    bt.disabled = false;
+    tiMsg(msg, e.message, 'err');
+  }
 }
 
 async function completar(lancId, trocarValor) {
@@ -482,7 +562,13 @@ async function confirmarLanc(confirmarDuplicata) {
     // O servidor recusou porque já existe despesa parecida. Mostra quais são,
     // com o caminho de completar a existente ao lado de lançar mesmo assim.
     if (e.body && e.body.duplicata) {
-      CONFERE = Object.assign({}, CONFERE, { semelhantes: e.body.semelhantes });
+      CONFERE = Object.assign({}, CONFERE, {
+        semelhantes: e.body.semelhantes || [],
+        // A recusa pode ser por fatura AGREGADA (a nota é o total de contas já
+        // lançadas). Sem carregar isto de volta, a tela recusaria sem mostrar
+        // o único caminho certo, que é guardar a nota sem lançar.
+        detalhamento: e.body.detalhamento || null,
+      });
       pintaDuplicatas();
       const box = document.getElementById('lcDuplicata').querySelector('.alert');
       if (box && !box.querySelector('[data-forcar]')) {

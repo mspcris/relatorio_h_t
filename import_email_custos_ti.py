@@ -316,7 +316,20 @@ def _parse_email(sess, msg) -> dict:
     # antes de o robô passar, tem outro Message-ID e entraria de novo. Aqui o
     # e-mail redondo para na fila em vez de duplicar sozinho de madrugada —
     # guard no consumidor, não só na tela (lição de 2026-05-06).
+    # Fatura AGREGADA: sem conta definida e o fornecedor tem várias contas já
+    # lançadas neste mês (a da Contabo cobre as 17 VPS, R$ 1.387,98 em
+    # julho/2026 — exatamente o total da nota). Lançar contaria o mesmo gasto
+    # duas vezes. Vai para a fila, onde existe o botão de anexar a nota sem
+    # criar despesa.
     semelhantes = []
+    if motivo is None and conta is None:
+        det = custos_ti.detalhamento_fornecedor(
+            sess, competencia=competencia, fornecedor=fornecedor)
+        if det:
+            motivo = (f"as contas de {det['fornecedor']} já estão lançadas uma a "
+                      f"uma em {competencia} ({det['lancamentos']} despesas, "
+                      f"R$ {det['total_brl']:.2f}) — esta fatura parece ser o "
+                      f"total delas")[:200]
     if motivo is None:
         semelhantes = custos_ti.lancamentos_semelhantes(
             sess, competencia=competencia,

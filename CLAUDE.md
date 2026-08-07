@@ -575,6 +575,59 @@ repetição não buscava nada**.
 Contas ainda NÃO cadastradas em 2026-08-06 (a proteção nelas depende só do
 fornecedor digitado): AWS, KingHost, MongoDB, TecnoSpeed, Google API.
 
+### Fatura AGREGADA — uma nota que cobre várias contas (2026-08-06)
+
+A fatura da Contabo é **uma só e paga as 17 VPS**, cada uma cadastrada como sua
+própria conta e lançada individualmente. Quando essa nota vira despesa, o painel
+soma o mesmo dinheiro duas vezes — uma pelo detalhe, outra pelo total.
+
+Medido em julho/2026: as 17 VPS somam **R$ 1.387,98** e a fatura que chegou por
+e-mail veio **R$ 1.387,98**. Ao centavo. A despesa #636 foi removida e a nota
+virou `anexado` (item 9 da fila), com o PDF preservado.
+
+**Por que a antiduplicidade não pegou:** `lancamentos_semelhantes()` compara o
+`fornecedor` **escrito na despesa**, e as despesas das VPS têm esse campo vazio
+— o "Contabo" mora no cadastro da **conta**. A busca varria e não achava nada.
+Quem enxerga por esse caminho agora é `custos_ti.detalhamento_fornecedor()`.
+
+**Só dispara para fornecedor com MAIS DE UMA conta e com a fatura SEM conta
+definida.** As duas condições importam:
+- uma conta só → a duplicidade normal (mesma conta, mesma competência) já
+  resolve, e avisar de novo seria ruído sobre todo lançamento legítimo;
+- conta escolhida/reconhecida → é a fatura daquele contrato específico, não a
+  nota agregada. Lançar a fatura de UMA VPS com as outras 16 já lançadas é
+  normal e não pode ser barrado.
+- Medido em 2026-08-06: **Contabo é o único fornecedor multi-conta**. A trava
+  nasce disparando exatamente onde deve.
+
+**Quarto estado da fila: `anexado`.** A nota agregada não pode virar despesa
+(dobra o mês) nem ser descartada (`descartado` diz *"não é custo"*, e é custo —
+só está detalhado em outro lugar). `anexado` guarda o e-mail e o PDF sem criar
+lançamento nenhum. Tem `reabrir` para o engano.
+
+`rateio_fornecedor` + `rateio_competencia` gravam **o que** aquela nota cobre.
+Sem os dois a nota fica órfã: presa num item de fila que ninguém mais abre, e
+quem olhar a despesa da VPS não acha o documento — que é exatamente quando
+alguém pergunta "de onde saiu esse valor?". É por eles que
+`anexos_por_lancamento()` põe o clipe nas 17 despesas (validado: 17 de 17).
+Nota própria do lançamento **ganha** da nota do fornecedor. Sair de `anexado`
+(descartar/reabrir) limpa os dois campos, senão o clipe aponta para nota
+renegada.
+
+**A trava vale para o robô também** (mesma lição de 2026-05-06: guard no
+consumidor). No `import_email_custos_ti.py` a fatura agregada **para na fila**
+em vez de lançar sozinha às 08h/14h/20h. Se ficasse só na tela, o mês seguinte
+duplicaria de madrugada e ninguém veria.
+
+**Não é bloqueio.** A rota devolve 409 com o detalhamento na mão e o botão
+*"Já está detalhada — só guardar a nota"*. O caminho de forçar continua ali:
+duas faturas legítimas do mesmo fornecedor no mesmo mês já aconteceram
+(TecnoSpeed e KingHost em julho/2026).
+
+**Rateio automático NÃO foi feito** (dividir a nota entre as 17 contas). Fica
+para quando existir o caso de mês em que as VPS ainda não foram lançadas —
+precisa de regra para o centavo que sobra e para VPS não cadastrada.
+
 ### Página com modal PRECISA carregar o Bootstrap
 
 O `adminlte.min.js` do AdminLTE 3 **não embute o Bootstrap**. Sem

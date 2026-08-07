@@ -48,6 +48,10 @@ COLUNAS_NOVAS = [
     ("ti_email_auditoria", "valor_sugerido", "NUMERIC(14,4)", None),
     ("ti_email_auditoria", "moeda_sugerida", "VARCHAR(3)", None),
     ("ti_email_auditoria", "trecho_valor", "VARCHAR(300)", None),
+    # Fatura agregada (status='anexado'): de qual fornecedor e de qual mês ela é.
+    # Sem backfill — item antigo nunca foi anexado, o vazio é a verdade.
+    ("ti_email_auditoria", "rateio_fornecedor", "VARCHAR(120)", None),
+    ("ti_email_auditoria", "rateio_competencia", "VARCHAR(7)", None),
 ]
 
 

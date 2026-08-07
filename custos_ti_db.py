@@ -338,7 +338,13 @@ class Cotacao(TiBase):
                 "fonte": self.fonte}
 
 
-STATUS_AUDITORIA = ("pendente", "lancado", "descartado")
+# 'anexado' é a fatura AGREGADA de um fornecedor cujas contas já estão lançadas
+# uma a uma — a da Contabo cobre as 17 VPS. Ela não pode virar despesa (dobraria
+# o mês) e não pode ser descartada (descartar diz "não é custo", e é custo: só
+# está detalhado em outro lugar). Medido em julho/2026: as 17 VPS somam
+# R$ 1.387,98 e a fatura do e-mail veio R$ 1.387,98 — o mesmo dinheiro, ao
+# centavo, contado duas vezes no painel.
+STATUS_AUDITORIA = ("pendente", "lancado", "descartado", "anexado")
 
 
 class EmailAuditoria(TiBase):
@@ -381,6 +387,15 @@ class EmailAuditoria(TiBase):
     # ela que denunciou o MongoDB (rótulo "Amount Due $23." e sugestão 25,46,
     # dois números que não se falam). Sugestão sem prova é palpite.
     trecho_valor = Column(String(300), nullable=True)
+
+    # ── quando status='anexado': o que esta nota cobre ───────────────────────
+    # Sem estes dois a nota vira órfã: fica guardada num item de fila que
+    # ninguém mais abre, e quem olhar a despesa da VPS não acha o documento —
+    # que é exatamente quando alguém pergunta "de onde saiu esse valor?".
+    # É por eles que `anexos_por_lancamento()` põe o clipe nas 17 despesas.
+    rateio_fornecedor = Column(String(120), nullable=True)
+    rateio_competencia = Column(String(7), nullable=True)   # 'YYYY-MM'
+
     created_at = Column(DateTime, nullable=False, default=now_brt)
     updated_at = Column(DateTime, nullable=False, default=now_brt, onupdate=now_brt)
 
@@ -405,6 +420,8 @@ class EmailAuditoria(TiBase):
             "valor_sugerido": float(self.valor_sugerido) if self.valor_sugerido is not None else None,
             "moeda_sugerida": self.moeda_sugerida,
             "trecho_valor": self.trecho_valor,
+            "rateio_fornecedor": self.rateio_fornecedor,
+            "rateio_competencia": self.rateio_competencia,
         }
 
 

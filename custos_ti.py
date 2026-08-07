@@ -717,6 +717,64 @@ def sugerir_conta(sess, texto: str) -> Optional[Conta]:
     return reconhecer_conta(sess, texto)["conta"]
 
 
+def detalhamento_fornecedor(sess, *, competencia: Optional[str],
+                            fornecedor: Optional[str],
+                            ignorar_id: Optional[int] = None) -> Optional[dict]:
+    """A fatura deste fornecedor JÁ ESTÁ detalhada, conta por conta, neste mês?
+
+    Existe fornecedor cuja fatura é uma só e cobre VÁRIOS contratos: a da
+    Contabo paga as 17 VPS, cada uma cadastrada como sua própria conta e
+    lançada individualmente. Quando essa nota entra como despesa, o painel soma
+    o mesmo dinheiro duas vezes — uma pelo detalhe, outra pelo total.
+
+    Medido em julho/2026: as 17 VPS somam R$ 1.387,98 e a fatura que chegou por
+    e-mail veio R$ 1.387,98. Ao centavo.
+
+    Por que `lancamentos_semelhantes()` não pegava isso sozinha: ela compara o
+    fornecedor ESCRITO NA DESPESA, e as despesas das VPS têm esse campo vazio —
+    o "Contabo" mora no cadastro da CONTA. A busca varria e não achava nada.
+
+    Só responde para fornecedor com mais de uma conta: com uma conta só, a
+    duplicidade normal (mesma conta, mesma competência) já resolve, e avisar de
+    novo aqui seria ruído em cima de todo lançamento legítimo.
+
+    Devolve None quando não há o que avisar — quem chama trata None como
+    "pode seguir".
+    """
+    forn = _norm(fornecedor)
+    if not competencia or len(forn) < 3:
+        return None
+
+    contas = [c for c in listar_contas(sess, incluir_inativas=True)
+              if _norm(c.fornecedor) == forn]
+    if len(contas) < 2:
+        return None
+
+    ids = {c.id for c in contas}
+    lancs = [l for l in sess.query(Lancamento).filter(
+                 Lancamento.competencia == competencia,
+                 Lancamento.conta_id.in_(ids)).all()
+             if not (ignorar_id and l.id == int(ignorar_id))]
+    if not lancs:
+        return None
+
+    # Só o que foi PAGO soma no painel — previsto não entra nos totais, então
+    # também não é ele que está duplicando nada.
+    pagos = [l for l in lancs if l.status == "pago"]
+    return {
+        "fornecedor": contas[0].fornecedor,
+        "competencia": competencia,
+        "contas_cadastradas": len(contas),
+        "lancamentos": len(pagos),
+        "total_brl": round(sum(float(l.valor_brl or 0) for l in pagos), 2),
+        "total_usd": round(sum(float(l.valor_usd or 0) for l in pagos), 2),
+        "itens": [{"id": l.id, "conta": (l.conta.nome if l.conta else None),
+                   "valor_brl": float(l.valor_brl or 0),
+                   "valor_usd": float(l.valor_usd or 0)}
+                  for l in sorted(pagos, key=lambda x: -float(x.valor_brl or 0))],
+    }
+
+
 def lancamentos_semelhantes(sess, *, competencia: Optional[str] = None,
                             conta_id: Optional[int] = None,
                             fornecedor: Optional[str] = None,
@@ -849,8 +907,28 @@ def anexos_por_lancamento(sess, lanc_ids: list[int]) -> dict[int, dict]:
     linhas = (sess.query(db.EmailAuditoria)
               .filter(db.EmailAuditoria.lancamento_id.in_(ids),
                       db.EmailAuditoria.anexo_nome.isnot(None)).all())
-    return {l.lancamento_id: {"auditoria_id": l.id, "nome": l.anexo_nome}
+    mapa = {l.lancamento_id: {"auditoria_id": l.id, "nome": l.anexo_nome}
             for l in linhas}
+
+    # Fatura AGREGADA (status='anexado'): não virou despesa nenhuma, mas é a
+    # nota que sustenta VÁRIAS. A da Contabo é a prova das 17 VPS de julho.
+    # Sem isto o documento fica preso num item de fila que ninguém mais abre e
+    # a despesa da VPS não tem de onde provar o valor.
+    agregadas = (sess.query(db.EmailAuditoria)
+                 .filter(db.EmailAuditoria.status == "anexado",
+                         db.EmailAuditoria.anexo_nome.isnot(None),
+                         db.EmailAuditoria.rateio_fornecedor.isnot(None)).all())
+    if agregadas:
+        alvo = {(_norm(a.rateio_fornecedor), a.rateio_competencia): a
+                for a in agregadas}
+        for l in sess.query(Lancamento).filter(Lancamento.id.in_(ids)).all():
+            if l.id in mapa or l.conta is None:
+                continue   # nota própria ganha da nota do fornecedor
+            a = alvo.get((_norm(l.conta.fornecedor), l.competencia))
+            if a is not None:
+                mapa[l.id] = {"auditoria_id": a.id, "nome": a.anexo_nome,
+                              "agregada": True}
+    return mapa
 
 
 # ─────────────────────────────────────────────────────────────────────────────
