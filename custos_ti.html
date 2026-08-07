@@ -490,7 +490,10 @@ document.addEventListener('DOMContentLoaded', () => {
   tiLigaTabela('btnTblForma', 'tblFormaBox');
   tiLigaTabela('btnTblEvo', 'tblEvoBox');
   tiMoedaInit(desenha);
-  PERIODO_INICIAL = tiPeriodoInit(carregar);
+  /* Abre no mês FECHADO. O corrente tem meia dúzia de contas lançadas e faria
+     o custo de TI parecer menor do que é. Quem quiser o mês em curso tem o
+     atalho "Mês atual". */
+  PERIODO_INICIAL = tiPeriodoInit(carregar, { padrao: 'anterior' });
   carregar(PERIODO_INICIAL.de, PERIODO_INICIAL.ate);
 });
 </script>

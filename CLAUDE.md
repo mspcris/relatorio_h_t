@@ -283,11 +283,20 @@ Consolida **todos** os custos de tecnologia por centro de custo. O painel
 | `custos_ti.py` | Regras de negócio, agregações por período, câmbio, ponte com o `custos_ia` |
 | `custos_ti_meta.py` | Importação de custos da Meta (texto colado + Graph API) |
 | `custos_ti_routes.py` | Blueprint `/api/custos-ti/*` |
-| `custos_ti.html` | Home — consolidação gráfica do período (default = mês atual) |
+| `custos_ti.html` | Home — consolidação gráfica do período (default = **mês anterior**) |
 | `custos_ti_centro.html` | Página de um centro (contas + lançamentos + import) |
 | `custos_ti_cadastros.html` | Centros de custo, formas de pagamento, cotação |
 | `_custos_ti_sidebar.html` / `_custos_ti_head.html` | Menu e CSS/JS compartilhados |
 | `migrate_custos_ti.py` | Cria as tabelas + semeia os centros (idempotente) |
+
+**Período de abertura — Visão geral abre no mês ANTERIOR, centro no ATUAL**
+(2026-08-06). Não é inconsistência, é o uso de cada tela: a Visão geral é
+leitura e o mês corrente pela metade faz o custo de TI parecer menor do que é;
+a página do centro é onde se LANÇA despesa, e abrir no mês fechado esconderia a
+conta lançada hoje — parece que não gravou. Quem escolhe é `tiPeriodoInit(fn,
+{padrao:'anterior'})`; sem a opção, mês atual. **Não uniformizar as duas.**
+O fallback de mês vazio (`tiFallbackMes`) continua valendo e a frase dele cita o
+mês que abriu, não "mês atual".
 
 **Por que Postgres e não JSON como o `custos_ia`:** o `custos_ia` guarda
 snapshots congelados por mês (bom para o que a Costs API devolveu). Aqui o dado

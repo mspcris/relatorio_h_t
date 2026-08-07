@@ -278,13 +278,20 @@ function tiMsg(el, texto, tipo) {
 }
 
 /* ── Filtro de período (uma linha só, acima de tudo que ele filtra) ────────── */
-function tiPeriodoInit(onChange) {
+function tiPeriodoInit(onChange, opts) {
   const de = document.getElementById('fltDe'), ate = document.getElementById('fltAte');
   const q = new URLSearchParams(location.search);
   const hoje = new Date();
-  const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
-  de.value = q.get('de') || mesAtual;
-  ate.value = q.get('ate') || mesAtual;
+  const fmtMes = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const mesAtual = fmtMes(hoje);
+  const mesAnterior = fmtMes(new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1));
+  /* `padrao:'anterior'` é para tela de LEITURA (Visão geral): o mês corrente
+     está pela metade e faz o gasto parecer menor do que é. Tela onde se LANÇA
+     despesa (centro) continua no mês atual — senão a conta lançada hoje não
+     aparece e parece que não gravou. */
+  const padrao = (opts && opts.padrao === 'anterior') ? mesAnterior : mesAtual;
+  de.value = q.get('de') || padrao;
+  ate.value = q.get('ate') || padrao;
 
   function aplica() {
     const url = new URL(location.href);
@@ -307,9 +314,7 @@ function tiPeriodoInit(onChange) {
   });
   const btnAnterior = document.getElementById('btnMesAnterior');
   if (btnAnterior) btnAnterior.addEventListener('click', () => {
-    const d = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-    de.value = ate.value =
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    de.value = ate.value = mesAnterior;
     aplica();
   });
 
@@ -324,10 +329,11 @@ function tiPeriodoInit(onChange) {
   return { de: de.value, ate: ate.value, escolhido: q.has('de') || q.has('ate') };
 }
 
-/* Mês corrente vazio faz a tela parecer quebrada — no dia 2 não há nada nele.
-   Quando o usuário não pediu período explícito e o mês atual está zerado, pula
-   para o último mês COM lançamento (não só o anterior: ele também pode estar
-   vazio). Roda uma vez só, e avisa que se mexeu. */
+/* Período de abertura vazio faz a tela parecer quebrada. Quando o usuário não
+   pediu período explícito e o que abriu está zerado, pula para o último mês COM
+   lançamento (não é só recuar um: o anterior também pode estar vazio). Roda uma
+   vez só, e avisa que se mexeu — a frase cita o mês que abriu, não "mês atual",
+   porque a Visão geral abre no anterior. */
 let _jaCaiuPraTras = false;
 function tiFallbackMes(dados, periodoInicial, recarregar) {
   if (_jaCaiuPraTras || periodoInicial.escolhido) return false;
@@ -341,8 +347,8 @@ function tiFallbackMes(dados, periodoInicial, recarregar) {
   url.searchParams.set('de', alvo); url.searchParams.set('ate', alvo);
   history.replaceState(null, '', url);
   const box = document.getElementById('globalMsg');
-  if (box) tiMsg(box, `O mês atual ainda não tem lançamento — mostrando `
-    + `${tiFmtMes(alvo)}, o último com movimento.`, 'warn');
+  if (box) tiMsg(box, `${tiFmtMes(dados.periodo.ate)} ainda não tem lançamento `
+    + `— mostrando ${tiFmtMes(alvo)}, o último com movimento.`, 'warn');
   recarregar(alvo, alvo);
   return true;
 }
