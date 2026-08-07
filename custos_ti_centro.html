@@ -634,7 +634,8 @@ function pintaLancamentos(d) {
   let linhas = d.lancamentos.map(l => `
     <tr>
       <td>${tiFmtMes(l.competencia)}</td>
-      <td>${tiEsc(l.descricao)}${l.obs ? ` <i class="fas fa-comment-dots ti-muted" title="${tiEsc(l.obs)}"></i>` : ''}</td>
+      <td>${tiEsc(l.descricao)}${l.obs ? ` <i class="fas fa-comment-dots ti-muted" title="${tiEsc(l.obs)}"></i>` : ''}${l.anexo ? ` <a href="/api/custos-ti/auditoria/${l.anexo.auditoria_id}/pdf" target="_blank"
+             title="Nota desta despesa: ${tiEsc(l.anexo.nome)}"><i class="fas fa-paperclip"></i></a>` : ''}</td>
       <td>${tiEsc(l.conta_nome || l.fornecedor || '—')}</td>
       <td>${tiEsc(l.forma_rotulo || '—')}</td>
       <td>${tiFmtData(l.data_pagamento)}</td>

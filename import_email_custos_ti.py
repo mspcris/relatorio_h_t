@@ -192,11 +192,20 @@ def _data(txt: str | None):
         return None
 
 
-def _centro_id(sess, termo: str | None):
-    """Casa o 'Centro:' do e-mail com um centro por key ou nome; senão o padrão."""
+def _centro_id(sess, termo: str | None, *, usar_padrao: bool = True):
+    """Casa o 'Centro:' do e-mail com um centro por key ou nome; senão o padrão.
+
+    `usar_padrao=False` responde None quando o e-mail não diz o centro — é o que
+    permite distinguir "o e-mail escolheu infra" de "ninguém escolheu nada".
+    Sem essa distinção o padrão ganha da conta reconhecida e a despesa da conta
+    do centro 5 vai parar no centro 3.
+    """
     import custos_ti_db as db
     centros = sess.query(db.CentroCusto).all()
-    alvo = (termo or os.getenv("CONTAS_CENTRO_DEFAULT", "infra")).strip().lower()
+    padrao = os.getenv("CONTAS_CENTRO_DEFAULT", "infra") if usar_padrao else ""
+    alvo = (termo or padrao).strip().lower()
+    if not alvo:
+        return None
     for c in centros:
         if (c.key or "").lower() == alvo or (c.nome or "").lower() == alvo:
             return c.id
@@ -210,6 +219,26 @@ def _anexos(msg) -> str | None:
     nomes = [p.get_filename() for p in msg.walk()
              if p.get_filename() and "attachment" in str(p.get("Content-Disposition") or "")]
     return ", ".join(n for n in nomes if n) or None
+
+
+def _ids_dos_remetentes(M, remetentes: set[str]) -> list:
+    """IDs dos não-lidos DOS REMETENTES DE CONTA, perguntando ao servidor.
+
+    Antes isto baixava os 361 não-lidos e jogava 351 fora no Python: a caixa
+    auditoria@ é COMPARTILHADA e o CRM despeja cópia de tudo nela. Perguntar
+    'UNSEEN FROM fulano' devolve só as ~10 que interessam.
+
+    Isto é filtro de desempenho, NÃO é a trava. A conferência de remetente
+    continua no laço do run() — defesa em profundidade, porque 'FROM' no IMAP
+    casa por substring do cabeçalho e um dia pode trazer o que não devia."""
+    vistos, ids = set(), []
+    for quem in sorted(remetentes):
+        typ, data = M.search(None, "UNSEEN", "FROM", f'"{quem}"')
+        for i in (data[0].split() if data and data[0] else []):
+            if i not in vistos:
+                vistos.add(i)
+                ids.append(i)
+    return ids
 
 
 def _parse_email(sess, msg) -> dict:
@@ -227,35 +256,134 @@ def _parse_email(sess, msg) -> dict:
     if moeda not in ("BRL", "USD", "EUR"):
         moeda = dict(SIMBOLO_MOEDA).get(moeda.lower(), "BRL")
     venc = _data(_campo(corpo, "vencimento", "venc", "data"))
-    centro = _centro_id(sess, _campo(corpo, "centro", "centro de custo"))
+    # Só o que o e-mail DISSE. O padrão é aplicado no fim, depois da conta.
+    centro = _centro_id(sess, _campo(corpo, "centro", "centro de custo"),
+                        usar_padrao=False)
+
+    # ── o PDF ────────────────────────────────────────────────────────────────
+    # A conta real chega SÓ como PDF anexo — o corpo do e-mail do Leonardo diz o
+    # nome do arquivo e a competência, nunca o valor. E 7 dos 10 PDFs de julho
+    # não têm texto dentro (imagem escaneada), então quem lê é o OCR.
+    import contas_pdf
+    pdf_nome, pdf_tipo, pdf_raw = contas_pdf.anexo_pdf(msg)
+    leitura = contas_pdf.ler(pdf_raw) if pdf_raw else {}
+
+    # ── de qual conta CADASTRADA é este e-mail ───────────────────────────────
+    # Sem amarrar o e-mail ao cadastro da conta, toda fatura vira despesa solta
+    # e não há chave para perceber que a mesma conta já entrou no mês.
+    # Só o assunto e o nome do arquivo entram na busca: são o que identifica a
+    # fatura. O texto do PDF cita outros produtos do fornecedor e faria a conta
+    # errada ganhar (ver reconhecer_conta).
+    import custos_ti
+    rec = custos_ti.reconhecer_conta(sess, " · ".join(filter(None, [assunto, pdf_nome])))
+    conta = rec["conta"]
+    # Ordem: centro escrito no e-mail > centro da conta reconhecida > padrão.
+    # A conta sabe a que centro pertence; o padrão não sabe nada.
+    if centro is None and conta is not None:
+        centro = conta.centro_id
+    if centro is None:
+        centro = _centro_id(sess, None)
+    # Fornecedor reconhecido vale mesmo sem conta definida (fatura da Contabo
+    # cobre 16 VPS): é ele que sustenta a busca por repetição.
+    fornecedor = _campo(corpo, "fornecedor", "de", "credor") or rec["fornecedor"]
+    # A competência que importa é a da CONTA, e ela está no assunto
+    # ("Julho/2026") — o corpo destes e-mails não traz vencimento. Sem isto a
+    # competência sai vazia e a busca por repetição não busca nada.
+    competencia = (venc.strftime("%Y-%m") if venc
+                   else _competencia_do_assunto(assunto, _data_hora(msg.get("Date"))))
 
     motivo = None
-    if valor is None:
-        motivo = "não consegui ler o valor da conta"
-    elif centro is None:
+    if valor is not None and centro is None:
         motivo = "não consegui definir o centro de custo"
+    elif valor is None:
+        # REGRA — valor vindo de PDF NUNCA vira lançamento sozinho.
+        # O OCR erra e erra calado: na fatura do MongoDB ele leu "Amount Due
+        # $23." (comeu os centavos) e o número mais próximo na página era de
+        # outra tabela. Um valor desses entra no painel e ninguém revisa. Então
+        # PDF sempre para na fila, com a sugestão preenchida e o documento do
+        # lado, e só vira lançamento quando uma pessoa confirma na tela.
+        if pdf_raw:
+            motivo = ("conta em PDF — confira o valor sugerido"
+                      if leitura.get("valor")
+                      else f"PDF anexo, mas não consegui ler o valor "
+                           f"({leitura.get('como') or 'sem texto'})")
+        else:
+            motivo = "não consegui ler o valor da conta"
+
+    # ── trava de duplicidade DO ROBÔ ─────────────────────────────────────────
+    # O dedupe por Message-ID só pega o mesmo e-mail chegando duas vezes. A
+    # mesma FATURA reenviada, encaminhada por outra pessoa, ou já lançada à mão
+    # antes de o robô passar, tem outro Message-ID e entraria de novo. Aqui o
+    # e-mail redondo para na fila em vez de duplicar sozinho de madrugada —
+    # guard no consumidor, não só na tela (lição de 2026-05-06).
+    semelhantes = []
+    if motivo is None:
+        semelhantes = custos_ti.lancamentos_semelhantes(
+            sess, competencia=competencia,
+            conta_id=(conta.id if conta else None),
+            fornecedor=fornecedor)
+        if semelhantes:
+            motivo = (f"já existe despesa desta conta em {competencia} "
+                      f"({semelhantes[0]['motivo']}) — confira se não é a mesma")
     reconhecido = motivo is None
 
     return {
         "origem": "email",
         "status": "previsto",           # conta a pagar, não pagamento feito
         "centro_id": centro,
+        "conta_id": (conta.id if conta else None),
         "descricao": (_campo(corpo, "descricao", "descrição") or assunto)[:240],
-        "fornecedor": _campo(corpo, "fornecedor", "de", "credor"),
+        "fornecedor": fornecedor,
         "valor": valor,
         "moeda": moeda,
-        "competencia": venc.strftime("%Y-%m") if venc else None,
+        "competencia": competencia,
         "external_id": (msg.get("Message-ID") or "").strip("<> ").strip() or None,
         "obs": f"De: {remetente}",
         # contexto cru — usado tanto no lançamento quanto na Auditoria
         "_reconhecido": reconhecido,
         "_motivo": motivo,
+        "_conta_nome": (conta.nome if conta else None),
+        "_semelhantes": semelhantes,
         "_remetente": remetente,
         "_assunto": assunto,
         "_corpo": corpo,
         "_anexos": _anexos(msg),
         "_recebido_em": _data_hora(msg.get("Date")),
+        # o documento e a leitura dele — o que a tela de auditoria mostra
+        "_pdf_nome": pdf_nome,
+        "_pdf_tipo": pdf_tipo,
+        "_pdf_bytes": pdf_raw,
+        "_pdf_texto": (leitura.get("texto") or None),
+        "_pdf_como": (leitura.get("como") or None),
+        "_valor_sugerido": leitura.get("valor"),
+        "_moeda_sugerida": leitura.get("moeda"),
+        "_trecho_valor": leitura.get("trecho"),
     }
+
+
+_MESES_PT = ("janeiro", "fevereiro", "marco", "abril", "maio", "junho",
+             "julho", "agosto", "setembro", "outubro", "novembro", "dezembro")
+_SEM_ACENTO = str.maketrans("áàâãäéèêëíìîïóòôõöúùûüçñ", "aaaaaeeeeiiiiooooouuuucn")
+
+
+def _competencia_do_assunto(assunto: str, recebido) -> str | None:
+    """"Fatura Contabo - Julho/2026" -> "2026-07".
+
+    Mesma leitura que a tela de auditoria faz (`competenciaDoAssunto`): a
+    competência da conta é a que está no ASSUNTO, não a do dia em que o e-mail
+    chegou. Uma fatura de julho encaminhada em agosto é de julho.
+    """
+    t = (assunto or "").lower().translate(_SEM_ACENTO)
+    for i, mes in enumerate(_MESES_PT, start=1):
+        if re.search(rf"{mes}\s*[/\- ]\s*(20\d{{2}})", t):
+            ano = re.search(rf"{mes}\s*[/\- ]\s*(20\d{{2}})", t).group(1)
+            return f"{ano}-{i:02d}"
+    m = re.search(r"\b(0?[1-9]|1[0-2])\s*/\s*(20\d{2})\b", t)
+    if m:
+        return f"{m.group(2)}-{int(m.group(1)):02d}"
+    # Último recurso: o mês em que o e-mail chegou. Vale para a busca por
+    # repetição; quem confirma na tela ainda pode corrigir.
+    return recebido.strftime("%Y-%m") if recebido else None
 
 
 def _data_hora(cru: str | None):
@@ -278,9 +406,8 @@ def run(dry: bool) -> None:
           + ("   [DRY-RUN: não grava]" if dry else ""))
 
     M = _conectar(cfg, readonly=dry)      # dry não marca como lido
-    typ, data = M.search(None, "UNSEEN")
-    ids = data[0].split() if data and data[0] else []
-    print(f"não-lidos: {len(ids)}")
+    ids = _ids_dos_remetentes(M, cfg["remetentes"])
+    print(f"não-lidos dos remetentes de conta: {len(ids)}")
 
     sess = db.TiSession()
     lancados = auditoria = ignorados = duplicados = 0
@@ -304,6 +431,18 @@ def run(dry: bool) -> None:
         if dry:
             print(f"  {'+' if dados['_reconhecido'] else '?'} {de} · "
                   f"{dados['_assunto'][:34]:34} → {destino}")
+            print(f"      conta cadastrada: {dados['_conta_nome'] or '(não reconheci)'}")
+            for s in dados["_semelhantes"]:
+                print(f"      JÁ EXISTE #{s['id']} {s['competencia']} "
+                      f"{s['moeda']} {s['valor']:,.2f} · {s['descricao'][:40]} "
+                      f"({s['motivo']})")
+            if dados["_pdf_nome"]:
+                sug = (f"{dados['_moeda_sugerida']} {dados['_valor_sugerido']:,.2f}"
+                       if dados["_valor_sugerido"] else "(não achei valor)")
+                print(f"      PDF {dados['_pdf_nome'][:44]} [{dados['_pdf_como']}] "
+                      f"sugere {sug}")
+                if dados["_trecho_valor"]:
+                    print(f"      prova: {dados['_trecho_valor'][:100]}")
             lancados += dados["_reconhecido"]; auditoria += not dados["_reconhecido"]
             continue
         try:
@@ -314,7 +453,15 @@ def run(dry: bool) -> None:
                 sess.add(db.EmailAuditoria(
                     message_id=mid, remetente=dados["_remetente"],
                     assunto=dados["_assunto"], recebido_em=dados["_recebido_em"],
-                    corpo=dados["_corpo"], anexos=dados["_anexos"], motivo=dados["_motivo"]))
+                    corpo=dados["_corpo"], anexos=dados["_anexos"], motivo=dados["_motivo"],
+                    # o documento vai inteiro para o banco: é o que a pessoa
+                    # abre na tela para conferir o número antes de confirmar
+                    anexo_nome=dados["_pdf_nome"], anexo_tipo=dados["_pdf_tipo"],
+                    anexo_bytes=dados["_pdf_bytes"] or None,
+                    texto_extraido=dados["_pdf_texto"], extraido_como=dados["_pdf_como"],
+                    valor_sugerido=dados["_valor_sugerido"],
+                    moeda_sugerida=dados["_moeda_sugerida"],
+                    trecho_valor=dados["_trecho_valor"]))
                 auditoria += 1
             sess.commit()
             M.store(i, "+FLAGS", "\\Seen")   # só marca lido depois de gravar
@@ -331,10 +478,15 @@ def run(dry: bool) -> None:
 
 
 def _ja_visto(sess, db, mid: str) -> bool:
-    """Mesmo Message-ID já virou lançamento OU já está na auditoria."""
-    from sqlalchemy import or_
+    """Mesmo Message-ID já virou lançamento OU já está na auditoria.
+
+    Procura o Message-ID em QUALQUER origem, não só em origem='email': quando a
+    auditoria gruda este e-mail numa despesa que já tinha sido lançada à mão, o
+    identificador fica numa linha origem='manual'. Filtrar por origem aqui faria
+    o robô não enxergar essa linha e trazer a mesma conta de volta na próxima
+    execução — exatamente a duplicidade que a tela acabou de evitar."""
     achou_lanc = sess.query(db.Lancamento.id).filter(
-        db.Lancamento.origem == "email", db.Lancamento.external_id == mid).first()
+        db.Lancamento.external_id == mid).first()
     achou_aud = sess.query(db.EmailAuditoria.id).filter(
         db.EmailAuditoria.message_id == mid).first()
     return bool(achou_lanc or achou_aud)

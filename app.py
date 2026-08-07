@@ -209,9 +209,11 @@ _TEMPLATE_TO_PAGINA = {
     "custos_ti.html":                   "custos_ti",
     "custos_ti_centro.html":            "custos_ti",
     "custos_ti_cadastros.html":         "custos_ti",
+    "custos_ti_auditoria.html":         "custos_ti",
     "custos_ti":                        "custos_ti",
     "/custos_ti":                       "custos_ti",
     "/custos_ti_cadastros":             "custos_ti",
+    "/custos_ti_auditoria":             "custos_ti",
     # Itens de mais_servicos.html (internos)
     "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
     "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",
@@ -1466,6 +1468,17 @@ def h_custos_ti_cadastros():
     return render_protected_page("custos_ti_cadastros.html",
                                  TI_CENTROS=_ti_centros(force=True),
                                  TI_ATIVO="_cadastros")
+
+
+@app.get('/custos_ti_auditoria')
+def h_custos_ti_auditoria():
+    """Fila das contas que chegaram por e-mail e esperam confirmação.
+
+    Endereço próprio, e não /custos_ti/auditoria, porque aquela rota é a dos
+    centros de custo: cadastrar um centro com a key 'auditoria' engoliria esta
+    página. Mesmo motivo do /custos_ti_cadastros."""
+    return render_protected_page("custos_ti_auditoria.html",
+                                 TI_CENTROS=_ti_centros(), TI_ATIVO="_auditoria")
 
 
 @app.get('/custos_ti/<key>')

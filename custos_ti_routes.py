@@ -384,3 +384,251 @@ def api_meta_sync():
     except Exception as e:  # noqa: BLE001
         _sess().rollback()
         return _erro(e, "sync meta")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fila de auditoria — contas que chegaram por e-mail e esperam confirmação
+#
+# Por que existe: a conta fixa chega SÓ como PDF anexo e 7 em cada 10 PDFs são
+# imagem escaneada, lidos por OCR. OCR erra calado — então nada que veio de PDF
+# vira lançamento sozinho. Fica aqui, com o documento e o valor sugerido, até
+# uma pessoa confirmar. É o "auditoria e validação humana".
+# ─────────────────────────────────────────────────────────────────────────────
+@custos_ti_bp.get("/api/custos-ti/auditoria")
+def api_auditoria_listar():
+    if not _require_admin():
+        return _deny()
+    try:
+        status = (request.args.get("status") or "pendente").strip()
+        q = _sess().query(tidb.EmailAuditoria)
+        if status != "todos":
+            q = q.filter(tidb.EmailAuditoria.status == status)
+        itens = q.order_by(tidb.EmailAuditoria.recebido_em.desc().nullslast(),
+                           tidb.EmailAuditoria.id.desc()).limit(300).all()
+        pendentes = (_sess().query(tidb.EmailAuditoria)
+                     .filter(tidb.EmailAuditoria.status == "pendente").count())
+        return jsonify({"ok": True, "pendentes": pendentes,
+                        "itens": [i.to_dict() for i in itens]})
+    except Exception as e:  # noqa: BLE001
+        return _erro(e, "listar auditoria")
+
+
+@custos_ti_bp.get("/api/custos-ti/auditoria/pendentes")
+def api_auditoria_pendentes():
+    """Só o número, para o menu piscar. Barato o bastante para chamar em toda página."""
+    if not _require_admin():
+        return _deny()
+    try:
+        n = (_sess().query(tidb.EmailAuditoria)
+             .filter(tidb.EmailAuditoria.status == "pendente").count())
+        return jsonify({"ok": True, "pendentes": n})
+    except Exception as e:  # noqa: BLE001
+        return _erro(e, "contar auditoria")
+
+
+@custos_ti_bp.get("/api/custos-ti/auditoria/<int:item_id>/pdf")
+def api_auditoria_pdf(item_id):
+    """O documento original. Servido inline para abrir no visualizador do browser."""
+    if not _require_admin():
+        return _deny()
+    from flask import Response
+    item = _sess().get(tidb.EmailAuditoria, item_id)
+    if not item or not item.anexo_bytes:
+        return jsonify({"ok": False, "error": "sem PDF guardado neste item"}), 404
+    nome = (item.anexo_nome or f"conta_{item_id}.pdf").replace('"', "")
+    return Response(bytes(item.anexo_bytes),
+                    mimetype=item.anexo_tipo or "application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{nome}"',
+                             "Cache-Control": "private, max-age=300"})
+
+
+@custos_ti_bp.get("/api/custos-ti/auditoria/<int:item_id>/texto")
+def api_auditoria_texto(item_id):
+    """O texto que o OCR leu. Serve para entender uma sugestão estranha."""
+    if not _require_admin():
+        return _deny()
+    item = _sess().get(tidb.EmailAuditoria, item_id)
+    if not item:
+        return jsonify({"ok": False, "error": "item não encontrado"}), 404
+    return jsonify({"ok": True, "como": item.extraido_como,
+                    "texto": (item.texto_extraido or "")[:120_000]})
+
+
+def _conferir(sess, item, *, competencia=None, conta_id=None, fornecedor=None) -> dict:
+    """De qual conta cadastrada é este e-mail, e já existe despesa igual?
+
+    Usado pela tela ANTES de gravar e pela própria rota de lançar DEPOIS — a
+    mesma conta nas duas pontas. Se ficasse só no JavaScript, um clique duplo
+    ou uma aba antiga furaria a trava e a despesa entraria em dobro.
+    """
+    # Só assunto + nome do anexo: é o que identifica a fatura. O texto lido do
+    # PDF cita outros produtos do fornecedor e escolheria a conta errada.
+    rec = custos_ti.reconhecer_conta(
+        sess, " · ".join(filter(None, [item.assunto, item.anexo_nome])))
+    conta = sess.get(tidb.Conta, int(conta_id)) if conta_id else rec["conta"]
+    return {
+        "conta": conta.to_dict() if conta else None,
+        "sugerida": not conta_id and rec["conta"] is not None,
+        # Fornecedor reconhecido sem conta definida: a fatura da Contabo cobre
+        # 16 VPS cadastradas e não pertence a nenhuma delas em particular.
+        "fornecedor": rec["fornecedor"],
+        "candidatos": rec["candidatos"],
+        "ambiguo": rec["como"] == "fornecedor_ambiguo",
+        "semelhantes": custos_ti.lancamentos_semelhantes(
+            sess, competencia=competencia,
+            conta_id=(conta.id if conta else None),
+            fornecedor=(fornecedor or rec["fornecedor"]),
+            message_id=item.message_id),
+    }
+
+
+@custos_ti_bp.get("/api/custos-ti/auditoria/<int:item_id>/conferir")
+def api_auditoria_conferir(item_id):
+    """O que a tela mostra ao abrir o item: conta reconhecida + repetições."""
+    if not _require_admin():
+        return _deny()
+    sess = _sess()
+    try:
+        item = sess.get(tidb.EmailAuditoria, item_id)
+        if not item:
+            return jsonify({"ok": False, "error": "item não encontrado"}), 404
+        return jsonify({"ok": True, **_conferir(
+            sess, item,
+            competencia=request.args.get("competencia") or None,
+            conta_id=request.args.get("conta_id") or None,
+            fornecedor=request.args.get("fornecedor") or None)})
+    except Exception as e:  # noqa: BLE001
+        return _erro(e, "conferir item da auditoria")
+
+
+@custos_ti_bp.post("/api/custos-ti/auditoria/<int:item_id>/complementar")
+def api_auditoria_complementar(item_id):
+    """Gruda este e-mail numa despesa que JÁ EXISTE, em vez de criar outra.
+
+    É o caminho para a conta que já tinha sido lançada à mão: a despesa
+    permanece a mesma (e o histórico dela também), só ganha o que faltava — a
+    conta cadastrada, o fornecedor, o cartão — e passa a ter o PDF da nota
+    pendurado, acessível pelo clipe na tabela de lançamentos.
+    """
+    email = _require_admin()
+    if not email:
+        return _deny()
+    sess = _sess()
+    try:
+        item = sess.get(tidb.EmailAuditoria, item_id)
+        if not item:
+            return jsonify({"ok": False, "error": "item não encontrado"}), 404
+        if item.status != "pendente":
+            return jsonify({"ok": False,
+                            "error": f"este item já está como '{item.status}'"}), 400
+        dados = dict(_body())
+        lanc_id = dados.pop("lancamento_id", None)
+        if not lanc_id:
+            return jsonify({"ok": False, "error": "escolha a despesa a completar"}), 400
+        dados.setdefault("external_id", item.message_id)
+        dados["obs_extra"] = (f"Nota recebida por e-mail de {item.remetente}"
+                              + (f" · {item.anexo_nome}" if item.anexo_nome else "")
+                              + " · anexada pela auditoria.")
+        r = custos_ti.complementar_lancamento(
+            sess, lanc_id, dados, email=email,
+            atualizar_valor=bool(dados.get("atualizar_valor")))
+        # O item sai da fila apontando para a despesa que já existia: é esse
+        # vínculo que faz o PDF aparecer no clipe dela.
+        item.status = "lancado"
+        item.lancamento_id = r["lancamento"]["id"]
+        sess.commit()
+        return jsonify({"ok": True, **r, "item": item.to_dict()})
+    except Exception as e:  # noqa: BLE001
+        sess.rollback()
+        return _erro(e, "completar despesa da auditoria")
+
+
+@custos_ti_bp.post("/api/custos-ti/auditoria/<int:item_id>/lancar")
+def api_auditoria_lancar(item_id):
+    """Confirma o item da fila: vira lançamento e sai da fila.
+
+    O valor gravado é o que veio do FORMULÁRIO, não o sugerido — a pessoa pode
+    ter corrigido o número olhando o PDF, que é justamente o objetivo da tela.
+    Passa pelo mesmo salvar_lancamento() do resto do módulo para que cotação,
+    valor_brl e valor_usd congelem exatamente como num lançamento manual."""
+    email = _require_admin()
+    if not email:
+        return _deny()
+    sess = _sess()
+    try:
+        item = sess.get(tidb.EmailAuditoria, item_id)
+        if not item:
+            return jsonify({"ok": False, "error": "item não encontrado"}), 404
+        if item.status != "pendente":
+            return jsonify({"ok": False,
+                            "error": f"este item já está como '{item.status}'"}), 400
+        dados = dict(_body())
+        dados.pop("id", None)               # nunca sobrescrever lançamento existente
+        dados["origem"] = "email"
+        # TRAVA — despesa parecida já existe e ninguém decidiu nada a respeito.
+        # Recusa com a lista na mão em vez de criar a segunda: quem quiser as
+        # duas (TecnoSpeed e KingHost mandam duas faturas no mesmo mês) manda de
+        # novo com confirmar_duplicata, e aí a repetição é escolha registrada.
+        if not dados.pop("confirmar_duplicata", False):
+            conf = _conferir(sess, item, competencia=dados.get("competencia"),
+                             conta_id=dados.get("conta_id"),
+                             fornecedor=dados.get("fornecedor"))
+            if conf["semelhantes"]:
+                return jsonify({"ok": False, "duplicata": True,
+                                "semelhantes": conf["semelhantes"],
+                                "error": "já existe despesa parecida nesta competência"}), 409
+        # Dedupe: o Message-ID viaja para o lançamento, então reprocessar a
+        # caixa não cria a conta de novo.
+        dados.setdefault("external_id", item.message_id)
+        dados.setdefault("descricao", (item.assunto or "conta por e-mail")[:240])
+        dados.setdefault("obs", f"De: {item.remetente} · confirmado na auditoria")
+        lanc = custos_ti.salvar_lancamento(sess, dados, email=email)
+        item.status = "lancado"
+        item.lancamento_id = lanc.get("id")
+        sess.commit()
+        return jsonify({"ok": True, "lancamento": lanc, "item": item.to_dict()})
+    except Exception as e:  # noqa: BLE001
+        sess.rollback()
+        return _erro(e, "lançar item da auditoria")
+
+
+@custos_ti_bp.post("/api/custos-ti/auditoria/<int:item_id>/descartar")
+def api_auditoria_descartar(item_id):
+    """Tira da fila sem lançar. O e-mail e o PDF continuam guardados — descartar
+    é dizer 'não é custo', não é apagar a prova de que a conta chegou."""
+    if not _require_admin():
+        return _deny()
+    sess = _sess()
+    try:
+        item = sess.get(tidb.EmailAuditoria, item_id)
+        if not item:
+            return jsonify({"ok": False, "error": "item não encontrado"}), 404
+        if item.status == "lancado":
+            return jsonify({"ok": False,
+                            "error": "já virou lançamento; exclua o lançamento primeiro"}), 400
+        item.status = "descartado"
+        sess.commit()
+        return jsonify({"ok": True, "item": item.to_dict()})
+    except Exception as e:  # noqa: BLE001
+        sess.rollback()
+        return _erro(e, "descartar item da auditoria")
+
+
+@custos_ti_bp.post("/api/custos-ti/auditoria/<int:item_id>/reabrir")
+def api_auditoria_reabrir(item_id):
+    """Volta para 'pendente' um item descartado por engano."""
+    if not _require_admin():
+        return _deny()
+    sess = _sess()
+    try:
+        item = sess.get(tidb.EmailAuditoria, item_id)
+        if not item:
+            return jsonify({"ok": False, "error": "item não encontrado"}), 404
+        if item.status == "lancado":
+            return jsonify({"ok": False, "error": "item já lançado"}), 400
+        item.status = "pendente"
+        sess.commit()
+        return jsonify({"ok": True, "item": item.to_dict()})
+    except Exception as e:  # noqa: BLE001
+        sess.rollback()
+        return _erro(e, "reabrir item da auditoria")

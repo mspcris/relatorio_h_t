@@ -261,7 +261,12 @@ async function tiApi(url, opts) {
   let body = null;
   try { body = await r.json(); } catch (e) { body = null; }
   if (!r.ok || !body || body.ok === false) {
-    throw new Error((body && body.error) || `HTTP ${r.status}`);
+    const err = new Error((body && body.error) || `HTTP ${r.status}`);
+    // A resposta de erro inteira vai junto: a recusa por duplicidade devolve a
+    // LISTA das despesas que já existem, e quem chamou precisa mostrá-la.
+    err.body = body;
+    err.status = r.status;
+    throw err;
   }
   return body;
 }

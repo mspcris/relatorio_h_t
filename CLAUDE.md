@@ -371,6 +371,201 @@ pode colar o histórico inteiro toda vez.
 `ti_forma_pagamento` (bandeira + 4 últimos dígitos, que são `UNIQUE`), e a
 importação reporta o que criou.
 
+### Contas fixas por e-mail — cron 3x/dia (2026-08-06)
+
+`import_email_custos_ti.py` + `import_email_custos_ti.sh`. Horário definido, de
+manhã, de tarde e de noite:
+
+```cron
+0 8,14,20 * * * /bin/bash /opt/relatorio_h_t/import_email_custos_ti.sh --run >> /var/log/relatorio_h_t/import_email_custos_ti.log 2>&1
+```
+
+**INSTALADO em 2026-08-06**, depois de fechar as duas pendências que impediam
+(tela da fila e leitura do PDF). Linha exata no crontab do root da vps154.
+Validada rodando o comando idêntico ao do cron, com `env -i`.
+
+Env no `.env` do `/opt/relatorio_h_t/`: `IMAP_HOST`, `IMAP_PORT`, `IMAP_USER`,
+`IMAP_PASSWORD` (Gmail exige APP PASSWORD, não a senha da conta) e
+`CONTAS_REMETENTES`.
+
+**Credencial: já resolvida na VM, não configurar nada (verificado 2026-08-06.)**
+Não existe `IMAP_*` no `.env` da vps154 e não precisa existir — `_cfg()` cai no
+`ALARM_EMAIL_USER`/`ALARM_EMAIL_PASSWORD`, que é `auditoria@camim.com.br` com
+app password de 16 caracteres já usada pelos alarmes. Login IMAP testado OK.
+`CONTAS_REMETENTES` está preenchido com `lcarneiro@arquitetodigital.com.br` e
+`cristiano@camim.com.br`.
+
+> Ao conferir isso de novo, **grep pelo valor, não pelo nome da variável**.
+> `grep -oE "^CONTAS_REMETENTES="` imprime só o prefixo casado e a variável
+> parece vazia — foi assim que eu concluí "kill-switch ligado" com ela cheia.
+
+**`auditoria@` é caixa COMPARTILHADA, não é caixa de contas.** O CRM manda cópia
+de tudo para ela. Medido em 2026-08-06: 399 mensagens, 361 não-lidas, das quais
+**351 são cópia do CRM** e só 10 são fatura. A lista de remetentes não é
+firula — é ela que segura 351 e-mails por execução. E o filtro roda **antes** de
+qualquer `\Seen` (`run()`, linha 293), então e-mail do CRM não é tocado.
+Confirmado no dry-run: `ignorados: 351`.
+
+Por que 3x e não 1x como os outros ETLs: os outros leem o SQL Server e a foto do
+dia serve. Aqui a conta chega ao longo do expediente e o gasto só aparece no
+painel depois que o robô passa. 08h pega o que chegou de madrugada, 14h a manhã,
+20h o resto do dia.
+
+Rodar várias vezes é seguro **por construção**: busca só `UNSEEN`, dedupe por
+`Message-ID` contra `ti_lancamento` E `ti_email_auditoria`, e só marca `\Seen`
+**depois** do commit. Execução que morre no meio deixa o e-mail não-lido e a
+próxima pega. Tem `flock` contra sobreposição.
+
+- **`--run` fica escrito na linha do cron, não dentro do `.sh`.** Sem argumento o
+  script roda `--probe` (só leitura). Quem abre o crontab tem que enxergar qual
+  linha escreve em produção.
+- **`CONTAS_REMETENTES` vazio é kill-switch e sai com erro** — de propósito. Por
+  cron isso vira falha no log em vez de lançar e-mail que não é conta. Ao mexer
+  nisso, lembrar do incidente de 2026-05-06: kill-switch implícito que some sem
+  ninguém perceber é o padrão do estrago.
+- **ARMADILHA — o deploy copia `.sh` sem bit de execução.** O rsync do
+  `deploy.yml` para `/opt/relatorio_h_t` usa `--no-perms`, então script NOVO
+  chega 644 e o cron falharia calado. Por isso a linha chama `/bin/bash <script>`
+  em vez do caminho direto. Vale para todo `.sh` novo deste diretório.
+- **Quem ler a caixa `auditoria@` na mão tira o e-mail do robô.** Lido é lido: o
+  `UNSEEN` não acha mais e aquela conta nunca entra. Ninguém deve trabalhar essa
+  caixa manualmente — o que o parser não entender já cai sozinho na fila de
+  auditoria da tela.
+- **O robô pergunta ao Gmail por remetente** (`UNSEEN FROM fulano`), em vez de
+  baixar os 361 não-lidos e descartar 351 no Python. Isso é desempenho, **não é
+  a trava**: a conferência de remetente continua no laço do `run()` — defesa em
+  profundidade, porque `FROM` no IMAP casa por substring de cabeçalho.
+
+### A conta chega em PDF ESCANEADO — quem lê é OCR (2026-08-06)
+
+Medido nas 10 faturas de julho: **7 não têm texto nenhum dentro** (TecnoSpeed ×2,
+PayGo, MongoDB, Google API, Google Workspace, Contabo). São imagem. Só KingHost
+×2 e AWS têm texto extraível. O corpo do e-mail nunca traz o valor — diz o nome
+do arquivo e a competência.
+
+`contas_pdf.py` tenta `pdftotext` e cai no OCR (`pdftoppm` 300dpi + `tesseract
+por+eng`) quando o texto vem abaixo de 80 chars. Pacotes de SISTEMA instalados na
+vps154: `poppler-utils`, `tesseract-ocr`, `tesseract-ocr-por`. No venv: `pypdf`.
+
+**REGRA — valor lido de PDF NUNCA vira lançamento sozinho.** Todo PDF para na
+fila com a sugestão preenchida e o documento anexado; só vira despesa quando
+alguém confirma em `/custos_ti_auditoria`. Não é excesso de zelo, é medição: na
+fatura do MongoDB o OCR leu `Amount Due $23.` (comeu os centavos), leu o ano
+como `2926`, e o número que o robô escolheu (US$ 25,46) veio de uma tabela de
+pagamentos, não do total. Valor errado entrando calado no painel é pior que
+valor faltando.
+
+Junto com o valor vai o **trecho** do PDF de onde ele saiu — mesma regra do
+`explicacao()` do medico_custo: número na tela diz de onde veio. Foi o trecho
+que denunciou o MongoDB. A tela ainda avisa quando (a) a leitura foi por OCR e
+(b) o rótulo tinha **mais de dois números ao lado** (serviço, desconto, ISS...),
+sinal de que a escolha do robô é frágil.
+
+Âncoras do total, em ordem de prioridade, em `contas_pdf.ANCORAS`: `VALOR TOTAL
+DO SERVIÇO`, `VALOR TOTAL DA NFS-e`, `Total a Pagar`, `Amount Due`... **Ao
+acrescentar fornecedor novo, acrescentar a âncora dele lá** em vez de afrouxar o
+`\btotal\b`, que casa com qualquer linha de somatório da nota.
+
+### Tela da fila — `/custos_ti_auditoria`
+
+Endereço próprio, **não** `/custos_ti/auditoria`: aquela rota é a dos centros de
+custo e cadastrar um centro com a key `auditoria` engoliria a página. Mesmo
+motivo do `/custos_ti_cadastros`.
+
+O modal de confirmação mostra **o PDF ao lado do formulário** — a conferência é
+olhando a nota, sem trocar de janela. O valor gravado é o do formulário, não o
+sugerido, e passa pelo mesmo `salvar_lancamento()` do resto do módulo para que
+cotação, `valor_brl` e `valor_usd` congelem igual a um lançamento manual.
+
+O PDF vai **inteiro** para o Postgres (`ti_email_auditoria.anexo_bytes`): as 10
+faturas de julho deram 3,0 MB, ~36 MB/ano. `to_dict()` NÃO devolve os bytes — o
+documento é servido sob demanda em `/api/custos-ti/auditoria/<id>/pdf`, senão a
+listagem carregaria megabytes por nada.
+
+**Descartar não apaga.** Item descartado sai da fila mas guarda e-mail e PDF —
+descartar é dizer "não é custo", não é apagar a prova de que a conta chegou.
+Tem `reabrir` para o descarte por engano.
+
+O selo do menu (`tiBadgeAuditoria`) vive no `_custos_ti_sidebar.html`, então
+aparece em TODAS as telas de Custos de TI — é ele que impede a conta de morrer
+numa tabela que ninguém abre, que era o buraco que travava o cron.
+
+### Antiduplicidade — a mesma conta não pode entrar duas vezes (2026-08-06)
+
+O `UNIQUE(origem, external_id)` só protege contra o **mesmo e-mail** chegando
+duas vezes. Ele não vê a mesma **fatura** por caminho diferente: reenviada pelo
+fornecedor, encaminhada por duas pessoas, ou já lançada à mão antes de o robô
+passar. Message-ID diferente, despesa em dobro no painel.
+
+Medido em 2026-08-06: a **Google Workspace de julho já estava lançada (#29,
+R$ 1.442,05)** e o item continuava pendente na fila. Confirmar na tela criava a
+segunda. A chave de negócio é `conta_id + competência`.
+
+**Sem `conta_id` não existe antiduplicidade.** O modal da fila não tinha campo
+de conta — toda fatura de e-mail virava despesa solta, sem ligação com o
+cadastro do serviço. Por isso o campo Conta existe agora, e é ele que sustenta
+o resto.
+
+`custos_ti.lancamentos_semelhantes()` procura, na mesma competência, por: mesma
+conta · mesmo fornecedor · **a descrição citando o nome da conta**. O terceiro
+é rede de segurança para a despesa digitada à mão, que quase nunca tem conta
+nem fornecedor preenchidos — só "Contabo julho" na descrição.
+
+**Não é bloqueio, é recusa com a lista na mão.** TecnoSpeed e KingHost mandaram
+DUAS faturas no mesmo mês em julho/2026, ambas legítimas. Barrar
+automaticamente comeria conta de verdade. A rota devolve **409 + a lista**, e a
+tela oferece os dois caminhos: *completar a despesa que já existe* ou *é outra
+fatura do mês, lançar assim mesmo*. A trava está no SERVIDOR — a tela é só o
+aviso, senão um clique duplo ou uma aba velha fura tudo.
+
+**Completar não sobrescreve.** `complementar_lancamento()` preenche só o que
+está VAZIO (conta, fornecedor, cartão, data) e **nunca** troca o valor sozinho:
+número que alguém já conferiu só muda com marcação explícita na tela, mostrando
+o de-para. A `cotacao` original fica preservada mesmo quando o valor muda — ela
+é o que torna o `valor_brl` auditável; recongelar no câmbio de hoje reescreve
+história.
+
+Completar gruda o PDF na despesa que já existia (`item.lancamento_id`), e o
+clipe na tabela de lançamentos do centro serve o documento. Sem isso a nota
+morre na fila e ninguém acha a prova quando perguntam de onde saiu o valor.
+
+**`_ja_visto()` do robô procura o Message-ID em QUALQUER origem.** Quando a
+auditoria gruda o e-mail numa despesa lançada à mão, o identificador fica numa
+linha `origem='manual'`. Filtrar por `origem='email'` ali faria o robô trazer a
+mesma conta de volta na execução seguinte.
+
+**A trava vale para o robô também, não só para a tela** (lição de 2026-05-06:
+guard no consumidor). E-mail redondo com despesa parecida no mês **para na
+fila** em vez de lançar sozinho de madrugada.
+
+#### Como o e-mail é casado com a conta cadastrada
+
+`custos_ti.reconhecer_conta()`. Três armadilhas medidas em faturas reais:
+
+- **Só assunto + nome do anexo.** Procurar no texto lido do PDF pôs a "Fatura
+  Google API" na conta "Google Workspace" — o nome da outra conta aparecia
+  dentro da nota. Assunto e nome do arquivo são escritos por quem encaminha e
+  identificam a fatura; o miolo cita outros produtos do fornecedor.
+- **Fornecedor com mais de uma conta NÃO escolhe conta nenhuma.** Uma fatura da
+  Contabo cobre as **17 VPS** cadastradas (todas com `fornecedor='Contabo'`).
+  Pendurar em uma delas jogaria a conta inteira na máquina errada. Devolve
+  `conta=None` + `fornecedor='Contabo'` — o fornecedor sozinho já sustenta a
+  busca por repetição. Nome sempre ganha de fornecedor; nome mais longo ganha.
+- **Fronteira de palavra, não `in`.** "AWS" casaria dentro de "laws".
+
+**O centro do padrão não pode ganhar do centro da conta.** `_centro_id()` tem
+`usar_padrao=False` para distinguir "o e-mail escolheu infra" de "ninguém
+escolheu nada". A ordem é: centro escrito no e-mail > centro da conta
+reconhecida > padrão. Sem isso a Workspace (centro 5) ia para o centro 3.
+
+**A competência vem do ASSUNTO** (`_competencia_do_assunto`, espelho do
+`competenciaDoAssunto` da tela): estes e-mails não trazem vencimento no corpo,
+o mês está em "Julho/2026". Sem isso a competência saía vazia e **a busca por
+repetição não buscava nada**.
+
+Contas ainda NÃO cadastradas em 2026-08-06 (a proteção nelas depende só do
+fornecedor digitado): AWS, KingHost, MongoDB, TecnoSpeed, Google API.
+
 ### Página com modal PRECISA carregar o Bootstrap
 
 O `adminlte.min.js` do AdminLTE 3 **não embute o Bootstrap**. Sem

@@ -636,6 +636,224 @@ def listar_lancamentos(sess, de: str, ate: str, centro_id: Optional[int] = None,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Antiduplicidade — a mesma conta não pode entrar duas vezes
+# ─────────────────────────────────────────────────────────────────────────────
+# O dedupe por Message-ID (UNIQUE origem+external_id) só protege contra o MESMO
+# e-mail chegando duas vezes. Ele não vê a mesma FATURA chegando por caminhos
+# diferentes — reenviada pelo fornecedor, encaminhada pelo Leonardo e pelo
+# Cristiano, ou já lançada à mão antes de o robô passar. Nesses casos o
+# Message-ID é outro e a despesa entra duas vezes no painel.
+#
+# A chave de negócio da conta do mês é `conta_id + competência`. Por isso o
+# lançamento vindo do e-mail precisa ficar AMARRADO ao cadastro da conta — sem
+# conta_id não existe como perceber que é a mesma despesa.
+_SEM_ACENTO = str.maketrans("áàâãäéèêëíìîïóòôõöúùûüçñ", "aaaaaeeeeiiiiooooouuuucn")
+
+
+def _norm(texto: Optional[str]) -> str:
+    return re.sub(r"\s+", " ", (texto or "").lower().translate(_SEM_ACENTO)).strip()
+
+
+def reconhecer_conta(sess, texto: str) -> dict:
+    """De qual conta cadastrada é este e-mail — e o que fazer quando não dá.
+
+    Devolve `{conta, fornecedor, candidatos, como}`. `conta=None` com
+    `fornecedor` preenchido é resposta legítima e útil: sei de quem é a fatura,
+    não sei a qual contrato ela pertence.
+
+    **Só olha o assunto e o nome do arquivo**, nunca o texto lido do PDF. O
+    assunto e o nome do anexo são escritos por quem encaminha e identificam a
+    fatura; o miolo da nota cita outros produtos do fornecedor. Foi assim que a
+    "Fatura Google API" foi parar na conta "Google Workspace" — o nome da outra
+    conta aparecia dentro do PDF.
+
+    Casa com fronteira de palavra, não com `in`: nome curto como "AWS" bateria
+    dentro de qualquer palavra que o contenha.
+
+    Ganha o nome MAIS LONGO que casar — com "Google Workspace" e "Google API"
+    cadastradas, o e-mail de Workspace não pode cair na outra por ordem
+    alfabética. O nome sempre ganha do fornecedor.
+
+    **Fornecedor com mais de uma conta NÃO escolhe conta nenhuma.** Uma fatura
+    da Contabo cobre as 16 VPS cadastradas; pendurar as 16 numa delas jogaria a
+    conta inteira na máquina errada. Sem conta é honesto, conta errada não é.
+    """
+    vazio = {"conta": None, "fornecedor": None, "candidatos": 0, "como": None}
+    alvo = _norm(texto)
+    if not alvo:
+        return vazio
+
+    def _casa(termo: Optional[str]) -> bool:
+        t = _norm(termo)
+        return (len(t) >= 3
+                and bool(re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", alvo)))
+
+    contas = listar_contas(sess, incluir_inativas=False)
+
+    melhor, peso = None, 0
+    for c in contas:
+        if _casa(c.nome) and len(_norm(c.nome)) > peso:
+            melhor, peso = c, len(_norm(c.nome))
+    if melhor is not None:
+        return {"conta": melhor, "fornecedor": melhor.fornecedor,
+                "candidatos": 1, "como": "nome"}
+
+    forn, peso = None, 0
+    for c in contas:
+        if _casa(c.fornecedor) and len(_norm(c.fornecedor)) > peso:
+            forn, peso = c.fornecedor, len(_norm(c.fornecedor))
+    if not forn:
+        return vazio
+    iguais = [c for c in contas if _norm(c.fornecedor) == _norm(forn)]
+    if len(iguais) == 1:
+        return {"conta": iguais[0], "fornecedor": forn,
+                "candidatos": 1, "como": "fornecedor"}
+    return {"conta": None, "fornecedor": forn, "candidatos": len(iguais),
+            "como": "fornecedor_ambiguo"}
+
+
+def sugerir_conta(sess, texto: str) -> Optional[Conta]:
+    """Só a conta, quando existe uma sem ambiguidade."""
+    return reconhecer_conta(sess, texto)["conta"]
+
+
+def lancamentos_semelhantes(sess, *, competencia: Optional[str] = None,
+                            conta_id: Optional[int] = None,
+                            fornecedor: Optional[str] = None,
+                            message_id: Optional[str] = None,
+                            ignorar_id: Optional[int] = None) -> list[dict]:
+    """Despesas que já existem e podem ser ESTA MESMA conta.
+
+    Devolve `motivo` em cada uma — quem confirma na tela precisa entender por
+    que aquilo apareceu como possível repetição, senão ignora o aviso.
+
+    NÃO é bloqueio: em julho/2026 a TecnoSpeed e a KingHost mandaram DUAS
+    faturas no mesmo mês, ambas legítimas. Barrar automaticamente comeria conta
+    de verdade. A decisão é da pessoa; o sistema só se recusa a fazer isso
+    calado.
+    """
+    achados: dict[int, dict] = {}
+
+    def _junta(linhas, motivo: str) -> None:
+        for l in linhas:
+            if ignorar_id and l.id == int(ignorar_id):
+                continue
+            if l.id not in achados:
+                achados[l.id] = {**l.to_dict(), "motivo": motivo}
+
+    if message_id:
+        _junta(sess.query(Lancamento).filter(
+            Lancamento.external_id == str(message_id)[:120]).all(),
+            "este mesmo e-mail já virou lançamento")
+
+    if competencia:
+        base = sess.query(Lancamento).filter(Lancamento.competencia == competencia)
+        if conta_id:
+            _junta(base.filter(Lancamento.conta_id == int(conta_id)).all(),
+                   "mesma conta, mesma competência")
+        forn = _norm(fornecedor)
+        if len(forn) >= 3:
+            _junta([l for l in base.filter(Lancamento.fornecedor.isnot(None)).all()
+                    if _norm(l.fornecedor) == forn],
+                   "mesmo fornecedor, mesma competência")
+        # Rede de segurança para a despesa digitada à mão: quem lança pelo
+        # formulário quase nunca escolhe a conta nem preenche fornecedor — põe
+        # tudo na descrição ("Contabo julho"). Sem isto, a fatura que chega
+        # depois por e-mail não encontra nada e entra em dobro.
+        conta = sess.get(Conta, int(conta_id)) if conta_id else None
+        if conta is not None:
+            for termo in {_norm(conta.nome), _norm(conta.fornecedor)}:
+                if len(termo) < 3:
+                    continue
+                alvo = re.compile(rf"(?<![a-z0-9]){re.escape(termo)}(?![a-z0-9])")
+                _junta([l for l in base.all() if alvo.search(_norm(l.descricao))],
+                       f"a descrição cita “{termo}”, mesma competência")
+
+    return sorted(achados.values(), key=lambda d: d["id"], reverse=True)[:5]
+
+
+# Campos que o "complementar" pode preencher, e o nome deles na tela. Só entram
+# onde o lançamento existente está VAZIO — completar não é sobrescrever.
+_COMPLEMENTAVEIS = (
+    ("conta_id", "conta"),
+    ("fornecedor", "fornecedor"),
+    ("forma_pagamento_id", "forma de pagamento"),
+    ("data_pagamento", "data de pagamento"),
+    ("external_id", "identificador do e-mail"),
+)
+
+
+def complementar_lancamento(sess, lanc_id: int, dados: dict, *,
+                            email: Optional[str] = None,
+                            atualizar_valor: bool = False) -> dict:
+    """Completa um lançamento que JÁ EXISTE em vez de criar um segundo.
+
+    Regra de dinheiro: `valor` e `moeda` só mudam com `atualizar_valor=True`,
+    que na tela é uma marcação explícita mostrando o de-para. Robô trocando
+    calado um número que alguém já conferiu é pior que número faltando.
+
+    A `cotacao` original é preservada de propósito, mesmo quando o valor muda:
+    ela é a do dia em que a despesa foi registrada e é o que torna o valor_brl
+    auditável. Recongelar no câmbio de hoje reescreveria história.
+    """
+    lanc = sess.get(Lancamento, int(lanc_id))
+    if not lanc:
+        raise ValueError("lançamento não encontrado")
+
+    base = lanc.to_dict()
+    novo = dict(base)
+    novo["id"] = lanc.id
+    novo["cotacao"] = base.get("cotacao")
+    preenchidos: list[str] = []
+
+    for campo, rotulo in _COMPLEMENTAVEIS:
+        if base.get(campo) not in (None, "", 0):
+            continue
+        valor = dados.get(campo)
+        if valor in (None, "", 0):
+            continue
+        novo[campo] = valor
+        preenchidos.append(rotulo)
+
+    extra = (dados.get("obs_extra") or "").strip()
+    if extra and extra not in (base.get("obs") or ""):
+        novo["obs"] = ((base.get("obs") or "").strip() + "\n" + extra).strip()
+
+    trocou_valor = None
+    if atualizar_valor:
+        v = _dec_ou_none(dados.get("valor"))
+        if v is None:
+            raise ValueError("valor é obrigatório para atualizar a despesa")
+        moeda = (dados.get("moeda") or base["moeda"]).upper()
+        if float(v) != float(base["valor"] or 0) or moeda != base["moeda"]:
+            trocou_valor = {"de": base["valor"], "de_moeda": base["moeda"],
+                            "para": float(v), "para_moeda": moeda}
+            novo["valor"], novo["moeda"] = v, moeda
+            preenchidos.append("valor")
+
+    salvo = salvar_lancamento(sess, novo, email=email)
+    return {"lancamento": salvo, "preenchidos": preenchidos,
+            "valor_alterado": trocou_valor}
+
+
+def anexos_por_lancamento(sess, lanc_ids: list[int]) -> dict[int, dict]:
+    """{lancamento_id: {id, nome}} do PDF que sustenta cada despesa.
+
+    É o que põe o clipe na tabela de lançamentos: sem isso o documento fica
+    preso na fila de auditoria e ninguém acha a nota depois que a conta saiu
+    de lá — que é justamente quando alguém pergunta "de onde saiu esse valor?".
+    """
+    ids = [int(i) for i in lanc_ids if i]
+    if not ids:
+        return {}
+    linhas = (sess.query(db.EmailAuditoria)
+              .filter(db.EmailAuditoria.lancamento_id.in_(ids),
+                      db.EmailAuditoria.anexo_nome.isnot(None)).all())
+    return {l.lancamento_id: {"auditoria_id": l.id, "nome": l.anexo_nome}
+            for l in linhas}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Integração com o painel Custos com IA (centro fonte='ia')
 # ─────────────────────────────────────────────────────────────────────────────
 def ia_totais_usd(meses: list[str]) -> dict[str, dict]:
@@ -904,6 +1122,7 @@ def centro_payload(sess, key: str, de: Optional[str] = None,
     de, ate = _periodo(de, ate)
     meses = range_meses(de, ate)
     lancs = listar_lancamentos(sess, de, ate, centro_id=centro.id)
+    anexos = anexos_por_lancamento(sess, [l.id for l in lancs])
 
     def _bal():
         return {"brl": 0.0, "usd": 0.0}
@@ -962,7 +1181,8 @@ def centro_payload(sess, key: str, de: Optional[str] = None,
                       for k, b in sorted(por_conta.items(),
                                          key=lambda kv: kv[1]["brl"], reverse=True)],
         "contas": [c.to_dict() for c in listar_contas(sess, centro.id)],
-        "lancamentos": [l.to_dict() for l in lancs],
+        # `anexo` = o PDF da nota que sustenta aquela despesa (clipe na tabela).
+        "lancamentos": [{**l.to_dict(), "anexo": anexos.get(l.id)} for l in lancs],
         "formas": [f.to_dict() for f in listar_formas(sess)],
         "centros": [c.to_dict() for c in listar_centros(sess)],
         "ia": ia,

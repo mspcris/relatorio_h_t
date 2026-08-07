@@ -42,7 +42,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Index,
-    Integer, Numeric, String, Text, UniqueConstraint, create_engine,
+    Integer, LargeBinary, Numeric, String, Text, UniqueConstraint, create_engine,
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -360,6 +360,27 @@ class EmailAuditoria(TiBase):
     motivo = Column(String(200), nullable=True)       # por que não foi reconhecido
     status = Column(String(12), nullable=False, default="pendente")
     lancamento_id = Column(Integer, nullable=True)    # preenchido quando vira lançamento
+
+    # ── o PDF da conta ───────────────────────────────────────────────────────
+    # Guardado INTEIRO, não só o nome. Sem o documento na mão, "validação
+    # humana" vira confiar no OCR — que é exatamente o que não se pode fazer
+    # com dinheiro. Fatura tem 300-700 KB e chegam ~10 por mês: ~6 MB/ano.
+    anexo_nome = Column(String(260), nullable=True)
+    anexo_tipo = Column(String(80), nullable=True)
+    anexo_bytes = Column(LargeBinary, nullable=True)
+
+    # ── o que o robô leu, e COMO ─────────────────────────────────────────────
+    # extraido_como: 'texto' (PDF tinha texto) | 'ocr' (era imagem) | 'vazio'.
+    # Medido em julho/2026: 7 das 10 contas são imagem pura, então 'ocr' é o
+    # caso normal aqui, não a exceção — e OCR erra. Daí valor_sugerido.
+    texto_extraido = Column(Text, nullable=True)
+    extraido_como = Column(String(10), nullable=True)
+    valor_sugerido = Column(Numeric(14, 4), nullable=True)
+    moeda_sugerida = Column(String(3), nullable=True)
+    # A linha do PDF de onde o número saiu. É a PROVA que aparece na tela: foi
+    # ela que denunciou o MongoDB (rótulo "Amount Due $23." e sugestão 25,46,
+    # dois números que não se falam). Sugestão sem prova é palpite.
+    trecho_valor = Column(String(300), nullable=True)
     created_at = Column(DateTime, nullable=False, default=now_brt)
     updated_at = Column(DateTime, nullable=False, default=now_brt, onupdate=now_brt)
 
@@ -376,6 +397,14 @@ class EmailAuditoria(TiBase):
             "recebido_em": self.recebido_em.isoformat() if self.recebido_em else None,
             "corpo": self.corpo, "anexos": self.anexos, "motivo": self.motivo,
             "status": self.status, "lancamento_id": self.lancamento_id,
+            # anexo_bytes NÃO entra: a listagem carregaria megabytes de PDF por
+            # nada. O documento é servido sob demanda em /api/custos-ti/auditoria/<id>/pdf.
+            "anexo_nome": self.anexo_nome, "anexo_tipo": self.anexo_tipo,
+            "tem_pdf": bool(self.anexo_bytes),
+            "extraido_como": self.extraido_como,
+            "valor_sugerido": float(self.valor_sugerido) if self.valor_sugerido is not None else None,
+            "moeda_sugerida": self.moeda_sugerida,
+            "trecho_valor": self.trecho_valor,
         }
 
 

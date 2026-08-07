@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>CAMIM — Custos de TI · Auditoria</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% include "_custos_ti_head.html" %}
+  <style>
+    .aud-prova {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11.5px; background: #f6f8fa; border-left: 3px solid #2a78d6;
+      padding: 6px 9px; border-radius: 3px; color: #444; white-space: pre-wrap;
+      word-break: break-word; margin-top: 6px;
+    }
+    .aud-sug { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .aud-sem { font-size: 15px; color: #b0450b; font-weight: 600; }
+    .aud-pdf { width: 100%; height: 72vh; border: 1px solid #dfe3e8; border-radius: 4px; }
+    .aud-item { border-left: 4px solid #eda100; }
+    .aud-item.lancado { border-left-color: #1baf7a; }
+    .aud-item.descartado { border-left-color: #b8bfc7; opacity: .72; }
+    .aud-tag { font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
+  </style>
+</head>
+
+<body class="hold-transition sidebar-mini layout-fixed">
+  <div class="wrapper">
+    {% include "_custos_ti_sidebar.html" %}
+
+    <div class="content-wrapper">
+      <section class="content-header">
+        <div class="container-fluid">
+          <h1 class="m-0">
+            <i class="fas fa-inbox" style="color:#eda100"></i> Auditoria de contas por e-mail
+          </h1>
+          <span class="ti-muted">
+            Contas que chegaram na caixa e esperam sua confirmação para virar despesa
+          </span>
+        </div>
+      </section>
+
+      <section class="content">
+        <div class="container-fluid">
+          <div id="globalMsg"></div>
+
+          <div class="card ti-card mb-3">
+            <div class="card-body py-2">
+              <p class="mb-1" style="font-size:13.5px">
+                <i class="fas fa-shield-alt" style="color:#2a78d6"></i>
+                <strong>Nada daqui entra no custo sozinho.</strong>
+                A conta chega como PDF anexo e, na maioria das vezes, o PDF é uma
+                imagem escaneada — quem lê o valor é o reconhecimento de texto, que
+                erra. Por isso o robô só <em>sugere</em> o número, com o trecho da
+                nota de onde ele saiu. Você confere no documento e confirma.
+              </p>
+              <div class="btn-group btn-group-sm mt-2" role="group">
+                <button class="btn btn-outline-primary active" data-filtro="pendente">Pendentes</button>
+                <button class="btn btn-outline-primary" data-filtro="lancado">Lançadas</button>
+                <button class="btn btn-outline-primary" data-filtro="descartado">Descartadas</button>
+                <button class="btn btn-outline-primary" data-filtro="todos">Todas</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="lista"></div>
+          <div id="vazio" class="text-center ti-muted py-5" style="display:none">
+            <i class="fas fa-check-circle fa-2x mb-2" style="color:#1baf7a"></i><br>
+            Nenhuma conta esperando. A caixa está em dia.
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Confirmar: o PDF de um lado, o formulário do outro -->
+  <div class="modal fade" id="mdLancar" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Confirmar conta <span id="lcTitulo" class="ti-muted"></span></h5>
+          <button type="button" class="close" data-dismiss="modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-lg-7 mb-3">
+              <div id="lcPdfBox"></div>
+            </div>
+            <div class="col-lg-5">
+              <div id="lcAvisos"></div>
+              <div class="form-group">
+                <label class="mb-0">Valor <span class="ti-muted" id="lcSugLabel"></span></label>
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <select class="custom-select" id="lcMoeda" style="max-width:92px">
+                      <option value="BRL">R$</option>
+                      <option value="USD">US$</option>
+                      <option value="EUR">€</option>
+                    </select>
+                  </div>
+                  <input type="text" class="form-control ti-money" id="lcValor" inputmode="decimal">
+                </div>
+                <div class="aud-prova" id="lcProva"></div>
+              </div>
+              <div class="form-group">
+                <label class="mb-0">Centro de custo</label>
+                <select class="form-control" id="lcCentro"></select>
+              </div>
+              <!-- Amarra a fatura ao cadastro do serviço. É esta ligação que
+                   permite ao sistema perceber que a mesma conta já entrou no
+                   mês; sem ela toda despesa de e-mail fica solta. -->
+              <div class="form-group">
+                <label class="mb-0">Conta <span class="ti-muted" id="lcContaDica"></span></label>
+                <select class="form-control" id="lcConta"></select>
+              </div>
+              <div id="lcDuplicata"></div>
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label class="mb-0">Competência</label>
+                  <input type="month" class="form-control" id="lcComp">
+                </div>
+                <div class="form-group col-6">
+                  <label class="mb-0">Situação</label>
+                  <select class="form-control" id="lcStatus">
+                    <option value="previsto">Previsto (a pagar)</option>
+                    <option value="pago">Pago</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="mb-0">Descrição</label>
+                <input type="text" class="form-control" id="lcDescricao" maxlength="240">
+              </div>
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label class="mb-0">Fornecedor</label>
+                  <input type="text" class="form-control" id="lcFornecedor" maxlength="120">
+                </div>
+                <div class="form-group col-6">
+                  <label class="mb-0">Forma de pagamento</label>
+                  <select class="form-control" id="lcForma"></select>
+                </div>
+              </div>
+              <div id="lcMsg"></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+          <button class="btn btn-primary" id="btnConfirmarLanc">
+            <i class="fas fa-check"></i> Confirmar e lançar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+/* ── Auditoria de contas por e-mail ────────────────────────────────────────
+   A tela existe porque o robô NÃO pode lançar sozinho o que leu de um PDF
+   escaneado. Tudo aqui é sugestão com prova; a decisão é de quem lê.        */
+let ITENS = [], CADASTROS = { centros: [], formas: [], contas: [] },
+  FILTRO = 'pendente', ATUAL = null;
+/* O que o servidor respondeu sobre ESTE item: de qual conta cadastrada ele é e
+   quais despesas já existentes podem ser a mesma. */
+let CONFERE = null;
+
+const MESES_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho',
+  'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+/* "Fatura Google WorkSpace - Julho/2026" -> "2026-07". A competência que
+   importa é a do assunto, não a do dia em que o e-mail chegou: a conta de
+   julho costuma cair na caixa em agosto. */
+function competenciaDoAssunto(assunto, recebido) {
+  const t = (assunto || '').toLowerCase();
+  for (let i = 0; i < 12; i++) {
+    const m = t.match(new RegExp(MESES_PT[i] + '\\s*[/\\- ]\\s*(20\\d{2})'));
+    if (m) return `${m[1]}-${String(i + 1).padStart(2, '0')}`;
+  }
+  const m2 = t.match(/(0?[1-9]|1[0-2])\s*\/\s*(20\d{2})/);
+  if (m2) return `${m2[2]}-${String(+m2[1]).padStart(2, '0')}`;
+  if (recebido) return recebido.slice(0, 7);
+  const h = new Date();
+  return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/* Quantos números com centavos existem no trecho. Mais de dois quer dizer que
+   o rótulo tinha uma fileira de valores ao lado (serviço, desconto, ISS...) e
+   a escolha do robô é frágil — foi assim que a fatura do MongoDB se entregou. */
+function quantosNumeros(trecho) {
+  return ((trecho || '').match(/\d[\d.,]*[.,]\d{2}/g) || []).length;
+}
+
+function fmtValor(v, moeda) {
+  if (v === null || v === undefined) return '—';
+  if (moeda === 'USD') return tiFmtUSD(v);
+  if (moeda === 'EUR') return '€ ' + Number(v).toLocaleString('pt-BR',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return tiFmtBRL(v);
+}
+
+function avisosDe(it) {
+  const av = [];
+  if (it.extraido_como === 'ocr') {
+    av.push(['warn', 'O PDF era imagem — o valor foi lido por reconhecimento de '
+      + 'texto (OCR). Confira o número no documento antes de confirmar.']);
+  }
+  if (it.valor_sugerido && quantosNumeros(it.trecho_valor) > 2) {
+    av.push(['warn', 'Havia vários números ao lado do rótulo na nota. O robô '
+      + 'escolheu um deles — veja no trecho se é mesmo o total.']);
+  }
+  if (!it.valor_sugerido) {
+    av.push(['err', 'Não consegui achar o valor no PDF. Digite olhando o documento.']);
+  }
+  if (!it.tem_pdf) {
+    av.push(['err', 'Este item não tem PDF guardado — chegou antes da leitura de '
+      + 'anexo existir, ou o e-mail veio sem anexo.']);
+  }
+  return av;
+}
+
+function pinta() {
+  const box = document.getElementById('lista');
+  document.getElementById('vazio').style.display = ITENS.length ? 'none' : '';
+  box.innerHTML = ITENS.map(it => {
+    const av = avisosDe(it);
+    const tag = it.status === 'pendente'
+      ? '<span class="aud-tag" style="background:#fff3cd;color:#7a5b00">esperando você</span>'
+      : it.status === 'lancado'
+        ? '<span class="aud-tag" style="background:#d8f5e8;color:#0d6e4a">lançada</span>'
+        : '<span class="aud-tag" style="background:#eceff1;color:#5c6670">descartada</span>';
+    const sug = it.valor_sugerido
+      ? `<div class="aud-sug">${fmtValor(it.valor_sugerido, it.moeda_sugerida)}</div>
+         <div class="ti-muted" style="font-size:11.5px">valor sugerido pelo robô</div>`
+      : '<div class="aud-sem">valor não identificado</div>';
+    return `
+      <div class="card ti-card mb-2 aud-item ${it.status}">
+        <div class="card-body py-2">
+          <div class="d-flex flex-wrap align-items-start">
+            <div style="flex:1 1 380px; min-width:280px">
+              <div>${tag}
+                <strong style="font-size:14.5px">${(it.assunto || '(sem assunto)')
+        .replace(/</g, '&lt;')}</strong>
+              </div>
+              <div class="ti-muted" style="font-size:12px">
+                de ${it.remetente} · ${it.recebido_em ? tiFmtData(it.recebido_em) : 's/ data'}
+                ${it.anexo_nome ? ' · <i class="fas fa-file-pdf"></i> ' +
+          it.anexo_nome.replace(/</g, '&lt;') : ''}
+              </div>
+              ${it.trecho_valor ? `<div class="aud-prova">${it.trecho_valor
+            .replace(/</g, '&lt;')}</div>` : ''}
+              ${av.map(([t, m]) => `<div class="ti-muted" style="font-size:12px;
+                 color:${t === 'err' ? '#b0450b' : '#8a6d00'}">
+                 <i class="fas fa-exclamation-triangle"></i> ${m}</div>`).join('')}
+            </div>
+            <div class="text-right pl-3" style="flex:0 0 210px">
+              ${sug}
+              <div class="mt-2">
+                ${it.tem_pdf ? `<a class="btn btn-sm btn-outline-secondary"
+                   href="/api/custos-ti/auditoria/${it.id}/pdf" target="_blank">
+                   <i class="fas fa-file-pdf"></i> Ver PDF</a>` : ''}
+                ${it.status === 'pendente'
+        ? `<button class="btn btn-sm btn-primary ml-1" data-lancar="${it.id}">
+                     <i class="fas fa-check"></i> Conferir e lançar</button>
+                   <button class="btn btn-sm btn-outline-secondary ml-1" data-descartar="${it.id}"
+                     title="Não é custo — some da fila, mas o e-mail fica guardado">
+                     <i class="fas fa-times"></i></button>`
+        : it.status === 'descartado'
+          ? `<button class="btn btn-sm btn-outline-secondary ml-1" data-reabrir="${it.id}">
+                       <i class="fas fa-undo"></i> Reabrir</button>`
+          : `<span class="ti-muted" style="font-size:12px">lançamento
+                       #${it.lancamento_id || '?'}</span>`}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  box.querySelectorAll('[data-lancar]').forEach(b =>
+    b.addEventListener('click', () => abreLancar(+b.dataset.lancar)));
+  box.querySelectorAll('[data-descartar]').forEach(b =>
+    b.addEventListener('click', () => acao(+b.dataset.descartar, 'descartar',
+      'Tirar esta conta da fila sem lançar?')));
+  box.querySelectorAll('[data-reabrir]').forEach(b =>
+    b.addEventListener('click', () => acao(+b.dataset.reabrir, 'reabrir', null)));
+}
+
+function abreLancar(id) {
+  const it = ITENS.find(x => x.id === id);
+  if (!it) return;
+  ATUAL = it;
+  document.getElementById('lcTitulo').textContent = it.assunto || '';
+  document.getElementById('lcPdfBox').innerHTML = it.tem_pdf
+    ? `<iframe class="aud-pdf" src="/api/custos-ti/auditoria/${it.id}/pdf"></iframe>`
+    : `<div class="ti-muted p-4 text-center">Sem PDF guardado neste item.<br>
+       <small>Confira o corpo do e-mail na caixa auditoria@.</small></div>`;
+
+  document.getElementById('lcAvisos').innerHTML = avisosDe(it)
+    .map(([t, m]) => `<div class="alert ${t === 'err' ? 'alert-danger' : 'alert-warning'}
+      py-2 px-2" style="font-size:12.5px">${m}</div>`).join('');
+
+  document.getElementById('lcMoeda').value = it.moeda_sugerida || 'BRL';
+  document.getElementById('lcValor').value = it.valor_sugerido
+    ? Number(it.valor_sugerido).toLocaleString('pt-BR',
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+  document.getElementById('lcSugLabel').textContent = it.valor_sugerido
+    ? '(sugerido pelo robô — corrija se estiver errado)' : '(o robô não achou; digite)';
+  document.getElementById('lcProva').textContent = it.trecho_valor
+    ? 'Trecho da nota: ' + it.trecho_valor : 'Sem trecho — o robô não localizou o total.';
+  document.getElementById('lcComp').value =
+    competenciaDoAssunto(it.assunto, it.recebido_em);
+  document.getElementById('lcDescricao').value = (it.assunto || '').slice(0, 240);
+  document.getElementById('lcFornecedor').value = '';
+  document.getElementById('lcStatus').value = 'previsto';
+  tiMsg(document.getElementById('lcMsg'), '');
+
+  document.getElementById('lcCentro').innerHTML = '<option value="">— escolha —</option>'
+    + (CADASTROS.centros || []).filter(c => c.fonte !== 'ia')
+      .map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+  document.getElementById('lcForma').innerHTML = '<option value="">— nenhuma —</option>'
+    + (CADASTROS.formas || []).map(f => `<option value="${f.id}">${f.rotulo || f.nome}</option>`).join('');
+  pintaContas(null, null);
+  document.getElementById('lcDuplicata').innerHTML = '';
+  document.getElementById('lcContaDica').textContent = '';
+  CONFERE = null;
+
+  tiModal('#mdLancar', 'show');
+  conferir(true);
+}
+
+/* ── Antiduplicidade ───────────────────────────────────────────────────────
+   A conta cadastrada é a chave: sem ela a fatura vira despesa solta e não há
+   como o sistema saber que a mesma conta já entrou naquele mês. */
+function pintaContas(centroId, selecionada) {
+  const contas = (CADASTROS.contas || [])
+    .filter(c => c.ativo !== false && (!centroId || c.centro_id === +centroId));
+  document.getElementById('lcConta').innerHTML =
+    '<option value="">— nenhuma (despesa avulsa) —</option>'
+    + contas.map(c => `<option value="${c.id}"${+selecionada === c.id ? ' selected' : ''}
+        >${c.nome}</option>`).join('');
+}
+
+function fmtDinheiro(v, m) {
+  const sim = { BRL: 'R$', USD: 'US$', EUR: '€' }[m] || m;
+  return sim + ' ' + Number(v || 0).toLocaleString('pt-BR',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/* Pergunta ao servidor de qual conta é este e-mail e se já existe despesa
+   igual. Quem decide é a mesma função que a rota de lançar usa depois — a
+   tela não é a trava, é o aviso. */
+async function conferir(primeira) {
+  if (!ATUAL) return;
+  const q = new URLSearchParams();
+  const comp = document.getElementById('lcComp').value;
+  if (comp) q.set('competencia', comp);
+  const conta = document.getElementById('lcConta').value;
+  if (!primeira && conta) q.set('conta_id', conta);
+  const forn = document.getElementById('lcFornecedor').value;
+  if (forn) q.set('fornecedor', forn);
+  try {
+    CONFERE = await tiApi(`/api/custos-ti/auditoria/${ATUAL.id}/conferir?` + q.toString());
+  } catch (e) { CONFERE = null; return; }
+
+  if (primeira) {
+    const dica = document.getElementById('lcContaDica');
+    if (CONFERE.conta) {
+      // A conta sabe o centro dela — palpite melhor que o do corpo do e-mail.
+      document.getElementById('lcCentro').value = CONFERE.conta.centro_id;
+      pintaContas(CONFERE.conta.centro_id, CONFERE.conta.id);
+      dica.textContent = '(o robô reconheceu — confira)';
+    } else if (CONFERE.ambiguo) {
+      // Fatura única que cobre vários contratos do mesmo fornecedor (Contabo).
+      // Escolher uma seria jogar a conta inteira na máquina errada.
+      dica.textContent = `(${CONFERE.candidatos} contas de ${CONFERE.fornecedor}`
+        + ' — a fatura não é de uma só; deixe sem conta se cobre todas)';
+    } else {
+      dica.textContent = '(não reconheci a conta — escolha, ou cadastre antes)';
+    }
+    if (!document.getElementById('lcFornecedor').value)
+      document.getElementById('lcFornecedor').value = CONFERE.fornecedor || '';
+  }
+  pintaDuplicatas();
+}
+
+function pintaDuplicatas() {
+  const box = document.getElementById('lcDuplicata');
+  const lista = (CONFERE && CONFERE.semelhantes) || [];
+  if (!lista.length) { box.innerHTML = ''; return; }
+  const valor = leNumero(document.getElementById('lcValor').value);
+  const moeda = document.getElementById('lcMoeda').value;
+  box.innerHTML = `<div class="alert alert-warning py-2 px-2" style="font-size:12.5px">
+    <b>Esta conta já pode estar lançada.</b> Complete a despesa que já existe — ela
+    fica com o PDF desta nota anexado e nada é contado duas vezes. Só use
+    "lançar assim mesmo" se for realmente uma <u>segunda fatura do mesmo mês</u>.
+    ${lista.map(l => {
+    const difere = valor && (Math.abs(valor - Number(l.valor)) > 0.005 || moeda !== l.moeda);
+    return `<div class="border-top mt-2 pt-2">
+        <div><b>#${l.id}</b> · ${l.competencia} · ${fmtDinheiro(l.valor, l.moeda)}
+          · ${(l.descricao || '').slice(0, 60)}</div>
+        <div class="ti-muted">${l.motivo}${l.conta_nome ? ' · conta ' + l.conta_nome : ''}
+          · lançada como ${l.origem}</div>
+        ${difere ? `<label class="d-block mt-1 mb-1">
+            <input type="checkbox" data-trocar="${l.id}">
+            usar o valor desta nota (${fmtDinheiro(l.valor, l.moeda)} →
+            ${fmtDinheiro(valor, moeda)})</label>` : ''}
+        <button class="btn btn-sm btn-primary mt-1" data-completar="${l.id}">
+          <i class="fas fa-paperclip"></i> Completar esta despesa</button>
+      </div>`;
+  }).join('')}
+  </div>`;
+  box.querySelectorAll('[data-completar]').forEach(b =>
+    b.addEventListener('click', () => completar(+b.dataset.completar,
+      !!box.querySelector(`[data-trocar="${b.dataset.completar}"]:checked`))));
+}
+
+async function completar(lancId, trocarValor) {
+  const msg = document.getElementById('lcMsg');
+  const forma = document.getElementById('lcForma').value;
+  const conta = document.getElementById('lcConta').value;
+  try {
+    const r = await tiApi(`/api/custos-ti/auditoria/${ATUAL.id}/complementar`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lancamento_id: lancId,
+        conta_id: conta ? +conta : null,
+        fornecedor: document.getElementById('lcFornecedor').value || null,
+        forma_pagamento_id: forma ? +forma : null,
+        valor: leNumero(document.getElementById('lcValor').value),
+        moeda: document.getElementById('lcMoeda').value,
+        atualizar_valor: trocarValor,
+      }),
+    });
+    const fez = (r.preenchidos || []).length
+      ? 'preenchi ' + r.preenchidos.join(', ') : 'nada faltava preencher';
+    alert(`Nota anexada à despesa #${lancId} — ${fez}.`);
+    tiModal('#mdLancar', 'hide');
+    carregar();
+  } catch (e) { tiMsg(msg, e.message, 'err'); }
+}
+
+/* "1.234,56" -> 1234.56. Mesma leitura do resto do módulo: a última vírgula
+   ou ponto é o decimal. */
+function leNumero(txt) {
+  let n = (txt || '').replace(/[^\d.,-]/g, '');
+  if (n.includes(',') && n.includes('.')) {
+    n = n.lastIndexOf(',') > n.lastIndexOf('.')
+      ? n.replace(/\./g, '').replace(',', '.') : n.replace(/,/g, '');
+  } else if (n.includes(',')) { n = n.replace(',', '.'); }
+  const v = parseFloat(n);
+  return isNaN(v) ? null : v;
+}
+
+async function confirmarLanc(confirmarDuplicata) {
+  if (!ATUAL) return;
+  const valor = leNumero(document.getElementById('lcValor').value);
+  const centro = document.getElementById('lcCentro').value;
+  const msg = document.getElementById('lcMsg');
+  if (!valor || valor <= 0) return tiMsg(msg, 'Informe o valor da conta.', 'err');
+  if (!centro) return tiMsg(msg, 'Escolha o centro de custo.', 'err');
+  const forma = document.getElementById('lcForma').value;
+  const conta = document.getElementById('lcConta').value;
+  try {
+    await tiApi(`/api/custos-ti/auditoria/${ATUAL.id}/lancar`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        valor: valor,
+        moeda: document.getElementById('lcMoeda').value,
+        centro_id: +centro,
+        conta_id: conta ? +conta : null,
+        competencia: document.getElementById('lcComp').value,
+        status: document.getElementById('lcStatus').value,
+        descricao: document.getElementById('lcDescricao').value,
+        fornecedor: document.getElementById('lcFornecedor').value || null,
+        forma_pagamento_id: forma ? +forma : null,
+        confirmar_duplicata: !!confirmarDuplicata,
+      }),
+    });
+    tiModal('#mdLancar', 'hide');
+    carregar();
+  } catch (e) {
+    // O servidor recusou porque já existe despesa parecida. Mostra quais são,
+    // com o caminho de completar a existente ao lado de lançar mesmo assim.
+    if (e.body && e.body.duplicata) {
+      CONFERE = Object.assign({}, CONFERE, { semelhantes: e.body.semelhantes });
+      pintaDuplicatas();
+      const box = document.getElementById('lcDuplicata').querySelector('.alert');
+      if (box && !box.querySelector('[data-forcar]')) {
+        const b = document.createElement('button');
+        b.className = 'btn btn-sm btn-outline-danger mt-2';
+        b.setAttribute('data-forcar', '1');
+        b.textContent = 'É outra fatura do mês — lançar assim mesmo';
+        b.addEventListener('click', () => confirmarLanc(true));
+        box.appendChild(b);
+      }
+      return tiMsg(msg, 'Confira a repetição acima antes de lançar.', 'err');
+    }
+    tiMsg(msg, e.message, 'err');
+  }
+}
+
+async function acao(id, qual, pergunta) {
+  if (pergunta && !confirm(pergunta)) return;
+  try {
+    await tiApi(`/api/custos-ti/auditoria/${id}/${qual}`, { method: 'POST' });
+    carregar();
+  } catch (e) { alert(e.message); }
+}
+
+async function carregar() {
+  try {
+    const r = await tiApi('/api/custos-ti/auditoria?status=' + FILTRO);
+    ITENS = r.itens || [];
+    tiMsg(document.getElementById('globalMsg'), '');
+    pinta();
+    if (window.tiAtualizaBadgeAuditoria) window.tiAtualizaBadgeAuditoria(r.pendentes);
+  } catch (e) {
+    tiMsg(document.getElementById('globalMsg'), 'Falha ao carregar: ' + e.message, 'err');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  document.querySelectorAll('[data-filtro]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('[data-filtro]').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    FILTRO = b.dataset.filtro;
+    carregar();
+  }));
+  // Sem a arrow, o objeto do clique chegaria como `confirmarDuplicata` — e
+  // como todo evento é truthy, a trava de duplicidade nasceria já furada.
+  document.getElementById('btnConfirmarLanc')
+    .addEventListener('click', () => confirmarLanc(false));
+  // Mudou centro, conta, competência ou fornecedor → a pergunta "isso já está
+  // lançado?" muda de resposta. Reconferir com o servidor.
+  document.getElementById('lcCentro').addEventListener('change', e => {
+    pintaContas(e.target.value, null);
+    conferir(false);
+  });
+  ['lcConta', 'lcComp', 'lcFornecedor'].forEach(id =>
+    document.getElementById(id).addEventListener('change', () => conferir(false)));
+  try {
+    const c = await tiApi('/api/custos-ti/cadastros');
+    CADASTROS = c.data || CADASTROS;
+  } catch (e) { /* a tela ainda lista; o modal avisa ao salvar */ }
+  carregar();
+});
+  </script>
+</body>
+
+</html>

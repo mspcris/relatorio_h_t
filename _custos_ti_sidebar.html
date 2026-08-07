@@ -45,6 +45,15 @@
         </li>
         {% endfor %}
         <li class="nav-item">
+          <a href="/custos_ti_auditoria" class="nav-link{% if TI_ATIVO == '_auditoria' %} active{% endif %}">
+            <i class="nav-icon fas fa-inbox" style="color:#eda100"></i>
+            <p>Auditoria
+              <span class="badge badge-warning right" id="tiBadgeAuditoria"
+                    style="display:none"></span>
+            </p>
+          </a>
+        </li>
+        <li class="nav-item">
           <a href="/custos_ti_cadastros" class="nav-link{% if TI_ATIVO == '_cadastros' %} active{% endif %}">
             <i class="nav-icon fas fa-sliders-h" style="color:#8a9199"></i><p>Cadastros</p>
           </a>
@@ -53,3 +62,25 @@
     </nav>
   </div>
 </aside>
+
+<script>
+/* Contador da fila de auditoria. Fica no menu de TODAS as telas de Custos de
+   TI de propósito: a conta que chegou por e-mail não vira despesa sozinha, e
+   sem este número ela ficaria numa tabela que ninguém abre — que era o buraco
+   que impedia de ligar o robô. Falha de rede some com o selo em silêncio; o
+   menu continua funcionando. */
+window.tiAtualizaBadgeAuditoria = function (n) {
+  const el = document.getElementById('tiBadgeAuditoria');
+  if (!el) return;
+  if (!n) { el.style.display = 'none'; return; }
+  el.textContent = n;
+  el.style.display = '';
+  el.title = n + (n === 1 ? ' conta esperando conferência' : ' contas esperando conferência');
+};
+document.addEventListener('DOMContentLoaded', function () {
+  fetch('/api/custos-ti/auditoria/pendentes', { credentials: 'same-origin' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) { if (j && j.ok) window.tiAtualizaBadgeAuditoria(j.pendentes); })
+    .catch(function () { /* menu não quebra por causa do selo */ });
+});
+</script>
