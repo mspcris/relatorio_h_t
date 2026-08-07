@@ -466,7 +466,7 @@ canvas { max-width: 100% !important; }
            id="toggleMedAlt">
     <label class="custom-control-label small"
            for="toggleMedAlt">
-      Mostrar medicina alternativa
+      Mostrar medicina alternativa e exames
     </label>
   </div>
 </div>
@@ -794,11 +794,48 @@ window.USER_POSTOS = {{ USER_POSTOS | tojson | default('[]') }};
         'ULTRA-SONOGRAFISTA'
       ].map(e => e.toUpperCase().trim());
 
+      // Cada posto grava a especialidade de um jeito (PSICÓLOGO, PSICOLOGIA,
+      // PSICOLOGIA ON LINE...), então além da lista exata acima o filtro casa
+      // por radical, com acento removido. Chamado 7ER-HUJ-L3A5: com o bit
+      // desmarcado ficam SÓ médicos — sai terapia, exame e procedimento.
+      const MED_ALT_PATTERNS = [
+        // terapias / não médicos
+        /PSIC/,               // psicologia, psicopedagogia, neuropsic..., psicanalista (PSIQUIATRIA não tem "PSIC")
+        /FONOAUDI/,
+        /FISIOTERAP/,
+        /TERAPIA|TERAPEUTA/,  // terapia ABA, terapia alimentar, terapeuta ocupacional
+        /NUTRICION|NUTRICAO/, // nutricionista, nutrição (NUTROLOGIA é médico e não casa)
+        /ACUPUNT/,
+        /ENFERM/,
+        /PILATES/,
+        /EMAGRECIMENTO/,
+        /BIOLOG/,
+        /LABORATOR/,
+        /MEDICAMENTO/,
+        // exames / equipamento — o "médico" é o aparelho ou a sala
+        /ELETRO(CARDIO|ENCEFALO|NEURO)/,
+        /ECOCARDIOGRAMA|ECO DOPPLER/,
+        /HOLTER/,
+        /\bMAPA\b/,
+        /RAIO ?X|RADIOLOG|MAMOGRAFIA|DENSITOMETR/,
+        /ULTRA.?SON/,
+        /ENDOSCOP|COLONOSCOP/,
+        /ESPIROMETRIA|RESSONANCIA|TOMOGRAF/,
+        /\bTESTE\b/,          // teste ergométrico, teste e vacina alérgica
+        /AGENDAMENTO/,
+        /TECNICO/
+      ];
+
+      const semAcento = (s) => String(s ?? '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase().trim();
+
       function isMedicinaAlternativa(esp) {
         if (!esp) return false;
-        return MED_ALT_LIST.includes(
-          String(esp).toUpperCase().trim()
-        );
+        const e = String(esp).toUpperCase().trim();
+        if (MED_ALT_LIST.includes(e)) return true;
+        const norm = semAcento(e);
+        return MED_ALT_PATTERNS.some(rx => rx.test(norm));
       }
 
 
@@ -883,7 +920,7 @@ function getPickerYM(sel) {
 
       let sel2 = 'ALL';
       let chTotal, chFlags, chPareto;
-      let showMedAlt = false; // default: NÃO mostrar medicina alternativa
+      let showMedAlt = false; // default: só médicos (sem medicina alternativa e exames)
 
 
       // ================== TABS ==================
