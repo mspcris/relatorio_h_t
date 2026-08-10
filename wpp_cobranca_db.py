@@ -41,8 +41,28 @@ def _motivo_contabilizavel(motivo: str | None) -> bool:
     return not any(m.startswith(prefixo) for prefixo in _MOTIVOS_NAO_CONTABILIZAR)
 
 
+class _AutoCloseConn(sqlite3.Connection):
+    """Connection que FECHA no fim do bloco `with` (além do commit/rollback).
+
+    `with conn:` do sqlite3 só transaciona — nunca fechou a conexão. Até o
+    Python 3.12 o garbage collector fechava logo em seguida e ninguém via;
+    no venv 3.14 (pós-upgrade Ubuntu 26.04) a conexão abandonada fica aberta.
+    Medido em 2026-08-10: cada helper vazava 1 fd, o cron de cobrança
+    estourava o ulimit de 1024 ~2 min depois de abrir a janela das 08h e
+    morria com 'unable to open database file' — dias de rodadas mortas no
+    meio, campanhas do fim da fila (Seja Bem Vindo etc.) sem enviar NADA.
+    Todos os usos de get_conn() são `with get_conn() as conn:`; esta
+    subclass garante o close sem mexer em nenhum call site.
+    """
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            return super().__exit__(exc_type, exc_val, exc_tb)
+        finally:
+            self.close()
+
+
 def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, factory=_AutoCloseConn)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
