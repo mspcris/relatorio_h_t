@@ -30,6 +30,7 @@ SQL Server e pode levar minutos — request síncrono derrubaria o worker único
 
 import copy
 import logging
+import os
 import threading
 from datetime import date, datetime, timedelta
 
@@ -140,67 +141,130 @@ MOTIVOS_LEGENDA = {
 
 
 # ---------------------------------------------------------------------------
-# Estado da execução em background (padrão do cache-refresh das rotas WPP)
+# Estado da execução em background — EM ARQUIVO, não em memória.
+#
+# camim-auth e wpp-campanhas rodam a mesma rota, e o gunicorn pode ter mais
+# de um worker: estado em memória fazia o "Iniciar" cair num processo e o
+# "Status" noutro, que respondia "nada rodando / nenhum resultado" (medido em
+# 2026-08-10: botão travava e destravava sem nada acontecer). Os arquivos
+# ficam no MESMO diretório do SQLite de controle (os serviços já têm escrita
+# lá) e a exclusão mútua entre processos é por flock no arquivo de lock.
 # ---------------------------------------------------------------------------
-_run_lock = threading.Lock()
-_status = {
-    "running": False,
-    "pct": 0,
-    "msg": "",
-    "erro": None,
-    "data": None,        # data simulada (ISO)
-    "gerado_em": None,   # quando o último resultado ficou pronto
-}
-_resultado: dict | None = None
+import fcntl
+import json as _json
+
+_STATE_DIR = os.path.dirname(db.DB_PATH)
+_STATUS_PATH = os.path.join(_STATE_DIR, "wpp_previsao_status.json")
+_RESULT_PATH = os.path.join(_STATE_DIR, "wpp_previsao_resultado.json")
+_LOCK_PATH = os.path.join(_STATE_DIR, "wpp_previsao.lock")
+
+_lock_fh = None  # handle do flock, vivo enquanto a thread roda NESTE processo
+
+
+def _write_json_atomic(path: str, payload: dict) -> None:
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        _json.dump(payload, f, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def _read_json(path: str) -> dict | None:
+    try:
+        with open(path, encoding="utf-8") as f:
+            return _json.load(f)
+    except Exception:
+        return None
+
+
+def _alguem_rodando() -> bool:
+    """True se ALGUM processo segura o flock da análise agora."""
+    try:
+        with open(_LOCK_PATH, "a") as fh:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(fh, fcntl.LOCK_UN)
+                return False
+            except OSError:
+                return True
+    except OSError:
+        return False
+
+
+def _grava_status(**kw) -> None:
+    s = _read_json(_STATUS_PATH) or {}
+    s.update(kw)
+    _write_json_atomic(_STATUS_PATH, s)
 
 
 def status() -> dict:
-    s = dict(_status)
-    if _resultado is not None:
-        s["resumo"] = _resultado.get("resumo")
-        s["data_resultado"] = _resultado.get("data")
+    s = _read_json(_STATUS_PATH) or {"running": False, "pct": 0, "msg": "",
+                                     "erro": None, "data": None}
+    if s.get("running") and not _alguem_rodando():
+        # Arquivo diz "rodando" mas ninguém segura o lock: o processo morreu
+        # no meio (deploy/restart). Sem este guard a tela ficaria em
+        # "Analisando…" para sempre.
+        s["running"] = False
+        s["erro"] = (s.get("erro")
+                     or "Análise interrompida (o serviço foi reiniciado no meio). "
+                        "Clique em Analisar para refazer.")
+        _write_json_atomic(_STATUS_PATH, s)
     return s
 
 
 def resultado() -> dict | None:
-    return _resultado
+    return _read_json(_RESULT_PATH)
 
 
 def iniciar(data_iso: str) -> tuple[bool, str]:
     """Dispara a análise em thread de fundo. Retorna (ok, mensagem)."""
+    global _lock_fh
     try:
         alvo = date.fromisoformat(data_iso)
     except (TypeError, ValueError):
         return False, "data inválida (use AAAA-MM-DD)"
-    if not _run_lock.acquire(blocking=False):
+    fh = open(_LOCK_PATH, "a")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
         return False, "já existe uma análise em andamento"
-    _status.update({"running": True, "pct": 0, "msg": "Iniciando…",
-                    "erro": None, "data": alvo.isoformat()})
+    _lock_fh = fh  # mantém o fd aberto → lock vivo enquanto a thread roda
+    _write_json_atomic(_STATUS_PATH, {
+        "running": True, "pct": 0, "msg": "Iniciando…", "erro": None,
+        "data": alvo.isoformat(),
+    })
     t = threading.Thread(target=_rodar, args=(alvo,), daemon=True)
     t.start()
     return True, "análise iniciada"
 
 
 def _rodar(alvo: date) -> None:
-    global _resultado
+    global _lock_fh
     try:
         if alvo < date.today():
             res = _auditar_passado(alvo)
         else:
             res = _simular(alvo)
-        _resultado = res
-        _status.update({"pct": 100, "msg": "Concluído",
-                        "gerado_em": res["gerado_em"]})
+        _write_json_atomic(_RESULT_PATH, res)
+        _grava_status(running=False, pct=100, msg="Concluído",
+                      gerado_em=res["gerado_em"],
+                      resumo=res.get("resumo"), data_resultado=res.get("data"))
     except Exception as e:
         log.exception("previsao: falha na análise")
-        _status.update({"erro": f"{type(e).__name__}: {str(e)[:300]}"})
+        _grava_status(running=False,
+                      erro=f"{type(e).__name__}: {str(e)[:300]}")
     finally:
-        _status["running"] = False
-        _run_lock.release()
+        try:
+            if _lock_fh is not None:
+                fcntl.flock(_lock_fh, fcntl.LOCK_UN)
+                _lock_fh.close()
+        except Exception:
+            pass
+        _lock_fh = None
 
 
 def _progresso(pct: int, msg: str) -> None:
-    _status.update({"pct": max(0, min(99, int(pct))), "msg": msg})
+    _grava_status(pct=max(0, min(99, int(pct))), msg=msg)
 
 
 # ---------------------------------------------------------------------------
