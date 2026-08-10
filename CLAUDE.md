@@ -908,6 +908,61 @@ primeira execução. Escreva `8h30`, nunca `8` dois-pontos `30`.
 
 ---
 
+## WPP — Controle e auditoria dos disparos (`/wpp/previsao`) — 2026-08-10
+
+Responde "quantas mensagens saem hoje, para quem, quando, por quê — e por que
+NÃO", linha a linha, em linguagem leiga. Nasceu do incômodo do Cristiano de
+olhar a lista de campanhas e não ter como afirmar se 0 envio era regra de
+negócio ou ferramenta quebrada.
+
+| Arquivo | Papel |
+|---|---|
+| `wpp_previsao.py` | Engine da análise (thread de fundo, SOMENTE-LEITURA) |
+| `wpp_cobranca_routes.py` | Rotas `/wpp/previsao` + `/wpp/api/previsao/{start,status,resultado}` |
+| `wpp_previsao.html` | Central de controle (data, resumo, linhas com motivo) |
+| `wpp_campanhas.html` | Botões "Calcular previsão de hoje" / "Ver em detalhes" |
+
+**Três regimes por data:**
+- **Passado** = auditoria das tabelas `envios`/`nao_enviados` (não toca SQL
+  Server). Bloqueios de cadência (intervalo global, telefone repetido na
+  rodada) **não são gravados** por decisão de projeto (`_MOTIVOS_NAO_CONTABILIZAR`
+  no `wpp_cobranca_db`), então a auditoria de dias passados não os mostra — a
+  tela avisa isso.
+- **Hoje** = simulação fiel do cron cruzada com o realizado do dia (envios do
+  dia aparecem como "enviada às HH:MM"; erro_api do dia entra como "erro").
+- **Futuro** = simulação com a régua deslocada (`_campanha_ajustada`): atraso
+  desloca limites para baixo, pré-vencimento para cima, cliente_novo desloca a
+  janela de 7d. Marcada como ESTIMATIVA na tela.
+
+**Fidelidade por REUSO, não por cópia:** o engine importa do próprio
+`send_whatsapp_cobranca` as funções puras (`buscar_faturas`, `limpar_telefone`,
+`montar_params_template`, bodies de template) e repete a ordem da rodada
+(sort por `hora_fim`) e as duas políticas de dedupe (`ignorar_intervalo` vs
+intervalo global). Se o cron mudar, a previsão muda junto. **Nenhum arquivo do
+cron foi alterado** — e deve continuar assim: qualquer regra nova no cron
+precisa aparecer aqui, de preferência importando a função em vez de duplicar.
+
+**SEGURANÇA — o módulo nunca envia nada.** Só SELECTs (SQL Server) e leitura
+do SQLite. Jamais chamar `enviar*`/`registrar_*` de dentro dele.
+
+- Roda em **thread de fundo** com progresso (mesmo padrão do cache-refresh):
+  varre os 13 postos e pode levar minutos; request síncrono derrubaria o
+  worker único do gunicorn (nginx corta em 60s).
+- Import **lazy** nas rotas: problema no módulo não derruba o serviço, só a tela.
+- Posto sem conexão/erro de query vira ALERTA visível (`erros_postos`) — nunca
+  silêncio, senão "0 previstas" mente (mesma lição do medico_custo: falha de
+  posto não pode parecer economia).
+- Teto de 4.000 linhas de detalhe por campanha no JSON; contagens sempre
+  completas e a truncagem é avisada na tela (nada de teto silencioso).
+- Todo motivo tem código técnico + frase leiga (`MOTIVOS_LEGENDA`) — padrão
+  "todo selo diz por quê" do medico_custo.
+- Custo Meta estimado = previstas × R$ 0,35 (`CUSTO_MSG_META`), rotulado como
+  estimativa; só para campanhas com `enviar_meta=1`.
+- Rodada do robô = `*/15 min` (`sync_wpp.sh` no cron) — é daí que sai o "que
+  horas vai". Se o agendamento mudar, atualizar `RODADA_MIN`.
+
+---
+
 ## Regras de desenvolvimento
 
 - Cada KPI é independente — nunca compartilha cálculos entre páginas

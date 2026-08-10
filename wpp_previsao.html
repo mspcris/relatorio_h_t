@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8"/>
+  <title>CAMIM — Controle de Disparos WhatsApp</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style2.css">
+  <link rel="icon" href="/images/favicon-wpp.svg" type="image/svg+xml">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+  <style>
+    html { font-size: 16px; }
+    body { font-family: "Source Sans Pro", system-ui, sans-serif; }
+
+    /* Status: cor reservada + ícone + rótulo (nunca cor sozinha) */
+    .st-pill { display:inline-flex; align-items:center; gap:5px; font-size:.78rem;
+               font-weight:600; padding:2px 9px; border-radius:20px; white-space:nowrap; }
+    .st-prevista  { background:#d6ecf3; color:#0c5064; }
+    .st-enviada   { background:#d4edda; color:#155724; }
+    .st-bloqueada { background:#fff3cd; color:#856404; }
+    .st-erro      { background:#f8d7da; color:#721c24; }
+
+    .tile { border-radius:8px; padding:14px 16px; background:#fff;
+            border:1px solid #e3e6ea; border-left-width:5px; }
+    .tile .num { font-size:1.7rem; font-weight:700; line-height:1.1; }
+    .tile .lbl { font-size:.8rem; color:#6c757d; }
+    .tile-prevista  { border-left-color:#17a2b8; }
+    .tile-enviada   { border-left-color:#28a745; }
+    .tile-bloqueada { border-left-color:#ffc107; }
+    .tile-erro      { border-left-color:#dc3545; }
+    .tile-custo     { border-left-color:#6c757d; }
+
+    .camp-badges .badge { font-weight:500; margin-right:4px; margin-bottom:3px; }
+    .motivo-chip { cursor:pointer; user-select:none; }
+    .motivo-chip.ativo { outline:2px solid #007bff; }
+    .tbl-prev td { font-size:.82rem; vertical-align:middle; }
+    .msg-preview { white-space:pre-wrap; background:#f8f9fa; border:1px solid #e3e6ea;
+                   border-radius:6px; padding:10px 12px; font-size:.82rem; }
+    .txt-tec { color:#a0a6ad; font-size:.72rem; }
+    @media (max-width: 767px) {
+      .content-wrapper { margin-left: 0 !important; }
+      .main-sidebar { z-index: 1050; }
+    }
+  </style>
+</head>
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a></li>
+    </ul>
+    <span class="ml-2 font-weight-bold d-flex align-items-center">
+      <img src="/images/Logo%20Camim-01_200px.png" style="height:28px">
+      <span class="ml-2">Controle de Disparos</span>
+    </span>
+    <ul class="navbar-nav ml-auto">
+      <li class="nav-item">
+        <a href="/wpp" class="btn btn-outline-secondary btn-sm mr-2">
+          <i class="fab fa-whatsapp"></i> Campanhas
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <a href="/" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+    <div class="sidebar"><nav class="mt-2">
+      <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+        <li class="nav-item"><a href="https://kpi.camim.com.br/index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home</p></a></li>
+        {% if USER_IS_ADMIN %}
+        <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+        {% endif %}
+        <li class="nav-item"><a href="https://kpi.camim.com.br/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+        <div class="sidebar-section-header" style="padding:8px 16px 4px;font-size:.72rem;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,.4);margin-top:8px">WhatsApp</div>
+        <li class="nav-item"><a href="/wpp" class="nav-link"><i class="nav-icon fab fa-whatsapp"></i><p>Campanhas</p></a></li>
+        <li class="nav-item"><a href="/wpp/previsao" class="nav-link active"><i class="nav-icon fas fa-clipboard-check"></i><p>Controle de Disparos</p></a></li>
+        <li class="nav-item"><a href="/wpp/templates" class="nav-link"><i class="nav-icon fas fa-file-alt"></i><p>Templates</p></a></li>
+        <li class="nav-item"><a href="/wpp/teste" class="nav-link"><i class="nav-icon fas fa-vial"></i><p>Teste de Envio</p></a></li>
+        <li class="nav-item"><a href="/wpp/buscar" class="nav-link"><i class="nav-icon fas fa-search"></i><p>Buscar Envios</p></a></li>
+        <li class="nav-item"><a href="/wpp/dashboard" class="nav-link"><i class="nav-icon fas fa-chart-line"></i><p>Dashboard</p></a></li>
+        <li class="nav-item"><a href="/wpp/desculpas" class="nav-link"><i class="nav-icon fas fa-heart-broken"></i><p>Pedido de Desculpas</p></a></li>
+        <li class="nav-item"><a href="/wpp/auditoria" class="nav-link"><i class="nav-icon fas fa-history"></i><p>Auditoria</p></a></li>
+      </ul>
+    </nav>
+    <div style="padding:10px 16px;margin-top:auto">
+      <button type="button" onclick="window.location.assign('/session/logout')"
+              style="color:rgba(255,255,255,.8);background:rgba(255,255,255,.08);border:none;display:block;width:100%;padding:8px 12px;border-radius:4px;cursor:pointer;text-align:left;font-size:inherit">
+        <i class="fas fa-sign-out-alt mr-2"></i>Sair
+      </button>
+    </div>
+    </div>
+  </aside>
+
+  <div class="content-wrapper">
+    <section class="content-header px-3 pt-3 pb-1">
+      <h1 style="font-size:1.5rem"><i class="fas fa-clipboard-check text-info mr-2"></i>Controle e auditoria dos disparos de cobrança</h1>
+      <p class="text-muted mb-0" style="font-size:.9rem">
+        Quantas mensagens serão (ou foram) enviadas, para quem, quando, por quê — e por que <b>não</b>.
+        Cada linha é um cliente analisado pelo robô, com o motivo em linguagem simples.
+      </p>
+    </section>
+
+    <section class="content px-3 pb-3">
+
+      <!-- Controles: data + analisar -->
+      <div class="card mb-3">
+        <div class="card-body py-2 d-flex align-items-center flex-wrap" style="gap:10px">
+          <label class="mb-0 font-weight-bold" for="dataAlvo">Data da análise:</label>
+          <input type="date" id="dataAlvo" class="form-control form-control-sm" style="width:auto">
+          <button id="btnAnalisar" class="btn btn-primary btn-sm" onclick="iniciarAnalise()">
+            <i class="fas fa-sync-alt mr-1"></i>Analisar
+          </button>
+          <span id="infoGerado" class="text-muted" style="font-size:.82rem"></span>
+          <span class="ml-auto text-muted" style="font-size:.78rem">
+            Datas passadas = auditoria do que foi registrado ·
+            hoje = previsto × realizado · futuras = estimativa
+          </span>
+        </div>
+        <div id="barraProgresso" class="px-3 pb-2" style="display:none">
+          <div class="progress" style="height:16px">
+            <div id="progBar" class="progress-bar progress-bar-striped progress-bar-animated bg-info" style="width:0%"></div>
+          </div>
+          <small id="progMsg" class="text-muted"></small>
+        </div>
+        <div id="erroAnalise" class="alert alert-danger mx-3 mb-2 py-2" style="display:none"></div>
+      </div>
+
+      <div id="conteudo" style="display:none">
+
+        <!-- Avisos -->
+        <div id="avisos"></div>
+
+        <!-- Resumo -->
+        <div class="row mb-3" id="tiles"></div>
+
+        <!-- Como ler -->
+        <div class="card mb-3">
+          <div class="card-header py-2" style="cursor:pointer" data-toggle="collapse" data-target="#comoLer">
+            <i class="fas fa-question-circle text-info mr-1"></i>
+            <b>Como ler esta página</b> — o que significa cada situação
+            <i class="fas fa-chevron-down float-right mt-1 text-muted"></i>
+          </div>
+          <div id="comoLer" class="collapse">
+            <div class="card-body py-2" id="legendaMotivos" style="font-size:.85rem"></div>
+          </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="card mb-3">
+          <div class="card-body py-2 d-flex align-items-center flex-wrap" style="gap:10px">
+            <i class="fas fa-filter text-muted"></i>
+            <select id="fStatus" class="form-control form-control-sm" style="width:auto" onchange="renderCampanhas()">
+              <option value="">Todas as situações</option>
+              <option value="prevista">Serão enviadas</option>
+              <option value="enviada">Enviadas</option>
+              <option value="bloqueada">Não serão enviadas</option>
+              <option value="erro">Erros</option>
+            </select>
+            <select id="fMotivo" class="form-control form-control-sm" style="width:auto" onchange="renderCampanhas()">
+              <option value="">Todos os motivos</option>
+            </select>
+            <select id="fPosto" class="form-control form-control-sm" style="width:auto" onchange="renderCampanhas()">
+              <option value="">Todos os postos</option>
+            </select>
+            <input id="fBusca" class="form-control form-control-sm" style="width:220px"
+                   placeholder="Buscar nome, matrícula ou telefone…" oninput="renderCampanhas()">
+            <span id="fResumo" class="text-muted" style="font-size:.8rem"></span>
+          </div>
+        </div>
+
+        <!-- Campanhas -->
+        <div id="listaCampanhas"></div>
+      </div>
+
+    </section>
+  </div>
+</div>
+
+<script>
+if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
+
+let RES = null;          // resultado da análise
+let pollTimer = null;
+const PAGINA = 200;      // linhas exibidas por clique em "mostrar mais"
+const mostrar = {};      // campId -> quantas linhas mostrar
+
+const ST_META = {
+  prevista:  {cls:'st-prevista',  icone:'fa-paper-plane', rotulo:'Será enviada'},
+  enviada:   {cls:'st-enviada',   icone:'fa-check',       rotulo:'Enviada'},
+  bloqueada: {cls:'st-bloqueada', icone:'fa-ban',         rotulo:'Não envia'},
+  erro:      {cls:'st-erro',      icone:'fa-exclamation-triangle', rotulo:'Erro'},
+};
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+function hojeISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+// ---------------------------------------------------------------------------
+// Ciclo: iniciar análise → poll status → carregar resultado
+// ---------------------------------------------------------------------------
+async function iniciarAnalise() {
+  const data = document.getElementById('dataAlvo').value || hojeISO();
+  document.getElementById('erroAnalise').style.display = 'none';
+  const r = await fetch('/wpp/api/previsao/start', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({data}),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 409) { pollStatus(); return; }   // já rodando — acompanha
+  if (!r.ok) { mostrarErro(d.error || d.msg || 'Falha ao iniciar a análise.'); return; }
+  pollStatus();
+}
+
+function mostrarErro(msg) {
+  const el = document.getElementById('erroAnalise');
+  el.textContent = msg;
+  el.style.display = '';
+  document.getElementById('barraProgresso').style.display = 'none';
+  document.getElementById('btnAnalisar').disabled = false;
+}
+
+function pollStatus() {
+  clearInterval(pollTimer);
+  document.getElementById('barraProgresso').style.display = '';
+  document.getElementById('btnAnalisar').disabled = true;
+  pollTimer = setInterval(async () => {
+    let s;
+    try { s = await (await fetch('/wpp/api/previsao/status')).json(); }
+    catch (e) { return; }
+    document.getElementById('progBar').style.width = (s.pct || 0) + '%';
+    document.getElementById('progMsg').textContent = s.msg || '';
+    if (!s.running) {
+      clearInterval(pollTimer);
+      document.getElementById('barraProgresso').style.display = 'none';
+      document.getElementById('btnAnalisar').disabled = false;
+      if (s.erro) { mostrarErro('A análise falhou: ' + s.erro); return; }
+      carregarResultado();
+    }
+  }, 2000);
+}
+
+async function carregarResultado() {
+  const r = await fetch('/wpp/api/previsao/resultado');
+  if (!r.ok) { mostrarErro('Nenhum resultado disponível.'); return; }
+  RES = await r.json();
+  document.getElementById('dataAlvo').value = RES.data;
+  renderTudo();
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+function renderTudo() {
+  document.getElementById('conteudo').style.display = '';
+  const g = new Date(RES.gerado_em);
+  const quando = isNaN(g) ? RES.gerado_em :
+    g.toLocaleDateString('pt-BR') + ' ' + g.toLocaleTimeString('pt-BR').slice(0,5);
+  document.getElementById('infoGerado').innerHTML =
+    'Retrato gerado em <b>' + esc(quando) + '</b> — clique em Analisar para atualizar.';
+
+  // Avisos
+  document.getElementById('avisos').innerHTML = (RES.avisos || []).map(a =>
+    '<div class="callout callout-warning py-2 mb-2" style="font-size:.85rem">' +
+    '<i class="fas fa-info-circle mr-1"></i>' + esc(a) + '</div>').join('');
+
+  // Tiles do resumo
+  const t = RES.resumo || {};
+  const rotuloPrev = RES.tipo === 'passado' ? 'Previstas (não se aplica)' :
+                     (RES.tipo === 'futuro' ? 'Previstas para o dia' : 'Aguardam envio hoje');
+  let tiles = [
+    {cls:'tile-prevista', icone:'fa-paper-plane text-info',   num:t.previstas,  lbl:rotuloPrev},
+    {cls:'tile-enviada',  icone:'fa-check text-success',      num:t.enviadas,   lbl:'Já enviadas'},
+    {cls:'tile-bloqueada',icone:'fa-ban text-warning',        num:t.bloqueadas, lbl:'Não serão enviadas (regras)'},
+    {cls:'tile-erro',     icone:'fa-exclamation-triangle text-danger', num:t.erros, lbl:'Erros / exigem atenção'},
+  ];
+  if (t.custo_estimado_meta) {
+    tiles.push({cls:'tile-custo', icone:'fa-dollar-sign text-muted',
+      num:'R$ ' + t.custo_estimado_meta.toFixed(2).replace('.', ','),
+      lbl:'Custo estimado Meta (~R$ 0,35/msg)'});
+  }
+  document.getElementById('tiles').innerHTML = tiles.map(x =>
+    '<div class="col-6 col-md mb-2"><div class="tile ' + x.cls + '">' +
+    '<div class="num">' + esc(x.num ?? 0) + '</div>' +
+    '<div class="lbl"><i class="fas ' + x.icone + ' mr-1"></i>' + esc(x.lbl) + '</div>' +
+    '</div></div>').join('');
+
+  // Legenda
+  const leg = RES.motivos_legenda || {};
+  document.getElementById('legendaMotivos').innerHTML =
+    '<div class="row">' + Object.entries(leg).map(([cod, m]) =>
+      '<div class="col-md-6 mb-2"><b>' + esc(m.rotulo) + '</b>' +
+      '<span class="txt-tec ml-1">(' + esc(cod) + ')</span><br>' +
+      '<span class="text-muted">' + esc(m.explica) + '</span></div>').join('') + '</div>';
+
+  // Filtros: opções de motivo e posto a partir do resultado
+  const motivos = new Set(), postos = new Set();
+  (RES.campanhas || []).forEach(c => {
+    Object.keys(c.contagem.por_motivo || {}).forEach(m => motivos.add(m));
+    (c.postos || []).forEach(p => postos.add(p));
+  });
+  const selM = document.getElementById('fMotivo');
+  selM.innerHTML = '<option value="">Todos os motivos</option>' +
+    [...motivos].sort().map(m => '<option value="' + esc(m) + '">' +
+      esc((leg[m] || {}).rotulo || m) + '</option>').join('');
+  const selP = document.getElementById('fPosto');
+  selP.innerHTML = '<option value="">Todos os postos</option>' +
+    [...postos].sort().map(p => '<option>' + esc(p) + '</option>').join('');
+
+  renderCampanhas();
+}
+
+function filtroAtual() {
+  return {
+    status: document.getElementById('fStatus').value,
+    motivo: document.getElementById('fMotivo').value,
+    posto:  document.getElementById('fPosto').value,
+    busca:  (document.getElementById('fBusca').value || '').trim().toLowerCase(),
+  };
+}
+
+function linhaPassa(l, f) {
+  if (f.status && l.status !== f.status) return false;
+  if (f.motivo && (l.motivo_codigo || '') !== f.motivo) return false;
+  if (f.posto && (l.posto || '') !== f.posto) return false;
+  if (f.busca) {
+    const alvo = ((l.nome || '') + ' ' + (l.matricula || '') + ' ' +
+                  (l.telefone || '')).toLowerCase();
+    if (!alvo.includes(f.busca)) return false;
+  }
+  return true;
+}
+
+function renderCampanhas() {
+  const f = filtroAtual();
+  const cont = document.getElementById('listaCampanhas');
+  let totalVis = 0;
+  cont.innerHTML = (RES.campanhas || []).map(c => {
+    const linhas = (c.linhas || []).filter(l => linhaPassa(l, f));
+    totalVis += linhas.length;
+    return cardCampanha(c, linhas, f);
+  }).join('');
+  const temFiltro = f.status || f.motivo || f.posto || f.busca;
+  document.getElementById('fResumo').textContent =
+    temFiltro ? (totalVis + ' linha(s) encontradas com o filtro') : '';
+}
+
+function cardCampanha(c, linhas, f) {
+  const cont = c.contagem || {};
+  const leg = RES.motivos_legenda || {};
+  const badges =
+    '<span class="badge badge-light border">Regra: ' + esc(c.regra_humana) + '</span>' +
+    '<span class="badge badge-light border">Janela: ' + esc(c.janela) + ' (' + esc(c.dias_semana_txt) + ')</span>' +
+    '<span class="badge badge-light border">Canal: ' + esc(c.canal) + '</span>' +
+    '<span class="badge badge-light border">Nº saída: ' + esc(c.numero_saida) + '</span>' +
+    (c.ignorar_intervalo
+      ? '<span class="badge badge-light border">Envio único por contato</span>'
+      : '<span class="badge badge-light border">Silêncio: ' + esc(c.intervalo_dias) + 'd entre mensagens</span>') +
+    (c.ordem_rodada ? '<span class="badge badge-light border">' + c.ordem_rodada + 'ª na fila do robô</span>' : '');
+
+  // Campanha pulada (suspensa / falta_medico / sem posto / dia não permitido)
+  if (c.status_campanha === 'pulada' && !(c.linhas || []).length) {
+    return '<div class="card mb-2" style="opacity:.75"><div class="card-body py-2">' +
+      '<b>' + esc(c.nome) + '</b> <span class="badge badge-secondary ml-1">não roda nesta data</span>' +
+      '<div class="text-muted mt-1" style="font-size:.85rem"><i class="fas fa-info-circle mr-1"></i>' +
+      esc(c.motivo_campanha || '') + '</div>' +
+      '<div class="camp-badges mt-1">' + badges + '</div></div></div>';
+  }
+
+  const chips = Object.entries(cont.por_motivo || {}).sort((a, b) => b[1] - a[1]).map(([m, n]) => {
+    const ativo = (filtroAtual().motivo === m) ? ' ativo' : '';
+    return '<span class="badge badge-light border motivo-chip' + ativo + '" ' +
+      'onclick="filtrarMotivo(\'' + esc(m) + '\')" title="clique para filtrar">' +
+      esc((leg[m] || {}).rotulo || m) + ': <b>' + n + '</b></span> ';
+  }).join('');
+
+  const errosPostos = (c.erros_postos || []).map(e =>
+    '<div class="text-danger" style="font-size:.82rem"><i class="fas fa-plug mr-1"></i>' +
+    esc(e) + '</div>').join('');
+
+  const custoTxt = c.custo_estimado_meta
+    ? ' · custo Meta estimado R$ ' + c.custo_estimado_meta.toFixed(2).replace('.', ',')
+    : '';
+
+  const hora = c.hora_prevista_txt
+    ? '<div class="text-muted" style="font-size:.82rem"><i class="far fa-clock mr-1"></i>' +
+      'Horário previsto: ' + esc(c.hora_prevista_txt) + '</div>'
+    : '';
+
+  const motivoCamp = c.motivo_campanha
+    ? '<div class="text-muted" style="font-size:.85rem"><i class="fas fa-info-circle mr-1"></i>' +
+      esc(c.motivo_campanha) + '</div>'
+    : '';
+
+  const trunc = c.linhas_truncadas
+    ? '<div class="callout callout-warning py-1 my-1" style="font-size:.8rem">Exibindo as primeiras ' +
+      (c.linhas || []).length + ' linhas — mais ' + c.linhas_truncadas +
+      ' ficaram fora do detalhe (as CONTAGENS acima incluem todas). Use os filtros da campanha para investigar.</div>'
+    : '';
+
+  const key = 'c' + c.id;
+  if (!(key in mostrar)) mostrar[key] = PAGINA;
+  const vis = linhas.slice(0, mostrar[key]);
+  const temMais = linhas.length > vis.length;
+
+  const tabela = !linhas.length
+    ? '<div class="text-muted py-2" style="font-size:.85rem">Nenhuma linha nesta campanha' +
+      ((f.status || f.motivo || f.posto || f.busca) ? ' com o filtro atual.' : '.') + '</div>'
+    : '<div class="table-responsive"><table class="table table-sm table-hover tbl-prev mb-1">' +
+      '<thead class="thead-light"><tr>' +
+      '<th>Cliente</th><th>Posto</th><th>Telefone</th><th>Fatura / referência</th>' +
+      '<th>Por que entrou</th><th>Situação</th><th>Motivo</th><th>Quando</th><th></th>' +
+      '</tr></thead><tbody>' +
+      vis.map((l, i) => trLinha(c, l, key + '_' + i)).join('') +
+      '</tbody></table></div>' +
+      (temMais ? '<button class="btn btn-outline-secondary btn-sm mb-2" ' +
+        'onclick="mostrar[\'' + key + '\']+=' + PAGINA + ';renderCampanhas()">' +
+        'Mostrar mais (' + (linhas.length - vis.length) + ' restantes)</button>' : '');
+
+  return '<div class="card mb-3"><div class="card-header py-2">' +
+    '<b>' + esc(c.nome) + '</b>' +
+    ' <span class="st-pill st-prevista ml-1"><i class="fas fa-paper-plane"></i>' + (cont.previstas || 0) + '</span>' +
+    ' <span class="st-pill st-enviada"><i class="fas fa-check"></i>' + (cont.enviadas || 0) + '</span>' +
+    ' <span class="st-pill st-bloqueada"><i class="fas fa-ban"></i>' + (cont.bloqueadas || 0) + '</span>' +
+    ' <span class="st-pill st-erro"><i class="fas fa-exclamation-triangle"></i>' + (cont.erros || 0) + '</span>' +
+    '<span class="text-muted ml-2" style="font-size:.8rem">' + custoTxt + '</span>' +
+    '<div class="camp-badges mt-1">' + badges + '</div>' + hora + motivoCamp + errosPostos +
+    '</div><div class="card-body py-2">' +
+    '<div class="mb-1">' + chips + '</div>' + trunc + tabela +
+    '</div></div>';
+}
+
+function trLinha(c, l, uid) {
+  const st = ST_META[l.status] || ST_META.bloqueada;
+  const fat = [l.ref, l.valor ? 'R$ ' + l.valor : '', l.venc].filter(Boolean).join(' · ') +
+    (l.dias_atraso ? ' <span class="text-muted">(' + l.dias_atraso + 'd)</span>' : '');
+  const btnMsg = (l.params && c.template_body)
+    ? '<button class="btn btn-xs btn-outline-info" title="Ver a mensagem que será enviada" ' +
+      'onclick="verMensagem(\'' + uid + '\')"><i class="far fa-comment-dots"></i></button>'
+    : '';
+  const msgRow = (l.params && c.template_body)
+    ? '<tr id="msg_' + uid + '" style="display:none"><td colspan="9">' +
+      '<div class="msg-preview">' + esc(expandir(c.template_body, l.params)) + '</div></td></tr>'
+    : '';
+  return '<tr>' +
+    '<td><b>' + esc(l.nome) + '</b><br><span class="txt-tec">mat. ' + esc(l.matricula) + '</span></td>' +
+    '<td>' + esc(l.posto || '') + '</td>' +
+    '<td>' + esc(l.telefone || '—') + '</td>' +
+    '<td>' + fat + '</td>' +
+    '<td style="max-width:220px"><small>' + esc(l.por_que_entrou || '') + '</small></td>' +
+    '<td><span class="st-pill ' + st.cls + '"><i class="fas ' + st.icone + '"></i>' + st.rotulo + '</span></td>' +
+    '<td style="max-width:320px"><small>' + esc(l.motivo || '') + '</small>' +
+    (l.motivo_codigo ? '<br><span class="txt-tec">' + esc(l.motivo_codigo) + '</span>' : '') + '</td>' +
+    '<td><small>' + esc(l.quando || '—') + '</small></td>' +
+    '<td>' + btnMsg + '</td>' +
+    '</tr>' + msgRow;
+}
+
+function expandir(body, params) {
+  let t = body;
+  Object.entries(params || {}).forEach(([k, v]) => {
+    t = t.split('{{' + k + '}}').join(String(v));
+  });
+  return t;
+}
+
+function verMensagem(uid) {
+  const el = document.getElementById('msg_' + uid);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+function filtrarMotivo(m) {
+  const sel = document.getElementById('fMotivo');
+  sel.value = (sel.value === m) ? '' : m;
+  renderCampanhas();
+}
+
+// ---------------------------------------------------------------------------
+// Boot: usa o último resultado se for da data escolhida; senão analisa.
+// ---------------------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', async () => {
+  const url = new URL(window.location.href);
+  const dataParam = url.searchParams.get('data');
+  document.getElementById('dataAlvo').value = dataParam || hojeISO();
+  let s = null;
+  try { s = await (await fetch('/wpp/api/previsao/status')).json(); } catch (e) {}
+  if (s && s.running) { pollStatus(); return; }
+  if (s && s.data_resultado === document.getElementById('dataAlvo').value) {
+    carregarResultado();
+    return;
+  }
+  iniciarAnalise();
+});
+</script>
+
+<script src="/js/menu_enforce.js" defer></script>
+</body>
+</html>

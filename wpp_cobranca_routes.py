@@ -1823,6 +1823,71 @@ def api_envio_teste():
 
 
 # ---------------------------------------------------------------------------
+# Central de controle e auditoria dos disparos (/wpp/previsao)
+# ---------------------------------------------------------------------------
+# A análise roda em thread de fundo dentro de wpp_previsao (padrão do
+# cache-refresh): varre os 13 postos e pode levar minutos — request síncrono
+# derrubaria o worker único do gunicorn (nginx corta em 60s).
+# Import LAZY de propósito: se o módulo/ambiente tiver problema, o serviço
+# sobe normal e só esta tela mostra o erro.
+
+def _previsao_mod():
+    import wpp_previsao
+    return wpp_previsao
+
+
+@wpp_bp.get("/previsao")
+def previsao_page():
+    email, is_admin = _check_auth()
+    if not email:
+        return ('', 401)
+    return render_template(
+        "wpp_previsao.html",
+        USER_EMAIL=email, USER_IS_ADMIN=is_admin,
+    )
+
+
+@wpp_bp.post("/api/previsao/start")
+def api_previsao_start():
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    data = (request.get_json(silent=True) or {}).get("data") or \
+        datetime.now().date().isoformat()
+    try:
+        mod = _previsao_mod()
+    except Exception as e:
+        return jsonify({"error": f"módulo de previsão indisponível: {str(e)[:200]}"}), 500
+    ok, msg = mod.iniciar(data)
+    return jsonify({"ok": ok, "msg": msg}), (202 if ok else 409)
+
+
+@wpp_bp.get("/api/previsao/status")
+def api_previsao_status():
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        return jsonify(_previsao_mod().status())
+    except Exception as e:
+        return jsonify({"error": f"módulo de previsão indisponível: {str(e)[:200]}"}), 500
+
+
+@wpp_bp.get("/api/previsao/resultado")
+def api_previsao_resultado():
+    email, _ = _check_auth()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        res = _previsao_mod().resultado()
+    except Exception as e:
+        return jsonify({"error": f"módulo de previsão indisponível: {str(e)[:200]}"}), 500
+    if res is None:
+        return jsonify({"error": "nenhuma análise concluída ainda"}), 404
+    return jsonify(res)
+
+
+# ---------------------------------------------------------------------------
 # Helper: form → dict
 # ---------------------------------------------------------------------------
 

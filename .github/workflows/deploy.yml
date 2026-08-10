@@ -154,7 +154,7 @@ jobs:
           set -euxo pipefail
           DEST=/opt/wpp-campanhas/templates
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "sudo mkdir -p '$DEST' && sudo chmod 775 '$DEST'"
-          for f in wpp_campanhas.html wpp_campanha_form.html wpp_campanha_envios.html wpp_auditoria.html wpp_envio_detalhe.html wpp_teste_envio.html wpp_buscar_envios.html wpp_dashboard.html wpp_respondentes.html wpp_desculpas_lista.html wpp_templates_config.html; do
+          for f in wpp_campanhas.html wpp_campanha_form.html wpp_campanha_envios.html wpp_auditoria.html wpp_envio_detalhe.html wpp_teste_envio.html wpp_buscar_envios.html wpp_dashboard.html wpp_respondentes.html wpp_desculpas_lista.html wpp_templates_config.html wpp_previsao.html; do
             if [ -f "$f" ]; then
               echo "Copiando $f → $DEST"
               rsync -lvz \
@@ -321,7 +321,7 @@ jobs:
           set -euxo pipefail
           DEST=/opt/camim-auth
           ssh -i ~/.ssh/id_vm -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEST'"
-          for f in app.py auth_db.py auth_routes.py servicos_db.py migrate_usuarios.py ia_router_openai.py llm_client_openai.py llm_client_anthropic.py llm_client.py ia_context_builder.py wpp_cobranca_routes.py wpp_cobranca_db.py wpp_cobranca_sql.py alarmes_db.py alarmes_routes.py kpi_receita_despesa_api.py kpi_registry.py api_fin_despesas.py medico_novo_routes.py medico_falta_routes.py cancelados_robo_routes.py api_vg_indicadores.py custos_ia.py custos_ia_routes.py custos_ti.py custos_ti_db.py custos_ti_meta.py custos_ti_routes.py migrate_custos_ti.py medico_custo_routes.py medico_custo_hist.py medico_custo_hist_db.py export_medico_custo.py migrate_medico_custo_hist.py acesso_avancado_routes.py; do
+          for f in app.py auth_db.py auth_routes.py servicos_db.py migrate_usuarios.py ia_router_openai.py llm_client_openai.py llm_client_anthropic.py llm_client.py ia_context_builder.py wpp_cobranca_routes.py wpp_cobranca_db.py wpp_cobranca_sql.py wpp_previsao.py alarmes_db.py alarmes_routes.py kpi_receita_despesa_api.py kpi_registry.py api_fin_despesas.py medico_novo_routes.py medico_falta_routes.py cancelados_robo_routes.py api_vg_indicadores.py custos_ia.py custos_ia_routes.py custos_ti.py custos_ti_db.py custos_ti_meta.py custos_ti_routes.py migrate_custos_ti.py medico_custo_routes.py medico_custo_hist.py medico_custo_hist_db.py export_medico_custo.py migrate_medico_custo_hist.py acesso_avancado_routes.py; do
             if [ -f "$f" ]; then
               echo "Copiando $f → $DEST"
               rsync -rlvz \
@@ -415,7 +415,7 @@ jobs:
           # ficou de março, sem o endpoint /conversa novo.)
           for f in wpp-campanhas/app.py wpp-campanhas/requirements.txt \
                    wpp_cobranca_routes.py wpp_cobranca_db.py wpp_cobranca_sql.py \
-                   send_whatsapp_cobranca.py servicos_db.py; do
+                   wpp_previsao.py send_whatsapp_cobranca.py servicos_db.py; do
             if [ -f "$f" ]; then
               echo "Copiando $f → $DEST"
               rsync -lvz \

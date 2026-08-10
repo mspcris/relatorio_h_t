@@ -80,6 +80,7 @@
         <li class="nav-item"><a href="https://kpi.camim.com.br/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
         <div class="sidebar-section-header" style="padding:8px 16px 4px;font-size:.72rem;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,.4);margin-top:8px">WhatsApp</div>
         <li class="nav-item"><a href="/wpp" class="nav-link active"><i class="nav-icon fab fa-whatsapp"></i><p>Campanhas</p></a></li>
+        <li class="nav-item"><a href="/wpp/previsao" class="nav-link"><i class="nav-icon fas fa-clipboard-check"></i><p>Controle de Disparos</p></a></li>
         <li class="nav-item"><a href="/wpp/templates" class="nav-link"><i class="nav-icon fas fa-file-alt"></i><p>Templates</p></a></li>
         <li class="nav-item"><a href="/wpp/teste" class="nav-link"><i class="nav-icon fas fa-vial"></i><p>Teste de Envio</p></a></li>
         <li class="nav-item"><a href="/wpp/buscar" class="nav-link"><i class="nav-icon fas fa-search"></i><p>Buscar Envios</p></a></li>
@@ -102,6 +103,23 @@
       <h1><i class="fab fa-whatsapp text-success mr-2"></i>Campanhas de Cobrança WhatsApp</h1>
     </section>
     <section class="content px-3 pb-3">
+
+      <!-- Previsão do dia: quantas mensagens vão sair hoje e por quê -->
+      <div class="card mb-3">
+        <div class="card-body py-2 d-flex align-items-center flex-wrap" style="gap:10px">
+          <button id="btnPrevisao" class="btn btn-outline-primary btn-sm" onclick="calcularPrevisao()">
+            <i class="fas fa-calculator mr-1"></i>Calcular previsão de hoje
+          </button>
+          <a href="/wpp/previsao" class="btn btn-primary btn-sm">
+            <i class="fas fa-clipboard-check mr-1"></i>Ver em detalhes
+          </a>
+          <span id="previsaoResumo" class="d-flex align-items-center flex-wrap" style="gap:6px;font-size:.85rem">
+            <span class="text-muted">Simula as mesmas regras do robô (sem enviar nada) e diz
+              quantas mensagens sairão hoje, para quem e por quê.</span>
+          </span>
+        </div>
+      </div>
+
 
       <!-- Legenda de cores + filtro ativas/inativas -->
       <div class="mb-3 d-flex align-items-center flex-wrap" style="gap:16px;font-size:.85rem">
@@ -296,6 +314,78 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sw) {
     sw.addEventListener('change', aplicarFiltroStatus);
     aplicarFiltroStatus();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Previsão de hoje (simulação somente-leitura — nunca envia nada)
+// ---------------------------------------------------------------------------
+let previsaoTimer = null;
+
+function chipsPrevisao(resumo, quando) {
+  const f = n => (n == null ? 0 : n);
+  return (
+    '<span class="badge badge-info">Aguardam envio hoje: <b>' + f(resumo.previstas) + '</b></span>' +
+    '<span class="badge badge-success">Já enviadas: <b>' + f(resumo.enviadas) + '</b></span>' +
+    '<span class="badge badge-warning text-dark">Não serão enviadas: <b>' + f(resumo.bloqueadas) + '</b></span>' +
+    '<span class="badge badge-danger">Erros/atenção: <b>' + f(resumo.erros) + '</b></span>' +
+    (resumo.custo_estimado_meta
+      ? '<span class="badge badge-light border">Custo Meta estimado: R$ ' +
+        resumo.custo_estimado_meta.toFixed(2).replace('.', ',') + '</span>' : '') +
+    (quando ? '<span class="text-muted ml-1">retrato de ' + quando + '</span>' : '')
+  );
+}
+
+function calcularPrevisao() {
+  const hoje = new Date();
+  const iso = hoje.getFullYear() + '-' + String(hoje.getMonth()+1).padStart(2,'0') +
+              '-' + String(hoje.getDate()).padStart(2,'0');
+  document.getElementById('btnPrevisao').disabled = true;
+  fetch('/wpp/api/previsao/start', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({data: iso}),
+  }).then(() => acompanharPrevisao());
+}
+
+function acompanharPrevisao() {
+  clearInterval(previsaoTimer);
+  const alvo = document.getElementById('previsaoResumo');
+  previsaoTimer = setInterval(async () => {
+    let s;
+    try { s = await (await fetch('/wpp/api/previsao/status')).json(); } catch (e) { return; }
+    if (s.running) {
+      alvo.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>' +
+        'Analisando… ' + (s.pct || 0) + '% — ' + (s.msg || '') + '</span>';
+      return;
+    }
+    clearInterval(previsaoTimer);
+    document.getElementById('btnPrevisao').disabled = false;
+    if (s.erro) {
+      alvo.innerHTML = '<span class="text-danger">Falha na análise: ' + s.erro + '</span>';
+      return;
+    }
+    if (s.resumo) {
+      let quando = '';
+      try {
+        const g = new Date(s.gerado_em);
+        quando = g.toLocaleTimeString('pt-BR').slice(0, 5);
+      } catch (e) {}
+      alvo.innerHTML = chipsPrevisao(s.resumo, quando);
+    }
+  }, 2000);
+}
+
+// Ao abrir a página: se já existe retrato de HOJE pronto, mostra sem recalcular.
+document.addEventListener('DOMContentLoaded', async () => {
+  let s = null;
+  try { s = await (await fetch('/wpp/api/previsao/status')).json(); } catch (e) { return; }
+  if (!s) return;
+  if (s.running) { acompanharPrevisao(); return; }
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  if (s.resumo && s.data_resultado === hojeISO) {
+    let quando = '';
+    try { quando = new Date(s.gerado_em).toLocaleTimeString('pt-BR').slice(0, 5); } catch (e) {}
+    document.getElementById('previsaoResumo').innerHTML = chipsPrevisao(s.resumo, quando);
   }
 });
 
