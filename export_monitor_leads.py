@@ -90,7 +90,7 @@ def coletar() -> dict:
         dias = [{"d": str(r["d"]), "n": int(r["n"])} for r in cur.fetchall()]
 
         cur.execute(
-            f"SELECT COALESCE(s.name, CONCAT('fonte #', l.leadsource_id), 'sem fonte') fonte, "
+            f"SELECT COALESCE(s.title, CONCAT('fonte #', l.leadsource_id), 'sem fonte') fonte, "
             f"       COUNT(*) n "
             f"FROM leads l LEFT JOIN leadsources s ON s.id = l.leadsource_id "
             f"WHERE DATE(l.created_at + INTERVAL {off} HOUR) = DATE(NOW() + INTERVAL {off} HOUR) "
