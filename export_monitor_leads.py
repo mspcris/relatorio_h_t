@@ -30,7 +30,25 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 OUT_PATH = os.path.join(BASE_DIR, "json_consolidado", "monitor_leads.json")
-AUTH_DB = os.getenv("AUTH_DB_PATH", "/opt/relatorio_h_t/camim_auth.db")
+
+
+def _resolver_auth_db() -> str:
+    """O serviço web usa AUTH_DB_PATH de /etc/camim-auth.env
+    (/var/lib/camim-auth/camim_auth.db) — que NÃO está no .env deste projeto.
+    Sem esta resolução o ETL lia outro camim_auth.db e via 'nenhum inscrito'
+    com inscrições existindo (medido em 2026-08-10)."""
+    candidatos = [
+        os.getenv("AUTH_DB_PATH"),
+        "/var/lib/camim-auth/camim_auth.db",
+        "/opt/relatorio_h_t/camim_auth.db",
+    ]
+    for c in candidatos:
+        if c and os.path.isfile(c):
+            return c
+    return candidatos[-1]
+
+
+AUTH_DB = _resolver_auth_db()
 LINK_PAGINA = "https://kpi.camim.com.br/outros_monitores.html"
 
 EMAIL_HOST = os.getenv("ALARM_EMAIL_HOST", "smtp.gmail.com")
