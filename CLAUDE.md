@@ -1047,6 +1047,34 @@ resolvem sem quebrar o `_oauth_states` em memória do login IDCamim —
 
 ---
 
+## REGRA — Menu lateral: SÓ existe UM, o canônico (2026-08-10)
+
+`js/menu.js` é a ÚNICA fonte de verdade do menu do kpi.camim.com.br: bloco-base
+(Buscar, Monitor de Avisos, Monitor de Robôs, Outros Monitores, Central de
+Problemas, Painel Antigo, KPI's, Mais Serviços) + seções Indicadores e
+WhatsApp + Admin/Sair — idêntico em toda página. O script SUBSTITUI o
+`ul.nav-sidebar` em runtime; o HTML local é só fallback sem-JS.
+
+- **Página nova**: incluir `<script src="/js/menu.js"></script>` antes de
+  `</body>` e NÃO caprichar no sidebar hardcoded — ele será substituído.
+- **Item novo de menu**: editar a lista em `js/menu.js`, NUNCA o HTML de
+  páginas individuais (foi assim que viraram 26 menus diferentes).
+- `menu_enforce.js` vira no-op quando o canônico está presente.
+- **Exceções deliberadas** (menu próprio): família `wpp_*` (produto
+  camila1/IDCamim) e `custos_ti*` (sidebar Jinja dinâmico do banco).
+
+## Gestores de posto — fonte única é o CRM (2026-08-10)
+
+`sync_gerentes.py` espelha diariamente o cadastro de gestores do CRM
+(Postgres do /opt/crm, `gestores`+`postos`, id_endereco↔letra) para
+`gerente_posto` do alarmes.db. A fonte antiga (sis_empresa) tinha wa.me da
+clínica/fixo/vazio. **Não editar gerente no /alarmes** — editar em
+https://crm.camim.com.br/admin (atalho no /admin do KPI). Posto com vários
+gestores ativos: o de MENOR id ganha o alerta; para trocar o titular,
+desativar o outro no CRM. Falha de conexão preserva o espelho anterior.
+
+---
+
 ## Regras de desenvolvimento
 
 - Cada KPI é independente — nunca compartilha cálculos entre páginas
