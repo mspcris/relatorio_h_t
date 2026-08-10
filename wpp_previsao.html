@@ -286,9 +286,14 @@ function renderTudo() {
     {cls:'tile-erro',     icone:'fa-exclamation-triangle text-danger', num:t.erros, lbl:'Erros / exigem atenção'},
   ];
   if (t.custo_estimado_meta) {
+    const ci = RES.custo_info || {};
+    const lblCusto = ci.usd_brl
+      ? 'Custo Meta estimado — dólar R$ ' + String(ci.usd_brl).replace('.', ',') +
+        ' (' + (ci.fonte || '') + ')'
+      : 'Custo Meta estimado';
     tiles.push({cls:'tile-custo', icone:'fa-dollar-sign text-muted',
       num:'R$ ' + t.custo_estimado_meta.toFixed(2).replace('.', ','),
-      lbl:'Custo estimado Meta (~R$ 0,35/msg)'});
+      lbl:lblCusto});
   }
   document.getElementById('tiles').innerHTML = tiles.map(x =>
     '<div class="col-6 col-md mb-2"><div class="tile ' + x.cls + '">' +
@@ -390,7 +395,8 @@ function cardCampanha(c, linhas, f) {
     esc(e) + '</div>').join('');
 
   const custoTxt = c.custo_estimado_meta
-    ? ' · custo Meta estimado R$ ' + c.custo_estimado_meta.toFixed(2).replace('.', ',')
+    ? ' · custo Meta estimado R$ ' + c.custo_estimado_meta.toFixed(2).replace('.', ',') +
+      (c.custo_detalhe ? ' <span class="txt-tec">(' + esc(c.custo_detalhe) + ')</span>' : '')
     : '';
 
   const hora = c.hora_prevista_txt

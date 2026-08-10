@@ -49,8 +49,18 @@ log = logging.getLogger(__name__)
 
 # Rodada do cron: sync_wpp.sh roda a cada 15 min (cron/relatorio_ht linha */15).
 RODADA_MIN = 15
-# Custo aproximado por mensagem Meta (estimativa exibida como tal; varia com o dólar).
-CUSTO_MSG_META = 0.35
+
+# Preço Meta por mensagem em US$, por CATEGORIA do template (a categoria vem
+# da própria API /templates — mesma classificação que a Meta usa pra cobrar).
+# Defaults = padrão Meta Brasil exibido no wpp_dashboard; ajustável por env.
+import os as _os
+PRECO_META_USD = {
+    "MARKETING":      float(_os.getenv("WPP_PRECO_MKT_USD",  "0.0625")),
+    "UTILITY":        float(_os.getenv("WPP_PRECO_UTIL_USD", "0.0068")),
+    "AUTHENTICATION": float(_os.getenv("WPP_PRECO_AUTH_USD", "0.0315")),
+}
+# Fallback de cotação quando a awesomeapi não responder (marcado como tal).
+USD_BRL_FALLBACK = float(_os.getenv("WPP_USD_BRL", "5.40"))
 # Teto de linhas detalhadas por campanha no JSON (contagens continuam completas
 # e a truncagem é AVISADA na tela — nada de teto silencioso).
 MAX_LINHAS_POR_CAMPANHA = 4000
@@ -270,6 +280,7 @@ def _resumo_campanha_base(c: dict, ordem: int) -> dict:
         "contagem": {"previstas": 0, "enviadas": 0, "bloqueadas": 0, "erros": 0,
                      "por_motivo": {}},
         "custo_estimado_meta": None,
+        "custo_detalhe": None,
         "erros_postos": [],
         "linhas": [],
         "linhas_truncadas": 0,
@@ -319,6 +330,46 @@ def _hora_de_iso(iso: str | None) -> str:
         return datetime.fromisoformat(iso).strftime("%H:%M")
     except Exception:
         return "?"
+
+
+# ---------------------------------------------------------------------------
+# Custo Meta: cotação ao vivo + categoria real do template
+# ---------------------------------------------------------------------------
+
+def _cotacao_usd_brl() -> dict:
+    """Dólar comercial ao vivo (awesomeapi, mesma fonte do wpp_dashboard e do
+    custos_ti). Nunca quebra a análise: sem resposta, cai no fallback do
+    sistema E DIZ que caiu — cotação de origem desconhecida induz decisão
+    errada (lição do custos_ti em 2026-08-02)."""
+    import requests
+    try:
+        r = requests.get("https://economia.awesomeapi.com.br/json/last/USD-BRL",
+                         timeout=8)
+        r.raise_for_status()
+        bid = float(r.json()["USDBRL"]["bid"])
+        return {"usd_brl": round(bid, 4), "fonte": "awesomeapi.com.br",
+                "ao_vivo": True}
+    except Exception as e:
+        log.warning("previsao: cotação awesomeapi falhou (%s) — usando fallback", e)
+        return {"usd_brl": USD_BRL_FALLBACK, "fonte": "padrão do sistema (cotação ao vivo indisponível)",
+                "ao_vivo": False}
+
+
+def _categorias_templates() -> dict:
+    """{nome_template: categoria Meta} via API /templates. Vazio se a API falhar."""
+    import requests
+    try:
+        r = requests.get(
+            f"{_os.getenv('WAPP_API_URL', 'https://whatsapp-api.camim.com.br')}/templates",
+            headers={"Authorization": f"Bearer {_os.getenv('WAPP_TOKEN', '')}"},
+            timeout=10,
+        )
+        r.raise_for_status()
+        return {t.get("name"): str(t.get("category") or "").upper()
+                for t in r.json().get("items", [])}
+    except Exception as e:
+        log.warning("previsao: não foi possível ler categorias dos templates: %s", e)
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +475,8 @@ def _simular(alvo: date) -> dict:
     eh_hoje = (delta == 0)
 
     engine._load_template_bodies()
+    cot = _cotacao_usd_brl()
+    categorias = _categorias_templates()
 
     todas = db.listar_campanhas()
     ativas = [c for c in todas if c.get("ativa")]
@@ -661,8 +714,19 @@ def _simular(alvo: date) -> dict:
                     _conta(camp, li)
 
         if camp["enviar_meta"] and camp["contagem"]["previstas"]:
-            camp["custo_estimado_meta"] = round(
-                camp["contagem"]["previstas"] * CUSTO_MSG_META, 2)
+            cat = categorias.get(c.get("template") or "")
+            preco = PRECO_META_USD.get(cat)
+            cat_txt = (cat or "").lower() or "?"
+            if preco is None:
+                # Sem categoria → assume o preço MAIOR (marketing): estimativa
+                # conservadora é melhor que custo subestimado.
+                preco = PRECO_META_USD["MARKETING"]
+                cat_txt = "categoria desconhecida, assumido marketing"
+            n = camp["contagem"]["previstas"]
+            camp["custo_estimado_meta"] = round(n * preco * cot["usd_brl"], 2)
+            camp["custo_detalhe"] = (
+                f"{n} msgs × US$ {preco:g} ({cat_txt}) × "
+                f"R$ {cot['usd_brl']:.4f}/US$ — {cot['fonte']}")
 
     # Erros de API do dia (nao_enviados com motivo erro%)
     err_por_camp: dict[int, list[dict]] = {}
@@ -681,6 +745,16 @@ def _simular(alvo: date) -> dict:
                 "por_que_entrou": "", "params": None,
             })
 
+    resultado["custo_info"] = {
+        "usd_brl": cot["usd_brl"],
+        "fonte": cot["fonte"],
+        "ao_vivo": cot["ao_vivo"],
+        "precos_usd": PRECO_META_USD,
+    }
+    if not cot["ao_vivo"]:
+        resultado["avisos"].append(
+            "Cotação do dólar ao vivo indisponível — o custo estimado usa o "
+            f"valor padrão do sistema (R$ {cot['usd_brl']:.2f}/US$).")
     resultado["campanhas"] = campanhas_out
     resultado["resumo"] = _totalizar(campanhas_out)
     return resultado
