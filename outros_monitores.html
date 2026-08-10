@@ -76,11 +76,17 @@
         <div class="card-header py-2 d-flex align-items-center flex-wrap" style="gap:10px">
           <b><i class="fas fa-user-plus text-primary mr-1"></i>Leads criados</b>
           <span id="ldGerado" class="text-muted" style="font-size:.8rem"></span>
-          <div class="ml-auto custom-control custom-switch" title="Receber e-mail de hora em hora com os leads criados (07h–22h)">
-            <input type="checkbox" class="custom-control-input" id="ldNotif">
-            <label class="custom-control-label" for="ldNotif" style="font-size:.85rem">
-              <i class="fas fa-bell mr-1"></i>Receber notificações por e-mail (de hora em hora)
-            </label>
+          <div class="ml-auto d-flex align-items-center" style="gap:8px">
+            <div class="custom-control custom-switch" title="Receber e-mail com os leads criados">
+              <input type="checkbox" class="custom-control-input" id="ldNotif">
+              <label class="custom-control-label" for="ldNotif" style="font-size:.85rem">
+                <i class="fas fa-bell mr-1"></i>Receber notificações por e-mail
+              </label>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" title="Preferências de notificação"
+                    data-toggle="modal" data-target="#ldCfgModal">
+              <i class="fas fa-cog"></i>
+            </button>
           </div>
         </div>
         <div class="card-body">
@@ -132,6 +138,77 @@
 
     </section>
   </div>
+</div>
+
+<!-- Modal: preferências de notificação (engrenagem) -->
+<div class="modal fade" id="ldCfgModal" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header py-2">
+      <h5 class="modal-title"><i class="fas fa-cog mr-2 text-muted"></i>Preferências de notificação — Leads</h5>
+      <button type="button" class="close" data-dismiss="modal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <b style="font-size:.85rem" class="text-muted text-uppercase">Quando enviar</b>
+      <div class="mt-1 mb-3">
+        <div class="custom-control custom-radio">
+          <input type="radio" name="cfgModo" id="cfgModoSempre" value="sempre" class="custom-control-input">
+          <label class="custom-control-label" for="cfgModoSempre">Sempre, de hora em hora (com ou sem leads criados)</label>
+        </div>
+        <div class="custom-control custom-radio">
+          <input type="radio" name="cfgModo" id="cfgModoSem" value="sem_lead" class="custom-control-input">
+          <label class="custom-control-label" for="cfgModoSem">Somente se <b>não</b> houver lead criado na hora (alerta de silêncio)</label>
+        </div>
+        <div class="custom-control custom-radio">
+          <input type="radio" name="cfgModo" id="cfgModoCom" value="com_lead" class="custom-control-input">
+          <label class="custom-control-label" for="cfgModoCom">Somente se houver lead criado na hora</label>
+        </div>
+      </div>
+
+      <b style="font-size:.85rem" class="text-muted text-uppercase">Dias</b>
+      <div class="mt-1 mb-3 d-flex flex-wrap" style="gap:16px">
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox" id="cfgDiaSegSex" value="seg_sex" class="custom-control-input cfg-dia">
+          <label class="custom-control-label" for="cfgDiaSegSex">Segunda a sexta</label>
+        </div>
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox" id="cfgDiaSab" value="sab" class="custom-control-input cfg-dia">
+          <label class="custom-control-label" for="cfgDiaSab">Sábado</label>
+        </div>
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox" id="cfgDiaDom" value="dom" class="custom-control-input cfg-dia">
+          <label class="custom-control-label" for="cfgDiaDom">Domingo</label>
+        </div>
+      </div>
+
+      <b style="font-size:.85rem" class="text-muted text-uppercase">Horário</b>
+      <div class="mt-1 mb-2 d-flex flex-wrap" style="gap:16px">
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox" id="cfgHor718" value="7_18" class="custom-control-input cfg-hor">
+          <label class="custom-control-label" for="cfgHor718">7h às 18h</label>
+        </div>
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox" id="cfgHor822" value="8_22" class="custom-control-input cfg-hor">
+          <label class="custom-control-label" for="cfgHor822">8h às 22h</label>
+        </div>
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox" id="cfgHor24" value="24h" class="custom-control-input cfg-hor">
+          <label class="custom-control-label" for="cfgHor24">24h</label>
+        </div>
+      </div>
+      <small class="text-muted d-block mb-1">
+        <i class="fas fa-info-circle mr-1"></i>Marcando mais de um horário vale a união
+        das faixas. Fora do horário nada é enviado — e o <b>primeiro e-mail</b> da
+        janela seguinte traz o resumo das horas não avisadas.
+      </small>
+      <div id="cfgErro" class="alert alert-danger py-1 mt-2" style="display:none;font-size:.85rem"></div>
+    </div>
+    <div class="modal-footer py-2">
+      <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="salvarCfg()">
+        <i class="fas fa-save mr-1"></i>Salvar preferências
+      </button>
+    </div>
+  </div></div>
 </div>
 
 <script>
@@ -197,23 +274,62 @@ async function carregarLeads() {
   });
 }
 
+let CFG_ATUAL = {modo: 'sempre', dias: ['seg_sex','sab','dom'], horarios: ['8_22']};
+
+function aplicarCfgNoModal() {
+  document.querySelectorAll('input[name="cfgModo"]').forEach(r =>
+    r.checked = (r.value === CFG_ATUAL.modo));
+  document.querySelectorAll('.cfg-dia').forEach(c =>
+    c.checked = (CFG_ATUAL.dias || []).includes(c.value));
+  document.querySelectorAll('.cfg-hor').forEach(c =>
+    c.checked = (CFG_ATUAL.horarios || []).includes(c.value));
+}
+
 async function carregarInscricao() {
   try {
     const r = await fetch('/api/monitores/inscricao?monitor=leads', {credentials:'same-origin'});
     const d = await r.json();
-    if (r.ok) document.getElementById('ldNotif').checked = !!d.inscrito;
+    if (r.ok) {
+      document.getElementById('ldNotif').checked = !!d.inscrito;
+      if (d.config) CFG_ATUAL = d.config;
+      aplicarCfgNoModal();
+    }
   } catch (e) {}
+}
+
+async function postInscricao(ativo, config) {
+  const r = await fetch('/api/monitores/inscricao', {
+    method: 'POST', credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({monitor: 'leads', ativo, config}),
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+async function salvarCfg() {
+  const erroEl = document.getElementById('cfgErro');
+  erroEl.style.display = 'none';
+  const modo = (document.querySelector('input[name="cfgModo"]:checked') || {}).value || 'sempre';
+  const dias = [...document.querySelectorAll('.cfg-dia:checked')].map(c => c.value);
+  const horarios = [...document.querySelectorAll('.cfg-hor:checked')].map(c => c.value);
+  if (!dias.length) { erroEl.textContent = 'Marque pelo menos um dia.'; erroEl.style.display=''; return; }
+  if (!horarios.length) { erroEl.textContent = 'Marque pelo menos um horário.'; erroEl.style.display=''; return; }
+  const cfg = {modo, dias, horarios};
+  try {
+    const d = await postInscricao(document.getElementById('ldNotif').checked, cfg);
+    CFG_ATUAL = d.config || cfg;
+    $('#ldCfgModal').modal('hide');
+  } catch (e) {
+    erroEl.textContent = 'Não consegui salvar: ' + e.message;
+    erroEl.style.display = '';
+  }
 }
 
 document.getElementById('ldNotif').addEventListener('change', async (ev) => {
   const ativo = ev.target.checked;
   try {
-    const r = await fetch('/api/monitores/inscricao', {
-      method: 'POST', credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({monitor: 'leads', ativo}),
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    await postInscricao(ativo, CFG_ATUAL);
   } catch (e) {
     ev.target.checked = !ativo;
     alert('Não consegui salvar a preferência: ' + e.message);

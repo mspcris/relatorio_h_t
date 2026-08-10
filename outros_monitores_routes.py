@@ -44,7 +44,28 @@ def _conn() -> sqlite3.Connection:
             atualizado_em  TEXT NOT NULL,
             PRIMARY KEY (email, monitor_key)
         )""")
+    # Migração leve: preferências da engrenagem (modo/dias/horários) em JSON.
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(monitor_notificacoes)")}
+    if "config" not in cols:
+        conn.execute("ALTER TABLE monitor_notificacoes ADD COLUMN config TEXT")
     return conn
+
+
+# Validação da config da engrenagem — o ETL confia no que está gravado.
+_MODOS = {"sempre", "sem_lead", "com_lead"}
+_DIAS = {"seg_sex", "sab", "dom"}
+_HORARIOS = {"7_18", "8_22", "24h"}
+
+
+def _valida_config(raw) -> dict | None:
+    if not isinstance(raw, dict):
+        return None
+    modo = raw.get("modo") if raw.get("modo") in _MODOS else "sempre"
+    dias = [d for d in (raw.get("dias") or []) if d in _DIAS]
+    horarios = [h for h in (raw.get("horarios") or []) if h in _HORARIOS]
+    return {"modo": modo,
+            "dias": dias or ["seg_sex", "sab", "dom"],
+            "horarios": horarios or ["8_22"]}
 
 
 @monitores_bp.get("/leads")
@@ -75,9 +96,17 @@ def inscricao_get():
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT ativo FROM monitor_notificacoes WHERE email=? AND monitor_key=?",
+            "SELECT ativo, config FROM monitor_notificacoes WHERE email=? AND monitor_key=?",
             (email, monitor)).fetchone()
-        return jsonify({"monitor": monitor, "inscrito": bool(row and row[0])})
+        cfg = None
+        if row and row[1]:
+            import json as _j
+            try:
+                cfg = _valida_config(_j.loads(row[1]))
+            except Exception:
+                cfg = None
+        return jsonify({"monitor": monitor, "inscrito": bool(row and row[0]),
+                        "config": cfg or _valida_config({})})
     finally:
         conn.close()
 
@@ -93,15 +122,27 @@ def inscricao_post():
     if monitor not in MONITORES_VALIDOS:
         return jsonify({"error": "monitor inválido"}), 400
     now = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+    import json as _j
+    cfg = _valida_config(data.get("config")) if data.get("config") is not None else None
     conn = _conn()
     try:
-        conn.execute(
-            """INSERT INTO monitor_notificacoes (email, monitor_key, ativo, atualizado_em)
-               VALUES (?,?,?,?)
-               ON CONFLICT(email, monitor_key) DO UPDATE SET
-                 ativo=excluded.ativo, atualizado_em=excluded.atualizado_em""",
-            (email, monitor, ativo, now))
+        if cfg is not None:
+            conn.execute(
+                """INSERT INTO monitor_notificacoes (email, monitor_key, ativo, atualizado_em, config)
+                   VALUES (?,?,?,?,?)
+                   ON CONFLICT(email, monitor_key) DO UPDATE SET
+                     ativo=excluded.ativo, atualizado_em=excluded.atualizado_em,
+                     config=excluded.config""",
+                (email, monitor, ativo, now, _j.dumps(cfg, ensure_ascii=False)))
+        else:
+            conn.execute(
+                """INSERT INTO monitor_notificacoes (email, monitor_key, ativo, atualizado_em)
+                   VALUES (?,?,?,?)
+                   ON CONFLICT(email, monitor_key) DO UPDATE SET
+                     ativo=excluded.ativo, atualizado_em=excluded.atualizado_em""",
+                (email, monitor, ativo, now))
         conn.commit()
-        return jsonify({"ok": True, "monitor": monitor, "inscrito": bool(ativo)})
+        return jsonify({"ok": True, "monitor": monitor, "inscrito": bool(ativo),
+                        "config": cfg})
     finally:
         conn.close()
