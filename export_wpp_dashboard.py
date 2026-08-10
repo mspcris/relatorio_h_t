@@ -168,9 +168,14 @@ def ler_envios_meta() -> pd.DataFrame:
     df["idreceita"]  = df["idreceita"].fillna("").astype(str).str.strip()
     df["modo_envio"] = df["modo_envio"].fillna("atraso").str.strip().str.lower()
     df["dias_atraso"] = pd.to_numeric(df["dias_atraso"], errors="coerce").fillna(0).astype(int)
-    # pd.to_datetime garante coluna datetimelike (.dt funciona). apply(parse_dt)
-    # produzia série de datetime puro, que quebra em pandas modernos.
-    df["enviado_em_dt"] = pd.to_datetime(df["enviado_em"], errors="coerce")
+    # enviado_em tem DOIS formatos na base: ISO com offset ('…-03:00', cron de
+    # cobrança) e ISO naive ('…T08:41:05', caminho do falta_medico). Os dois
+    # são horário LOCAL da VM. pd.to_datetime em coluna mista aware/naive
+    # coerceia os naive pra NaT e o dropna descartava TODO envio pós-26/05
+    # (a série diária congelava em 26/05 mesmo com o export rodando). Corta no
+    # segundo (19 chars) e parseia uniforme como local naive.
+    df["enviado_em_dt"] = pd.to_datetime(
+        df["enviado_em"].astype(str).str.slice(0, 19), errors="coerce")
     df = df.dropna(subset=["enviado_em_dt"])
     df["enviado_data"] = df["enviado_em_dt"].dt.date
 
