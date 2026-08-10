@@ -22,11 +22,27 @@
   };
 
   // ── Lista canônica — única fonte de verdade ──────────────────────────
+  // Padronizada em 2026-08-10 a pedido do Cristiano: TODA página do
+  // kpi.camim.com.br mostra ESTE menu, idêntico. O bloco-base (Buscar →
+  // Mais Serviços) SEMPRE aparece; depois vêm as seções Indicadores e
+  // WhatsApp, também idênticas em toda parte. Para mudar o menu do site,
+  // mude AQUI — nunca no HTML de uma página individual (o HTML local é só
+  // fallback sem-JS e é substituído por este script em runtime).
   var MENU = [
-    { href: '/index.html',                         icon: 'fa-home',                    label: 'Home' },
-    { href: '/monitorarrobos.html',                 icon: 'fa-tachometer-alt',          label: 'Monitorar Robôs' },
-    { href: '/kpi_home.html',                      icon: 'fa-book-open',               label: 'Leia-me' },
+    { href: '/index.html',            icon: 'fa-search',         label: 'Buscar' },
+    { href: 'https://avisos.camim.com.br/avisos', icon: 'fa-bell', label: 'Monitor de Avisos',
+      external: true, style: 'border-left:3px solid #e74c3c', iconStyle: 'color:#e74c3c' },
+    { href: '/monitorarrobos.html',   icon: 'fa-bell',           label: 'Monitor de Robôs',
+      style: 'border-left:3px solid #f1c40f', iconStyle: 'color:#f1c40f' },
+    { href: '/outros_monitores.html', icon: 'fa-satellite-dish', label: 'Outros Monitores',
+      style: 'border-left:3px solid #3498db', iconStyle: 'color:#3498db' },
+    { href: '/central_problemas.html', icon: 'fa-clipboard-list', label: 'Central de Problemas',
+      style: 'border-left:3px solid #e67e22', iconStyle: 'color:#e67e22' },
+    { href: '/leiame',                icon: 'fa-th',             label: 'Painel Antigo' },
+    { href: '/kpi_home.html',         icon: 'fa-book-open',      label: "KPI's" },
+    { href: '/mais_servicos',         icon: 'fa-th-large',       label: 'Mais Serviços' },
     { type: 'sep' },
+    { type: 'header', label: 'Indicadores' },
     { href: '/kpi_v2.html',                        icon: 'fa-chart-line',              label: 'KPI Mensalidades' },
     { href: '/kpi_alimentacao.html',               icon: 'fa-utensils',                label: 'KPI Custo Alimentação' },
     { href: '/kpi_medicos.html',                   icon: 'fa-notes-medical',           label: 'KPI Custo Médico' },
@@ -44,7 +60,13 @@
     { href: '/kpi_receita_despesa_rateio.html',    icon: 'fa-balance-scale',           label: 'KPI R x D com Rateio' },
     { href: '/growth.html',                        icon: 'fa-rocket',                  label: 'Growth Dashboard' },
     { href: '/kpi_egide.html',                     iconSvg: 'egide',                   label: 'KPI Égide Saúde' },
-    { href: '/mais_servicos.html',                 icon: 'fa-th-large',                label: 'Mais Serviços' },
+    { type: 'sep' },
+    { type: 'header', label: 'WhatsApp' },
+    { href: '/wpp',           icon: 'fa-comments',        label: 'Campanhas' },
+    { href: '/wpp/previsao',  icon: 'fa-clipboard-check', label: 'Controle de Disparos' },
+    { href: '/alarmes',       icon: 'fa-bell',            label: 'Configurar Alertas' },
+    { href: '/wpp/templates', icon: 'fa-file-alt',        label: 'Templates' },
+    { href: '/wpp/dashboard', icon: 'fa-chart-line',      label: 'Dashboard WPP' },
     { type: 'sep' },
     { href: '/admin', icon: 'fa-users-cog', label: 'Admin', adminOnly: true,
       style: 'border-left:3px solid #f39c12', iconStyle: 'color:#f39c12' },
@@ -71,6 +93,11 @@
         if (i.type === 'sep') {
           return '<li style="border-top:1px solid rgba(255,255,255,0.1);margin:5px 14px;padding:0;height:0;list-style:none;pointer-events:none"></li>';
         }
+        if (i.type === 'header') {
+          return '<li style="padding:6px 16px 2px;font-size:.72rem;font-weight:700;'
+            + 'text-transform:uppercase;color:rgba(255,255,255,.4);list-style:none;'
+            + 'pointer-events:none">' + i.label + '</li>';
+        }
         if (i.type === 'logout') {
           return '<li class="nav-item">'
             + '<form method="POST" action="/session/logout" style="display:inline;width:100%">'
@@ -87,8 +114,9 @@
         } else {
           iconHTML = '<i class="nav-icon fas ' + i.icon + '"' + icoStyle + '></i>';
         }
+        var extra = i.external ? ' target="_blank" rel="noopener"' : '';
         return '<li class="nav-item">'
-          + '<a href="' + i.href + '" class="nav-link' + active + '"' + liStyle + '>'
+          + '<a href="' + i.href + '" class="nav-link' + active + '"' + liStyle + extra + '>'
           + iconHTML
           + '<p>' + i.label + '</p>'
           + '</a></li>';

@@ -1,4 +1,8 @@
 (function () {
+  // Quando a página carrega o menu canônico (js/menu.js), este script vira
+  // no-op: injetar itens por cima do canônico quebrava a padronização
+  // (aparecia "Indicadores"/"Home" duplicados fora de ordem). 2026-08-10.
+  if (document.querySelector('script[src*="/js/menu.js"]')) return;
   const path = (location.pathname || '').toLowerCase();
   if (path === '/' || path === '/index.html') return;
 
