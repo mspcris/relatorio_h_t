@@ -969,6 +969,24 @@ do SQLite. Jamais chamar `enviar*`/`registrar_*` de dentro dele.
 - Rodada do robô = `*/15 min` (`sync_wpp.sh` no cron) — é daí que sai o "que
   horas vai". Se o agendamento mudar, atualizar `RODADA_MIN`.
 
+### Robô-fiscal TEMPORÁRIO — `monitor_previsao_wpp.py` (2026-08-10 → 2026-08-17)
+
+**TEMPORÁRIO por pedido do Cristiano: roda NO MÁXIMO 1 semana.** Criado após o
+incidente do fd leak (Py3.14 não fecha conexão sqlite no GC; o cron de
+cobrança morreu no meio da rodada por DIAS sem ninguém perceber).
+
+- Cron: `/etc/cron.d/monitor-previsao-wpp` — hora em hora 08h–20h, usuário
+  www-data (para os arquivos de estado da previsão continuarem graváveis pela
+  página). Log: `/var/log/relatorio_h_t/monitor_previsao_wpp.log`.
+- A cada hora: refaz a análise de hoje (mantém `/wpp/previsao` fresca),
+  compara enviadas com a hora anterior e manda e-mail para o Cristiano com o
+  quadro por campanha + link da página. Previstas paradas / traceback no log
+  do cron / erro de API / posto fora ⇒ assunto vira `[ALERTA]` com tail do
+  log do cron no corpo.
+- **Expira sozinho** (`EXPIRA_EM = 2026-08-17`): depois disso o script loga
+  "EXPIRADO" e sai. Limpeza definitiva: `rm /etc/cron.d/monitor-previsao-wpp`
+  e apagar os dois arquivos `monitor_previsao_wpp.*` do repo.
+
 ---
 
 ## Regras de desenvolvimento
