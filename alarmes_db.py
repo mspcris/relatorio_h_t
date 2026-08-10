@@ -24,6 +24,10 @@ SERVICOS = {
     'email': 'Boleto (Email)',
     'tef':   'TEF Recorrente',
     'wpp':   'WhatsApp Cobrança',
+    # Pior campanha ATIVA do posto (staleness por campanha×posto). Detecta o
+    # padrão do incidente jun-ago/2026: campanha 1 enviando (posto "saudável")
+    # e as demais mudas há semanas. Status em disparar_alarmes.status_wpp_campanha.
+    'wpp_campanha': 'WhatsApp — pior campanha do posto',
 }
 STATUS_ORDER = {'otimo': 6, 'bom': 5, 'ok': 4, 'ruim': 3, 'pessimo': 2, 'horrivel': 1}
 STATUS_LABELS = {
@@ -35,8 +39,20 @@ DIAS_SEMANA_NOMES = {
 }
 
 
+class _AutoCloseConn(sqlite3.Connection):
+    """Fecha a conexão no fim do bloco `with` (além do commit/rollback).
+    Py3.14 não fecha conexão sqlite abandonada no GC — mesmo fd leak que
+    derrubou o cron de cobrança em 2026-08-10 (ver CLAUDE.md). Os helpers
+    deste módulo rodam no worker de vida longa do camim-auth."""
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            return super().__exit__(exc_type, exc_val, exc_tb)
+        finally:
+            self.close()
+
+
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, factory=_AutoCloseConn)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -135,6 +151,28 @@ def init_db():
                 motivo        TEXT,
                 ativo         INTEGER DEFAULT 1
             );
+
+            -- Ciência de notificação: 1 linha por destinatário de cada
+            -- disparo, com token único p/ o link público /ciencia/<token>.
+            -- Registro de envio E de ciência da Central de Notificação de
+            -- Problemas (2026-08-10).
+            CREATE TABLE IF NOT EXISTS ciencia (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                disparo_id    INTEGER REFERENCES disparo(id),
+                alarme_id     INTEGER NOT NULL REFERENCES alarme(id),
+                token         TEXT NOT NULL UNIQUE,
+                dest_tipo     TEXT NOT NULL,          -- gerente|extra|auditor|diretor
+                dest_nome     TEXT,
+                dest_email    TEXT,
+                dest_telefone TEXT,
+                canal         TEXT NOT NULL,          -- wpp|email
+                criado_em     DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ciente_em     DATETIME,
+                ciente_ip     TEXT,
+                ciente_agente TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_ciencia_token   ON ciencia(token);
+            CREATE INDEX IF NOT EXISTS idx_ciencia_disparo ON ciencia(disparo_id);
 
             CREATE TABLE IF NOT EXISTS auditoria_alarme (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -443,13 +481,95 @@ def listar_silenciamentos(alarme_id=None, apenas_ativos=True):
 # ── Disparo ───────────────────────────────────────────────────────────────────
 
 def registrar_disparo(alarme_id, numero_ciclo, status_registrado, wpp_ok, email_ok, detalhes):
+    """Retorna o id do disparo (para amarrar as ciências dos destinatários)."""
     with get_conn() as conn:
-        conn.execute("""
+        cur = conn.execute("""
             INSERT INTO disparo (alarme_id, numero_ciclo, status_registrado,
                 enviado_wpp_gerente, enviado_email_gerente, detalhes)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (alarme_id, numero_ciclo, status_registrado, int(wpp_ok), int(email_ok),
               json.dumps(detalhes, ensure_ascii=False) if detalhes else None))
+        return cur.lastrowid
+
+
+def atualizar_disparo(disparo_id, wpp_ok, email_ok, detalhes):
+    """Completa o disparo pré-registrado depois que os envios aconteceram."""
+    with get_conn() as conn:
+        conn.execute("""
+            UPDATE disparo SET enviado_wpp_gerente=?, enviado_email_gerente=?, detalhes=?
+            WHERE id=?
+        """, (int(wpp_ok), int(email_ok),
+              json.dumps(detalhes, ensure_ascii=False) if detalhes else None,
+              disparo_id))
+
+
+# ── Ciência (Central de Notificação de Problemas) ────────────────────────────
+
+def criar_ciencia(disparo_id, alarme_id, dest_tipo, dest_nome,
+                  dest_email, dest_telefone, canal):
+    """Cria o registro de ciência de UM destinatário e devolve o token do
+    link público /ciencia/<token>."""
+    import uuid
+    token = uuid.uuid4().hex
+    with get_conn() as conn:
+        conn.execute("""
+            INSERT INTO ciencia (disparo_id, alarme_id, token, dest_tipo,
+                dest_nome, dest_email, dest_telefone, canal)
+            VALUES (?,?,?,?,?,?,?,?)
+        """, (disparo_id, alarme_id, token, dest_tipo,
+              dest_nome, dest_email, dest_telefone, canal))
+    return token
+
+
+def get_ciencia(token):
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT c.*, a.nome AS alarme_nome, a.posto, a.servico,
+                   d.disparado_em, d.status_registrado
+            FROM ciencia c
+            JOIN alarme a ON a.id = c.alarme_id
+            LEFT JOIN disparo d ON d.id = c.disparo_id
+            WHERE c.token=?
+        """, (token,)).fetchone()
+    return dict(row) if row else None
+
+
+def marcar_ciencia(token, ip=None, agente=None):
+    """Marca a ciência (idempotente: só grava a PRIMEIRA confirmação).
+    Retorna o registro atualizado ou None se o token não existe."""
+    with get_conn() as conn:
+        conn.execute("""
+            UPDATE ciencia SET ciente_em=CURRENT_TIMESTAMP, ciente_ip=?, ciente_agente=?
+            WHERE token=? AND ciente_em IS NULL
+        """, (ip, (agente or "")[:200], token))
+    return get_ciencia(token)
+
+
+def listar_central(limite=300):
+    """Central de Notificação de Problemas: cada disparo com seus envios e o
+    estado de ciência de cada destinatário."""
+    with get_conn() as conn:
+        disparos = conn.execute("""
+            SELECT d.id, d.disparado_em, d.numero_ciclo, d.status_registrado,
+                   d.detalhes, a.nome AS alarme_nome, a.posto, a.servico
+            FROM disparo d JOIN alarme a ON a.id = d.alarme_id
+            ORDER BY d.disparado_em DESC LIMIT ?
+        """, (limite,)).fetchall()
+        out = []
+        for d in disparos:
+            item = dict(d)
+            try:
+                item["detalhes"] = json.loads(item.get("detalhes") or "{}")
+            except Exception:
+                item["detalhes"] = {}
+            cien = conn.execute("""
+                SELECT dest_tipo, dest_nome, dest_email, dest_telefone, canal,
+                       ciente_em, criado_em
+                FROM ciencia WHERE disparo_id=? ORDER BY id
+            """, (d["id"],)).fetchall()
+            item["ciencias"] = [dict(c) for c in cien]
+            out.append(item)
+    return out
 
 
 def get_numero_ciclo(alarme_id):

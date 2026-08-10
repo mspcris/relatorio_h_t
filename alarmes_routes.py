@@ -427,3 +427,100 @@ def api_resumo():
     db.init_db()
     resumo = db.alarmes_ativos_por_posto_servico(postos=postos if not is_admin else None)
     return jsonify({'ok': True, 'resumo': resumo})
+
+
+# ── Central de Notificação de Problemas (2026-08-10) ─────────────────────────
+
+@alarmes_bp.get('/api/central')
+def api_central():
+    """Registro de cada notificação enviada + estado de ciência por
+    destinatário — alimenta a página central_problemas.html."""
+    email, is_admin, postos, err, code = _require_auth()
+    if err:
+        return err, code
+    db.init_db()
+    return jsonify({'ok': True, 'itens': db.listar_central(limite=300),
+                    'servicos': db.SERVICOS, 'status_labels': db.STATUS_LABELS})
+
+
+# ── Ciência pública por token (link enviado no zap/e-mail) ───────────────────
+# Blueprint SEPARADO e SEM auth: o gestor clica do WhatsApp sem ter conta no
+# KPI. O token (uuid4 hex) é a credencial — identifica destinatário+disparo.
+# nginx: location ^~ /ciencia/ SEM auth_request (nginx/teste-ia.conf).
+
+from flask import Blueprint as _Blueprint
+
+ciencia_bp = _Blueprint('ciencia', __name__, url_prefix='/ciencia')
+
+_CIENCIA_PAGE = """<!doctype html><html lang="pt-br"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ciência de Problema — CAMIM</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+</head><body style="background:#f4f6f9">
+<div class="container" style="max-width:560px;margin-top:40px">
+  <div class="card shadow"><div class="card-body p-4">
+    <h5 class="mb-3">⚠️ Notificação de problema — CAMIM</h5>
+    <table class="table table-sm">
+      <tr><th>Alerta</th><td>{alarme_nome}</td></tr>
+      <tr><th>Posto</th><td>{posto}</td></tr>
+      <tr><th>Serviço</th><td>{servico}</td></tr>
+      <tr><th>Status</th><td><b>{status}</b></td></tr>
+      <tr><th>Enviado em</th><td>{quando}</td></tr>
+      <tr><th>Destinatário</th><td>{dest}</td></tr>
+    </table>
+    {miolo}
+  </div></div>
+  <p class="text-muted text-center mt-3" style="font-size:.8rem">
+    Central de Notificação de Problemas — CAMIM</p>
+</div></body></html>"""
+
+
+def _render_ciencia(c, miolo):
+    return _CIENCIA_PAGE.format(
+        alarme_nome=c.get('alarme_nome') or '?',
+        posto=c.get('posto') or '?',
+        servico=db.SERVICOS.get(c.get('servico'), c.get('servico') or '?'),
+        status=db.STATUS_LABELS.get(c.get('status_registrado'),
+                                    c.get('status_registrado') or '?'),
+        quando=(c.get('disparado_em') or c.get('criado_em') or '?'),
+        dest=(c.get('dest_nome') or c.get('dest_email')
+              or c.get('dest_telefone') or '?'),
+        miolo=miolo,
+    )
+
+
+@ciencia_bp.get('/<token>')
+def ciencia_ver(token):
+    c = db.get_ciencia(token)
+    if not c:
+        return ('<h3 style="font-family:sans-serif;text-align:center;margin-top:60px">'
+                'Link inválido ou expirado.</h3>'), 404
+    if c.get('ciente_em'):
+        miolo = (f'<div class="alert alert-success">✅ Ciência já registrada em '
+                 f'<b>{c["ciente_em"]}</b>. Obrigado!</div>')
+    else:
+        miolo = (f'<form method="POST" action="/ciencia/{token}/confirmar">'
+                 f'<button type="submit" class="btn btn-success btn-lg btn-block">'
+                 f'✅ Estou ciente deste problema</button></form>'
+                 f'<p class="text-muted mt-2" style="font-size:.85rem">Ao confirmar, '
+                 f'fica registrado dia e hora da sua ciência na Central de '
+                 f'Notificação de Problemas.</p>')
+    return _render_ciencia(c, miolo)
+
+
+@ciencia_bp.post('/<token>/confirmar')
+def ciencia_confirmar(token):
+    ip = (request.headers.get('X-Real-IP')
+          or request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+          or request.remote_addr)
+    c = db.marcar_ciencia(token, ip=ip,
+                          agente=request.headers.get('User-Agent'))
+    if not c:
+        return ('<h3 style="font-family:sans-serif;text-align:center;margin-top:60px">'
+                'Link inválido.</h3>'), 404
+    db.registrar_auditoria(c.get('dest_email') or c.get('dest_telefone') or 'ciencia',
+                           'CIENCIA', 'ciencia', c.get('id'),
+                           {'token': token, 'ip': ip})
+    miolo = (f'<div class="alert alert-success">✅ Ciência registrada em '
+             f'<b>{c["ciente_em"]}</b>. Obrigado!</div>')
+    return _render_ciencia(c, miolo)

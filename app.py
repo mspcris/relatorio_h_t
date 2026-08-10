@@ -99,6 +99,16 @@ except Exception as _e:
     logging.getLogger(__name__).error("monitores_bp não carregado: %s", _e)
 
 try:
+    # Ciência pública por token (Central de Notificação de Problemas).
+    # SEM auth de propósito — o gestor clica do WhatsApp sem conta no KPI;
+    # o token uuid é a credencial. nginx expõe /ciencia/ sem auth_request.
+    from alarmes_routes import ciencia_bp
+    app.register_blueprint(ciencia_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("ciencia_bp não carregado: %s", _e)
+
+try:
     from api_vg_indicadores import vg_indicadores_bp
     app.register_blueprint(vg_indicadores_bp)
 except Exception as _e:

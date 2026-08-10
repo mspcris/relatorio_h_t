@@ -1011,6 +1011,30 @@ Página para monitores de serviços específicos. Primeiro: **Leads criados**.
   queries custam ~0,5s. Se o volume crescer, criar o índice antes de apertar a
   frequência.
 
+## Central de Notificação de Problemas + Ciência (2026-08-10)
+
+Nasceu do incidente das campanhas 59 dias mudas: o painel Monitorar Robôs
+mostrava "Horrível" o tempo todo e **zero alarmes estavam configurados** — o
+sinal existia, ninguém era avisado. Agora o alarme notifica E cobra ciência.
+
+| Peça | Onde |
+|---|---|
+| Registro de ciência (1 token por destinatário×canal) | tabela `ciencia` no `alarmes.db` (`alarmes_db.py`) |
+| Link de ciência anexado a CADA zap/e-mail de alarme | `disparar_alarmes.disparar()` (pré-registra o disparo p/ amarrar tokens) |
+| Página pública de confirmação | `/ciencia/<token>` (`ciencia_bp` em `alarmes_routes.py`) — **sem login de propósito**: gestor clica do WhatsApp; o token uuid é a credencial; nginx expõe `location ^~ /ciencia/` sem auth_request |
+| Central (registro de envio + ciência) | `central_problemas.html` + `GET /alarmes/api/central` — menu "Central de Problemas" |
+| Serviço novo `wpp_campanha` | `status_wpp_campanha()` em `disparar_alarmes.py`: PIOR campanha ativa do posto. Detecta o padrão do incidente (campanha 1 enviando, resto mudo — o `wpp` posto-level não pega) |
+| Seed dos alarmes de Horrível | `seed_alarmes_horrivel.py` (idempotente, `--dry-run`): 1 alarme `wpp_campanha`/horrível por posto COM gerente, diário 08:30, e-mail+zap, diretor Cristiano associado |
+
+- O zap dos alarmes sai pela **Evolution API** (texto livre, custo zero) — não
+  é o canal Meta pago das campanhas.
+- `alarmes_db.get_conn` ganhou o mesmo `_AutoCloseConn` do wpp (fd leak Py3.14)
+  — os helpers rodam no worker de vida longa do camim-auth.
+- Segunda confirmação de ciência NÃO sobrescreve a primeira (fica o registro
+  original de quem/quando/IP).
+- `disparar_alarmes` roda a cada minuto pelo cron e dispara 1×/dia no minuto
+  exato de `hora_disparo` — o reenvio diário até resolver é isso.
+
 ## camim-auth — worker único agora tem THREADS (2026-08-10)
 
 `ExecStart` ganhou `--workers 1 --worker-class gthread --threads 8`. Motivo:

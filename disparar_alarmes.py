@@ -151,8 +151,52 @@ def status_wpp(posto):
         return 'horrivel'
 
 
+def status_wpp_campanha(posto):
+    """Pior campanha ATIVA de cobrança que inclui o posto — staleness do
+    último envio accepted DAQUELA campanha NAQUELE posto.
+
+    Diferença para status_wpp (que olha o último envio do posto em QUALQUER
+    campanha): pega o padrão do incidente de jun-ago/2026, quando a campanha
+    1 enviava todo dia (posto parecia saudável) e as demais ficaram 59 dias
+    mudas. Campanha falta_medico fica fora (dispara via API, não pelo cron).
+    Posto fora de toda campanha ativa → 'otimo' (não há o que cobrar)."""
+    wpp_db = os.getenv('WAPP_CTRL_DB', '/opt/camim-auth/whatsapp_cobranca.db')
+    try:
+        conn = sqlite3.connect(f'file:{wpp_db}?mode=ro', uri=True)
+        try:
+            camps = conn.execute(
+                "SELECT id, postos, modo_envio FROM campanhas WHERE ativa=1"
+            ).fetchall()
+            pior = None
+            for cid, postos_json, modo in camps:
+                if (modo or '').strip().lower() == 'falta_medico':
+                    continue
+                try:
+                    postos_c = json.loads(postos_json or '[]')
+                except Exception:
+                    postos_c = []
+                if posto not in postos_c:
+                    continue
+                row = conn.execute(
+                    "SELECT MAX(enviado_em) FROM envios "
+                    "WHERE campanha_id=? AND posto=? AND status LIKE 'accepted%'",
+                    (cid, posto)).fetchone()
+                dias = _ultimo_para_dias(row[0] if row else None)
+                dias = 999 if dias is None else dias
+                pior = dias if pior is None else max(pior, dias)
+        finally:
+            conn.close()
+        if pior is None:
+            return 'otimo'
+        return _dias_para_status(pior)
+    except Exception as e:
+        log.warning('status_wpp_campanha(%s): %s', posto, e)
+        return 'horrivel'
+
+
 def get_status(servico, posto):
-    fn = {'push': status_push, 'email': status_email, 'tef': status_tef, 'wpp': status_wpp}
+    fn = {'push': status_push, 'email': status_email, 'tef': status_tef,
+          'wpp': status_wpp, 'wpp_campanha': status_wpp_campanha}
     return fn.get(servico, lambda p: 'horrivel')(posto)
 
 
@@ -332,6 +376,25 @@ def disparar(alarme):
     wpp_ger_ok   = False
     email_ger_ok = False
 
+    # Pré-registra o disparo para amarrar as ciências (1 token por
+    # destinatário×canal). Central de Notificação de Problemas, 2026-08-10.
+    disparo_id = adb.registrar_disparo(alarme['id'], numero_ciclo, status_atual,
+                                       False, False, {'status': 'enviando'})
+
+    def _ciencia_wpp(dest_tipo, nome, email_d, tel):
+        tok = adb.criar_ciencia(disparo_id, alarme['id'], dest_tipo, nome,
+                                email_d, tel, 'wpp')
+        return (f"\n\n✅ *Confirme que está ciente deste problema:*\n"
+                f"{APP_URL}/ciencia/{tok}")
+
+    def _ciencia_email(dest_tipo, nome, email_d, tel):
+        tok = adb.criar_ciencia(disparo_id, alarme['id'], dest_tipo, nome,
+                                email_d, tel, 'email')
+        return (f'<p style="margin:18px 0"><a href="{APP_URL}/ciencia/{tok}" '
+                f'style="background:#28a745;color:#fff;padding:10px 18px;'
+                f'border-radius:6px;text-decoration:none;font-weight:bold">'
+                f'✅ Confirmar ciência do problema</a></p>')
+
     # ─ Gerente do posto (banco, não removível)
     gerente = adb.get_gerente(posto)
     if gerente:
@@ -340,25 +403,35 @@ def disparar(alarme):
             canal = 'wpp'
         elif alarme['via_email'] and not alarme['via_whatsapp']:
             canal = 'email'
+        nome_ger = f"Gerente posto {posto}"
         if alarme['via_whatsapp'] and gerente.get('telefone'):
-            ok, msg = enviar_wpp(gerente['telefone'], texto_wpp_base)
+            ok, msg = enviar_wpp(gerente['telefone'], texto_wpp_base +
+                                 _ciencia_wpp('gerente', nome_ger,
+                                              gerente.get('email'), gerente.get('telefone')))
             if ok:
                 wpp_ger_ok = True
             detalhes['envios'].append({'tipo': 'wpp', 'para': 'gerente', 'ok': ok, 'msg': msg})
         if alarme['via_email'] and gerente.get('email'):
-            ok, msg = enviar_email(gerente['email'], assunto, corpo_email_html)
+            ok, msg = enviar_email(gerente['email'], assunto, corpo_email_html +
+                                   _ciencia_email('gerente', nome_ger,
+                                                  gerente.get('email'), gerente.get('telefone')))
             if ok:
                 email_ger_ok = True
             detalhes['envios'].append({'tipo': 'email', 'para': 'gerente', 'ok': ok, 'msg': msg})
 
     # ─ Gerentes extras
     for extra in (alarme.get('extras') or []):
+        nome_ex = extra.get('nome') or f"extra:{extra['id']}"
         if extra.get('via_whatsapp') and extra.get('telefone') and alarme['via_whatsapp']:
             ok, msg = enviar_wpp(extra['telefone'],
-                                 f"[EXTRA] {texto_wpp_base}")
+                                 f"[EXTRA] {texto_wpp_base}" +
+                                 _ciencia_wpp('extra', nome_ex,
+                                              extra.get('email'), extra.get('telefone')))
             detalhes['envios'].append({'tipo': 'wpp', 'para': f'extra:{extra["id"]}', 'ok': ok})
         if extra.get('via_email') and extra.get('email') and alarme['via_email']:
-            ok, msg = enviar_email(extra['email'], assunto, corpo_email_html)
+            ok, msg = enviar_email(extra['email'], assunto, corpo_email_html +
+                                   _ciencia_email('extra', nome_ex,
+                                                  extra.get('email'), extra.get('telefone')))
             detalhes['envios'].append({'tipo': 'email', 'para': f'extra:{extra["id"]}', 'ok': ok})
 
     # ─ Auditores (ciclo 1 = prefs deles; ciclo 2+ = ambos os canais)
@@ -372,12 +445,17 @@ def disparar(alarme):
         else:
             send_wpp   = True
             send_email = True
+        nome_aud = aud.get('nome') or f"auditor:{aid}"
         if send_wpp and aud.get('telefone'):
             ok, msg = enviar_wpp(aud['telefone'],
-                                 f"[AUDITORIA] {texto_wpp_base}")
+                                 f"[AUDITORIA] {texto_wpp_base}" +
+                                 _ciencia_wpp('auditor', nome_aud,
+                                              aud.get('email'), aud.get('telefone')))
             detalhes['envios'].append({'tipo': 'wpp', 'para': f'auditor:{aid}', 'ok': ok})
         if send_email and aud.get('email'):
-            ok, msg = enviar_email(aud['email'], f"[AUDITORIA] {assunto}", corpo_email_html)
+            ok, msg = enviar_email(aud['email'], f"[AUDITORIA] {assunto}", corpo_email_html +
+                                   _ciencia_email('auditor', nome_aud,
+                                                  aud.get('email'), aud.get('telefone')))
             detalhes['envios'].append({'tipo': 'email', 'para': f'auditor:{aid}', 'ok': ok})
 
     # ─ Diretores (mesma lógica de ciclos)
@@ -391,16 +469,20 @@ def disparar(alarme):
         else:
             send_wpp   = True
             send_email = True
+        nome_dir = dire.get('nome') or f"diretor:{did}"
         if send_wpp and dire.get('telefone'):
             ok, msg = enviar_wpp(dire['telefone'],
-                                 f"[DIRETORIA] {texto_wpp_base}")
+                                 f"[DIRETORIA] {texto_wpp_base}" +
+                                 _ciencia_wpp('diretor', nome_dir,
+                                              dire.get('email'), dire.get('telefone')))
             detalhes['envios'].append({'tipo': 'wpp', 'para': f'diretor:{did}', 'ok': ok})
         if send_email and dire.get('email'):
-            ok, msg = enviar_email(dire['email'], f"[DIRETORIA] {assunto}", corpo_email_html)
+            ok, msg = enviar_email(dire['email'], f"[DIRETORIA] {assunto}", corpo_email_html +
+                                   _ciencia_email('diretor', nome_dir,
+                                                  dire.get('email'), dire.get('telefone')))
             detalhes['envios'].append({'tipo': 'email', 'para': f'diretor:{did}', 'ok': ok})
 
-    adb.registrar_disparo(alarme['id'], numero_ciclo, status_atual,
-                          wpp_ger_ok, email_ger_ok, detalhes)
+    adb.atualizar_disparo(disparo_id, wpp_ger_ok, email_ger_ok, detalhes)
     adb.registrar_auditoria(None, 'DISPARO', 'alarme', alarme['id'], detalhes)
     log.info('Alarme %d "%s" disparado: status=%s ciclo=%d envios=%d',
              alarme['id'], alarme['nome'], status_atual, numero_ciclo, len(detalhes['envios']))
