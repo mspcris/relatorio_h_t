@@ -153,7 +153,15 @@ MOTIVOS_LEGENDA = {
 import fcntl
 import json as _json
 
-_STATE_DIR = os.path.dirname(db.DB_PATH)
+# Subdiretório próprio: /opt/camim-auth é do usuário `deploy`, mas os
+# serviços rodam como www-data e precisam CRIAR arquivos aqui. O dir é
+# criado no deploy (ou à mão) como www-data:www-data 775; o makedirs abaixo
+# só cobre ambiente de dev/teste — em produção ele já existe.
+_STATE_DIR = os.path.join(os.path.dirname(db.DB_PATH), "wpp_previsao_state")
+try:
+    os.makedirs(_STATE_DIR, exist_ok=True)
+except OSError:
+    pass
 _STATUS_PATH = os.path.join(_STATE_DIR, "wpp_previsao_status.json")
 _RESULT_PATH = os.path.join(_STATE_DIR, "wpp_previsao_resultado.json")
 _LOCK_PATH = os.path.join(_STATE_DIR, "wpp_previsao.lock")
@@ -222,7 +230,11 @@ def iniciar(data_iso: str) -> tuple[bool, str]:
         alvo = date.fromisoformat(data_iso)
     except (TypeError, ValueError):
         return False, "data inválida (use AAAA-MM-DD)"
-    fh = open(_LOCK_PATH, "a")
+    try:
+        fh = open(_LOCK_PATH, "a")
+    except OSError as e:
+        return False, (f"sem permissão para gravar o estado em {_STATE_DIR} "
+                       f"({e.__class__.__name__}) — verificar dono www-data do diretório")
     try:
         fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
