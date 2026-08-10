@@ -207,12 +207,19 @@ def main() -> int:
     r = res["resumo"]
     alertas: list[str] = []
 
-    # 1) Cron crashando hoje
-    if diag["tracebacks_hoje"] > 0:
+    # 1) Cron crashando — só tracebacks NOVOS desde a última checagem.
+    # O log é diário: os crashes da manhã de 10/08 (fd leak, já consertado)
+    # ficariam gritando [ALERTA] a cada hora o dia inteiro. A primeira
+    # execução do dia estabelece a linha de base sem alertar; o que
+    # aparecer DEPOIS é problema novo e aí sim alerta.
+    tb_base = (antes.get("tracebacks", diag["tracebacks_hoje"])
+               if antes else diag["tracebacks_hoje"])
+    if diag["tracebacks_hoje"] > (tb_base or 0):
+        novos = diag["tracebacks_hoje"] - (tb_base or 0)
         alertas.append(
-            f"O log do cron tem {diag['tracebacks_hoje']} traceback(s) hoje — "
-            "rodadas podem estar morrendo no meio. Tail do log no fim do e-mail... "
-            "conferir /var/log/relatorio_h_t/sync_wpp.log na vps154.")
+            f"{novos} traceback(s) NOVO(S) no log do cron desde a última "
+            "checagem — rodadas podem estar morrendo no meio. Tail do log no "
+            "fim do e-mail; conferir /var/log/relatorio_h_t/sync_wpp.log na vps154.")
 
     # 2) Previstas não viram enviadas (dentro da janela 08-20h, com base anterior)
     agora = datetime.now()
@@ -252,7 +259,8 @@ def main() -> int:
 
     with open(estado_path, "w", encoding="utf-8") as f:
         json.dump({"data": hoje.isoformat(), "enviadas": r["enviadas"],
-                   "previstas": r["previstas"], "hora": hora}, f)
+                   "previstas": r["previstas"], "hora": hora,
+                   "tracebacks": diag["tracebacks_hoje"]}, f)
     log("=== monitor_previsao_wpp: fim ===")
     return 0
 
