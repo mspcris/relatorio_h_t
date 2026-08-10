@@ -77,33 +77,33 @@
   </nav>
 
   <!-- SIDEBAR -->
+  <!-- Sidebar da FAMÍLIA WHATSAPP (mesmo menu do /wpp) — decisão 2026-08-10:
+       o sistema de alertas faz parte das campanhas zap, não do painel KPI.
+       Por isso esta página NÃO inclui js/menu.js (que imporia o menu KPI). -->
   <aside class="main-sidebar sidebar-dark-primary elevation-4">
-    <a href="index.html" class="brand-link">
+    <a href="/" class="brand-link">
       <span class="brand-text font-weight-light">MENU</span>
     </a>
     <div class="sidebar">
       <nav class="mt-2">
         <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
-          <li class="nav-item">
-            <a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a>
-          </li>
-          <li class="nav-item">
-            <a href="monitorarrobos.html" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Monitorar Robôs</p></a>
-          </li>
-          <li class="nav-item">
-            <a href="/alarmes" class="nav-link active"><i class="nav-icon fas fa-bell"></i><p>Configurar Alertas</p></a>
-          </li>
+          <li class="nav-item"><a href="https://kpi.camim.com.br/index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home</p></a></li>
           {% if USER_IS_ADMIN %}
-          <li class="nav-item">
-            <a href="/admin" class="nav-link"><i class="nav-icon fas fa-users-cog"></i><p>Admin</p></a>
-          </li>
+          <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
           {% endif %}
-          <li class="nav-item">
-            <a href="/acesso_avancado" class="nav-link">
-              <i class="nav-icon fas fa-user-shield" style="color:#c0392b"></i>
-              <p>Acesso Avançado</p>
-            </a>
-          </li>
+          <li class="nav-item"><a href="https://kpi.camim.com.br/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+          <div class="sidebar-section-header" style="padding:8px 16px 4px;font-size:.72rem;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,.4);margin-top:8px">WhatsApp</div>
+          <li class="nav-item"><a href="/wpp" class="nav-link"><i class="nav-icon fab fa-whatsapp"></i><p>Campanhas</p></a></li>
+          <li class="nav-item"><a href="/wpp/previsao" class="nav-link"><i class="nav-icon fas fa-clipboard-check"></i><p>Controle de Disparos</p></a></li>
+          <li class="nav-item"><a href="/alarmes" class="nav-link active"><i class="nav-icon fas fa-bell"></i><p>Configurar Alertas</p></a></li>
+          <li class="nav-item"><a href="/central_problemas.html" class="nav-link"><i class="nav-icon fas fa-clipboard-list"></i><p>Central de Problemas</p></a></li>
+          <li class="nav-item"><a href="/monitorarrobos.html" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Monitorar Robôs</p></a></li>
+          <li class="nav-item"><a href="/wpp/templates" class="nav-link"><i class="nav-icon fas fa-file-alt"></i><p>Templates</p></a></li>
+          <li class="nav-item"><a href="/wpp/teste" class="nav-link"><i class="nav-icon fas fa-vial"></i><p>Teste de Envio</p></a></li>
+          <li class="nav-item"><a href="/wpp/buscar" class="nav-link"><i class="nav-icon fas fa-search"></i><p>Buscar Envios</p></a></li>
+          <li class="nav-item"><a href="/wpp/dashboard" class="nav-link"><i class="nav-icon fas fa-chart-line"></i><p>Dashboard</p></a></li>
+          <li class="nav-item"><a href="/wpp/desculpas" class="nav-link"><i class="nav-icon fas fa-heart-broken"></i><p>Pedido de Desculpas</p></a></li>
+          <li class="nav-item"><a href="/wpp/auditoria" class="nav-link"><i class="nav-icon fas fa-history"></i><p>Auditoria</p></a></li>
           <li class="nav-item">
             <form method="POST" action="/session/logout" style="display:inline">
               <button type="submit" class="nav-link btn btn-link p-0" style="text-align:left">
@@ -181,7 +181,12 @@
         <div class="card">
           <div class="card-header d-flex align-items-center">
             <h3 class="card-title mb-0">Gerentes por Posto</h3>
-            <small class="ml-3 text-muted">Sincronizado automaticamente às 11:30 de seg a sex</small>
+            <small class="ml-3 text-muted">Espelho do cadastro de gestores do CRM
+              (sincronizado todo dia pelo cron) — <b>não edite aqui</b></small>
+            <a href="https://crm.camim.com.br/admin" target="_blank" rel="noopener"
+               class="btn btn-sm btn-outline-primary ml-auto">
+              <i class="fas fa-external-link-alt mr-1"></i>Editar gestores no CRM
+            </a>
           </div>
           <div class="card-body p-0">
             <div class="table-responsive">
@@ -1212,6 +1217,8 @@ async function init() {
 document.addEventListener('DOMContentLoaded', init);
 })();
 </script>
-<script src="/js/menu.js" defer></script>
+<!-- js/menu.js removido de propósito (2026-08-10): ele SUBSTITUI o sidebar
+     pelo menu KPI completo, e esta página pertence à família WhatsApp. -->
+
 </body>
 </html>

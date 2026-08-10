@@ -18,6 +18,22 @@ DRY = "--dry-run" in sys.argv
 PREFIXO = "Horrível — WhatsApp campanha parada — posto "
 DIRETOR_EMAIL = "cristiano@camim.com.br"
 
+# 2ª leva (pedido 2026-08-10): TODOS os serviços do painel Monitorar Robôs,
+# para todos os postos com gerente. O 'wpp' posto-level fica FORA de
+# propósito: o wpp_campanha é mais rígido e cobre o mesmo sintoma — os dois
+# juntos dobrariam o alerta do mesmo problema.
+SERVICOS_PAINEL = {
+    "push":  ("Push Cobrança parado", "O robô de push de cobrança deste posto "
+              "não registra atividade há 5 dias ou mais. Clientes deixaram de "
+              "receber a notificação de cobrança pelo app."),
+    "email": ("Boleto por e-mail parado", "O robô de boleto por e-mail deste "
+              "posto não registra atividade há 5 dias ou mais. Clientes "
+              "deixaram de receber o boleto."),
+    "tef":   ("TEF Recorrente parado", "O robô de cobrança recorrente (TEF) "
+              "deste posto não registra atividade há 5 dias ou mais. As "
+              "cobranças automáticas no cartão podem ter parado."),
+}
+
 
 def main() -> int:
     adb.init_db()
@@ -72,6 +88,29 @@ def main() -> int:
         aid = adb.criar_alarme(dados, criado_por="seed_alarmes_horrivel")
         criados += 1
         print(f"criado: {nome} (id={aid})")
+
+    # 2ª leva: push / email / tef em Horrível, por posto
+    for posto, g in sorted(gerentes.items()):
+        for servico, (titulo, msg) in SERVICOS_PAINEL.items():
+            nome = f"Horrível — {titulo} — posto {posto}"
+            if nome in existentes:
+                print(f"já existe: {nome}")
+                continue
+            dados = {
+                "nome": nome, "posto": posto, "servico": servico,
+                "status_gatilho": "horrivel", "mensagem": msg,
+                "via_whatsapp": 1, "via_email": 1,
+                "hora_disparo": "08:30", "dias_semana": "0,1,2,3,4,5,6",
+                "ativo": 1,
+            }
+            if did:
+                dados["diretores"] = [did]
+            if DRY:
+                print(f"[dry-run] criaria: {nome}")
+                continue
+            aid = adb.criar_alarme(dados, criado_por="seed_alarmes_horrivel")
+            criados += 1
+            print(f"criado: {nome} (id={aid})")
 
     print(f"\n{'[dry-run] ' if DRY else ''}total novos: {criados} · "
           f"postos com gerente: {len(gerentes)}")

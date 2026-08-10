@@ -1,98 +1,108 @@
 #!/usr/bin/env python3
 """
 sync_gerentes.py
-Sincroniza dados de gerente (EmailGestor, TelefoneWhatsApp) de cada posto
-a partir do SQL Server, tabela sis_empresa.
+Sincroniza a tabela gerente_posto (alarmes.db) a partir do CADASTRO DE
+GESTORES DO CRM (Postgres do /opt/crm, tabelas gestores + postos).
 
-Cron (11:30 seg-sex):
-  30 11 * * 1-5 /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/sync_gerentes.py \
-    >> /opt/relatorio_h_t/logs/sync_gerentes.log 2>&1
+Decisão 2026-08-10 (Cristiano): o CRM é a FONTE ÚNICA dos gestores — lá tem
+nome e celular pessoal reais, com tela de edição própria
+(https://crm.camim.com.br/admin). A fonte antiga (sis_empresa.EmailGestor /
+TelefoneWhatsApp do SQL Server de cada posto) estava suja: links wa.me do
+número da própria clínica, telefone fixo, campos vazios. Não editar
+gerente aqui — editar no CRM; este sync espelha.
+
+Regras:
+  - postos.codigo (letra) ↔ gestores.id_posto (id_endereco);
+  - posto com MAIS DE UM gestor ativo: ganha o de MENOR id (mais antigo).
+    Para trocar o titular do alerta, desative o outro no CRM;
+  - falha de conexão com o CRM NÃO apaga nada — mantém o espelho anterior.
+
+Cron (diário, cron/relatorio_ht):
+  0 23 * * * root ... /opt/relatorio_h_t/sync_gerentes.py
 """
 
-import os
 import sys
 import logging
 
 sys.path.insert(0, '/opt/camim-auth')
 sys.path.insert(0, '/opt/relatorio_h_t')
 
-from dotenv import load_dotenv
-load_dotenv('/opt/relatorio_h_t/.env')
+from dotenv import dotenv_values
 
 import alarmes_db as adb
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(message)s'
-)
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s %(levelname)s %(message)s')
 log = logging.getLogger(__name__)
 
-POSTOS_ALL  = list('ANXYBRPCDGIMJ')
-ODBC_DRIVER = os.getenv('ODBC_DRIVER', 'ODBC Driver 17 for SQL Server')
+CRM_ENV_PATH = '/opt/crm/.env'
 
 
-def _env(key, default=''):
-    v = os.getenv(key, default)
-    return v.strip() if isinstance(v, str) else v
-
-
-def _build_conn_str(posto):
-    p = posto.strip()
-    host = _env(f'DB_HOST_{p}') or _env(f'DB_HOST_{p.lower()}')
-    base = _env(f'DB_BASE_{p}') or _env(f'DB_BASE_{p.lower()}')
-    if not host or not base:
-        return None
-    user = _env(f'DB_USER_{p}') or _env(f'DB_USER_{p.lower()}')
-    pwd  = _env(f'DB_PASSWORD_{p}') or _env(f'DB_PASSWORD_{p.lower()}')
-    port = _env(f'DB_PORT_{p}', '1433') or '1433'
-    encrypt = _env('DB_ENCRYPT', 'yes')
-    trust   = _env('DB_TRUST_CERT', 'yes')
-    timeout = _env('DB_TIMEOUT', '20')
-    cs = (
-        f'DRIVER={{{ODBC_DRIVER}}};SERVER=tcp:{host},{port};DATABASE={base};'
-        f'Encrypt={encrypt};TrustServerCertificate={trust};Connection Timeout={timeout};'
+def _conn_crm():
+    """Conexão ao Postgres do CRM usando o PRÓPRIO .env do CRM (isolado —
+    dotenv_values não polui o ambiente deste processo)."""
+    import psycopg2
+    cfg = dotenv_values(CRM_ENV_PATH)
+    host = (cfg.get('DB_HOST') or '').strip()
+    name = (cfg.get('DB_NAME') or '').strip()
+    if not host or not name:
+        raise RuntimeError(f'DB_HOST/DB_NAME ausentes em {CRM_ENV_PATH}')
+    return psycopg2.connect(
+        host=host,
+        port=int(cfg.get('DB_PORT') or 5432),
+        dbname=name,
+        user=cfg.get('DB_USER'),
+        password=cfg.get('DB_PASSWORD'),
+        connect_timeout=15,
     )
-    if user:
-        cs += f'UID={user};PWD={pwd}'
-    else:
-        cs += 'Trusted_Connection=yes'
-    return cs
 
 
-def sync_posto(posto):
-    conn_str = _build_conn_str(posto)
-    if not conn_str:
-        log.warning('Posto %s: sem configuração de banco — pulando', posto)
-        return False
+def buscar_gestores_crm() -> dict:
+    """{letra_posto: {nome, email, telefone}} — menor id ativo ganha."""
+    conn = _conn_crm()
     try:
-        import pyodbc
-        conn = pyodbc.connect(conn_str, timeout=20)
-        row = conn.execute(
-            'SELECT TOP 1 e.EmailGestor, e.TelefoneWhatsApp FROM sis_empresa e'
-        ).fetchone()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT p.codigo, g.id, g.nome, g.email, g.telefone
+            FROM gestores g
+            JOIN postos p ON p.id_endereco = g.id_posto
+            WHERE g.ativo = 1
+            ORDER BY p.codigo, g.id
+        """)
+        por_posto: dict = {}
+        for codigo, gid, nome, email, telefone in cur.fetchall():
+            letra = str(codigo or '').strip().upper()
+            if not letra or letra in por_posto:
+                continue  # menor id já ganhou
+            por_posto[letra] = {
+                'nome': (nome or '').strip(),
+                'email': (email or '').strip() or None,
+                'telefone': (telefone or '').strip() or None,
+            }
+        return por_posto
+    finally:
         conn.close()
-        if row:
-            email    = str(row[0] or '').strip() or None
-            telefone = str(row[1] or '').strip() or None
-            adb.upsert_gerente(posto, email, telefone)
-            log.info('Posto %s: email=%r telefone=%r atualizado', posto, email, telefone)
-            return True
-        else:
-            log.warning('Posto %s: nenhum registro em sis_empresa', posto)
-            return False
-    except Exception as e:
-        log.error('Posto %s: erro: %s', posto, e)
-        return False
 
 
 def main():
     adb.init_db()
-    ok_count = 0
-    for posto in POSTOS_ALL:
-        if sync_posto(posto):
-            ok_count += 1
-    log.info('Sync gerentes concluído: %d/%d postos atualizados', ok_count, len(POSTOS_ALL))
+    try:
+        gestores = buscar_gestores_crm()
+    except Exception as e:
+        log.error('CRM inacessível (%s) — espelho anterior mantido, nada alterado', e)
+        return 1
+
+    if not gestores:
+        log.error('CRM devolveu 0 gestores — espelho anterior mantido por segurança')
+        return 1
+
+    for letra, g in sorted(gestores.items()):
+        adb.upsert_gerente(letra, g['email'], g['telefone'])
+        log.info('Posto %s: %s <%s> %s', letra, g['nome'], g['email'], g['telefone'])
+
+    log.info('Sync gerentes (fonte CRM) concluído: %d postos', len(gestores))
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
