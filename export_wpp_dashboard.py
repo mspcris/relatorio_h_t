@@ -227,7 +227,17 @@ def buscar_pagamentos(posto: str, engine, idreceitas: list[str]) -> dict:
 def agregar_por_idreceita(df_cob: pd.DataFrame) -> pd.DataFrame:
     """Consolida múltiplos envios da mesma idreceita num único registro."""
     if df_cob.empty:
-        return df_cob
+        # Vazio TIPADO, com as mesmas colunas do agg. Devolver o df cru aqui
+        # derrubava o export inteiro com KeyError 'has_atraso' sempre que UM
+        # período não tinha envio de cobrança — foi o que congelou o dashboard
+        # em 31/05/2026: a partir de jun/2026 só falta_medico (sem idreceita)
+        # envia via Meta, o recorte de cobrança do mês ficou vazio e o cron
+        # falhou em toda execução por 70 dias.
+        return pd.DataFrame(columns=[
+            "posto", "idreceita", "first_send", "last_send", "n_sends",
+            "has_prevenc", "has_atraso", "max_dias_atraso",
+            "nome", "matricula", "campanha_nome", "first_send_date",
+        ])
 
     agg = df_cob.groupby(["posto", "idreceita"], as_index=False).agg(
         first_send=("enviado_em_dt", "min"),
@@ -291,9 +301,11 @@ def build_dashboard(df_envios: pd.DataFrame, pagamentos_por_posto: dict) -> dict
     cam = df_envios["campanha_nome"].fillna("").str.lower()
     df_envios["is_mkt"] = tpl.str.contains("indique") | cam.str.contains("indique")
 
-    # modo_envio para exibição: "marketing" sobrepõe "atraso"/"pre_vencimento"
-    df_envios["modo_display"] = df_envios.apply(
-        lambda r: "marketing" if r["is_mkt"] else r["modo_envio"], axis=1
+    # modo_envio para exibição: "marketing" sobrepõe "atraso"/"pre_vencimento".
+    # .where em vez de .apply(axis=1): apply em DataFrame vazio devolve
+    # DataFrame (não Series) e quebra a atribuição da coluna.
+    df_envios["modo_display"] = df_envios["modo_envio"].where(
+        ~df_envios["is_mkt"], "marketing"
     )
 
     # ── Divide envios ──────────────────────────────────────────────────────
