@@ -92,6 +92,13 @@ except Exception as _e:
     logging.getLogger(__name__).error("acesso_avancado_bp não carregado: %s", _e)
 
 try:
+    from outros_monitores_routes import monitores_bp
+    app.register_blueprint(monitores_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("monitores_bp não carregado: %s", _e)
+
+try:
     from api_vg_indicadores import vg_indicadores_bp
     app.register_blueprint(vg_indicadores_bp)
 except Exception as _e:

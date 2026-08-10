@@ -989,6 +989,40 @@ cobrança morreu no meio da rodada por DIAS sem ninguém perceber).
 
 ---
 
+## Outros Monitores (`/outros_monitores.html`) — 2026-08-10
+
+Página para monitores de serviços específicos. Primeiro: **Leads criados**.
+
+| Arquivo | Papel |
+|---|---|
+| `export_monitor_leads.py` + `.sh` | ETL horário (cron `:10`, `/etc/cron.d/monitor-leads`) — conta leads no MySQL `camim_leads_production` e manda e-mail aos inscritos |
+| `outros_monitores_routes.py` | Blueprint `/api/monitores/*` (dados + inscrição de notificação) |
+| `outros_monitores.html` | Página (tiles, gráficos hora/dia, fontes, switch de notificação) |
+
+- Sem page_key de propósito — mesmo precedente do `monitorarrobos.html`: todo
+  usuário logado acessa (não passa por seed_servicos).
+- **O MySQL de leads está em UTC** e o servidor local em America/Sao_Paulo. O
+  ETL calcula o offset AO VIVO (NOW() do MySQL vs relógio local) — não
+  hardcodar −3.
+- Inscrição de notificação: tabela `monitor_notificacoes` no `camim_auth.db`
+  (email + monitor_key), criada pelo blueprint, consumida pelo ETL. E-mails só
+  entre 07h–22h, via credencial `ALARM_EMAIL_*`.
+- `leads` não tem índice em `created_at`, mas o volume é baixo (~30/dia) e as
+  queries custam ~0,5s. Se o volume crescer, criar o índice antes de apertar a
+  frequência.
+
+## camim-auth — worker único agora tem THREADS (2026-08-10)
+
+`ExecStart` ganhou `--workers 1 --worker-class gthread --threads 8`. Motivo:
+um request longo (`/api/medico_falta/enviar_wpp` mandando dezenas de WhatsApps
+síncronos) segurava o worker único e até o `auth_request` do nginx morria →
+**qualquer página protegida devolvia 500** enquanto durasse o envio (visto em
+2026-08-10 11:26, WORKER TIMEOUT no journal). Threads no MESMO processo
+resolvem sem quebrar o `_oauth_states` em memória do login IDCamim —
+**não subir `--workers` >1 por causa disso**.
+
+---
+
 ## Regras de desenvolvimento
 
 - Cada KPI é independente — nunca compartilha cálculos entre páginas
