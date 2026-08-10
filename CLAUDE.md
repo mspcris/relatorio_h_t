@@ -956,8 +956,16 @@ do SQLite. Jamais chamar `enviar*`/`registrar_*` de dentro dele.
   completas e a truncagem é avisada na tela (nada de teto silencioso).
 - Todo motivo tem código técnico + frase leiga (`MOTIVOS_LEGENDA`) — padrão
   "todo selo diz por quê" do medico_custo.
-- Custo Meta estimado = previstas × R$ 0,35 (`CUSTO_MSG_META`), rotulado como
-  estimativa; só para campanhas com `enviar_meta=1`.
+- Custo Meta estimado = previstas × preço da CATEGORIA real do template
+  (UTILITY/MARKETING, lida da API `/templates`) × dólar ao vivo (awesomeapi,
+  mesma fonte do wpp_dashboard). Fallback de cotação avisado na tela; preços
+  ajustáveis por env (`WPP_PRECO_MKT_USD`, `WPP_PRECO_UTIL_USD`, `WPP_USD_BRL`).
+  Só para campanhas com `enviar_meta=1`; a conta inteira aparece ao lado do valor.
+- `wpp_dashboard.json` ficou 70 dias congelado (31/05→10/08/2026) porque o
+  export morria com fatia de período vazia (`KeyError has_atraso`) — desde
+  jun/2026 só falta_medico envia via Meta e o recorte de cobrança do mês ficou
+  vazio. Ao mexer no `export_wpp_dashboard.py`, testar sempre o caso "período
+  sem cobrança" e o df 100% vazio.
 - Rodada do robô = `*/15 min` (`sync_wpp.sh` no cron) — é daí que sai o "que
   horas vai". Se o agendamento mudar, atualizar `RODADA_MIN`.
 
