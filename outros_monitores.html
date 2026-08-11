@@ -20,6 +20,12 @@
     .tile .num { font-size:1.8rem; font-weight:700; line-height:1.1; }
     .tile .lbl { font-size:.8rem; color:#6c757d; }
     .chart-wrap { position:relative; height:260px; }
+    .ld-leg { display:flex; flex-wrap:wrap; gap:14px; font-size:.78rem;
+              color:#6c757d; margin-top:8px; }
+    .ld-leg span { display:inline-flex; align-items:center; gap:6px; }
+    .ld-leg .sw { width:13px; height:13px; border-radius:3px; display:inline-block;
+                  border:1px solid transparent; }
+    .ld-zerados { font-size:.78rem; color:#c0392b; margin-top:4px; }
     @media (max-width:767px){ .content-wrapper{margin-left:0!important} .main-sidebar{z-index:1050} }
   </style>
 </head>
@@ -112,12 +118,15 @@
           </div>
 
           <h6 class="text-muted">Por hora — últimas 72h</h6>
-          <div class="chart-wrap mb-4"><canvas id="ldChartHoras"></canvas></div>
+          <div class="chart-wrap"><canvas id="ldChartHoras"></canvas></div>
+          <div class="ld-leg mb-4" id="ldLegHoras"></div>
 
           <div class="row">
             <div class="col-md-7">
               <h6 class="text-muted">Por dia — últimos 30 dias</h6>
               <div class="chart-wrap"><canvas id="ldChartDias"></canvas></div>
+              <div class="ld-leg" id="ldLegDias"></div>
+              <div class="ld-zerados" id="ldZerados" style="display:none"></div>
             </div>
             <div class="col-md-5">
               <h6 class="text-muted">Fontes de hoje</h6>
@@ -215,7 +224,50 @@
 if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
 
 const AZUL = '#0d6e9e';
+// Tons do MESMO matiz do azul CAMIM (seguro para daltonismo, mesma regra da
+// paleta de Custos de TI). Do mais antigo (claro) para o mais recente (forte).
+const TONS_DIA     = ['#dbe9f1','#b9d5e4','#8ebfd6','#4a95bb','#0d6e9e'];
+const AZUL_CLARO   = '#a3cbdf';                // fim de semana
+const PARCIAL_FILL = 'rgba(13,110,158,.20)';   // hora/dia ainda em andamento
+const VERMELHO     = '#c0392b';                // dia sem nenhum lead
+const DIA_SEM = ['dom','seg','ter','qua','qui','sex','sáb'];
 let chartHoras = null, chartDias = null;
+
+const p2 = n => String(n).padStart(2,'0');
+const chaveH = dt => dt.getFullYear()+'-'+p2(dt.getMonth()+1)+'-'+p2(dt.getDate())+' '+p2(dt.getHours())+':00';
+const chaveD = dt => dt.getFullYear()+'-'+p2(dt.getMonth()+1)+'-'+p2(dt.getDate());
+const rotDia = dt => DIA_SEM[dt.getDay()] + ' ' + p2(dt.getDate()) + '/' + p2(dt.getMonth()+1);
+
+// O robô só devolve hora/dia QUE TEVE lead (é GROUP BY). Hora vazia some do
+// array, e aí duas barras vizinhas no gráfico não são horas vizinhas — o eixo
+// mente. Dia sem nenhum lead nem aparece. Aqui a série é remontada contínua,
+// com 0 onde não veio nada.
+function serieHoras(hs, n) {
+  const m = new Map((hs||[]).map(x => [x.h, x.n]));
+  const b = new Date(); b.setMinutes(0,0,0);
+  const out = [];
+  for (let i = n-1; i >= 0; i--) {
+    const dt = new Date(b.getFullYear(), b.getMonth(), b.getDate(), b.getHours()-i);
+    out.push({ dt, n: m.get(chaveH(dt)) || 0 });
+  }
+  return out;
+}
+function serieDias(ds, n) {
+  const m = new Map((ds||[]).map(x => [x.d, x.n]));
+  const b = new Date();
+  const out = [];
+  for (let i = n-1; i >= 0; i--) {
+    const dt = new Date(b.getFullYear(), b.getMonth(), b.getDate()-i);
+    out.push({ dt, n: m.get(chaveD(dt)) || 0 });
+  }
+  return out;
+}
+
+function chips(el, itens) {
+  el.innerHTML = itens.map(it =>
+    '<span><i class="sw" style="background:'+it.cor+
+    (it.borda ? ';border-color:'+it.borda : '')+'"></i>'+esc(it.txt)+'</span>').join('');
+}
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 
@@ -246,32 +298,72 @@ async function carregarLeads() {
     ? d.fontes_hoje.map(f => '<tr><td>'+esc(f.fonte)+'</td><td class="text-right"><b>'+f.n+'</b></td></tr>').join('')
     : '<tr><td colspan="2" class="text-muted">Nenhum lead hoje ainda.</td></tr>';
 
-  // Gráfico horas (barras finas, um matiz só)
-  const hs = d.horas || [];
+  // Gráfico horas — um tom por dia; a última barra é a hora EM ANDAMENTO
+  const sh = serieHoras(d.horas, 72);
+  const diasH = [...new Set(sh.map(x => chaveD(x.dt)))];          // ordem cronológica
+  const tons = TONS_DIA.slice(-diasH.length);
+  const corH = sh.map((x, i) => i === sh.length - 1
+      ? PARCIAL_FILL : (tons[diasH.indexOf(chaveD(x.dt))] || AZUL));
   const ctxH = document.getElementById('ldChartHoras');
   if (chartHoras) chartHoras.destroy();
   chartHoras = new Chart(ctxH, {
     type: 'bar',
-    data: { labels: hs.map(x => x.h.slice(5,13).replace(' ', ' ') + 'h'),
-            datasets: [{ data: hs.map(x => x.n), backgroundColor: AZUL,
+    data: { labels: sh.map(x => p2(x.dt.getHours()) + 'h'),
+            datasets: [{ data: sh.map(x => x.n), backgroundColor: corH,
+                         borderColor: sh.map((x,i) => i === sh.length-1 ? AZUL : 'transparent'),
+                         borderWidth: sh.map((x,i) => i === sh.length-1 ? 2 : 0),
                          borderRadius: 3, maxBarThickness: 14, label: 'Leads' }] },
-    options: { maintainAspectRatio:false, plugins:{legend:{display:false}},
+    options: { maintainAspectRatio:false, plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{ title: it => {
+          const x = sh[it[0].dataIndex];
+          return rotDia(x.dt) + ' · ' + p2(x.dt.getHours()) + 'h'
+                 + (it[0].dataIndex === sh.length-1 ? ' (em andamento)' : '');
+        } } } },
       scales:{ x:{grid:{display:false}, ticks:{maxTicksLimit:12}},
                y:{beginAtZero:true, ticks:{precision:0}, grid:{color:'#eef1f4'}} } }
   });
+  chips(document.getElementById('ldLegHoras'),
+    diasH.map((k, i) => ({ cor: tons[i],
+        txt: rotDia(sh.find(x => chaveD(x.dt) === k).dt) + (i === diasH.length-1 ? ' (hoje)' : '') }))
+      .concat([{ cor: PARCIAL_FILL, borda: AZUL, txt: 'hora em andamento' }]));
 
-  // Gráfico dias
+  // Gráfico dias — fim de semana em tom claro, hoje aberto (ainda contando)
+  const sd = serieDias(dias, 30);
+  const fds = sd.map(x => x.dt.getDay() === 0 || x.dt.getDay() === 6);
+  const corD = sd.map((x, i) => i === sd.length-1 ? PARCIAL_FILL : (fds[i] ? AZUL_CLARO : AZUL));
   const ctxD = document.getElementById('ldChartDias');
   if (chartDias) chartDias.destroy();
   chartDias = new Chart(ctxD, {
     type: 'bar',
-    data: { labels: dias.map(x => x.d.slice(5).split('-').reverse().join('/')),
-            datasets: [{ data: dias.map(x => x.n), backgroundColor: AZUL,
+    data: { labels: sd.map(x => p2(x.dt.getDate()) + '/' + p2(x.dt.getMonth()+1)),
+            datasets: [{ data: sd.map(x => x.n), backgroundColor: corD,
+                         borderColor: sd.map((x,i) => i === sd.length-1 ? AZUL : 'transparent'),
+                         borderWidth: sd.map((x,i) => i === sd.length-1 ? 2 : 0),
                          borderRadius: 3, maxBarThickness: 18, label: 'Leads' }] },
-    options: { maintainAspectRatio:false, plugins:{legend:{display:false}},
-      scales:{ x:{grid:{display:false}, ticks:{maxTicksLimit:15}},
+    options: { maintainAspectRatio:false, plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{ title: it => rotDia(sd[it[0].dataIndex].dt)
+          + (it[0].dataIndex === sd.length-1 ? ' (hoje, ainda contando)' : '') } } },
+      scales:{ x:{grid:{display:false}, ticks:{ maxTicksLimit:15,
+                 // barra de zero tem altura zero e some: quem avisa é a data
+                 color: c => { const i = (c.tick && typeof c.tick.value === 'number')
+                                 ? c.tick.value : c.index;
+                               return sd[i] && sd[i].n === 0 ? VERMELHO : '#666'; } }},
                y:{beginAtZero:true, ticks:{precision:0}, grid:{color:'#eef1f4'}} } }
   });
+  chips(document.getElementById('ldLegDias'), [
+    { cor: AZUL, txt: 'dia útil' },
+    { cor: AZUL_CLARO, txt: 'fim de semana' },
+    { cor: PARCIAL_FILL, borda: AZUL, txt: 'hoje (ainda contando)' }]);
+
+  // Dia sem NENHUM lead não é dia fraco — é suspeita de site/robô parado.
+  const zer = sd.slice(0, -1).filter(x => x.n === 0);
+  const elZ = document.getElementById('ldZerados');
+  elZ.style.display = zer.length ? '' : 'none';
+  elZ.innerHTML = zer.length
+    ? '<i class="fas fa-exclamation-triangle mr-1"></i>' +
+      (zer.length === 1 ? 'Um dia sem nenhum lead: ' : zer.length + ' dias sem nenhum lead: ') +
+      zer.map(x => esc(rotDia(x.dt))).join(' · ') + ' — vale conferir se o site/robô estava no ar.'
+    : '';
 }
 
 let CFG_ATUAL = {modo: 'sempre', dias: ['seg_sex','sab','dom'], horarios: ['8_22']};
