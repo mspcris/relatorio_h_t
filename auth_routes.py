@@ -791,7 +791,25 @@ def admin_deletar(uid: int):
 
 @auth_bp.get("/admin/api/validar_usuario_sqlserver")
 def admin_validar_usuario_sqlserver():
-    """Valida login Campinho contra Sis_Usuario no SQL Server."""
+    """Valida login Campinho contra Sis_Usuario no SQL Server.
+
+    Sis_Usuario NÃO é compartilhada entre os postos (o comentário antigo aqui
+    dizia que era, e estava errado — medido em 2026-08-14):
+
+    * o mesmo idUsuario é de PESSOAS DIFERENTES em cada posto — 2671 é
+      JULIA CRISTINA em Anchieta e ANGELA TENÓRIO no Campinho;
+    * o mesmo login costuma existir DUAS vezes, o antigo desativado ao lado do
+      ativo — JULIA.G é JULIA CRISTINA (desativada) e JULIA DE JESUS (ativa).
+      São ~370 logins repetidos por posto, não é exceção.
+
+    Antes esta rota batia em `next(iter(conns))` (= Anchieta, a primeira do
+    POSTOS_FALLBACK) sem filtrar Desativado, então o campo rotulado "Campinho"
+    respondia com o cadastro morto de outro posto. Agora:
+      1. ignora cadastro desativado;
+      2. procura primeiro no Campinho, como o rótulo promete, e só depois nos
+         demais postos — devolvendo em QUAL posto achou (id sem posto engana);
+      3. avisa quando há mais de um cadastro ativo com o mesmo login.
+    """
     if not _require_admin():
         return jsonify({"erro": "Não autorizado"}), 403
     login = (request.args.get("login") or "").strip()
@@ -800,19 +818,51 @@ def admin_validar_usuario_sqlserver():
     try:
         from ctrlq_desbloqueio import build_conns_from_env, make_engine
         from sqlalchemy import text as sa_text
+        try:
+            from alarmes_db import POSTOS_NOMES  # nome do posto nunca é escrito à mão
+        except Exception:
+            POSTOS_NOMES = {}
         conns = build_conns_from_env()
         if not conns:
             return jsonify({"erro": "Nenhuma conexão SQL Server configurada"}), 500
-        # Usa a primeira conexão disponível (Sis_Usuario é compartilhada)
-        conn_str = next(iter(conns.values()))
-        engine = make_engine(conn_str)
-        with engine.connect() as conn:
-            row = conn.execute(sa_text(
-                "SELECT TOP 1 idUsuario, Nome, Usuario FROM Sis_Usuario WHERE Usuario = :login"
-            ), {"login": login}).fetchone()
-        if not row:
-            return jsonify({"erro": f"Usuário '{login}' não encontrado no Campinho"}), 404
-        return jsonify({"ok": True, "idusuario": row[0], "nome": row[1], "usuario": row[2]})
+
+        # Campinho primeiro (é o que o campo promete), demais na ordem do env.
+        ordem = (["C"] if "C" in conns else []) + [p for p in conns if p != "C"]
+        sql_ativos = sa_text(
+            "SELECT idUsuario, RTRIM(Nome), RTRIM(Usuario) FROM Sis_Usuario "
+            "WHERE Usuario = :login AND ISNULL(Desativado, 0) = 0 "
+            "ORDER BY idUsuario DESC"
+        )
+        sql_inativos = sa_text(
+            "SELECT COUNT(*) FROM Sis_Usuario "
+            "WHERE Usuario = :login AND ISNULL(Desativado, 0) <> 0"
+        )
+        erros = []
+        for posto in ordem:
+            try:
+                engine = make_engine(conns[posto])
+                with engine.connect() as conn:
+                    ativos = conn.execute(sql_ativos, {"login": login}).fetchall()
+                    inativos = conn.execute(sql_inativos, {"login": login}).scalar() or 0
+            except Exception as e:      # posto fora do ar não pode virar "não existe"
+                erros.append(f"{posto}: {type(e).__name__}")
+                continue
+            if not ativos:
+                continue
+            row = ativos[0]
+            return jsonify({
+                "ok": True,
+                "idusuario": row[0], "nome": row[1], "usuario": row[2],
+                "posto": posto,
+                "posto_nome": POSTOS_NOMES.get(posto, posto),
+                # > 1 ativo: o admin precisa escolher, não dá para adivinhar
+                "ativos": [{"idusuario": r[0], "nome": r[1]} for r in ativos],
+                "desativados": int(inativos),
+            })
+        if erros:
+            return jsonify({"erro": f"Usuário '{login}' não encontrado; postos sem resposta: "
+                                    + ", ".join(erros)}), 404
+        return jsonify({"erro": f"Nenhum cadastro ATIVO com o login '{login}' em nenhum posto"}), 404
     except Exception as e:
         import logging
         logging.getLogger(__name__).error("Erro ao validar usuario SQL Server: %s", e)
