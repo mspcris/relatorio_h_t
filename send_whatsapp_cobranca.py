@@ -14,6 +14,7 @@ Flags:
     --limit N        Máximo de mensagens enviadas no total (0 = sem limite)
 """
 
+import hashlib
 import os
 import re
 import sys
@@ -243,11 +244,21 @@ def montar_payload_chat(telefone: str, nome: str, texto: str,
                          from_user_id: str | None = None,
                          phone_number_id: str | None = None,
                          display_phone_number: str | None = None,
-                         must_close_ticket: bool = False) -> tuple[dict, str]:
+                         must_close_ticket: bool = False,
+                         dedupe_key: str | None = None) -> tuple[dict, str]:
     """Monta o envelope do webhook pra api-chat sem disparar request.
     Útil pra acumular em lote (POST /webhooks/batch) ou disparar 1-a-1.
     Retorna (payload_dict, hash_id_gerado)."""
-    hash_id  = uuid.uuid4().hex[:24]
+    # dedupe_key: id determinístico em vez de uuid aleatório. No incidente de
+    # 07-14/08/2026 a api-chat reprocessou 1 batch preso ~19 mil vezes e não
+    # tinha COMO deduplicar, porque cada reenvio do mesmo conteúdo ganhava id
+    # novo. Mesmo conteúdo no mesmo dia => mesmo id (o reenvio legítimo da
+    # mesma fatura dias depois gera id novo). O dedupe em si é do lado da
+    # api-chat (UNIQUE no external id do ingest — combinado com o Robson).
+    if dedupe_key:
+        hash_id = hashlib.sha1(dedupe_key.encode("utf-8")).hexdigest()[:24]
+    else:
+        hash_id = uuid.uuid4().hex[:24]
     ts       = datetime.now().astimezone().isoformat(timespec="seconds")
     fila_id  = queue_id or CHAT_QUEUE_ID
     remetente = from_user_id or CHAT_FROM
@@ -783,6 +794,11 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                     phone_number_id=phone_number_id,
                     display_phone_number=display_chat,
                     must_close_ticket=must_close,
+                    dedupe_key=(
+                        f"cobranca:{campanha['id']}:"
+                        f"{fatura.get('idreceita','')}:{telefone}:"
+                        f"{date.today().isoformat()}"
+                    ),
                 )
 
             lote_buffer.append((chat_payload, fatura, telefone, params))
