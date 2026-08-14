@@ -152,12 +152,22 @@ def checar():
         (LIMIAR_TICKETS_POR_CLIENTE,))
     flood_tickets = cur.fetchall()
 
-    cur.execute(
-        'SELECT ticketId, COUNT(*) c FROM Message '
-        'WHERE createdAt >= UTC_TIMESTAMP() - INTERVAL 70 MINUTE '
-        'GROUP BY ticketId HAVING c >= %s ORDER BY c DESC LIMIT 5',
-        (LIMIAR_MSGS_POR_TICKET,))
-    flood_msgs = cur.fetchall()
+    # Message tem 2M+ linhas e NÃO tem índice em createdAt — varrer a tabela
+    # estoura o timeout. Dirigimos pelos tickets mexidos na última 1h10
+    # (updatedAt bumpa a cada mensagem) e contamos só dentro deles, via
+    # índice de ticketId.
+    flood_msgs = []
+    cur.execute('SELECT id FROM Ticket WHERE updatedAt >= UTC_TIMESTAMP() - INTERVAL 70 MINUTE LIMIT 3000')
+    recentes = [r[0] for r in cur.fetchall()]
+    if recentes:
+        lista = ','.join("'%s'" % i for i in recentes)
+        cur.execute(
+            f'SELECT ticketId, COUNT(*) c FROM Message '
+            f'WHERE ticketId IN ({lista}) '
+            f'AND createdAt >= UTC_TIMESTAMP() - INTERVAL 70 MINUTE '
+            f'GROUP BY ticketId HAVING c >= {LIMIAR_MSGS_POR_TICKET} '
+            f'ORDER BY c DESC LIMIT 5')
+        flood_msgs = cur.fetchall()
     conn.close()
 
     st = _estado()
