@@ -1743,8 +1743,12 @@ function uniqueDoctors(rows) {
         const total = topAgg.total || 0;
         const base = `${pctOf(semPJ, total)} do total (${fmtInt.format(total)})`;
         if (!PJ.loaded) return `${base} • clique para ver justificativas`;
-        const comp = topAgg.ym;
-        const docs = topAgg.doctors.filter(d => !d.pj);
+        // A cobrança é do MÊS DE HOJE (mesma competência em que o modal abre), não do mês do card.
+        // Por isso o subtítulo diz de que mês é cada número — o card conta o fechamento do mês do
+        // KPI; o pendente conta a foto de ontem (2026-08-17: card jul-26 = 118, hoje ago-26 = 115).
+        const hoje = ymHoje();
+        const comp = MESES.includes(hoje) ? hoje : topAgg.ym;
+        const docs = (comp === topAgg.ym ? topAgg.doctors : uniqueDoctors(rowsForMonthAndPostos(comp, sel2))).filter(d => !d.pj);
         let pend = 0, semLeitura = 0;
         for (const d of docs) {
           const st = pjStatusDe(d, comp);
@@ -1752,7 +1756,7 @@ function uniqueDoctors(rows) {
           else if (st.inMonth === null) semLeitura++;
         }
         const extra = semLeitura ? ` • ${semLeitura} sem leitura` : '';
-        return `${base} • <b class="${pend ? 'text-danger' : 'text-success'}">${fmtInt.format(pend)} sem justificativa em ${mFmt(comp)}</b>${extra}`;
+        return `${base} em ${mFmt(topAgg.ym)} • <b class="${pend ? 'text-danger' : 'text-success'}">cobrança ${mFmt(comp)}: ${fmtInt.format(pend)} pendentes de ${fmtInt.format(docs.length)}</b>${extra}`;
       }
 
       function docRowHtml(d) {
