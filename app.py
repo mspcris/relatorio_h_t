@@ -64,6 +64,13 @@ except Exception as _e:
     logging.getLogger(__name__).error("medico_falta_bp não carregado: %s", _e)
 
 try:
+    from ctrlq_pj_routes import ctrlq_pj_bp   # justificativas de médico sem contrato PJ (KPI Médicos · Qualidade)
+    app.register_blueprint(ctrlq_pj_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("ctrlq_pj_bp não carregado: %s", _e)
+
+try:
     from cancelados_robo_routes import cancelados_robo_bp
     app.register_blueprint(cancelados_robo_bp)
 except Exception as _e:

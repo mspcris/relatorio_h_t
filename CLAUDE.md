@@ -270,6 +270,46 @@ estranhas, suspeitar da chave antes de suspeitar da query.
 
 ---
 
+## KPI Médicos (Qualidade) — aba "Sem contrato PJ" + justificativa mensal (2026-08-17)
+
+Em `ctrlq_relatorio.html`, os cards **Com contrato PJ** e **Sem contrato PJ**
+abrem o mesmo modal (`#pjModal`) com duas abas. A aba *Sem contrato PJ* é
+onde o Cristiano cobra do gerente do posto uma **justificativa por mês** de
+por que o médico ainda não tem PJ. Mostra a última justificativa, tem
+"Anteriores (N)" para o histórico e caixa para justificar na hora.
+
+| Arquivo | Papel |
+|---|---|
+| `ctrlq_pj_routes.py` | `GET/POST /api/ctrlq/pj/justificativas`, `POST .../<id>/desativar` |
+| `sql_ctrlq_relatorio/sql_ctrlq_relatorio.sql` | passou a exportar `idmedico` + `idespecialidade` |
+| `ctrlq_relatorio.html` | modal, índice local, formulário |
+
+- **O dado mora no CAMIM**, tabela `Cad_EspecialidadeJustificativaPJ` (Janderson,
+  existe nos 13 postos): `idEspecialidade`, `DataHora`, `idUsuario`,
+  `Justificativa varchar(250)`, `Desativado`. Não é tabela nossa — o app do
+  CAMIM também escreve nela (a de teste veio de `VICTORIA.A`).
+- **Chave física é `idEspecialidade`, mas a pergunta é por MÉDICO.** Leitura
+  agrupa por `idMedico` (join em `Cad_Especialidade`); escrita usa o
+  `idespecialidade` da linha dedupada do KPI, ou a especialidade ativa mais
+  antiga do médico se o JSON for antigo. JSON sem `idmedico` casa por CRM.
+- **"Situação no mês"** = existe justificativa com `DataHora` dentro da
+  competência escolhida no modal (default = mês do card). Justificativa nova
+  entra sempre com a data de HOJE — a tela avisa quando a competência olhada
+  é passada.
+- **Auditoria:** a tabela não está em `Sis_HistoricoTabela`; grava-se em
+  `idTabela=53` (Cad_Especialidade) com `id=idEspecialidade`, comando 1
+  (incluir) / 3 (desativar). `idUsuario` vem do `login_campinho` resolvido na
+  `sis_usuario` do posto (mesmo padrão do `medico_novo_routes`). Sem vínculo,
+  vê mas não escreve, e a tela diz por quê.
+- Desativar (soft delete) só pelo autor ou admin; nunca DELETE.
+- Se hoje o médico já é PJ no cadastro (KPI é foto de ontem), o POST devolve
+  409 — não há o que justificar.
+- Posto fora do ar aparece como "sem leitura", **não** como pendente (mesma
+  regra do medico_custo: falha de posto não pode parecer resultado). GET lê os
+  13 postos em paralelo; posto com timeout custa ~10s à chamada.
+
+---
+
 ## Custos de TI (ex-"Custos com IA") — adicionado 2026-08-02
 
 Consolida **todos** os custos de tecnologia por centro de custo. O painel

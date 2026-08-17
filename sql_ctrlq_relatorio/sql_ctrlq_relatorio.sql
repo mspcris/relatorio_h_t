@@ -10,6 +10,7 @@ WITH base AS (
     EOMONTH(eh.DataHoraInclusao)       AS DataFechamentoMes,
 
     m.idmedico,
+    eh.idEspecialidade,
     m.nome,
     m.crm,
     eh.Especialidade,
@@ -62,6 +63,8 @@ ROW_NUMBER() OVER (
 SELECT
   DataFechamentoMes,
   DataHoraInclusao,
+  idmedico,
+  idEspecialidade AS idespecialidade,   -- chave da Cad_EspecialidadeJustificativaPJ (aba "sem contrato PJ")
   nome AS medico,
   crm,
   especialidade,

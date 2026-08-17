@@ -40,6 +40,26 @@
     .chart-card .card-body { height: 320px; }
     .clickable { cursor: pointer; }
     .badge-soft { background: rgba(0,0,0,.06); }
+    /* ---- Modal PJ (com / sem contrato) ---- */
+    #pjModal .nav-tabs .nav-link { font-weight: 600; }
+    #pjModal .pj-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+    #pjModal .pj-resumo { font-size:.9rem; }
+    #pjModal .pj-just-txt { white-space: pre-wrap; word-break: break-word; }
+    #pjModal .pj-just-meta { font-size:.78rem; color:#6c757d; }
+    #pjModal tr.pj-detail > td { background:#f8f9fa; border-top:0; }
+    #pjModal .pj-hist { list-style:none; padding:0; margin:0; }
+    #pjModal .pj-hist li { padding:6px 0; border-bottom:1px dashed rgba(0,0,0,.1); }
+    #pjModal .pj-hist li:last-child { border-bottom:0; }
+    #pjModal .pj-form textarea { resize: vertical; min-height: 70px; }
+    #pjModal td.pj-nome { min-width: 220px; }
+    #pjModal td.pj-ult { min-width: 260px; max-width: 460px; }
+    #pjModal .pj-pend { background: rgba(220,53,69,.06); }
+    #pjModal .btn-xs { padding: .1rem .45rem; font-size: .75rem; line-height: 1.4; }
+    @media (max-width: 768px) {
+      #pjModal.modal .modal-dialog { margin:0; width:100%; max-width:100%; height:100%; }
+      #pjModal.modal .modal-content { border-radius:0; height:100%; }
+      #pjModal.modal .modal-body { overflow:auto; -webkit-overflow-scrolling: touch; }
+    }
     .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; background:rgba(0,0,0,.06); }
     /* Normaliza o visual do input month para ficar igual aos demais */
 input[type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off"].form-control {
@@ -592,6 +612,91 @@ window.USER_POSTOS = {{ USER_POSTOS | tojson | default('[]') }};
               </thead>
               <tbody id="drillBody"></tbody>
             </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PJ: com contrato / sem contrato (justificativas mensais) -->
+  <div class="modal fade" id="pjModal" tabindex="-1" role="dialog" aria-labelledby="pjTitle" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="pjTitle">Contrato PJ</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Fechar">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <ul class="nav nav-tabs mb-2" role="tablist">
+            <li class="nav-item">
+              <a class="nav-link active" id="pjTabComLink" data-toggle="tab" href="#pjTabCom" role="tab">Com contrato PJ <span class="badge badge-success" id="pjCntCom">0</span></a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" id="pjTabSemLink" data-toggle="tab" href="#pjTabSem" role="tab">Sem contrato PJ <span class="badge badge-danger" id="pjCntSem">0</span></a>
+            </li>
+          </ul>
+
+          <div class="pj-toolbar">
+            <span id="pjMeta" class="mini muted"></span>
+            <input id="pjSearch" class="form-control form-control-sm ml-auto" style="width:min(380px, 100%)"
+              placeholder="Buscar por nome/CRM/especialidade...">
+          </div>
+
+          <div class="tab-content">
+            <!-- ABA 1: com contrato -->
+            <div class="tab-pane fade show active" id="pjTabCom" role="tabpanel">
+              <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>CRM/ID</th>
+                      <th>Especialidade</th>
+                      <th class="text-center">RQE</th>
+                      <th class="text-center">PJ</th>
+                      <th class="text-center">Agenda</th>
+                      <th class="text-center">Cert. digital</th>
+                      <th>Posto</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pjBodyCom"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- ABA 2: sem contrato + justificativas -->
+            <div class="tab-pane fade" id="pjTabSem" role="tabpanel">
+              <div class="pj-toolbar">
+                <label class="mb-0 mini muted">Competência da cobrança:</label>
+                <select id="pjComp" class="form-control form-control-sm" style="width:auto"></select>
+                <div class="custom-control custom-switch ml-2">
+                  <input type="checkbox" class="custom-control-input" id="pjSoPend">
+                  <label class="custom-control-label mini" for="pjSoPend">Só pendentes</label>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary ml-auto" id="pjReload" title="Reler as justificativas nos postos">
+                  <i class="fas fa-sync-alt"></i> Atualizar
+                </button>
+              </div>
+              <div id="pjResumo" class="pj-resumo mb-2"></div>
+              <div id="pjAvisos"></div>
+              <div class="table-responsive">
+                <table class="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>Médico</th>
+                      <th>Especialidade</th>
+                      <th>Posto</th>
+                      <th class="text-center">Situação no mês</th>
+                      <th>Última justificativa</th>
+                      <th class="text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pjBodySem"></tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1164,6 +1269,9 @@ function getPickerYM(sel) {
         const agendaAberta = b01(pick(r, FIELD_MAP.agenda_aberta)); // 1 aberta, 0 restrita
 
         const posto = cleanStr(r.posto ?? r.Posto ?? r.POSTO);
+        // ids do CAMIM (exportados pelo ETL desde 2026-08-17; JSON antigo não tem → null)
+        const idmedico = Number(r.idmedico ?? r.idMedico ?? r.IDMEDICO) || null;
+        const idespecialidade = Number(r.idespecialidade ?? r.idEspecialidade ?? r.IDESPECIALIDADE) || null;
 
         return {
           nome: nome || '',
@@ -1174,6 +1282,8 @@ function getPickerYM(sel) {
           cert,
           agendaAberta,
           posto: posto || '',
+          idmedico,
+          idespecialidade,
           __raw: r
         };
       }
@@ -1300,7 +1410,15 @@ function uniqueDoctors(rows) {
           `Com contrato PJ`,
           topAgg.comPJ,
           `${pctOf(topAgg.comPJ, total)} do total (${fmtInt.format(total)}) • clique para listar`,
-          openDrill(`Médicos com contrato PJ — ${mFmt(ym)}`, d => d.pj)
+          () => openPjModal({ ym, selection: sel2, tab: 'com' })
+        ));
+
+        const semPJ = total - topAgg.comPJ;
+        box.insertAdjacentHTML('beforeend', kpiCard(
+          `Sem contrato PJ`,
+          semPJ,
+          pjCardSubtitle(topAgg, semPJ),
+          () => openPjModal({ ym, selection: sel2, tab: 'sem' })
         ));
 
         box.insertAdjacentHTML('beforeend', kpiCard(
@@ -1522,6 +1640,352 @@ function uniqueDoctors(rows) {
         $('#drillModal').modal('show');
       }
 
+      // ================== CONTRATO PJ — MODAL COM/SEM + JUSTIFICATIVAS ==================
+      // A aba "Sem contrato PJ" lê ao vivo a Cad_EspecialidadeJustificativaPJ de cada
+      // posto (via /api/ctrlq/pj/justificativas) e cruza com os médicos do mês do KPI.
+      // Regra: o gerente deve justificar TODO MÊS por que o médico ainda não tem PJ.
+      // "Situação no mês" = existe justificativa com DataHora dentro da competência escolhida.
+      const PJ_API = '/api/ctrlq/pj/justificativas';
+      const PJ = {
+        loaded: false, loading: null, erroGeral: null,
+        postos: {},        // posto -> {itens, pode_escrever, id_usuario}
+        erros: {},         // posto -> msg
+        sem_vinculo: false, is_admin: false, login_campinho: null,
+        byMed: new Map(),  // "P|idmedico" -> [itens desc]
+        byCrm: new Map(),  // "P|crm"      -> [itens desc]
+        // estado do modal
+        ym: null, selection: 'ALL', comp: null, open: new Set(), form: null
+      };
+
+      const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const dtFmt = (iso) => {
+        if (!iso) return '-';
+        const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+        return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}` : String(iso);
+      };
+      const ymHoje = () => ym(new Date());
+      const agoraFmt = () => { const d = new Date(), z = n => String(n).padStart(2, '0'); return `${z(d.getDate())}/${z(d.getMonth() + 1)}/${d.getFullYear()} ${z(d.getHours())}:${z(d.getMinutes())}`; };
+
+      function pjIndexar() {
+        PJ.byMed.clear(); PJ.byCrm.clear();
+        for (const [p, dados] of Object.entries(PJ.postos || {})) {
+          for (const it of (dados.itens || [])) {
+            it.posto = p;
+            if (it.id_medico != null) {
+              const k = `${p}|${it.id_medico}`;
+              if (!PJ.byMed.has(k)) PJ.byMed.set(k, []);
+              PJ.byMed.get(k).push(it);
+            }
+            const crmKey = cleanStr(it.crm).replace(/\s+/g, '');
+            if (crmKey) {
+              const k = `${p}|${crmKey}`;
+              if (!PJ.byCrm.has(k)) PJ.byCrm.set(k, []);
+              PJ.byCrm.get(k).push(it);
+            }
+          }
+        }
+        const desc = (a, b) => String(b.data_hora || '').localeCompare(String(a.data_hora || '')) || (b.id - a.id);
+        for (const arr of PJ.byMed.values()) arr.sort(desc);
+        for (const arr of PJ.byCrm.values()) arr.sort(desc);
+      }
+
+      // Justificativas de um médico (linha do KPI): por idmedico; JSON antigo sem id → por CRM.
+      function pjJustsDe(d) {
+        const p = cleanStr(d.posto).toUpperCase();
+        if (d.idmedico) {
+          const a = PJ.byMed.get(`${p}|${d.idmedico}`);
+          if (a) return a;
+        }
+        const crmKey = cleanStr(d.crm).replace(/\s+/g, '');
+        if (crmKey) return PJ.byCrm.get(`${p}|${crmKey}`) || [];
+        return [];
+      }
+
+      async function loadPjJustificativas(force = false) {
+        if (PJ.loading) return PJ.loading;
+        if (PJ.loaded && !force) return Promise.resolve();
+        PJ.loading = (async () => {
+          try {
+            const r = await fetch(PJ_API, { cache: 'no-store', credentials: 'same-origin' });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const j = await r.json();
+            PJ.postos = j.postos || {};
+            PJ.erros = j.erros || {};
+            PJ.sem_vinculo = !!j.sem_vinculo;
+            PJ.is_admin = !!j.is_admin;
+            PJ.login_campinho = j.login_campinho || null;
+            PJ.erroGeral = null;
+            pjIndexar();
+            PJ.loaded = true;
+          } catch (e) {
+            PJ.erroGeral = String(e?.message || e);
+            console.error('justificativas PJ:', e);
+          } finally {
+            PJ.loading = null;
+          }
+        })();
+        return PJ.loading;
+      }
+
+      function pjStatusDe(d, comp) {
+        // {cls, txt, justs, ult, inMonth}
+        const p = cleanStr(d.posto).toUpperCase();
+        const justs = pjJustsDe(d);
+        const ult = justs[0] || null;
+        const inMonth = justs.some(j => j.competencia === comp);
+        if (!PJ.loaded) return { cls: 'secondary', txt: PJ.erroGeral ? 'sem leitura (erro)' : 'carregando…', justs, ult, inMonth: null };
+        if (PJ.erros[p]) return { cls: 'secondary', txt: 'sem leitura (posto fora)', justs, ult, inMonth: null };
+        if (inMonth) return { cls: 'success', txt: `Justificado em ${mFmt(comp)}`, justs, ult, inMonth: true };
+        return { cls: 'danger', txt: `Sem justificativa em ${mFmt(comp)}`, justs, ult, inMonth: false };
+      }
+
+      function pjCardSubtitle(topAgg, semPJ) {
+        const total = topAgg.total || 0;
+        const base = `${pctOf(semPJ, total)} do total (${fmtInt.format(total)})`;
+        if (!PJ.loaded) return `${base} • clique para ver justificativas`;
+        const comp = topAgg.ym;
+        const docs = topAgg.doctors.filter(d => !d.pj);
+        let pend = 0, semLeitura = 0;
+        for (const d of docs) {
+          const st = pjStatusDe(d, comp);
+          if (st.inMonth === false) pend++;
+          else if (st.inMonth === null) semLeitura++;
+        }
+        const extra = semLeitura ? ` • ${semLeitura} sem leitura` : '';
+        return `${base} • <b class="${pend ? 'text-danger' : 'text-success'}">${fmtInt.format(pend)} sem justificativa em ${mFmt(comp)}</b>${extra}`;
+      }
+
+      function docRowHtml(d) {
+        const badgeSimNao = (ok) => ok ? `<span class="badge badge-success">Sim</span>` : `<span class="badge badge-danger">Não</span>`;
+        const badgeAgenda = (aberta) => aberta ? `<span class="badge badge-success">Aberta</span>` : `<span class="badge badge-warning">Restrita</span>`;
+        return `
+          <tr>
+            <td>${esc(d.nome || '-')}</td>
+            <td>${esc(d.crm || '-')}</td>
+            <td>${esc(d.especialidade || '-')}</td>
+            <td class="text-center">${badgeSimNao(d.rqe)}</td>
+            <td class="text-center">${badgeSimNao(d.pj)}</td>
+            <td class="text-center">${badgeAgenda(d.agendaAberta)}</td>
+            <td class="text-center">${badgeSimNao(d.cert)}</td>
+            <td>${esc(d.posto || '-')}</td>
+          </tr>`;
+      }
+
+      function pjMatch(d, q) {
+        if (!q) return true;
+        return (d.nome || '').toLowerCase().includes(q) ||
+          String(d.crm || '').toLowerCase().includes(q) ||
+          (d.especialidade || '').toLowerCase().includes(q) ||
+          (d.posto || '').toLowerCase().includes(q);
+      }
+
+      function pjKey(d) { return `${d.posto}|${d.idmedico || ('crm:' + cleanStr(d.crm))}`; }
+
+      function openPjModal({ ym: y, selection, tab }) {
+        PJ.ym = y; PJ.selection = selection; PJ.comp = y; PJ.open.clear(); PJ.form = null;
+        const postoLabel = (selection === 'ALL') ? 'Todos' : [...selection].sort().join('+');
+        document.querySelector('#pjTitle').textContent = `Contrato PJ — ${mFmt(y)} • Posto: ${postoLabel}`;
+
+        // competências: todos os meses do JSON (o mês corrente = foto de ontem)
+        const sel = document.querySelector('#pjComp');
+        sel.innerHTML = '';
+        for (const m of MESES) sel.insertAdjacentHTML('beforeend', `<option value="${m}">${mFmt(m)}</option>`);
+        sel.value = MESES.includes(y) ? y : MESES[MESES.length - 1];
+        PJ.comp = sel.value;
+        sel.onchange = () => { PJ.comp = sel.value; PJ.open.clear(); PJ.form = null; renderPj(); };
+        document.querySelector('#pjSoPend').onchange = renderPj;
+        document.querySelector('#pjSearch').value = '';
+        document.querySelector('#pjSearch').oninput = renderPj;
+        document.querySelector('#pjReload').onclick = async () => {
+          const b = document.querySelector('#pjReload'); b.disabled = true;
+          await loadPjJustificativas(true); b.disabled = false; renderPj(); renderSel2();
+        };
+
+        $(`#pjTab${tab === 'sem' ? 'Sem' : 'Com'}Link`).tab('show');
+        renderPj();
+        $('#pjModal').modal('show');
+        if (!PJ.loaded) loadPjJustificativas().then(() => { renderPj(); renderSel2(); });
+      }
+
+      function renderPj() {
+        if (!PJ.ym) return;
+        const q = (document.querySelector('#pjSearch').value || '').trim().toLowerCase();
+        const soPend = document.querySelector('#pjSoPend').checked;
+
+        // aba 1: médicos do mês do KPI (o mesmo do card)
+        const allDocs = uniqueDoctors(rowsForMonthAndPostos(PJ.ym, PJ.selection));
+        const com = allDocs.filter(d => d.pj);
+        document.querySelector('#pjCntCom').textContent = fmtInt.format(com.length);
+        document.querySelector('#pjBodyCom').innerHTML = com.filter(d => pjMatch(d, q)).map(docRowHtml).join('');
+
+        // aba 2: médicos sem PJ na COMPETÊNCIA escolhida (pode diferir do mês do card)
+        const comp = PJ.comp;
+        const semAll = uniqueDoctors(rowsForMonthAndPostos(comp, PJ.selection)).filter(d => !d.pj);
+        const semKpi = allDocs.filter(d => !d.pj).length;
+        document.querySelector('#pjCntSem').textContent = fmtInt.format(semKpi);
+        document.querySelector('#pjMeta').textContent =
+          `Mês do KPI: ${mFmt(PJ.ym)} • Com PJ: ${com.length} • Sem PJ: ${semKpi}` +
+          (comp !== PJ.ym ? ` • aba "Sem contrato" olhando ${mFmt(comp)}: ${semAll.length} médicos` : '');
+
+        // resumo + avisos
+        let just = 0, pend = 0, semLeitura = 0;
+        const linhas = [];
+        for (const d of semAll) {
+          const st = pjStatusDe(d, comp);
+          if (st.inMonth === true) just++; else if (st.inMonth === false) pend++; else semLeitura++;
+          linhas.push({ d, st });
+        }
+        const resumo = document.querySelector('#pjResumo');
+        if (!PJ.loaded && PJ.loading) {
+          resumo.innerHTML = `<span class="text-muted"><i class="fas fa-spinner fa-spin"></i> Lendo justificativas nos postos…</span>`;
+        } else {
+          resumo.innerHTML =
+            `<b>${fmtInt.format(semAll.length)}</b> médicos sem contrato PJ em ${mFmt(comp)} • ` +
+            `<span class="text-success"><b>${fmtInt.format(just)}</b> justificados</span> • ` +
+            `<span class="${pend ? 'text-danger' : 'text-muted'}"><b>${fmtInt.format(pend)}</b> pendentes</span>` +
+            (semLeitura ? ` • <span class="text-muted">${fmtInt.format(semLeitura)} sem leitura</span>` : '') +
+            (comp === ymHoje() ? '' : ` <span class="mini muted">(competência passada: justificativa nova entra em ${mFmt(ymHoje())})</span>`);
+        }
+        const avisos = [];
+        if (PJ.erroGeral) avisos.push(`<div class="alert alert-danger py-1 px-2 mb-2 mini">Não consegui ler as justificativas: ${esc(PJ.erroGeral)}. Os status abaixo não valem.</div>`);
+        const errPostos = Object.keys(PJ.erros || {}).filter(p => postosFromSelection(PJ.selection).includes(p));
+        if (errPostos.length) avisos.push(`<div class="alert alert-warning py-1 px-2 mb-2 mini">Posto(s) sem leitura (fora do ar ou timeout): <b>${errPostos.join(', ')}</b>. Médicos desses postos aparecem como "sem leitura", não como pendentes.</div>`);
+        if (PJ.loaded && PJ.sem_vinculo) avisos.push(`<div class="alert alert-info py-1 px-2 mb-2 mini">Você pode ver, mas não pode justificar: seu login no KPI não tem vínculo com um usuário do CAMIM (Login Campinho). Toda justificativa fica assinada por quem escreveu — peça o vínculo ao Cristiano.</div>`);
+        document.querySelector('#pjAvisos').innerHTML = avisos.join('');
+
+        // tabela
+        const tb = document.querySelector('#pjBodySem');
+        const html = [];
+        for (const { d, st } of linhas) {
+          if (!pjMatch(d, q)) continue;
+          if (soPend && st.inMonth !== false) continue;
+          const key = pjKey(d);
+          const p = cleanStr(d.posto).toUpperCase();
+          const podeEscrever = PJ.loaded && !!(PJ.postos[p]?.pode_escrever);
+          const ult = st.ult;
+          const ultHtml = ult
+            ? `<div class="pj-just-txt">${esc(ult.justificativa)}</div>
+               <div class="pj-just-meta">${dtFmt(ult.data_hora)} • ${esc(ult.usuario_nome || ult.usuario || ('usuário #' + ult.id_usuario))}${ult.especialidade && ult.especialidade !== d.especialidade ? ' • ' + esc(ult.especialidade) : ''}</div>`
+            : `<span class="text-muted">— nunca justificado —</span>`;
+          const nHist = st.justs.length;
+          const aberto = PJ.open.has(key);
+          const formAberto = PJ.form === key;
+          html.push(`
+            <tr class="${st.inMonth === false ? 'pj-pend' : ''}" data-key="${esc(key)}">
+              <td class="pj-nome"><div>${esc(d.nome || '-')}</div><div class="mini muted">CRM ${esc(d.crm || '-')}</div></td>
+              <td>${esc(d.especialidade || '-')}</td>
+              <td>${esc(d.posto || '-')}</td>
+              <td class="text-center"><span class="badge badge-${st.cls}">${st.txt}</span></td>
+              <td class="pj-ult">${ultHtml}</td>
+              <td class="text-right text-nowrap">
+                ${nHist > 1 ? `<button type="button" class="btn btn-xs btn-outline-secondary pj-hist-btn" data-key="${esc(key)}">${aberto ? 'Ocultar' : 'Anteriores'} (${nHist - 1})</button>` : ''}
+                <button type="button" class="btn btn-xs ${st.inMonth === false ? 'btn-danger' : 'btn-outline-primary'} pj-just-btn" data-key="${esc(key)}"
+                  ${podeEscrever ? '' : 'disabled title="Seu login não tem vínculo com usuário do CAMIM neste posto"'}>${formAberto ? 'Cancelar' : 'Justificar'}</button>
+              </td>
+            </tr>`);
+          if (aberto || formAberto) {
+            let det = '';
+            if (formAberto) {
+              det += `
+                <div class="pj-form mb-2" data-key="${esc(key)}">
+                  <label class="mini mb-1">Por que <b>${esc(d.nome)}</b> ainda não tem contrato PJ? <span class="text-muted">(registra agora, ${agoraFmt()}, assinado por ${esc(PJ.login_campinho || '')})</span></label>
+                  <textarea class="form-control form-control-sm pj-txt" maxlength="250" rows="3" placeholder="Ex.: médico em processo de abertura de CNPJ; previsão de assinatura em setembro."></textarea>
+                  <div class="d-flex align-items-center mt-1" style="gap:8px">
+                    <span class="mini muted pj-cnt">0/250</span>
+                    <span class="mini text-danger pj-err ml-2"></span>
+                    <button type="button" class="btn btn-sm btn-primary ml-auto pj-save" data-key="${esc(key)}"><i class="fas fa-save"></i> Salvar justificativa</button>
+                  </div>
+                </div>`;
+            }
+            if (aberto && nHist > 1) {
+              det += `<div class="mini muted mb-1">Justificativas anteriores</div><ul class="pj-hist">` +
+                st.justs.slice(1).map(j => `
+                  <li data-jid="${j.id}">
+                    <div class="pj-just-txt">${esc(j.justificativa)}</div>
+                    <div class="pj-just-meta">${dtFmt(j.data_hora)} • ${esc(j.usuario_nome || j.usuario || ('usuário #' + j.id_usuario))} • competência ${j.competencia ? mFmt(j.competencia) : '-'}
+                      ${(PJ.is_admin || (PJ.postos[p]?.id_usuario && PJ.postos[p].id_usuario === j.id_usuario)) ? `<a href="#" class="ml-2 text-danger pj-del" data-jid="${j.id}" data-posto="${esc(p)}" title="Desativar (mantém no histórico do CAMIM)">desativar</a>` : ''}
+                    </div>
+                  </li>`).join('') + `</ul>`;
+            }
+            if (aberto && ult && (PJ.is_admin || (PJ.postos[p]?.id_usuario && PJ.postos[p].id_usuario === ult.id_usuario))) {
+              det += `<div class="mini mt-1"><a href="#" class="text-danger pj-del" data-jid="${ult.id}" data-posto="${esc(p)}">desativar a última justificativa</a></div>`;
+            }
+            html.push(`<tr class="pj-detail"><td colspan="6">${det}</td></tr>`);
+          }
+        }
+        tb.innerHTML = html.join('') || `<tr><td colspan="6" class="text-center text-muted py-3">Nenhum médico ${soPend ? 'pendente ' : ''}nesta competência/filtro.</td></tr>`;
+
+        // handlers
+        tb.querySelectorAll('.pj-hist-btn').forEach(b => b.onclick = () => {
+          const k = b.dataset.key; if (PJ.open.has(k)) PJ.open.delete(k); else PJ.open.add(k); renderPj();
+        });
+        tb.querySelectorAll('.pj-just-btn').forEach(b => b.onclick = () => {
+          const k = b.dataset.key; PJ.form = (PJ.form === k) ? null : k; renderPj();
+          if (PJ.form === k) { const ta = tb.querySelector('.pj-form .pj-txt'); if (ta) ta.focus(); }
+        });
+        tb.querySelectorAll('.pj-form').forEach(f => {
+          const ta = f.querySelector('.pj-txt'), cnt = f.querySelector('.pj-cnt');
+          ta.oninput = () => { cnt.textContent = `${ta.value.length}/250`; };
+          f.querySelector('.pj-save').onclick = () => pjSalvar(f.dataset.key, ta.value, f);
+        });
+        tb.querySelectorAll('.pj-del').forEach(a => a.onclick = (ev) => { ev.preventDefault(); pjDesativar(Number(a.dataset.jid), a.dataset.posto); });
+      }
+
+      function pjDocByKey(key) {
+        const docs = uniqueDoctors(rowsForMonthAndPostos(PJ.comp, PJ.selection)).filter(d => !d.pj);
+        return docs.find(d => pjKey(d) === key) || null;
+      }
+
+      async function pjSalvar(key, texto, formEl) {
+        const d = pjDocByKey(key); if (!d) return;
+        const err = formEl.querySelector('.pj-err'), btn = formEl.querySelector('.pj-save');
+        const t = (texto || '').trim();
+        if (t.length < 10) { err.textContent = 'Escreva pelo menos 10 caracteres.'; return; }
+        btn.disabled = true; err.textContent = '';
+        try {
+          const r = await fetch(PJ_API, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              posto: d.posto, id_medico: d.idmedico || null, crm: d.crm || null,
+              id_especialidade: d.idespecialidade || null, justificativa: t
+            })
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+          // entra no índice local sem reler os 13 postos
+          const it = j.item; it.posto = d.posto;
+          it.usuario_nome = it.usuario_nome || '';
+          const p = d.posto;
+          if (!PJ.postos[p]) PJ.postos[p] = { itens: [], pode_escrever: true, id_usuario: it.id_usuario };
+          PJ.postos[p].itens.unshift(it);
+          pjIndexar();
+          PJ.form = null;
+          renderPj(); renderSel2();
+        } catch (e) {
+          err.textContent = String(e.message || e);
+          btn.disabled = false;
+        }
+      }
+
+      async function pjDesativar(jid, posto) {
+        if (!confirm('Desativar esta justificativa? Ela some da tela, mas fica registrada no histórico do CAMIM.')) return;
+        try {
+          const r = await fetch(`${PJ_API}/${jid}/desativar`, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ posto })
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+          const arr = PJ.postos[posto]?.itens || [];
+          const i = arr.findIndex(x => x.id === jid); if (i >= 0) arr.splice(i, 1);
+          pjIndexar(); renderPj(); renderSel2();
+        } catch (e) {
+          alert('Não desativou: ' + (e.message || e));
+        }
+      }
+
       // ================== BOOT ==================
       function ym(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
 
@@ -1593,6 +2057,9 @@ setPickerYM('#to2', DEF_TO);
           wireGrupoButtons();
           initCharts();
           renderSel2();
+
+          // Justificativas PJ (ao vivo, 13 postos): quando chegar, o card "Sem contrato PJ" ganha o pendente do mês
+          loadPjJustificativas().then(() => renderSel2());
 
           const on = (s, e, f) => { const o = document.querySelector(s); if (o) o.addEventListener(e, f); };
           const maskInput = (e) => {
