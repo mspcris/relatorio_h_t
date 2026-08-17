@@ -1790,7 +1790,10 @@ function uniqueDoctors(rows) {
         const sel = document.querySelector('#pjComp');
         sel.innerHTML = '';
         for (const m of MESES) sel.insertAdjacentHTML('beforeend', `<option value="${m}">${mFmt(m)}</option>`);
-        sel.value = MESES.includes(y) ? y : MESES[MESES.length - 1];
+        // Cobrança é do MÊS CORRENTE: abre em hoje (o JSON tem o mês vigente = foto de ontem),
+        // não no mês do card — senão a justificativa registrada hoje "não conta" (2026-08-17).
+        const hoje = ymHoje();
+        sel.value = MESES.includes(hoje) ? hoje : (MESES.includes(y) ? y : MESES[MESES.length - 1]);
         PJ.comp = sel.value;
         sel.onchange = () => { PJ.comp = sel.value; PJ.open.clear(); PJ.form = null; renderPj(); };
         document.querySelector('#pjSoPend').onchange = renderPj;
@@ -1844,7 +1847,7 @@ function uniqueDoctors(rows) {
             `<span class="text-success"><b>${fmtInt.format(just)}</b> justificados</span> • ` +
             `<span class="${pend ? 'text-danger' : 'text-muted'}"><b>${fmtInt.format(pend)}</b> pendentes</span>` +
             (semLeitura ? ` • <span class="text-muted">${fmtInt.format(semLeitura)} sem leitura</span>` : '') +
-            (comp === ymHoje() ? '' : ` <span class="mini muted">(competência passada: justificativa nova entra em ${mFmt(ymHoje())})</span>`);
+            (comp === ymHoje() ? '' : ` <span class="badge badge-warning">competência passada — justificativa registrada hoje conta em ${mFmt(ymHoje())}, não em ${mFmt(comp)}</span>`);
         }
         const avisos = [];
         if (PJ.erroGeral) avisos.push(`<div class="alert alert-danger py-1 px-2 mb-2 mini">Não consegui ler as justificativas: ${esc(PJ.erroGeral)}. Os status abaixo não valem.</div>`);

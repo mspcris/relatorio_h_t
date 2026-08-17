@@ -293,9 +293,11 @@ por que o médico ainda não tem PJ. Mostra a última justificativa, tem
   `idespecialidade` da linha dedupada do KPI, ou a especialidade ativa mais
   antiga do médico se o JSON for antigo. JSON sem `idmedico` casa por CRM.
 - **"Situação no mês"** = existe justificativa com `DataHora` dentro da
-  competência escolhida no modal (default = mês do card). Justificativa nova
-  entra sempre com a data de HOJE — a tela avisa quando a competência olhada
-  é passada.
+  competência escolhida no modal. **Default = MÊS DE HOJE**, não o mês do
+  card: a cobrança é do mês corrente e justificativa nova entra sempre com a
+  data de hoje. Abrir em jul-26 fez a primeira justificativa real (17/08)
+  parecer "não contada" — o Cristiano estranhou na hora. Competência passada
+  ganha selo amarelo dizendo em que mês a nova vai cair.
 - **Auditoria:** a tabela não está em `Sis_HistoricoTabela`; grava-se em
   `idTabela=53` (Cad_Especialidade) com `id=idEspecialidade`, comando 1
   (incluir) / 3 (desativar). `idUsuario` vem do `login_campinho` resolvido na
