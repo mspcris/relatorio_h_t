@@ -149,6 +149,29 @@
         }
       });
       await Promise.allSettled(promises);
+      setGeradoInfo(ym);
+    }
+
+    // Hora em que o cron (de hora em hora) coletou os dados — campo gerado_em
+    // gravado pelo export_notas_rps.py em cada JSON de posto. Mostra a coleta
+    // mais ANTIGA entre os postos carregados: nota emitida depois disso ainda
+    // não aparece na página.
+    function setGeradoInfo(ym){
+      const badge = el('#geradoInfo');
+      if(!badge) return;
+      const postos = CACHE[ym] || {};
+      const stamps = Object.entries(postos)
+        .filter(([,v]) => v && v.gerado_em)
+        .map(([p,v]) => ({p, d:new Date(v.gerado_em)}))
+        .filter(x => !isNaN(x.d));
+      if(!stamps.length) return;
+      const oldest = stamps.reduce((a,b)=> a.d < b.d ? a : b);
+      const fmt = d => d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}) +
+                       ' às ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+      badge.textContent = `🕐 Dados coletados ${fmt(oldest.d)}`;
+      badge.title = 'O robô coleta do sistema CAMIM de hora em hora. ' +
+        'Nota emitida depois desse horário ainda não aparece aqui.\n\nColeta por posto:\n' +
+        stamps.sort((a,b)=> a.p.localeCompare(b.p)).map(x=>`${x.p}: ${fmt(x.d)}`).join('\n');
     }
 
     function setJsonInfo(lastModified, ym){
@@ -1120,6 +1143,9 @@
               <button id="btnFiltrar" class="btn btn-sm btn-primary">🔍 Filtrar</button>
               <button id="btnMesAtual" class="btn btn-sm btn-outline-info">Mês Atual</button>
               <button id="btnReload" class="btn btn-sm btn-outline-secondary">Recarregar</button>
+            </div>
+            <div class="ml-auto d-flex align-items-center">
+              <span id="geradoInfo" class="badge badge-light border" style="font-weight:500;font-size:.8rem;padding:.35rem .5rem;"></span>
             </div>
           </div>
         </div>
