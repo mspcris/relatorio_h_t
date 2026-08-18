@@ -783,7 +783,8 @@ def _limit_status(spent: float, limit) -> dict:
         "limit": lim,
         "pct": round(spent / lim * 100, 1) if lim else None,
         "over": bool(lim is not None and spent > lim),
-        "near": bool(lim is not None and not (spent > lim) and spent >= 0.8 * lim),
+        "at": bool(lim is not None and not (spent > lim) and spent >= lim),
+        "near": bool(lim is not None and not (spent >= lim) and spent >= 0.8 * lim),
     }
 
 

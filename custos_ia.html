@@ -374,6 +374,9 @@ function setCardLimit(boxId, smallId, st){
   if(st.over){
     sm.innerHTML = `<span class="lim-chip over">⚠ ESTOUROU</span> ${teto}`;
     box.classList.add("lim-over");
+  } else if(st.at || (st.limit!=null && st.spent>=st.limit)){
+    sm.innerHTML = `<span class="lim-chip near">⚠ no teto</span> ${teto}`;
+    box.classList.add("lim-near");
   } else if(st.near){
     sm.innerHTML = `<span class="lim-chip near">⚠ perto do teto</span> ${teto}`;
     box.classList.add("lim-near");
