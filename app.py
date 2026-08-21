@@ -143,6 +143,13 @@ except Exception as _e:
     import logging
     logging.getLogger(__name__).error("medico_custo_bp não carregado: %s", _e)
 
+try:
+    from controle_pjs_routes import controle_pjs_bp
+    app.register_blueprint(controle_pjs_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("controle_pjs_bp não carregado: %s", _e)
+
 PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
 
 # Mapeamento page_key → template para controle de acesso por página
@@ -238,6 +245,15 @@ _TEMPLATE_TO_PAGINA = {
     "/custos_ti":                       "custos_ti",
     "/custos_ti_cadastros":             "custos_ti",
     "/custos_ti_auditoria":             "custos_ti",
+    # Controle de PJs — MAIS restrito que os acima: NEM all_pages NEM is_admin
+    # entram. Só o dono (CONTROLE_PJS_OWNER, default cristiano@) e quem tiver a
+    # permissão explícita 'controle_pjs', concedida SÓ pelo dono na própria
+    # página. A chave fica fora de public.servicos (o modal do /admin nem a
+    # lista) e o admin_editar preserva a linha ao regravar as demais
+    # (PAGINAS_PROTEGIDAS em auth_routes). O guard fica na rota /controle_pjs.
+    "controle_pjs.html":                "controle_pjs",
+    "controle_pjs":                     "controle_pjs",
+    "/controle_pjs":                    "controle_pjs",
     # Itens de mais_servicos.html (internos)
     "k_adicional_NBS-IBS-CBS.html":    "k_nbs_ibs_cbs",
     "k_adicional_relatorio_pcs.html":  "k_relatorio_pcs",
@@ -1518,6 +1534,37 @@ def h_custos_ti_centro(key):
         return redirect("/custos_ia")
     return render_protected_page("custos_ti_centro.html", TI_CENTROS=centros,
                                  TI_ATIVO=key, TI_CENTRO=centro)
+
+
+@app.get('/controle_pjs')
+@app.get('/controle_pjs.html')
+def h_controle_pjs():
+    """Controle de PJs — contratos, boletos e NFs dos prestadores (o que chega
+    no alias prestadores@camim.com.br).
+
+    Guard PRÓPRIO, mais restrito que o render_protected_page: entra só o dono
+    (CONTROLE_PJS_OWNER) e quem tem o bit explícito 'controle_pjs' — nem
+    all_pages nem is_admin bastam. O render_protected_page roda depois apenas
+    para o render + injeções padrão (o guard dele não barraria all_pages)."""
+    try:
+        from controle_pjs_routes import acesso_info
+        info = acesso_info()
+    except Exception as _e:  # noqa: BLE001 - módulo fora do ar não derruba o app
+        logging.getLogger(__name__).error("controle_pjs indisponível: %s", _e)
+        return "Módulo Controle de PJs indisponível", 503
+    if not info["email"]:
+        return redirect("/login?next=/controle_pjs")
+    if not info["autorizado"]:
+        _log_access(info["email"], request.path, "controle_pjs",
+                    allowed=False, reason="pjs_negado")
+        return render_template(
+            "acesso_negado.html",
+            USER_EMAIL=info["email"],
+            USER_IS_ADMIN=info["is_admin"],
+            USER_POSTOS=json.dumps(info["postos"]),
+            PAGINA_BLOQUEADA="controle_pjs.html",
+        ), 403
+    return render_protected_page("controle_pjs.html", PJ_DONO=info["dono"])
 
 
 @app.get('/custos_ia')

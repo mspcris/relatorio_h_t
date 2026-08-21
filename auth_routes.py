@@ -134,6 +134,14 @@ IA_GROQ_URL = os.environ.get("IA_GROQ_URL", "http://127.0.0.1:8030/ia/analisar")
 
 auth_bp = Blueprint("auth_bp", __name__)
 
+# Chaves de página que o /admin NÃO gerencia (ficam fora do catálogo
+# public.servicos e o modal nunca as envia). O admin_editar PRESERVA essas
+# linhas ao regravar `paginas` — sem isso, qualquer admin salvando o modal
+# (que só envia as chaves do catálogo) apagaria o bit sem perceber.
+# 'controle_pjs' é concedido/removido SÓ pelo dono, dentro da própria página.
+PAGINAS_PROTEGIDAS = {"controle_pjs"}
+
+
 def obter_paginas_disponiveis() -> list[dict]:
     """Lê o catálogo de serviços do RDS Postgres (public.servicos).
 
@@ -715,6 +723,8 @@ def admin_criar():
             user.login_campinho = d["login_campinho"].strip()
         from auth_db import UserPagePermission
         for key in d.get("paginas", []):
+            if key in PAGINAS_PROTEGIDAS:
+                continue  # bit protegido não nasce pelo /admin
             db.add(UserPagePermission(user_id=user.id, page_key=key))
         db.commit()
         return jsonify({"id": user.id}), 201
@@ -760,9 +770,17 @@ def admin_editar(uid: int):
             user.login_campinho = (d["login_campinho"] or "").strip() or None
         if "paginas" in d:
             from auth_db import UserPagePermission
-            db.query(UserPagePermission).filter_by(user_id=user.id).delete(synchronize_session="fetch")
+            # Regrava só as chaves geridas pelo modal; as PROTEGIDAS (ex.:
+            # controle_pjs, que o modal nem lista) ficam intactas — apagar
+            # tudo aqui removeria o bit concedido pelo dono sem ninguém ver.
+            db.query(UserPagePermission).filter(
+                UserPagePermission.user_id == user.id,
+                UserPagePermission.page_key.notin_(PAGINAS_PROTEGIDAS),
+            ).delete(synchronize_session="fetch")
             db.flush()
             for key in d["paginas"]:
+                if key in PAGINAS_PROTEGIDAS:
+                    continue
                 db.add(UserPagePermission(user_id=user.id, page_key=key))
         db.commit()
         return jsonify({"ok": True})

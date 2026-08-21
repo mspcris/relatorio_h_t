@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Controle de PJs — CAMIM</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style2.css">
+  <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <!-- Bootstrap é OBRIGATÓRIO: o AdminLTE 3 NÃO o embute e sem ele
+       $(...).modal() não existe — modal morre calado (lição do custos_ti). -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+  <style>
+    body { font-family: 'Source Sans Pro', sans-serif; background: #f4f6f9; }
+    .pj-topo { background: #fff; border-bottom: 1px solid #e3e6ea; padding: .65rem 1.1rem;
+               display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; }
+    .pj-topo h1 { font-size: 1.15rem; font-weight: 700; margin: 0; }
+    .pj-topo .sub { color: #8a9199; font-size: .8rem; }
+    .pj-card { background: #fff; border: 1px solid #e9ecef; border-radius: 10px; }
+    .pj-card .hd { padding: .6rem .9rem; border-bottom: 1px solid #eef0f2; font-weight: 600; display: flex; align-items: center; gap: .5rem; }
+    .pj-card .bd { padding: .75rem .9rem; }
+    .pj-tile { background: #fff; border: 1px solid #e9ecef; border-radius: 10px; padding: .8rem 1rem; height: 100%; }
+    .pj-tile .rot { color: #8a9199; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
+    .pj-tile .fig { font-size: 1.55rem; font-weight: 700; line-height: 1.2; }
+    .pj-tile .sub { color: #52514e; font-size: .78rem; }
+    table.pj-tbl { width: 100%; font-size: .86rem; }
+    table.pj-tbl th, table.pj-tbl td { padding: .4rem .55rem; border-bottom: 1px solid #eef0f2; vertical-align: middle; }
+    table.pj-tbl th { color: #52514e; font-weight: 600; white-space: nowrap; }
+    table.pj-tbl td.num, table.pj-tbl th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    table.pj-tbl tfoot td { font-weight: 700; border-top: 2px solid #dee2e6; border-bottom: 0; }
+    .pj-selo { font-size: .7rem; padding: .12rem .5rem; border-radius: 999px; font-weight: 600; white-space: nowrap; display: inline-block; }
+    .selo-ok   { background: #e6f4ea; color: #1e7e34; }
+    .selo-falta{ background: #fdecea; color: #b02a37; }
+    .selo-aviso{ background: #fff3cd; color: #856404; }
+    .selo-neutro{ background: #eef0f2; color: #52514e; }
+    .pj-posto { display: inline-block; min-width: 1.45rem; text-align: center; font-size: .7rem;
+                font-weight: 700; background: #eef2f7; color: #37507a; border-radius: 5px;
+                padding: .1rem .25rem; margin: 0 .12rem .12rem 0; }
+    .pj-chip { display: inline-flex; align-items: center; gap: .3rem; font-size: .76rem;
+               background: #f1f3f5; border: 1px solid #e3e6ea; border-radius: 999px;
+               padding: .12rem .55rem; margin: 0 .25rem .25rem 0; color: #343a40; text-decoration: none; }
+    .pj-chip:hover { background: #e9ecef; text-decoration: none; }
+    .pj-chip .x { color: #b02a37; cursor: pointer; margin-left: .15rem; }
+    .scroll-x { overflow-x: auto; }
+    .pj-email { border: 1px solid #e9ecef; border-radius: 8px; padding: .55rem .75rem; margin-bottom: .55rem; }
+    .pj-email .assunto { font-weight: 600; }
+    .pj-email .meta { color: #8a9199; font-size: .78rem; }
+    .postos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .1rem .6rem; }
+    .postos-grid label { font-weight: 400; font-size: .85rem; margin: 0; }
+    .linha-empresa:hover { background: #fafbfc; cursor: pointer; }
+    .btn-xs { padding: .1rem .45rem; font-size: .75rem; }
+    #avisoTopo { display: none; }
+  </style>
+</head>
+<body class="hold-transition">
+<div class="pj-topo">
+  <h1><i class="fas fa-file-invoice-dollar text-primary"></i> Controle de PJs</h1>
+  <span class="sub">boletos e notas dos prestadores · alias <b>prestadores@camim.com.br</b></span>
+  <div class="ml-auto d-flex align-items-center" style="gap:.5rem;">
+    <button class="btn btn-outline-secondary btn-sm" id="btnFila">
+      <i class="far fa-envelope"></i> Fila de e-mails <span class="badge badge-danger" id="badgeFila" style="display:none;">0</span>
+    </button>
+    <button class="btn btn-outline-secondary btn-sm" id="btnAcesso" style="display:none;">
+      <i class="fas fa-user-lock"></i> Acesso
+    </button>
+    <button class="btn btn-primary btn-sm" id="btnNovaEmpresa"><i class="fas fa-plus"></i> Nova empresa</button>
+    <button class="btn btn-success btn-sm" id="btnNovoBoleto"><i class="fas fa-plus"></i> Lançar boleto</button>
+  </div>
+</div>
+
+<div class="container-fluid py-3" style="max-width: 1250px;">
+  <div class="alert alert-warning" id="avisoTopo"></div>
+
+  <div class="d-flex align-items-center mb-3" style="gap:.6rem; flex-wrap: wrap;">
+    <label class="mb-0 text-muted" for="selMes" style="font-size:.85rem;">Competência</label>
+    <input type="month" id="selMes" class="form-control form-control-sm" style="width:auto;">
+    <input type="search" id="txtBusca" class="form-control form-control-sm" style="width:220px;" placeholder="Buscar empresa...">
+    <span class="text-muted ml-auto" style="font-size:.78rem;" id="rodapeAtualizado"></span>
+  </div>
+
+  <div class="row mb-3">
+    <div class="col-md-3 col-6 mb-2"><div class="pj-tile"><div class="rot">Total do mês</div><div class="fig" id="tileTotal">—</div><div class="sub" id="tileTotalSub"></div></div></div>
+    <div class="col-md-3 col-6 mb-2"><div class="pj-tile"><div class="rot">Empresas ativas</div><div class="fig" id="tileEmpresas">—</div><div class="sub" id="tileEmpresasSub"></div></div></div>
+    <div class="col-md-3 col-6 mb-2"><div class="pj-tile"><div class="rot">Pendências no mês</div><div class="fig" id="tilePend">—</div><div class="sub">sem boleto, sem NF ou contrato</div></div></div>
+    <div class="col-md-3 col-6 mb-2"><div class="pj-tile"><div class="rot">E-mails na fila</div><div class="fig" id="tileFila">—</div><div class="sub">aguardando conferência</div></div></div>
+  </div>
+
+  <div class="pj-card mb-3">
+    <div class="hd"><i class="far fa-building text-muted"></i> Situação das empresas no mês <span id="hdMes" class="text-muted" style="font-weight:400;"></span></div>
+    <div class="bd scroll-x">
+      <table class="pj-tbl" id="tblEmpresas">
+        <thead><tr>
+          <th>Empresa</th><th>Contrato</th><th class="num">Boletos do mês</th>
+          <th class="num">Total do mês</th><th>NF do mês</th><th>Postos</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="text-muted py-3" id="vazioEmpresas" style="display:none;">
+        Nenhuma empresa cadastrada ainda — comece pelo botão <b>Nova empresa</b>.
+      </div>
+    </div>
+  </div>
+
+  <div class="pj-card mb-3">
+    <div class="hd"><i class="far fa-calendar-alt text-muted"></i> Despesa mensal por empresa — últimos 12 meses</div>
+    <div class="bd scroll-x"><table class="pj-tbl" id="tblMatriz"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+  </div>
+</div>
+
+<!-- ═══════════ Modais ═══════════ -->
+
+<div class="modal fade" id="mdEmpresa" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header py-2"><h5 class="modal-title" id="mdEmpresaTitulo">Nova empresa</h5>
+    <button type="button" class="close" data-dismiss="modal">&times;</button></div>
+  <div class="modal-body">
+    <input type="hidden" id="empId">
+    <div class="form-group mb-2"><label class="mb-0">Nome *</label><input class="form-control form-control-sm" id="empNome"></div>
+    <div class="form-row">
+      <div class="form-group col-6 mb-2"><label class="mb-0">CNPJ</label><input class="form-control form-control-sm" id="empCnpj"></div>
+      <div class="form-group col-6 mb-2"><label class="mb-0">Telefone</label><input class="form-control form-control-sm" id="empTel"></div>
+    </div>
+    <div class="form-group mb-2"><label class="mb-0">Contato</label><input class="form-control form-control-sm" id="empContato"></div>
+    <div class="form-group mb-2"><label class="mb-0">E-mails/domínios do remetente <small class="text-muted">(vírgula — o robô usa p/ reconhecer)</small></label>
+      <input class="form-control form-control-sm" id="empEmail" placeholder="financeiro@fulano.com.br, fulano.com.br"></div>
+    <div class="form-row">
+      <div class="form-group col-6 mb-2"><label class="mb-0">Contrato — início</label><input type="date" class="form-control form-control-sm" id="empCIni"></div>
+      <div class="form-group col-6 mb-2"><label class="mb-0">Contrato — fim <small class="text-muted">(vazio = sem prazo)</small></label><input type="date" class="form-control form-control-sm" id="empCFim"></div>
+    </div>
+    <div class="form-group mb-2"><label class="mb-0">Observações</label><textarea class="form-control form-control-sm" id="empObs" rows="2"></textarea></div>
+    <div class="custom-control custom-switch" id="wrapEmpAtivo" style="display:none;">
+      <input type="checkbox" class="custom-control-input" id="empAtivo" checked>
+      <label class="custom-control-label" for="empAtivo">Empresa ativa</label>
+    </div>
+  </div>
+  <div class="modal-footer py-2">
+    <button class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+    <button class="btn btn-primary btn-sm" id="btnSalvarEmpresa">Salvar</button>
+  </div>
+</div></div></div>
+
+<div class="modal fade" id="mdDetalhe" tabindex="-1"><div class="modal-dialog modal-xl"><div class="modal-content">
+  <div class="modal-header py-2"><h5 class="modal-title" id="detTitulo">Empresa</h5>
+    <button type="button" class="close" data-dismiss="modal">&times;</button></div>
+  <div class="modal-body" id="detCorpo"></div>
+</div></div></div>
+
+<div class="modal fade" id="mdBoleto" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header py-2"><h5 class="modal-title" id="mdBoletoTitulo">Lançar boleto</h5>
+    <button type="button" class="close" data-dismiss="modal">&times;</button></div>
+  <div class="modal-body">
+    <input type="hidden" id="bolId"><input type="hidden" id="bolEmailId">
+    <div class="form-group mb-2"><label class="mb-0">Empresa *</label>
+      <select class="form-control form-control-sm" id="bolEmpresa"></select></div>
+    <div class="form-row">
+      <div class="form-group col-4 mb-2"><label class="mb-0">Competência *</label><input type="month" class="form-control form-control-sm" id="bolComp"></div>
+      <div class="form-group col-4 mb-2"><label class="mb-0">Valor (R$) *</label><input class="form-control form-control-sm" id="bolValor" placeholder="1.234,56"></div>
+      <div class="form-group col-4 mb-2"><label class="mb-0">Vencimento</label><input type="date" class="form-control form-control-sm" id="bolVenc"></div>
+    </div>
+    <div class="form-group mb-2"><label class="mb-0">Emitido contra os postos</label>
+      <div class="postos-grid" id="bolPostos"></div></div>
+    <div class="form-group mb-2"><label class="mb-0">Descrição</label><input class="form-control form-control-sm" id="bolDesc"></div>
+    <div class="form-row" id="wrapBolStatus">
+      <div class="form-group col-6 mb-2"><label class="mb-0">Status</label>
+        <select class="form-control form-control-sm" id="bolStatus">
+          <option value="recebido">Recebido</option><option value="conferido">Conferido</option><option value="pago">Pago</option>
+        </select></div>
+      <div class="form-group col-6 mb-2" id="wrapPagoEm" style="display:none;"><label class="mb-0">Pago em</label>
+        <input type="date" class="form-control form-control-sm" id="bolPagoEm"></div>
+    </div>
+    <div id="wrapBolArquivos">
+      <div class="form-group mb-2"><label class="mb-0">Anexar boleto (PDF)</label>
+        <input type="file" class="form-control-file" id="bolArqBoleto" accept=".pdf,.png,.jpg,.jpeg"></div>
+      <div class="form-group mb-2"><label class="mb-0">Anexar nota fiscal (PDF/XML)</label>
+        <input type="file" class="form-control-file" id="bolArqNf" accept=".pdf,.xml,.png,.jpg,.jpeg"></div>
+    </div>
+    <div id="wrapEmailAnexos" style="display:none;">
+      <label class="mb-1">Anexos do e-mail — diga o que é cada um:</label>
+      <div id="listaEmailAnexos"></div>
+    </div>
+  </div>
+  <div class="modal-footer py-2">
+    <button class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+    <button class="btn btn-success btn-sm" id="btnSalvarBoleto">Salvar</button>
+  </div>
+</div></div></div>
+
+<div class="modal fade" id="mdFila" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+  <div class="modal-header py-2"><h5 class="modal-title">Fila de e-mails — prestadores@camim.com.br</h5>
+    <button type="button" class="close" data-dismiss="modal">&times;</button></div>
+  <div class="modal-body">
+    <div class="mb-2">
+      <div class="btn-group btn-group-sm" role="group">
+        <button class="btn btn-outline-secondary active" data-fs="pendente">Pendentes</button>
+        <button class="btn btn-outline-secondary" data-fs="descartado">Descartados</button>
+        <button class="btn btn-outline-secondary" data-fs="lancado">Lançados</button>
+      </div>
+    </div>
+    <div id="filaCorpo"><div class="text-muted">Carregando…</div></div>
+    <div class="text-muted mt-2" style="font-size:.76rem;">
+      O robô lê a caixa em modo somente-leitura (nunca marca como lido) e nada vira
+      boleto sozinho — todo item espera a sua confirmação aqui.
+    </div>
+  </div>
+</div></div></div>
+
+<div class="modal fade" id="mdAcesso" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header py-2"><h5 class="modal-title">Quem pode ver esta página</h5>
+    <button type="button" class="close" data-dismiss="modal">&times;</button></div>
+  <div class="modal-body">
+    <p class="text-muted mb-2" style="font-size:.8rem;">
+      Nem administradores entram sem estar nesta lista. Só você concede — e este
+      controle não aparece no /admin.
+    </p>
+    <div class="scroll-x"><table class="pj-tbl" id="tblAcesso"><tbody></tbody></table></div>
+  </div>
+</div></div></div>
+
+<script>
+"use strict";
+const EH_DONO = {{ 'true' if PJ_DONO else 'false' }};
+const MES_HOJE = new Date().toISOString().slice(0, 7);
+const fmtBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+let POSTOS = [];            // [{letra,nome}]
+let RESUMO = null;
+let EMPRESAS_OPCOES = [];   // p/ selects
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function moeda(v) { return fmtBRL.format(v || 0); }
+function mesBR(m) { const [a, mm] = m.split('-'); return `${mm}/${a}`; }
+
+// Guard de modal: se o Bootstrap não veio, avisa em vez de morrer calado.
+function pjModal(sel, acao) {
+  if (typeof $.fn.modal !== 'function') {
+    document.getElementById('avisoTopo').style.display = 'block';
+    document.getElementById('avisoTopo').textContent =
+      'O Bootstrap não carregou — modais indisponíveis. Recarregue a página (F5).';
+    return;
+  }
+  $(sel).modal(acao || 'show');
+}
+
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  let j = null;
+  try { j = await r.json(); } catch (e) { /* respostas de arquivo não são JSON */ }
+  if (!r.ok) throw new Error((j && j.error) || `erro HTTP ${r.status}`);
+  return j;
+}
+function avisa(msg) { alert(msg); }
+
+// ── Resumo ────────────────────────────────────────────────────────────────
+async function carregarResumo() {
+  const mes = document.getElementById('selMes').value || MES_HOJE;
+  RESUMO = await api(`/api/controle-pjs/resumo?mes=${mes}`);
+  EMPRESAS_OPCOES = RESUMO.empresas.map(e => ({ id: e.id, nome: e.nome, ativo: e.ativo }));
+  document.getElementById('hdMes').textContent = `· ${mesBR(mes)}`;
+  desenharTiles(); desenharTabela(); desenharMatriz();
+  const fila = RESUMO.fila_pendentes || 0;
+  document.getElementById('tileFila').textContent = fila;
+  const b = document.getElementById('badgeFila');
+  b.style.display = fila > 0 ? '' : 'none';
+  b.textContent = fila;
+  document.getElementById('rodapeAtualizado').textContent =
+    'Atualizado em ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function pendenciasDe(e) {
+  const p = [];
+  if (e.contrato === 'sem_contrato') p.push('sem contrato anexado');
+  if (e.contrato === 'vencido') p.push('contrato vencido');
+  if (!e.boletos_mes_n) p.push('sem boleto no mês');
+  if (e.boletos_mes_n && !e.nf_mes) p.push('sem NF no mês');
+  return p;
+}
+
+function desenharTiles() {
+  const ativas = RESUMO.empresas.filter(e => e.ativo);
+  document.getElementById('tileTotal').textContent = moeda(RESUMO.total_mes);
+  document.getElementById('tileTotalSub').textContent =
+    ativas.reduce((n, e) => n + e.boletos_mes_n, 0) + ' boleto(s) na competência';
+  document.getElementById('tileEmpresas').textContent = ativas.length;
+  document.getElementById('tileEmpresasSub').textContent =
+    RESUMO.empresas.length - ativas.length ? `${RESUMO.empresas.length - ativas.length} inativa(s)` : '';
+  document.getElementById('tilePend').textContent =
+    ativas.filter(e => pendenciasDe(e).length).length;
+}
+
+function seloContrato(e) {
+  if (e.contrato === 'ok') return '<span class="pj-selo selo-ok">em dia</span>';
+  if (e.contrato === 'vencido') return '<span class="pj-selo selo-aviso">vencido</span>';
+  return '<span class="pj-selo selo-falta">sem anexo</span>';
+}
+
+function desenharTabela() {
+  const busca = (document.getElementById('txtBusca').value || '').toLowerCase();
+  const tb = document.querySelector('#tblEmpresas tbody');
+  const linhas = RESUMO.empresas.filter(e =>
+    (!busca || e.nome.toLowerCase().includes(busca)) && (e.ativo || e.boletos_mes_n));
+  document.getElementById('vazioEmpresas').style.display = RESUMO.empresas.length ? 'none' : '';
+  tb.innerHTML = linhas.map(e => {
+    const postos = e.postos_mes.map(p => {
+      const n = POSTOS.find(x => x.letra === p);
+      return `<span class="pj-posto" title="${esc(n ? n.nome : p)}">${esc(p)}</span>`;
+    }).join('');
+    const nf = e.boletos_mes_n
+      ? (e.nf_mes ? '<span class="pj-selo selo-ok">anexada</span>' : '<span class="pj-selo selo-falta">falta</span>')
+      : '<span class="pj-selo selo-neutro">—</span>';
+    const bol = e.boletos_mes_n
+      ? `${e.boletos_mes_n}${e.boletos_mes_pagos ? ` <small class="text-muted">(${e.boletos_mes_pagos} pago)</small>` : ''}`
+      : '<span class="pj-selo selo-falta">nenhum</span>';
+    return `<tr class="linha-empresa" data-id="${e.id}">
+      <td><b>${esc(e.nome)}</b>${e.ativo ? '' : ' <span class="pj-selo selo-neutro">inativa</span>'}<br>
+          <small class="text-muted">${esc(e.cnpj || '')}</small></td>
+      <td>${seloContrato(e)}</td>
+      <td class="num">${bol}</td>
+      <td class="num"><b>${e.boletos_mes_total ? moeda(e.boletos_mes_total) : '—'}</b></td>
+      <td>${nf}</td>
+      <td>${postos || '<span class="text-muted">—</span>'}</td>
+      <td class="text-right" style="white-space:nowrap;">
+        <button class="btn btn-outline-success btn-xs" data-acao="boleto" title="Lançar boleto"><i class="fas fa-plus"></i></button>
+        <button class="btn btn-outline-primary btn-xs" data-acao="abrir" title="Abrir"><i class="far fa-folder-open"></i></button>
+      </td></tr>`;
+  }).join('');
+}
+
+function desenharMatriz() {
+  const meses = RESUMO.meses;
+  document.querySelector('#tblMatriz thead').innerHTML =
+    '<tr><th>Empresa</th>' + meses.map(m => `<th class="num">${mesBR(m)}</th>`).join('') + '</tr>';
+  const comDado = RESUMO.empresas.filter(e => meses.some(m => e.por_mes[m] > 0));
+  document.querySelector('#tblMatriz tbody').innerHTML = comDado.map(e =>
+    `<tr><td>${esc(e.nome)}</td>` + meses.map(m =>
+      `<td class="num">${e.por_mes[m] ? moeda(e.por_mes[m]) : '<span class="text-muted">·</span>'}</td>`).join('') + '</tr>'
+  ).join('') || `<tr><td colspan="${meses.length + 1}" class="text-muted">Nenhum boleto lançado ainda.</td></tr>`;
+  document.querySelector('#tblMatriz tfoot').innerHTML = comDado.length
+    ? '<tr><td>Total</td>' + meses.map(m =>
+        `<td class="num">${RESUMO.totais_por_mes[m] ? moeda(RESUMO.totais_por_mes[m]) : '·'}</td>`).join('') + '</tr>'
+    : '';
+}
+
+// ── Empresa: novo/editar/detalhe ──────────────────────────────────────────
+function abrirEmpresaModal(e) {
+  document.getElementById('mdEmpresaTitulo').textContent = e ? 'Editar empresa' : 'Nova empresa';
+  document.getElementById('empId').value = e ? e.id : '';
+  document.getElementById('empNome').value = e ? e.nome : '';
+  document.getElementById('empCnpj').value = e ? e.cnpj : '';
+  document.getElementById('empTel').value = e ? e.telefone : '';
+  document.getElementById('empContato').value = e ? e.contato : '';
+  document.getElementById('empEmail').value = e ? e.email_remetente : '';
+  document.getElementById('empCIni').value = e && e.contrato_inicio ? e.contrato_inicio : '';
+  document.getElementById('empCFim').value = e && e.contrato_fim ? e.contrato_fim : '';
+  document.getElementById('empObs').value = e ? e.observacao : '';
+  document.getElementById('wrapEmpAtivo').style.display = e ? '' : 'none';
+  document.getElementById('empAtivo').checked = e ? !!e.ativo : true;
+  pjModal('#mdEmpresa');
+}
+
+async function salvarEmpresa() {
+  const id = document.getElementById('empId').value;
+  const corpo = {
+    nome: document.getElementById('empNome').value,
+    cnpj: document.getElementById('empCnpj').value,
+    telefone: document.getElementById('empTel').value,
+    contato: document.getElementById('empContato').value,
+    email_remetente: document.getElementById('empEmail').value,
+    contrato_inicio: document.getElementById('empCIni').value,
+    contrato_fim: document.getElementById('empCFim').value,
+    observacao: document.getElementById('empObs').value,
+  };
+  if (id) corpo.ativo = document.getElementById('empAtivo').checked;
+  try {
+    await api('/api/controle-pjs/empresas' + (id ? '/' + id : ''), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo),
+    });
+    pjModal('#mdEmpresa', 'hide');
+    carregarResumo();
+  } catch (err) { avisa(err.message); }
+}
+
+function chipArquivo(a, podeRemover) {
+  const ic = a.tipo === 'nf' ? 'fa-file-alt' : a.tipo === 'contrato' ? 'fa-file-signature' : 'fa-file-pdf';
+  return `<a class="pj-chip" href="/api/controle-pjs/arquivos/${a.id}" target="_blank"
+            title="${esc(a.nome)} · ${(a.tamanho / 1024).toFixed(0)} KB">
+            <i class="far ${ic}"></i> ${esc(a.tipo)}: ${esc(a.nome.length > 28 ? a.nome.slice(0, 26) + '…' : a.nome)}
+            ${podeRemover ? `<span class="x" data-arq="${a.id}" title="Remover">&times;</span>` : ''}</a>`;
+}
+
+async function abrirDetalhe(eid) {
+  const d = await api(`/api/controle-pjs/empresas/${eid}`);
+  const e = d.empresa;
+  document.getElementById('detTitulo').textContent = e.nome;
+  const contratos = d.arquivos.filter(a => a.tipo === 'contrato');
+  const outros = d.arquivos.filter(a => a.tipo !== 'contrato');
+  const bol = d.boletos.map(b => `
+    <tr>
+      <td>${mesBR(b.competencia)}</td>
+      <td class="num"><b>${moeda(b.valor)}</b></td>
+      <td>${b.vencimento ? b.vencimento.split('-').reverse().join('/') : '—'}</td>
+      <td>${b.postos.map(p => `<span class="pj-posto">${esc(p)}</span>`).join('') || '—'}</td>
+      <td><span class="pj-selo ${b.status === 'pago' ? 'selo-ok' : b.status === 'conferido' ? 'selo-aviso' : 'selo-neutro'}">${b.status}</span>
+          ${b.origem === 'email' ? '<span class="pj-selo selo-neutro" title="veio da fila de e-mails">e-mail</span>' : ''}</td>
+      <td>${b.arquivos.map(a => chipArquivo(a, true)).join('') || '<span class="text-muted">sem anexos</span>'}
+          <label class="pj-chip mb-0" style="cursor:pointer;" title="Anexar arquivo a este boleto">
+            <i class="fas fa-paperclip"></i> anexar
+            <input type="file" hidden data-upbol="${b.id}" multiple accept=".pdf,.xml,.png,.jpg,.jpeg"></label></td>
+      <td class="text-right" style="white-space:nowrap;">
+        <button class="btn btn-outline-secondary btn-xs" data-editbol='${esc(JSON.stringify(b))}' title="Editar"><i class="fas fa-pen"></i></button>
+        <button class="btn btn-outline-danger btn-xs" data-delbol="${b.id}" title="Apagar"><i class="far fa-trash-alt"></i></button>
+      </td></tr>`).join('');
+  document.getElementById('detCorpo').innerHTML = `
+    <div class="d-flex mb-2" style="gap:.5rem; flex-wrap:wrap;">
+      <span class="text-muted">${esc(e.cnpj || 'sem CNPJ')} · ${esc(e.contato || '')} ${esc(e.telefone || '')}</span>
+      <span class="ml-auto"></span>
+      <button class="btn btn-outline-secondary btn-xs" id="btnEditEmpresa"><i class="fas fa-pen"></i> Editar cadastro</button>
+      <button class="btn btn-outline-success btn-xs" id="btnBoletoDaqui"><i class="fas fa-plus"></i> Lançar boleto</button>
+    </div>
+    ${e.observacao ? `<div class="text-muted mb-2" style="font-size:.82rem;">${esc(e.observacao)}</div>` : ''}
+    <div class="pj-card mb-3"><div class="hd">Contrato
+        <span style="font-weight:400;" class="text-muted">${e.contrato_inicio ? 'de ' + e.contrato_inicio.split('-').reverse().join('/') : ''}
+          ${e.contrato_fim ? 'até ' + e.contrato_fim.split('-').reverse().join('/') : '(sem prazo)'}</span>
+        <label class="pj-chip mb-0 ml-auto" style="cursor:pointer;"><i class="fas fa-paperclip"></i> anexar contrato
+          <input type="file" hidden id="upContrato" multiple accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"></label></div>
+      <div class="bd">${contratos.map(a => chipArquivo(a, true)).join('') ||
+        '<span class="pj-selo selo-falta">nenhum contrato anexado</span>'}
+        ${outros.length ? '<div class="mt-2 text-muted" style="font-size:.78rem;">Outros arquivos da empresa:</div>' + outros.map(a => chipArquivo(a, true)).join('') : ''}</div></div>
+    <div class="pj-card"><div class="hd">Boletos</div>
+      <div class="bd scroll-x"><table class="pj-tbl"><thead><tr>
+        <th>Competência</th><th class="num">Valor</th><th>Vencimento</th><th>Postos</th><th>Status</th><th>Anexos</th><th></th>
+      </tr></thead><tbody>${bol || '<tr><td colspan="7" class="text-muted">nenhum boleto</td></tr>'}</tbody></table></div></div>`;
+
+  document.getElementById('btnEditEmpresa').onclick = () => { pjModal('#mdDetalhe', 'hide'); abrirEmpresaModal(e); };
+  document.getElementById('btnBoletoDaqui').onclick = () => { pjModal('#mdDetalhe', 'hide'); abrirBoletoModal({ empresa_id: e.id }); };
+  document.getElementById('upContrato').onchange = ev =>
+    uploadArquivos({ empresa_id: e.id, tipo: 'contrato', files: ev.target.files, depois: () => abrirDetalhe(eid) });
+  document.querySelectorAll('#detCorpo [data-upbol]').forEach(inp => inp.onchange = ev =>
+    uploadArquivos({ boleto_id: inp.dataset.upbol, tipo: 'boleto', files: ev.target.files, depois: () => abrirDetalhe(eid) }));
+  document.querySelectorAll('#detCorpo [data-delbol]').forEach(btn => btn.onclick = async () => {
+    if (!confirm('Apagar este boleto (e os anexos dele)?')) return;
+    try { await api(`/api/controle-pjs/boletos/${btn.dataset.delbol}`, { method: 'DELETE' }); abrirDetalhe(eid); carregarResumo(); }
+    catch (err) { avisa(err.message); }
+  });
+  document.querySelectorAll('#detCorpo [data-editbol]').forEach(btn => btn.onclick = () => {
+    pjModal('#mdDetalhe', 'hide');
+    abrirBoletoModal(JSON.parse(btn.dataset.editbol));
+  });
+  document.querySelectorAll('#detCorpo .pj-chip .x').forEach(x => x.onclick = async ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    if (!confirm('Remover este anexo?')) return;
+    try { await api(`/api/controle-pjs/arquivos/${x.dataset.arq}`, { method: 'DELETE' }); abrirDetalhe(eid); carregarResumo(); }
+    catch (err) { avisa(err.message); }
+  });
+  pjModal('#mdDetalhe');
+}
+
+async function uploadArquivos({ empresa_id, boleto_id, tipo, files, depois }) {
+  if (!files || !files.length) return;
+  const fd = new FormData();
+  if (empresa_id) fd.append('empresa_id', empresa_id);
+  if (boleto_id) fd.append('boleto_id', boleto_id);
+  fd.append('tipo', tipo);
+  [...files].forEach(f => fd.append('arquivo', f));
+  try { await api('/api/controle-pjs/arquivos', { method: 'POST', body: fd }); if (depois) depois(); }
+  catch (err) { avisa(err.message); }
+}
+
+// ── Boleto: novo/editar (e lançar a partir de e-mail) ─────────────────────
+function preencherSelectEmpresas(sel, valor) {
+  sel.innerHTML = '<option value="">— escolha —</option>' + EMPRESAS_OPCOES
+    .filter(e => e.ativo || e.id === valor)
+    .map(e => `<option value="${e.id}">${esc(e.nome)}</option>`).join('');
+  if (valor) sel.value = valor;
+}
+
+function desenharPostosChecks(container, marcados) {
+  container.innerHTML = POSTOS.map(p => `
+    <label><input type="checkbox" value="${p.letra}" ${marcados && marcados.includes(p.letra) ? 'checked' : ''}>
+      ${p.letra} — ${esc(p.nome)}</label>`).join('');
+}
+
+let EMAIL_EM_LANCAMENTO = null;
+function abrirBoletoModal(b, emailItem) {
+  EMAIL_EM_LANCAMENTO = emailItem || null;
+  const edicao = !!(b && b.id);
+  document.getElementById('mdBoletoTitulo').textContent =
+    emailItem ? 'Lançar boleto do e-mail' : edicao ? 'Editar boleto' : 'Lançar boleto';
+  document.getElementById('bolId').value = edicao ? b.id : '';
+  document.getElementById('bolEmailId').value = emailItem ? emailItem.id : '';
+  preencherSelectEmpresas(document.getElementById('bolEmpresa'), b && b.empresa_id);
+  document.getElementById('bolComp').value = (b && b.competencia) ||
+    (emailItem && emailItem.data_email ? emailItem.data_email.slice(6, 10) + '-' + emailItem.data_email.slice(3, 5) : MES_HOJE);
+  document.getElementById('bolValor').value = b && b.valor ? String(b.valor.toFixed(2)).replace('.', ',') : '';
+  document.getElementById('bolVenc').value = (b && b.vencimento) || '';
+  document.getElementById('bolDesc').value = (b && b.descricao) || (emailItem ? emailItem.assunto : '');
+  document.getElementById('bolStatus').value = (b && b.status) || 'recebido';
+  document.getElementById('bolPagoEm').value = (b && b.pago_em) || '';
+  document.getElementById('wrapPagoEm').style.display =
+    document.getElementById('bolStatus').value === 'pago' ? '' : 'none';
+  desenharPostosChecks(document.getElementById('bolPostos'), b && b.postos);
+  document.getElementById('wrapBolArquivos').style.display = emailItem || edicao ? 'none' : '';
+  document.getElementById('bolArqBoleto').value = '';
+  document.getElementById('bolArqNf').value = '';
+  const wrapEA = document.getElementById('wrapEmailAnexos');
+  if (emailItem && emailItem.anexos.length) {
+    wrapEA.style.display = '';
+    document.getElementById('listaEmailAnexos').innerHTML = emailItem.anexos.map(a => `
+      <div class="d-flex align-items-center mb-1" style="gap:.5rem;">
+        <a class="pj-chip mb-0" href="/api/controle-pjs/arquivos/${a.id}" target="_blank"><i class="far fa-file-pdf"></i> ${esc(a.nome)}</a>
+        <select class="form-control form-control-sm" style="width:auto;" data-anexo="${a.id}">
+          <option value="boleto" ${a.tipo === 'boleto' ? 'selected' : ''}>Boleto</option>
+          <option value="nf" ${a.tipo === 'nf' ? 'selected' : ''}>Nota fiscal</option>
+          <option value="outro" ${a.tipo === 'outro' ? 'selected' : ''}>Outro</option>
+        </select></div>`).join('');
+  } else { wrapEA.style.display = 'none'; }
+  pjModal('#mdBoleto');
+}
+
+async function salvarBoleto() {
+  const id = document.getElementById('bolId').value;
+  const emailId = document.getElementById('bolEmailId').value;
+  const postos = [...document.querySelectorAll('#bolPostos input:checked')].map(i => i.value);
+  const base = {
+    empresa_id: document.getElementById('bolEmpresa').value,
+    competencia: document.getElementById('bolComp').value,
+    valor: document.getElementById('bolValor').value,
+    vencimento: document.getElementById('bolVenc').value,
+    postos: postos.join(','),
+    descricao: document.getElementById('bolDesc').value,
+    status: document.getElementById('bolStatus').value,
+    pago_em: document.getElementById('bolPagoEm').value,
+  };
+  try {
+    if (emailId) {
+      base.arquivos = [...document.querySelectorAll('#listaEmailAnexos [data-anexo]')]
+        .map(s => ({ id: +s.dataset.anexo, tipo: s.value }));
+      await api(`/api/controle-pjs/emails/${emailId}/lancar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(base) });
+    } else if (id) {
+      await api(`/api/controle-pjs/boletos/${id}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(base) });
+    } else {
+      const fd = new FormData();
+      Object.entries(base).forEach(([k, v]) => fd.append(k, v));
+      const fb = document.getElementById('bolArqBoleto').files[0];
+      const fn = document.getElementById('bolArqNf').files[0];
+      if (fb) fd.append('arquivo_boleto', fb);
+      if (fn) fd.append('arquivo_nf', fn);
+      await api('/api/controle-pjs/boletos', { method: 'POST', body: fd });
+    }
+    pjModal('#mdBoleto', 'hide');
+    if (emailId) carregarFila('pendente');
+    carregarResumo();
+  } catch (err) { avisa(err.message); }
+}
+
+// ── Fila de e-mails ───────────────────────────────────────────────────────
+async function carregarFila(status) {
+  const corpo = document.getElementById('filaCorpo');
+  corpo.innerHTML = '<div class="text-muted">Carregando…</div>';
+  const d = await api(`/api/controle-pjs/emails?status=${status}`);
+  if (!d.itens.length) {
+    corpo.innerHTML = `<div class="text-muted">Nenhum e-mail ${status === 'pendente' ? 'pendente — caixa em dia' : status}.</div>`;
+    return;
+  }
+  corpo.innerHTML = d.itens.map(em => {
+    const empresa = EMPRESAS_OPCOES.find(e => e.id === em.empresa_id);
+    return `<div class="pj-email">
+      <div class="assunto">${esc(em.assunto || '(sem assunto)')}</div>
+      <div class="meta">${esc(em.remetente)} · ${esc(em.data_email)}
+        ${empresa ? ` · reconhecida: <b>${esc(empresa.nome)}</b>` : ''}
+        ${em.boleto_id ? ` · boleto #${em.boleto_id}` : ''}</div>
+      <div class="mt-1">${em.anexos.map(a => chipArquivo(a, false)).join('') || '<span class="text-muted" style="font-size:.78rem;">sem anexos</span>'}</div>
+      <div class="mt-1 text-right">
+        ${status === 'pendente' ? `
+          <button class="btn btn-success btn-xs" data-lancar='${esc(JSON.stringify(em))}'><i class="fas fa-plus"></i> Lançar boleto</button>
+          <button class="btn btn-outline-secondary btn-xs" data-descartar="${em.id}">Não é boleto</button>` : ''}
+        ${status === 'descartado' ? `<button class="btn btn-outline-secondary btn-xs" data-reabrir="${em.id}">Reabrir</button>` : ''}
+      </div></div>`;
+  }).join('');
+  corpo.querySelectorAll('[data-lancar]').forEach(b => b.onclick = () => {
+    const em = JSON.parse(b.dataset.lancar);
+    pjModal('#mdFila', 'hide');
+    abrirBoletoModal({ empresa_id: em.empresa_id }, em);
+  });
+  corpo.querySelectorAll('[data-descartar]').forEach(b => b.onclick = async () => {
+    try { await api(`/api/controle-pjs/emails/${b.dataset.descartar}/descartar`, { method: 'POST' }); carregarFila('pendente'); carregarResumo(); }
+    catch (err) { avisa(err.message); }
+  });
+  corpo.querySelectorAll('[data-reabrir]').forEach(b => b.onclick = async () => {
+    try { await api(`/api/controle-pjs/emails/${b.dataset.reabrir}/reabrir`, { method: 'POST' }); carregarFila('descartado'); carregarResumo(); }
+    catch (err) { avisa(err.message); }
+  });
+}
+
+// ── Acesso (só o dono) ────────────────────────────────────────────────────
+async function abrirAcesso() {
+  const d = await api('/api/controle-pjs/acesso');
+  document.querySelector('#tblAcesso tbody').innerHTML = d.usuarios.map(u => `
+    <tr><td>${esc(u.nome)}<br><small class="text-muted">${esc(u.email)}</small></td>
+      <td class="text-right">
+        ${u.dono ? '<span class="pj-selo selo-ok">dono</span>' :
+          `<div class="custom-control custom-switch">
+             <input type="checkbox" class="custom-control-input" id="acc${u.id}" data-uid="${u.id}" ${u.tem_acesso ? 'checked' : ''} ${u.ativo ? '' : 'disabled'}>
+             <label class="custom-control-label" for="acc${u.id}">${u.ativo ? '' : 'inativo'}</label></div>`}
+      </td></tr>`).join('');
+  document.querySelectorAll('#tblAcesso [data-uid]').forEach(sw => sw.onchange = async () => {
+    try {
+      await api('/api/controle-pjs/acesso', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: +sw.dataset.uid, permitir: sw.checked }) });
+    } catch (err) { avisa(err.message); sw.checked = !sw.checked; }
+  });
+  pjModal('#mdAcesso');
+}
+
+// ── Ligações ──────────────────────────────────────────────────────────────
+document.getElementById('selMes').value = MES_HOJE;
+document.getElementById('selMes').onchange = carregarResumo;
+document.getElementById('txtBusca').oninput = desenharTabela;
+document.getElementById('btnNovaEmpresa').onclick = () => abrirEmpresaModal(null);
+document.getElementById('btnSalvarEmpresa').onclick = salvarEmpresa;
+document.getElementById('btnNovoBoleto').onclick = () => {
+  if (!EMPRESAS_OPCOES.length) { avisa('Cadastre uma empresa primeiro.'); return; }
+  abrirBoletoModal(null);
+};
+document.getElementById('btnSalvarBoleto').onclick = salvarBoleto;
+document.getElementById('bolStatus').onchange = ev =>
+  document.getElementById('wrapPagoEm').style.display = ev.target.value === 'pago' ? '' : 'none';
+document.getElementById('btnFila').onclick = () => { pjModal('#mdFila'); carregarFila('pendente'); };
+document.querySelectorAll('#mdFila [data-fs]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#mdFila [data-fs]').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  carregarFila(b.dataset.fs);
+});
+document.querySelector('#tblEmpresas tbody').addEventListener('click', ev => {
+  const tr = ev.target.closest('tr[data-id]');
+  if (!tr) return;
+  const btn = ev.target.closest('[data-acao]');
+  if (btn && btn.dataset.acao === 'boleto') { abrirBoletoModal({ empresa_id: +tr.dataset.id }); return; }
+  abrirDetalhe(+tr.dataset.id);
+});
+if (EH_DONO) {
+  const b = document.getElementById('btnAcesso');
+  b.style.display = '';
+  b.onclick = abrirAcesso;
+}
+
+(async function init() {
+  try {
+    POSTOS = await api('/api/controle-pjs/postos');
+    await carregarResumo();
+  } catch (err) {
+    document.getElementById('avisoTopo').style.display = 'block';
+    document.getElementById('avisoTopo').textContent = 'Erro ao carregar: ' + err.message;
+  }
+})();
+</script>
+</body>
+</html>
