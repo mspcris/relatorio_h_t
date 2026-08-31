@@ -116,6 +116,17 @@ except Exception as _e:
     logging.getLogger(__name__).error("ciencia_bp não carregado: %s", _e)
 
 try:
+    # Relatório "NF emitidas × meta" (Notas x RPS) em imagem para o celular.
+    # /relatorio_nf/<token> é PÚBLICA (nginx sem auth_request, como /ciencia/):
+    # o token assinado do link do zap/e-mail é a credencial. O Flask só grava o
+    # pedido na fila; quem roda ETL + imagem + envio é o cron (relatorio_nf.py --spool).
+    from relatorio_nf_routes import relatorio_nf_bp
+    app.register_blueprint(relatorio_nf_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("relatorio_nf_bp não carregado: %s", _e)
+
+try:
     from api_vg_indicadores import vg_indicadores_bp
     app.register_blueprint(vg_indicadores_bp)
 except Exception as _e:

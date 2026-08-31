@@ -312,6 +312,75 @@ por que o médico ainda não tem PJ. Mostra a última justificativa, tem
 
 ---
 
+## Notas x RPS — relatório "NF emitidas × meta" no celular (2026-08-31)
+
+Pedido do Cristiano: imagem que caiba na tela do celular com as notas emitidas
+por posto/empresa (grupo **Clínicas**, mês corrente) colorida contra a meta de
+NF do CNPJ, enviada por **zap e e-mail** para ele e para o **Vinicius Gomes**
+nos dias **25, 28, 30 e 31** (31 só quando existe — o cron resolve), e com um
+**link em toda mensagem** que, ao ser tocado, responde "⏳ Espere, atualizando
+os dados…" e depois manda mensagem NOVA com imagem nova e link novo.
+
+| Arquivo | Papel |
+|---|---|
+| `relatorio_nf.py` | Dados (lê `json_notas_rps/*_notas_rps_<ym>.json`), imagem (Pillow), token, envio (Evolution `sendMedia` + SMTP), fila, CLI |
+| `relatorio_nf_routes.py` | `/relatorio_nf/<token>` (pública), `POST /relatorio_nf/<token>/ir`, `POST /api/relatorio_nf/enviar`, `GET /api/relatorio_nf/info` |
+| `kpi_notas_rps.html` | Notas emitidas ANTES de RPS pendentes; coluna `% Meta` colorida; card "📲 Relatório no celular" no rodapé da aba Resumo |
+| `cron/relatorio_ht` | `30 9 25,28,30,31 * *` (envio) e `* * * * *` (fila) |
+| `nginx/teste-ia.conf` | `location ^~ /relatorio_nf/` sem `auth_request` (mesmo modelo do `/ciencia/`) |
+
+**Régua de cores** (`faixa()` no Python e `metaFaixa()` no HTML — **mudar nos
+dois**): até 80 % vermelho · 81–99 % amarelo · acima de 99 % verde. Sem meta
+cadastrada → cinza, fora da contagem.
+
+**% da meta = NF CONTABILIZADAS (emitidas − canceladas) ÷ objetivo.** Decisão
+minha em 2026-08-31 (o pedido dizia só "valor da meta"): nota cancelada não
+conta para o teto do CNPJ. Se o Cristiano quiser sobre EMITIDAS, é um campo em
+`carregar_dados()` e em `metaBadge()`. Caso real onde a escolha muda a cor:
+Anchieta em ago/26 — emitidas 100,8 % (verde) vs contabilizadas 99,99 % (amarelo).
+
+**Por que FILA (spool) e não envio direto pelo Flask.** O camim-auth roda como
+`www-data` e não escreve em `json_notas_rps` (root:deploy); o ETL precisa de
+root. Então o Flask só grava um `pedido_*.json` em
+`/opt/camim-auth/relatorio_nf_spool/` (o www-data está no grupo `deploy`, que
+tem escrita em `/opt/camim-auth`) e manda o zap "Espere…" na hora; o cron de
+root (`--spool --run`, 1×/min) roda `export_notas_rps.sh` esperando o lock do
+job horário (`flock -w 600`), gera a imagem e envia. ETL medido: ~40 s para os
+13 postos. Fila vazia termina em < 1 s.
+
+**Anti-loop do link público — três camadas, não tirar nenhuma:**
+1. `GET /relatorio_nf/<token>` **não tem efeito colateral**; o disparo é um
+   `POST /ir` que a página faz por JS ao abrir. Scanner de link de e-mail
+   (Safe Links) e prefetch de preview fazem GET sem JS → nada acontece.
+2. `linkPreview: False` em todo envio pela Evolution — senão o próprio robô
+   faria GET na URL que acabou de mandar.
+3. `pedir_envio()`: recusa se já há pedido pendente para o destinatário,
+   cooldown de 90 s após o último envio por link e teto de 20 reenvios/dia.
+   Não custa dinheiro (Evolution é texto livre), mas toque duplo ou scanner
+   não pode virar rajada.
+
+**Kill-switches explícitos:** sem `--run` o script é dry-run (o `--run` fica
+escrito NA LINHA do cron, padrão do `import_email_custos_ti`);
+`RELATORIO_NF_ENVIO=0` no `.env` desliga o envio mesmo com `--run` e a página
+mostra o aviso.
+
+**Destinatários** em `RELATORIO_NF_DESTINATARIOS` (`.env`, formato
+`id:Nome:email:telefone;...`), padrão no código: Cristiano
+(`5521994317573`, mesmo número do `monitor_loop_chat`) e Vinicius Gomes
+(`viniciusgomes@camim.com.br`, **sem telefone** — não existe em `users`, no
+CRM `gestores` nem no `alarmes.db`; até cadastrar, ele recebe só e-mail e o log
+diz "pulado: sem telefone").
+
+**Token** = `URLSafeTimedSerializer(SECRET_KEY, salt='relatorio-nf-v1')` com
+`{d: id, n: nonce}`; validade 90 dias (`RELATORIO_NF_TOKEN_DIAS`). O nonce faz
+cada envio ter link diferente; link velho continua abrindo (e entrega o dado de
+HOJE) até expirar.
+
+`python relatorio_nf.py --preview /tmp/nf.png` gera só a imagem (útil para
+conferir layout); `--enviar --para cristiano` sem `--run` mostra o que faria.
+
+---
+
 ## Custos de TI (ex-"Custos com IA") — adicionado 2026-08-02
 
 Consolida **todos** os custos de tecnologia por centro de custo. O painel

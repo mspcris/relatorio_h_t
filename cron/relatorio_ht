@@ -142,3 +142,14 @@ TZ=America/Sao_Paulo
 # dedupe por Message-ID; NADA vira boleto sozinho — tudo espera confirmação na página /controle_pjs.
 # O --run NA LINHA é proposital: sem ele o script roda --probe (só imprime). Env PJ_IMAP_* no /opt/relatorio_h_t/.env.
 30   8,14,20 * * * root flock -n /opt/relatorio_h_t/locks/import_email_pjs.lock /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/import_email_pjs.py --run >>/var/log/relatorio_h_t/import_email_pjs.log 2>&1
+
+# Relatório "NF emitidas × meta" (Notas x RPS) em imagem p/ celular — criado em 2026-08-31
+# Zap (Evolution, custo zero) + e-mail para os destinatários de RELATORIO_NF_DESTINATARIOS (.env;
+# padrão Cristiano + Vinicius Gomes). --atualizar roda o export_notas_rps.sh antes (espera o lock
+# do job horário). O --run NA LINHA é proposital: sem ele o script é dry-run e não envia nada.
+# Dia 31 só existe nos meses que têm 31 — o cron resolve sozinho.
+30   9 25,28,30,31 * * root flock -n /opt/relatorio_h_t/locks/relatorio_nf.lock /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/relatorio_nf.py --enviar --para all --atualizar --run >>/var/log/relatorio_h_t/relatorio_nf.log 2>&1
+# Fila do link "atualizar e receber de novo" (e do botão da página): o Flask (www-data) só grava o
+# pedido em /opt/camim-auth/relatorio_nf_spool; este job (root) roda ETL + imagem + envio em ≤ 1 min.
+# Com a fila vazia termina em < 1 s.
+*    * * * * root flock -n /opt/relatorio_h_t/locks/relatorio_nf_spool.lock /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/relatorio_nf.py --spool --run >>/var/log/relatorio_h_t/relatorio_nf.log 2>&1
