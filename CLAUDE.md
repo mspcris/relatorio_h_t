@@ -371,10 +371,15 @@ mostra o aviso.
 CRM `gestores` nem no `alarmes.db`; até cadastrar, ele recebe só e-mail e o log
 diz "pulado: sem telefone").
 
-**Token** = `URLSafeTimedSerializer(SECRET_KEY, salt='relatorio-nf-v1')` com
+**Token** = `URLSafeTimedSerializer(RELATORIO_NF_SECRET, salt='relatorio-nf-v1')` com
 `{d: id, n: nonce}`; validade 90 dias (`RELATORIO_NF_TOKEN_DIAS`). O nonce faz
 cada envio ter link diferente; link velho continua abrindo (e entrega o dado de
-HOJE) até expirar.
+HOJE) até expirar. **`RELATORIO_NF_SECRET` mora no `.env` de
+`/opt/relatorio_h_t/` (manual, fora do git)** — não existe `SECRET_KEY` em
+.env nenhum da VM; cron e Flask leem o mesmo arquivo, e é isso que faz o link
+gerado pelo cron abrir no Flask. Trocar o valor invalida todos os links já
+enviados. O venv de `/opt/relatorio_h_t` precisou de `pip install itsdangerous`
+(agora no `requirements.txt`).
 
 `python relatorio_nf.py --preview /tmp/nf.png` gera só a imagem (útil para
 conferir layout); `--enviar --para cristiano` sem `--run` mostra o que faria.

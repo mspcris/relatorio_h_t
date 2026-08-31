@@ -85,7 +85,10 @@ ETL_LOCK = '/opt/relatorio_h_t/locks/export_notas_rps.lock'
 
 APP_URL    = (os.getenv('APP_BASE_URL') or 'https://kpi.camim.com.br').rstrip('/')
 PAGINA_URL = f'{APP_URL}/kpi_notas_rps.html'
-SECRET_KEY = os.getenv('SECRET_KEY', '')
+# Segredo do link. Dedicado (RELATORIO_NF_SECRET no .env de /opt/relatorio_h_t,
+# que o camim-auth também carrega) — o SECRET_KEY "do Flask" não existe em
+# .env nenhum da VM (medido 2026-08-31). Cron e Flask PRECISAM ler o mesmo valor.
+SECRET_KEY = os.getenv('RELATORIO_NF_SECRET') or os.getenv('SECRET_KEY', '')
 
 EVOLUTION_BASE_URL = (os.getenv('EVOLUTION_BASE_URL') or '').rstrip('/')
 EVOLUTION_API_KEY  = os.getenv('EVOLUTION_API_KEY', '')
@@ -528,7 +531,7 @@ def html_email(dados: dict, link: str, nome: str) -> str:
 def _serializer():
     from itsdangerous import URLSafeTimedSerializer
     if not SECRET_KEY:
-        raise RuntimeError('SECRET_KEY ausente no .env — não dá para assinar o link')
+        raise RuntimeError('RELATORIO_NF_SECRET ausente em /opt/relatorio_h_t/.env — não dá para assinar o link')
     return URLSafeTimedSerializer(SECRET_KEY, salt='relatorio-nf-v1')
 
 
