@@ -141,6 +141,12 @@ auth_bp = Blueprint("auth_bp", __name__)
 # 'controle_pjs' é concedido/removido SÓ pelo dono, dentro da própria página.
 PAGINAS_PROTEGIDAS = {"controle_pjs"}
 
+# Páginas SEM gate de acesso (todo usuário logado entra): a linha continua em
+# public.servicos porque é dela que sai o card de Mais Serviços, mas o checkbox
+# no modal do admin seria mentira — marcar/desmarcar não teria efeito nenhum.
+# 'cancelados_robo' aberto em 2026-08-31 (pedido do Petterson/CG via Cristiano).
+PAGINAS_SEM_GATE = {"cancelados_robo"}
+
 
 def obter_paginas_disponiveis() -> list[dict]:
     """Lê o catálogo de serviços do RDS Postgres (public.servicos).
@@ -161,6 +167,7 @@ def obter_paginas_disponiveis() -> list[dict]:
                 "ordem": s.ordem,
             }
             for s in listar_servicos(db, somente_ativos=True)
+            if s.key not in PAGINAS_SEM_GATE
         ]
     finally:
         db.close()

@@ -254,12 +254,30 @@ sobrescrevendo. Foi assim que 2 linhas `Faltou → Atendido` apareceram do nada
 num dry-run e sumiram ao trocar a chave. Se um diff acusar poucas linhas
 estranhas, suspeitar da chave antes de suspeitar da query.
 
+**`/cancelados_robo` — período + rede inteira (2026-08-31, pedido do Petterson/CG
+via Cristiano):**
+- A API aceita `?ini=&fim=` (teto de 92 dias — consulta ao vivo é operacional;
+  histórico longo é papel do dashboard de pré-agendamento). `?data=` continua
+  aceito como atalho de 1 dia.
+- **Leitura é da rede inteira para qualquer usuário logado**: postos derivados
+  de `DB_HOST_*` no `.env` (nunca lista fixa — filial nova com robô aparece
+  sozinha), e a página saiu do gate de page_key (fora de `_TEMPLATE_TO_PAGINA`,
+  filtrada do modal do admin via `PAGINAS_SEM_GATE` em `auth_routes.py`; a
+  linha em `public.servicos` FICA, porque é dela que sai o card de Mais
+  Serviços).
+- **Marcar "tratado" continua exigindo o posto no ACL** — ver é de todos,
+  tratar é da recepção do posto. O front desabilita o checkbox fora do ACL
+  (`postos_acl` vem no payload da API).
+- Auto-refresh de 2 min só roda quando o período inclui hoje/futuro.
+
 **Pendências conhecidas (2026-07-21):**
 - `/cancelados_robo` ([cancelados_robo_routes.py](cancelados_robo_routes.py)) ainda
   usa `vw_Cad_LancamentoProntuarioComDesistencia` (~1,8s/posto no balcão). Cabe o
   mesmo tratamento, mas ela precisa de `Paciente`, `TelefoneResidencial`,
   `NomeMedico` e `idadePaciente` — remapear para as tabelas base dá mais trabalho
-  do que o ETL e não foi validado por dry-run.
+  do que o ETL e não foi validado por dry-run. Com o filtro de período
+  (2026-08-31) a view passou a ser consultada em ranges de até 92 dias — se o
+  tempo por posto crescer demais, essa migração sobe de prioridade.
 - A coluna `origem_cancelamento` deu **exatamente 72 "Pré agendamento não
   confirmado" em B e 72 em G** em julho/2026. Número idêntico em dois postos
   cheira a teto/limite do robô, não a coincidência. Conferir contra a lista ao

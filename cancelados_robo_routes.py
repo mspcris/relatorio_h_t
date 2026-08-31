@@ -1,14 +1,20 @@
 """
 cancelados_robo_routes.py — Lista operacional: quem o robô de pré-agendamento cancelou.
 
-Uso: a recepção abre a página e vê, por dia de consulta, quem foi cancelado
-automaticamente por não confirmar na janela 5-2 dias. Essas pessoas normalmente
-NÃO sabem que foram canceladas e aparecem no balcão no horário marcado.
+Uso: a recepção abre a página e vê, por dia (ou período) de consulta, quem foi
+cancelado automaticamente por não confirmar na janela 5-2 dias. Essas pessoas
+normalmente NÃO sabem que foram canceladas e aparecem no balcão no horário marcado.
 
 Por que consulta ao vivo e não o preagendamento.json:
   - o robô cancela a cada ~20 min; o ETL roda 1x/dia às 02:30 → lista sempre velha
   - o JSON tem ~190 MB; carregar isso no balcão pra ver 30 nomes não faz sentido
-  - aqui a query é estreita (só Desistencia=1 do robô, 1 dia) → ~3-4s por posto
+  - aqui a query é estreita (só Desistencia=1 do robô, período curto) → ~3-4s por posto
+
+Acesso (desde 2026-08-31, pedido do Petterson/Campo Grande via Cristiano):
+  - a LEITURA mostra a rede inteira para qualquer usuário logado — o ACL de
+    postos do usuário não limita mais o que ele vê aqui;
+  - a MARCAÇÃO de "tratado" continua exigindo o posto no ACL: quem trata o
+    cancelamento é a recepção do posto, não quem só acompanha o número.
 
 Identificação do robô: assinatura textual em Cad_LancamentoServico.MotivoDesistencia,
   "Consulta pré agendada não foi confirmada pelo cliente e foi cancelada
@@ -21,7 +27,9 @@ ATENÇÃO — existe um SEGUNDO cancelamento automático no CAMIM, com texto
   cliente" — é o que separa um do outro.
 """
 import logging
+import os
 import re
+import string
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -44,11 +52,23 @@ _CACHE_TTL = 60
 _cache: dict = {}
 _cache_lock = threading.Lock()
 
-# Postos consultados = os do ACL do usuário, sem lista fixa de "postos com robô".
-# O piloto começou em B/G/X/Y, mas fixar isso aqui viraria um kill-switch
-# implícito: quando o robô fosse habilitado numa filial nova, a página
-# esconderia os cancelamentos dela em silêncio. Posto sem robô só devolve 0 linhas.
+# Postos consultados = TODOS os configurados no .env, sem lista fixa de "postos
+# com robô". O piloto começou em B/G/X/Y, mas fixar isso aqui viraria um
+# kill-switch implícito: quando o robô fosse habilitado numa filial nova, a
+# página esconderia os cancelamentos dela em silêncio. Posto sem robô só
+# devolve 0 linhas.
 _MAX_WORKERS = 8
+
+# A view é pesada demais para range aberto — a consulta ao vivo é operacional,
+# não é o lugar de puxar um ano de histórico (para isso existe o dashboard de
+# pré-agendamento, que lê o JSON do ETL).
+_MAX_DIAS = 92
+
+
+def _postos_disponiveis() -> list:
+    """Toda letra com DB_HOST_<L> no .env. Derivado do ambiente (não de lista
+    fixa) pelo mesmo motivo do comentário acima: filial nova aparece sozinha."""
+    return [p for p in string.ascii_uppercase if os.getenv(f"DB_HOST_{p}", "").strip()]
 
 SQL = """
 SET NOCOUNT ON;
@@ -107,11 +127,12 @@ def _telefones(raw) -> list:
     return out
 
 
-def _buscar_posto(posto: str, d: date) -> list:
-    d_ini = _fmt_data_sql(d)
-    d_fim = _fmt_data_sql(d + timedelta(days=1))
+def _buscar_posto(posto: str, ini: date, fim: date) -> list:
+    """Cancelados do robô com DataConsulta entre ini e fim (inclusivos)."""
+    d_ini = _fmt_data_sql(ini)
+    d_fim = _fmt_data_sql(fim + timedelta(days=1))
 
-    ck = (posto, d_ini)
+    ck = (posto, d_ini, d_fim)
     with _cache_lock:
         hit = _cache.get(ck)
         if hit and (time.time() - hit[0]) < _CACHE_TTL:
@@ -141,7 +162,12 @@ def _buscar_posto(posto: str, d: date) -> list:
         con.close()
 
     with _cache_lock:
-        _cache[ck] = (time.time(), out)
+        # Com filtro de período cada combinação (posto, ini, fim) vira uma chave
+        # nova; sem poda o dict só cresce no worker de vida longa do camim-auth.
+        agora = time.time()
+        for k in [k for k, v in _cache.items() if (agora - v[0]) >= _CACHE_TTL]:
+            del _cache[k]
+        _cache[ck] = (agora, out)
     return out
 
 
@@ -167,34 +193,41 @@ def _marcacoes(postos: list) -> dict:
 
 @cancelados_robo_bp.get("/api/cancelados_robo")
 def api_listar():
-    """Lista os cancelados pelo robô para uma data de consulta.
+    """Lista os cancelados pelo robô para um período de data de consulta.
 
-    ?data=YYYY-MM-DD (default: hoje)  ·  ?posto=X (default: todos do ACL)
+    ?ini=YYYY-MM-DD&fim=YYYY-MM-DD (default: hoje)  ·  ?data=YYYY-MM-DD é o
+    atalho antigo de 1 dia e continua aceito  ·  ?posto=X (default: rede inteira)
+
+    A leitura é da rede inteira de propósito — ver docstring do módulo.
     """
     email, postos_acl, _ = _check_admin()
     if not email:
         return jsonify({"error": "unauthorized"}), 401
-    if not postos_acl:
-        return jsonify({"error": "sem postos liberados"}), 403
 
-    raw = (request.args.get("data") or "").strip()
+    raw_ini = (request.args.get("ini") or request.args.get("data") or "").strip()
+    raw_fim = (request.args.get("fim") or "").strip()
     try:
-        d = datetime.strptime(raw, "%Y-%m-%d").date() if raw else date.today()
+        d_ini = datetime.strptime(raw_ini, "%Y-%m-%d").date() if raw_ini else date.today()
+        d_fim = datetime.strptime(raw_fim, "%Y-%m-%d").date() if raw_fim else d_ini
     except ValueError:
         return jsonify({"error": "data inválida (use YYYY-MM-DD)"}), 400
+    if d_fim < d_ini:
+        d_ini, d_fim = d_fim, d_ini
+    if (d_fim - d_ini).days + 1 > _MAX_DIAS:
+        return jsonify({"error": f"período máximo de {_MAX_DIAS} dias por consulta"}), 400
 
+    disponiveis = _postos_disponiveis()
     posto_req = (request.args.get("posto") or "").strip().upper()
     if posto_req:
-        erro = _require_posto_in_acl(posto_req, postos_acl)
-        if erro:
-            return jsonify({"error": erro}), 400
+        if posto_req not in disponiveis:
+            return jsonify({"error": f"posto {posto_req} não configurado"}), 400
         alvo = [posto_req]
     else:
-        alvo = sorted(postos_acl)
+        alvo = disponiveis
 
     linhas, erros = [], {}
     with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
-        futs = {pool.submit(_buscar_posto, p, d): p for p in alvo}
+        futs = {pool.submit(_buscar_posto, p, d_ini, d_fim): p for p in alvo}
         for fut in as_completed(futs):
             p = futs[fut]
             try:
@@ -214,10 +247,15 @@ def api_listar():
         ln["tratado_em"] = m["tratado_em"] if m else ""
         ln["observacao"] = m["observacao"] if m else ""
 
-    linhas.sort(key=lambda x: (x["hora_consulta"] or "99:99", x["posto"], x["paciente"]))
+    linhas.sort(key=lambda x: (x["data_consulta"] or "9999-99-99",
+                               x["hora_consulta"] or "99:99",
+                               x["posto"], x["paciente"]))
 
     return jsonify({
-        "data":          d.strftime("%Y-%m-%d"),
+        "ini":           d_ini.strftime("%Y-%m-%d"),
+        "fim":           d_fim.strftime("%Y-%m-%d"),
+        # o front marca "tratado" só nos postos do ACL do usuário
+        "postos_acl":    sorted(postos_acl or []),
         "postos":        alvo,
         "postos_erro":   erros,
         "total":         len(linhas),

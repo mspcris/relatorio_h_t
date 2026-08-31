@@ -160,20 +160,28 @@
         <div class="aviso no-print">
           <i class="fas fa-info-circle"></i>
           O robô corta com cerca de <strong>24h de antecedência</strong>, e a lista muda ao longo do dia —
-          por isso ela é consultada ao vivo no banco de cada posto (atualiza sozinha a cada 2 minutos).
-          Só entram aqui os cancelamentos do <strong>robô de pré-agendamento</strong>: quem cancelou sozinho
-          pelo app não aparece, porque sabe que cancelou.
+          por isso ela é consultada ao vivo no banco de cada posto (atualiza sozinha a cada 2 minutos
+          quando o período inclui hoje). A página mostra <strong>todos os postos da rede</strong> —
+          posto sem robô ativo simplesmente não tem cancelamento. Só entram aqui os cancelamentos do
+          <strong>robô de pré-agendamento</strong>: quem cancelou sozinho pelo app não aparece, porque
+          sabe que cancelou. Marcar como "tratado" continua restrito aos postos do seu acesso.
         </div>
 
         <div class="barra no-print">
           <div class="form-row align-items-end">
             <div class="col-auto mb-2">
-              <label class="mb-1" style="font-size:.8rem;font-weight:700;color:#5a6672">DATA DA CONSULTA</label>
-              <input type="date" id="fData" class="form-control form-control-sm">
+              <label class="mb-1" style="font-size:.8rem;font-weight:700;color:#5a6672">CONSULTA DE</label>
+              <input type="date" id="fIni" class="form-control form-control-sm">
+            </div>
+            <div class="col-auto mb-2">
+              <label class="mb-1" style="font-size:.8rem;font-weight:700;color:#5a6672">ATÉ</label>
+              <input type="date" id="fFim" class="form-control form-control-sm">
             </div>
             <div class="col-auto mb-2">
               <button class="btn btn-sm btn-outline-secondary" onclick="setDia(0)">Hoje</button>
               <button class="btn btn-sm btn-outline-secondary" onclick="setDia(1)">Amanhã</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="setRange(7)" title="Últimos 7 dias até hoje">7 dias</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="setMes()" title="Do dia 1º até hoje">Mês</button>
             </div>
             <div class="col-auto mb-2">
               <label class="mb-1" style="font-size:.8rem;font-weight:700;color:#5a6672">ESPECIALIDADE</label>
@@ -196,7 +204,7 @@
         </div>
 
         <div class="row mb-3">
-          <div class="col-4"><div class="tile total"><div class="n" id="tTotal">—</div><div class="l">Cancelados no dia</div></div></div>
+          <div class="col-4"><div class="tile total"><div class="n" id="tTotal">—</div><div class="l" id="tTotalLbl">Cancelados no dia</div></div></div>
           <div class="col-4"><div class="tile pendente"><div class="n" id="tPend">—</div><div class="l">A tratar</div></div></div>
           <div class="col-4"><div class="tile tratado"><div class="n" id="tOk">—</div><div class="l">Já tratados</div></div></div>
         </div>
@@ -218,14 +226,30 @@
 const $ = s => document.querySelector(s);
 let DADOS = [];
 let POSTOS_SEL = new Set();
+let POSTOS_OFF = new Set();
 let timer = null;
+let MULTI_DIA = false;
+// Postos onde o usuário PODE marcar "tratado" (ACL). Ver todos é de todos;
+// tratar é da recepção do posto.
+let ACL = new Set(window.USER_POSTOS || []);
 
 function hojeISO(off = 0) {
   const d = new Date();
   d.setDate(d.getDate() + off);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
-function setDia(off) { $('#fData').value = hojeISO(off); carregar(); }
+function setDia(off)   { $('#fIni').value = hojeISO(off); $('#fFim').value = hojeISO(off); carregar(); }
+function setRange(n)   { $('#fIni').value = hojeISO(-(n - 1)); $('#fFim').value = hojeISO(); carregar(); }
+function setMes() {
+  const d = new Date();
+  $('#fIni').value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
+  $('#fFim').value = hojeISO();
+  carregar();
+}
+function fmtDia(iso) { // YYYY-MM-DD → DD/MM
+  const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})/);
+  return m ? `${m[2]}/${m[1]}` : '';
+}
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -237,17 +261,22 @@ function fmtTel(n) {
 }
 
 async function carregar() {
-  const data = $('#fData').value || hojeISO();
+  const ini = $('#fIni').value || hojeISO();
+  const fim = $('#fFim').value || ini;
+  MULTI_DIA = ini !== fim;
+  $('#tTotalLbl').textContent = MULTI_DIA ? 'Cancelados no período' : 'Cancelados no dia';
   $('#wrapLista').innerHTML =
     '<div class="vazio"><i class="fas fa-spinner fa-spin fa-2x"></i><div class="mt-2">Consultando os postos…</div></div>';
   try {
-    const r = await fetch('/api/cancelados_robo?data=' + encodeURIComponent(data), { credentials: 'same-origin' });
+    const r = await fetch('/api/cancelados_robo?ini=' + encodeURIComponent(ini) +
+                          '&fim=' + encodeURIComponent(fim), { credentials: 'same-origin' });
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
       throw new Error(e.error || ('HTTP ' + r.status));
     }
     const d = await r.json();
     DADOS = d.cancelados || [];
+    if (d.postos_acl) ACL = new Set(d.postos_acl);
 
     // Posto fora do ar não pode passar despercebido: a recepção precisa saber
     // que a lista está incompleta, senão confia num total que não é o total.
@@ -271,7 +300,10 @@ async function carregar() {
 
 function montarFiltros() {
   const postos = [...new Set(DADOS.map(x => x.posto))].sort();
-  if (POSTOS_SEL.size === 0) postos.forEach(p => POSTOS_SEL.add(p));
+  // Guardar o que o usuário DESMARCOU (e não o que marcou): posto que só tem
+  // cancelamento no período novo entra selecionado sozinho, em vez de chegar
+  // desmarcado e sumir do total em silêncio.
+  POSTOS_SEL = new Set(postos.filter(p => !POSTOS_OFF.has(p)));
   $('#chipsPosto').innerHTML = postos.length
     ? '<span style="font-size:.8rem;font-weight:700;color:#5a6672;margin-right:.4rem">POSTO</span>' +
       postos.map(p => `<span class="chip ${POSTOS_SEL.has(p) ? 'on' : ''}" onclick="togglePosto('${p}')">${p}</span>`).join('')
@@ -287,7 +319,7 @@ function montarFiltros() {
   enche('#fMed', 'medico');
 }
 function togglePosto(p) {
-  POSTOS_SEL.has(p) ? POSTOS_SEL.delete(p) : POSTOS_SEL.add(p);
+  POSTOS_OFF.has(p) ? POSTOS_OFF.delete(p) : POSTOS_OFF.add(p);
   montarFiltros(); render();
 }
 
@@ -317,7 +349,7 @@ function render() {
   $('#wrapLista').innerHTML = `
     <table class="lista">
       <thead><tr>
-        <th>Hora</th><th>Posto</th><th>Paciente</th><th>Especialidade</th>
+        ${MULTI_DIA ? '<th>Dia</th>' : ''}<th>Hora</th><th>Posto</th><th>Paciente</th><th>Especialidade</th>
         <th>Médico</th><th>Telefone</th><th>Cancelado em</th><th class="text-center">Tratado</th>
       </tr></thead>
       <tbody>${L.map(linha).join('')}</tbody>
@@ -325,6 +357,7 @@ function render() {
 }
 
 function linha(x) {
+  const podeMarcar = ACL.has(x.posto);
   const tels = (x.telefones || []).length
     ? x.telefones.map(t =>
         `<a href="https://wa.me/${t}" target="_blank" rel="noopener" title="Abrir WhatsApp">
@@ -334,6 +367,7 @@ function linha(x) {
   const idade = x.idade != null ? ` · ${x.idade} anos` : '';
   return `
     <tr class="${x.tratado ? 'ok' : ''}">
+      ${MULTI_DIA ? `<td class="hora">${esc(fmtDia(x.data_consulta))}</td>` : ''}
       <td class="hora">${esc(x.hora_consulta || '—')}</td>
       <td><span class="posto-badge">${esc(x.posto)}</span></td>
       <td><div class="paciente">${esc(x.paciente)}</div>
@@ -342,8 +376,8 @@ function linha(x) {
       <td>${esc(x.medico)}</td>
       <td class="tel">${tels}</td>
       <td class="sub">${esc(canc)}</td>
-      <td class="text-center">
-        <input type="checkbox" ${x.tratado ? 'checked' : ''}
+      <td class="text-center" ${podeMarcar ? '' : `title="Marcação restrita aos postos do seu acesso (posto ${esc(x.posto)} fora do seu ACL)"`}>
+        <input type="checkbox" ${x.tratado ? 'checked' : ''} ${podeMarcar ? '' : 'disabled'}
                onchange="marcar('${x.posto}', ${x.id_lancamento_servico}, this)">
         ${x.tratado ? `<div class="sub" title="${esc(x.tratado_por)}">${esc((x.tratado_por || '').split('@')[0])}</div>` : ''}
       </td>
@@ -377,13 +411,18 @@ async function marcar(posto, id, el) {
 ['#fEsp', '#fMed', '#fPend'].forEach(s => document.addEventListener('change', ev => {
   if (ev.target.matches(s)) render();
 }));
-$('#fData').addEventListener('change', carregar);
+$('#fIni').addEventListener('change', carregar);
+$('#fFim').addEventListener('change', carregar);
 
-$('#fData').value = hojeISO();
+$('#fIni').value = hojeISO();
+$('#fFim').value = hojeISO();
 carregar();
 // Auto-refresh: o robô roda a cada ~20 min, então 2 min mantém o balcão em dia
-// sem martelar o banco (a API ainda tem cache de 60s por posto).
-timer = setInterval(carregar, 120000);
+// sem martelar o banco (a API ainda tem cache de 60s por posto). Período
+// totalmente no passado não muda mais — nesse caso não refaz a consulta.
+timer = setInterval(() => {
+  if (($('#fFim').value || hojeISO()) >= hojeISO()) carregar();
+}, 120000);
 </script>
 <script src="/js/menu.js"></script>
 </body>

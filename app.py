@@ -217,9 +217,10 @@ _TEMPLATE_TO_PAGINA = {
     "preagendamento.html":              "preagendamento",
     "preagendamento":                   "preagendamento",
     "/preagendamento":                  "preagendamento",
-    "cancelados_robo.html":             "cancelados_robo",
-    "cancelados_robo":                  "cancelados_robo",
-    "/cancelados_robo":                 "cancelados_robo",
+    # cancelados_robo NÃO tem page_key de propósito (2026-08-31, pedido do
+    # Petterson/CG via Cristiano): todo usuário logado acessa, mesmo precedente
+    # do monitorarrobos. A marcação de "tratado" continua limitada pelo ACL de
+    # postos na própria rota da API.
     "medico_novo.html":                 "medico_novo",
     "medico_novo":                      "medico_novo",
     "/medico_novo":                     "medico_novo",
