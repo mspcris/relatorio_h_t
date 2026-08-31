@@ -33,6 +33,22 @@
     .brand-link .brand-text { font-size:1rem; }
     .muted{color:#6b7280;} .mini{font-size:.85rem;} .small-td{white-space:nowrap;}
 
+    /* ── Cards do "Resumo do mês" ──
+       Desktop: 4 por linha (8 cards = 2 linhas). Telas menores: 3 → 2.
+       Toque (celular/tablet): auto-fill mais denso, padding menor. */
+    .kpi-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; }
+    .kpi-grid .card { box-shadow:none; border:1px solid #e5e7eb; }
+    .kpi-grid .card-body { padding:.5rem .75rem !important; }
+    .kpi-grid .h5 { font-size:1.15rem; font-weight:600; white-space:nowrap; }
+    @media (max-width: 991.98px){ .kpi-grid { grid-template-columns:repeat(3, minmax(0,1fr)); } }
+    @media (max-width: 575.98px){ .kpi-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+    @media (hover:none) and (pointer:coarse){
+      .kpi-grid { grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:6px; }
+      .kpi-grid .card-body { padding:.35rem .5rem !important; }
+      .kpi-grid .small { font-size:.72rem; line-height:1.15; }
+      .kpi-grid .h5 { font-size:1rem; }
+    }
+
     /* ── Tabs principais ── */
     .main-tabs { display:flex; gap:4px; margin-bottom:12px; }
     .main-tabs .tab-btn {
@@ -109,7 +125,7 @@
     // =========================
     let POSTOS = [];
     let selPostos = 'ALL';        // 'ALL' ou Set
-    let selGrupo  = 'ALL';        // ALL | Clinica | OperadoraCamim | OperadoraSDM | Laboratorio
+    let selGrupo  = 'Clinica';    // ALL | Clinica | OperadoraCamim | OperadoraSDM | Laboratorio
     let ymSel = ymNow();
 
     // switches de Operadora (mutuamente exclusivos)
@@ -1127,7 +1143,7 @@
             <div class="d-flex align-items-center" style="gap:8px;">
               <select id="grupo" class="form-control form-control-sm" style="width:auto;">
                 <option value="ALL">Todos grupos</option>
-                <option value="Clinica">Clínicas</option>
+                <option value="Clinica" selected>Clínicas</option>
                 <option value="Laboratorio">Laboratório</option>
               </select>
               <div class="custom-control custom-switch mb-0">
