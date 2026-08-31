@@ -6,9 +6,10 @@ Gera um PNG no formato de tela de celular com a tabela de notas emitidas por
 posto/empresa (grupo Clínicas, mês corrente) colorida contra a meta mensal de
 NF de cada CNPJ (`objetivos` do JSON do export_notas_rps):
 
-    ≤ 80 % da meta  → vermelho
-    81 % – 99 %     → amarelo
-    > 99 %          → verde
+    ≤ 50 % da meta            → vermelho
+    50 % → 100 %              → gradiente amarelo escuro → verde intenso
+    100 % → 150 %             → gradiente verde → amarelo
+    ≥ 150 %                   → vermelho intenso (estouro)
 
 e envia por WhatsApp (Evolution API, texto livre — custo zero, mesma instância
 dos alarmes) e por e-mail (ALARM_EMAIL_*) para os destinatários configurados.
@@ -121,10 +122,12 @@ _DEST_PADRAO = (
 )
 
 FAIXAS = {
-    # nome: (hex, rótulo)
-    'vermelho': ('#dc2626', 'até 80 %'),
-    'amarelo':  ('#d97706', '81 % a 99 %'),
-    'verde':    ('#16a34a', 'acima de 99 %'),
+    # nome: (hex de referência da zona, rótulo). A cor da LINHA vem de
+    # cor_meta(pct) (gradiente contínuo); estes hex são âncora de legenda/chip.
+    'vermelho': ('#dc2626', 'até 50 %'),
+    'amarelo':  ('#d97706', '50 % a 100 %'),
+    'verde':    ('#00c853', '100 % a 150 %'),
+    'estouro':  ('#b91c1c', '150 % ou mais'),
     'sem_meta': ('#9ca3af', 'sem meta cadastrada'),
 }
 
@@ -190,11 +193,35 @@ def _eh_clinica(row: dict) -> bool:
 def faixa(pct) -> str:
     if pct is None:
         return 'sem_meta'
-    if pct <= 80:
+    if pct <= 50:
         return 'vermelho'
-    if pct <= 99:
+    if pct <= 100:
         return 'amarelo'
-    return 'verde'
+    if pct < 150:
+        return 'verde'
+    return 'estouro'
+
+
+def _lerp_hex(c1: str, c2: str, t: float) -> str:
+    t = max(0.0, min(1.0, t))
+    a = [int(c1[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(c2[i:i + 2], 16) for i in (1, 3, 5)]
+    return '#' + ''.join(f'{round(x + (y - x) * t):02x}' for x, y in zip(a, b))
+
+
+def cor_meta(pct) -> str:
+    """Régua do Cristiano (2026-08-31): ≤50 vermelho; 50→100 amarelo escuro
+    → verde intenso; 100→150 verde → amarelo; ≥150 vermelho intenso.
+    Espelho de metaCor() em kpi_notas_rps.html — mudar nos DOIS."""
+    if pct is None:
+        return FAIXAS['sem_meta'][0]
+    if pct <= 50:
+        return '#dc2626'
+    if pct <= 100:
+        return _lerp_hex('#a16207', '#00c853', (pct - 50) / 50)
+    if pct < 150:
+        return _lerp_hex('#00c853', '#d97706', (pct - 100) / 50)
+    return '#b91c1c'
 
 
 def carregar_dados(ym: str | None = None) -> dict:
@@ -383,9 +410,9 @@ def render_png(dados: dict) -> bytes:
 
     # chips de contagem por faixa
     x = PAD
-    for k in ('verde', 'amarelo', 'vermelho', 'sem_meta'):
+    for k in ('verde', 'amarelo', 'vermelho', 'estouro', 'sem_meta'):
         n = dados['contagem'].get(k, 0)
-        if k == 'sem_meta' and n == 0:
+        if k in ('sem_meta', 'estouro') and n == 0:
             continue
         cor = _hex(FAIXAS[k][0])
         txt = f'{n} {FAIXAS[k][1]}' if k != 'sem_meta' else f'{n} sem meta'
@@ -419,7 +446,7 @@ def render_png(dados: dict) -> bytes:
         y += ROW_H
 
     for i, r in enumerate(linhas):
-        cor = _hex(FAIXAS[r['faixa']][0])
+        cor = _hex(cor_meta(r['pct']))
         if i % 2:
             dr.rectangle([PAD, y, W - PAD, y + ROW_H], fill=_hex('#fafafa'))
         dr.rectangle([PAD, y + 8, PAD + 10, y + ROW_H - 8], fill=cor)      # faixa lateral
@@ -439,7 +466,7 @@ def render_png(dados: dict) -> bytes:
     # totais
     dr.rectangle([PAD, y, W - PAD, y + 2], fill=_hex('#e5e7eb'))
     y += 14
-    cor_t = _hex(FAIXAS[faixa(tot['pct'])][0])
+    cor_t = _hex(cor_meta(tot['pct']))
     dr.text((X_POSTO, y + 24), 'TOTAL', font=f_hdr, fill=_hex('#374151'))
     dr.text((X_EMP, y + 14), f"{len(linhas)} empresas · {len(dados['postos'])} postos", font=f_emp, fill=_hex('#374151'))
     dr.text((X_EMP, y + 49), _cortar(dr, f"RPS pendentes: {fmt_int(tot['rps_qtd'])} · {fmt_brl(tot['rps_total'])}", f_meta, EMP_W + 40),
@@ -456,7 +483,7 @@ def render_png(dados: dict) -> bytes:
     dr.text((PAD, y), '% META = NF contabilizadas (emitidas − canceladas) ÷ meta mensal de NF do CNPJ.', font=f_rod, fill=_hex('#6b7280'))
     y += 36
     x = PAD
-    for k in ('vermelho', 'amarelo', 'verde'):
+    for k in ('vermelho', 'amarelo', 'verde', 'estouro'):
         dr.ellipse([x, y + 4, x + 20, y + 24], fill=_hex(FAIXAS[k][0]))
         txt = FAIXAS[k][1]
         dr.text((x + 30, y), txt, font=f_rod, fill=_hex('#6b7280'))
@@ -474,7 +501,9 @@ def render_png(dados: dict) -> bytes:
 def texto_resumo(dados: dict) -> str:
     c = dados['contagem']
     t = dados['totais']
-    partes = [f"🟢 {c['verde']} acima de 99%", f"🟡 {c['amarelo']} entre 81 e 99%", f"🔴 {c['vermelho']} até 80%"]
+    partes = [f"🟢 {c['verde']} meta batida (100–150%)", f"🟡 {c['amarelo']} entre 50 e 100%", f"🔴 {c['vermelho']} até 50%"]
+    if c.get('estouro'):
+        partes.append(f"🚨 {c['estouro']} acima de 150%")
     if c['sem_meta']:
         partes.append(f"⚪ {c['sem_meta']} sem meta")
     return (f"📊 *NF emitidas × meta — {dados['mes_nome']}* (Clínicas)\n"

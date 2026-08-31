@@ -329,9 +329,12 @@ os dados…" e depois manda mensagem NOVA com imagem nova e link novo.
 | `cron/relatorio_ht` | `30 9 25,28,30,31 * *` (envio) e `* * * * *` (fila) |
 | `nginx/teste-ia.conf` | `location ^~ /relatorio_nf/` sem `auth_request` (mesmo modelo do `/ciencia/`) |
 
-**Régua de cores** (`faixa()` no Python e `metaFaixa()` no HTML — **mudar nos
-dois**): até 80 % vermelho · 81–99 % amarelo · acima de 99 % verde. Sem meta
-cadastrada → cinza, fora da contagem.
+**Régua de cores** (`cor_meta()` no Python e `metaCor()` no HTML — **mudar nos
+dois**), definida pelo Cristiano em 2026-08-31: gradiente contínuo — até 50 %
+vermelho · 50→100 % do amarelo escuro ao verde intenso · 100→150 % do verde de
+volta ao amarelo · ≥150 % vermelho intenso (estouro). Sem meta cadastrada →
+cinza, fora da contagem. `faixa()`/chips contam por zona (vermelho/amarelo/
+verde/estouro).
 
 **% da meta = NF CONTABILIZADAS (emitidas − canceladas) ÷ objetivo.** Decisão
 minha em 2026-08-31 (o pedido dizia só "valor da meta"): nota cancelada não
