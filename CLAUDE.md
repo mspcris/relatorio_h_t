@@ -269,6 +269,8 @@ via Cristiano):**
   tratar é da recepção do posto. O front desabilita o checkbox fora do ACL
   (`postos_acl` vem no payload da API).
 - Auto-refresh de 2 min só roda quando o período inclui hoje/futuro.
+- Período de mais de um dia agrupa a grid por dia de consulta (linha
+  separadora com dia da semana + data + contagem), pedido do Petterson.
 
 **Pendências conhecidas (2026-07-21):**
 - `/cancelados_robo` ([cancelados_robo_routes.py](cancelados_robo_routes.py)) ainda
