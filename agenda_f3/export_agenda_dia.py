@@ -499,7 +499,10 @@ def fetch_financeiro_for_letra(args):
             eng = make_engine(cs)
             with eng.connect() as con:
                 con.execute(text("SELECT 1"))
-            engines[posto_letra] = eng
+            # NÃO escrever eng de volta em engines: o posto falhou na Fase 1,
+            # logo não tem agenda baixada. Reinseri-lo aqui fazia a Fase 5
+            # considerá-lo "válido" e a Fase 6 reescrevia o snapshot com 0
+            # registros (incidente Anchieta 2026-08-12 08:30).
         except Exception as e:
             return posto_letra, {}, {}, str(e)
 
@@ -608,6 +611,11 @@ def validate_postos(engines: dict, agendas: dict, erros_agenda: dict,
     for posto in POSTOS:
         if posto not in engines:
             postos_invalidos[posto] = "conexão falhou"
+            continue
+        # Guarda definitiva: sem agenda baixada na Fase 2 (mesmo que a conexão
+        # tenha "voltado" depois), o posto NÃO pode ser reescrito.
+        if posto not in agendas:
+            postos_invalidos[posto] = "agenda não baixada (conexão falhou na Fase 1)"
             continue
         if erros_agenda.get(posto):
             postos_invalidos[posto] = "; ".join(erros_agenda[posto])
@@ -862,9 +870,11 @@ def run():
         engines, agendas, erros_agenda, origens_por_posto, origens_ok, origens_err
     )
 
-    # Inclui falhas de conexão nos inválidos
+    # Inclui falhas de conexão nos inválidos — e garante que NÃO estejam nos
+    # válidos (cinto e suspensório; ver incidente Anchieta 2026-08-12).
     for p, err in conn_failures.items():
         postos_invalidos.setdefault(p, f"conexão: {err}")
+        postos_validos.discard(p)
 
     gerado_em = datetime.now(timezone.utc)
     dados_validos, write_errs, total_pacientes = write_postos_validos(
