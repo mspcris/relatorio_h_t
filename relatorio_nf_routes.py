@@ -63,7 +63,7 @@ _PAGE = """<!doctype html><html lang="pt-br"><head><meta charset="UTF-8">
   <h1>📊 NF emitidas × meta</h1>
   <p>Olá, <b>{nome}</b>.</p>
   <p id="msg" class="big">{espere}</p>
-  <p id="det">Em 1 a 2 minutos chega no seu {canais} uma mensagem <b>nova</b>, com a imagem atualizada e um link novo.</p>
+  <p id="det">Em alguns minutos (o robô recoleta os 13 postos antes) chega no seu {canais} uma mensagem <b>nova</b>, com a imagem atualizada e um link novo.</p>
   <noscript><form method="POST" action="/relatorio_nf/{token}/ir"><button type="submit">🔄 Atualizar e me enviar</button></form></noscript>
   <p class="mini"><a href="{pagina}">Abrir o painel completo</a></p>
 </div>
@@ -132,7 +132,7 @@ def ir(token):
     if criado and d.get('telefone'):
         # zap imediato, fora do request: o usuário vê "Espere…" no celular na hora
         threading.Thread(target=rn.enviar_zap_texto, args=(d['telefone'], FRASE_ESPERE), daemon=True).start()
-    detalhe = (f"Em 1 a 2 minutos chega no seu {_canais(d)} uma mensagem nova, com a imagem atualizada e um link novo."
+    detalhe = (f"Em alguns minutos (o robô recoleta os 13 postos antes) chega no seu {_canais(d)} uma mensagem nova, com a imagem atualizada e um link novo."
                if criado else 'Um pedido já está em andamento — a mensagem nova está a caminho.')
     return jsonify(ok=True, criado=criado, motivo=motivo, mensagem=FRASE_ESPERE, detalhe=detalhe)
 
@@ -165,6 +165,6 @@ def enviar():
         return jsonify(ok=False, erro=str(e)[:200]), 500
     log.info('relatorio_nf página: por=%s criado=%s motivo=%s', email, criado, motivo)
     nomes = ' e '.join(d['nome'] for d in rn.destinatarios().values())
-    msg = (f'{FRASE_ESPERE} Em 1 a 2 minutos {nomes} recebem a imagem nova por WhatsApp/e-mail.'
+    msg = (f'{FRASE_ESPERE} Em alguns minutos (o robô recoleta os 13 postos antes) {nomes} recebem a imagem nova por WhatsApp/e-mail.'
            if criado else f'Já existe um pedido em andamento ({motivo}).')
     return jsonify(ok=True, criado=criado, motivo=motivo, mensagem=msg)

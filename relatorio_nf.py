@@ -655,6 +655,12 @@ def _spool_dir() -> str:
         if os.geteuid() == 0:
             # Se foi o root (cron) quem criou, o www-data (Flask) precisa gravar aqui.
             os.chmod(SPOOL_DIR, 0o2777)
+            # /opt/camim-auth tem ACL default `user:www-data:rw-` (sem x). Entrada
+            # nomeada de usuário GANHA do other::rwx, e sem x no diretório o
+            # www-data não cria arquivo — o chmod 2777 sozinho não resolve
+            # (medido 2026-08-31: "Permission denied" com a pasta 777).
+            subprocess.run(['setfacl', '-m', 'u:www-data:rwx', SPOOL_DIR],
+                           check=False, capture_output=True)
     except OSError as e:
         log.warning('spool %s: %s', SPOOL_DIR, e)
     return SPOOL_DIR
