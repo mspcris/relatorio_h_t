@@ -118,7 +118,7 @@ TETO_DIA_POR_DEST = 20
 # Telefone vazio = só e-mail (o zap é pulado e o log avisa).
 _DEST_PADRAO = (
     'cristiano:Cristiano:cristiano@camim.com.br:5521994317573;'
-    'vinicius:Vinicius Gomes:viniciusgomes@camim.com.br:'
+    'vinicius:Vinicius Gomes:viniciusgomes@camim.com.br:5521999448104'
 )
 
 FAIXAS = {
