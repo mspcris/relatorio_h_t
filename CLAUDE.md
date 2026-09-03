@@ -409,6 +409,44 @@ conferir layout); `--enviar --para cristiano` sem `--run` mostra o que faria.
 
 ---
 
+## KPI Receita × Despesa — drill-down até a despesa (como no APP Gestão) — 2026-09-03
+
+Clique no mês em qualquer tabela do explorador (Nível 1 plano principal,
+Nível 2 plano, Nível 3 tipo) abre um painel lateral com os registros
+individuais: ID, data da prestação, data de pagamento, valor pago, descrição,
+comentário, fornecedor, usuário. Mesmo formato dos cards do APP Gestão.
+
+| Peça | Onde |
+|---|---|
+| Fonte | RDS `fin_despesa` (`export_fin_despesa_pg.py`, cron 2 h) via `/api/fin/despesas` |
+| Filtros novos na API | `mes_base=auto`, `<campo>_eq` (exato), `retirada=0`, `cancelada=0`, `totais=1` |
+| Página | `abrirRegistros()` / `renderRegistros()` em `kpi_receita_despesa.html`, drawer `#regDrawer` |
+
+**Por que a carga mudou (o Cristiano autorizou "mudar o select e fazer carga"):**
+- O gráfico agrupa o mês por **`DataPagamentoAuto`** (data em que o pagamento
+  foi LANÇADO — `sql_full/*.sql`), não por `DataPagamento`. A view
+  `vw_Fin_Despesa` não expõe essa coluna; ~1,6 % das linhas caem em mês
+  diferente (G 135/8.250, A 297/29.568 em 12 m). O ETL passou a fazer JOIN em
+  `Fin_Despesa` e gravar `data_pagamento_auto`; `--backfill-auto` preencheu o
+  histórico (rodado em 2026-09-03). O drill-down pede `mes_base=auto`, senão
+  não fecha com o total do mês.
+- A carga era só `INSERT … DO NOTHING`: despesa editada ou cancelada depois
+  nunca chegava ao RDS. Agora, além do incremental, há **refresh com UPSERT
+  dos últimos 45 dias** por `DataPagamentoAuto` (`FIN_DESPESA_REFRESH_DIAS`).
+  ~1.000 linhas por posto por execução, 5 s.
+- `--dry-run` só conta. `ensure_schema()` é idempotente (coluna + índice).
+
+**Conferência na tela:** o painel mostra "Total no gráfico" × "Soma dos
+registros" (soma do filtro inteiro no RDS, não só da página carregada) e
+avisa em amarelo quando difere — em geral é defasagem de até 2 h da carga.
+"Última atualização" do app não existe no banco (é a hora da consulta do
+app); o card mostra a hora da carga no RDS.
+
+Filtro exato com os rótulos que a página usa para vazio ("Sem plano", "Sem
+classificação") vira `IS NULL OR ''` na API (`ROTULOS_VAZIO`).
+
+---
+
 ## Desbloqueio CTRL-Q (`/ctrlq_desbloqueio`) — gatilho, "antes" e prazo do ERP (2026-09-03)
 
 Regra de negócio que faz o registro aparecer (**não é trigger no banco, é o

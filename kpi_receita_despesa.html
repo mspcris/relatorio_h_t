@@ -3041,6 +3041,7 @@ function renderExplorerTable(tbodySel, mesesSelec, values) {
   // Mais recente em cima (Cristiano, 2026-09-03) — o gráfico continua
   // cronológico; só a tabela inverte.
   const idxs = mesesSelec.map((_, i) => i).reverse();
+  const nivel = tbodySel === '#tblExplPP' ? 1 : tbodySel === '#tblExplPlano' ? 2 : 3;
   idxs.forEach(idx => {
     const ym = mesesSelec[idx];
     const totalMes = despesaTotalMes(ym);
@@ -3048,13 +3049,108 @@ function renderExplorerTable(tbodySel, mesesSelec, values) {
     const pct = totalMes > 0 ? (v / totalMes) * 100 : null;
 
     tb.insertAdjacentHTML('beforeend', `
-<tr>
-  <td>${mFmt(ym)}</td>
+<tr class="reg-row" data-ym="${ym}" data-nivel="${nivel}" data-valor="${v}" title="Clique para ver os registros (despesa a despesa)" style="cursor:pointer">
+  <td>${mFmt(ym)} <i class="fas fa-list-ul" style="font-size:.7rem;color:#8a94a3"></i></td>
   <td class="text-right">R$ ${fmt2.format(v)}</td>
   <td class="text-right">${pct == null ? '-' : fmtPct.format(pct) + '%'}</td>
 </tr>`);
   });
 }
+
+// ── Drill-down: registros de despesa (linha a linha, como no APP Gestão) ──
+// Fonte: /api/fin/despesas (RDS fin_despesa, carga a cada 2h com refresh de
+// 45 dias). Mês por data_pagamento_auto — a mesma base do gráfico
+// (sql_full/*.sql filtra por DataPagamentoAuto). Pedido do Cristiano 2026-09-03.
+const REG = { params: null, rows: [], cursor: null, hasMore: false, totais: null, valorTabela: 0, titulo: '' };
+
+function regFmtDT(iso, semHora) {
+  if (!iso) return '—';
+  const m = String(iso).match(/(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+  if (!m) return iso;
+  return `${m[3]}/${m[2]}/${m[1]}` + (!semHora && m[4] ? ` ${m[4]}:${m[5]}` : '');
+}
+function regEsc(v) { return String(v ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+
+function abrirRegistros(nivel, ym, valorTabela) {
+  const pp = el('#selExplPP')?.value || '';
+  const plano = el('#selExplPlano')?.value || '';
+  const tipo = el('#selExplTipo')?.value || '';
+  if (!pp) return;
+  const postos = postosSelecionados();
+  const q = new URLSearchParams({ mes: ym, mes_base: 'auto', order: 'id_desc', limit: '200', totais: '1', plano_principal_eq: pp });
+  if (nivel >= 2 && plano) q.set('plano_eq', plano);
+  if (nivel >= 3 && tipo) q.set('tipo_eq', tipo);
+  if (postos.length >= 13) q.set('grupo', 'todos'); else q.set('postos', postos.join(','));
+  if (!considerarRetirada) q.set('retirada', '0');
+  REG.params = q; REG.rows = []; REG.cursor = null; REG.hasMore = false; REG.totais = null; REG.valorTabela = valorTabela;
+  REG.titulo = [pp, nivel >= 2 ? plano : null, nivel >= 3 ? tipo : null].filter(Boolean);
+  REG.ym = ym; REG.postos = postos;
+  el('#regDrawer').classList.add('show');
+  renderRegistros(true);
+  carregarRegistros();
+}
+
+async function carregarRegistros() {
+  const q = new URLSearchParams(REG.params);
+  if (REG.cursor) { q.set('cursor', REG.cursor.id_despesa); q.set('cursor_posto', REG.cursor.posto); q.delete('totais'); }
+  try {
+    const r = await fetch('/api/fin/despesas?' + q.toString(), { credentials: 'same-origin' });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    REG.rows = REG.rows.concat(j.rows || []);
+    REG.hasMore = !!j.has_more; REG.cursor = j.next_cursor || null;
+    if (j.totais) REG.totais = j.totais;
+    renderRegistros(false);
+  } catch (e) {
+    el('#regDrawerBody').insertAdjacentHTML('beforeend', `<div class="alert alert-danger mt-2">Não consegui buscar os registros: ${regEsc(e.message)}</div>`);
+  }
+}
+
+function renderRegistros(carregando) {
+  const body = el('#regDrawerBody');
+  const busca = (el('#regBusca')?.value || '').trim().toUpperCase();
+  const rows = busca ? REG.rows.filter(r => [r.descricao, r.comentario, r.fornecedor, r.usuario_inclusao, r.usuario, String(r.id_despesa)].join(' ').toUpperCase().includes(busca)) : REG.rows;
+  const tot = REG.totais;
+  const dif = tot ? Math.abs((tot.soma_valor_pago || 0) - (REG.valorTabela || 0)) : 0;
+  const cards = rows.map(r => `
+    <div class="reg-card">
+      <div class="row1"><span>ID Despesa:</span><span>${regEsc(r.id_despesa)} <small class="text-muted">· posto ${regEsc(r.posto)}</small></span></div>
+      <div class="row1"><span>Data da prestação:</span><span>${regFmtDT(r.data_prestacao)}</span></div>
+      <div class="row1"><span>Data de pagamento:</span><span>${regFmtDT(r.data_pagamento, true)}${r.data_pagamento_auto && regFmtDT(r.data_pagamento_auto, true) !== regFmtDT(r.data_pagamento, true) ? ` <small class="text-muted" title="lançamento do pagamento (mês do gráfico)">· lançado ${regFmtDT(r.data_pagamento_auto, true)}</small>` : ''}</span></div>
+      <div class="row1"><span>Valor pago:</span><span>R$ ${fmt2.format(Number(r.valor_pago) || 0)}${r.data_cancelamento ? ` <span class="tag">cancelada ${regFmtDT(r.data_cancelamento, true)}</span>` : ''}</span></div>
+      <div class="lbl2">Descrição:</div><div class="txt">${regEsc((r.descricao || '').trim()) || 'N/A'}</div>
+      <div class="lbl2">Comentário:</div><div class="txt">${regEsc((r.comentario || '').trim()) || 'N/A'}</div>
+      <div class="meta">${r.fornecedor ? `Fornecedor: ${regEsc(r.fornecedor)} · ` : ''}${r.conta ? `Conta: ${regEsc(r.conta)} · ` : ''}${r.forma ? `Forma: ${regEsc(r.forma)} · ` : ''}Usuário: ${regEsc(r.usuario_inclusao || r.usuario || '—')} · Carga no RDS: ${regFmtDT(r.imported_at)}</div>
+    </div>`).join('');
+  body.innerHTML = `
+    <button class="close-x" id="regDrawerClose">×</button>
+    <div class="lbl">Registros de despesa</div>
+    <h5>${regEsc(REG.titulo[REG.titulo.length - 1] || '')} — ${mFmt(REG.ym)}</h5>
+    <div class="reg-crumb">${REG.titulo.map(regEsc).join(' <b>›</b> ')} · postos <b>${REG.postos.length >= 13 ? 'todos' : REG.postos.join(', ')}</b>${considerarRetirada ? '' : ' · sem RETIRADA'}</div>
+    <div class="reg-tot">
+      <div class="st"><span class="lbl">Total no gráfico</span>R$ ${fmt2.format(REG.valorTabela || 0)}</div>
+      <div class="st ${tot && dif > 0.01 ? 'dif' : ''}"><span class="lbl">Soma dos registros</span>${tot ? 'R$ ' + fmt2.format(tot.soma_valor_pago || 0) + ` <small class="text-muted">(${tot.count} registros)</small>` : (carregando ? '…' : '—')}</div>
+      ${tot && dif > 0.01 ? `<div class="st dif" style="font-size:12px;max-width:260px">Diferença de R$ ${fmt2.format(dif)}: o RDS é carregado a cada 2 h (refresh de 45 dias); despesa lançada ou alterada depois disso ainda não chegou.</div>` : ''}
+    </div>
+    <input id="regBusca" class="form-control form-control-sm reg-busca" placeholder="filtrar por descrição, comentário, fornecedor, usuário ou ID…" value="${regEsc(el('#regBusca')?.value || '')}">
+    ${carregando ? '<div class="text-muted">Carregando…</div>' : (cards || '<div class="text-muted">Nenhum registro com este filtro.</div>')}
+    ${REG.hasMore ? `<button class="btn btn-sm btn-outline-secondary btn-block" id="regMais">Carregar mais (${REG.rows.length} carregados)</button>` : (REG.rows.length ? `<div class="text-muted text-center" style="font-size:12px">${REG.rows.length} registros</div>` : '')}
+  `;
+  el('#regDrawerClose').onclick = () => el('#regDrawer').classList.remove('show');
+  el('#regMais') && (el('#regMais').onclick = carregarRegistros);
+  const b = el('#regBusca');
+  b.addEventListener('input', () => { const pos = b.selectionStart; renderRegistros(false); const nb = el('#regBusca'); nb.focus(); nb.setSelectionRange(pos, pos); });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  ['#tblExplPP', '#tblExplPlano', '#tblExplTipo'].forEach(sel => {
+    el(sel)?.addEventListener('click', e => {
+      const tr = e.target.closest('tr.reg-row'); if (!tr) return;
+      abrirRegistros(Number(tr.dataset.nivel), tr.dataset.ym, Number(tr.dataset.valor) || 0);
+    });
+  });
+  el('#regDrawer')?.addEventListener('click', e => { if (e.target.id === 'regDrawer') el('#regDrawer').classList.remove('show'); });
+});
 
 function updateExplorerChart(chart, labels, values, label) {
   if (!chart) return;
@@ -3563,6 +3659,22 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
   }
   @keyframes slideIn { from{transform:translateX(40px); opacity:.5;} to{transform:none; opacity:1;} }
   .audit-drawer h5 { margin:0 0 4px 0; font-size:18px; }
+  /* drill-down de registros (2026-09-03) — cards como no APP Gestão */
+  .reg-drawer { width:min(720px, 96vw); }
+  .reg-crumb { font-size:12px; color:#555; margin:4px 0 8px; }
+  .reg-crumb b { color:#1e7b3a; }
+  .reg-tot { display:flex; gap:10px; flex-wrap:wrap; margin:8px 0 12px; }
+  .reg-tot .st { background:#f8f9fa; border-radius:6px; padding:6px 10px; font-size:13px; }
+  .reg-tot .st .lbl { display:block; }
+  .reg-tot .st.dif { background:#fff4d6; }
+  .reg-card { background:#fff; border:1px solid #e7eaef; border-radius:12px; padding:12px 14px; margin-bottom:10px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .reg-card .row1 { display:flex; justify-content:space-between; gap:8px; font-size:13px; }
+  .reg-card .row1 span:last-child { font-weight:700; }
+  .reg-card .lbl2 { font-weight:700; margin-top:8px; font-size:13px; }
+  .reg-card .txt { white-space:pre-wrap; font-size:13px; }
+  .reg-card .meta { color:#8a94a3; font-size:11px; margin-top:8px; }
+  .reg-card .tag { display:inline-block; padding:1px 7px; border-radius:999px; font-size:11px; font-weight:600; background:#fde8e8; color:#a12020; }
+  .reg-busca { width:100%; margin:6px 0 10px; }
   .audit-drawer .lbl { color:#666; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
   .audit-drawer .val { font-weight:600; }
   .audit-drawer .stat-grid {
@@ -3623,6 +3735,7 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
 </div>
 
 <!-- Drawer Detalhe da anomalia -->
+<div class="audit-drawer-bg" id="regDrawer"><div class="audit-drawer reg-drawer" id="regDrawerBody"></div></div>
 <div class="audit-drawer-bg" id="auditDrawer">
   <div class="audit-drawer" id="auditDrawerBody"></div>
 </div>

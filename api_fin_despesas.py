@@ -71,7 +71,13 @@ COLUNAS_RETORNO = [
     "endereco", "usuario", "paciente", "ordem_pagamento", "contabilizado",
     "id_conta", "id_conta_tipo", "id_lancamento", "valor_rateio",
     "forma", "data_atendimento", "cargo",
+    # 2026-09-03 — drill-down do kpi_receita_despesa (cards como no APP Gestao)
+    "data_prestacao", "data_pagamento_auto", "usuario_inclusao", "imported_at",
 ]
+
+# Rotulos que a pagina kpi_receita_despesa usa para NULL/vazio (normStr()).
+# Filtro exato com esses valores vira "IS NULL OR = ''".
+ROTULOS_VAZIO = {"sem classificação", "sem classificacao", "sem plano", "sem tipo"}
 
 GROUP_BY_ALIASES = {
     "tipo": "tipo",
@@ -148,15 +154,43 @@ def _build_where(args) -> tuple[str, list[Any]]:
         where.append("posto = ANY(%s)")
         p.append(postos)
 
+    # Base de data (2026-09-03): 'pagamento' (padrao, compativel) ou 'auto'
+    # (DataPagamentoAuto = data do LANCAMENTO do pagamento). O grafico do
+    # kpi_receita_despesa agrupa o mes por DataPagamentoAuto (sql_full/*.sql),
+    # e ~1,6% das linhas caem em mes diferente — o drill-down usa 'auto'.
+    base = (args.get("mes_base") or "pagamento").strip().lower()
+    col_data = "data_pagamento_auto" if base == "auto" else "data_pagamento"
+
     data_ini = _parse_date(args.get("data_ini"))
     if data_ini:
-        where.append("data_pagamento >= %s")
+        where.append(f"{col_data} >= %s")
         p.append(data_ini)
 
     data_fim = _parse_date(args.get("data_fim"))
     if data_fim:
-        where.append("data_pagamento < (%s::date + INTERVAL '1 day')")
+        where.append(f"{col_data} < (%s::date + INTERVAL '1 day')")
         p.append(data_fim)
+
+    # Filtros EXATOS (<campo>_eq) — o LIKE nao serve para a hierarquia do
+    # plano de contas ("DESPESAS OPERACIONAIS" casaria com "DESPESAS
+    # OPERACIONAIS - X"). Comparacao sem espacos nas pontas e sem caixa.
+    for f in ("tipo", "plano", "plano_principal", "conta", "fornecedor", "forma"):
+        v = (args.get(f + "_eq") or "").strip()
+        if not v:
+            continue
+        if v.lower() in ROTULOS_VAZIO:
+            where.append(f"({f} IS NULL OR TRIM({f}) = '')")
+        else:
+            where.append(f"UPPER(TRIM({f})) = UPPER(TRIM(%s))")
+            p.append(v)
+
+    # retirada=0 exclui Tipo/Plano RETIRADA (mesma regra do switch da pagina)
+    if (args.get("retirada") or "").strip() in ("0", "false", "nao", "não"):
+        where.append("UPPER(TRIM(COALESCE(tipo,''))) <> 'RETIRADA' AND UPPER(TRIM(COALESCE(plano,''))) <> 'RETIRADA'")
+
+    # cancelada=0 exclui despesa com data_cancelamento
+    if (args.get("cancelada") or "").strip() in ("0", "false", "nao", "não"):
+        where.append("data_cancelamento IS NULL")
 
     # Filtros LIKE case-insensitive.
     LIKE_FIELDS = [
@@ -183,7 +217,7 @@ def _build_where(args) -> tuple[str, list[Any]]:
     # Filtro por mes de pagamento (YYYY-MM).
     mes = (args.get("mes") or "").strip()
     if mes and len(mes) == 7 and mes[4] == "-":
-        where.append("to_char(data_pagamento, 'YYYY-MM') = %s")
+        where.append(f"to_char({col_data}, 'YYYY-MM') = %s")
         p.append(mes)
 
     return " AND ".join(where), p
@@ -220,6 +254,7 @@ def api_despesas_listar():
         cursor_cond = None
 
     where_sql, params = _build_where(args)
+    where_base, params_base = where_sql, list(params)
     if cursor_cond and cursor_id:
         where_sql += " AND " + cursor_cond
         params.append(cursor_posto or "Z")
@@ -250,6 +285,18 @@ def api_despesas_listar():
     if has_more:
         rows = rows[:limit]
 
+    # Soma e contagem do filtro inteiro (nao so da pagina): a tela compara
+    # com o total do mes do grafico e avisa se nao fechar.
+    totais = None
+    if (args.get("totais") or "").strip() in ("1", "true", "sim"):
+        try:
+            with _pg_conn() as pg, pg.cursor() as c:
+                c.execute(f"SELECT COUNT(*), COALESCE(SUM(valor_pago),0) FROM fin_despesa WHERE {where_base}", params_base)
+                n, soma = c.fetchone()
+                totais = {"count": int(n), "soma_valor_pago": float(soma or 0)}
+        except Exception as e:
+            log.warning("fin_despesas: totais falhou: %s", e)
+
     next_cursor = None
     if has_more and rows and order in ("id_desc", "id_asc"):
         last = rows[-1]
@@ -258,9 +305,10 @@ def api_despesas_listar():
     # normaliza datas para ISO
     for r in rows:
         for k in ("data_pagamento", "data_vencimento", "data_cancelamento",
-                  "data_atendimento"):
+                  "data_atendimento", "data_prestacao", "data_pagamento_auto",
+                  "imported_at"):
             v = r.get(k)
-            if v is not None:
+            if v is not None and hasattr(v, "isoformat"):
                 r[k] = v.isoformat()
 
     return jsonify({
@@ -271,6 +319,7 @@ def api_despesas_listar():
         "next_cursor": next_cursor,
         "order": order,
         "limit": limit,
+        "totais": totais,
     })
 
 
