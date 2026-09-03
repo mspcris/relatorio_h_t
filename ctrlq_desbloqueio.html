@@ -146,6 +146,26 @@
     margin-left: 4px;
   }
   .diff-antes  { background: #fdecea; color: #b71c1c; }
+  /* bloco "por que está aqui" */
+  .motivo-box { border: 2px solid #f0a202; background: #fff8e1; border-radius: 8px; padding: 10px 14px; margin: 10px 0;
+                animation: motivo-pulse 2.4s ease-in-out 3; }
+  @keyframes motivo-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(240,162,2,.0); } 50% { box-shadow: 0 0 0 6px rgba(240,162,2,.35); } }
+  .motivo-title { font-size: .78rem; font-weight: 700; color: #8a5a00; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .motivo-linha { font-size: .86rem; margin: 3px 0; }
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .74rem; font-weight: 600; margin: 2px 4px 2px 0; white-space: nowrap; }
+  .chip-mud { background: #fde8e8; color: #a12020; border: 1px solid #f5b5b5; }
+  .chip-fim { background: #e8f1fd; color: #1c4f9c; border: 1px solid #b9d1f3; }
+  .chip-obs { background: #fff4d6; color: #8a5a00; border: 1px solid #ffe08a; }
+  .chip-mut { background: #eef0f3; color: #5b6472; }
+  .chip-gat { background: #f0a202; color: #fff; }
+  .chip-pro { background: #2a78d6; color: #fff; }
+  .motivo-status { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; font-size: .84rem; }
+  .motivo-status .st { background: #fff; border: 1px solid #ffe08a; border-radius: 6px; padding: 4px 10px; }
+  .motivo-status .st b.dif { color: #a12020; }
+  .aud-linha.aud-contexto { opacity: .55; }
+  .aud-mud { display: block; margin: 2px 0 0 0; }
+  .obs-item { display: block; padding: 1px 0; }
+  .obs-item.primeiro { font-weight: 700; }
   .diff-depois { background: #e8f5e9; color: #1b5e20; }
 
   /* ── Filtros ── */
@@ -594,9 +614,9 @@
       ? painelTabela(rec, true)
       : `<div class="painel-sem-dados">
            <i class="fas fa-exclamation-circle mr-1"></i>
-           Nenhum registro encontrado em <strong>Cad_EspecialidadeHistorico</strong>
-           anterior à data de início do desbloqueio.<br>
-           <small>O snapshot diário pode não ter sido gerado antes desta data.</small>
+           Nenhuma foto em <strong>Cad_EspecialidadeHistorico</strong>
+           anterior ao gatilho.<br>
+           <small>O snapshot diário (23:59) só existe a partir da criação da agenda — agenda nova não tem "antes".</small>
          </div>`;
 
     return `<div class="paineis-wrap">
@@ -605,7 +625,7 @@
         ${painelProducaoComIrmaos(rec)}
       </div>
       <div class="painel-box painel-historico">
-        <div class="painel-header">Histórico — como era antes</div>
+        <div class="painel-header">Histórico — como era antes${rec.hist_fonte === 'vespera_gatilho' ? ` <small style="font-weight:400">(foto de ${fmtDateTime(rec.hist_DataHoraInclusao)}, véspera do gatilho)</small>` : rec.hist_fonte === 'reconstruido_auditoria' ? ` <small style="font-weight:400">(reconstruído pela auditoria — sem foto anterior ao gatilho)</small>` : rec.hist_DataHoraInclusao ? ` <small style="font-weight:400">(foto de ${fmtDateTime(rec.hist_DataHoraInclusao)})</small>` : ''}</div>
         ${conteudoHist}
       </div>
     </div>`;
@@ -698,10 +718,87 @@
 
   // ── Histórico de auditoria linha a linha ─────────────────────────────────
 
+  // Antes mostrava só HH:MM — em ciclo de semanas (gatilho 24/07, data fim
+  // 05/09) ficava impossível saber o DIA de cada linha (Cristiano, 2026-09-03).
   function fmtHora2(isoStr) {
     if (!isoStr) return '';
-    const m = String(isoStr).match(/T?(\d{2}:\d{2})/);
-    return m ? m[1] : '';
+    const m = String(isoStr).match(/(\d{4})-(\d{2})-(\d{2})T?(\d{2}):(\d{2})/);
+    return m ? `${m[3]}/${m[2]}/${m[1].slice(2)} ${m[4]}:${m[5]}` : '';
+  }
+
+  // "ValorCustoSexta" → "Custo sexta", "SextaHoraFim" → "Sexta fim" …
+  function rotuloCampo(c) {
+    const dias = { Segunda:'seg', Terca:'ter', Quarta:'qua', Quinta:'qui', Sexta:'sex', Sabado:'sáb', Domingo:'dom' };
+    let m;
+    if ((m = /^ValorCusto(\w+)$/i.exec(c)))        return `Custo ${dias[m[1]] || m[1]}`;
+    if ((m = /^QuantidadeCusto(\w+)$/i.exec(c)))   return `Qtd custo ${dias[m[1]] || m[1]}`;
+    if ((m = /^(\w+?)HoraInicio$/i.exec(c)))        return `${dias[m[1]] || m[1]} início`;
+    if ((m = /^(\w+?)HoraFim$/i.exec(c)))           return `${dias[m[1]] || m[1]} fim`;
+    if ((m = /^(\w+?)Almocoinicio$/i.exec(c)))      return `${dias[m[1]] || m[1]} almoço início`;
+    if ((m = /^(\w+?)AlmocoFim$/i.exec(c)))         return `${dias[m[1]] || m[1]} almoço fim`;
+    if ((m = /^(\w+?)QuantidadeMaxima$/i.exec(c)))  return `${dias[m[1]] || m[1]} qtd máx.`;
+    if ((m = /^(\w+?)Quantidade$/i.exec(c)))        return `${dias[m[1]] || m[1]} qtd`;
+    if (/^DataFimExibicao$/i.test(c))   return 'Data fim';
+    if (/^DataInicioExibicao$/i.test(c)) return 'Data início';
+    return c;
+  }
+  const chipsMudancas = (muds, semDataFim) => (muds || [])
+    .filter(m => !(semDataFim && /^DataFimExibicao$/i.test(m.campo)))
+    .map(m => /^DataFimExibicao$/i.test(m.campo)
+      ? `<span class="chip chip-fim">Data fim: ${esc(m.de)} → ${esc(m.para)}</span>`
+      : `<span class="chip chip-mud">${esc(rotuloCampo(m.campo))}: ${esc(m.de)} → ${esc(m.para)}</span>`).join('');
+
+  // Custo/tempo semanal a partir dos campos do registro (prefixo '' ou 'hist_')
+  function semanal(rec, p) {
+    let custo = 0, horas = 0, tem = false;
+    DIAS_SEMANA.forEach(d => {
+      if (!rec[p + d]) return;
+      tem = true;
+      custo += Number(rec[p + 'ValorCusto' + d]) || 0;
+      const h = calcHoras(rec[p + d + 'HoraInicio'], rec[p + d + 'HoraFim'], rec[p + d + 'Almoco'], rec[p + d + 'Almocoinicio'], rec[p + d + 'AlmocoFim']);
+      horas += h || 0;
+    });
+    return tem ? { custo, horas } : null;
+  }
+  const fmtHoras = h => { const t = Math.round(h * 60); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+
+  // Itens da ObservacaoDesbloqueio ("- Custo Semanal Anterior de X para Y" …).
+  // Genérico de propósito: o ERP vai passar a gravar também mudança de
+  // quantidade por hora / valor por consulta (Cristiano, 2026-09-03) e o
+  // rótulo novo tem que aparecer sem mexer aqui.
+  function itensObs(obs) {
+    return String(obs || '').split(/\r\n|\r|\n|(?=\s-\s[A-ZÁ-Ú])/).map(x => x.replace(/^\s*-\s*/, '').trim()).filter(Boolean);
+  }
+
+  function renderMotivo(rec) {
+    const g = rec.aud_gatilho, pro = rec.aud_prorrogacao;
+    const agora = semanal(rec, ''), antes = semanal(rec, 'hist_');
+    const obsItens = itensObs(rec.ObservacaoDesbloqueio);
+    let linhas = '';
+    if (g && g.estimado) {
+      linhas += `<div class="motivo-linha"><span class="chip chip-gat">GATILHO ESTIMADO</span> <b>${fmtDateTime(g.data)}</b> = data fim − 8 dias (é o prazo que o ERP grava). A auditoria não tem linha "DataFimExibicao de (vazio) para…" — acontece quando a agenda é <b>criada</b> já com custo/tempo (a inclusão não detalha campos).</div>`;
+    } else if (g) {
+      linhas += `<div class="motivo-linha"><span class="chip chip-gat">GATILHO</span> Em <b>${fmtDateTime(g.data)}</b>, <b>${esc(g.usuario || '—')}</b> alterou: ${chipsMudancas(g.mudancas, true) || '<span class="chip chip-mut">(sem campo de horário/custo na linha)</span>'}
+        ${g.datafim_definida ? `<span class="chip chip-fim">→ o ERP definiu a data fim para ${esc(g.datafim_definida)}</span>` : ''}</div>`;
+    }
+    if (g) {
+      const motivoErp = (g.obs_apos || '').split(/\r|\n/).map(x => x.replace(/^\s*-\s*/, '').trim()).filter(Boolean).pop() || obsItens[0];
+      if (motivoErp) linhas += `<div class="motivo-linha">Motivo registrado pelo ERP: <span class="chip chip-obs">${esc(motivoErp)}</span></div>`;
+      if (pro) linhas += `<div class="motivo-linha"><span class="chip chip-pro">PRORROGAÇÃO</span> Em <b>${fmtDateTime(pro.data)}</b>, <b>${esc(pro.usuario || '—')}</b> mudou a data fim de ${esc(pro.de || '?')} para <b>${esc(pro.para || '?')}</b>.</div>`;
+    } else {
+      linhas += `<div class="motivo-linha"><i class="fas fa-question-circle mr-1"></i>Não achei na auditoria a linha que definiu esta data fim (fora dos 365 dias ou auditoria indisponível). ${obsItens[0] ? `Primeiro motivo gravado pelo ERP: <span class="chip chip-obs">${esc(obsItens[0])}</span>` : ''}</div>`;
+    }
+    if (agora || antes) {
+      const dif = (a, b, f) => (a == null || b == null) ? '' : (Math.abs(a - b) > 1e-6 ? ' dif' : '');
+      const st = (rot, a, b, f) => `<div class="st">${rot}: <span class="text-muted">antes</span> ${b != null ? f(b) : '—'} → <span class="text-muted">agora</span> <b class="${dif(a, b)}">${a != null ? f(a) : '—'}</b></div>`;
+      linhas += `<div class="motivo-status">
+        ${st('Custo semanal', agora?.custo, antes?.custo, v => 'R$ ' + fmtValor(v))}
+        ${st('Tempo semanal', agora?.horas, antes?.horas, fmtHoras)}
+        ${st('R$/hora', agora && agora.horas ? agora.custo / agora.horas : null, antes && antes.horas ? antes.custo / antes.horas : null, v => 'R$ ' + fmtValor(v))}
+        <div class="st text-muted" style="font-size:.76rem">${rec.hist_fonte === 'vespera_gatilho' ? `"antes" = foto de ${fmtDateTime(rec.hist_DataHoraInclusao)} (véspera do gatilho)` : rec.hist_fonte === 'reconstruido_auditoria' ? `"antes" = estado atual com as ${rec.hist_mudancas_desfeitas || 0} mudanças do ciclo desfeitas pela auditoria (não havia foto anterior ao gatilho — agenda criada no ciclo)` : `"antes" = último snapshot anterior à data fim (pode já conter a mudança)`}</div>
+      </div>`;
+    }
+    return `<div class="motivo-box"><div class="motivo-title"><i class="fas fa-exclamation-triangle mr-1"></i>Por que este registro está aqui</div>${linhas}</div>`;
   }
 
   function renderAudHistorico(rec) {
@@ -716,20 +813,25 @@
       </div>`;
     }
     const isFallback = lista.some(e => e.aud_fallback);
-    const headerText = isFallback
-      ? 'Últimos 5 registros — vw_Sis_Historico <small class="text-warning ml-2">(sem registros nos 10 dias antes da data fim)</small>'
-      : 'Histórico (10 dias antes da data fim) — vw_Sis_Historico';
+    const g = rec.aud_gatilho;
+    const headerText = g
+      ? `Histórico desde o gatilho (${fmtDateTime(g.data)}) — vw_Sis_Historico <small class="text-muted ml-2">linhas apagadas = contexto anterior ao gatilho</small>`
+      : (isFallback
+          ? 'Últimos registros — vw_Sis_Historico <small class="text-warning ml-2">(nada nos últimos 365 dias)</small>'
+          : 'Últimos 10 registros — vw_Sis_Historico <small class="text-warning ml-2">(gatilho não identificado)</small>');
     const linhas = lista.map(e => {
-      const isPrincipal = e.aud_detalhe && e.aud_detalhe.includes('DataFimExibicao');
-      const detalheHtml = e.aud_detalhe
-        ? `<div class="aud-detalhe">${esc(e.aud_detalhe)}</div>`
-        : '';
-      return `<div class="aud-linha${isPrincipal ? ' aud-principal' : ''}">
+      const cls = (e.aud_gatilho ? ' aud-principal' : '') + (g && e.aud_no_ciclo === false ? ' aud-contexto' : '');
+      const tag = e.aud_gatilho ? '<span class="chip chip-gat">GATILHO</span>' : e.aud_prorrogacao ? '<span class="chip chip-pro">PRORROGAÇÃO</span>' : '';
+      const muds = Array.isArray(e.mudancas) && e.mudancas.length ? `<span class="aud-mud">${chipsMudancas(e.mudancas)}</span>` : '';
+      const obsMud = e.obs_para ? `<span class="aud-mud"><span class="chip chip-obs" title="ObservacaoDesbloqueio após esta alteração">obs: ${esc(itensObs(e.obs_para).pop() || '')}</span></span>` : '';
+      const detalheHtml = (!muds && !obsMud && e.aud_detalhe) ? `<div class="aud-detalhe">${esc(e.aud_detalhe)}</div>` : '';
+      return `<div class="aud-linha${cls}" title="${esc(e.aud_detalhe || '')}">
         <span class="aud-hora">${fmtHora2(e.aud_data)}</span>
         <span class="aud-user">${esc(e.aud_usuario || '—')}</span>
         <span class="aud-cmd">[${esc(e.aud_comando || '')}]</span>
+        ${tag}
         <span class="aud-desc">${esc(e.aud_descricao || '')}</span>
-        ${detalheHtml}
+        ${muds}${obsMud}${detalheHtml}
       </div>`;
     }).join('');
     return `<div class="aud-historico">
@@ -759,7 +861,7 @@
 
     const audInfo = rec.aud_usuario
       ? `<div style="font-size:.78rem;color:#777;margin-top:3px">
-           <i class="fas fa-user-edit mr-1"></i>Solicitado por
+           <i class="fas fa-user-edit mr-1"></i>${rec.aud_gatilho ? (rec.aud_gatilho.estimado ? 'Primeira alteração do ciclo por' : 'Gatilho por') : 'Última alteração por'}
            <strong>${esc(rec.aud_usuario)}</strong> em ${fmtDateTime(rec.aud_data)}
          </div>`
       : `<div style="font-size:.75rem;color:#aaa;margin-top:3px">
@@ -792,10 +894,14 @@
           </div>
         </div>
 
+        ${renderMotivo(rec)}
+
         ${obs ? `
         <div class="desb-obs">
-          <div class="obs-label"><i class="fas fa-comment-alt mr-1"></i>Observação de Desbloqueio</div>
-          ${esc(obs)}
+          <div class="obs-label"><i class="fas fa-comment-alt mr-1"></i>Observação de Desbloqueio <small class="text-muted">(log do ERP, do mais antigo ao mais novo — o primeiro item abriu o registro)</small></div>
+          ${(() => { const its = itensObs(obs); const g = rec.aud_gatilho; const mot = g && g.obs_apos ? (itensObs(g.obs_apos).pop() || '') : (g && g.estimado ? its[0] : ''); let marcado = false;
+              return its.map((it, i) => { const eh = !marcado && mot && it === mot; if (eh) marcado = true;
+                return `<span class="obs-item${eh ? ' primeiro' : ''}">${i + 1}. ${esc(it)}${eh ? ' <span class="chip chip-gat">gatilho deste registro</span>' : ''}</span>`; }).join(''); })()}
         </div>` : ''}
 
         ${renderAudHistorico(rec)}

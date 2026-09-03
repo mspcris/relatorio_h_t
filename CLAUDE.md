@@ -409,6 +409,45 @@ conferir layout); `--enviar --para cristiano` sem `--run` mostra o que faria.
 
 ---
 
+## Desbloqueio CTRL-Q (`/ctrlq_desbloqueio`) — gatilho, "antes" e prazo do ERP (2026-09-03)
+
+Regra de negócio que faz o registro aparecer (**não é trigger no banco, é o
+ERP**): ao mudar custo semanal ou tempo semanal de uma agenda, o ERP grava
+`cad_especialidade.DataFimExibicao = agora + 8 dias EXATOS` e anexa
+" - Custo/Tempo Semanal Anterior de X para Y" em `ObservacaoDesbloqueio` (log
+cumulativo, do mais antigo ao mais novo). A `vw_Sis_Historico` registra a
+mesma edição com "DataFimExibicao de (vazio) para dd/mm/aaaa hh:mm:ss" mais os
+campos que mudaram. **Esse é o gatilho.** O Cristiano vai fazer o ERP disparar
+também por mudança de quantidade de pacientes por hora (valor por consulta
+sobe) — o parse é genérico, rótulo novo aparece sem mexer no código.
+
+O que estava errado até 2026-09-03 (caso Dr. Milton, R, id 2586):
+- "Como era antes" era o snapshot de `Cad_EspecialidadeHistorico` anterior à
+  **DataFimExibicao** — que está no futuro; logo era a foto de ontem, já com
+  todas as mudanças, e a comparação saía sem diferença.
+- A auditoria olhava 10 dias antes da data fim; com prorrogação (gatilho
+  24/07, data fim 05/09) o gatilho ficava fora e caía em "últimos 5".
+- Linhas de histórico só com hora, sem dia.
+
+Como ficou (`ctrlq_desbloqueio.py` + `sql_ctrlq_desbloqueio_aud.sql`):
+- Auditoria dos últimos 365 dias; `detectar_gatilho()` acha a última linha
+  "DataFimExibicao de (vazio) para X" e a **prorrogação** (linha posterior
+  que trocou X por Y — botão Prorrogar Agenda ou ERP). O card mostra o ciclo
+  desde o gatilho (+3 linhas anteriores apagadas, contexto).
+- Agenda **criada** já com data fim não gera linha com DataFimExibicao →
+  gatilho **estimado** = data fim − 8 dias (`DIAS_DATAFIM_ERP`). Se o ERP
+  mudar o prazo, mudar a constante.
+- "Antes" = foto de `Cad_EspecialidadeHistorico` (diária, 23:59:59) da
+  **véspera do gatilho**, por `idEspecialidade`. Sem foto anterior (agenda
+  criada no ciclo) → `reconstruir_antes()` desfaz as mudanças do ciclo a partir
+  do estado atual, usando a própria auditoria. `hist_fonte` diz qual caminho
+  foi usado e a página escreve isso ao lado do número.
+- Bloco amarelo "Por que este registro está aqui": gatilho (data, usuário,
+  campos alterados em chips), motivo gravado pelo ERP, prorrogação, e custo /
+  tempo semanal / R$·h antes → agora.
+
+---
+
 ## Farmácia · Saídas e Consumo por posto (`/farmacia_saidas`) — 2026-09-03
 
 Pergunta do Cristiano: *"quanto saiu da farmácia de Realengo nos últimos 2-3

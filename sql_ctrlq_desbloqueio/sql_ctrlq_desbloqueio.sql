@@ -116,7 +116,10 @@ SELECT
 FROM cad_especialidade ce
 INNER JOIN cad_medico m ON m.idmedico = ce.idMedico
 
--- Snapshot imediatamente anterior ao início do desbloqueio
+-- Snapshot imediatamente anterior à DATA FIM — é só o FALLBACK. Como a data
+-- fim está no futuro, isso é a foto de ontem. O ETL (merge_snapshot_gatilho)
+-- substitui pelos campos da véspera do GATILHO quando acha o gatilho na
+-- auditoria; por idEspecialidade, não por médico+especialidade (irmãos).
 OUTER APPLY (
     SELECT TOP 1
         DataHoraInclusao,
@@ -143,8 +146,7 @@ OUTER APPLY (
                DomingoAlmoco, DomingoAlmocoinicio, DomingoAlmocoFim,
                ValorCustoDomingo, QuantidadeCustoDomingo
     FROM Cad_EspecialidadeHistorico
-    WHERE idmedico      = ce.idMedico
-      AND Especialidade = ce.Especialidade
+    WHERE idEspecialidade = ce.idEspecialidade
       AND DataHoraInclusao < ce.DataFimExibicao
     ORDER BY DataHoraInclusao DESC
 ) h
