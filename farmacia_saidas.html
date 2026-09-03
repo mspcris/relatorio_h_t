@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8" />
+    <title>CAMIM — Farmácia · Saídas e Consumo por Posto</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <meta name="kpi-id" content="farmacia_saidas" />
+    <meta name="kpi-title" content="Farmácia - Saídas e Consumo por Posto" />
+    <meta name="kpi-description" content="Saídas da farmácia de cada posto (o que foi entregue à enfermagem, laboratório, outros postos), consumo real lançado ao paciente, entradas por origem e estoque atual — para decidir quanto enviar a cada unidade." />
+    <meta name="kpi-category" content="Operacional" />
+    <meta name="kpi-keywords" content="farmácia, estoque, saídas, medicamento, material, reposição, envio" />
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap">
+    <link rel="stylesheet" href="/css/style2.css?v=20251114">
+    <link rel="stylesheet" href="/css/style_kpi.css?v=20251114&force=1">
+    <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        fetch("/session/me", { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(data => { window.USER_EMAIL = data.email; window.USER_POSTOS = data.postos; })
+            .catch(() => { window.USER_EMAIL = null; window.USER_POSTOS = []; });
+    </script>
+    <script src="/js/calendar-picker.js?v=20260326"></script>
+
+    <style>
+        html { font-size: 16px; }
+        body { font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+        .mini { font-size: .8rem; }
+        .kpi { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+        .kpi .card { border-radius: 12px; margin: 0; }
+        .kpi .card .card-body { padding: .5rem .75rem; }
+        .kpi .lbl { font-size: .78rem; color: #6c757d; text-transform: uppercase; letter-spacing: .03em; }
+        .kpi .val { font-size: 1.45rem; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+        .kpi .sub { font-size: .78rem; color: #6c757d; }
+        .chart-card .card-body { height: 320px; }
+        .tbl-wrap { overflow: auto; max-height: 70vh; }
+        table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .86rem; }
+        table.tbl th { position: sticky; top: 0; background: #f8f9fa; z-index: 1; cursor: pointer; white-space: nowrap; user-select: none; }
+        table.tbl th, table.tbl td { padding: 6px 8px; border-bottom: 1px solid #eef0f3; }
+        table.tbl td.num, table.tbl th.num { text-align: right; font-variant-numeric: tabular-nums; }
+        table.tbl tbody tr:hover { background: #f4f9ff; cursor: pointer; }
+        .tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: .72rem; font-weight: 600; line-height: 1.4; white-space: nowrap; }
+        .tag-ok { background: #e6f6ec; color: #1e7b3a; }
+        .tag-warn { background: #fff4d6; color: #8a5a00; }
+        .tag-bad { background: #fde8e8; color: #a12020; }
+        .tag-mut { background: #eef0f3; color: #5b6472; }
+        .tag-info { background: #e8f1fd; color: #1c4f9c; }
+        .posto-nome { font-weight: 600; color: #1e7b3a; margin-left: 8px; }
+        .posto-tabs-inline .nav-link.sem-dado { opacity: .35; }
+        .filter-num { width: 84px; }
+        .aviso { background: #fff8e1; border: 1px solid #ffe08a; border-radius: 8px; padding: 8px 12px; font-size: .85rem; margin-bottom: 10px; }
+        .aviso.erro { background: #fde8e8; border-color: #f5b5b5; }
+        .nav-tabs .nav-link { font-weight: 600; }
+        .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+        .modal-lg { max-width: 960px; }
+        .serie-tbl td, .serie-tbl th { padding: 3px 6px; font-size: .8rem; }
+        .muted { color: #8a94a3; }
+        .semdado { padding: 40px; text-align: center; color: #6c757d; }
+        .btn-xs { padding: 1px 8px; font-size: .78rem; }
+        @media (max-width: 768px) { .kpi { grid-template-columns: repeat(2, 1fr); } .chart-card .card-body { height: 260px; } }
+    </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+    <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+        <ul class="navbar-nav">
+            <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li>
+        </ul>
+        <span class="ml-2 font-weight-bold d-flex align-items-center">
+            <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+            <span class="ml-2">Quem tem saúde é mais feliz!</span>
+            <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+        </span>
+    </nav>
+
+    <aside class="main-sidebar sidebar-dark-primary elevation-4">
+        <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+        <div class="sidebar"><nav class="mt-2">
+            <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+                <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a></li>
+                <li class="nav-item"><a href="farmacia_saidas.html" class="nav-link active"><i class="nav-icon fas fa-pills"></i><p>Farmácia · Saídas</p></a></li>
+            </ul>
+        </nav></div>
+    </aside>
+
+    <div class="content-wrapper">
+        <section class="content-header"><div class="container-fluid">
+            <h1 class="h4 mb-0">Farmácia · Saídas e Consumo por Posto</h1>
+            <div class="mini text-muted">Saídas da farmácia (o que foi entregue), consumo lançado ao paciente, entradas por origem e estoque de hoje — um posto de cada vez.</div>
+        </div></section>
+
+        <section class="content"><div class="container-fluid">
+
+            <!-- FILTROS -->
+            <div class="card">
+              <div class="kpi-filter-panel">
+                <div class="kpi-filter-row kpi-filter-postos">
+                  <span class="filter-label mr-1">Posto</span>
+                  <ul id="postoTabs" class="nav nav-pills posto-tabs-inline"></ul>
+                  <span id="postoNome" class="posto-nome"></span>
+                </div>
+                <div class="kpi-filter-row kpi-filter-actions">
+                  <div class="filter-dates-row">
+                    <div class="filter-date-group">
+                      <label class="filter-label">De</label>
+                      <div class="filter-date-wrap">
+                        <input id="from" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm filter-date-input" />
+                        <button id="btnCalFrom" class="btn btn-sm btn-cal" title="Abrir calendário">📅</button>
+                      </div>
+                    </div>
+                    <div class="filter-date-group">
+                      <label class="filter-label">Até</label>
+                      <div class="filter-date-wrap">
+                        <input id="to" type="text" placeholder="MM/YYYY" maxlength="7" inputmode="numeric" autocomplete="off" class="form-control form-control-sm filter-date-input" />
+                        <button id="btnCalTo" class="btn btn-sm btn-cal" title="Abrir calendário">📅</button>
+                      </div>
+                    </div>
+                    <div class="filter-date-group">
+                      <label class="filter-label" title="Quantos meses de consumo o envio deve cobrir. Sugestão = média mensal × cobertura − estoque atual do posto.">Cobrir (meses)</label>
+                      <input id="cobertura" type="number" min="0.5" step="0.5" value="1" class="form-control form-control-sm filter-num" />
+                    </div>
+                    <div class="filter-date-group">
+                      <label class="filter-label">Buscar produto</label>
+                      <input id="busca" type="text" placeholder="nome, substância..." class="form-control form-control-sm" style="width:200px" />
+                    </div>
+                    <div class="filter-date-group" id="grupoWrap" style="display:none">
+                      <label class="filter-label">Grupo</label>
+                      <select id="grupo" class="form-control form-control-sm"><option value="">todos</option></select>
+                    </div>
+                  </div>
+                  <div class="filter-btns-row">
+                    <button id="btnFiltrar" class="btn btn-sm btn-primary">🔍 Filtrar</button>
+                    <button id="btnReset" class="btn btn-sm btn-outline-secondary">Reset</button>
+                    <button id="btnMesAtual" class="btn btn-sm btn-outline-info">Mês Atual</button>
+                    <button id="btn3m" class="btn btn-sm btn-outline-info" title="Três últimos meses fechados + o corrente">Últimos 3 meses</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="avisos"></div>
+
+            <!-- ABAS -->
+            <ul class="nav nav-tabs mb-2" id="abas">
+                <li class="nav-item"><a class="nav-link active" data-aba="saidas" href="#">Saídas da farmácia</a></li>
+                <li class="nav-item"><a class="nav-link" data-aba="consumo" href="#">Consumo real (lançado ao paciente)</a></li>
+                <li class="nav-item"><a class="nav-link" data-aba="entradas" href="#">Entradas (de onde veio)</a></li>
+                <li class="nav-item"><a class="nav-link" data-aba="estoque" href="#">Estoque de hoje</a></li>
+            </ul>
+
+            <div id="carregando" class="semdado">Carregando…</div>
+            <div id="conteudo" style="display:none">
+
+                <!-- ═══ SAÍDAS ═══ -->
+                <div class="aba" data-aba="saidas">
+                    <div class="card"><div class="card-body kpi" id="kpiSaidas"></div></div>
+                    <div class="row">
+                        <div class="col-lg-7"><div class="card chart-card">
+                            <div class="card-header py-2"><h3 class="card-title mb-0 h6">Saídas por mês (unidades) — por destino</h3></div>
+                            <div class="card-body"><canvas id="chSaidasMes"></canvas></div>
+                        </div></div>
+                        <div class="col-lg-5"><div class="card chart-card">
+                            <div class="card-header py-2"><h3 class="card-title mb-0 h6">Para quem saiu (setor / destino)</h3></div>
+                            <div class="card-body"><canvas id="chSaidasSetor"></canvas></div>
+                        </div></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header py-2 d-flex align-items-center justify-content-between flex-wrap">
+                            <h3 class="card-title mb-0 h6">Produtos — saída no período × estoque de hoje × sugestão de envio</h3>
+                            <div class="mini">
+                                <label class="mr-2 mb-0"><input type="checkbox" id="soComSaida" checked> só com saída no período</label>
+                                <label class="mr-2 mb-0"><input type="checkbox" id="incluiTransf"> contar transferência p/ outro posto como saída</label>
+                                <span class="mr-2">Remetente:</span>
+                                <select id="remetente" class="form-control form-control-sm d-inline-block" style="width:auto"></select>
+                                <span id="remetenteInfo" class="ml-2 muted"></span>
+                            </div>
+                        </div>
+                        <div class="card-body p-0 tbl-wrap"><table class="tbl" id="tblProdutos"><thead></thead><tbody></tbody></table></div>
+                        <div class="card-footer mini text-muted" id="rodapeProdutos"></div>
+                    </div>
+                </div>
+
+                <!-- ═══ CONSUMO ═══ -->
+                <div class="aba" data-aba="consumo" style="display:none">
+                    <div class="card"><div class="card-body kpi" id="kpiConsumo"></div></div>
+                    <div class="row">
+                        <div class="col-lg-7"><div class="card chart-card">
+                            <div class="card-header py-2 d-flex align-items-center justify-content-between">
+                                <h3 class="card-title mb-0 h6">Medicamento lançado ao paciente por mês (unidades) — por classe</h3>
+                                <span id="classesBox" class="mini"></span>
+                            </div>
+                            <div class="card-body"><canvas id="chConsumoMes"></canvas></div>
+                        </div></div>
+                        <div class="col-lg-5"><div class="card chart-card">
+                            <div class="card-header py-2"><h3 class="card-title mb-0 h6">Top 12 serviços (unidades)</h3></div>
+                            <div class="card-body"><canvas id="chConsumoTop"></canvas></div>
+                        </div></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header py-2"><h3 class="card-title mb-0 h6">Serviços — lançamentos × saída da farmácia do produto ligado</h3></div>
+                        <div class="card-body p-0 tbl-wrap"><table class="tbl" id="tblConsumo"><thead></thead><tbody></tbody></table></div>
+                        <div class="card-footer mini text-muted" id="rodapeConsumo"></div>
+                    </div>
+                </div>
+
+                <!-- ═══ ENTRADAS ═══ -->
+                <div class="aba" data-aba="entradas" style="display:none">
+                    <div class="card"><div class="card-body kpi" id="kpiEntradas"></div></div>
+                    <div class="row">
+                        <div class="col-lg-7"><div class="card chart-card">
+                            <div class="card-header py-2"><h3 class="card-title mb-0 h6">Entradas por mês (unidades) — por tipo de origem</h3></div>
+                            <div class="card-body"><canvas id="chEntradasMes"></canvas></div>
+                        </div></div>
+                        <div class="col-lg-5"><div class="card">
+                            <div class="card-header py-2"><h3 class="card-title mb-0 h6">De onde veio</h3></div>
+                            <div class="card-body p-0 tbl-wrap" style="max-height:320px"><table class="tbl" id="tblOrigens"><thead></thead><tbody></tbody></table></div>
+                        </div></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header py-2"><h3 class="card-title mb-0 h6">Produtos — entradas no período por origem</h3></div>
+                        <div class="card-body p-0 tbl-wrap"><table class="tbl" id="tblEntradas"><thead></thead><tbody></tbody></table></div>
+                        <div class="card-footer mini text-muted" id="rodapeEntradas"></div>
+                    </div>
+                </div>
+
+                <!-- ═══ ESTOQUE ═══ -->
+                <div class="aba" data-aba="estoque" style="display:none">
+                    <div class="card"><div class="card-body kpi" id="kpiEstoque"></div></div>
+                    <div class="card">
+                        <div class="card-header py-2 d-flex align-items-center justify-content-between flex-wrap">
+                            <h3 class="card-title mb-0 h6">Estoque da farmácia hoje (foto do último ETL)</h3>
+                            <div class="mini">
+                                <label class="mr-2 mb-0"><input type="checkbox" id="soAtivos" checked> só produtos ativos</label>
+                                <label class="mr-2 mb-0"><input type="checkbox" id="soAlerta"> só com alerta</label>
+                            </div>
+                        </div>
+                        <div class="card-body p-0 tbl-wrap"><table class="tbl" id="tblEstoque"><thead></thead><tbody></tbody></table></div>
+                        <div class="card-footer mini text-muted">Estoque = lotes ativos da farmácia com validade em dia (mesma conta da vw_Cad_ProdutoFarmacia). A quantidade da enfermaria do cadastro <b>não</b> é estoque — só acumula envios.</div>
+                    </div>
+                </div>
+
+            </div>
+        </div></section>
+    </div>
+</div>
+
+<!-- MODAL PRODUTO -->
+<div class="modal fade" id="mdProduto" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+    <div class="modal-header py-2"><h5 class="modal-title" id="mdTitulo"></h5><button type="button" class="close" data-dismiss="modal">&times;</button></div>
+    <div class="modal-body" id="mdCorpo"></div>
+</div></div></div>
+
+<script>
+(function () {
+'use strict';
+const BASE = new URL('.', location.href);
+const URL_INDEX = new URL('json_consolidado/farmacia_index.json', BASE).href;
+const urlPosto = p => new URL(`json_consolidado/farmacia_${p}.json`, BASE).href;
+const POSTOS = ['A','B','C','D','G','I','J','M','N','P','R','X','Y'];
+const MESES_PT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const COR = { interna: '#2a78d6', posto: '#f0a202', descarte: '#d64545', outro: '#8b94a3',
+              fornecedor: '#2a9d8f', acerto: '#8b94a3',
+              'MEDICAMENTO 120': '#2a78d6', 'MEDICAMENTO 30': '#7bb0ea', 'MEDICAMENTO': '#1c4f9c', 'MEDICAMENTO EXTERNO': '#c9ced6' };
+const TIPO_SAIDA = { interna: 'interna (setores do posto)', posto: 'transferência p/ outro posto', descarte: 'descarte', outro: 'outro destino' };
+const TIPO_ENT = { posto: 'outro posto', fornecedor: 'fornecedor', acerto: 'acerto de estoque' };
+
+const el = s => document.querySelector(s);
+const fmt = (n, d = 0) => (n === null || n === undefined || isNaN(n)) ? '—' : Number(n).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtD = s => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : '—';
+const ymLabel = ym => MESES_PT[(ym % 100) - 1] + '/' + String(Math.floor(ym / 100)).slice(2);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// Mesma regra do normalizar() do ETL — mudar nos dois.
+const normalizar = s => String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, ' ').toUpperCase().trim().replace(/\s+/g, ' ');
+
+const estado = {
+    index: null, posto: null, dados: null, remetente: null, remDados: null,
+    ymIni: null, ymFim: null, cobertura: 1, busca: '', grupo: '',
+    aba: 'saidas', ord: { saidas: ['saida', false], consumo: ['qtd', false], entradas: ['qtd', false], estoque: ['n', true] },
+    classes: null, charts: {},
+};
+const cacheDados = {};
+
+// ── período ──────────────────────────────────────────────────────────────
+function ymHoje() { const d = new Date(); return d.getFullYear() * 100 + d.getMonth() + 1; }
+function ymAdd(ym, n) { let y = Math.floor(ym / 100), m = (ym % 100) + n; while (m <= 0) { m += 12; y--; } while (m > 12) { m -= 12; y++; } return y * 100 + m; }
+function ymToInput(ym) { return String(ym % 100).padStart(2, '0') + '/' + Math.floor(ym / 100); }
+function inputToYm(v) { const m = /^(\d{2})\/(\d{4})$/.exec((v || '').trim()); return m ? Number(m[2]) * 100 + Number(m[1]) : null; }
+function mesesNoPeriodo() { const a = estado.ymIni, b = estado.ymFim; return (Math.floor(b / 100) - Math.floor(a / 100)) * 12 + (b % 100 - a % 100) + 1; }
+function listaYm() { const r = []; for (let y = estado.ymIni; y <= estado.ymFim; y = ymAdd(y, 1)) r.push(y); return r; }
+function noPeriodo(ym) { return ym >= estado.ymIni && ym <= estado.ymFim; }
+function setPeriodo(ini, fim) { estado.ymIni = ini; estado.ymFim = fim; el('#from').value = ymToInput(ini); el('#to').value = ymToInput(fim); }
+function lerFiltros() {
+    const a = inputToYm(el('#from').value), b = inputToYm(el('#to').value);
+    if (a && b && a <= b) { estado.ymIni = a; estado.ymFim = b; } else { setPeriodo(estado.ymIni, estado.ymFim); }
+    estado.cobertura = Math.max(0.5, Number(el('#cobertura').value) || 1);
+    estado.busca = normalizar(el('#busca').value);
+    estado.grupo = el('#grupo').value;
+}
+
+// ── carga ────────────────────────────────────────────────────────────────
+async function carregarIndex() {
+    const r = await fetch(URL_INDEX + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('índice não encontrado (' + r.status + ')');
+    estado.index = await r.json();
+    el('#jsonInfo').textContent = '• dados gerados em ' + (estado.index.gerado_em || '').replace('T', ', ').slice(0, 17);
+}
+async function carregarPosto(p) {
+    if (cacheDados[p]) return cacheDados[p];
+    const r = await fetch(urlPosto(p) + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(`sem arquivo para o posto ${p} (${r.status})`);
+    const d = await r.json();
+    d._prod = Object.fromEntries(d.produtos.map(x => [x.id, x]));
+    cacheDados[p] = d;
+    return d;
+}
+function infoPosto(p) { return (estado.index?.postos || []).find(x => x.codigo === p) || { codigo: p, nome: p, ok: false }; }
+
+// ── postos ───────────────────────────────────────────────────────────────
+function montarPostos() {
+    const ul = el('#postoTabs'); ul.innerHTML = '';
+    POSTOS.forEach(p => {
+        const i = infoPosto(p);
+        const semDado = !i.ok && !i.gerado_em;
+        const fraco = i.ok && !(i.saidas_itens > 0);
+        ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link ${semDado || fraco ? 'sem-dado' : ''}" href="#" title="${esc(i.nome)}${fraco ? ' — sem saída registrada na janela' : ''}${semDado ? ' — sem dado' : ''}">${p}</a></li>`);
+    });
+    ul.addEventListener('click', e => {
+        if (!e.target.matches('.nav-link')) return;
+        e.preventDefault();
+        selecionarPosto(e.target.dataset.posto);
+    });
+}
+function marcarPosto() {
+    document.querySelectorAll('#postoTabs .nav-link').forEach(a => a.classList.toggle('active', a.dataset.posto === estado.posto));
+    const i = infoPosto(estado.posto);
+    el('#postoNome').textContent = i.nome || estado.posto;
+}
+async function selecionarPosto(p) {
+    estado.posto = p; marcarPosto();
+    el('#carregando').style.display = ''; el('#conteudo').style.display = 'none';
+    try {
+        estado.dados = await carregarPosto(p);
+        const rem = estado.dados.remetente_sugerido;
+        estado.remetente = (rem && rem !== p) ? rem : null;
+        montarRemetentes();
+        await carregarRemetente();
+        montarGrupos();
+        history.replaceState(null, '', '?posto=' + p);
+        desenhar();
+    } catch (e) {
+        el('#carregando').innerHTML = `<div class="aviso erro">Não consegui carregar o posto ${p}: ${esc(e.message)}</div>`;
+    }
+}
+function montarRemetentes() {
+    const s = el('#remetente'); s.innerHTML = '<option value="">— nenhum —</option>';
+    POSTOS.filter(p => p !== estado.posto && infoPosto(p).gerado_em).forEach(p => {
+        s.insertAdjacentHTML('beforeend', `<option value="${p}" ${p === estado.remetente ? 'selected' : ''}>${p} — ${esc(infoPosto(p).nome)}</option>`);
+    });
+}
+async function carregarRemetente() {
+    estado.remDados = null;
+    if (!estado.remetente) return;
+    try {
+        const d = await carregarPosto(estado.remetente);
+        // índice por nome normalizado (primeiro produto ativo ganha)
+        d._porNome = {};
+        d.produtos.forEach(x => { const k = normalizar(x.n); if (!d._porNome[k] || (d._porNome[k].d && !x.d)) d._porNome[k] = x; });
+        estado.remDados = d;
+    } catch (e) { estado.remDados = null; }
+}
+function montarGrupos() {
+    const gs = [...new Set(estado.dados.produtos.map(p => p.g).filter(Boolean))].sort();
+    const s = el('#grupo'); s.innerHTML = '<option value="">todos</option>';
+    gs.forEach(g => s.insertAdjacentHTML('beforeend', `<option value="${esc(g)}">${esc(g)}</option>`));
+    el('#grupoWrap').style.display = gs.length ? '' : 'none';
+    if (!gs.length) estado.grupo = '';
+}
+
+// ── agregações ───────────────────────────────────────────────────────────
+function filtraProduto(p) {
+    if (estado.grupo && p.g !== estado.grupo) return false;
+    if (estado.busca) {
+        const alvo = normalizar(p.n + ' ' + (p.sub || '') + ' ' + (p.nc || '') + ' ' + (p.sn || ''));
+        if (!alvo.includes(estado.busca)) return false;
+    }
+    return true;
+}
+function saidasPeriodo() { return estado.dados.saidas.filter(l => noPeriodo(l[1])); }
+function entradasPeriodo() { return estado.dados.entradas.filter(l => noPeriodo(l[1])); }
+function consumoPeriodo() { return estado.dados.consumo.filter(l => noPeriodo(l[1]) && estado.classes.has(l[2])); }
+function tiposContados() { return el('#incluiTransf').checked ? new Set(['interna', 'posto']) : new Set(['interna']); }
+
+function tabelaProdutos() {
+    const d = estado.dados, tipos = tiposContados(), nMeses = mesesNoPeriodo();
+    const agg = {};
+    saidasPeriodo().forEach(l => {
+        const a = agg[l[0]] || (agg[l[0]] = { saida: 0, transf: 0, descarte: 0, outro: 0, itens: 0 });
+        if (tipos.has(l[2])) a.saida += l[7] || 0;
+        if (l[2] === 'posto') a.transf += l[7] || 0;
+        if (l[2] === 'descarte') a.descarte += l[7] || 0;
+        if (l[2] === 'outro') a.outro += l[7] || 0;
+        a.itens += l[5] || 0;
+    });
+    const ent = {};
+    entradasPeriodo().forEach(l => { ent[l[0]] = (ent[l[0]] || 0) + (l[6] || 0); });
+    const cons = {};
+    consumoPeriodo().forEach(l => { cons[l[0]] = (cons[l[0]] || 0) + (l[6] || 0); });
+    const linhas = [];
+    d.produtos.forEach(p => {
+        if (!filtraProduto(p)) return;
+        const a = agg[p.id] || { saida: 0, transf: 0, descarte: 0, outro: 0, itens: 0 };
+        if (el('#soComSaida').checked && a.itens === 0) return;
+        const media = a.saida / nMeses;
+        const estoque = p.e || 0;
+        const cobertura = media > 0 ? estoque / media : null;
+        const sugestao = Math.max(0, media * estado.cobertura - estoque);
+        let rem = null, remQ = null;
+        if (estado.remDados) { rem = estado.remDados._porNome[normalizar(p.n)] || null; remQ = rem ? (rem.e || 0) : null; }
+        linhas.push({ p, saida: a.saida, transf: a.transf, descarte: a.descarte, outro: a.outro, itens: a.itens, media, estoque, cobertura, sugestao,
+                      entrada: ent[p.id] || 0, consumo: p.sid ? (cons[p.sid] ?? null) : null, rem, remQ });
+    });
+    return linhas;
+}
+
+// ── desenho ──────────────────────────────────────────────────────────────
+function chart(id, cfg) {
+    if (estado.charts[id]) estado.charts[id].destroy();
+    const ctx = el('#' + id).getContext('2d');
+    estado.charts[id] = new Chart(ctx, cfg);
+}
+function kpiHtml(items) {
+    return items.map(i => `<div class="card"><div class="card-body"><div class="lbl">${i.l}</div><div class="val">${i.v}</div>${i.s ? `<div class="sub">${i.s}</div>` : ''}</div></div>`).join('');
+}
+function avisos() {
+    const d = estado.dados, i = infoPosto(estado.posto), out = [];
+    if (!i.ok) out.push(`<div class="aviso erro">O último ETL <b>falhou neste posto</b> (${esc(i.erro || 'sem detalhe')}). Os dados abaixo são de <b>${esc((i.gerado_em || '').slice(0, 16).replace('T', ' ')) || 'data desconhecida'}</b>.</div>`);
+    if (!(d.saidas || []).length) out.push(`<div class="aviso">Este posto <b>não tem saída de farmácia registrada</b> na janela (${fmtD(d.janela.ini)} → ${fmtD(d.janela.fim)}). Não é consumo zero — é que o módulo de saída não é usado aqui. Veja a aba <b>Consumo real</b>.</div>`);
+    const jIni = Number(d.janela.ini.slice(0, 4)) * 100 + Number(d.janela.ini.slice(5, 7));
+    if (estado.ymIni < jIni) out.push(`<div class="aviso">O ETL guarda só a partir de <b>${ymLabel(jIni)}</b>; meses anteriores do período aparecem vazios.</div>`);
+    const ymH = ymHoje();
+    if (estado.ymFim >= ymH) out.push(`<div class="aviso">O mês corrente está <b>incompleto</b> (dados até ${fmtD(d.janela.fim)}) e entra na média mensal com peso inteiro. Para decidir envio, prefira meses fechados (botão <b>Últimos 3 meses</b>).</div>`);
+    const r = d.rascunho || {};
+    const rq = Object.entries(r.por_ym || {}).filter(([ym]) => noPeriodo(Number(ym))).reduce((s, [, v]) => s + v, 0);
+    if (rq > 0) out.push(`<div class="aviso">Há <b>${fmt(rq)} unidades</b> em saídas <b>não gravadas</b> (rascunho, sem número) no período — fora da conta, como faz o próprio CAMIM.</div>`);
+    el('#avisos').innerHTML = out.join('');
+}
+
+function desenharSaidas() {
+    const d = estado.dados, sp = saidasPeriodo(), nMeses = mesesNoPeriodo(), tipos = tiposContados();
+    const porTipo = {}, porMes = {}, porSetor = {};
+    let itens = 0, nSaidas = 0; const prods = new Set();
+    sp.forEach(l => {
+        porTipo[l[2]] = (porTipo[l[2]] || 0) + (l[7] || 0);
+        (porMes[l[1]] = porMes[l[1]] || {})[l[2]] = ((porMes[l[1]] || {})[l[2]] || 0) + (l[7] || 0);
+        const chave = l[2] === 'interna' ? l[4] : (TIPO_SAIDA[l[2]] === 'transferência p/ outro posto' ? '→ ' + l[3] : l[3]);
+        porSetor[chave] = (porSetor[chave] || 0) + (l[7] || 0);
+        itens += l[5] || 0; nSaidas += l[6] || 0; prods.add(l[0]);
+    });
+    const total = Object.values(porTipo).reduce((a, b) => a + b, 0);
+    const contado = [...tipos].reduce((s, t) => s + (porTipo[t] || 0), 0);
+    el('#kpiSaidas').innerHTML = kpiHtml([
+        { l: 'Saída contada (un)', v: fmt(contado), s: `${[...tipos].map(t => TIPO_SAIDA[t]).join(' + ')}` },
+        { l: 'Média mensal (un)', v: fmt(contado / nMeses), s: `${nMeses} ${nMeses === 1 ? 'mês' : 'meses'} no período` },
+        { l: 'Interna (setores)', v: fmt(porTipo.interna || 0), s: total ? fmt(100 * (porTipo.interna || 0) / total, 1) + '% do total' : '' },
+        { l: 'Transf. p/ outro posto', v: fmt(porTipo.posto || 0), s: total ? fmt(100 * (porTipo.posto || 0) / total, 1) + '%' : '' },
+        { l: 'Descarte', v: fmt(porTipo.descarte || 0), s: porTipo.outro ? `outros destinos: ${fmt(porTipo.outro)}` : '' },
+        { l: 'Linhas · saídas · produtos', v: `${fmt(itens)} · ${fmt(nSaidas)} · ${fmt(prods.size)}`, s: 'itens lançados · documentos · produtos distintos' },
+    ]);
+    const yms = listaYm();
+    chart('chSaidasMes', { type: 'bar', data: { labels: yms.map(ymLabel), datasets: ['interna', 'posto', 'descarte', 'outro'].filter(t => porTipo[t]).map(t => ({ label: TIPO_SAIDA[t], data: yms.map(y => (porMes[y] || {})[t] || 0), backgroundColor: COR[t], stack: 's' })) },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmt(v) } } } } });
+    const setores = Object.entries(porSetor).sort((a, b) => b[1] - a[1]).slice(0, 12);
+    chart('chSaidasSetor', { type: 'bar', data: { labels: setores.map(s => s[0]), datasets: [{ label: 'unidades', data: setores.map(s => s[1]), backgroundColor: '#2a78d6' }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v => fmt(v) } } } } });
+
+    // tabela
+    const linhas = tabelaProdutos();
+    const [oc, asc] = estado.ord.saidas;
+    const key = r => oc === 'n' ? r.p.n : oc === 'g' ? (r.p.g || '') : (r[oc] ?? (oc === 'cobertura' ? 1e12 : -1));
+    linhas.sort((a, b) => { const x = key(a), y = key(b); return (typeof x === 'string' ? x.localeCompare(y) : x - y) * (asc ? 1 : -1); });
+    const remNome = estado.remetente ? infoPosto(estado.remetente).nome : null;
+    const cols = [['n', 'Produto'], ['g', 'Grupo'], ['saida', 'Saída no período', 1], ['media', 'Média / mês', 1], ['estoque', 'Estoque hoje', 1], ['cobertura', 'Cobertura (meses)', 1],
+                  ['sugestao', `Enviar p/ cobrir ${estado.cobertura} m`, 1], ['consumo', 'Lançado ao paciente', 1], ['entrada', 'Entrou no período', 1], ['transf', 'Transferido p/ outro posto', 1]];
+    if (remNome) cols.push(['remQ', `Estoque em ${remNome}`, 1]);
+    el('#tblProdutos thead').innerHTML = '<tr>' + cols.map(c => `<th class="${c[2] ? 'num' : ''}" data-ord="${c[0]}">${c[1]} <span class="seta">${oc === c[0] ? (asc ? '▲' : '▼') : ''}</span></th>`).join('') + '</tr>';
+    const tb = el('#tblProdutos tbody'); tb.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    linhas.forEach(r => {
+        const tr = document.createElement('tr'); tr.dataset.id = r.p.id;
+        let cob = '—', cobCls = 'tag-mut';
+        if (r.cobertura !== null) { cob = fmt(r.cobertura, 1); cobCls = r.cobertura < 1 ? 'tag-bad' : r.cobertura < estado.cobertura ? 'tag-warn' : 'tag-ok'; }
+        else if (r.saida === 0 && r.estoque > 0) { cob = 'sem saída'; }
+        const sug = r.sugestao > 0 ? `<b>${fmt(Math.ceil(r.sugestao))}</b>` : '<span class="muted">0</span>';
+        const cons = r.consumo === null ? `<span class="muted" title="${r.p.sid ? 'sem lançamento no período' : 'produto sem serviço ligado — material não é lançado ao paciente'}">—</span>` : fmt(r.consumo) + (r.p.sids > 1 ? ` <span class="tag tag-info" title="serviço compartilhado por ${r.p.sids} produtos (ex.: tamanhos) — consumo é do grupo">×${r.p.sids}</span>` : '');
+        tr.innerHTML = `<td>${esc(r.p.n)}${r.p.d ? ' <span class="tag tag-mut">desativado</span>' : ''}${(r.p.ev || 0) > 0 ? ` <span class="tag tag-bad" title="lotes vencidos com saldo">${fmt(r.p.ev)} venc.</span>` : ''}</td>
+            <td class="muted">${esc(r.p.g || '')}</td>
+            <td class="num">${fmt(r.saida)}</td><td class="num">${fmt(r.media, 1)}</td>
+            <td class="num">${fmt(r.estoque)}${r.p.min && r.estoque < r.p.min ? ` <span class="tag tag-warn" title="abaixo do mínimo cadastrado (${fmt(r.p.min)})">mín</span>` : ''}</td>
+            <td class="num"><span class="tag ${cobCls}">${cob}</span></td>
+            <td class="num">${sug}</td><td class="num">${cons}</td><td class="num">${fmt(r.entrada)}</td><td class="num">${fmt(r.transf)}</td>`
+            + (remNome ? `<td class="num">${r.rem ? fmt(r.remQ) + (normalizar(r.rem.n) === normalizar(r.p.n) ? '' : '') : '<span class="muted" title="nenhum produto com o mesmo nome no remetente">sem par</span>'}</td>` : '');
+        frag.appendChild(tr);
+    });
+    tb.appendChild(frag);
+    const casados = remNome ? linhas.filter(r => r.rem).length : 0;
+    el('#remetenteInfo').textContent = remNome ? `${casados} de ${linhas.length} produtos casados por nome` : '';
+    el('#rodapeProdutos').innerHTML = `${linhas.length} produtos · Média = saída contada ÷ ${nMeses} ${nMeses === 1 ? 'mês' : 'meses'} · Cobertura = estoque de hoje ÷ média · Sugestão = média × ${estado.cobertura} − estoque (nunca negativa) · Estoque de hoje = foto do ETL de ${esc((d.gerado_em || '').slice(0, 16).replace('T', ' '))}${remNome ? ` · O par no remetente é por <b>nome igual</b> (o cadastro de produto é separado em cada posto); nome diferente = "sem par", não é estoque zero.` : ''} · Clique na linha para ver mês a mês.`;
+}
+
+function desenharConsumo() {
+    const d = estado.dados, cp = consumoPeriodo(), nMeses = mesesNoPeriodo();
+    // classes
+    el('#classesBox').innerHTML = d.classes.map(c => `<label class="mr-2 mb-0"><input type="checkbox" data-classe="${esc(c)}" ${estado.classes.has(c) ? 'checked' : ''}> ${esc(c)}</label>`).join('');
+    const porMes = {}, porServ = {}, porClasse = {};
+    let lanc = 0, atend = 0;
+    cp.forEach(l => {
+        (porMes[l[1]] = porMes[l[1]] || {})[l[2]] = ((porMes[l[1]] || {})[l[2]] || 0) + (l[6] || 0);
+        const s = porServ[l[0]] || (porServ[l[0]] = { qtd: 0, lanc: 0, atend: 0, plano: 0, classe: l[2] });
+        s.qtd += l[6] || 0; s.lanc += l[3] || 0; s.atend += l[4] || 0; s.plano += l[7] || 0;
+        porClasse[l[2]] = (porClasse[l[2]] || 0) + (l[6] || 0);
+        lanc += l[3] || 0; atend += l[4] || 0;
+    });
+    const total = Object.values(porClasse).reduce((a, b) => a + b, 0);
+    el('#kpiConsumo').innerHTML = kpiHtml([
+        { l: 'Unidades lançadas', v: fmt(total), s: `${[...estado.classes].join(', ')}` },
+        { l: 'Média mensal', v: fmt(total / nMeses), s: `${nMeses} ${nMeses === 1 ? 'mês' : 'meses'}` },
+        { l: 'Lançamentos · atendimentos', v: `${fmt(lanc)} · ${fmt(atend)}`, s: 'linhas de serviço · talões distintos' },
+        { l: 'Serviços distintos', v: fmt(Object.keys(porServ).length), s: 'medicamentos diferentes lançados' },
+        ...Object.entries(porClasse).sort((a, b) => b[1] - a[1]).map(([c, v]) => ({ l: c, v: fmt(v), s: total ? fmt(100 * v / total, 1) + '%' : '' })),
+    ]);
+    const yms = listaYm();
+    chart('chConsumoMes', { type: 'bar', data: { labels: yms.map(ymLabel), datasets: [...estado.classes].map(c => ({ label: c, data: yms.map(y => (porMes[y] || {})[c] || 0), backgroundColor: COR[c] || '#8b94a3', stack: 's' })) },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmt(v) } } } } });
+    const top = Object.entries(porServ).sort((a, b) => b[1].qtd - a[1].qtd).slice(0, 12);
+    chart('chConsumoTop', { type: 'bar', data: { labels: top.map(([sid]) => d.servicos[sid] || sid), datasets: [{ label: 'unidades', data: top.map(([, s]) => s.qtd), backgroundColor: '#1c4f9c' }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v => fmt(v) } } } } });
+
+    // saída da farmácia do(s) produto(s) ligado(s) ao serviço, no período
+    const tipos = tiposContados(), saidaProd = {};
+    saidasPeriodo().forEach(l => { if (tipos.has(l[2])) saidaProd[l[0]] = (saidaProd[l[0]] || 0) + (l[7] || 0); });
+    const prodPorServ = {};
+    d.produtos.forEach(p => { if (p.sid) (prodPorServ[p.sid] = prodPorServ[p.sid] || []).push(p); });
+    let linhas = Object.entries(porServ).map(([sid, s]) => {
+        const ps = prodPorServ[sid] || [];
+        const saida = ps.reduce((a, p) => a + (saidaProd[p.id] || 0), 0);
+        const estoque = ps.reduce((a, p) => a + (p.e || 0), 0);
+        return { sid: Number(sid), nome: d.servicos[sid] || sid, classe: s.classe, qtd: s.qtd, lanc: s.lanc, atend: s.atend, plano: s.plano, media: s.qtd / nMeses, ps, saida: ps.length ? saida : null, estoque: ps.length ? estoque : null };
+    });
+    if (estado.busca) linhas = linhas.filter(r => normalizar(r.nome + ' ' + r.ps.map(p => p.n).join(' ')).includes(estado.busca));
+    const [oc, asc] = estado.ord.consumo;
+    linhas.sort((a, b) => { const x = a[oc] ?? -1, y = b[oc] ?? -1; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * (asc ? 1 : -1); });
+    const cols = [['nome', 'Serviço (medicamento lançado)'], ['classe', 'Classe'], ['qtd', 'Unidades', 1], ['media', 'Média / mês', 1], ['lanc', 'Lançamentos', 1], ['atend', 'Atendimentos', 1], ['plano', 'Pelo plano', 1], ['ps', 'Produto da farmácia ligado'], ['saida', 'Saída da farmácia no período', 1], ['estoque', 'Estoque hoje', 1]];
+    el('#tblConsumo thead').innerHTML = '<tr>' + cols.map(c => `<th class="${c[2] ? 'num' : ''}" data-ord="${c[0]}">${c[1]} <span class="seta">${oc === c[0] ? (asc ? '▲' : '▼') : ''}</span></th>`).join('') + '</tr>';
+    el('#tblConsumo tbody').innerHTML = linhas.map(r => `<tr data-sid="${r.sid}"><td>${esc(r.nome)}</td><td class="muted">${esc(r.classe)}</td><td class="num">${fmt(r.qtd)}</td><td class="num">${fmt(r.media, 1)}</td><td class="num">${fmt(r.lanc)}</td><td class="num">${fmt(r.atend)}</td><td class="num">${fmt(r.plano)}</td>
+        <td>${r.ps.length ? r.ps.map(p => esc(p.n)).join('<br>') : '<span class="muted" title="nenhum Cad_Produto com este idServico">— sem produto ligado —</span>'}</td>
+        <td class="num">${r.saida === null ? '—' : fmt(r.saida) + (r.saida > 0 && r.qtd > 0 ? ` <span class="tag ${r.qtd / r.saida > 1.2 ? 'tag-warn' : r.qtd / r.saida < 0.5 ? 'tag-info' : 'tag-ok'}" title="lançado ao paciente ÷ saída da farmácia">${fmt(100 * r.qtd / r.saida)}%</span>` : '')}</td>
+        <td class="num">${r.estoque === null ? '—' : fmt(r.estoque)}</td></tr>`).join('');
+    el('#rodapeConsumo').innerHTML = `${linhas.length} serviços · Fonte: Cad_LancamentoServico com classe MEDICAMENTO*, situação Normal, lançado fora do faturamento (mesmo filtro da vw_Cad_LancamentoServicos). A classe <b>MEDICAMENTO 90</b> não existe em nenhum posto — as que existem estão nas caixas acima. O "%" compara o que foi <b>lançado ao paciente</b> com o que a <b>farmácia entregou</b> do produto ligado: acima de 120 % sugere saída não registrada; abaixo de 50 %, sobra na enfermaria.`;
+}
+
+function desenharEntradas() {
+    const d = estado.dados, ep = entradasPeriodo(), nMeses = mesesNoPeriodo();
+    const porMes = {}, porOrigem = {}, porTipo = {}, porProd = {};
+    let valor = 0;
+    ep.forEach(l => {
+        (porMes[l[1]] = porMes[l[1]] || {})[l[2]] = ((porMes[l[1]] || {})[l[2]] || 0) + (l[6] || 0);
+        const nome = l[2] === 'posto' ? (d.postos_nomes?.[l[3]] || l[3]) : l[3];
+        const o = porOrigem[nome] || (porOrigem[nome] = { tipo: l[2], qtd: 0, itens: 0, entradas: 0, valor: 0, prods: new Set() });
+        o.qtd += l[6] || 0; o.itens += l[4] || 0; o.entradas += l[5] || 0; o.valor += l[7] || 0; o.prods.add(l[0]);
+        porTipo[l[2]] = (porTipo[l[2]] || 0) + (l[6] || 0);
+        const p = porProd[l[0]] || (porProd[l[0]] = { qtd: 0, valor: 0, origens: {} });
+        p.qtd += l[6] || 0; p.valor += l[7] || 0; p.origens[nome] = (p.origens[nome] || 0) + (l[6] || 0);
+        valor += l[7] || 0;
+    });
+    const total = Object.values(porTipo).reduce((a, b) => a + b, 0);
+    el('#kpiEntradas').innerHTML = kpiHtml([
+        { l: 'Entradas (un)', v: fmt(total), s: `${nMeses} ${nMeses === 1 ? 'mês' : 'meses'} · média ${fmt(total / nMeses)}/mês` },
+        { l: 'De outro posto', v: fmt(porTipo.posto || 0), s: total ? fmt(100 * (porTipo.posto || 0) / total, 1) + '%' : '' },
+        { l: 'De fornecedor', v: fmt(porTipo.fornecedor || 0), s: total ? fmt(100 * (porTipo.fornecedor || 0) / total, 1) + '%' : '' },
+        { l: 'Acerto de estoque', v: fmt(porTipo.acerto || 0), s: 'ajuste de inventário, não é compra' },
+        { l: 'Valor registrado', v: 'R$ ' + fmt(valor, 2), s: 'transferência entre postos vem a R$ 0' },
+    ]);
+    const yms = listaYm();
+    chart('chEntradasMes', { type: 'bar', data: { labels: yms.map(ymLabel), datasets: ['posto', 'fornecedor', 'acerto'].filter(t => porTipo[t]).map(t => ({ label: TIPO_ENT[t], data: yms.map(y => (porMes[y] || {})[t] || 0), backgroundColor: COR[t], stack: 's' })) },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmt(v) } } } } });
+    const origens = Object.entries(porOrigem).sort((a, b) => b[1].qtd - a[1].qtd);
+    el('#tblOrigens thead').innerHTML = '<tr><th>Origem</th><th>Tipo</th><th class="num">Unidades</th><th class="num">Entradas</th><th class="num">Produtos</th><th class="num">R$</th></tr>';
+    el('#tblOrigens tbody').innerHTML = origens.map(([n, o]) => `<tr><td>${esc(n)}</td><td><span class="tag ${o.tipo === 'posto' ? 'tag-warn' : o.tipo === 'acerto' ? 'tag-mut' : 'tag-ok'}">${TIPO_ENT[o.tipo]}</span></td><td class="num">${fmt(o.qtd)}</td><td class="num">${fmt(o.entradas)}</td><td class="num">${fmt(o.prods.size)}</td><td class="num">${fmt(o.valor, 2)}</td></tr>`).join('');
+
+    let linhas = Object.entries(porProd).map(([id, x]) => ({ p: d._prod[id] || { id, n: 'produto ' + id }, ...x })).filter(r => filtraProduto(r.p));
+    const [oc, asc] = estado.ord.entradas;
+    linhas.sort((a, b) => { const x = oc === 'n' ? a.p.n : a[oc], y = oc === 'n' ? b.p.n : b[oc]; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * (asc ? 1 : -1); });
+    const cols = [['n', 'Produto'], ['qtd', 'Unidades', 1], ['valor', 'R$', 1], ['origens', 'Origem (unidades)']];
+    el('#tblEntradas thead').innerHTML = '<tr>' + cols.map(c => `<th class="${c[2] ? 'num' : ''}" data-ord="${c[0]}">${c[1]} <span class="seta">${oc === c[0] ? (asc ? '▲' : '▼') : ''}</span></th>`).join('') + '</tr>';
+    el('#tblEntradas tbody').innerHTML = linhas.map(r => `<tr data-id="${r.p.id}"><td>${esc(r.p.n)}</td><td class="num">${fmt(r.qtd)}</td><td class="num">${fmt(r.valor, 2)}</td><td class="mini">${Object.entries(r.origens).sort((a, b) => b[1] - a[1]).map(([n, q]) => `${esc(n)} <b>${fmt(q)}</b>`).join(' · ')}</td></tr>`).join('');
+    el('#rodapeEntradas').innerHTML = `${linhas.length} produtos · Unidades = caixas × unidades por caixa (QuantidadeTotal da vw_Est_Entradaitem). Fornecedor com nome de posto (ANCHIETA, CAMPINHO, CAMIM CAMPO GRANDE…) é transferência.`;
+}
+
+function desenharEstoque() {
+    const d = estado.dados, hoje = new Date().toISOString().slice(0, 10);
+    let linhas = d.produtos.filter(p => filtraProduto(p) && (!el('#soAtivos').checked || !p.d));
+    const alerta = p => ({ min: p.min && (p.e || 0) < p.min, venc: (p.ev || 0) > 0, v90: (p.v90 || 0) > 0, zero: (p.e || 0) <= 0 && !p.d });
+    const tot = { abaixo: 0, venc: 0, v90: 0, zero: 0, saldo: 0 };
+    d.produtos.filter(p => !p.d).forEach(p => { const a = alerta(p); if (a.min) tot.abaixo++; if (a.venc) tot.venc++; if (a.v90) tot.v90++; if (a.zero) tot.zero++; if ((p.e || 0) > 0) tot.saldo++; });
+    el('#kpiEstoque').innerHTML = kpiHtml([
+        { l: 'Produtos ativos', v: fmt(d.produtos.filter(p => !p.d).length), s: `${fmt(tot.saldo)} com saldo` },
+        { l: 'Abaixo do mínimo', v: fmt(tot.abaixo), s: 'QuantidadeMinima do cadastro' },
+        { l: 'Zerados', v: fmt(tot.zero), s: 'ativos sem saldo na farmácia' },
+        { l: 'Lote vence em 90 dias', v: fmt(tot.v90), s: 'produtos com algum lote a vencer' },
+        { l: 'Com lote vencido', v: fmt(tot.venc), s: 'saldo em lote vencido (fora do estoque)' },
+    ]);
+    if (el('#soAlerta').checked) linhas = linhas.filter(p => { const a = alerta(p); return a.min || a.venc || a.v90 || a.zero; });
+    const [oc, asc] = estado.ord.estoque;
+    linhas.sort((a, b) => { const x = a[oc] ?? '', y = b[oc] ?? ''; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * (asc ? 1 : -1); });
+    const cols = [['n', 'Produto'], ['g', 'Grupo'], ['e', 'Estoque farmácia', 1], ['min', 'Mínimo', 1], ['pv', 'Próx. vencimento'], ['v90', 'Vence 90d', 1], ['ev', 'Vencido', 1], ['qe', 'Enfermaria (cadastro)', 1], ['ue', 'Última entrada']];
+    el('#tblEstoque thead').innerHTML = '<tr>' + cols.map(c => `<th class="${c[2] ? 'num' : ''}" data-ord="${c[0]}">${c[1]} <span class="seta">${oc === c[0] ? (asc ? '▲' : '▼') : ''}</span></th>`).join('') + '</tr>';
+    el('#tblEstoque tbody').innerHTML = linhas.map(p => { const a = alerta(p); return `<tr data-id="${p.id}"><td>${esc(p.n)}${p.d ? ' <span class="tag tag-mut">desativado</span>' : ''}</td><td class="muted">${esc(p.g || '')}</td>
+        <td class="num">${fmt(p.e)}${a.min ? ' <span class="tag tag-warn">abaixo do mín.</span>' : ''}${a.zero ? ' <span class="tag tag-bad">zerado</span>' : ''}</td><td class="num">${fmt(p.min)}</td>
+        <td>${p.pv ? fmtD(p.pv) + (p.pv < hoje ? '' : a.v90 ? ' <span class="tag tag-warn">90d</span>' : '') : '—'}</td><td class="num">${fmt(p.v90)}</td><td class="num">${(p.ev || 0) > 0 ? `<span class="tag tag-bad">${fmt(p.ev)}</span>` : '—'}</td>
+        <td class="num muted" title="acumulado de envios; não é saldo">${fmt(p.qe)}</td>
+        <td class="mini">${p.ue ? `${fmtD(p.ue.d)} · ${esc(p.ue.f || '')}${p.ue.v ? ` · R$ ${fmt(p.ue.v, 4)}` : ''}${p.ue.q ? ` · ${fmt(p.ue.q)} un` : ''}` : '—'}</td></tr>`; }).join('');
+}
+
+function desenhar() {
+    if (!estado.dados) return;
+    lerFiltros();
+    if (!estado.classes) estado.classes = new Set(estado.dados.classes.filter(c => c !== 'MEDICAMENTO EXTERNO'));
+    else estado.classes = new Set([...estado.classes].filter(c => estado.dados.classes.includes(c)).concat(estado.dados.classes.filter(c => c !== 'MEDICAMENTO EXTERNO' && ![...estado.classes].length)));
+    avisos();
+    el('#carregando').style.display = 'none'; el('#conteudo').style.display = '';
+    document.querySelectorAll('.aba').forEach(a => a.style.display = a.dataset.aba === estado.aba ? '' : 'none');
+    document.querySelectorAll('#abas .nav-link').forEach(a => a.classList.toggle('active', a.dataset.aba === estado.aba));
+    ({ saidas: desenharSaidas, consumo: desenharConsumo, entradas: desenharEntradas, estoque: desenharEstoque })[estado.aba]();
+}
+
+// ── modal do produto: mês a mês ──────────────────────────────────────────
+function abrirProduto(id) {
+    const d = estado.dados, p = d._prod[id]; if (!p) return;
+    const yms = listaYm(), s = {}, e = {}, c = {};
+    d.saidas.filter(l => l[0] == id && noPeriodo(l[1])).forEach(l => { const k = l[2] === 'interna' ? l[4] : TIPO_SAIDA[l[2]] + ' · ' + l[3]; (s[k] = s[k] || {})[l[1]] = ((s[k] || {})[l[1]] || 0) + (l[7] || 0); });
+    d.entradas.filter(l => l[0] == id && noPeriodo(l[1])).forEach(l => { const k = (l[2] === 'posto' ? (d.postos_nomes?.[l[3]] || l[3]) : l[3]); (e[k] = e[k] || {})[l[1]] = ((e[k] || {})[l[1]] || 0) + (l[6] || 0); });
+    if (p.sid) d.consumo.filter(l => l[0] === p.sid && noPeriodo(l[1])).forEach(l => { (c[l[2]] = c[l[2]] || {})[l[1]] = ((c[l[2]] || {})[l[1]] || 0) + (l[6] || 0); });
+    const tabela = (titulo, obj) => {
+        const ks = Object.keys(obj); if (!ks.length) return `<p class="muted mini mb-2">${titulo}: nada no período.</p>`;
+        const tot = {}; ks.forEach(k => yms.forEach(y => tot[y] = (tot[y] || 0) + (obj[k][y] || 0)));
+        return `<h6 class="mt-3">${titulo}</h6><div class="tbl-wrap"><table class="tbl serie-tbl"><thead><tr><th></th>${yms.map(y => `<th class="num">${ymLabel(y)}</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>
+            ${ks.map(k => `<tr><td>${esc(k)}</td>${yms.map(y => `<td class="num">${obj[k][y] ? fmt(obj[k][y]) : '<span class="muted">·</span>'}</td>`).join('')}<td class="num"><b>${fmt(yms.reduce((a, y) => a + (obj[k][y] || 0), 0))}</b></td></tr>`).join('')}
+            <tr><td><b>Total</b></td>${yms.map(y => `<td class="num"><b>${fmt(tot[y])}</b></td>`).join('')}<td class="num"><b>${fmt(Object.values(tot).reduce((a, b) => a + b, 0))}</b></td></tr></tbody></table></div>`;
+    };
+    el('#mdTitulo').textContent = p.n;
+    el('#mdCorpo').innerHTML = `<div class="mini mb-2">${p.g ? `Grupo <b>${esc(p.g)}</b> · ` : ''}${p.sub ? `Substância <b>${esc(p.sub)}</b> · ` : ''}${p.sn ? `Serviço ligado <b>${esc(p.sn)}</b>${p.sids > 1 ? ` (compartilhado por ${p.sids} produtos)` : ''} · ` : 'Sem serviço ligado (não é lançado ao paciente) · '}
+        Estoque hoje <b>${fmt(p.e)}</b>${p.min ? ` · mínimo ${fmt(p.min)}` : ''}${p.pv ? ` · próximo vencimento ${fmtD(p.pv)}` : ''}${p.ue ? ` · última entrada ${fmtD(p.ue.d)} (${esc(p.ue.f || '')})` : ''}</div>
+        ${tabela('Saídas da farmácia — para quem', s)}${tabela('Lançado ao paciente (consumo real)', c)}${tabela('Entradas — de onde', e)}`;
+    $('#mdProduto').modal('show');
+}
+
+// ── eventos ──────────────────────────────────────────────────────────────
+function wire() {
+    el('#btnFiltrar').addEventListener('click', desenhar);
+    ['#from', '#to', '#cobertura', '#busca'].forEach(s => el(s).addEventListener('keydown', e => { if (e.key === 'Enter') desenhar(); }));
+    el('#busca').addEventListener('input', () => { clearTimeout(estado._t); estado._t = setTimeout(desenhar, 250); });
+    el('#grupo').addEventListener('change', desenhar);
+    el('#cobertura').addEventListener('change', desenhar);
+    el('#btnReset').addEventListener('click', () => { const h = ymHoje(); setPeriodo(ymAdd(h, -3), ymAdd(h, -1)); el('#cobertura').value = 1; el('#busca').value = ''; el('#grupo').value = ''; desenhar(); });
+    el('#btnMesAtual').addEventListener('click', () => { const h = ymHoje(); setPeriodo(h, h); desenhar(); });
+    el('#btn3m').addEventListener('click', () => { const h = ymHoje(); setPeriodo(ymAdd(h, -3), ymAdd(h, -1)); desenhar(); });
+    ['#soComSaida', '#incluiTransf', '#soAtivos', '#soAlerta'].forEach(s => el(s).addEventListener('change', desenhar));
+    el('#remetente').addEventListener('change', async e => { estado.remetente = e.target.value || null; await carregarRemetente(); desenhar(); });
+    el('#abas').addEventListener('click', e => { if (!e.target.dataset.aba) return; e.preventDefault(); estado.aba = e.target.dataset.aba; desenhar(); });
+    el('#classesBox').addEventListener('change', e => { const c = e.target.dataset.classe; if (!c) return; if (e.target.checked) estado.classes.add(c); else estado.classes.delete(c); desenhar(); });
+    // ordenação
+    [['#tblProdutos', 'saidas'], ['#tblConsumo', 'consumo'], ['#tblEntradas', 'entradas'], ['#tblEstoque', 'estoque']].forEach(([sel, k]) => {
+        el(sel + ' thead').addEventListener('click', e => { const th = e.target.closest('th[data-ord]'); if (!th) return; const o = th.dataset.ord; const cur = estado.ord[k]; estado.ord[k] = [o, cur[0] === o ? !cur[1] : (o === 'n' || o === 'g' || o === 'nome' || o === 'classe' || o === 'pv')]; desenhar(); });
+    });
+    // clique na linha → modal
+    [['#tblProdutos', 'id'], ['#tblEntradas', 'id'], ['#tblEstoque', 'id']].forEach(([sel, k]) => el(sel + ' tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr) abrirProduto(Number(tr.dataset.id)); }));
+    el('#tblConsumo tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-sid]'); if (!tr) return; const ps = estado.dados.produtos.filter(p => p.sid === Number(tr.dataset.sid)); if (ps.length) abrirProduto(ps[0].id); });
+    if (window.initCalendarPicker) { initCalendarPicker('#from', '#btnCalFrom', 'month'); initCalendarPicker('#to', '#btnCalTo', 'month'); }
+}
+
+async function iniciar() {
+    wire();
+    const h = ymHoje(); setPeriodo(ymAdd(h, -3), ymAdd(h, -1));
+    try { await carregarIndex(); } catch (e) { el('#carregando').innerHTML = `<div class="aviso erro">${esc(e.message)} — o ETL export_farmacia.py ainda não rodou?</div>`; return; }
+    montarPostos();
+    const q = new URLSearchParams(location.search).get('posto');
+    const comDado = POSTOS.filter(p => infoPosto(p).gerado_em);
+    const inicial = (q && POSTOS.includes(q.toUpperCase())) ? q.toUpperCase()
+        : (comDado.map(p => infoPosto(p)).sort((a, b) => (b.saidas_itens || 0) - (a.saidas_itens || 0))[0] || {}).codigo || 'A';
+    await selecionarPosto(inicial);
+}
+iniciar();
+})();
+</script>
+
+<script src="/js/etl_status.js"></script>
+<script>ETLStatus.init({ metaUrl: '/json_consolidado/_etl_meta_export_farmacia.json' });</script>
+<script src="/js/menu.js"></script>
+</body>
+</html>

@@ -92,6 +92,7 @@ SERVICOS_SEED: list[dict] = [
     {"key": "medico_novo",                "label": "Médico - Inclusão Agenda Temporária",      "group_name": "mais", "href": "/medico_novo",                                  "lock": "verde", "ordem": 170},
     {"key": "medico_falta",               "label": "Médico - Cadastrar Falta + WhatsApp",      "group_name": "mais", "href": "/medico_falta",                                 "lock": "verde", "ordem": 180},
     {"key": "medico_custo",               "label": "Médico - Custo Efetivo Nominal",           "group_name": "mais", "href": "/medico_custo",                                 "lock": "dourado", "ordem": 185},
+    {"key": "farmacia_saidas",            "label": "Farmácia - Saídas e Consumo por Posto",    "group_name": "mais", "href": "/farmacia_saidas",                              "lock": "dourado", "ordem": 187},
     {"key": "tef",                        "label": "TEF Recorrente",                           "group_name": "mais", "href": "/tef",                                          "lock": "verde", "ordem": 190},
     {"key": "chat_dashboard",             "label": "Dashboard Chat (Camila.ai)",               "group_name": "mais", "href": "/chat_dashboard.html",                          "lock": "verde", "ordem": 200},
     {"key": "wpp_dashboard",              "label": "Dashboard WhatsApp (Meta)",                "group_name": "mais", "href": "/wpp_dashboard.html",                           "lock": "verde", "ordem": 210},

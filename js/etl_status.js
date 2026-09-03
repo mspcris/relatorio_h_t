@@ -54,6 +54,7 @@
     'export_notas_rps':               { py: 'export_notas_rps.py',             sh: 'export_notas_rps.sh',              cron_desc: 'de hora em hora',             interval_min: 60 },
     'indicadores_etl':                { py: 'indicadores_etl.py',              sh: '(direto no cron)',                 cron_desc: 'diario as 02:45',             interval_min: 1440 },
     'export_preagendamento':          { py: 'export_preagendamento.py',        sh: 'export_preagendamento.sh',         cron_desc: 'diario as 02:30',             interval_min: 1440 }
+    'export_farmacia':                { py: 'export_farmacia.py',              sh: 'export_farmacia.sh',               cron_desc: 'diario as 03:20',             interval_min: 1440 },
   };
 
   /* ── Nomes legiveis dos postos ── */

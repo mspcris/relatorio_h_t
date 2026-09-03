@@ -409,6 +409,78 @@ conferir layout); `--enviar --para cristiano` sem `--run` mostra o que faria.
 
 ---
 
+## Farmácia · Saídas e Consumo por posto (`/farmacia_saidas`) — 2026-09-03
+
+Pergunta do Cristiano: *"quanto saiu da farmácia de Realengo nos últimos 2-3
+meses, quanto eu tenho em estoque, quanto mando agora"*. **As saídas são o
+foco; estoque é complemento.** Um posto por vez (sem Altamiro/Couto — decisão
+dele: saída se olha posto a posto; agrupar só faria sentido em entradas).
+
+| Arquivo | Papel |
+|---|---|
+| `export_farmacia.py` + `export_farmacia.sh` | ETL diário 03:20, 13 postos em paralelo (~6 s/posto), só SELECT |
+| `sql/farmacia_saidas.sql` | Est_Saida/Est_SaidaItem por produto × mês × destino × setor |
+| `sql/farmacia_entradas.sql` | Est_Entrada/Est_EntradaItem por produto × mês × fornecedor |
+| `sql/farmacia_consumo.sql` | Cad_LancamentoServico classe MEDICAMENTO* (lançado ao paciente) |
+| `sql/farmacia_estoque.sql` | Cad_Produto + Cad_ProdutoLote — foto do estoque de hoje |
+| `farmacia_saidas.html` | 4 abas: Saídas · Consumo real · Entradas · Estoque |
+| `json_consolidado/farmacia_<P>.json` + `farmacia_index.json` | 245-485 KB por posto |
+
+**Três leituras diferentes de "consumo" — não misturar:**
+- **Saída da farmácia** (`Est_Saida`) = o que a farmácia ENTREGOU aos setores
+  (enfermagem, laboratório, recepção…) ou MANDOU (outro posto, descarte). É o
+  número que o Cristiano usa para decidir envio.
+- **Consumo real** (`Cad_LancamentoServico`, classe `MEDICAMENTO*`) = remédio
+  LANÇADO AO PACIENTE. Só medicamento tem isso; material (gaze, luva) não é
+  lançado. Liga com o produto por `Cad_Produto.idServico` (156 de 355 produtos
+  em Anchieta). Serviço compartilhado por vários produtos (SONDA FOLEY 14…24 →
+  um idServico) é marcado `×N` na tela.
+- **QuantidadeEnfermaria** de `Cad_Produto` NÃO é estoque: a enfermaria não é
+  controlada, o campo só acumula envios (1,6 milhão de gazes, saldos
+  negativos). Cristiano confirmou em 2026-09-03. Nunca usar como saldo.
+
+**Fatos medidos que definem o desenho:**
+- **`idProduto` é diferente em cada posto** (id 25 = Benzetacil em C,
+  Diazepam em R; só 15 de 211 nomes iguais entre C e R). Todo cruzamento é
+  dentro do posto. A coluna "Estoque no remetente" casa por **nome
+  normalizado** e mostra quantos casaram — "sem par" não é zero.
+- **Só A, C, R, G, I usam o módulo de saída** de verdade. N, X, Y, B, D têm
+  poucas; **P, M, J têm zero em 12 meses**. A página avisa "sem saída
+  registrada — não é consumo zero" e manda para a aba Consumo real.
+- **Hub de abastecimento:** Anchieta supre o grupo Altamiro (R recebe 100 %
+  de A), Campinho supre o Couto (J, D, M) e Anchieta recebe de Campinho. O ETL
+  deduz o remetente pelas entradas (`remetente_sugerido`).
+- **Entrada em unidades = `Quantidade × CaixaCom`** (Quantidade é nº de
+  caixas, quase sempre 1). Mesma conta do `QuantidadeTotal` da
+  `vw_Est_Entradaitem`. Somar só Quantidade daria "1 tubo" onde entraram 1.200.
+- **Saída com `Gravado NULL` (Numero 0) é rascunho**, ~5 % do volume. Fica
+  fora, como na `vw_Est_Saida`, e a página diz quanto ficou de fora.
+- **A classe `MEDICAMENTO 90` NÃO EXISTE** em posto nenhum (o select do
+  Cristiano citava 120 e 90). Existem `MEDICAMENTO 120`, `MEDICAMENTO 30`,
+  `MEDICAMENTO`, `MEDICAMENTO EXTERNO`. A classe vai como coluna e a página
+  filtra (padrão: todas menos EXTERNO, que é remédio trazido pelo paciente).
+- `Cad_ProdutoGrupo` só está preenchido em Anchieta (19) e Campo Grande (1);
+  nos outros o grupo é NULL e o filtro de grupo some.
+- Departamentos do próprio posto têm código **numérico** em `cad_endereco`
+  (TOMOGRAFIA '13', RAIOX '14', LIMPEZA '15', ENDOSCOPIA '16'…): saída para
+  eles é **interna**, com o nome do departamento como setor.
+
+**Sugestão de envio** = média mensal de saída (contada = interna; a
+transferência para outro posto entra só com o checkbox) × cobertura desejada
+(input, padrão 1 mês) − estoque de hoje, nunca negativa. Mês corrente entra
+com peso inteiro e a página avisa; o botão "Últimos 3 meses" usa só meses
+fechados.
+
+**ARMADILHA repetida duas vezes no mesmo dia:** `:ini` escrito no COMENTÁRIO
+do .sql virou bind param ("1 parameter markers, but 2 supplied") e, ao
+documentar isso, `":nome"` no comentário novo virou outro. `text()` varre o
+arquivo inteiro. Nenhum `:palavra` fora do bind real — nem em comentário.
+
+Posto que falha no ETL mantém o JSON anterior e sai marcado no índice; a
+página mostra "dado de <data>" em vermelho. Falha não vira consumo zero.
+
+---
+
 ## Custos de TI (ex-"Custos com IA") — adicionado 2026-08-02
 
 Consolida **todos** os custos de tecnologia por centro de custo. O painel

@@ -230,6 +230,9 @@ _TEMPLATE_TO_PAGINA = {
     "medico_custo.html":                "medico_custo",
     "medico_custo":                     "medico_custo",
     "/medico_custo":                    "medico_custo",
+    "farmacia_saidas.html":             "farmacia_saidas",
+    "farmacia_saidas":                  "farmacia_saidas",
+    "/farmacia_saidas":                 "farmacia_saidas",
     "indicadores_vg.html":              "indicadores_vg",
     "indicadores_vg":                   "indicadores_vg",
     "/indicadores_vg":                  "indicadores_vg",
@@ -1596,6 +1599,14 @@ def h_medico_custo():
     no catálogo public.servicos: o admin pode liberar por usuário. Enquanto
     ninguém for marcado, só quem tem all_pages enxerga."""
     return render_protected_page("medico_custo.html")
+
+@app.get('/farmacia_saidas')
+@app.get('/farmacia_saidas.html')
+def h_farmacia_saidas():
+    """Farmácia · Saídas e Consumo por posto (ETL export_farmacia.py).
+    Entra no catálogo public.servicos como o medico_custo: admin libera por
+    usuário; até lá só all_pages enxerga."""
+    return render_protected_page("farmacia_saidas.html")
 
 
 @app.get('/higienizacao.html')
