@@ -2092,7 +2092,8 @@
         if (!tb) return;
         tb.innerHTML = '';
 
-        meses.forEach(ym => {
+        // Mais recente em cima (Cristiano, 2026-09-03)
+        [...meses].reverse().forEach(ym => {
           const r = aggregateReceitaMes(ym);
           const d = aggregateDespesaMes(ym);
 
@@ -3037,7 +3038,11 @@ function renderExplorerTable(tbodySel, mesesSelec, values) {
   tb.closest('.expl-table').style.display = showTable ? '' : 'none';
 
   tb.innerHTML = '';
-  mesesSelec.forEach((ym, idx) => {
+  // Mais recente em cima (Cristiano, 2026-09-03) — o gráfico continua
+  // cronológico; só a tabela inverte.
+  const idxs = mesesSelec.map((_, i) => i).reverse();
+  idxs.forEach(idx => {
+    const ym = mesesSelec[idx];
     const totalMes = despesaTotalMes(ym);
     const v = values[idx] || 0;
     const pct = totalMes > 0 ? (v / totalMes) * 100 : null;
@@ -3988,7 +3993,7 @@ AnaliseIA.init({ kpi: 'receita_despesa', anchor: '#btnETLStatus' });
         <div><span class="lbl">Valor neste mês</span><br><span class="val">${fmtBR(a.valor_atual)}</span></div>
       </div>` : `<div class="stat-grid"><div><span class="lbl">Sem estatísticas históricas</span></div></div>`;
 
-    const histRows = hist.map(h=>{
+    const histRows = [...hist].reverse().map(h=>{   // mais recente em cima
       const isRef = h.mes === a.mes_ref;
       return `<tr class="${isRef?'ref-row':''}"><td>${h.mes}</td><td class="text-right">${fmtBR(h.valor)}</td></tr>`;
     }).join("");
