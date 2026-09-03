@@ -117,6 +117,8 @@ TZ=America/Sao_Paulo
 # Farmácia · Saídas e Consumo por posto — saídas/entradas/consumo/estoque dos 13 postos, só SELECT — criado em 2026-09-03
 # /bin/bash porque o rsync do deploy chega sem bit de execução (ver CLAUDE.md).
 20   3 * * * root flock -n /opt/relatorio_h_t/locks/farmacia.lock           /bin/bash /opt/relatorio_h_t/export_farmacia.sh >>/var/log/relatorio_h_t/farmacia.log 2>&1
+# Painel Financeiro — e-mail dos impostos em VERMELHO (1 por posto×imposto×mês). Sem --run é dry-run; IMPOSTOS_ALERTA_EMAIL=0 desliga. — criado em 2026-09-03
+15   8 * * * root flock -n /opt/relatorio_h_t/locks/alerta_impostos.lock    /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/alerta_impostos.py --run >>/var/log/relatorio_h_t/alerta_impostos.log 2>&1
 
 # Custos com IA — snapshot horário do custo da OpenAI por projeto (Costs API; só GET, sem custo) — criado em 2026-06-22
 # Mês fechado não é sobrescrito. Requer OPENAI_ADMIN_KEY (sk-admin) + CUSTOS_IA_DIR no /opt/relatorio_h_t/.env.

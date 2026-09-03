@@ -123,8 +123,13 @@ try:
     from relatorio_nf_routes import relatorio_nf_bp
     app.register_blueprint(relatorio_nf_bp)
 except Exception as _e:
-    import logging
     logging.getLogger(__name__).error("relatorio_nf_bp não carregado: %s", _e)
+try:
+    from painel_financeiro_routes import painel_financeiro_bp
+    app.register_blueprint(painel_financeiro_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("painel_financeiro_bp não carregado: %s", _e)
 
 try:
     from api_vg_indicadores import vg_indicadores_bp
@@ -233,6 +238,9 @@ _TEMPLATE_TO_PAGINA = {
     "farmacia_saidas.html":             "farmacia_saidas",
     "farmacia_saidas":                  "farmacia_saidas",
     "/farmacia_saidas":                 "farmacia_saidas",
+    "painel_financeiro.html":           "painel_financeiro",
+    "painel_financeiro":                "painel_financeiro",
+    "/painel_financeiro":               "painel_financeiro",
     "indicadores_vg.html":              "indicadores_vg",
     "indicadores_vg":                   "indicadores_vg",
     "/indicadores_vg":                  "indicadores_vg",
@@ -1607,6 +1615,13 @@ def h_farmacia_saidas():
     Entra no catálogo public.servicos como o medico_custo: admin libera por
     usuário; até lá só all_pages enxerga."""
     return render_protected_page("farmacia_saidas.html")
+
+@app.get('/painel_financeiro')
+@app.get('/painel_financeiro.html')
+def h_painel_financeiro():
+    """Painel Financeiro (impostos por posto × faixa de alarme). Catálogo
+    public.servicos; faixa só admin (API)."""
+    return render_protected_page("painel_financeiro.html")
 
 
 @app.get('/higienizacao.html')

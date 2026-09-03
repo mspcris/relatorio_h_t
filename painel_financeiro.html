@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8" />
+    <title>CAMIM — Painel Financeiro · Impostos</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="kpi-id" content="painel_financeiro" />
+    <meta name="kpi-title" content="Painel Financeiro" />
+    <meta name="kpi-description" content="Impostos pagos por posto nos últimos 36 meses, média, desvio do último mês fechado e faixas de alarme (amarela e vermelha, com e-mail)." />
+    <meta name="kpi-category" content="Financeiro" />
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap">
+    <link rel="stylesheet" href="/css/style2.css?v=20251114">
+    <link rel="stylesheet" href="/css/style_kpi.css?v=20251114&force=1">
+    <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        fetch("/session/me", { credentials: 'same-origin' }).then(r => r.json())
+            .then(d => { window.USER_EMAIL = d.email; window.USER_POSTOS = d.postos; }).catch(() => {});
+    </script>
+    <style>
+        html { font-size: 16px; }
+        body { font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+        .mini { font-size: .8rem; }
+        .muted { color: #8a94a3; }
+        .resumo { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+        .resumo .card { border-radius: 12px; margin: 0; cursor: pointer; }
+        .resumo .card .card-body { padding: .5rem .75rem; }
+        .resumo .lbl { font-size: .74rem; color: #6c757d; text-transform: uppercase; letter-spacing: .03em; }
+        .resumo .val { font-size: 1.5rem; font-weight: 700; line-height: 1.2; }
+        .resumo .card.ativo { outline: 2px solid #2a78d6; }
+        .posto-tabs-inline .nav-link .bd { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; font-size: .68rem; font-weight: 700; line-height: 1.5; margin-left: 3px; color: #fff; }
+        .bd-r { background: #d64545; } .bd-a { background: #f0a202; } .bd-s { background: #8b94a3; }
+        .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+        .imp { border: 1px solid #e7eaef; border-left: 6px solid #8b94a3; border-radius: 12px; background: #fff; padding: 10px 14px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.04); transition: transform .08s; }
+        .imp:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,.08); }
+        .imp.vermelho { border-left-color: #d64545; background: #fff5f5; }
+        .imp.amarelo { border-left-color: #f0a202; background: #fffaf0; }
+        .imp.sem_faixa { border-left-color: #8b94a3; }
+        .imp.normal { border-left-color: #2a9d5c; opacity: .85; }
+        .imp.sem_base, .imp.sem_mes { border-left-color: #c9ced6; opacity: .8; }
+        .imp .t { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+        .imp .nome { font-weight: 700; font-size: 1rem; }
+        .imp .posto { font-size: .74rem; color: #6c757d; }
+        .imp .val { font-size: 1.35rem; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+        .imp .desv { font-weight: 700; font-size: .95rem; }
+        .imp .linha { font-size: .8rem; color: #4a5260; margin-top: 2px; }
+        .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; white-space: nowrap; }
+        .tag-r { background: #d64545; color: #fff; } .tag-a { background: #f0a202; color: #fff; } .tag-s { background: #eef0f3; color: #5b6472; }
+        .tag-ok { background: #e6f6ec; color: #1e7b3a; } .tag-info { background: #e8f1fd; color: #1c4f9c; } .tag-mut { background: #eef0f3; color: #5b6472; }
+        .grupo-posto { margin: 14px 0 6px; font-weight: 700; font-size: 1.05rem; color: #1e7b3a; display: flex; align-items: center; gap: 8px; }
+        .grupo-posto small { font-weight: 400; color: #6c757d; }
+        .vazio { padding: 30px; text-align: center; color: #6c757d; background: #fff; border-radius: 12px; border: 1px dashed #d8dde5; }
+        .modal-xl { max-width: 1080px; }
+        .st { background: #f8f9fa; border-radius: 8px; padding: 6px 12px; font-size: .9rem; }
+        .st .lbl { display: block; font-size: .7rem; text-transform: uppercase; color: #6c757d; }
+        .st b { font-size: 1.05rem; }
+        .stgrid { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+        .reg-card { background: #fff; border: 1px solid #e7eaef; border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; }
+        .reg-card .row1 { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+        .reg-card .row1 span:last-child { font-weight: 700; }
+        .reg-card .lbl2 { font-weight: 700; margin-top: 6px; font-size: 13px; }
+        .reg-card .txt { white-space: pre-wrap; font-size: 13px; }
+        .reg-card .meta { color: #8a94a3; font-size: 11px; margin-top: 6px; }
+        .faixa-box { background: #fff8e1; border: 1px solid #ffe08a; border-radius: 10px; padding: 10px 14px; }
+        .faixa-box input { width: 90px; display: inline-block; }
+        .serie-tbl { width: 100%; font-size: .8rem; }
+        .serie-tbl th, .serie-tbl td { padding: 3px 6px; border-bottom: 1px solid #eef0f3; }
+        .serie-tbl td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .serie-tbl tr.ref { background: #fff4d6; font-weight: 700; }
+        .serie-tbl tr.zero td { color: #b0b7c3; }
+        .chart-box { height: 240px; }
+        .tipos { font-size: .78rem; color: #4a5260; }
+        .aviso { background: #fff8e1; border: 1px solid #ffe08a; border-radius: 8px; padding: 8px 12px; font-size: .85rem; margin-bottom: 10px; }
+        .aviso.erro { background: #fde8e8; border-color: #f5b5b5; }
+    </style>
+</head>
+<body class="hold-transition sidebar-mini">
+<div class="wrapper">
+    <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+        <ul class="navbar-nav"><li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li></ul>
+        <span class="ml-2 font-weight-bold d-flex align-items-center">
+            <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+            <span class="ml-2">Quem tem saúde é mais feliz!</span>
+            <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+        </span>
+    </nav>
+    <aside class="main-sidebar sidebar-dark-primary elevation-4">
+        <a href="index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+        <div class="sidebar"><nav class="mt-2"><ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
+            <li class="nav-item"><a href="index.html" class="nav-link"><i class="nav-icon fas fa-home"></i><p>Home Page</p></a></li>
+            <li class="nav-item"><a href="painel_financeiro.html" class="nav-link active"><i class="nav-icon fas fa-landmark"></i><p>Painel Financeiro</p></a></li>
+        </ul></nav></div>
+    </aside>
+
+    <div class="content-wrapper">
+        <section class="content-header"><div class="container-fluid d-flex align-items-center justify-content-between flex-wrap">
+            <div>
+                <h1 class="h4 mb-0">Painel Financeiro · Impostos</h1>
+                <div class="mini text-muted">Último mês fechado de cada imposto contra a média dos meses anteriores. Aparece aqui quem <b>não tem faixa</b> ou está <b>fora da faixa</b> cadastrada.</div>
+            </div>
+            <div class="mini">
+                <label class="mb-0 mr-3"><input type="checkbox" id="chkTodos"> mostrar também os normais</label>
+                <button id="btnRecarregar" class="btn btn-sm btn-outline-secondary">↻ Atualizar</button>
+            </div>
+        </div></section>
+
+        <section class="content"><div class="container-fluid">
+            <div class="card"><div class="kpi-filter-panel">
+                <div class="kpi-filter-row kpi-filter-postos">
+                    <div class="posto-groups"><div class="btn-group">
+                        <button id="btnTodos" class="btn active">Todos</button>
+                        <button id="btnAltamiro" class="btn" title="A B G I N R X Y">Altamiro</button>
+                        <button id="btnCouto" class="btn" title="C D J M P">Couto</button>
+                    </div></div>
+                    <div class="filter-sep-v"></div>
+                    <ul id="postoTabs" class="nav nav-pills posto-tabs-inline"></ul>
+                </div>
+            </div></div>
+
+            <div id="avisos"></div>
+            <div class="card"><div class="card-body resumo" id="resumo"></div></div>
+            <div id="carregando" class="vazio">Carregando…</div>
+            <div id="lista"></div>
+        </div></section>
+    </div>
+</div>
+
+<!-- MODAL IMPOSTO -->
+<div class="modal fade" id="mdImp" tabindex="-1"><div class="modal-dialog modal-xl"><div class="modal-content">
+    <div class="modal-header py-2"><h5 class="modal-title" id="mdTitulo"></h5><button type="button" class="close" data-dismiss="modal">&times;</button></div>
+    <div class="modal-body" id="mdCorpo"></div>
+</div></div></div>
+
+<script>
+(function () {
+'use strict';
+const el = s => document.querySelector(s);
+const POSTOS = ['A','B','C','D','G','I','J','M','N','P','R','X','Y'];
+const GRUPOS = { altamiro: ['A','B','G','I','N','R','X','Y'], couto: ['C','D','J','M','P'] };
+const NOMES = {};   // preenchido pelo /session/me? não — pelo próprio payload (nomes de posto vêm do alarmes_db no e-mail; aqui letra basta)
+const MESES_PT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const fmt = (n, d = 2) => (n === null || n === undefined || isNaN(n)) ? '—' : Number(n).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const brl = n => (n === null || n === undefined) ? '—' : 'R$ ' + fmt(n);
+const ymL = ym => ym ? MESES_PT[Number(ym.slice(5, 7)) - 1] + '/' + ym.slice(2, 4) : '—';
+const fmtD = s => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) + (s.length > 15 ? ' ' + s.slice(11, 16) : '') : '—';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const STATUS = { vermelho: ['tag-r', 'VERMELHO'], amarelo: ['tag-a', 'AMARELO'], sem_faixa: ['tag-s', 'sem % cadastrada'], normal: ['tag-ok', 'dentro da faixa'], sem_base: ['tag-mut', 'sem histórico p/ média'], sem_mes: ['tag-mut', 'sem pagamento no mês (não é mensal)'] };
+
+const estado = { dados: null, postos: new Set(), imposto: null, chart: null };
+
+// ── carga ────────────────────────────────────────────────────────────────
+async function carregar() {
+    el('#carregando').style.display = ''; el('#lista').innerHTML = '';
+    try {
+        const r = await fetch('/api/painel_financeiro/impostos', { credentials: 'same-origin' });
+        const j = await r.json();
+        if (!r.ok || !j.ok) throw new Error(j.error || 'HTTP ' + r.status);
+        estado.dados = j;
+        el('#jsonInfo').textContent = '• avaliado em ' + (j.gerado_em || '').replace('T', ', ').slice(0, 17) + ' · dados do RDS (carga a cada 2 h)';
+        desenhar();
+    } catch (e) {
+        el('#carregando').innerHTML = `<div class="aviso erro">Não consegui carregar o painel: ${esc(e.message)}</div>`;
+    }
+}
+
+// ── filtros ──────────────────────────────────────────────────────────────
+function linhasFiltradas() {
+    const todos = el('#chkTodos').checked;
+    return (estado.dados?.linhas || []).filter(l =>
+        (estado.postos.size === 0 || estado.postos.has(l.posto)) &&
+        (!estado.imposto || l.imposto === estado.imposto) &&
+        (todos || ['vermelho', 'amarelo', 'sem_faixa', 'sem_base'].includes(l.status)));
+}
+function contagens(linhas) {
+    const c = { vermelho: 0, amarelo: 0, sem_faixa: 0, normal: 0, sem_base: 0, sem_mes: 0 };
+    linhas.forEach(l => c[l.status] = (c[l.status] || 0) + 1);
+    return c;
+}
+function montarPostos() {
+    const ul = el('#postoTabs'); ul.innerHTML = '';
+    const porPosto = {};
+    (estado.dados?.linhas || []).forEach(l => { const c = porPosto[l.posto] = porPosto[l.posto] || { r: 0, a: 0, s: 0 }; if (l.status === 'vermelho') c.r++; else if (l.status === 'amarelo') c.a++; else if (l.status === 'sem_faixa') c.s++; });
+    POSTOS.forEach(p => {
+        const c = porPosto[p] || { r: 0, a: 0, s: 0 };
+        ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link ${estado.postos.has(p) ? 'active' : ''}" href="#" title="vermelho · amarelo · sem faixa">${p}${c.r ? `<span class="bd bd-r">${c.r}</span>` : ''}${c.a ? `<span class="bd bd-a">${c.a}</span>` : ''}${c.s ? `<span class="bd bd-s">${c.s}</span>` : ''}</a></li>`);
+    });
+    const sel = [...estado.postos].sort().join(',');
+    el('#btnTodos').classList.toggle('active', estado.postos.size === 0);
+    el('#btnAltamiro').classList.toggle('active', sel === GRUPOS.altamiro.join(','));
+    el('#btnCouto').classList.toggle('active', sel === GRUPOS.couto.join(','));
+}
+
+// ── desenho ──────────────────────────────────────────────────────────────
+function desenhar() {
+    const d = estado.dados; if (!d) return;
+    montarPostos();
+    const base = (d.linhas || []).filter(l => estado.postos.size === 0 || estado.postos.has(l.posto));
+    // resumo por imposto (todas as linhas do filtro de posto, ignorando o filtro de imposto)
+    const porImp = {};
+    base.forEach(l => { const c = porImp[l.imposto] = porImp[l.imposto] || { r: 0, a: 0, s: 0, n: 0, total: 0, media: 0 }; c.n++; c.total += l.valor_ref || 0; c.media += l.media12 || 0; if (l.status === 'vermelho') c.r++; else if (l.status === 'amarelo') c.a++; else if (l.status === 'sem_faixa') c.s++; });
+    el('#resumo').innerHTML = d.impostos.filter(i => porImp[i.chave]).map(i => { const c = porImp[i.chave]; const f = d.faixas[i.chave];
+        return `<div class="card ${estado.imposto === i.chave ? 'ativo' : ''}" data-imp="${i.chave}"><div class="card-body">
+            <div class="lbl">${esc(i.rotulo)}</div>
+            <div class="val" style="color:${c.r ? '#d64545' : c.a ? '#c47a00' : '#14181f'}">${brl(c.total)}</div>
+            <div class="mini muted">${c.n} posto(s) · ${c.r ? `<span class="tag tag-r">${c.r}</span> ` : ''}${c.a ? `<span class="tag tag-a">${c.a}</span> ` : ''}${f ? `faixa ${fmt(f.amarelo_pct, 0)}% / ${fmt(f.vermelho_pct, 0)}%` : '<span class="tag tag-s">sem faixa</span>'}</div>
+        </div></div>`; }).join('') || '<div class="muted">Nenhum imposto encontrado.</div>';
+    document.querySelectorAll('#resumo .card').forEach(c => c.addEventListener('click', () => { estado.imposto = estado.imposto === c.dataset.imp ? null : c.dataset.imp; desenhar(); }));
+
+    const linhas = linhasFiltradas();
+    const ct = contagens(linhas);
+    const avisos = [];
+    const semFaixa = d.impostos.filter(i => !d.faixas[i.chave] && porImp[i.chave]);
+    if (semFaixa.length) avisos.push(`<div class="aviso"><b>${semFaixa.length} imposto(s) sem faixa cadastrada</b> (${semFaixa.map(i => esc(i.rotulo)).join(', ')}) — aparecem todos até você clicar e cadastrar as % amarela e vermelha.${d.pode_editar_faixa ? '' : ' Só administrador cadastra faixa.'}</div>`);
+    el('#avisos').innerHTML = avisos.join('');
+
+    el('#carregando').style.display = 'none';
+    if (!linhas.length) { el('#lista').innerHTML = `<div class="vazio">Nada fora da faixa${estado.imposto ? ' para ' + esc(d.impostos.find(i => i.chave === estado.imposto)?.rotulo || '') : ''}. Marque "mostrar também os normais" para ver tudo.</div>`; return; }
+    const porPosto = {};
+    linhas.forEach(l => (porPosto[l.posto] = porPosto[l.posto] || []).push(l));
+    el('#lista').innerHTML = Object.keys(porPosto).sort().map(p => {
+        const ls = porPosto[p]; const c = contagens(ls);
+        return `<div class="grupo-posto">Posto ${p} <small>${ls.length} imposto(s) · ${c.vermelho ? `<span class="tag tag-r">${c.vermelho} vermelho</span> ` : ''}${c.amarelo ? `<span class="tag tag-a">${c.amarelo} amarelo</span> ` : ''}${c.sem_faixa ? `<span class="tag tag-s">${c.sem_faixa} sem faixa</span>` : ''}</small></div>
+            <div class="grade">${ls.map(card).join('')}</div>`;
+    }).join('');
+    document.querySelectorAll('.imp').forEach(c => c.addEventListener('click', () => abrir(c.dataset.posto, c.dataset.imp)));
+}
+
+function card(l) {
+    const [cls, rot] = STATUS[l.status] || ['tag-mut', l.status];
+    const desv = l.desvio_pct === null || l.desvio_pct === undefined ? '' : `<span class="desv" style="color:${l.status === 'vermelho' ? '#d64545' : l.status === 'amarelo' ? '#c47a00' : '#4a5260'}">${l.desvio_pct > 0 ? '+' : ''}${fmt(l.desvio_pct, 1)}%</span>`;
+    return `<div class="imp ${l.status}" data-posto="${l.posto}" data-imp="${l.imposto}">
+        <div class="t"><span class="nome">${esc(l.rotulo)}</span><span class="tag ${cls}">${rot}</span></div>
+        <div class="posto">posto ${l.posto} · mês avaliado ${ymL(l.mes_ref)}${l.nao_pago ? ' · <b style="color:#d64545">NÃO PAGO</b>' : ''}</div>
+        <div class="t"><span class="val">${brl(l.valor_ref)}</span>${desv}</div>
+        <div class="linha">média ${l.base_meses}m <b>${brl(l.media_base)}</b> · 12m ${brl(l.media12)} · 24m ${brl(l.media24)} · 36m ${brl(l.media36)}</div>
+        <div class="linha muted">${l.faixa ? `faixa: amarelo ≥ ${fmt(l.faixa.amarelo, 0)}% · vermelho ≥ ${fmt(l.faixa.vermelho, 0)}%` : 'clique para cadastrar a faixa'}${l.n_atual ? ` · ${ymL(l.mes_atual)} (parcial) ${brl(l.valor_atual)}` : ''}</div>
+    </div>`;
+}
+
+// ── modal ────────────────────────────────────────────────────────────────
+async function abrir(posto, imposto) {
+    const d = estado.dados; const l = d.linhas.find(x => x.posto === posto && x.imposto === imposto); if (!l) return;
+    const f = d.faixas[imposto]; const tipos = d.tipos_por_imposto[imposto] || {};
+    const [cls, rot] = STATUS[l.status] || ['tag-mut', l.status];
+    el('#mdTitulo').innerHTML = `${esc(l.rotulo)} — posto ${posto} <span class="tag ${cls} ml-2">${rot}</span>`;
+    el('#mdCorpo').innerHTML = `
+      <div class="stgrid">
+        <div class="st"><span class="lbl">Mês avaliado ${ymL(l.mes_ref)}</span><b>${brl(l.valor_ref)}</b> <small class="muted">${l.n_ref} lanç.</small>${l.nao_pago ? ' <span class="tag tag-r">NÃO PAGO</span>' : ''}</div>
+        <div class="st"><span class="lbl">Desvio sobre média ${l.base_meses}m</span><b style="color:${l.status === 'vermelho' ? '#d64545' : l.status === 'amarelo' ? '#c47a00' : 'inherit'}">${l.desvio_pct === null ? '—' : (l.desvio_pct > 0 ? '+' : '') + fmt(l.desvio_pct, 1) + '%'}</b></div>
+        <div class="st"><span class="lbl">Média 12 meses</span><b>${brl(l.media12)}</b> <small class="muted">${l.meses_com_pgto_12} meses c/ pgto</small></div>
+        <div class="st"><span class="lbl">Média 24 meses</span><b>${brl(l.media24)}</b></div>
+        <div class="st"><span class="lbl">Média 36 meses</span><b>${brl(l.media36)}</b></div>
+        <div class="st"><span class="lbl">${ymL(l.mes_atual)} (mês corrente, parcial)</span><b>${brl(l.valor_atual)}</b></div>
+      </div>
+      <div class="mini muted mb-2">Média = meses <b>com pagamento</b> na janela, sem contar o mês avaliado. ${l.mensal ? 'Imposto mensal (pago em ' + l.meses_com_pgto_12 + ' dos últimos 12 meses).' : 'Não é mensal: mês sem pagamento não é avaliado.'}
+        · Tipos originais agrupados aqui: <span class="tipos">${Object.entries(tipos).sort((a, b) => b[1].valor - a[1].valor).map(([t, x]) => `<span class="tag tag-mut" title="${x.postos.join(', ')} · ${x.n} lanç.">${esc(t)}</span>`).join(' ')}</span></div>
+
+      <div class="faixa-box mb-3" id="faixaBox">
+        <div class="d-flex align-items-center justify-content-between flex-wrap"><b><i class="fas fa-bell mr-1"></i>Faixa de alarme — ${esc(l.rotulo)} (vale para todos os postos)</b>
+          ${f ? `<small class="muted">cadastrada por ${esc(f.atualizado_por || '—')} em ${fmtD(f.atualizado_em)}</small>` : '<small class="muted">ainda sem faixa: este imposto aparece em todos os postos</small>'}</div>
+        ${d.pode_editar_faixa ? `
+        <form id="fFaixa" class="form-inline mt-2" style="gap:8px;flex-wrap:wrap">
+          <label>Amarelo ≥ <input type="number" step="1" min="1" class="form-control form-control-sm" name="amarelo_pct" value="${f ? f.amarelo_pct : 20}"> %</label>
+          <label>Vermelho ≥ <input type="number" step="1" min="2" class="form-control form-control-sm" name="vermelho_pct" value="${f ? f.vermelho_pct : 40}"> %</label>
+          <label>Média de <select name="base_meses" class="form-control form-control-sm">${[12, 24, 36].map(n => `<option value="${n}" ${(f ? f.base_meses : 12) == n ? 'selected' : ''}>${n}</option>`).join('')}</select> meses</label>
+          <label>E-mail do vermelho <input type="email" class="form-control form-control-sm" name="email" style="width:220px" value="${esc(f?.email || d.email_padrao)}"></label>
+          <input type="text" class="form-control form-control-sm" name="observacao" placeholder="observação (opcional)" style="width:220px" value="${esc(f?.observacao || '')}">
+          <button class="btn btn-sm btn-warning" type="submit">Salvar faixa</button>
+          ${f ? '<button class="btn btn-sm btn-outline-danger" type="button" id="btnApagarFaixa">Remover faixa</button>' : ''}
+          <span id="faixaMsg" class="mini"></span>
+        </form>
+        <div class="mini muted mt-1">Desvio nos dois sentidos: pagar 40 % a menos é tão estranho quanto 40 % a mais. Vermelho manda e-mail uma vez por posto × imposto × mês (robô diário 08:15).</div>` :
+        `<div class="mini mt-1">${f ? `Amarelo ≥ ${fmt(f.amarelo_pct, 0)} % · Vermelho ≥ ${fmt(f.vermelho_pct, 0)} % · média de ${f.base_meses} meses · e-mail ${esc(f.email || d.email_padrao)}` : ''} <span class="muted">(só administrador altera)</span></div>`}
+      </div>
+
+      <div class="row">
+        <div class="col-lg-7"><div class="chart-box"><canvas id="chSerie"></canvas></div></div>
+        <div class="col-lg-5" style="max-height:260px;overflow:auto"><table class="serie-tbl"><thead><tr><th>Mês</th><th class="num">Pago</th><th class="num">Lanç.</th><th class="num">vs média 12m</th></tr></thead><tbody>
+          ${[...l.serie].reverse().map(s => { const dv = l.media12 ? (s.valor - l.media12) / l.media12 * 100 : null; return `<tr class="${s.ym === l.mes_ref ? 'ref' : ''} ${s.n ? '' : 'zero'}"><td>${ymL(s.ym)}</td><td class="num">${brl(s.valor)}</td><td class="num">${s.n}</td><td class="num">${dv === null || !s.n ? '—' : (dv > 0 ? '+' : '') + fmt(dv, 0) + '%'}</td></tr>`; }).join('')}
+        </tbody></table></div>
+      </div>
+
+      <h6 class="mt-3">Registros — <span id="regTit">${ymL(l.mes_ref)}</span> <button class="btn btn-xs btn-outline-secondary ml-2" id="btnReg36">ver os 36 meses</button> <span id="regInfo" class="mini muted"></span></h6>
+      <div id="regs" class="muted mini">Carregando…</div>`;
+    // gráfico
+    if (estado.chart) estado.chart.destroy();
+    estado.chart = new Chart(el('#chSerie').getContext('2d'), { type: 'bar', data: { labels: l.serie.map(s => ymL(s.ym)), datasets: [
+        { label: 'pago no mês', data: l.serie.map(s => s.valor), backgroundColor: l.serie.map(s => s.ym === l.mes_ref ? (l.status === 'vermelho' ? '#d64545' : l.status === 'amarelo' ? '#f0a202' : '#2a78d6') : '#9cc4ee') },
+        { label: `média ${l.base_meses}m`, type: 'line', data: l.serie.map(() => l.media_base), borderColor: '#1e7b3a', borderDash: [4, 4], pointRadius: 0, borderWidth: 2 },
+        ...(f ? [{ label: `+${fmt(f.vermelho_pct, 0)}%`, type: 'line', data: l.serie.map(() => l.media_base * (1 + f.vermelho_pct / 100)), borderColor: 'rgba(214,69,69,.5)', pointRadius: 0, borderWidth: 1 },
+                 { label: `−${fmt(f.vermelho_pct, 0)}%`, type: 'line', data: l.serie.map(() => l.media_base * (1 - f.vermelho_pct / 100)), borderColor: 'rgba(214,69,69,.5)', pointRadius: 0, borderWidth: 1 }] : [])
+    ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => fmt(v, 0) } } } } });
+    // faixa
+    el('#fFaixa')?.addEventListener('submit', async e => {
+        e.preventDefault(); const fd = new FormData(e.target); const msg = el('#faixaMsg'); msg.textContent = 'salvando…';
+        try {
+            const r = await fetch('/api/painel_financeiro/impostos/faixa', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imposto, amarelo_pct: fd.get('amarelo_pct'), vermelho_pct: fd.get('vermelho_pct'), base_meses: fd.get('base_meses'), email: fd.get('email'), observacao: fd.get('observacao') }) });
+            const j = await r.json(); if (!r.ok || !j.ok) throw new Error(j.error || 'HTTP ' + r.status);
+            msg.textContent = 'salvo ✓ — recalculando…'; await carregar(); $('#mdImp').modal('hide');
+        } catch (err) { msg.textContent = 'erro: ' + err.message; }
+    });
+    el('#btnApagarFaixa')?.addEventListener('click', async () => {
+        if (!confirm('Remover a faixa deste imposto? Ele volta a aparecer em todos os postos como "sem % cadastrada".')) return;
+        const r = await fetch('/api/painel_financeiro/impostos/faixa/' + imposto, { method: 'DELETE', credentials: 'same-origin' });
+        if (r.ok) { await carregar(); $('#mdImp').modal('hide'); }
+    });
+    $('#mdImp').modal('show');
+    // registros
+    const regs = async (mes) => {
+        el('#regs').innerHTML = 'Carregando…';
+        const r = await fetch(`/api/painel_financeiro/impostos/registros?posto=${posto}&imposto=${imposto}${mes ? '&mes=' + mes : ''}`, { credentials: 'same-origin' });
+        const j = await r.json();
+        if (!r.ok || !j.ok) { el('#regs').innerHTML = `<div class="aviso erro">${esc(j.error || r.status)}</div>`; return; }
+        el('#regInfo').textContent = `${j.count} registro(s) · ${brl(j.soma)}`;
+        el('#regs').innerHTML = j.rows.map(x => `<div class="reg-card">
+            <div class="row1"><span>ID Despesa:</span><span>${x.id_despesa}</span></div>
+            <div class="row1"><span>Data da prestação:</span><span>${fmtD(x.data_prestacao)}</span></div>
+            <div class="row1"><span>Data de pagamento:</span><span>${fmtD((x.data_pagamento || '').slice(0, 10))}${x.data_pagamento_auto && x.data_pagamento_auto.slice(0, 7) !== (x.data_pagamento || '').slice(0, 7) ? ` <small class="muted">· lançado ${fmtD(x.data_pagamento_auto.slice(0, 10))}</small>` : ''}</span></div>
+            <div class="row1"><span>Valor pago:</span><span>${brl(x.valor_pago)}${x.data_cancelamento ? ' <span class="tag tag-r">cancelada</span>' : ''}</span></div>
+            <div class="lbl2">Descrição:</div><div class="txt">${esc((x.descricao || '').trim()) || 'N/A'}</div>
+            <div class="lbl2">Comentário:</div><div class="txt">${esc((x.comentario || '').trim()) || 'N/A'}</div>
+            <div class="meta">${esc(x.plano_principal || '')} › ${esc(x.plano || '')} › <b>${esc(x.tipo || '')}</b>${x.fornecedor ? ' · ' + esc(x.fornecedor) : ''}${x.forma ? ' · ' + esc(x.forma) : ''} · usuário ${esc(x.usuario_inclusao || x.usuario || '—')} · carga ${fmtD(x.imported_at)}</div>
+        </div>`).join('') || '<div class="muted">Nenhum lançamento.</div>';
+    };
+    el('#btnReg36').addEventListener('click', () => { el('#regTit').textContent = '36 meses'; regs(null); });
+    regs(l.mes_ref);
+}
+
+// ── eventos ──────────────────────────────────────────────────────────────
+el('#postoTabs').addEventListener('click', e => { if (!e.target.closest('.nav-link')) return; e.preventDefault(); const p = e.target.closest('.nav-link').dataset.posto; if (estado.postos.has(p)) estado.postos.delete(p); else estado.postos.add(p); if (estado.postos.size >= POSTOS.length) estado.postos.clear(); desenhar(); });
+el('#btnTodos').addEventListener('click', () => { estado.postos.clear(); desenhar(); });
+el('#btnAltamiro').addEventListener('click', () => { estado.postos = new Set(GRUPOS.altamiro); desenhar(); });
+el('#btnCouto').addEventListener('click', () => { estado.postos = new Set(GRUPOS.couto); desenhar(); });
+el('#chkTodos').addEventListener('change', desenhar);
+el('#btnRecarregar').addEventListener('click', carregar);
+carregar();
+})();
+</script>
+<script src="/js/menu.js"></script>
+</body>
+</html>

@@ -409,6 +409,50 @@ conferir layout); `--enviar --para cristiano` sem `--run` mostra o que faria.
 
 ---
 
+## Painel Financeiro · Impostos (`/painel_financeiro`) — 2026-09-03
+
+Pedido do Cristiano: "ver o imposto A, INSS por exemplo, os últimos 36 meses
+daquele posto, a média, os registros se clicar; cada imposto com faixa
+amarela e vermelha, a vermelha manda e-mail ao Leonardo; só quero ver quem
+não tem % e quem está fora da faixa". Pediu "temperatura 0,9" — as regras
+abaixo foram decisão minha e estão escritas no topo de `painel_financeiro.py`.
+
+| Peça | Papel |
+|---|---|
+| `painel_financeiro.py` | classificação por radical, séries 36 m do RDS `fin_despesa`, médias, status, faixas (RDS `fin_imposto_faixa`) |
+| `painel_financeiro_routes.py` | `/api/painel_financeiro/impostos`, `/registros`, `POST/DELETE /faixa` (faixa só admin) |
+| `painel_financeiro.html` | cards por posto × imposto, modal com 36 meses + faixa + registros |
+| `alerta_impostos.py` | cron 08:15, e-mail dos VERMELHOS, 1 por posto×imposto×mês (`fin_imposto_alerta_envio`); sem `--run` é dry-run; `IMPOSTOS_ALERTA_EMAIL=0` desliga |
+
+**Regras (decididas em 2026-09-03):**
+- Mês avaliado = **último mês fechado** (o corrente é parcial; DAS do mês
+  cai no dia 20). Mês corrente aparece como informação.
+- Média = meses **com pagamento** na base (12 padrão; 24/36 opcionais),
+  **sem o mês avaliado**. IPTU parcelado tem meses zerados que não são queda.
+- Desvio = (pago − média) ÷ média, **nos dois sentidos**. Amarelo ≥ a %,
+  vermelho ≥ b %. Sem faixa → aparece sempre. Dentro da faixa → some (há
+  "mostrar também os normais").
+- Imposto **mensal** (pago em ≥ 8 dos últimos 12 meses) sem pagamento no
+  mês avaliado = −100 % e selo "NÃO PAGO". Não mensal sem pagamento →
+  `sem_mes`, não avaliado.
+- Faixa é **por imposto, vale para todos os postos** (foi o que ele pediu:
+  "cada imposto terá a sua faixa"). E-mail padrão `IMPOSTOS_EMAIL_ALERTA`
+  (leonardo@camim.com.br), sobrescrevível na faixa.
+
+**Plano de contas não é igual entre postos.** Impostos vivem em `IMPOSTOS
+CLÍNICA` + `IMPOSTOS FUNCIONÁRIOS` (um grupo) e `IMPOSTO` / `IMPOSTOS` (outro),
+mais alguns tipos em `DESPESAS FIXAS`. O mesmo tributo tem várias grafias
+(`GPS - INSS`/`INSS`; `GRF - FGTS`/`FGTS`/`GUIA DO RECOLHIMENTO DO FGTS`;
+`DAS - SIMPLES NACIONAL`/`DAS`/`SIMPLES NACIONAL`). A lista `IMPOSTOS` em
+`painel_financeiro.py` casa por regex sobre o tipo normalizado; a tela mostra
+os tipos originais de cada grupo. Tipo novo cai em `OUTROS` — conferir lá
+antes de acrescentar regex.
+
+Medido em 2026-09-03: 91 linhas posto × imposto, `painel()` em 1,3 s, JSON
+185 KB. Tudo lê o RDS ao vivo (carga a cada 2 h), não há ETL/JSON estático.
+
+---
+
 ## KPI Receita × Despesa — drill-down até a despesa (como no APP Gestão) — 2026-09-03
 
 Clique no mês em qualquer tabela do explorador (Nível 1 plano principal,
