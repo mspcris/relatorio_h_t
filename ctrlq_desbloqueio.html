@@ -247,6 +247,52 @@
     padding: 1px 7px; font-size: .75rem; font-weight: 600;
   }
   .hist-detalhe { font-size: .75rem; color: #555; word-break: break-word; }
+  /* ── Resumo do agente + confiança (2026-09-10) ────────────────────────── */
+  .res-box {
+    margin-top: 10px; border: 1px solid #e3e8ee; border-left: 3px solid #17a2b8;
+    border-radius: 4px; background: #f8fbfd; padding: 10px 12px;
+  }
+  .res-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
+  .res-titulo { font-size:.7rem; font-weight:700; letter-spacing:.06em;
+    text-transform:uppercase; color:#0c5460; }
+  .res-texto { font-size:.86rem; line-height:1.5; color:#2f3d44; }
+  .res-frase { padding:2px 0 2px 13px; position:relative; }
+  .res-frase::before { content:""; position:absolute; left:2px; top:.62em;
+    width:4px; height:4px; border-radius:50%; background:#b6c4cd; }
+  .res-frase.alerta { background:#fdecea; color:#721c24; font-weight:600;
+    border-radius:3px; padding:5px 9px 5px 13px; margin-top:4px; }
+  .res-frase.alerta::before { background:#dc3545; top:.85em; }
+  .res-base { font-size:.66rem; padding:2px 7px; border-radius:9px; font-weight:700;
+    background:#d1ecf1; color:#0c5460; }
+  .res-base.agenda { background:#e9ecef; color:#495057; }
+  .conf-wrap { display:flex; align-items:center; gap:6px; margin-left:auto; }
+  .conf-barra { width:74px; height:7px; border-radius:4px; background:#e3e8ee; overflow:hidden; }
+  .conf-fill { height:100%; border-radius:4px; }
+  .conf-num { font-size:.72rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .conf-alta .conf-fill { background:#28a745; } .conf-alta .conf-num { color:#1e7e34; }
+  .conf-media .conf-fill { background:#f0ad4e; } .conf-media .conf-num { color:#8a6100; }
+  .conf-baixa .conf-fill { background:#dc3545; } .conf-baixa .conf-num { color:#b02a37; }
+  .res-fatores { margin-top:6px; font-size:.74rem; color:#6c757d; }
+  .res-fatores li { margin-bottom:2px; }
+  .res-acoes { display:flex; gap:6px; flex-wrap:wrap; margin-top:9px; }
+
+  /* ── Cobertura do turno ───────────────────────────────────────────────── */
+  .cob-turno { border:1px solid #e3e8ee; border-radius:4px; margin-bottom:10px; overflow:hidden; }
+  .cob-turno-head { background:#f4f7fa; padding:7px 11px; font-size:.8rem; font-weight:600;
+    display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:baseline; }
+  .cob-turno-head .tot { font-variant-numeric:tabular-nums; color:#0c5460; }
+  .cob-linha { display:flex; justify-content:space-between; gap:10px; padding:6px 11px;
+    font-size:.82rem; border-top:1px solid #f0f3f6; align-items:baseline; }
+  .cob-linha.este { background:#fff8e1; font-weight:600; }
+  .cob-linha .val { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .cob-vazio { padding:7px 11px; font-size:.78rem; color:#856404; background:#fff3cd; }
+  .cob-num { display:flex; gap:18px; flex-wrap:wrap; margin-bottom:12px; }
+  .cob-num div { font-size:.78rem; color:#6c757d; }
+  .cob-num b { display:block; font-size:1.05rem; color:#212529;
+    font-variant-numeric:tabular-nums; font-weight:700; }
+  .cob-alerta { background:#fdecea; border:1px solid #dc3545; color:#721c24;
+    border-radius:4px; padding:8px 11px; font-size:.82rem; margin-bottom:12px; }
+
 </style>
 </head>
 
@@ -326,8 +372,9 @@
             </div>
             <ul id="postoTabs" class="nav nav-pills posto-tabs mb-0 flex-grow-1"></ul>
             <div class="form-check form-check-inline ml-2 mb-0">
-              <input class="form-check-input" type="checkbox" id="chkExpirados">
-              <label class="form-check-label small" for="chkExpirados">Mostrar expirados</label>
+              <input class="form-check-input" type="checkbox" id="chkExpirados" checked>
+              <label class="form-check-label small" for="chkExpirados"
+                     title="Registro com data fim vencida continua ativo no ERP — continua valendo e continua custando">Incluir vencidos</label>
             </div>
           </div>
         </div>
@@ -401,7 +448,7 @@
   let _dados  = {};   // { posto: [ ...registros ] }
   let _postos = [];
   let _postoSel = 'TODOS';  // 'TODOS' ou Set de postos selecionados
-  let _mostrarExpirados = false;
+  let _mostrarExpirados = true;   // vencido continua valendo no ERP e continua custando
 
   // ── Formatadores ──────────────────────────────────────────────────────────
 
@@ -851,14 +898,6 @@
     window.__cardData[key] = rec;
     const dias   = diasParaExpirar(rec.DataFimExibicao);
     const cls    = cardClass(dias);
-    const obs    = (rec.ObservacaoDesbloqueio || '').trim();
-    const custos = renderPaineis(rec);
-    const diff   = diffFlag(
-      'Permitir agendamento sem consulta anterior',
-      rec.atual_PermitirSemConsulta,
-      rec.hist_PermitirSemConsulta
-    );
-
     const audInfo = rec.aud_usuario
       ? `<div style="font-size:.78rem;color:#777;margin-top:3px">
            <i class="fas fa-user-edit mr-1"></i>${rec.aud_gatilho ? (rec.aud_gatilho.estimado ? 'Primeira alteração do ciclo por' : 'Gatilho por') : 'Última alteração por'}
@@ -880,7 +919,7 @@
           <div class="desb-periodo">
             <div>${fmtDate(rec.DataInicioExibicao)} → ${fmtDate(rec.DataFimExibicao)}${badgeDias(dias)}</div>
             ${audInfo}
-            ${window.__PODE_DESBLOQUEAR && dias !== null && dias >= 0 ? `
+            ${window.__PODE_DESBLOQUEAR && dias !== null ? `
             <div class="desb-acoes mt-2" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
               <button class="btn btn-xs btn-outline-danger"
                       onclick="window.__retirarDataFim(${rec.idEspecialidade}, '${esc(rec._posto)}', '${esc(rec.Especialidade || '')}')">
@@ -894,6 +933,77 @@
           </div>
         </div>
 
+        ${renderResumo(rec)}
+      </div>`;
+  }
+
+  // ── Resumo do agente + botões (2026-09-10) ────────────────────────────────
+  //
+  // O cartão passou a mostrar a LEITURA, não as quatro tabelas. O detalhe
+  // continua inteiro, mas dentro dos modais — foi o que o Cristiano pediu
+  // ("um botão ver auditoria, com o que está lá hoje, e outro para o formato
+  // novo, em modal, bem completo").
+  function renderResumo(rec) {
+    const r = rec.resumo || null;
+    const key = `${rec.idEspecialidade}_${rec._posto}`;
+    const btns = `
+      <div class="res-acoes">
+        <button class="btn btn-xs btn-outline-info" onclick="window.__verCobertura('${key}')">
+          <i class="fas fa-layer-group mr-1"></i>Ver cobertura do turno
+        </button>
+        <button class="btn btn-xs btn-outline-secondary" onclick="window.__verAuditoria('${key}')">
+          <i class="fas fa-search mr-1"></i>Ver auditoria
+        </button>
+      </div>`;
+
+    if (!r) {
+      return `<div class="res-box" style="border-left-color:#adb5bd">
+        <div class="res-texto text-muted">Este registro ainda não tem a leitura por turno.
+        O JSON foi gerado por uma versão anterior do ETL — o cartão volta ao normal na
+        próxima carga.</div>${btns}</div>`;
+    }
+
+    const c = Number(r.confianca) || 0;
+    const cls = c >= 85 ? 'conf-alta' : (c >= 60 ? 'conf-media' : 'conf-baixa');
+    const fat = (r.fatores || []).length
+      ? `<ul class="res-fatores mb-0 pl-3">
+           ${r.fatores.map(f => `<li>${esc(f.motivo)} <strong>(${f.peso})</strong></li>`).join('')}
+         </ul>`
+      : '<div class="res-fatores">Nada faltou: gatilho lido na auditoria, foto anterior encontrada e cobertura montada.</div>';
+
+    return `
+      <div class="res-box">
+        <div class="res-head">
+          <span class="res-titulo"><i class="fas fa-robot mr-1"></i>O que eu entendi</span>
+          <span class="res-base ${r.base === 'turno' ? '' : 'agenda'}">leitura por ${esc(r.base)}</span>
+          <span class="conf-wrap ${cls}" title="Começa em 100 e desconta o que faltou de evidência. A lista abaixo mostra cada desconto.">
+            <span class="conf-barra"><span class="conf-fill" style="width:${c}%"></span></span>
+            <span class="conf-num">${c}% de certeza</span>
+          </span>
+        </div>
+        ${frasesHtml(r)}
+        ${fat}
+        ${btns}
+      </div>`;
+  }
+
+  // Uma frase por linha lê muito melhor que o parágrafo corrido — e a frase que
+  // começa com ATENÇÃO ganha destaque, porque é a que muda decisão.
+  function frasesHtml(r) {
+    const fs = (r.frases && r.frases.length) ? r.frases : [r.texto || ''];
+    return `<div class="res-texto">${fs.map(f => {
+      const alerta = /^ATEN[ÇC][ÃA]O/i.test(f);
+      return `<div class="res-frase${alerta ? ' alerta' : ''}">${esc(f)}</div>`;
+    }).join('')}</div>`;
+  }
+
+  // conteúdo antigo, agora servido dentro do modal "Ver auditoria"
+  function blocoAuditoriaCompleto(rec) {
+    const obs    = (rec.ObservacaoDesbloqueio || '').trim();
+    const custos = renderPaineis(rec);
+    const diff = diffFlag('Permitir agendamento sem consulta anterior',
+                          rec.atual_PermitirSemConsulta, rec.hist_PermitirSemConsulta);
+    return `
         ${renderMotivo(rec)}
 
         ${obs ? `
@@ -908,8 +1018,9 @@
 
         ${diff}
         ${custos}
-      </div>`;
+    `;
   }
+
 
   // ── Render da lista ───────────────────────────────────────────────────────
 
@@ -1103,6 +1214,125 @@
   window.__getDados = () => _dados;
 
   load();
+
+  // ── Modais: auditoria e cobertura (2026-09-10) ──────────────────────────────
+  //
+  // Abrir SEMPRE por aqui. O AdminLTE não embute o Bootstrap; se o bundle não
+  // vier, $.fn.modal não existe e o clique morre calado no console, sem nada no
+  // log do servidor. Este guard avisa na tela em vez de sumir.
+  function abrirModal(id) {
+    if (window.jQuery && typeof window.jQuery.fn.modal === 'function') {
+      window.jQuery('#' + id).modal('show');
+      return true;
+    }
+    alert('A janela não abriu porque o Bootstrap não carregou nesta página. '
+        + 'Recarregue; se continuar, avise o TI.');
+    return false;
+  }
+
+  window.__verAuditoria = function(key) {
+    const rec = window.__cardData[key];
+    if (!rec) return;
+    document.getElementById('modalAudTitulo').textContent =
+      `${rec.medico || ''} — ${rec.Especialidade || ''} (posto ${rec._posto}, id ${rec.idEspecialidade})`;
+    document.getElementById('modalAudBody').innerHTML = blocoAuditoriaCompleto(rec);
+    abrirModal('modalAud');
+  };
+
+  window.__verCobertura = function(key) {
+    const rec = window.__cardData[key];
+    if (!rec) return;
+    document.getElementById('modalCobTitulo').textContent =
+      `${rec.medico || ''} — ${rec.Especialidade || ''} (posto ${rec._posto})`;
+    document.getElementById('modalCobBody').innerHTML = blocoCobertura(rec);
+    abrirModal('modalCob');
+  };
+
+  // ── Conteúdo do modal de cobertura ─────────────────────────────────────────
+  function blocoCobertura(rec) {
+    const c = rec.cobertura;
+    if (!c) {
+      return `<div class="alert alert-secondary mb-0" style="font-size:.85rem">
+        Este registro não tem leitura por turno. O JSON foi gerado por uma versão
+        anterior do ETL, ou a consulta de cobertura falhou neste posto — nesse caso
+        o número não é zero, é leitura que não houve.</div>`;
+    }
+    const carga = rec.carga_posto || {};
+    const r = rec.resumo || {};
+
+    const alerta = carga.acima_limite ? `
+      <div class="cob-alerta">
+        <i class="fas fa-exclamation-triangle mr-1"></i>
+        <strong>${esc(rec.medico || '')}</strong> soma
+        <strong>${fmtHoras(carga.horas)}</strong> por semana neste posto,
+        em ${carga.agendas} agenda(s). O limite combinado é ${carga.limite}h.
+      </div>` : '';
+
+    const vencido = rec._vencido ? `
+      <div class="cob-alerta" style="background:#fff3cd;border-color:#f0ad4e;color:#856404">
+        <i class="fas fa-clock mr-1"></i>A data fim já passou e o registro continua ativo
+        no ERP — ou seja, continua valendo e continua custando.
+      </div>` : '';
+
+    const nums = `
+      <div class="cob-num">
+        <div>Horas por semana<b>${fmtHoras(c.horas_semana)}</b></div>
+        <div>Custo deste cadastro<b>R$ ${fmtValor(c.custo_semana_registro)}</b></div>
+        <div>${esc(rec.Especialidade || '')} no posto<b>R$ ${fmtValor(c.custo_semana_especialidade)}</b></div>
+        <div>Sem este cadastro<b>R$ ${fmtValor(c.custo_semana_sem_este)}</b></div>
+        <div>Médicos na especialidade<b>${c.medicos_especialidade ?? '—'}</b></div>
+      </div>`;
+
+    const turnos = (c.turnos || []).map(t => {
+      const cabeca = `
+        <div class="cob-turno-head">
+          <span>${DIA_LABEL(t.dia)} · ${t.ini || '?'}–${t.fim || '?'}
+            <small class="text-muted">${esc(t.modalidade)}${t.horas ? ' · ' + fmtHoras(t.horas) : ''}</small></span>
+          <span class="tot">${t.n_no_turno} no turno · R$ ${fmtValor(t.custo_turno)}</span>
+        </div>`;
+      const este = `
+        <div class="cob-linha este">
+          <span>${esc(rec.medico || '')} <small class="text-muted">(este registro)</small></span>
+          <span class="val">R$ ${fmtValor(t.custo)}${t.rh ? ' · R$ ' + fmtValor(t.rh) + '/h' : ''}</span>
+        </div>`;
+      const outros = (t.acompanhantes || []).map(a => `
+        <div class="cob-linha">
+          <span>${esc(a.medico || '?')}
+            <small class="text-muted">${a.ini || '?'}–${a.fim || '?'} · id ${a.idEspecialidade}${a.data_fim ? ' · com data fim' : ''}</small></span>
+          <span class="val">R$ ${fmtValor(a.custo)}</span>
+        </div>`).join('');
+      const vazio = !(t.acompanhantes || []).length ? `
+        <div class="cob-vazio"><i class="fas fa-user-slash mr-1"></i>
+          Único médico da especialidade neste horário. Encerrar esta agenda deixa o turno descoberto.
+        </div>` : '';
+      return `<div class="cob-turno">${cabeca}${este}${outros}${vazio}</div>`;
+    }).join('');
+
+    const fatores = (r.fatores || []).length ? `
+      <div class="res-fatores mt-2">
+        <strong>Por que a certeza não é 100%:</strong>
+        <ul class="mb-0 pl-3">${r.fatores.map(f => `<li>${esc(f.motivo)} (${f.peso})</li>`).join('')}</ul>
+      </div>` : '';
+
+    return `
+      ${vencido}${alerta}
+      <div class="res-box" style="margin-top:0">
+        <div class="res-titulo mb-1"><i class="fas fa-robot mr-1"></i>Leitura por ${esc(r.base || 'turno')}
+          — ${r.confianca ?? '—'}% de certeza</div>
+        ${frasesHtml(r)}
+        ${fatores}
+      </div>
+      <hr>
+      ${nums}
+      <h6 class="text-uppercase text-muted" style="font-size:.72rem;letter-spacing:.06em">
+        Quem está no mesmo horário</h6>
+      ${turnos || '<p class="text-muted" style="font-size:.85rem">Sem dia ativo neste cadastro.</p>'}
+      <p class="text-muted mt-3 mb-0" style="font-size:.74rem">
+        Mesmo turno = começa até 1h de diferença, ou um horário cobre mais da metade do outro.
+        07–19 e 08–19 são o mesmo plantão de dia; 07–19 e 19–07 não são.</p>`;
+  }
+
+
 })();
 
 // ── Ações de desbloqueio (fora da IIFE para ser acessível via window) ────
@@ -1286,5 +1516,34 @@ function toggleHistCard(idx) {
 </script>
 
 <script src="/js/menu.js"></script>
+
+<!-- Modal: auditoria (o que a tela mostrava antes) -->
+<div class="modal fade" id="modalAud" tabindex="-1" role="dialog" aria-labelledby="modalAudTitulo" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalAudTitulo">Auditoria</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Fechar">
+          <span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body" id="modalAudBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: cobertura do turno (leitura nova) -->
+<div class="modal fade" id="modalCob" tabindex="-1" role="dialog" aria-labelledby="modalCobTitulo" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalCobTitulo">Cobertura do turno</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Fechar">
+          <span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body" id="modalCobBody"></div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

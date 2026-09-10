@@ -21,30 +21,37 @@ SELECT
     ce.Segunda,     ce.SegundaHoraInicio, ce.SegundaHoraFim,
                     ce.SegundaAlmoco,     ce.SegundaAlmocoinicio, ce.SegundaAlmocoFim,
                     ce.ValorCustoSegunda, ce.QuantidadeCustoSegunda,
+                    ce.SegundaOrdemChegada, ce.SegundaInternet, ce.SegundaTelefone,
 
     ce.Terca,       ce.TercaHoraInicio,   ce.TercaHoraFim,
                     ce.TercaAlmoco,       ce.TercaAlmocoinicio,   ce.TercaAlmocoFim,
                     ce.ValorCustoTerca,   ce.QuantidadeCustoTerca,
+                    ce.TercaOrdemChegada, ce.TercaInternet, ce.TercaTelefone,
 
     ce.Quarta,      ce.QuartaHoraInicio,  ce.QuartaHoraFim,
                     ce.QuartaAlmoco,      ce.QuartaAlmocoinicio,  ce.QuartaAlmocoFim,
                     ce.ValorCustoQuarta,  ce.QuantidadeCustoQuarta,
+                    ce.QuartaOrdemChegada, ce.QuartaInternet, ce.QuartaTelefone,
 
     ce.Quinta,      ce.QuintaHoraInicio,  ce.QuintaHoraFim,
                     ce.QuintaAlmoco,      ce.QuintaAlmocoinicio,  ce.QuintaAlmocoFim,
                     ce.ValorCustoQuinta,  ce.QuantidadeCustoQuinta,
+                    ce.QuintaOrdemChegada, ce.QuintaInternet, ce.QuintaTelefone,
 
     ce.Sexta,       ce.SextaHoraInicio,   ce.SextaHoraFim,
                     ce.SextaAlmoco,       ce.SextaAlmocoinicio,   ce.SextaAlmocoFim,
                     ce.ValorCustoSexta,   ce.QuantidadeCustoSexta,
+                    ce.SextaOrdemChegada, ce.SextaInternet, ce.SextaTelefone,
 
     ce.Sabado,      ce.SabadoHoraInicio,  ce.SabadoHoraFim,
                     ce.SabadoAlmoco,      ce.SabadoAlmocoinicio,  ce.SabadoAlmocoFim,
                     ce.ValorCustoSabado,  ce.QuantidadeCustoSabado,
+                    ce.SabadoOrdemChegada, ce.SabadoInternet, ce.SabadoTelefone,
 
     ce.Domingo,     ce.DomingoHoraInicio, ce.DomingoHoraFim,
                     ce.DomingoAlmoco,     ce.DomingoAlmocoinicio, ce.DomingoAlmocoFim,
                     ce.ValorCustoDomingo, ce.QuantidadeCustoDomingo,
+                    ce.DomingoOrdemChegada, ce.DomingoInternet, ce.DomingoTelefone,
 
     -- ── HISTÓRICO: snapshot anterior (Cad_EspecialidadeHistorico) ─────────
     h.DataHoraInclusao                           AS hist_DataHoraInclusao,

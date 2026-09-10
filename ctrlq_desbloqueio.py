@@ -17,10 +17,13 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
+import ctrlq_desbloqueio_cobertura as cob_mod
+
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 SQL_PATH     = os.path.join(BASE_DIR, "sql_ctrlq_desbloqueio", "sql_ctrlq_desbloqueio.sql")
 SQL_AUD_PATH = os.path.join(BASE_DIR, "sql_ctrlq_desbloqueio", "sql_ctrlq_desbloqueio_aud.sql")
 SQL_IRM_PATH = os.path.join(BASE_DIR, "sql_ctrlq_desbloqueio", "sql_ctrlq_desbloqueio_irmaos.sql")
+SQL_COB_PATH = os.path.join(BASE_DIR, "sql_ctrlq_desbloqueio", "sql_ctrlq_desbloqueio_cobertura.sql")
 JSON_DIR     = os.path.join(BASE_DIR, "json_ctrlq_desbloqueio")
 
 ODBC_DRIVER     = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
@@ -434,6 +437,73 @@ def merge_irmaos(rows, irmaos_map):
     return rows
 
 
+
+# ── cobertura do turno (leitura por HORÁRIO) ─────────────────────────────────
+
+def fetch_cobertura(engine, cob_sql):
+    """{parent_idEspecialidade: [agendas ativas da MESMA especialidade]}.
+
+    É o que permite dizer quem mais cobre o turno. Sem isso o cartão só sabe
+    comparar a agenda com ela mesma, que é o defeito que a tela tinha.
+    """
+    try:
+        with engine.connect() as con:
+            df = pd.read_sql_query(text(cob_sql), con)
+        result = {}
+        for r in df.to_dict(orient="records"):
+            parent = r.pop("parent_idEspecialidade", None)
+            if parent is not None:
+                result.setdefault(int(parent), []).append(normalize_row(r))
+        return result
+    except Exception as e:
+        print(f"(cobertura indisponível: {type(e).__name__})", end=" ")
+        return {}
+
+
+def merge_cobertura(rows, cob_map, hoje=None):
+    """Anexa cobertura, carga do médico no posto e o resumo em português.
+
+    Falha na cobertura NÃO derruba o registro: ele fica com cobertura vazia e o
+    resumo desconta confiança dizendo por quê (mesma regra do medico_custo —
+    posto sem leitura não pode parecer resultado).
+    """
+    hoje = hoje or datetime.now().date()
+    # universo do posto para a carga do médico: a união de todas as coberturas
+    universo, vistos = [], set()
+    for lst in (cob_map or {}).values():
+        for c in lst:
+            ide = c.get("idEspecialidade")
+            if ide not in vistos:
+                vistos.add(ide); universo.append(c)
+    for r in rows:
+        ide = r.get("idEspecialidade")
+        lista = cob_map.get(int(ide), []) if ide is not None else []
+        try:
+            df = str(r.get("DataFimExibicao") or "")[:10]
+            r["_vencido"] = bool(df) and date.fromisoformat(df) < hoje
+        except Exception:
+            r["_vencido"] = False
+        r["_dias_datafim"] = DIAS_DATAFIM_ERP
+        try:
+            c = cob_mod.montar_cobertura(r, lista)
+            base = universo if universo else lista
+            if not any(x.get("idEspecialidade") == ide for x in base):
+                base = base + [r]
+            carga = cob_mod.carga_no_posto(r, base)
+            r["cobertura"] = c
+            r["carga_posto"] = carga
+            r["resumo"] = cob_mod.montar_resumo(r, c, carga)
+        except Exception as e:
+            r["cobertura"] = None
+            r["carga_posto"] = None
+            r["resumo"] = {"texto": "Não foi possível montar a leitura por turno "
+                                    f"deste registro ({type(e).__name__}).",
+                           "frases": [], "confianca": 10,
+                           "fatores": [{"motivo": "Falha ao calcular a cobertura", "peso": -90}],
+                           "base": "erro"}
+    return rows
+
+
 # ── exportação ────────────────────────────────────────────────────────────────
 
 def main():
@@ -459,6 +529,10 @@ def main():
     if os.path.isfile(SQL_IRM_PATH):
         irm_sql = open(SQL_IRM_PATH, encoding="utf-8").read().strip()
 
+    cob_sql = ""
+    if os.path.isfile(SQL_COB_PATH):
+        cob_sql = open(SQL_COB_PATH, encoding="utf-8").read().strip()
+
     conns = build_conns_from_env()
     if not conns:
         print("ERRO: nenhuma conexão no .env"); return
@@ -482,6 +556,9 @@ def main():
             if irm_sql:
                 irmaos_map = fetch_irmaos(engine, irm_sql)
                 rows = merge_irmaos(rows, irmaos_map)
+            if cob_sql:
+                cob_map = fetch_cobertura(engine, cob_sql)
+                rows = merge_cobertura(rows, cob_map)
             por_posto[posto] = rows
             out = os.path.join(JSON_DIR, f"CTRLQ_DESBLOQUEIO_{posto}.json")
             atomic_write(out, rows)
