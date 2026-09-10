@@ -1596,3 +1596,34 @@ bruto do dict QUANTO o valor normalizado.
    preferir essa cópia. O `deploy.yml` precisa sincronizar os arquivos
    compartilhados (`wpp_cobranca_*`, `send_whatsapp_cobranca`) PARA OS
    DOIS PATHS pra evitar versões divergentes silenciosas.
+
+---
+
+## Desbloqueio CTRL-Q — leitura por HORÁRIO e o custo real do plantão (2026-09-10)
+
+Ver **[docs/2026-09-10_plantao_por_horario.md](docs/2026-09-10_plantao_por_horario.md)**
+para a investigação inteira. O essencial:
+
+- **Plantão de ordem de chegada lê-se pelo TURNO, não pelo `idEspecialidade`.**
+  O turno é fixo e os médicos passam por ele; a agenda nova de quem entrou não
+  tem "antes", e o "antes" verdadeiro é quem cobria aquele horário.
+  Plantão = OC **sem mínimo de horas** (decisão do Cristiano).
+- **`Temporario=1` é plantão avulso de um dia** e vale **30% do custo real**
+  (Realengo, clínica geral: fixo R$ 21.972/sem + avulso R$ 9.424/sem). A tela
+  antiga só via a agenda fixa e por isso subestimava em ~30%. **Não tirar o
+  avulso da conta principal.**
+- **`Cad_EspecialidadeHistorico` é foto DIÁRIA de TODAS as agendas** desde
+  dez/2022 — é com ela que se reconstrói quem cobria o turno em qualquer data.
+- **`Cad_MedicoFalta` é 98,5% feriado** (30.956 linhas até 2099 contra 468
+  faltas reais; 3 em 2026). Falta real tem `DataFalta` NULL e vive em
+  `DataHora`. **Não dá para saber se um plantonista faltou** — a régua é o
+  custo do dia contra o padrão do dia da semana.
+- **`Fin_Despesa.idEspecialidade` liga o pagamento ao cadastro do plantão** e
+  `cad_prontuario.idEspecialidade` diz por qual cadastro o paciente foi
+  atendido. É assim que se prova pagamento em dobro sem deduzir: 10 plantões,
+  R$ 10.751 em 12 meses. **Usar `ValorPago`, nunca `Valor`**, e ignorar as
+  despesas de R$ 0,01 (é o rateio quando o médico tem duas especialidades).
+- **Registro com data fim vencida continua ativo no ERP** — aparece na tela por
+  padrão e os botões funcionam nele.
+- **JS novo nessa página vai DENTRO do IIFE do script inline.** Cair em
+  `<script src>` ou depois do `})();` mata o botão sem erro em log nenhum.
