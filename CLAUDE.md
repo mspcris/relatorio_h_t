@@ -330,6 +330,34 @@ por que o médico ainda não tem PJ. Mostra a última justificativa, tem
   regra do medico_custo: falha de posto não pode parecer resultado). GET lê os
   13 postos em paralelo; posto com timeout custa ~10s à chamada.
 
+### Resumo para o avisos_gerenciais (2026-09-11)
+
+A cobrança dessa justificativa era um cartão no Tarefas ("Relatório dos médicos
+PJ" / "Relatório do CTRL-Q"); o Cristiano apagou os cartões e a cobrança virou
+indicador na home do `avisos_gerenciais` (administrativo.camim.com.br), que
+mostra o **mês anterior e o corrente** — a justificativa é mensal e morre no
+virar do mês.
+
+| Arquivo | Papel |
+|---|---|
+| `ctrlq_pj_quadro.py` | a conta da aba "Sem contrato PJ" feita no servidor |
+| `ctrlq_pj_routes.py` | `GET /api/ctrlq/pj/resumo?postos=A,C&meses=2` |
+| `nginx/teste-ia.conf` | `location = /api/ctrlq/pj/resumo` sem `auth_request` |
+
+- **Autenticação:** `Authorization: Bearer $AVISOS_API_TOKEN` (no `.env` do KPI;
+  do outro lado é `KPI_API_TOKEN`). Sem token no `.env`, essa porta não existe —
+  só a sessão do KPI, e aí vale o ACL de postos do usuário. O nginx precisa do
+  `location =` exato: o catch-all `^~ /api/` exige cookie e barraria a máquina.
+- **`ctrlq_pj_quadro.py` é cópia fiel do JS** de `ctrlq_relatorio.html` (filtro
+  de medicina alternativa, dedup por CRM dentro do posto, justificativa casada
+  por `idMedico` e, sem id, por CRM). Mudou a regra num lado, muda no outro —
+  senão a home do gestor diz 9 pendentes e o KPI diz 8, e ele para de acreditar
+  nos dois.
+- Lê a foto do CTRL-Q do disco (`json_ctrlq_relatorio/CTRLQ_RELATORIO_CONSOLIDADO.json`,
+  relido quando o ETL reescreve) e as justificativas ao vivo no SQL Server.
+  Posto que falhou vai em `erros`, nunca vira "0 pendentes".
+- Escrita continua só aqui: o avisos manda o gestor para esta página.
+
 ---
 
 ## Notas x RPS — relatório "NF emitidas × meta" no celular (2026-08-31)

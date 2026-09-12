@@ -35,11 +35,15 @@ Rotas (todas exigem sessão do KPI + posto dentro do ACL do usuário):
   GET  /api/ctrlq/pj/justificativas?postos=A,B      lista ativas (+ pode_escrever por posto)
   POST /api/ctrlq/pj/justificativas                 {posto, id_medico|crm, id_especialidade?, justificativa}
   POST /api/ctrlq/pj/justificativas/<id>/desativar  {posto}  — só o autor ou admin
+  GET  /api/ctrlq/pj/resumo?postos=A,C&meses=2      contagem por posto × competência
+                                                    (sessão do KPI ou token de máquina)
 """
 
 from __future__ import annotations
 
+import hmac
 import logging
+import os
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -56,6 +60,8 @@ from medico_novo_routes import (
     _conn_for_posto,
     _resolver_idusuario_no_posto,
 )
+
+import ctrlq_pj_quadro
 
 logger = logging.getLogger(__name__)
 
@@ -363,3 +369,81 @@ def api_desativar(jid: int):
     except pyodbc.Error as e:
         logger.exception("desativar justificativa PJ falhou (posto %s)", posto)
         return jsonify({"error": f"Erro no SQL Server do posto {posto}: {str(e)[:200]}"}), 500
+
+
+# ---------------------------------------------------------------------------
+# Resumo por posto × competência (consumido pelo avisos_gerenciais)
+# ---------------------------------------------------------------------------
+
+def _token_de_maquina() -> bool:
+    """`Authorization: Bearer $AVISOS_API_TOKEN`. Sem token no .env, ninguém entra
+    por essa porta — só a sessão do KPI."""
+    esperado = (os.getenv("AVISOS_API_TOKEN") or "").strip()
+    if not esperado:
+        return False
+    enviado = (request.headers.get("Authorization") or "").strip()
+    if enviado.lower().startswith("bearer "):
+        enviado = enviado[7:].strip()
+    return bool(enviado) and hmac.compare_digest(enviado, esperado)
+
+
+def _postos_do_resumo(acl: set | None) -> list:
+    """`?postos=A,C`. Com token, vale o que pediram; com sessão, só o ACL."""
+    pedidos = [p.strip().upper() for p in (request.args.get("postos") or "").split(",") if p.strip()]
+    pedidos = sorted({p for p in pedidos if len(p) == 1})
+    if acl is None:
+        return pedidos
+    return sorted(p for p in pedidos if p in acl) if pedidos else sorted(acl)
+
+
+@ctrlq_pj_bp.get("/api/ctrlq/pj/resumo")
+def api_resumo():
+    """Quantos médicos seguem sem contrato PJ em cada posto e quantos já foram
+    justificados no mês — a mesma conta da aba "Sem contrato PJ", feita aqui
+    para quem não é navegador (a home do avisos_gerenciais).
+
+    Um posto fora do ar entra em `erros`, nunca vira "0 pendentes" calado: a
+    home do gestor prefere dizer que não leu a dizer que está tudo certo.
+    """
+    if _token_de_maquina():
+        acl, is_admin = None, True
+    else:
+        email, acl, _login, is_admin = _sessao()
+        if not email:
+            return jsonify({"error": "unauthorized"}), 401
+
+    postos = _postos_do_resumo(acl)
+    try:
+        meses_qtd = max(1, min(12, int(request.args.get("meses") or 2)))
+    except ValueError:
+        meses_qtd = 2
+    meses = ctrlq_pj_quadro.competencias(meses_qtd)
+
+    try:
+        dados = ctrlq_pj_quadro.carregar_consolidado()
+    except ctrlq_pj_quadro.QuadroIndisponivel as e:
+        logger.warning("resumo PJ sem o JSON do CTRL-Q: %s", e)
+        return jsonify({"error": str(e)}), 503
+
+    out, erros = {}, {}
+    if postos:
+        with ThreadPoolExecutor(max_workers=min(_MAX_WORKERS, len(postos))) as pool:
+            futs = {pool.submit(_ler_posto, p, None): p for p in postos}
+            for f in as_completed(futs):
+                p = futs[f]
+                try:
+                    itens = f.result()["itens"]
+                except Exception as e:
+                    logger.warning("resumo PJ: posto %s falhou: %s", p, e)
+                    erros[p] = str(e)[:200]
+                    continue
+                out[p] = ctrlq_pj_quadro.quadro_do_posto(dados, p, meses, itens)
+
+    return jsonify({
+        "meses": meses,
+        "postos": out,
+        "erros": erros,
+        "dados_gerados_em": (dados.get("meta") or {}).get("dados_gerados_em"),
+        "gerado_em": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "is_admin": is_admin,
+    })
