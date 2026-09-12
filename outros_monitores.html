@@ -15,6 +15,10 @@
   <style>
     html { font-size: 16px; }
     body { font-family: "Source Sans Pro", system-ui, sans-serif; }
+    .ld-postos .btn-posto { width:32px; height:32px; padding:0; border-radius:50%;
+      font-weight:700; font-size:.8rem; margin-right:4px; margin-bottom:4px; }
+    .ld-postos .btn-posto.active { background:#007bff; border-color:#007bff; color:#fff; }
+    .ld-postos .btn-posto.vazio { opacity:.45; }
     .tile { border-radius:8px; padding:14px 16px; background:#fff;
             border:1px solid #e3e6ea; border-left:5px solid #0d6e9e; }
     .tile .num { font-size:1.8rem; font-weight:700; line-height:1.1; }
@@ -97,6 +101,21 @@
         </div>
         <div class="card-body">
           <div id="ldErro" class="alert alert-warning py-2" style="display:none"></div>
+
+          <!-- Posto do lead: vem de leads.filialCode, preenchido em 100% dos
+               registros. Corretor atende mais de um posto, então o vínculo do
+               corretor não serve — o do lead serve. -->
+          <div class="ld-postos mb-3" id="ldPostos">
+            <div class="btn-group btn-group-sm mr-2" role="group">
+              <button type="button" class="btn btn-outline-secondary" data-grupo="todos">Todos</button>
+              <button type="button" class="btn btn-outline-secondary" data-grupo="altamiro"
+                      title="A B G I N R X Y">Altamiro</button>
+              <button type="button" class="btn btn-outline-secondary" data-grupo="couto"
+                      title="C D J M P">Couto</button>
+            </div>
+            <span id="ldPostosBtns"></span>
+            <span class="text-muted ml-2" style="font-size:.8rem" id="ldEscopo"></span>
+          </div>
 
           <div class="row mb-3">
             <div class="col-6 col-md-3 mb-2"><div class="tile">
@@ -271,6 +290,108 @@ function chips(el, itens) {
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 
+// ── Filtro por posto ────────────────────────────────────────────────────────
+// O JSON traz as séries quebradas por posto; a rede é a soma delas. Filtrar é
+// só somar outro subconjunto — nada de ida ao servidor.
+const GRUPO_ALTAMIRO = ['A','B','G','I','N','R','X','Y'];
+const GRUPO_COUTO    = ['C','D','J','M','P'];
+let LD = null;                 // payload cru
+let LD_SEL = new Set();        // vazio = todos
+
+function ldPostos() { return (LD && LD.postos) || []; }
+
+function ldSelecionados() {
+  return LD_SEL.size ? ldPostos().filter(p => LD_SEL.has(p)) : ldPostos();
+}
+
+/** Soma as séries dos postos escolhidos, respeitando a ordem do eixo. */
+function ldSomar(mapaPorPosto, chave) {
+  const acc = new Map();
+  for (const p of ldSelecionados()) {
+    for (const x of (mapaPorPosto || {})[p] || []) {
+      acc.set(x[chave], (acc.get(x[chave]) || 0) + x.n);
+    }
+  }
+  return [...acc.entries()]
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+    .map(([k, n]) => ({ [chave]: k, n }));
+}
+
+/** Recorta o payload para os postos escolhidos. */
+function ldFiltrado() {
+  const todos = LD_SEL.size === 0;
+  if (todos) return LD;
+  const dias = ldSomar(LD.dias_posto, 'd');
+  const horas = ldSomar(LD.horas_posto, 'h');
+  const fontes = ldSomar(LD.fontes_posto, 'fonte').sort((a, b) => b.n - a.n);
+  const hoje = new Date(); const iso = dt => dt.toISOString().slice(0, 10);
+  const hojeStr = iso(hoje);
+  const ontemStr = iso(new Date(hoje.getTime() - 86400000));
+  const somaDia = alvo => dias.filter(x => x.d === alvo).reduce((a, x) => a + x.n, 0);
+  const ult = LD.ultima_hora && LD.ultima_hora.label
+    ? (horas.find(x => String(x.h).slice(-5) === LD.ultima_hora.label) || {}).n || 0
+    : 0;
+  return Object.assign({}, LD, {
+    dias, horas, fontes_hoje: fontes,
+    hoje: somaDia(hojeStr), ontem: somaDia(ontemStr),
+    ultima_hora: { label: LD.ultima_hora.label, n: ult },
+  });
+}
+
+function ldEscopoTexto() {
+  const sel = [...LD_SEL];
+  if (!sel.length) return 'todos os postos';
+  const iguais = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+  const daRede = GRUPO_ALTAMIRO.filter(p => ldPostos().includes(p));
+  const doCouto = GRUPO_COUTO.filter(p => ldPostos().includes(p));
+  if (iguais(sel, daRede)) return 'grupo Altamiro';
+  if (iguais(sel, doCouto)) return 'grupo Couto';
+  return sel.length === 1 ? ('posto ' + sel[0]) : ('postos ' + sel.sort().join(', '));
+}
+
+function ldMontarBotoes() {
+  const cont = document.getElementById('ldPostosBtns');
+  if (!cont) return;
+  // Posto sem lead nenhum no período fica apagado mas continua clicável —
+  // sumir com ele esconderia justamente a informação de que não veio lead.
+  const comLead = new Set();
+  for (const [p, linhas] of Object.entries(LD.dias_posto || {})) {
+    if ((linhas || []).some(x => x.n > 0)) comLead.add(p);
+  }
+  cont.innerHTML = ldPostos().map(p =>
+    `<button type="button" class="btn btn-outline-secondary btn-posto${comLead.has(p) ? '' : ' vazio'}"
+             data-posto="${p}" title="${comLead.has(p) ? '' : 'sem lead no período'}">${p}</button>`
+  ).join('');
+  cont.querySelectorAll('[data-posto]').forEach(b =>
+    b.addEventListener('click', () => {
+      const p = b.dataset.posto;
+      LD_SEL.has(p) ? LD_SEL.delete(p) : LD_SEL.add(p);
+      ldAplicar();
+    }));
+  document.querySelectorAll('#ldPostos [data-grupo]').forEach(b =>
+    b.addEventListener('click', () => {
+      const g = b.dataset.grupo;
+      LD_SEL = new Set(g === 'todos' ? []
+        : (g === 'altamiro' ? GRUPO_ALTAMIRO : GRUPO_COUTO).filter(p => ldPostos().includes(p)));
+      ldAplicar();
+    }));
+}
+
+function ldAplicar() {
+  document.querySelectorAll('#ldPostos [data-posto]').forEach(b =>
+    b.classList.toggle('active', LD_SEL.has(b.dataset.posto)));
+  const sel = [...LD_SEL].sort().join(',');
+  const alt = GRUPO_ALTAMIRO.filter(p => ldPostos().includes(p)).sort().join(',');
+  const cou = GRUPO_COUTO.filter(p => ldPostos().includes(p)).sort().join(',');
+  document.querySelectorAll('#ldPostos [data-grupo]').forEach(b =>
+    b.classList.toggle('active',
+      (b.dataset.grupo === 'todos' && !LD_SEL.size) ||
+      (b.dataset.grupo === 'altamiro' && sel && sel === alt) ||
+      (b.dataset.grupo === 'couto' && sel && sel === cou)));
+  document.getElementById('ldEscopo').textContent = '· ' + ldEscopoTexto();
+  desenharLeads(ldFiltrado());
+}
+
 async function carregarLeads() {
   const erroEl = document.getElementById('ldErro');
   erroEl.style.display = 'none';
@@ -280,6 +401,12 @@ async function carregarLeads() {
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { erroEl.textContent = d.error || ('Erro ' + r.status); erroEl.style.display=''; return; }
 
+  LD = d;
+  if (d.postos && d.postos.length) { ldMontarBotoes(); ldAplicar(); return; }
+  desenharLeads(d);   // JSON antigo, sem quebra por posto: página segue funcionando
+}
+
+function desenharLeads(d) {
   const g = new Date(d.gerado_em);
   document.getElementById('ldGerado').textContent =
     '· atualizado ' + (isNaN(g) ? d.gerado_em : g.toLocaleString('pt-BR').slice(0,17)) + ' (o robô passa de hora em hora)';

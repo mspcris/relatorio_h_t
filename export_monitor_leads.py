@@ -86,6 +86,35 @@ def offset_horas(cur) -> int:
     return round(delta.total_seconds() / 3600)
 
 
+# Posto do lead. Código vazio nunca some do total: vira "?" e aparece na tela,
+# senão a soma dos postos não fecharia com a rede e ninguém confiaria no número.
+POSTO_SQL = "COALESCE(NULLIF(TRIM(filialCode), ''), '?')"
+
+# Os 13 da rede. Código fora daqui existe (L, O, Q, S… com 1 lead cada, resto de
+# teste) e continua contado — só vai para o fim da barra, sem sumir do total.
+POSTOS_REDE = ["A", "N", "I", "X", "G", "Y", "B", "R", "M", "C", "D", "J", "P"]
+
+
+def _somar(linhas, chave):
+    """Colapsa a série por posto na série da rede, preservando a ordem."""
+    fora, ordem = {}, []
+    for r in linhas:
+        k = r[chave]
+        if k not in fora:
+            fora[k] = 0
+            ordem.append(k)
+        fora[k] += r["n"]
+    return [{chave: k, "n": fora[k]} for k in ordem]
+
+
+def _por_posto(linhas, chave):
+    """{posto: [{chave, n}, ...]} a partir da série quebrada."""
+    out = {}
+    for r in linhas:
+        out.setdefault(r["p"], []).append({chave: r[chave], "n": r["n"]})
+    return out
+
+
 def coletar() -> dict:
     c = conn_leads()
     try:
@@ -98,28 +127,38 @@ def coletar() -> dict:
         # interpola, e '%%' chegava literal no MySQL → todas as linhas caíam
         # num único balde de rótulo "%Y-%m-%d %H:00" (gráfico com 1 barra e
         # última hora sempre 0 — bug de 2026-08-10).
+        # As três séries saem quebradas POR POSTO e a rede é a soma delas — não
+        # duas consultas que podem discordar. `filialCode` é do próprio lead
+        # (medido em 11/09/2026: 5.632 leads em 30 dias, ZERO sem posto), então
+        # não é preciso passar pelo corretor para saber de onde o lead veio.
         cur.execute(
-            f"SELECT DATE_FORMAT({shift}, '%Y-%m-%d %H:00') h, COUNT(*) n "
+            f"SELECT DATE_FORMAT({shift}, '%Y-%m-%d %H:00') h, {POSTO_SQL} p, COUNT(*) n "
             f"FROM leads WHERE created_at >= NOW() - INTERVAL 75 HOUR "
-            f"GROUP BY 1 ORDER BY 1")
-        horas = [{"h": r["h"], "n": int(r["n"])} for r in cur.fetchall()]
+            f"GROUP BY 1, 2 ORDER BY 1")
+        horas_pp = [{"h": r["h"], "p": str(r["p"]), "n": int(r["n"])} for r in cur.fetchall()]
 
         cur.execute(
-            f"SELECT DATE({shift}) d, COUNT(*) n "
+            f"SELECT DATE({shift}) d, {POSTO_SQL} p, COUNT(*) n "
             f"FROM leads WHERE created_at >= NOW() - INTERVAL 32 DAY "
-            f"GROUP BY 1 ORDER BY 1")
-        dias = [{"d": str(r["d"]), "n": int(r["n"])} for r in cur.fetchall()]
+            f"GROUP BY 1, 2 ORDER BY 1")
+        dias_pp = [{"d": str(r["d"]), "p": str(r["p"]), "n": int(r["n"])} for r in cur.fetchall()]
 
         cur.execute(
             f"SELECT COALESCE(s.title, CONCAT('fonte #', l.leadsource_id), 'sem fonte') fonte, "
-            f"       COUNT(*) n "
+            f"       {POSTO_SQL.replace('filialCode', 'l.filialCode')} p, COUNT(*) n "
             f"FROM leads l LEFT JOIN leadsources s ON s.id = l.leadsource_id "
             f"WHERE DATE(l.created_at + INTERVAL {off} HOUR) = DATE(NOW() + INTERVAL {off} HOUR) "
-            f"GROUP BY 1 ORDER BY 2 DESC")
-        fontes = [{"fonte": str(r["fonte"]), "n": int(r["n"])} for r in cur.fetchall()]
+            f"GROUP BY 1, 2 ORDER BY 3 DESC")
+        fontes_pp = [{"fonte": str(r["fonte"]), "p": str(r["p"]), "n": int(r["n"])}
+                     for r in cur.fetchall()]
+
+        horas = _somar(horas_pp, "h")
+        dias = _somar(dias_pp, "d")
+        fontes = _somar(fontes_pp, "fonte")
     finally:
         c.close()
 
+    vistos = {r["p"] for r in dias_pp} | {r["p"] for r in horas_pp}
     hoje = date.today().isoformat()
     ontem = (date.today() - timedelta(days=1)).isoformat()
     total_hoje = sum(x["n"] for x in dias if x["d"] == hoje)
@@ -137,6 +176,12 @@ def coletar() -> dict:
         "ontem": total_ontem,
         "ultima_hora": {"label": ult[-5:], "n": n_ult},
         "fontes_hoje": fontes,
+        # Séries por posto: a página filtra sem ir ao servidor de novo.
+        "postos": ([p for p in POSTOS_REDE if p in vistos]
+                   + sorted(p for p in vistos if p not in POSTOS_REDE)),
+        "horas_posto": _por_posto(horas_pp, "h"),
+        "dias_posto": _por_posto(dias_pp, "d"),
+        "fontes_posto": _por_posto(fontes_pp, "fonte"),
     }
 
 
