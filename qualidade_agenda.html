@@ -1172,10 +1172,16 @@ async function loadDataForDate(dataRef) {
 }
 
 async function loadJsonData(dataRef) {
-    const url = dataRef
+    const base = dataRef
         ? `/json_consolidado/qualidade_agenda/${dataRef}.json`
         : '/json_consolidado/qualidade_agenda.json';
-    const r = await fetch(url);
+    // O nginx não manda Cache-Control em /json_consolidado/, então o navegador
+    // guarda o arquivo por heurística e continua mostrando a foto de ontem —
+    // aconteceu em 11/09/2026, com a tela teimando no snapshot de 09/09 mesmo
+    // depois de Ctrl+Shift+R. O snapshot por data é imutável e pode cachear;
+    // o arquivo principal muda todo dia e precisa revalidar sempre.
+    const url = dataRef ? base : `${base}?v=${Date.now()}`;
+    const r = await fetch(url, { cache: dataRef ? 'default' : 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const json = await r.json();
     allData           = json.dados           || [];
