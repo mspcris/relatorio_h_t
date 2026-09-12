@@ -262,6 +262,149 @@ def make_engine(odbc_str: str):
 # Status
 # =========================
 
+# =========================
+# Especialidade da agenda × especialidade do cad_cbos
+# =========================
+# A agenda nomeia a ÁREA ("CARDIOLOGIA"); o cad_cbos, que guarda os prazos,
+# nomeia o PROFISSIONAL ("CARDIOLOGISTA"). O join era por nome exato e acertava
+# 17 de 60: nas outras 43 o prazo vinha 0, e como calc_status manda tudo sem
+# prazo para CRITICO, o mapa de calor pintava 261 de 295 células de vermelho —
+# inclusive CLÍNICA GERAL com ZERO dia de espera. Medido em 11/09/2026; com o
+# casamento por radical o mapa vira 232 OK, 28 alerta e 35 críticos de verdade.
+#
+# Ao mexer aqui, rodar o de-para inteiro e conferir a olho: é matching por
+# aproximação, e errar o par é pior que não casar. Dois pares que JÁ deram
+# errado e por isso existem os pisos: NEUROPSICOLOGIA não pode virar
+# NEUROPEDIATRA (prefixo comum NEUROP), nem PSICOLOGIA virar PSICOPEDAGOGO.
+
+import re
+import unicodedata
+
+_STOP = {"DE", "DA", "DO", "DAS", "DOS", "E", "COM", "EM", "A", "O", "ON", "LINE"}
+
+# Sufixos que distinguem profissão de área. O radical é o que sobra.
+_SUFIXOS = [
+    ("OLOGISTAS", "OLOG"), ("OLOGISTA", "OLOG"), ("OLOGOS", "OLOG"),
+    ("OLOGOG", "OLOG"), ("OLOGO", "OLOG"), ("OLOGIA", "OLOG"),
+    ("IATRIA", "IATR"), ("IATRA", "IATR"), ("IATRICO", "IATR"), ("IATRICA", "IATR"),
+    ("ETRISTA", "ETR"), ("ETRIA", "ETR"),
+    ("TERAPEUTA", "TERAP"), ("TERAPIA", "TERAP"),
+    ("GRAFISTA", "GRAF"), ("GRAFIA", "GRAF"),
+    ("SCOPISTA", "SCOP"), ("SCOPIA", "SCOP"),
+    ("CIRURGIAO", "CIRURG"), ("CIRURGICO", "CIRURG"), ("CIRURGIA", "CIRURG"),
+    ("CLINICO", "CLINIC"), ("CLINICA", "CLINIC"),
+    ("MEDICO", "MEDIC"), ("MEDICINA", "MEDIC"),
+    ("OBSTETRICIA", "OBSTETR"), ("OBSTETRA", "OBSTETR"), ("OBSTETRICO", "OBSTETR"),
+    ("NUTRICIONISTA", "NUTRIC"), ("NUTRICAO", "NUTRIC"),
+    ("PLASTICO", "PLASTIC"), ("PLASTICA", "PLASTIC"),
+    ("PEDAGOGIA", "PEDAGOG"), ("PEDAGOGO", "PEDAGOG"),
+    ("HOMEOPATIA", "HOMEOPAT"), ("HOMEOPATA", "HOMEOPAT"),
+    ("ISTA", ""), ("ISTAS", ""),
+]
+
+
+def _sem_acento(t):
+    return "".join(c for c in unicodedata.normalize("NFD", t)
+                   if unicodedata.category(c) != "Mn")
+
+
+def radical(token):
+    t = token
+    for suf, troca in _SUFIXOS:
+        # `>=` e não `>`: quando o token INTEIRO é o sufixo (NUTRICAO,
+        # CIRURGIA, CLINICA, MEDICINA, OBSTETRICIA) a regra também vale.
+        if t.endswith(suf) and len(t) >= len(suf):
+            return t[: -len(suf)] + troca
+    return t
+
+
+def tokens(nome):
+    t = _sem_acento(str(nome or "")).upper()
+    t = t.replace("-", "")   # ULTRA-SONOGRAFISTA e uma palavra so
+    t = re.sub(r"SS", "S", t)          # ULTRASSONOGRAFIA ≈ ULTRA-SONOGRAFISTA
+    t = re.sub(r"[^A-Z0-9 ]+", " ", t)
+    partes = [p for p in t.split() if p and p not in _STOP]
+    return [radical(p) for p in partes]
+
+
+def _prefixo_comum(a, b):
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n
+
+
+def _casa_token(a, b, minimo=5, minimo_prefixo=9):
+    """Dois radicais são o mesmo se um é prefixo do outro (ALERG ⊂ ALERGOLOG)
+    ou se compartilham prefixo longo (HOMEOPATIA ≈ HOMEOPATA).
+
+    O piso alto no prefixo comum é o que separa NEUROPSICOLOG de NEUROPEDIATR
+    (comum = NEUROP, 6) e PSICOLOG de PSICOPEDAGOG (comum = PSICO, 5) — esses
+    NÃO podem casar, são especialidades diferentes. Com 6 o matcher pôs
+    NEUROPSICOLOGIA em NEUROPEDIATRA.
+    """
+    if a == b:
+        return True
+    curto, longo = (a, b) if len(a) <= len(b) else (b, a)
+    if len(curto) >= minimo and longo.startswith(curto):
+        return True
+    return _prefixo_comum(a, b) >= minimo_prefixo
+
+
+def _peso(x, lista):
+    """1.0 quando o radical é idêntico, 0.85 quando só se parece.
+
+    Sem isso, NEUROPSICOLOGIA empatava 1.0 com NEUROPSICÓLOGO (igual) e
+    NEUROPEDIATRA (parecido), e o desempate por nome mais curto escolhia o
+    errado. Igualdade tem que valer mais que semelhança.
+    """
+    if any(x == y for y in lista):
+        return 1.0
+    return 0.85 if any(_casa_token(x, y) for y in lista) else 0.0
+
+
+def pontua(ag, cb):
+    """0..1 — quanto os dois nomes descrevem a mesma coisa."""
+    if not ag or not cb:
+        return 0.0
+    casados = sum(_peso(x, cb) for x in ag)
+    casados_inv = sum(_peso(y, ag) for y in cb)
+    # penaliza sobra dos dois lados: "NEFROLOGIA" não deve virar
+    # "ENFERMEIRO NEFROLOGISTA" quando existe "NEFROLOGISTA"
+    return (casados + casados_inv) / (len(ag) + len(cb))
+
+
+_CACHE_CASAMENTO = {}
+
+
+def casar_cbos(especialidade, cbos_map):
+    """Chave do cad_cbos para esta especialidade de agenda, ou None.
+
+    Com cache: são 295 linhas para ~60 especialidades distintas, e cada
+    resolução varre as 158 chaves do cad_cbos.
+    """
+    if especialidade in _CACHE_CASAMENTO:
+        return _CACHE_CASAMENTO[especialidade]
+    chave, _score = casar(especialidade, cbos_map)
+    _CACHE_CASAMENTO[especialidade] = chave
+    return chave
+
+
+def casar(especialidade, chaves_cbos, minimo=0.6):
+    """Devolve (chave_do_cbos, score) ou (None, 0.0) se nada for bom o bastante."""
+    if especialidade in chaves_cbos:
+        return especialidade, 1.0
+    ag = tokens(especialidade)
+    melhor, melhor_score = None, 0.0
+    for chave in chaves_cbos:
+        s = pontua(ag, tokens(chave))
+        if s > melhor_score or (s == melhor_score and melhor and len(chave) < len(melhor)):
+            melhor, melhor_score = chave, s
+    return (melhor, melhor_score) if melhor_score >= minimo else (None, melhor_score)
+
+
 def calc_status(dias, prazo_ans: int, prazo_camim: int) -> str:
     """
     SEM_VAGA  → sem data de próxima vaga
@@ -269,6 +412,11 @@ def calc_status(dias, prazo_ans: int, prazo_camim: int) -> str:
     ALERTA    → dias <= prazo_camim (além do ANS mas dentro do prazo CAMIM)
     CRITICO   → além de ambos os prazos
     """
+    if prazo_ans <= 0 and prazo_camim <= 0:
+        # Sem prazo cadastrado não dá para dizer se está no prazo. Antes isto
+        # caía em CRITICO e virava alarme falso; agora tem cor própria (cinza)
+        # e sai da conta de crítico — é pendência de CADASTRO, não de agenda.
+        return "SEM_PRAZO"
     if dias is None:
         return "SEM_VAGA"
     if prazo_ans > 0 and dias <= prazo_ans:
@@ -410,7 +558,10 @@ def run():
                     pass
 
             esp        = str(d.get("Especialidade") or "").strip().upper()
-            cbos_info  = cbos_map.get(esp, {"prazoconsultaans": 0, "prazoconsultacamim": 0, "ValorPMinimoVagaDisponivel": 0.0})
+            chave_cbos = casar_cbos(esp, cbos_map)
+            cbos_info  = cbos_map.get(chave_cbos or esp,
+                                      {"prazoconsultaans": 0, "prazoconsultacamim": 0,
+                                       "ValorPMinimoVagaDisponivel": 0.0})
             prazo_ans  = cbos_info["prazoconsultaans"]
             prazo_cam  = cbos_info["prazoconsultacamim"]
             status     = calc_status(dias, prazo_ans, prazo_cam)
@@ -432,6 +583,7 @@ def run():
                 "QuantidadeReservaDias":                              _safe_int(d.get("QuantidadeReservaDias")),
                 "CapacidadeConsiderada":                              _safe_int(d.get("CapacidadeConsiderada")),
                 "QuantidadeVagasTotalMedicosAtendemIncluindoReserva": _safe_int(d.get("QuantidadeVagasTotalMedicosAtendemIncluindoReserva")),
+                "cbos_casado":       chave_cbos,
                 "prazoconsultaans":  prazo_ans,
                 "prazoconsultacamim": prazo_cam,
                 "Status":            status,

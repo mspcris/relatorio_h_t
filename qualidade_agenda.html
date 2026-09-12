@@ -75,6 +75,9 @@
         .badge-ok      { background: var(--ok);      color: #fff; display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 0.78rem; font-weight: 700; }
         .badge-alerta  { background: var(--alerta);  color: #fff; display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 0.78rem; font-weight: 700; }
         .badge-critico { background: var(--critico); color: #fff; display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 0.78rem; font-weight: 700; animation: pulse-badge 1.5s infinite; }
+        /* Especialidade sem prazo cadastrado no cad_cbos: não dá para dizer se
+           está no prazo, então não pode usar a cor de quem está fora dele. */
+        .badge-sem-prazo { background: #adb5bd; color: #fff; display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 0.78rem; font-weight: 700; }
         .badge-sem-vaga{ background: var(--neutro);  color: #fff; display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 0.78rem; font-weight: 700; }
 
         @keyframes pulse-badge {
@@ -189,6 +192,7 @@
         .hm-cell-ok      { background: var(--ok-bg);      border-left: 3px solid var(--ok); }
         .hm-cell-alerta  { background: var(--alerta-bg);  border-left: 3px solid var(--alerta); }
         .hm-cell-critico { background: var(--critico-bg); border-left: 3px solid var(--critico); }
+        .hm-cell-sem-prazo { background: #f1f3f5; border-left: 3px solid #adb5bd; color: #6c757d; }
         .hm-cell-none    { background: #f8f9fa; color: #adb5bd; }
         .hm-dias  { font-size: 1.3rem; font-weight: 700; line-height: 1.1; }
         .hm-date  { font-size: 0.68rem; color: #666; margin-top: 1px; }
@@ -570,7 +574,8 @@
                                 Células coloridas: <span class="badge-ok">OK</span> dentro do prazo ANS &nbsp;
                                 <span class="badge-alerta">ALERTA</span> dentro do prazo CAMIM &nbsp;
                                 <span class="badge-critico">CRITICO</span> acima do prazo &nbsp;
-                                <span class="badge-sem-vaga">SEM VAGA</span> sem disponibilidade.
+                                <span class="badge-sem-vaga">SEM VAGA</span> sem disponibilidade &nbsp;
+                                <span class="badge-sem-prazo">SEM PRAZO</span> especialidade sem prazo no cad_cbos — não dá para avaliar.
                                 Passe o mouse para ver detalhes.
                             </p>
                             <div class="hm-wrap" id="heatmapContainer">
@@ -653,6 +658,7 @@
                                     <option value="CRITICO">Apenas Críticos</option>
                                     <option value="SEM_VAGA">Apenas Sem Vaga</option>
                                     <option value="ALERTA">Apenas Alerta</option>
+                                    <option value="SEM_PRAZO">Sem prazo cadastrado</option>
                                     <option value="OK">Apenas OK</option>
                                 </select>
                                 <label class="ml-3">Ordenar por:</label>
@@ -1072,15 +1078,18 @@ function statusBadgeHtml(status) {
     const cls = status === 'OK' ? 'badge-ok'
               : status === 'ALERTA' ? 'badge-alerta'
               : status === 'CRITICO' ? 'badge-critico'
+              : status === 'SEM_PRAZO' ? 'badge-sem-prazo'
               : 'badge-sem-vaga';
-    const label = status === 'SEM_VAGA' ? 'SEM VAGA' : status;
+    const label = status === 'SEM_VAGA' ? 'SEM VAGA'
+                : status === 'SEM_PRAZO' ? 'SEM PRAZO' : status;
     return `<span class="${cls}">${label}</span>`;
 }
 
 function statusHmClass(status) {
-    return status === 'OK'     ? 'hm-cell-ok'
-         : status === 'ALERTA' ? 'hm-cell-alerta'
-         : status === 'CRITICO'? 'hm-cell-critico'
+    return status === 'OK'      ? 'hm-cell-ok'
+         : status === 'ALERTA'    ? 'hm-cell-alerta'
+         : status === 'CRITICO'   ? 'hm-cell-critico'
+         : status === 'SEM_PRAZO' ? 'hm-cell-sem-prazo'
          : 'hm-cell-none';
 }
 
@@ -1096,9 +1105,10 @@ function diasColor(dias) {
 }
 
 function statusColor(status) {
-    return status === 'OK'     ? '#28a745'
-         : status === 'ALERTA' ? '#fd7e14'
-         : status === 'CRITICO'? '#dc3545'
+    return status === 'OK'      ? '#28a745'
+         : status === 'ALERTA'    ? '#fd7e14'
+         : status === 'CRITICO'   ? '#dc3545'
+         : status === 'SEM_PRAZO' ? '#adb5bd'
          : '#6c757d';
 }
 
@@ -1283,6 +1293,8 @@ function renderSummary(data) {
     if (!total) return;
     const ok      = data.filter(d => d.Status === 'OK').length;
     const alerta  = data.filter(d => d.Status === 'ALERTA').length;
+    // SEM_PRAZO fica FORA: é falha de cadastro, não agenda estourada. Contar
+    // junto era o que fazia o painel mostrar 261 críticos onde havia 35.
     const critico = data.filter(d => d.Status === 'CRITICO' || d.Status === 'SEM_VAGA').length;
 
     const pctOk       = (ok / total * 100).toFixed(1);
