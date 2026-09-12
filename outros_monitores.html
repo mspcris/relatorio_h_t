@@ -298,10 +298,15 @@ const GRUPO_COUTO    = ['C','D','J','M','P'];
 let LD = null;                 // payload cru
 let LD_SEL = new Set();        // vazio = todos
 
+// Postos de atendimento (os 13) — o que a barra mostra.
 function ldPostos() { return (LD && LD.postos) || []; }
+// Unidades internas (Laboratório, Operadora…) e códigos órfãos: entram no total
+// mas não merecem um botão cada.
+function ldOutros() { return (LD && LD.postos_outros) || []; }
+function ldTodos() { return ldPostos().concat(ldOutros()); }
 
 function ldSelecionados() {
-  return LD_SEL.size ? ldPostos().filter(p => LD_SEL.has(p)) : ldPostos();
+  return LD_SEL.size ? ldTodos().filter(p => LD_SEL.has(p)) : ldTodos();
 }
 
 /** Soma as séries dos postos escolhidos, respeitando a ordem do eixo. */
@@ -346,6 +351,8 @@ function ldEscopoTexto() {
   const doCouto = GRUPO_COUTO.filter(p => ldPostos().includes(p));
   if (iguais(sel, daRede)) return 'grupo Altamiro';
   if (iguais(sel, doCouto)) return 'grupo Couto';
+  if (iguais(sel, ldOutros().filter(p => sel.includes(p))) && sel.every(p => ldOutros().includes(p)))
+    return 'unidades internas (' + sel.sort().join(', ') + ') — não são postos';
   return sel.length === 1 ? ('posto ' + sel[0]) : ('postos ' + sel.sort().join(', '));
 }
 
@@ -362,6 +369,20 @@ function ldMontarBotoes() {
     `<button type="button" class="btn btn-outline-secondary btn-posto${comLead.has(p) ? '' : ' vazio'}"
              data-posto="${p}" title="${comLead.has(p) ? '' : 'sem lead no período'}">${p}</button>`
   ).join('');
+  // Um botão só para as unidades internas, e apenas se tiverem lead.
+  const outrosComLead = ldOutros().filter(p => comLead.has(p));
+  if (outrosComLead.length) {
+    cont.insertAdjacentHTML('beforeend',
+      `<button type="button" class="btn btn-outline-secondary btn-sm ml-1" id="ldBtnOutras"
+               style="border-radius:14px;font-size:.75rem"
+               title="Unidades internas, não são postos de atendimento: ${outrosComLead.join(', ')}">
+         Outras (${outrosComLead.length})</button>`);
+    document.getElementById('ldBtnOutras').addEventListener('click', () => {
+      const todasDentro = outrosComLead.every(p => LD_SEL.has(p));
+      outrosComLead.forEach(p => todasDentro ? LD_SEL.delete(p) : LD_SEL.add(p));
+      ldAplicar();
+    });
+  }
   cont.querySelectorAll('[data-posto]').forEach(b =>
     b.addEventListener('click', () => {
       const p = b.dataset.posto;
@@ -372,7 +393,7 @@ function ldMontarBotoes() {
     b.addEventListener('click', () => {
       const g = b.dataset.grupo;
       LD_SEL = new Set(g === 'todos' ? []
-        : (g === 'altamiro' ? GRUPO_ALTAMIRO : GRUPO_COUTO).filter(p => ldPostos().includes(p)));
+        : (g === 'altamiro' ? GRUPO_ALTAMIRO : GRUPO_COUTO).filter(p => ldTodos().includes(p)));
       ldAplicar();
     }));
 }
@@ -380,6 +401,8 @@ function ldMontarBotoes() {
 function ldAplicar() {
   document.querySelectorAll('#ldPostos [data-posto]').forEach(b =>
     b.classList.toggle('active', LD_SEL.has(b.dataset.posto)));
+  const btnOutras = document.getElementById('ldBtnOutras');
+  if (btnOutras) btnOutras.classList.toggle('active', ldOutros().some(p => LD_SEL.has(p)));
   const sel = [...LD_SEL].sort().join(',');
   const alt = GRUPO_ALTAMIRO.filter(p => ldPostos().includes(p)).sort().join(',');
   const cou = GRUPO_COUTO.filter(p => ldPostos().includes(p)).sort().join(',');

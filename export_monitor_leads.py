@@ -90,8 +90,13 @@ def offset_horas(cur) -> int:
 # senão a soma dos postos não fecharia com a rede e ninguém confiaria no número.
 POSTO_SQL = "COALESCE(NULLIF(TRIM(filialCode), ''), '?')"
 
-# Os 13 da rede. Código fora daqui existe (L, O, Q, S… com 1 lead cada, resto de
-# teste) e continua contado — só vai para o fim da barra, sem sumir do total.
+# Os 13 postos de atendimento. O critério não é opinião: em cad_endereco eles
+# são os únicos com AtendimentoAtivoPosto = 1. Os outros códigos que aparecem em
+# leads.filialCode são unidades internas criadas para resolver problema de
+# sistema — L Laboratório, O Operadora Camim, S Operadora SDM, V Oftalmo Vision,
+# Z Resgate Camim — e Q, T, U, W, que nem existem no cadastro. Juntos deram 9
+# leads em 30 dias (1 cada). Ficam fora da barra, agrupados em "Outras", mas
+# CONTINUAM no total: número que não fecha derruba a confiança na página.
 POSTOS_REDE = ["A", "N", "I", "X", "G", "Y", "B", "R", "M", "C", "D", "J", "P"]
 
 
@@ -177,8 +182,8 @@ def coletar() -> dict:
         "ultima_hora": {"label": ult[-5:], "n": n_ult},
         "fontes_hoje": fontes,
         # Séries por posto: a página filtra sem ir ao servidor de novo.
-        "postos": ([p for p in POSTOS_REDE if p in vistos]
-                   + sorted(p for p in vistos if p not in POSTOS_REDE)),
+        "postos": [p for p in POSTOS_REDE if p in vistos],
+        "postos_outros": sorted(p for p in vistos if p not in POSTOS_REDE),
         "horas_posto": _por_posto(horas_pp, "h"),
         "dias_posto": _por_posto(dias_pp, "d"),
         "fontes_posto": _por_posto(fontes_pp, "fonte"),
