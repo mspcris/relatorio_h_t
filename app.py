@@ -175,6 +175,8 @@ _TEMPLATE_TO_PAGINA = {
     "medicos.html":                     "medicos",
     "kpi_medicos.html":                 "medicos",
     "ctrlq_relatorio.html":             "ctrlq_relatorio",
+    "ctrlq_pj":                         "ctrlq_relatorio",
+    "/ctrlq_pj":                        "ctrlq_relatorio",
     "kpi_v2.html":                      "kpi_v2",
     "kpi_vendas.html":                  "kpi_vendas",
     "clientes.html":                    "clientes",
@@ -1181,6 +1183,34 @@ def r_tef_logs():
 @app.get('/chat_avaliacoes')
 def r_chat_avaliacoes():
     return render_protected_page("chat_avaliacoes.html")
+
+@app.get('/ctrlq_pj')
+def r_ctrlq_pj():
+    """Atalho para a cobrança de contrato PJ — abre o KPI Médicos (Qualidade)
+    com o modal "Contrato PJ" já aberto.
+
+    Existe para ser LINKADO DE FORA (o cartão "Médicos ainda não PJ" do
+    avisos_gerenciais manda o gestor para cá justificar). O modal vivia só
+    dentro de ctrlq_relatorio.html, atrás de dois cliques, e não tinha
+    endereço próprio.
+
+    Parâmetros (todos opcionais, lidos pelo JS da página):
+        posto / postos  letra ou lista (A, ou A,C,G)
+        comp            competência da cobrança (AAAA-MM); padrão = mês de hoje
+        pendentes=1     abre já filtrado em quem falta justificar
+        q               busca por nome, CRM ou especialidade
+        aba             'sem' (padrão) ou 'com'
+        ym              mês do KPI; padrão = último mês do JSON
+
+    A página é a mesma, então o controle de acesso é o do ctrlq_relatorio, e
+    posto fora do ACL do usuário é ignorado pelo JS — a URL não dá acesso a
+    nada que a pessoa já não pudesse ver.
+    """
+    resp = make_response(render_protected_page("ctrlq_relatorio.html"))
+    # Sem cache: o link é usado para conferir a cobrança do dia.
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
 
 @app.get('/ctrlq_desbloqueio')
 def r_ctrlq_desbloqueio():

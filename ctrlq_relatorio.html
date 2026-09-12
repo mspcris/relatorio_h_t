@@ -2103,11 +2103,72 @@ setPickerYM('#to2', DEF_TO);
             updatePareto(document.querySelector('#paretoMonthSel').value);
           });
 
+          // Abre o modal de Contrato PJ direto pela URL (link vindo de fora).
+          abrirPjPelaUrl();
+
         } catch (e) {
           console.error(e);
           if (err) err.textContent = 'Erro: ' + (e.message || e);
         }
       });
+
+      /**
+       * Abre o modal "Contrato PJ" a partir da querystring, para que outros
+       * sistemas linkem direto para a cobrança de um posto (o cartão
+       * "Médicos ainda não PJ" do avisos_gerenciais, por exemplo).
+       *
+       *   /ctrlq_pj                       → todos os postos, competência de hoje
+       *   /ctrlq_pj?posto=A               → só o posto A
+       *   /ctrlq_pj?postos=A,C,G          → vários
+       *   /ctrlq_pj?comp=2026-09          → competência da cobrança
+       *   /ctrlq_pj?pendentes=1           → já filtrado em quem falta justificar
+       *   /ctrlq_pj?q=52623350            → busca por nome, CRM ou especialidade
+       *   /ctrlq_pj?aba=com               → abre na aba "Com contrato PJ"
+       *
+       * Sem `pj` na URL não faz nada — a página abre normal.
+       * Posto fora do ACL do usuário é ignorado (o filtro do KPI manda, não a URL).
+       */
+      function abrirPjPelaUrl() {
+        const p = new URLSearchParams(location.search);
+        const querAbrir = p.has('pj') || p.has('posto') || p.has('postos') ||
+                          p.has('comp') || p.has('aba');
+        if (!querAbrir) return;
+
+        // postos: valida contra o que o usuário pode ver. Nenhum válido → Todos.
+        const pedidos = (p.get('postos') || p.get('posto') || '')
+          .split(/[,+ ]+/).map(v => v.trim().toUpperCase()).filter(Boolean);
+        const validos = pedidos.filter(v => POSTOS.includes(v));
+        const selection = validos.length ? new Set(validos) : 'ALL';
+
+        // mês do KPI: o card usa o último mês fechado do JSON.
+        const ymPedido = (p.get('ym') || '').trim();
+        const ymUsar = MESES.includes(ymPedido) ? ymPedido : MESES[MESES.length - 1];
+
+        const aba = (p.get('aba') || 'sem').toLowerCase() === 'com' ? 'com' : 'sem';
+        openPjModal({ ym: ymUsar, selection, tab: aba });
+
+        // Depois de aberto: competência, "só pendentes" e busca.
+        // openPjModal já escolheu a competência de hoje; `comp` na URL manda.
+        const comp = (p.get('comp') || '').trim();
+        const selComp = document.querySelector('#pjComp');
+        if (comp && selComp && [...selComp.options].some(o => o.value === comp)) {
+          selComp.value = comp;
+          PJ.comp = comp;
+        }
+        const soPend = document.querySelector('#pjSoPend');
+        if (soPend && ['1', 'true', 'sim'].includes((p.get('pendentes') || '').toLowerCase())) {
+          soPend.checked = true;
+        }
+        const busca = document.querySelector('#pjSearch');
+        if (busca && p.get('q')) busca.value = p.get('q');
+        renderPj();
+
+        // Mantém a barra do navegador com a URL que a pessoa recebeu, mas
+        // limpa ao fechar o modal — senão recarregar a página reabre sozinho.
+        $('#pjModal').one('hidden.bs.modal', () => {
+          history.replaceState(null, '', location.pathname);
+        });
+      }
 
       function renderSel2() {
         const months = mesesSel('#from2', '#to2');
