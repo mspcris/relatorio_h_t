@@ -285,15 +285,18 @@ def api_leads():
         logger.warning("monitor de leads indisponível: %s", e)
         return jsonify({"error": f"monitor_leads.json indisponível: {str(e)[:120]}"}), 503
 
-    # O dia de referência é o da PRÓPRIA FOTO, não o relógio do servidor: o robô
-    # roda de hora em hora, então entre a meia-noite e a primeira rodada do dia
-    # "hoje" pelo relógio seria zero — e a lista de fontes, que veio na foto,
-    # continuaria mostrando os leads de ontem. Dois números discordando na
-    # mesma tela (visto às 00:02 de 12/09/2026).
+    # Virou o dia, o contador ZERA — e o que veio na foto de ontem vira "ontem".
+    # O robô roda de hora em hora; entre a meia-noite e a primeira rodada não
+    # existe leitura do dia novo. Mostrar a foto de ontem como se fosse de hoje
+    # trava o gestor num número velho (e, pior, dava "0 hoje" com a lista de
+    # fontes de ontem somando 22 na mesma tela — visto às 00:02 de 12/09/2026).
+    # Então: dia novo começa zerado, e a tela diz que está esperando a leitura.
     try:
-        referencia = date.fromisoformat(str(d.get("gerado_em"))[:10])
+        foto = date.fromisoformat(str(d.get("gerado_em"))[:10])
     except ValueError:
-        referencia = date.today()
+        foto = date.today()
+    referencia = date.today()
+    aguardando = foto < referencia
     hoje = referencia.isoformat()
     ontem = (referencia - timedelta(days=1)).isoformat()
     dias_posto = d.get("dias_posto") or {}
@@ -309,19 +312,22 @@ def api_leads():
         fechados = [x for x in serie if x.get("d") != hoje][-30:]
         total = sum(x.get("n", 0) for x in fechados)
         saida[posto] = dict(
-            hoje=sum(x.get("n", 0) for x in serie if x.get("d") == hoje),
+            # Sem leitura do dia novo, hoje é 0 de verdade — não é o de ontem
+            hoje=0 if aguardando else sum(x.get("n", 0) for x in serie if x.get("d") == hoje),
             ontem=sum(x.get("n", 0) for x in serie if x.get("d") == ontem),
             media30=round(total / len(fechados), 1) if fechados else 0,
             dias_considerados=len(fechados),
             ultima_hora=sum(x.get("n", 0) for x in (horas_posto.get(posto) or [])
                             if x.get("h") == balde),
-            fontes_hoje=sorted(
+            # As fontes vieram da foto: se a foto é de ontem, elas são de ontem
+            fontes_hoje=[] if aguardando else sorted(
                 ({"fonte": x.get("fonte"), "n": x.get("n", 0)} for x in (fontes_posto.get(posto) or [])),
                 key=lambda x: -x["n"]),
             por_dia=[{"d": x.get("d"), "n": x.get("n", 0)} for x in serie[-14:]],
         )
 
     return jsonify({
-        "postos": saida, "hora": ultima_hora, "dia": hoje,
+        "postos": saida, "hora": "" if aguardando else ultima_hora, "dia": hoje,
+        "aguardando": aguardando, "foto": foto.isoformat(),
         "gerado_em": d.get("gerado_em"),
     })
