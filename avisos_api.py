@@ -8,12 +8,17 @@ aqui é o token.
 
   GET /api/avisos/notas?postos=A,C[&ym=2026-09]   NF emitidas × meta do mês
   GET /api/avisos/metas?postos=A,C[&ym=2026-09]   mensalidades e vendas × meta
+  GET /api/avisos/robos?postos=A,C                robôs do posto e há quanto tempo pararam
+  GET /api/avisos/leads?postos=A,C                leads criados hoje, ontem e a média de 30d
 
-Nenhum dos dois recalcula regra de negócio: as notas saem do
-`relatorio_nf.carregar_dados` (o mesmo agregado do relatório "NF emitidas ×
-meta" que vai por zap, modo Clínicas, % sobre as CONTABILIZADAS) e as metas de
-mensalidade/venda saem do JSON do `export_metas.py`, somando os dias. Se a
-régua mudar lá, muda aqui junto — não existe segunda verdade.
+Nenhuma delas recalcula regra de negócio; todas leem o que o KPI já produziu:
+as notas saem do `relatorio_nf.carregar_dados` (o mesmo agregado do relatório
+"NF emitidas × meta" que vai por zap, modo Clínicas, % sobre as
+CONTABILIZADAS); as metas somam os dias do JSON do `export_metas.py`; os robôs
+saem do `indicadores_painel.json` com a mesma régua de dias da página
+monitorarrobos.html; os leads, do `monitor_leads.json` do robô que roda de hora
+em hora. Se a régua mudar lá, muda aqui junto — não pode existir uma segunda
+verdade sobre o mesmo número.
 """
 
 from __future__ import annotations
@@ -22,7 +27,7 @@ import hmac
 import json
 import logging
 import os
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, jsonify, request
 
@@ -168,4 +173,146 @@ def api_metas():
     return jsonify({
         "ym": ym, "dia": dia_corrente, "dias_no_mes": dias_no_mes,
         "postos": saida, "erros": erros,
+    })
+
+
+# ── Monitor de robôs ────────────────────────────────────────────────────────
+# Mesma leitura da página monitorarrobos.html: o JSON pré-agregado
+# (indicadores_painel.json, cron de 5 em 5 min) e a régua de dias sem rodar.
+# Régua copiada do diasParaStatus() da página — mudar nos DOIS.
+
+PAINEL_JSON = os.getenv("INDICADORES_PAINEL_JSON",
+                        "/opt/relatorio_h_t/json_consolidado/indicadores_painel.json")
+STATUS_POR_DIA = {0: "otimo", 1: "bom", 2: "ok", 3: "ruim", 4: "pessimo"}
+# Ordem do pior para o melhor: é assim que o gestor quer ler a lista
+ORDEM_STATUS = ("horrivel", "pessimo", "ruim", "ok", "bom", "otimo")
+ROTULO_STATUS = {"otimo": "Ótimo", "bom": "Bom", "ok": "Ok", "ruim": "Ruim",
+                 "pessimo": "Péssimo", "horrivel": "Horrível"}
+
+
+def _dias_desde(texto: str | None) -> int:
+    """Dias inteiros desde o último envio. Sem data = 999 (nunca rodou)."""
+    if not texto:
+        return 999
+    try:
+        quando = datetime.fromisoformat(str(texto).replace(" ", "T")[:19])
+    except ValueError:
+        return 999
+    return max((date.today() - quando.date()).days, 0)
+
+
+def _status(dias: int) -> str:
+    return STATUS_POR_DIA.get(dias, "horrivel")
+
+
+def _robos_do_painel(painel: dict) -> list[dict]:
+    """Normaliza as quatro famílias (push, e-mail, TEF, WhatsApp) numa lista só."""
+    ind = painel.get("indicadores") or {}
+    robos = []
+
+    for posto, item in (ind.get("push") or {}).items():
+        robos.append(dict(familia="Push", nome="Push Cobrança", posto=posto,
+                          ultimo=item.get("ultimo_envio")))
+
+    for item in ((ind.get("email") or {}).get("data") or {}).values():
+        robos.append(dict(familia="E-mail", nome=item.get("categoria") or "E-mail",
+                          posto=item.get("posto"), ultimo=item.get("ultimo_envio")))
+
+    for item in ((ind.get("tef") or {}).get("data") or {}).values():
+        robos.append(dict(familia="TEF", nome="TEF Recorrente",
+                          posto=item.get("posto"), ultimo=item.get("ultimo_tef")))
+
+    for campanha in (ind.get("wpp") or []):
+        for posto, item in (campanha.get("postos") or {}).items():
+            robos.append(dict(familia="WhatsApp", nome=campanha.get("nome") or "WhatsApp",
+                              posto=posto, ultimo=item.get("ultimo_envio")))
+
+    for r in robos:
+        r["dias"] = _dias_desde(r["ultimo"])
+        r["status"] = _status(r["dias"])
+    return robos
+
+
+@avisos_bp.get("/api/avisos/robos")
+def api_robos():
+    """Robôs do posto: quantos rodaram hoje e quais estão parados, com há
+    quantos dias. Parado é o que importa — por isso a lista vem do pior."""
+    if not token_de_maquina():
+        return jsonify({"error": "unauthorized"}), 401
+    postos = _postos_pedidos()
+    try:
+        with open(PAINEL_JSON, encoding="utf-8") as f:
+            painel = json.load(f)
+    except (OSError, ValueError) as e:
+        logger.warning("monitor de robôs indisponível: %s", e)
+        return jsonify({"error": f"indicadores_painel.json indisponível: {str(e)[:120]}"}), 503
+
+    saida = {}
+    for r in _robos_do_painel(painel):
+        if not r["posto"] or (postos and r["posto"] not in postos):
+            continue
+        posto = saida.setdefault(r["posto"], dict(robos=[], total=0, parados=0, contagem={}))
+        posto["robos"].append(r)
+        posto["total"] += 1
+        posto["parados"] += int(r["dias"] >= 1)
+        posto["contagem"][r["status"]] = posto["contagem"].get(r["status"], 0) + 1
+    for posto in saida.values():
+        posto["robos"].sort(key=lambda r: (-r["dias"], r["nome"]))
+
+    return jsonify({"postos": saida, "rotulos": ROTULO_STATUS,
+                    "gerado_em": datetime.now().strftime("%Y-%m-%dT%H:%M:%S")})
+
+
+# ── Monitor de leads ────────────────────────────────────────────────────────
+# JSON do export_monitor_leads.py (roda de hora em hora), que já traz as séries
+# quebradas por posto — aqui é só recortar o posto e contar.
+
+LEADS_JSON = os.getenv("MONITOR_LEADS_JSON",
+                       "/opt/relatorio_h_t/json_consolidado/monitor_leads.json")
+
+
+@avisos_bp.get("/api/avisos/leads")
+def api_leads():
+    """Leads criados: hoje até agora, ontem inteiro, média diária de 30 dias e
+    as fontes de hoje — por posto."""
+    if not token_de_maquina():
+        return jsonify({"error": "unauthorized"}), 401
+    postos = _postos_pedidos()
+    try:
+        with open(LEADS_JSON, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError) as e:
+        logger.warning("monitor de leads indisponível: %s", e)
+        return jsonify({"error": f"monitor_leads.json indisponível: {str(e)[:120]}"}), 503
+
+    hoje = date.today().isoformat()
+    ontem = (date.today() - timedelta(days=1)).isoformat()
+    dias_posto = d.get("dias_posto") or {}
+    horas_posto = d.get("horas_posto") or {}
+    fontes_posto = d.get("fontes_posto") or {}
+    ultima_hora = (d.get("ultima_hora") or {}).get("label") or ""
+    balde = f"{hoje} {ultima_hora}" if ultima_hora else ""
+
+    saida = {}
+    for posto in (postos or sorted(dias_posto)):
+        serie = dias_posto.get(posto) or []
+        # A média de 30 dias ignora HOJE, que ainda está contando
+        fechados = [x for x in serie if x.get("d") != hoje][-30:]
+        total = sum(x.get("n", 0) for x in fechados)
+        saida[posto] = dict(
+            hoje=sum(x.get("n", 0) for x in serie if x.get("d") == hoje),
+            ontem=sum(x.get("n", 0) for x in serie if x.get("d") == ontem),
+            media30=round(total / len(fechados), 1) if fechados else 0,
+            dias_considerados=len(fechados),
+            ultima_hora=sum(x.get("n", 0) for x in (horas_posto.get(posto) or [])
+                            if x.get("h") == balde),
+            fontes_hoje=sorted(
+                ({"fonte": x.get("fonte"), "n": x.get("n", 0)} for x in (fontes_posto.get(posto) or [])),
+                key=lambda x: -x["n"]),
+            por_dia=[{"d": x.get("d"), "n": x.get("n", 0)} for x in serie[-14:]],
+        )
+
+    return jsonify({
+        "postos": saida, "hora": ultima_hora,
+        "gerado_em": d.get("gerado_em"),
     })
