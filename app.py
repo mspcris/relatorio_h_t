@@ -71,6 +71,13 @@ except Exception as _e:
     logging.getLogger(__name__).error("ctrlq_pj_bp não carregado: %s", _e)
 
 try:
+    from avisos_api import avisos_bp   # o que o avisos_gerenciais lê do KPI (token de máquina)
+    app.register_blueprint(avisos_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("avisos_bp não carregado: %s", _e)
+
+try:
     from cancelados_robo_routes import cancelados_robo_bp
     app.register_blueprint(cancelados_robo_bp)
 except Exception as _e:

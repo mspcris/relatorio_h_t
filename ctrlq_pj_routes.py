@@ -41,7 +41,6 @@ Rotas (todas exigem sessão do KPI + posto dentro do ACL do usuário):
 
 from __future__ import annotations
 
-import hmac
 import logging
 import os
 from contextlib import contextmanager
@@ -62,6 +61,7 @@ from medico_novo_routes import (
 )
 
 import ctrlq_pj_quadro
+from avisos_api import token_de_maquina  # a porta de máquina é uma só
 
 logger = logging.getLogger(__name__)
 
@@ -375,18 +375,6 @@ def api_desativar(jid: int):
 # Resumo por posto × competência (consumido pelo avisos_gerenciais)
 # ---------------------------------------------------------------------------
 
-def _token_de_maquina() -> bool:
-    """`Authorization: Bearer $AVISOS_API_TOKEN`. Sem token no .env, ninguém entra
-    por essa porta — só a sessão do KPI."""
-    esperado = (os.getenv("AVISOS_API_TOKEN") or "").strip()
-    if not esperado:
-        return False
-    enviado = (request.headers.get("Authorization") or "").strip()
-    if enviado.lower().startswith("bearer "):
-        enviado = enviado[7:].strip()
-    return bool(enviado) and hmac.compare_digest(enviado, esperado)
-
-
 def _postos_do_resumo(acl: set | None) -> list:
     """`?postos=A,C`. Com token, vale o que pediram; com sessão, só o ACL."""
     pedidos = [p.strip().upper() for p in (request.args.get("postos") or "").split(",") if p.strip()]
@@ -405,7 +393,7 @@ def api_resumo():
     Um posto fora do ar entra em `erros`, nunca vira "0 pendentes" calado: a
     home do gestor prefere dizer que não leu a dizer que está tudo certo.
     """
-    if _token_de_maquina():
+    if token_de_maquina():
         acl, is_admin = None, True
     else:
         email, acl, _login, is_admin = _sessao()
