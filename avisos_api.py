@@ -10,6 +10,7 @@ aqui é o token.
   GET /api/avisos/metas?postos=A,C[&ym=2026-09]   mensalidades e vendas × meta
   GET /api/avisos/robos?postos=A,C                robôs do posto e há quanto tempo pararam
   GET /api/avisos/leads?postos=A,C                leads criados hoje, ontem e a média de 30d
+  GET /api/avisos/agenda?postos=A,N,I             prazo da próxima vaga por especialidade
 
 Nenhuma delas recalcula regra de negócio; todas leem o que o KPI já produziu:
 as notas saem do `relatorio_nf.carregar_dados` (o mesmo agregado do relatório
@@ -330,4 +331,57 @@ def api_leads():
         "postos": saida, "hora": "" if aguardando else ultima_hora, "dia": hoje,
         "aguardando": aguardando, "foto": foto.isoformat(),
         "gerado_em": d.get("gerado_em"),
+    })
+
+
+# ── Qualidade da agenda ─────────────────────────────────────────────────────
+# A foto diária do export_qualidade_agenda: para cada posto × especialidade,
+# quantos dias até a próxima vaga e os prazos da ANS e da CAMIM daquele CBOS.
+# ATENÇÃO à ordem dos prazos: o da ANS é o APERTADO. A régua da página é
+#   dias <= prazo_ans        → no prazo
+#   dias <= prazo_camim      → furou a ANS, ainda dentro do nosso
+#   acima dos dois           → crítico
+# Quem agrupa posto em corredor é o avisos: aqui só se devolve a linha crua.
+
+AGENDA_DIR = os.getenv("QUALIDADE_AGENDA_DIR") or "/opt/relatorio_h_t/json_consolidado/qualidade_agenda"
+
+
+@avisos_bp.get("/api/avisos/agenda")
+def api_agenda():
+    if not token_de_maquina():
+        return jsonify({"error": "unauthorized"}), 401
+    import glob
+
+    pedidos = {p.strip().upper() for p in (request.args.get("postos") or "").split(",") if p.strip()}
+    arquivos = sorted(glob.glob(os.path.join(AGENDA_DIR, "*.json")))
+    if not arquivos:
+        return jsonify({"error": "sem foto da qualidade da agenda"}), 503
+    try:
+        with open(arquivos[-1], encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError) as e:
+        return jsonify({"error": f"foto da agenda ilegível: {str(e)[:120]}"}), 503
+
+    cbos = d.get("cbos") or {}
+    postos: dict[str, list] = {}
+    for linha in d.get("dados") or []:
+        posto = (linha.get("posto") or "").strip().upper()
+        if not posto or (pedidos and posto not in pedidos):
+            continue
+        prazos = cbos.get(linha.get("cbos_casado") or "", {})
+        postos.setdefault(posto, []).append(dict(
+            especialidade=(linha.get("Especialidade") or "").strip(),
+            dias=linha.get("DiasAteProximaVaga"),
+            data=linha.get("DataProximaVaga"),
+            vagas=linha.get("QuantidadeVagasDisponivelNaData") or 0,
+            prazo_ans=int(prazos.get("prazoconsultaans") or 0),
+            prazo_camim=int(prazos.get("prazoconsultacamim") or 0),
+        ))
+
+    meta = d.get("meta") or {}
+    return jsonify({
+        "postos": postos,
+        "data": meta.get("data_referencia"),
+        "gerado_em": meta.get("gerado_em"),
+        "nomes": {k: v.get("nome") for k, v in (d.get("postos_info") or {}).items()},
     })
