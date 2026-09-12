@@ -68,24 +68,84 @@ FROM cad_cbos
 WHERE Desativado = 0
 """
 
+# ATENÇÃO — por que não lemos mais a view vw_rel_especialidadeProximaVaga
+#
+# A view do CAMIM calcula o percentual de vagas livres assim:
+#
+#     CAST( (capacidade - agendados) * 100.0 / capacidade AS DECIMAL(5,2) )
+#
+# DECIMAL(5,2) só comporta até 999,99. Quando uma agenda tem MAIS agendados do
+# que a capacidade considerada, o percentual fica muito negativo e o SQL Server
+# aborta a consulta inteira com "22003 — estouro aritmético" (erro 8115).
+# Uma linha basta para derrubar o relatório dos 13 postos: em 10/09/2026 foi
+# PSIQUIATRIA em Nova Iguaçu, 17/09, capacidade 1 e 11 agendados → -1000,00,
+# um centésimo além do limite. O ETL morreu em 4 segundos por dois dias e a
+# página seguiu servindo o JSON de 09/09 como se fosse do dia.
+#
+# Aqui a cadeia das três views é reproduzida com DECIMAL(12,2), que não estoura.
+# Validado em 11/09/2026 contra a réplica fiel da original (mesmo CAST 5,2,
+# excluindo só as linhas que estouram): 295 linhas dos dois lados, ZERO
+# divergência campo a campo.
+#
+# Ao mexer aqui, conferir se a view original mudou — isto é cópia da regra do
+# CAMIM, não regra nossa. A correção definitiva é lá: trocar DECIMAL(5,2) por
+# DECIMAL(9,2) em vw_Rel_EspecialidadeProximaVagaPai.
 SQL_VAGAS = """
+WITH pai AS (
+    SELECT
+        idEndereco,
+        Especialidade,
+        Data,
+        QuantidadeMaxima,
+        QuantidadeAgendada,
+        QuantidadeReservaDias,
+        QuantidadeVagasReservadas,
+        CapacidadeConsiderada,
+        CASE
+            WHEN CapacidadeConsiderada = 0 THEN CAST(0 AS DECIMAL(12, 2))
+            ELSE CAST((CapacidadeConsiderada - QuantidadeAgendada) * 100.0
+                      / CapacidadeConsiderada AS DECIMAL(12, 2))
+        END AS ValorPercentualVagasLivres
+    FROM vw_Rel_EspecialidadeProximaVagaPai
+),
+dados AS (
+    SELECT
+        e.idEndereco,
+        e.Especialidade,
+        cbos.ValorPMinimoVagaDisponivel,
+        MIN(e.Data) AS Data
+    FROM pai e
+    LEFT JOIN cad_cbos cbos
+           ON cbos.Especialidade = e.Especialidade
+          AND cbos.Desativado = 0
+    WHERE e.ValorPercentualVagasLivres >=
+          CASE WHEN ISNULL(cbos.ValorPMinimoVagaDisponivel, 0) = 0
+               THEN 0 ELSE cbos.ValorPMinimoVagaDisponivel END
+    GROUP BY e.idEndereco, e.Especialidade, cbos.ValorPMinimoVagaDisponivel
+)
 SELECT
-    idEndereco,
-    Endereco,
-    Especialidade,
-    DataProximaVaga,
-    QuantidadeVagasDisponivelNaData,
-    QuantidadeVagasTotalMedicosAtendem,
-    Desativado,
-    ValorPMinimoVagaDisponivel,
-    ValorPercentualVagasLivres,
-    QuantidadeVagasReservadas,
-    QuantidadeReservaDias,
-    CapacidadeConsiderada,
-    QuantidadeVagasTotalMedicosAtendemIncluindoReserva
-FROM vw_rel_especialidadeProximaVaga
-WHERE ISNULL(Desativado, 0) = 0
-ORDER BY idEndereco, Especialidade
+    D.idEndereco,
+    en.Descricao AS Endereco,
+    D.Especialidade,
+    pai.Data AS DataProximaVaga,
+    SUM(pai.CapacidadeConsiderada - pai.QuantidadeAgendada) AS QuantidadeVagasDisponivelNaData,
+    SUM(pai.CapacidadeConsiderada) AS QuantidadeVagasTotalMedicosAtendem,
+    CAST(0 AS BIT) AS Desativado,
+    D.ValorPMinimoVagaDisponivel,
+    SUM(pai.ValorPercentualVagasLivres) AS ValorPercentualVagasLivres,
+    SUM(pai.QuantidadeVagasReservadas) AS QuantidadeVagasReservadas,
+    MAX(pai.QuantidadeReservaDias) AS QuantidadeReservaDias,
+    pai.CapacidadeConsiderada,
+    SUM(pai.QuantidadeMaxima) AS QuantidadeVagasTotalMedicosAtendemIncluindoReserva
+FROM dados D
+JOIN pai
+       ON pai.Especialidade = D.Especialidade
+      AND pai.idEndereco = D.idEndereco
+      AND pai.Data = D.Data
+JOIN cad_Endereco en ON en.idEndereco = D.idEndereco
+GROUP BY D.idEndereco, en.Descricao, D.Especialidade, pai.Data,
+         D.ValorPMinimoVagaDisponivel, pai.CapacidadeConsiderada
+ORDER BY D.idEndereco, D.Especialidade
 """
 
 # =========================
