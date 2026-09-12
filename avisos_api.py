@@ -285,8 +285,17 @@ def api_leads():
         logger.warning("monitor de leads indisponível: %s", e)
         return jsonify({"error": f"monitor_leads.json indisponível: {str(e)[:120]}"}), 503
 
-    hoje = date.today().isoformat()
-    ontem = (date.today() - timedelta(days=1)).isoformat()
+    # O dia de referência é o da PRÓPRIA FOTO, não o relógio do servidor: o robô
+    # roda de hora em hora, então entre a meia-noite e a primeira rodada do dia
+    # "hoje" pelo relógio seria zero — e a lista de fontes, que veio na foto,
+    # continuaria mostrando os leads de ontem. Dois números discordando na
+    # mesma tela (visto às 00:02 de 12/09/2026).
+    try:
+        referencia = date.fromisoformat(str(d.get("gerado_em"))[:10])
+    except ValueError:
+        referencia = date.today()
+    hoje = referencia.isoformat()
+    ontem = (referencia - timedelta(days=1)).isoformat()
     dias_posto = d.get("dias_posto") or {}
     horas_posto = d.get("horas_posto") or {}
     fontes_posto = d.get("fontes_posto") or {}
@@ -313,6 +322,6 @@ def api_leads():
         )
 
     return jsonify({
-        "postos": saida, "hora": ultima_hora,
+        "postos": saida, "hora": ultima_hora, "dia": hoje,
         "gerado_em": d.get("gerado_em"),
     })
