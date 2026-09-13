@@ -90,6 +90,21 @@ WHERE Desativado = 0
 # Ao mexer aqui, conferir se a view original mudou — isto é cópia da regra do
 # CAMIM, não regra nossa. A correção definitiva é lá: trocar DECIMAL(5,2) por
 # DECIMAL(9,2) em vw_Rel_EspecialidadeProximaVagaPai.
+#
+# DESVIO CONSCIENTE DA VIEW — "próxima vaga" exige vaga livre (2026-09-13)
+#
+# A view escolhe o primeiro dia com % livre >= ValorPMinimoVagaDisponivel. O
+# mínimo está vazio (0) em todo cad_cbos, então `0% >= 0` passava e um dia
+# LOTADO virava "próxima vaga": a tela mostrava "11d · 0v" em verde/amarelo
+# (Ginecologia em G, 24/09 lotado; a vaga real era 16/10). Medido em
+# 13/09/2026: 20 especialidades com a data errada e 6 sem NENHUM dia livre na
+# agenda que apareciam como OK. Agora o dia precisa ter pelo menos 1 vaga livre
+# (CapacidadeConsiderada - QuantidadeAgendada > 0) além do mínimo. Vaga
+# reservada ainda não liberada não conta — ela não está em CapacidadeConsiderada.
+#
+# Especialidade com agenda mas sem dia livre continua na lista com
+# DataProximaVaga NULL (LEFT JOIN) e vira SEM_VAGA — sumir da tela seria
+# esconder justamente o pior caso.
 SQL_VAGAS = """
 WITH pai AS (
     SELECT
@@ -113,14 +128,17 @@ dados AS (
         e.idEndereco,
         e.Especialidade,
         cbos.ValorPMinimoVagaDisponivel,
-        MIN(e.Data) AS Data
+        MIN(CASE
+                WHEN e.CapacidadeConsiderada - e.QuantidadeAgendada > 0
+                 AND e.ValorPercentualVagasLivres >=
+                     CASE WHEN ISNULL(cbos.ValorPMinimoVagaDisponivel, 0) = 0
+                          THEN 0 ELSE cbos.ValorPMinimoVagaDisponivel END
+                THEN e.Data
+            END) AS Data
     FROM pai e
     LEFT JOIN cad_cbos cbos
            ON cbos.Especialidade = e.Especialidade
           AND cbos.Desativado = 0
-    WHERE e.ValorPercentualVagasLivres >=
-          CASE WHEN ISNULL(cbos.ValorPMinimoVagaDisponivel, 0) = 0
-               THEN 0 ELSE cbos.ValorPMinimoVagaDisponivel END
     GROUP BY e.idEndereco, e.Especialidade, cbos.ValorPMinimoVagaDisponivel
 )
 SELECT
@@ -138,7 +156,7 @@ SELECT
     pai.CapacidadeConsiderada,
     SUM(pai.QuantidadeMaxima) AS QuantidadeVagasTotalMedicosAtendemIncluindoReserva
 FROM dados D
-JOIN pai
+LEFT JOIN pai
        ON pai.Especialidade = D.Especialidade
       AND pai.idEndereco = D.idEndereco
       AND pai.Data = D.Data

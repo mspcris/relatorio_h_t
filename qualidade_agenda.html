@@ -1109,6 +1109,7 @@ function statusHmClass(status) {
     return status === 'OK'      ? 'hm-cell-ok'
          : status === 'ALERTA'    ? 'hm-cell-alerta'
          : status === 'CRITICO'   ? 'hm-cell-critico'
+         : status === 'SEM_VAGA'  ? 'hm-cell-critico'
          : status === 'SEM_PRAZO' ? 'hm-cell-sem-prazo'
          : 'hm-cell-none';
 }
@@ -1456,8 +1457,16 @@ function renderHeatmap(data) {
             const diasStr = d.DiasAteProximaVaga !== null && d.DiasAteProximaVaga !== undefined
                 ? d.DiasAteProximaVaga : '—';
             const dateStr = d.DataProximaVaga ? fmtDate(d.DataProximaVaga) : 'S/D';
-            const vagasStr = d.QuantidadeVagasDisponivelNaData !== null
+            const vagasStr = d.QuantidadeVagasDisponivelNaData != null
                 ? `${d.QuantidadeVagasDisponivelNaData}v` : '';
+            // Agenda existe mas nenhum dia tem vaga livre (ETL: SEM_VAGA)
+            if (d.Status === 'SEM_VAGA') {
+                html += `<td class="hm-cell hm-cell-critico" title="${esp} — ${POSTO_NOMES[p]||p}\nNenhum dia com vaga livre na agenda aberta">
+                    <div class="hm-dias">sem vaga</div>
+                    <div class="hm-date">agenda lotada</div>
+                </td>`;
+                return;
+            }
             const tooltip = [
                 `${esp} — ${POSTO_NOMES[p]||p}`,
                 `Status: ${d.Status}`,
