@@ -15,7 +15,9 @@ aqui é o token.
 Nenhuma delas recalcula regra de negócio; todas leem o que o KPI já produziu:
 as notas saem do `relatorio_nf.carregar_dados` (o mesmo agregado do relatório
 "NF emitidas × meta" que vai por zap, modo Clínicas, % sobre as
-CONTABILIZADAS); as metas somam os dias do JSON do `export_metas.py`; os robôs
+CONTABILIZADAS); as metas somam os dias do JSON do `export_metas.py` — e a régua de "quanto
+já deveria ter entrado a esta altura do mês" sai da série diária dos meses
+fechados desse mesmo posto (`metas_historico`), não de regra de três; os robôs
 saem do `indicadores_painel.json` com a mesma régua de dias da página
 monitorarrobos.html; os leads, do `monitor_leads.json` do robô que roda de hora
 em hora. Se a régua mudar lá, muda aqui junto — não pode existir uma segunda
@@ -31,6 +33,8 @@ import os
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, jsonify, request
+
+import metas_historico
 
 logger = logging.getLogger(__name__)
 
@@ -141,8 +145,13 @@ def _somar(dias: list, campo: str) -> float:
 @avisos_bp.get("/api/avisos/metas")
 def api_metas():
     """Mensalidades e vendas do mês contra a meta cadastrada, por posto.
-    Devolve também o dia de hoje dentro do mês: meta mensal olhada no dia 11
-    sem saber que é dia 11 engana — metade do mês é metade da meta."""
+
+    Devolve também o dia de hoje dentro do mês E a régua histórica do posto
+    (`metas_historico`): metade do mês NÃO é metade da meta. A mensalidade é
+    fortemente adiantada — no posto A, 58% da meta já entrou no dia 13, contra
+    os 42% da regra de três —, então quem compara com a linear dá verde a quem
+    está atrás. Quem julga é o `historico`; a régua linear fica só de reserva,
+    para posto sem histórico suficiente."""
     if not token_de_maquina():
         return jsonify({"error": "unauthorized"}), 401
 
@@ -169,6 +178,7 @@ def api_metas():
             vendas=vendas, meta_vendas=meta_venda,
             pct_vendas=(vendas / meta_venda * 100.0) if meta_venda else None,
             gerado_em=d.get("gerado_em"),
+            historico=metas_historico.do_posto(METAS_DIR, posto, ym, dia_corrente),
         )
 
     return jsonify({
