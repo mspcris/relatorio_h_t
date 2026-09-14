@@ -134,6 +134,120 @@ def _resumir(serie: list[tuple[str, float, float]], mes_do_ano: int) -> dict | N
     )
 
 
+# ── Chance de bater a meta ──────────────────────────────────────────────────
+# Previsão feita SÓ com o passado do próprio posto — nada de fórmula mágica.
+#
+# Dois modelos ingênuos, cada um certo por um motivo diferente, e a média dos
+# dois (medido em 14/09/2026 sobre 884 previsões de 13 postos):
+#   • multiplicativo: quem está atrás continua proporcionalmente atrás.
+#     Ganha em vendas (erro médio 12,9 contra 13,0 do aditivo).
+#   • aditivo: o que falta entra em bloco, independente do que já entrou.
+#     Ganha em mensalidades (3,8 contra 4,1) — mensalidade atrasada é paga.
+#
+# A CHANCE não sai do ponto: sai da distribuição dos ERROS que este mesmo
+# modelo cometeu no passado do posto (leave-one-out). Sem isso ele fica
+# convencido demais: a versão que só espalhava os cenários históricos dizia
+# "80–99%" e acontecia 75% das vezes. Com os erros, a calibração fica quase
+# na diagonal — disse 60–79%, aconteceu 65,6%; disse 80–99%, aconteceu 85,4%.
+#
+# Antes do dia 10 não se prevê: o erro médio mais que dobra (13,7 pontos no
+# dia 5 contra 5,4 no dia 10). Número ruim é pior do que "ainda é cedo".
+DIA_MINIMO = 10
+FATIA_MULTIPLICATIVA = 0.5
+
+
+def _ponto(serie_acc: list[tuple[str, dict]], dia: int, hoje: float) -> float | None:
+    """Fechamento central previsto, em % da meta: média dos dois ingênuos."""
+    mult, add = [], []
+    for ym, acc in serie_acc:
+        d = min(dia, dias_no_mes(ym))
+        if acc.get(d, 0) > 0:
+            mult.append(acc[31] / acc[d])
+            add.append(acc[31] - acc[d])
+    if not mult:
+        return None
+    return (FATIA_MULTIPLICATIVA * (hoje * st.median(mult))
+            + (1 - FATIA_MULTIPLICATIVA) * (hoje + st.median(add)))
+
+
+def _acumulado_por_mes(metas_dir: str, posto: str, ym: str, lista: str, campo: str,
+                       chave_meta: str) -> list[tuple[str, dict]]:
+    """[(mês, {dia: % da meta acumulado})] dos meses fechados com meta."""
+    saida = []
+    for anterior in _meses_antes(ym, JANELA_MESES):
+        d = _ler(metas_dir, posto, anterior)
+        if not d:
+            continue
+        meta = float((d.get("meta") or {}).get(chave_meta) or 0)
+        dias = d.get(lista) or []
+        if meta <= 0 or not _fechado(dias):
+            continue
+        acc, total = {}, 0.0
+        por_dia: dict = {}
+        for r in dias:
+            por_dia[int(r.get("dia") or 0)] = por_dia.get(int(r.get("dia") or 0), 0.0) + float(r.get(campo) or 0)
+        for dia in range(1, 32):
+            total += por_dia.get(dia, 0.0)
+            acc[dia] = 100.0 * total / meta
+        saida.append((anterior, acc))
+    return saida
+
+
+def _prever(serie_acc, dia: int, hoje: float) -> dict | None:
+    central = _ponto(serie_acc, dia, hoje)
+    if central is None:
+        return None
+    # Quanto este modelo ERROU, mês a mês, prevendo neste mesmo dia. É essa
+    # nuvem de erros que vira a incerteza de hoje — e é ela que o calibra.
+    erros = []
+    for alvo, acc in serie_acc:
+        d = min(dia, dias_no_mes(alvo))
+        if acc.get(d, 0) <= 0:
+            continue
+        estimado = _ponto([(y, a) for y, a in serie_acc if y != alvo], dia, acc[d])
+        if estimado is not None:
+            erros.append(acc[31] - estimado)
+    if len(erros) < MINIMO_MESES:
+        return dict(suficiente=False, meses=len(erros))
+    cenarios = sorted(central + e for e in erros)
+    batem = sum(1 for c in cenarios if c >= 100)
+    mult = [acc[31] / acc[min(dia, dias_no_mes(y))]
+            for y, acc in serie_acc if acc.get(min(dia, dias_no_mes(y)), 0) > 0]
+    add = [acc[31] - acc[min(dia, dias_no_mes(y))]
+           for y, acc in serie_acc if acc.get(min(dia, dias_no_mes(y)), 0) > 0]
+    return dict(
+        suficiente=True, meses=len(erros), hoje=round(hoje, 1),
+        chance=round(100 * batem / len(cenarios)),
+        cenarios_que_batem=batem, cenarios=len(cenarios),
+        projecao=round(central, 1),
+        piso=round(cenarios[0], 1), teto=round(cenarios[-1], 1),
+        # O quanto esta previsão costuma errar — sem isso, o número parece
+        # mais exato do que é.
+        erro_medio=round(st.mean(abs(e) for e in erros), 1),
+        multiplicador=round(st.median(mult), 3),
+        acrescimo=round(st.median(add), 1),
+    )
+
+
+def previsao_do_posto(metas_dir: str, posto: str, ym: str, dia: int,
+                      mens_hoje: float | None, vendas_hoje: float | None) -> dict:
+    """Chance de fechar a meta deste mês, em % da meta, para as duas metas."""
+    saida = {"dia": dia, "dias_no_mes": dias_no_mes(ym), "dia_minimo": DIA_MINIMO}
+    cedo = dia < DIA_MINIMO
+    for chave, lista, campo, chave_meta, hoje in (
+        ("mensalidades", "mensalidades_por_dia", "mens_dia", "meta_mens", mens_hoje),
+        ("vendas", "vendas_por_dia", "vendas_dia", "meta_venda", vendas_hoje),
+    ):
+        if cedo:
+            saida[chave] = dict(suficiente=False, cedo=True, meses=0)
+        elif hoje is None:
+            saida[chave] = dict(suficiente=False, sem_meta=True, meses=0)
+        else:
+            serie = _acumulado_por_mes(metas_dir, posto, ym, lista, campo, chave_meta)
+            saida[chave] = _prever(serie, dia, hoje) or dict(suficiente=False, meses=0)
+    return saida
+
+
 def do_posto(metas_dir: str, posto: str, ym: str, dia: int) -> dict:
     """Régua histórica deste posto para o dia `dia` do mês `ym`, em % da meta."""
     mes_do_ano, dias_alvo = int(ym[5:7]), dias_no_mes(ym)

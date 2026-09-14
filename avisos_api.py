@@ -179,6 +179,14 @@ def api_metas():
             pct_vendas=(vendas / meta_venda * 100.0) if meta_venda else None,
             gerado_em=d.get("gerado_em"),
             historico=metas_historico.do_posto(METAS_DIR, posto, ym, dia_corrente),
+            # Chance de fechar a meta, prevista SÓ com o passado deste posto —
+            # e junto a conta que levou até ela, porque número de previsão sem
+            # a conta é adivinhação com cara de ciência.
+            previsao=metas_historico.previsao_do_posto(
+                METAS_DIR, posto, ym, dia_corrente,
+                (mens / meta_mens * 100.0) if meta_mens else None,
+                (vendas / meta_venda * 100.0) if meta_venda else None,
+            ),
         )
 
     return jsonify({
