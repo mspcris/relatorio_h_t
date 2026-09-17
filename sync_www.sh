@@ -43,21 +43,28 @@ fi
 # helpers
 # -----------------------------------------------------------
 
+# Este script roda a cada 5 min e ao fim de cada export. Antes as cópias usavam
+# `install`, que regrava o arquivo mesmo sem mudança: ~700 MB de JSON (liberty
+# 370 MB, preagendamento 190 MB) x 2 destinos a cada chamada, ~12 MB/s de
+# escrita contínua no disco. rsync só copia quando tamanho/mtime mudaram e
+# grava em arquivo temporário + rename (o nginx nunca serve JSON pela metade).
+RSYNC_FILE_OPTS=(-tp --omit-dir-times --owner --group --chown="$OWNER_USER:$WEB_GRP" --chmod=D2775,F664)
+
 # Copia arquivo único
 copy_file() {
   local srcf="$1" dstd="$2"
   [ -f "$srcf" ] || return 0
   install -d -m 2775 -g "$WEB_GRP" "$dstd"
-  install -p -m 664 -o "$OWNER_USER" -g "$WEB_GRP" "$srcf" "$dstd/"
+  rsync "${RSYNC_FILE_OPTS[@]}" "$srcf" "$dstd/"
 }
 
-# Copia todos .json de um diretório
+# Copia todos .json de um diretório (sem descer em subdiretórios)
 copy_json_dir() {
   local sd="$1" dd="$2"
   [ -d "$sd" ] || { echo "warn: diretório origem $sd não existe"; return 0; }
   install -d -m 2775 -g "$WEB_GRP" "$dd"
-  find "$sd" -maxdepth 1 -type f -name '*.json' -print0 \
-    | xargs -0 -I{} install -p -m 664 -o "$OWNER_USER" -g "$WEB_GRP" "{}" "$dd/"
+  rsync -r "${RSYNC_FILE_OPTS[@]}" --include='*.json' --exclude='*' \
+    --out-format='json %n' "$sd"/ "$dd"/
 }
 
 # Copia diretório recursivamente (árvore inteira)
