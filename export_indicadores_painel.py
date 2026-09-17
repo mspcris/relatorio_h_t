@@ -158,13 +158,22 @@ def _coletar_push() -> dict:
         SELECT posto, MAX(sent_at) FROM push_log
         WHERE modo = 'producao' GROUP BY posto""").fetchall())
 
-    hoje_rows = conn.execute("""
+    # Falha de produção recuperada pelo reenvio do dia (modo='reenvio',
+    # send_push.py --reenviar-falhas) conta como "recebeu", sem tentativa nova.
+    recuperado = """(status = 'error' AND EXISTS (
+        SELECT 1 FROM push_log r
+        WHERE r.modo = 'reenvio' AND r.status = 'success'
+          AND date(r.sent_at) = date(push_log.sent_at)
+          AND r.posto = push_log.posto AND r.id_cliente = push_log.id_cliente
+          AND ifnull(r.id_receita, 0) = ifnull(push_log.id_receita, 0)
+          AND r.tipo_envio = push_log.tipo_envio))"""
+    hoje_rows = conn.execute(f"""
         SELECT posto, COUNT(*),
-               SUM(status = 'success'),
-               SUM(status = 'error'),
-               SUM(motivo IN ('sem_token', 'nao_inscrito')),
+               SUM(status = 'success' OR {recuperado}),
+               SUM(status = 'error' AND NOT {recuperado}),
+               SUM(motivo IN ('sem_token', 'nao_inscrito') AND NOT {recuperado}),
                SUM(status = 'error' AND ifnull(motivo, 'api_erro')
-                   IN ('api_erro', 'http_erro', 'conexao'))
+                   IN ('api_erro', 'http_erro', 'conexao') AND NOT {recuperado})
         FROM push_log
         WHERE modo = 'producao' AND date(sent_at) = ?
         GROUP BY posto""", (hoje,)).fetchall()
