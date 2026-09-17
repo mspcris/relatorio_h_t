@@ -336,25 +336,31 @@ def numeros_tef(hoje: dict | None) -> dict | None:
 
 
 def numeros_email(hoje: dict | None) -> dict | None:
-    """Enviados × falharam, pela coluna Erro da vw_cad_email (email_resultado).
-    Sem taxa: quase todos os programas NÃO gravam o resultado (Erro vazio), e
-    uma % sobre eles seria 100% de mentira. `sem_registro` diz quantos são.
-    Boleto: + e-mails repetidos para a mesma cobrança. Outros: os tipos."""
-    if not hoje or not hoje.get("emails"):
+    """Enviados de quantos deviam sair: "20 de 35 enviados".
+
+    Enviado = está na Cad_Email sem erro (em branco ou ID da Amazon SES);
+    falhou = "EMAIL EXCECAO…" (email_resultado); na fila = quem a fila do robô
+    ainda aponta e não recebeu (boas-vindas, exame, aviso de 3 dias). A taxa é
+    enviados ÷ (enviados + falharam + na fila). Boleto: + repetidos."""
+    if not hoje or not (hoje.get("emails") or hoje.get("na_fila")):
         return None
-    partes = [(hoje.get("enviados", hoje["emails"]), "enviados", "ok"),
-              (hoje.get("falharam", 0), "falharam", "falha")]
+    enviados, falharam, fila = hoje.get("enviados", 0), hoje.get("falharam", 0), hoje.get("na_fila", 0)
+    devidos = enviados + falharam + fila
+    partes = [(enviados, f"de {_milhar(devidos)} enviados" if fila or falharam else "enviados", "ok"),
+              (falharam, "falharam", "falha")]
+    if fila:
+        partes.append((fila, "na fila, não enviados", "falha"))
     if hoje.get("repetidos"):
         partes.append((hoje["repetidos"], "repetidos", "falha"))
-    obs = [_motivos(hoje.get("motivos"))]
+    obs = [_motivos(hoje.get("motivos")),
+           " · ".join(f"{_milhar(n)} {rot} na fila" + (f" ({_milhar(sem)} sem e-mail)" if sem else "")
+                      for rot, n, sem in hoje.get("filas") or [] if n)]
     if hoje.get("tipos"):
-        obs.append(" · ".join(f"{_milhar(n)} {re.sub(r'^camim\s*[-–]\s*', '', t, flags=re.I).lower()}"
-                              for t, n in hoje["tipos"][:3]))
-    if hoje.get("sem_registro") == hoje["emails"]:
-        obs.append("o programa não grava se falhou")
-    elif hoje.get("sem_registro"):
-        obs.append(f"{_milhar(hoje['sem_registro'])} sem registro de resultado")
-    return _numeros(None, "", partes, obs)
+        obs.append("enviados: " + " · ".join(
+            f"{_milhar(n)} {re.sub(r'^camim\s*[-–]\s*', '', t, flags=re.I).lower()}"
+            for t, n in hoje["tipos"][:3]))
+    taxa = round(100 * enviados / devidos, 1) if devidos else None
+    return _numeros(taxa, "enviados", partes, obs)
 
 
 def numeros_wpp(hoje: dict | None) -> dict | None:

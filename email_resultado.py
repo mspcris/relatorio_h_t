@@ -9,12 +9,22 @@ import re
 # Levantado em 17/09/2026 em todos os postos (desde 01/08): SÓ o
 # CamimCancelaConsultas ("Pré agendamento Cancelado") grava a coluna Erro —
 # com o ID da mensagem na Amazon SES quando deu certo, ou "EMAIL EXCECAO HTTP:
-# …" quando falhou. Os outros programas (boleto, exame, prescrição, boas-vindas)
-# deixam Erro sempre vazio: o e-mail está na tabela, mas o resultado não.
+# …" quando falhou. Nos outros programas (boleto, exame, prescrição,
+# boas-vindas) Erro fica em branco — e em branco é ENVIADO: é assim que a tela
+# Administrar E-mail do ERP lê (Cristiano, 17/09/2026). Quem NÃO recebeu está
+# nas filas (ind_email_fila, ver sync_email.FILAS_EMAIL).
 # Quem usa: sync_email (grava ind_email.falhou), export_indicadores_painel e a
 # lista do monitor de robôs (auth_routes) — a regra mora SÓ aqui.
 
 _RE_SES_ID = re.compile(r"^[0-9a-f]{16}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[0-9]{6}$", re.I)
+
+
+# As filas dos robôs de e-mail, com o nome que aparece nas telas
+ROTULO_FILA = {
+    "boas_vindas": "boas-vindas",
+    "exame": "resultado de exame",
+    "aviso_vencimento": "aviso de vencimento em 3 dias",
+}
 
 
 def email_falhou(erro: str) -> int:
@@ -30,7 +40,7 @@ def explicar_erro_email(erro: str) -> str:
     """O conteúdo da coluna Erro em português de gente."""
     e = (erro or "").strip()
     if not e:
-        return "enviado (o programa não grava o resultado)"
+        return "enviado"
     if _RE_SES_ID.match(e):
         return "aceito pela Amazon SES para entrega (o código é o ID da mensagem lá)"
     if "500" in e and "Internal Server Error" in e:

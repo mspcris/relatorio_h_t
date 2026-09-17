@@ -104,10 +104,11 @@ def _coletar_email() -> dict:
 def _hoje_email(conn: sqlite3.Connection) -> dict:
     """E-mails de HOJE por (posto, Boleto | Outros e-mails).
 
-    Falhou = ind_email.falhou, gravado pelo sync_email com a regra de
-    email_resultado (coluna Erro da vw_cad_email). Só o "Pré agendamento
-    Cancelado" grava o resultado; os outros programas deixam Erro vazio, e aí
-    não há falha para contar — `sem_registro` diz quantos são.
+    Enviado = linha na Cad_Email com Erro em branco ou ID da Amazon SES;
+    falhou = ind_email.falhou (regra de email_resultado). NÃO ENVIADO = quem
+    está agora numa fila dos robôs (ind_email_fila: boas-vindas, exame, aviso
+    de 3 dias) — as filas tiram quem já recebeu, então quem ficou não recebeu.
+    Assim dá "20 de 35 enviados" (Cristiano, 17/09/2026).
     Repetido (só boleto): título igual no mesmo dia = mesma cobrança (em
     14/09/2026 o Y mandou 75 e-mails para 17 boletos).
     """
@@ -147,7 +148,21 @@ def _hoje_email(conn: sqlite3.Connection) -> dict:
             h["repetidos"] += n - distintos
         else:
             h["tipos"][cat] = h["tipos"].get(cat, 0) + n
+    # Filas: só de "Outros e-mails" (a do boleto depende de regra do .exe)
+    try:
+        from email_resultado import ROTULO_FILA
+        for posto, fila, n, sem_email in conn.execute("""
+                SELECT posto, fila, COUNT(*), SUM(1 - email_ok) FROM ind_email_fila GROUP BY 1, 2"""):
+            h = saida.setdefault(((posto or "").strip().upper(), "Outros e-mails"),
+                                 {"emails": 0, "falharam": 0, "repetidos": 0, "sem_registro": 0, "tipos": {}})
+            h["na_fila"] = h.get("na_fila", 0) + n
+            h.setdefault("filas", []).append([ROTULO_FILA.get(fila, fila), n, sem_email or 0])
+    except sqlite3.OperationalError:
+        pass    # tabela ainda não criada pelo sync
     for chave, h in saida.items():
+        h.setdefault("na_fila", 0)
+        h.setdefault("filas", [])
+        h["filas"].sort(key=lambda f: -f[1])
         h["enviados"] = h["emails"] - h["falharam"]
         h["cobrancas"] = h["emails"] - h["repetidos"]          # compat: boleto
         h["tipos"] = sorted(h["tipos"].items(), key=lambda kv: -kv[1])

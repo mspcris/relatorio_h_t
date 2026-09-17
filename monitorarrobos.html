@@ -743,13 +743,13 @@
         <div id="robo-codigos" class="mb-2" hidden style="font-size:.8rem;background:#f5f7fa;border:1px solid #e3e7ee;border-radius:8px;padding:8px 12px">
           <b>Como ler o resultado do e-mail</b> (coluna <i>Erro</i> do cadastro de e-mails do sistema)
           <ul class="mb-0 pl-3">
-            <li><b>Vazio</b> — o programa que mandou não grava o resultado (boleto, exame, prescrição, boas-vindas…). O e-mail foi gerado; se chegou, o sistema não sabe.</li>
+            <li><b>Em branco</b> — enviado (é assim que a tela Administrar E-mail do sistema lê).</li>
             <li><b>Código tipo <code>010301a0919…-000000</code></b> — é o <b>ID da mensagem na Amazon SES</b>: a Amazon aceitou o e-mail para entrega. Não é erro.</li>
             <li><b>EMAIL EXCECAO HTTP: HTTP/1.1 500</b> — a API de e-mail deu erro interno; o e-mail não saiu.</li>
             <li><b>Error sending data (12002)</b> — código 12002 do Windows (WinHTTP): a API não respondeu a tempo; o e-mail não saiu.</li>
             <li><b>Error receiving data (12002)</b> — o pedido foi, a resposta não voltou a tempo; pode ter saído.</li>
           </ul>
-          <span class="text-muted">Hoje só o "Pré agendamento Cancelado" grava o resultado.</span>
+          <b>Na fila, não enviado</b> — o cliente está agora na fila de um robô (boas-vindas, resultado de exame, aviso de vencimento em 3 dias) e ainda não recebeu. As filas tiram da lista quem já recebeu. A fila do boleto não entra: quem ela escolhe depende de regra do programa de envio.
         </div>
         <div id="robo-lista"></div>
       </div>

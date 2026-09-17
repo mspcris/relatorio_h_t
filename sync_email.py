@@ -207,6 +207,56 @@ def sync_posto(posto: str, odbc_str: str, kpi: sqlite3.Connection,
     return len(registros)
 
 
+# ── Filas: quem DEVIA receber e ainda não recebeu ─────────────────────────────
+# Cad_Email só guarda o que saiu. Estas views do ERP são as filas dos robôs e
+# tiram da lista quem já recebeu (left join cad_email … is null) — então quem
+# está nelas agora NÃO recebeu. Só as filas com regra explícita na própria
+# view; a do boleto (EMAIL_AUTOMATICO3) depende de regra do EmailAutomatico.exe
+# (dias até o vencimento) e fica de fora até a regra ser confirmada.
+FILAS_EMAIL = {   # chave (rótulo em email_resultado.ROTULO_FILA): view do ERP
+    "boas_vindas": "EMAIL_AUTOMATICOBoasVindas",
+    "exame": "EMAIL_AUTOMATICOExameliberadoTodos",
+    "aviso_vencimento": "EMAIL_AUTOMATICO2",
+}
+
+DDL_FILA = """
+CREATE TABLE IF NOT EXISTS ind_email_fila (
+    posto      TEXT NOT NULL,
+    fila       TEXT NOT NULL,
+    idcliente  TEXT,
+    matricula  TEXT,
+    nome       TEXT,
+    email_ok   INTEGER,
+    synced_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_emfila_posto ON ind_email_fila(posto, fila);
+"""
+
+
+def sync_filas(posto: str, odbc_str: str, kpi: sqlite3.Connection, agora: str) -> dict:
+    """Foto das filas deste posto agora (substitui a anterior)."""
+    kpi.executescript(DDL_FILA)
+    srv = pyodbc.connect(odbc_str, timeout=30)
+    cursor = srv.cursor()
+    registros, contagem = [], {}
+    for chave, view in FILAS_EMAIL.items():
+        try:
+            cursor.execute(f"SELECT DISTINCT idcliente, Matricula, Cliente, Email FROM {view}")
+            linhas = cursor.fetchall()
+        except pyodbc.Error as exc:           # view ausente neste posto: fila vazia
+            print(f"(fila {view}: {str(exc)[:80]})", end=" ")
+            continue
+        contagem[chave] = len(linhas)
+        for idc, mat, nome, email in linhas:
+            e = (email or "").strip()
+            registros.append((posto, chave, str(idc or ""), str(mat or ""), str(nome or ""),
+                              int(len(e) > 5 and "@" in e and "." in e), agora))
+    srv.close()
+    kpi.execute("DELETE FROM ind_email_fila WHERE posto = ?", (posto,))
+    kpi.executemany("INSERT INTO ind_email_fila VALUES (?, ?, ?, ?, ?, ?, ?)", registros)
+    return contagem
+
+
 def sync(postos: list[str], dias: int) -> None:
     agora  = datetime.now().isoformat(timespec="seconds")
     ini_dt = datetime.combine(date.today() - timedelta(days=dias), datetime.min.time())
@@ -228,13 +278,14 @@ def sync(postos: list[str], dias: int) -> None:
         print(f"  [{posto}] sincronizando...", end=" ", flush=True)
         try:
             n = sync_posto(posto, odbc_str, kpi, ini_dt, ini, agora)
+            filas = sync_filas(posto, odbc_str, kpi, agora)
             kpi.execute("""
                 INSERT INTO ind_sync_log (indicador, posto, synced_at, total_records, status)
                 VALUES ('email', ?, ?, ?, 'ok')
             """, (posto, agora, n))
             kpi.commit()
             totais[posto] = n
-            print(f"{n} registros.")
+            print(f"{n} registros · filas {filas}.")
         except Exception as exc:
             kpi.execute("""
                 INSERT INTO ind_sync_log (indicador, posto, synced_at, total_records, status, mensagem)

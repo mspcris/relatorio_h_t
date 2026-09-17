@@ -2142,8 +2142,10 @@ def _lista_tef(posto: str) -> list:
 
 def _lista_email(posto: str, outros: bool = False) -> list:
     """Boleto (outros=False) ou todo o resto. A situação explica a coluna Erro
-    da vw_cad_email (email_resultado): ID da Amazon SES = aceito; "EMAIL
-    EXCECAO HTTP" = falhou; vazio = o programa não grava o resultado."""
+    da vw_cad_email (email_resultado): em branco = enviado; ID da Amazon SES =
+    aceito; "EMAIL EXCECAO HTTP" = falhou. Em Outros, também quem está na fila
+    de um robô e não recebeu (ind_email_fila)."""
+    from email_resultado import ROTULO_FILA
     from email_resultado import explicar_erro_email
     from export_indicadores_painel import KPI_DB, _connect_ro
     conn = _connect_ro(KPI_DB)
@@ -2169,6 +2171,18 @@ def _lista_email(posto: str, outros: bool = False) -> list:
             ok, situacao = True, explicar_erro_email(texto_erro)
         saida.append(dict(hora=(dh or "")[11:16], quem=mat or "", nome=titulo or "",
                           ok=ok, situacao=situacao, valor=None, codigo=(texto_erro or "")[:120]))
+    if outros:
+        conn = _connect_ro(KPI_DB)
+        try:
+            fila = conn.execute("""SELECT fila, matricula, nome, email_ok FROM ind_email_fila
+                                   WHERE posto = ? ORDER BY fila, nome LIMIT ?""", (posto, _LISTA_MAX)).fetchall()
+        except sqlite3.OperationalError:
+            fila = []
+        conn.close()
+        saida += [dict(hora="", quem=mat or "", nome=nome or "", ok=False, valor=None, codigo="",
+                       situacao=f"na fila, não enviado ({ROTULO_FILA.get(f, f)})"
+                                + ("" if email_ok else " · sem e-mail válido no cadastro"))
+                  for f, mat, nome, email_ok in fila]
     return saida
 
 
