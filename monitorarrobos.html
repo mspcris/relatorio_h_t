@@ -105,7 +105,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      padding: 0 14px;
+      padding: 8px 14px;
       min-height: 52px;
       pointer-events: none;
     }
@@ -116,22 +116,36 @@
       color: #1a202c;
       display: flex;
       align-items: center;
-      flex: 1;
-      min-width: 0;
+      /* min-width segura o nome: com o lado direito comprido (a linha de
+         e-mails passa de 300 caracteres) o título encolhia até sumir */
+      flex: 1 1 auto;
+      min-width: 190px;
     }
 
     .ind-label-text {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: normal;
+      word-break: break-word;
     }
 
+    /* O texto da direita QUEBRA em mais linhas em vez de estourar a barra.
+       A pílula de status fica fora dele, como último item do flex, para cair
+       sempre na mesma coluna em todas as linhas. */
     .ind-right {
       font-size: .78rem;
       font-weight: 600;
       color: rgba(0,0,0,.5);
-      white-space: nowrap;
-      flex-shrink: 0;
+      white-space: normal;
+      word-break: break-word;
+      text-align: right;
+      line-height: 1.45;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .ind-badge-wrap {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
     }
 
     /* ── Mobile: quebra em duas linhas ──────────────────────────── */
@@ -151,6 +165,16 @@
       .ind-right {
         font-size: .74rem;
         white-space: normal;   /* push traz tentados/enviados/falharam */
+        text-align: left;
+      }
+      .ind-label {
+        min-width: 0;
+      }
+      .ind-badge-wrap {
+        align-self: flex-end;  /* pílula continua à direita, como no desktop */
+      }
+      .ind-badge {
+        margin-left: 0;
       }
     }
 
@@ -950,6 +974,8 @@
           <span class="ind-right">
             ${bellBtn}
             ${textoDir}
+          </span>
+          <span class="ind-badge-wrap">
             <span class="ind-badge">${s.label}</span>
           </span>
         </div>
