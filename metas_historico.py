@@ -262,3 +262,49 @@ def do_posto(metas_dir: str, posto: str, ym: str, dia: int) -> dict:
                    "vendas_por_dia", "vendas_dia", "meta_venda"),
             mes_do_ano),
     }
+
+
+# ── Ritmo do dia: quanto costuma ter entrado até hoje, sem meta ─────────────
+# Pedido do Cristiano (16/09/2026): "em média eu, no dia X, recebo 400
+# mensalidades, mas recebi 390". É a régua em QUANTIDADE, não em % da meta —
+# vale para posto sem meta cadastrada (vendas, quase todos) e se soma entre
+# postos sem ponderação nenhuma: a média do agrupamento é a soma das médias.
+#
+# O corte é o último dia FECHADO: o `export_metas.py` roda de 6 em 6 horas e
+# o dia de hoje chega pela metade (A tinha 154 mensalidades às 18h do dia 16,
+# num dia que costuma dar 300). Comparar com ele pintaria toda manhã de
+# vermelho. A régua olha os 12 meses fechados anteriores.
+
+MESES_RITMO = 12
+MINIMO_RITMO = 3   # com menos de três meses, "média" é só um mês bom ou ruim
+
+
+def ritmo_do_posto(metas_dir: str, posto: str, ym: str, dia: int) -> dict:
+    """Acumulado de mensalidades e vendas até o dia `dia` no mês `ym`, e a
+    média do mesmo acumulado nos 12 meses fechados anteriores.
+
+    `dia` = 0 (primeiro dia do mês, nada fechou ainda) devolve tudo zerado
+    com `suficiente=False` — não há o que comparar."""
+    dias_alvo = dias_no_mes(ym)
+    atual = _ler(metas_dir, posto, ym) or {}
+    saida = {"dia": dia, "meses_janela": MESES_RITMO}
+    for metrica, lista, campo in (("mensalidades", "mensalidades_por_dia", "mens_dia"),
+                                  ("vendas", "vendas_por_dia", "vendas_dia")):
+        valores = []
+        if dia > 0:
+            for anterior in _meses_antes(ym, MESES_RITMO):
+                d = _ler(metas_dir, posto, anterior)
+                dias = (d or {}).get(lista) or []
+                if not d or not _fechado(dias):
+                    continue
+                ate = _corte(dia, dias_alvo, dias_no_mes(anterior))
+                valores.append(_acumulado(dias, campo, ate))
+        realizado = _acumulado(atual.get(lista), campo, dia) if dia > 0 else 0.0
+        suficiente = len(valores) >= MINIMO_RITMO
+        saida[metrica] = dict(
+            realizado=round(realizado), meses=len(valores), suficiente=suficiente,
+            media=round(st.mean(valores), 1) if suficiente else None,
+            minimo=round(min(valores)) if suficiente else None,
+            maximo=round(max(valores)) if suficiente else None,
+        )
+    return saida

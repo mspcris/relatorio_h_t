@@ -7,7 +7,7 @@ sem `auth_request` justamente porque máquina não tem cookie; quem autentica
 aqui é o token.
 
   GET /api/avisos/notas?postos=A,C[&ym=2026-09]   NF emitidas × meta do mês
-  GET /api/avisos/metas?postos=A,C[&ym=2026-09]   mensalidades e vendas × meta
+  GET /api/avisos/metas?postos=A,C[&ym=2026-09]   mensalidades e vendas × meta (+ ritmo sem meta)
   GET /api/avisos/robos?postos=A,C                robôs do posto e há quanto tempo pararam
   GET /api/avisos/leads?postos=A,C                leads criados hoje, ontem e a média de 30d
   GET /api/avisos/agenda?postos=A,N,I             prazo da próxima vaga por especialidade
@@ -161,6 +161,9 @@ def api_metas():
     dias_no_mes = (date(ano + (mes == 12), (mes % 12) + 1, 1) - date(ano, mes, 1)).days
     # Mês passado conta o mês inteiro; o corrente conta até hoje
     dia_corrente = hoje.day if (hoje.year, hoje.month) == (ano, mes) else dias_no_mes
+    # O dia de hoje ainda está entrando (export de 6 em 6 horas): o ritmo corta
+    # no último dia inteiro
+    dia_fechado = hoje.day - 1 if (hoje.year, hoje.month) == (ano, mes) else dias_no_mes
 
     saida, erros = {}, {}
     for posto in postos:
@@ -182,6 +185,9 @@ def api_metas():
             # Chance de fechar a meta, prevista SÓ com o passado deste posto —
             # e junto a conta que levou até ela, porque número de previsão sem
             # a conta é adivinhação com cara de ciência.
+            # Quantidade até o último dia fechado contra a média dos 12 meses
+            # anteriores — sem meta, e somável entre postos.
+            ritmo=metas_historico.ritmo_do_posto(METAS_DIR, posto, ym, dia_fechado),
             previsao=metas_historico.previsao_do_posto(
                 METAS_DIR, posto, ym, dia_corrente,
                 (mens / meta_mens * 100.0) if meta_mens else None,
