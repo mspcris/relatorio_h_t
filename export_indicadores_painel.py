@@ -74,6 +74,7 @@ def _coletar_email() -> dict:
         WHERE  indicador='email'
         ORDER BY id DESC LIMIT 1
     """).fetchone()
+    hoje = _hoje_email(conn)
     conn.close()
 
     data = {}
@@ -86,6 +87,7 @@ def _coletar_email() -> dict:
             "categoria":    "Boleto",
             "ultimo_envio": ultimo,
             "total":        total,
+            "hoje":         hoje.get(posto, {"emails": 0, "cobrancas": 0, "repetidos": 0}),
         }
     return {
         "data": data,
@@ -96,6 +98,86 @@ def _coletar_email() -> dict:
             "mensagem":      sync[3] if sync else None,
         },
     }
+
+
+def _hoje_email(conn: sqlite3.Connection) -> dict:
+    """Boleto por e-mail HOJE, por posto.
+
+    O ERP não registra falha de entrega (vw_cad_email.Erro vem sempre vazio),
+    então a realidade que dá para mostrar é: quantas cobranças saíram e
+    quantos e-mails foram REPETIDOS para a mesma cobrança (em 14/09/2026 o Y
+    mandou 75 e-mails para 17 boletos). O título traz matrícula + mês, então
+    título igual no mesmo dia = mesma cobrança.
+    """
+    rows = conn.execute("""
+        SELECT posto, COUNT(*), COUNT(DISTINCT titulo_original)
+        FROM   ind_email
+        WHERE  titulo_categoria = 'Boleto' AND date(datahora) = date('now','localtime')
+        GROUP BY posto
+    """).fetchall()
+    return {
+        (p or "").strip().upper(): {"emails": n, "cobrancas": d, "repetidos": n - d}
+        for p, n, d in rows if p
+    }
+
+
+# Recusa do TEF em texto de gente. O que não está aqui aparece como veio.
+_MOTIVO_TEF = {
+    "": "sem resposta da Cielo",
+    "could not get credit card": "cartão não encontrado",
+    "autorizacao negada": "negada",
+}
+
+
+def _motivo_tef(erro: str, resposta: str) -> str:
+    erro = (erro or "").strip().rstrip(".")
+    if erro:
+        return erro
+    return _MOTIVO_TEF.get((resposta or "").strip().lower(), resposta or "sem resposta da Cielo")
+
+
+def _hoje_tef(conn: sqlite3.Connection) -> dict:
+    """TEF Recorrente HOJE, por posto, contado por CLIENTE (matrícula).
+
+    O robô tenta de novo quem teve saldo insuficiente: contar linhas inflava a
+    tentativa. Pagou = alguma tentativa do dia aprovada (sync_tef.is_aprovado).
+    O motivo é o da ÚLTIMA tentativa de quem não pagou.
+    """
+    rows = conn.execute("""
+        SELECT posto, matricula, datahora, aprovado, valor, erro, resposta_cielo
+        FROM   ind_tef
+        WHERE  date(datahora) = date('now','localtime')
+        ORDER BY datahora
+    """).fetchall()
+    por_cliente = {}
+    for posto, mat, _dh, aprovado, valor, erro, resp in rows:
+        posto = (posto or "").strip().upper()
+        c = por_cliente.setdefault((posto, mat), {"pago": False, "valor": 0.0, "motivo": ""})
+        c["valor"] = max(c["valor"], valor or 0)
+        c["tentativas"] = c.get("tentativas", 0) + 1
+        if aprovado:
+            c["pago"] = True
+        else:
+            c["motivo"] = _motivo_tef(erro, resp)
+    saida = {}
+    for (posto, _mat), c in por_cliente.items():
+        h = saida.setdefault(posto, {"cobrados": 0, "pagaram": 0, "nao_pagaram": 0, "tentativas": 0,
+                                     "valor_cobrado": 0.0, "valor_pago": 0.0, "motivos": {}})
+        h["cobrados"] += 1
+        h["tentativas"] += c["tentativas"]
+        h["valor_cobrado"] += c["valor"]
+        if c["pago"]:
+            h["pagaram"] += 1
+            h["valor_pago"] += c["valor"]
+        else:
+            h["nao_pagaram"] += 1
+            h["motivos"][c["motivo"]] = h["motivos"].get(c["motivo"], 0) + 1
+    for h in saida.values():
+        h["taxa"] = round(100 * h["pagaram"] / h["cobrados"], 1) if h["cobrados"] else None
+        h["valor_cobrado"] = round(h["valor_cobrado"], 2)
+        h["valor_pago"] = round(h["valor_pago"], 2)
+        h["motivos"] = sorted(h["motivos"].items(), key=lambda kv: -kv[1])
+    return saida
 
 
 def _coletar_tef() -> dict:
@@ -111,6 +193,7 @@ def _coletar_tef() -> dict:
         WHERE  indicador='tef'
         ORDER BY id DESC LIMIT 1
     """).fetchone()
+    hoje = _hoje_tef(conn)
     conn.close()
 
     data = {}
@@ -122,6 +205,7 @@ def _coletar_tef() -> dict:
             "posto":      posto,
             "ultimo_tef": ultimo,
             "total":      total,
+            "hoje":       hoje.get(posto),
         }
     return {
         "data": data,
@@ -224,6 +308,67 @@ def _coletar_push() -> dict:
     return data
 
 
+# Por que o cliente não recebeu o WhatsApp. FALHA é o que devia ter saído e não
+# saiu; PULADO é escolha do robô (já recebeu nesta campanha, várias faturas no
+# mesmo telefone viram uma mensagem só, nome de teste) — não entra na taxa.
+_WPP_PULADO = {"ja_enviado_campanha", "multi_fatura_mesmo_tel_nesta_rodada", "nome_de_teste"}
+_WPP_MOTIVO = {
+    "sem_telefone_valido": "sem telefone válido",
+    "janela_fechou_entre_fases": "janela de envio fechou",
+    "ja_enviado_campanha": "já recebeu nesta campanha",
+    "multi_fatura_mesmo_tel_nesta_rodada": "outra fatura no mesmo telefone",
+    "nome_de_teste": "nome de teste",
+}
+
+
+def motivo_wpp(motivo: str) -> str:
+    m = (motivo or "").strip()
+    if m.startswith("erro_api") or m.startswith("erro:"):
+        return "erro no envio"
+    return _WPP_MOTIVO.get(m, m)
+
+
+def _hoje_wpp(conn: sqlite3.Connection) -> dict:
+    """WhatsApp HOJE por (campanha, posto), contado por cobrança (idreceita;
+    sem idreceita, o telefone). A rodada roda várias vezes no dia e regrava os
+    não enviados a cada volta — daí o DISTINCT."""
+    saida = {}
+
+    def caixa(cid, posto):
+        return saida.setdefault((cid, (posto or "").strip().upper()),
+                                {"enviados": 0, "falharam": 0, "pulados": 0, "motivos": {}})
+
+    for cid, posto, n in conn.execute("""
+            SELECT campanha_id, posto, COUNT(DISTINCT COALESCE(idreceita, telefone))
+            FROM envios
+            WHERE date(enviado_em) = date('now','localtime') AND status LIKE 'accepted%'
+            GROUP BY 1, 2"""):
+        caixa(cid, posto)["enviados"] += n
+    falhas = conn.execute("""
+            SELECT campanha_id, posto, 'erro:' || status, COUNT(DISTINCT COALESCE(idreceita, telefone))
+            FROM envios
+            WHERE date(enviado_em) = date('now','localtime') AND status LIKE 'erro%'
+            GROUP BY 1, 2, 3
+            UNION ALL
+            SELECT campanha_id, posto, motivo, COUNT(DISTINCT COALESCE(idreceita, matricula, telefone_raw))
+            FROM nao_enviados
+            WHERE date(rodada_em) = date('now','localtime')
+            GROUP BY 1, 2, 3""").fetchall()
+    for cid, posto, motivo, n in falhas:
+        c = caixa(cid, posto)
+        if motivo in _WPP_PULADO:
+            c["pulados"] += n
+        else:
+            c["falharam"] += n
+            m = motivo_wpp(motivo)
+            c["motivos"][m] = c["motivos"].get(m, 0) + n
+    for c in saida.values():
+        tentou = c["enviados"] + c["falharam"]
+        c["taxa"] = round(100 * c["enviados"] / tentou, 1) if tentou else None
+        c["motivos"] = sorted(c["motivos"].items(), key=lambda kv: -kv[1])
+    return saida
+
+
 def _coletar_wpp() -> list:
     """Pra cada campanha ativa, coleta:
     - postos: {posto: {ultimo_envio}}  — granular pra detalhe
@@ -243,6 +388,7 @@ def _coletar_wpp() -> list:
         "WHERE ativa=1 AND COALESCE(modo_envio,'atraso') <> 'falta_medico'"
     ).fetchall()
 
+    hoje = _hoje_wpp(conn)
     result = []
     for c in campanhas:
         try:
@@ -267,7 +413,8 @@ def _coletar_wpp() -> list:
                 (c["id"], posto),
             ).fetchone()
             postos_dados[posto] = {
-                "ultimo_envio": row["ultimo"] if row and row["ultimo"] else None
+                "ultimo_envio": row["ultimo"] if row and row["ultimo"] else None,
+                "hoje": hoje.get((c["id"], str(posto).strip().upper())),
             }
         result.append({
             "id": c["id"], "nome": c["nome"],

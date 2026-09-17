@@ -282,28 +282,107 @@ def status_push(dias: int, envio: dict | None) -> str:
     return st
 
 
+# ── Números de HOJE de cada robô, num formato só ────────────────────────────
+# "Rodou hoje" não diz se deu certo (Cristiano, 17/09/2026: "precisa me
+# mostrar a realidade, não só ok ou não ok"). Cada família conta do seu jeito
+# no export_indicadores_painel.py; aqui vira o MESMO desenho para as telas:
+#   taxa + rotulo_taxa  → o número grande ("21%" "pagaram")
+#   partes              → [{n, rotulo, tom: neutro|ok|falha}] na linha miúda
+#   obs                 → leituras curtas (motivo principal, valor, rodada)
+# None = o robô não trabalhou hoje (ou o JSON é do export antigo).
+
+def _milhar(n) -> str:
+    return f"{int(n or 0):,}".replace(",", ".")
+
+
+def _reais(v) -> str:
+    return "R$ " + f"{float(v or 0):,.0f}".replace(",", ".")
+
+
+def _numeros(taxa, rotulo_taxa, partes, obs=()) -> dict:
+    return dict(taxa=taxa, rotulo_taxa=rotulo_taxa,
+                partes=[dict(n=n, rotulo=r, tom=t) for n, r, t in partes],
+                obs=[o for o in obs if o])
+
+
+def _motivos(motivos, quantos=2) -> str:
+    return " · ".join(f"{_milhar(n)} {m.lower()}" for m, n in (motivos or [])[:quantos])
+
+
+def numeros_push(envio: dict | None) -> dict | None:
+    if not envio or not envio["tentativas"]:
+        return None
+    return _numeros(
+        envio["taxa"], "entregue",
+        [(envio["tentativas"], "tentados", "neutro"),
+         (envio["receberam"], "enviados", "ok"),
+         (envio["nao_receberam"], "falharam", "falha")],
+        [f"{_milhar(envio['sem_app'])} sem o app" if envio["sem_app"] else "",
+         "robô parou no meio" if envio["rodada"] == "interrompida" else
+         "em andamento" if envio["rodada"] == "em_andamento" else ""])
+
+
+def numeros_tef(hoje: dict | None) -> dict | None:
+    if not hoje or not hoje.get("cobrados"):
+        return None
+    return _numeros(
+        hoje["taxa"], "pagaram",
+        [(hoje["cobrados"], "cobrados", "neutro"),
+         (hoje["pagaram"], "pagaram", "ok"),
+         (hoje["nao_pagaram"], "não pagaram", "falha")],
+        [f"{_reais(hoje['valor_pago'])} de {_reais(hoje['valor_cobrado'])}",
+         _motivos(hoje.get("motivos"))])
+
+
+def numeros_email(hoje: dict | None) -> dict | None:
+    """O ERP não registra falha de entrega de e-mail: não há taxa. O que dá
+    para ver é quanto saiu e o que saiu REPETIDO para a mesma cobrança."""
+    if not hoje or not hoje.get("emails"):
+        return None
+    partes = [(hoje["cobrancas"], "cobranças enviadas", "ok")]
+    if hoje["repetidos"]:
+        partes.append((hoje["repetidos"], "repetidos", "falha"))
+    return _numeros(None, "", partes, ["o ERP não registra falha de entrega"])
+
+
+def numeros_wpp(hoje: dict | None) -> dict | None:
+    if not hoje or not (hoje.get("enviados") or hoje.get("falharam")):
+        return None
+    return _numeros(
+        hoje["taxa"], "enviados",
+        [(hoje["enviados"], "enviados", "ok"),
+         (hoje["falharam"], "falharam", "falha")],
+        [_motivos(hoje.get("motivos")),
+         f"{_milhar(hoje['pulados'])} pulados (já receberam ou mesmo telefone)" if hoje.get("pulados") else ""])
+
+
 def _robos_do_painel(painel: dict) -> list[dict]:
     """Normaliza as quatro famílias (push, e-mail, TEF, WhatsApp) numa lista só."""
     ind = painel.get("indicadores") or {}
     robos = []
 
     for posto, item in (ind.get("push") or {}).items():
+        envio = envio_push(item)
         robos.append(dict(familia="Push", nome="Push Cobrança", posto=posto,
                           ultimo=item.get("ultimo_envio"),
-                          envio=envio_push(item)))
+                          envio=envio, numeros=numeros_push(envio), robo="push"))
 
     for item in ((ind.get("email") or {}).get("data") or {}).values():
         robos.append(dict(familia="E-mail", nome=item.get("categoria") or "E-mail",
-                          posto=item.get("posto"), ultimo=item.get("ultimo_envio")))
+                          posto=item.get("posto"), ultimo=item.get("ultimo_envio"),
+                          numeros=numeros_email(item.get("hoje")), robo="email"))
 
     for item in ((ind.get("tef") or {}).get("data") or {}).values():
         robos.append(dict(familia="TEF", nome="TEF Recorrente",
-                          posto=item.get("posto"), ultimo=item.get("ultimo_tef")))
+                          posto=item.get("posto"), ultimo=item.get("ultimo_tef"),
+                          numeros=numeros_tef(item.get("hoje")), robo="tef"))
 
     for campanha in (ind.get("wpp") or []):
         for posto, item in (campanha.get("postos") or {}).items():
             robos.append(dict(familia="WhatsApp", nome=campanha.get("nome") or "WhatsApp",
-                              posto=posto, ultimo=item.get("ultimo_envio")))
+                              posto=posto, ultimo=item.get("ultimo_envio"),
+                              numeros=numeros_wpp(item.get("hoje")),
+                              robo=f"wpp:{campanha.get('id')}"))
 
     for r in robos:
         r["dias"] = _dias_desde(r["ultimo"])

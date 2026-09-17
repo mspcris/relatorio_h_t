@@ -1623,9 +1623,10 @@ def indicadores_push():
     try:
         # import tardio: auth_routes é o núcleo do login; se avisos_api não
         # carregar, a página segue funcionando só com os dias.
-        from avisos_api import envio_push
+        from avisos_api import envio_push, numeros_push
     except Exception:
         envio_push = lambda _item: None  # noqa: E731
+        numeros_push = lambda _envio: None  # noqa: E731
     result = {}
     for posto, item in push.items():
         if user_postos and posto not in user_postos:
@@ -1636,6 +1637,7 @@ def indicadores_push():
             "dias":         _calc_dias(ultimo, hoje),
             # tentados / receberam / não receberam de hoje + estado da rodada
             "envio":        envio_push(item),
+            "numeros":      numeros_push(envio_push(item)),
         }
     return jsonify(result)
 
@@ -1661,6 +1663,10 @@ def indicadores_email():
     sync  = bloco.get("sync", {}) or {}
     hoje  = date.today()
 
+    try:
+        from avisos_api import numeros_email
+    except Exception:
+        numeros_email = lambda _h: None  # noqa: E731
     dados = {}
     for chave, item in raw.items():
         posto = (item.get("posto") or "").strip().upper()
@@ -1673,6 +1679,7 @@ def indicadores_email():
             "ultimo_envio": ultimo,
             "dias":         _calc_dias(ultimo, hoje),
             "total":        item.get("total", 0),
+            "numeros":      numeros_email(item.get("hoje")),
         }
     return jsonify({"dados": dados, "sync": sync})
 
@@ -2017,11 +2024,13 @@ def email_clientes_logs():
 # TEF Recorrente
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _tef_is_aprovado(erro: str) -> bool:
-    if not erro:
-        return True
-    e = erro.lower()
-    return any(k in e for k in ("autoriza", "sucesso", "aprovad"))
+def _tef_is_aprovado(erro: str, resposta: str = "") -> bool:
+    """Mesma regra de sync_tef.is_aprovado — mudar nos DOIS."""
+    r = (resposta or "").lower()
+    e = (erro or "").lower()
+    if "negad" in r or "não autoriza" in e or "nao autoriza" in e:
+        return False
+    return "capturada com sucesso" in r or "autorizada com sucesso" in e
 
 
 def _tef_ensure_table(kpi_db: str) -> None:
@@ -2066,6 +2075,10 @@ def indicadores_tef():
     sync  = bloco.get("sync", {}) or {}
     hoje  = date.today()
 
+    try:
+        from avisos_api import numeros_tef
+    except Exception:
+        numeros_tef = lambda _h: None  # noqa: E731
     dados = {}
     for posto, item in raw.items():
         if user_postos and posto not in user_postos:
@@ -2076,8 +2089,134 @@ def indicadores_tef():
             "ultimo_tef": ultimo,
             "dias":       _calc_dias(ultimo, hoje),
             "total":      item.get("total", 0),
+            "numeros":    numeros_tef(item.get("hoje")),
         }
     return jsonify({"dados": dados, "sync": sync})
+
+
+# ── Monitor de robôs: a lista de HOJE de um robô (o clique na barra) ────────
+# Quem recebeu e quem não recebeu, com o motivo. Os números da barra saem do
+# export_indicadores_painel.py; a lista é lida ao vivo dos mesmos bancos, com
+# as mesmas regras (sync_tef.is_aprovado, motivo_wpp). No TEF a lista é por
+# TENTATIVA (quem teve saldo insuficiente aparece de novo na retentativa); a
+# barra conta por cliente.
+
+_PUSH_MOTIVO = {
+    "entregue": "entregue", "sem_token": "sem o app", "nao_inscrito": "não inscrito no app",
+    "api_erro": "falha técnica", "http_erro": "falha técnica", "conexao": "falha técnica",
+}
+_LISTA_MAX = 5000
+
+
+def _lista_push(posto: str) -> list:
+    from export_indicadores_painel import PUSH_DB, _connect_ro
+    conn = _connect_ro(PUSH_DB)
+    rows = conn.execute("""
+        SELECT sent_at, matricula, status, motivo, modo, valor_devido
+        FROM push_log
+        WHERE posto = ? AND date(sent_at) = date('now','localtime')
+          AND modo IN ('producao', 'reenvio')
+        ORDER BY sent_at LIMIT ?""", (posto, _LISTA_MAX)).fetchall()
+    conn.close()
+    return [dict(hora=(dh or "")[11:16], quem=mat or "", nome="",
+                 ok=status == "success",
+                 situacao=_PUSH_MOTIVO.get(motivo or "", motivo or status or "")
+                          + (" (reenvio)" if modo == "reenvio" else ""),
+                 valor=valor)
+            for dh, mat, status, motivo, modo, valor in rows]
+
+
+def _lista_tef(posto: str) -> list:
+    from export_indicadores_painel import KPI_DB, _connect_ro, _motivo_tef
+    conn = _connect_ro(KPI_DB)
+    rows = conn.execute("""
+        SELECT datahora, matricula, aprovado, valor, erro, resposta_cielo
+        FROM ind_tef
+        WHERE posto = ? AND date(datahora) = date('now','localtime')
+        ORDER BY datahora LIMIT ?""", (posto, _LISTA_MAX)).fetchall()
+    conn.close()
+    return [dict(hora=(dh or "")[11:16], quem=mat or "", nome="", ok=bool(apr),
+                 situacao="pagou" if apr else _motivo_tef(erro, resp), valor=valor)
+            for dh, mat, apr, valor, erro, resp in rows]
+
+
+def _lista_email(posto: str) -> list:
+    from export_indicadores_painel import KPI_DB, _connect_ro
+    conn = _connect_ro(KPI_DB)
+    rows = conn.execute("""
+        SELECT datahora, matricula, titulo_original
+        FROM ind_email
+        WHERE posto = ? AND titulo_categoria = 'Boleto' AND date(datahora) = date('now','localtime')
+        ORDER BY datahora LIMIT ?""", (posto, _LISTA_MAX)).fetchall()
+    conn.close()
+    vistos, saida = set(), []
+    for dh, mat, titulo in rows:
+        repetido = titulo in vistos
+        vistos.add(titulo)
+        saida.append(dict(hora=(dh or "")[11:16], quem=mat or "", nome=titulo or "",
+                          ok=not repetido, situacao="repetido" if repetido else "enviado", valor=None))
+    return saida
+
+
+def _lista_wpp(posto: str, campanha_id: int) -> list:
+    from export_indicadores_painel import WPP_DB, _WPP_PULADO, _connect_ro, motivo_wpp
+    conn = _connect_ro(WPP_DB)
+    enviados = conn.execute("""
+        SELECT enviado_em, matricula, nome, status, valor
+        FROM envios
+        WHERE campanha_id = ? AND posto = ? AND date(enviado_em) = date('now','localtime')
+        ORDER BY enviado_em LIMIT ?""", (campanha_id, posto, _LISTA_MAX)).fetchall()
+    # A rodada regrava os não enviados a cada volta: um por cobrança, o último
+    nao = conn.execute("""
+        SELECT MAX(rodada_em), matricula, nome, motivo
+        FROM nao_enviados
+        WHERE campanha_id = ? AND posto = ? AND date(rodada_em) = date('now','localtime')
+        GROUP BY COALESCE(idreceita, matricula, telefone_raw), motivo
+        LIMIT ?""", (campanha_id, posto, _LISTA_MAX)).fetchall()
+    conn.close()
+    saida = [dict(hora=(dh or "")[11:16], quem=mat or "", nome=nome or "",
+                  ok=(st or "").startswith("accepted"),
+                  situacao="enviado" if (st or "").startswith("accepted") else motivo_wpp(st),
+                  valor=valor)
+             for dh, mat, nome, st, valor in enviados]
+    saida += [dict(hora=(dh or "")[11:16], quem=mat or "", nome=nome or "",
+                   ok=None if motivo in _WPP_PULADO else False,
+                   situacao=motivo_wpp(motivo), valor=None)
+              for dh, mat, nome, motivo in nao]
+    return sorted(saida, key=lambda r: r["hora"])
+
+
+@auth_bp.get("/api/indicadores/robo/lista")
+def indicadores_robo_lista():
+    """?robo=push|tef|email|wpp:<id>&posto=Y — a lista de hoje de um robô.
+    ok: true deu certo · false falhou · null pulado de propósito."""
+    email_usr, user_postos = decode_user()
+    if not email_usr:
+        return ("", 401)
+    posto = (request.args.get("posto") or "").strip().upper()
+    robo = (request.args.get("robo") or "").strip().lower()
+    if not posto or (user_postos and posto not in user_postos):
+        return jsonify({"erro": "posto fora do seu acesso"}), 403
+    try:
+        if robo == "push":
+            linhas = _lista_push(posto)
+        elif robo == "tef":
+            linhas = _lista_tef(posto)
+        elif robo == "email":
+            linhas = _lista_email(posto)
+        elif robo.startswith("wpp:") and robo[4:].isdigit():
+            linhas = _lista_wpp(posto, int(robo[4:]))
+        else:
+            return jsonify({"erro": "robô desconhecido"}), 400
+    except Exception as exc:
+        logging.getLogger(__name__).exception("lista do robô %s/%s", robo, posto)
+        return jsonify({"erro": f"{type(exc).__name__}: {str(exc)[:200]}"}), 500
+    return jsonify({
+        "robo": robo, "posto": posto, "linhas": linhas, "cortado": len(linhas) >= _LISTA_MAX,
+        "certo": sum(1 for l in linhas if l["ok"] is True),
+        "falha": sum(1 for l in linhas if l["ok"] is False),
+        "pulado": sum(1 for l in linhas if l["ok"] is None),
+    })
 
 
 @auth_bp.get("/api/tef/dashboard")

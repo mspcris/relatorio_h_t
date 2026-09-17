@@ -362,7 +362,8 @@ def api_indicadores():
         for posto, d in (camp.get("postos") or {}).items():
             ultimo = d.get("ultimo_envio")
             dias = _dias_desde(ultimo)
-            postos_dados[posto] = {"dias": dias, "ultimo_envio": ultimo}
+            # números de hoje (enviados × falharam) — contados no export
+            postos_dados[posto] = {"dias": dias, "ultimo_envio": ultimo, "hoje": d.get("hoje")}
             if ultimo and dias <= 7:
                 postos_com_envio.append(posto)
             else:

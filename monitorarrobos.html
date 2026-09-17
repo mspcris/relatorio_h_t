@@ -728,6 +728,35 @@
     <strong>CAMIM</strong> — Painel de Indicadores Operacionais
   </footer>
 
+<!-- ── MODAL LISTA DO ROBÔ: quem recebeu e quem não recebeu hoje ───── -->
+<div class="modal fade" id="modalRobo" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="robo-titulo" style="font-size:1.05rem"></h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="robo-postos" class="mb-2"></div>
+        <div id="robo-filtros" class="mb-2"></div>
+        <div id="robo-motivos" class="mb-2" style="font-size:.82rem"></div>
+        <div id="robo-lista"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<style>
+  .ind-bar[data-robo] { cursor: pointer; }
+  .ind-bar[data-robo]:hover { filter: brightness(.97); box-shadow: 0 0 0 2px rgba(0,0,0,.08); }
+  .ind-taxa { font-size: 1.15em; }
+  #robo-filtros .btn, #robo-postos .btn { margin: 0 4px 4px 0; }
+  #robo-motivos .chip { display: inline-block; background: #fdecea; color: #b71c1c; border-radius: 1rem; padding: 1px 9px; margin: 0 4px 4px 0; }
+  .robo-tab td { font-size: .85rem; padding: .3rem .5rem; vertical-align: top; }
+  .robo-tab .ok { color: #2e7d32; font-weight: 600; }
+  .robo-tab .falha { color: #c62828; font-weight: 600; }
+  .robo-tab .pulado { color: #6b7280; }
+</style>
+
 <!-- ── MODAL SILENCIAR ALARME ──────────────────────────────────────── -->
 <div class="modal fade" id="modalSilenciar" tabindex="-1">
   <div class="modal-dialog modal-sm">
@@ -876,7 +905,8 @@
   });
 
   // prefix: ex "PUSH", nome: ex "Cobrança — Posto X"
-  function barraHTML(prefix, nome, statusKey, textoDir, posto) {
+  // abrir: {robo, postos} torna a barra clicável — abre a lista de hoje
+  function barraHTML(prefix, nome, statusKey, textoDir, posto, abrir) {
     const s = STATUS[statusKey] || STATUS.horrivel;
     const fillPct = Math.max(s.fill, 5); // mínimo visual de 5%
     const iconCls = PREFIX_ICON[prefix] || 'fas fa-circle';
@@ -898,7 +928,8 @@
     return `
       <div class="ind-bar"
            style="--ind-color:${s.color}; --ind-bg:${s.bg}; --ind-fill:${fillPct}%"
-           title="${prefix} — ${nome} — ${s.label}">
+           ${abrir ? `data-robo="${abrir.robo}" data-postos="${abrir.postos.join(',')}" data-nome="${nome.replace(/"/g, '&quot;')}"` : ''}
+           title="${prefix} — ${nome} — ${s.label}${abrir ? ' — clique para ver quem recebeu e quem não recebeu hoje' : ''}">
         <div class="ind-fill"></div>
         <div class="ind-content">
           <span class="ind-label">
@@ -1037,6 +1068,22 @@
     return t;
   }
 
+  /* ── Números de hoje (formato único do avisos_api.numeros_*) ────── */
+  // "Rodou hoje" não diz se deu certo: cada barra mostra quanto saiu, quanto
+  // falhou e a taxa. As contas são do export_indicadores_painel.py.
+  const fmtN = v => (v || 0).toLocaleString('pt-BR');
+  const TOM_NUM = { ok: '#2e7d32', falha: '#c62828', neutro: 'inherit' };
+  function textoNumeros(num) {
+    if (!num) return '';
+    let t = ' · ' + num.partes.map(p =>
+      `<b style="color:${TOM_NUM[p.tom] || 'inherit'}">${fmtN(p.n)}</b> ${p.rotulo}`).join(' · ');
+    if (num.taxa !== null && num.taxa !== undefined)
+      t += ` · <b class="ind-taxa">${String(num.taxa).replace('.', ',')}%</b> ${num.rotulo_taxa}`;
+    if (num.obs && num.obs.length)
+      t += ` <span class="text-muted ml-1" style="font-size:.78rem">(${num.obs.join(' · ')})</span>`;
+    return t;
+  }
+
   async function loadPush(postos) {
     const resp = await fetch('/api/indicadores/push', { credentials: 'same-origin' });
     if (!resp.ok) throw new Error(`Push API: ${resp.status}`);
@@ -1047,7 +1094,7 @@
     const itens = postos.map(p => {
       const d = data[p];
       if (!d) return { posto: p, dias: 999, ultimo: null, envio: null };
-      return { posto: p, dias: d.dias, ultimo: d.ultimo_envio, envio: d.envio };
+      return { posto: p, dias: d.dias, ultimo: d.ultimo_envio, envio: d.envio, numeros: d.numeros };
     });
 
     // Ordena do pior (menor order) ao melhor
@@ -1064,9 +1111,9 @@
       const s    = STATUS[sKey];
       const nome = mostrar1Posto ? 'Push Cobrança' : `Push Cobrança — Posto ${it.posto}`;
       const texto = it.ultimo
-        ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo)}${it.dias === 0 ? textoEnvioPush(it.envio) : ''}`
+        ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo)}${it.dias === 0 ? (it.numeros ? textoNumeros(it.numeros) : textoEnvioPush(it.envio)) : ''}`
         : fmtDias(it.dias);
-      return { html: barraHTML('PUSH', nome, sKey, texto, it.posto), order: s.order };
+      return { html: barraHTML('PUSH', nome, sKey, texto, it.posto, { robo: 'push', postos: [it.posto] }), order: s.order };
     });
   }
 
@@ -1109,18 +1156,20 @@
         const it = lista[0];
         const sKey = diasParaStatus(it.dias);
         const texto = it.ultimo_envio
-          ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo_envio)} · ${it.total} enviados`
+          ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo_envio)}${it.numeros ? textoNumeros(it.numeros) : ''}`
           : fmtDias(it.dias);
-        itens.push({ html: barraHTML('EMAIL', cat, sKey, texto, it.posto), order: STATUS[sKey].order });
+        const abrir = cat === 'Boleto' ? { robo: 'email', postos: [it.posto] } : null;
+        itens.push({ html: barraHTML('EMAIL', cat, sKey, texto, it.posto, abrir), order: STATUS[sKey].order });
       } else {
         // vários postos: um item por posto dentro da categoria
         for (const it of lista) {
           const sKey = diasParaStatus(it.dias);
           const texto = it.ultimo_envio
-            ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo_envio)}`
+            ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo_envio)}${it.numeros ? textoNumeros(it.numeros) : ''}`
             : fmtDias(it.dias);
           const nome = `${cat} — Posto ${it.posto}`;
-          itens.push({ html: barraHTML('EMAIL', nome, sKey, texto, it.posto), order: STATUS[sKey].order });
+          const abrir = cat === 'Boleto' ? { robo: 'email', postos: [it.posto] } : null;
+          itens.push({ html: barraHTML('EMAIL', nome, sKey, texto, it.posto, abrir), order: STATUS[sKey].order });
         }
       }
     }
@@ -1141,7 +1190,7 @@
     const itens = postos.map(p => {
       const d = dados[p];
       if (!d) return { posto: p, dias: 999, ultimo: null };
-      return { posto: p, dias: d.dias, ultimo: d.ultimo_tef };
+      return { posto: p, dias: d.dias, ultimo: d.ultimo_tef, numeros: d.numeros };
     });
 
     itens.sort((a, b) => STATUS[diasParaStatus(a.dias)].order - STATUS[diasParaStatus(b.dias)].order);
@@ -1150,9 +1199,9 @@
       const sKey = diasParaStatus(it.dias);
       const nome = mostrar1Posto ? 'TEF Recorrente' : `TEF Recorrente — Posto ${it.posto}`;
       const texto = it.ultimo
-        ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo)}`
+        ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo)}${it.dias === 0 && it.numeros ? textoNumeros(it.numeros) : ''}`
         : fmtDias(it.dias);
-      return { html: barraHTML('TEF', nome, sKey, texto, it.posto), order: STATUS[sKey].order };
+      return { html: barraHTML('TEF', nome, sKey, texto, it.posto, { robo: 'tef', postos: [it.posto] }), order: STATUS[sKey].order };
     });
   }
 
@@ -1191,18 +1240,111 @@
       const detalhe = [];
       if (coberturaOK.length)    detalhe.push(`✓ ${coberturaOK.join(' ')}`);
       if (coberturaFalta.length) detalhe.push(`✗ ${coberturaFalta.join(' ')}`);
-      const texto = detalhe.length
+      // Números de hoje somados nos postos selecionados (a taxa é refeita
+      // sobre a soma, não é média de taxas)
+      let env = 0, fal = 0, pul = 0;
+      for (const p of postosCamp) {
+        const h = postosSet.has(p) && camp.postos[p].hoje;
+        if (!h) continue;
+        env += h.enviados || 0; fal += h.falharam || 0; pul += h.pulados || 0;
+      }
+      const numeros = (env || fal) ? {
+        taxa: Math.round(1000 * env / (env + fal)) / 10, rotulo_taxa: 'enviados',
+        partes: [{ n: env, rotulo: 'enviados', tom: 'ok' }, { n: fal, rotulo: 'falharam', tom: 'falha' }],
+        obs: pul ? [`${fmtN(pul)} pulados`] : [],
+      } : null;
+      const texto = (detalhe.length
         ? `${ultStr} <span class="text-muted ml-2" style="font-size:.78rem">(${detalhe.join(' · ')})</span>`
-        : ultStr;
+        : ultStr) + textoNumeros(numeros);
 
       itens.push({
-        html: barraHTML('WPP', camp.nome || 'WhatsApp Cobrança', sKey, texto, postosCamp[0] || ''),
+        html: barraHTML('WPP', camp.nome || 'WhatsApp Cobrança', sKey, texto, postosCamp[0] || '',
+                        { robo: `wpp:${camp.id}`, postos: postosCamp.filter(p => postosSet.has(p)) }),
         order: STATUS[sKey].order,
       });
     }
 
     return itens;
   }
+
+  /* ── Lista de hoje de um robô (o clique na barra) ──────────────── */
+  // Quem recebeu e quem não recebeu, com o motivo. Abre em "Falharam" quando
+  // há falha: é isso que alguém veio procurar.
+  const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let _robo = null;   // { robo, nome, postos, posto, dados, filtro }
+
+  async function abrirRobo(robo, nome, postos) {
+    _robo = { robo, nome, postos, posto: postos[0], dados: null, filtro: null };
+    document.getElementById('robo-titulo').textContent = `${nome} — hoje`;
+    $('#modalRobo').modal('show');
+    await carregarRobo();
+  }
+
+  async function carregarRobo() {
+    const lista = document.getElementById('robo-lista');
+    const pbox = document.getElementById('robo-postos');
+    pbox.innerHTML = _robo.postos.length > 1
+      ? _robo.postos.map(p => `<button class="btn btn-sm ${p === _robo.posto ? 'btn-secondary' : 'btn-outline-secondary'}" data-posto="${p}">Posto ${p}</button>`).join('')
+      : `<span class="text-muted">Posto ${esc(_robo.posto)}</span>`;
+    document.getElementById('robo-filtros').innerHTML = '';
+    document.getElementById('robo-motivos').innerHTML = '';
+    lista.innerHTML = '<div class="text-muted">Carregando…</div>';
+    try {
+      const r = await fetch(`/api/indicadores/robo/lista?robo=${encodeURIComponent(_robo.robo)}&posto=${encodeURIComponent(_robo.posto)}`,
+                            { credentials: 'same-origin' });
+      const d = await r.json();
+      if (!r.ok || d.erro) throw new Error(d.erro || `HTTP ${r.status}`);
+      _robo.dados = d;
+      _robo.filtro = d.falha ? 'falha' : 'todos';
+      desenharRobo();
+    } catch (e) {
+      lista.innerHTML = `<div class="ind-err">Não consegui ler a lista: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function desenharRobo() {
+    const d = _robo.dados;
+    const filtros = [['todos', 'Todos', d.linhas.length], ['certo', 'Deram certo', d.certo], ['falha', 'Falharam', d.falha]];
+    if (d.pulado) filtros.push(['pulado', 'Pulados', d.pulado]);
+    document.getElementById('robo-filtros').innerHTML = filtros.map(([k, rot, n]) =>
+      `<button class="btn btn-sm ${k === _robo.filtro ? 'btn-primary' : 'btn-outline-primary'}" data-filtro="${k}">${rot} <b>${fmtN(n)}</b></button>`).join('');
+
+    // Os motivos de falha agrupados: de relance, por que não saiu
+    const motivos = {};
+    d.linhas.filter(l => l.ok === false).forEach(l => { motivos[l.situacao] = (motivos[l.situacao] || 0) + 1; });
+    document.getElementById('robo-motivos').innerHTML = Object.entries(motivos).sort((a, b) => b[1] - a[1])
+      .map(([m, n]) => `<span class="chip">${esc(m)} <b>${fmtN(n)}</b></span>`).join('');
+
+    const passa = l => _robo.filtro === 'todos' || (_robo.filtro === 'certo' && l.ok === true)
+      || (_robo.filtro === 'falha' && l.ok === false) || (_robo.filtro === 'pulado' && l.ok === null);
+    const linhas = d.linhas.filter(passa);
+    const temNome = d.linhas.some(l => l.nome);
+    const temValor = d.linhas.some(l => l.valor !== null && l.valor !== undefined && l.valor !== '');
+    const moeda = v => { const n = Number(v); return isNaN(n) ? esc(v) : n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); };
+    document.getElementById('robo-lista').innerHTML = linhas.length ? `
+      <table class="table table-sm table-striped robo-tab mb-0">
+        <thead><tr><th>Hora</th><th>Matrícula</th>${temNome ? '<th>Cliente / título</th>' : ''}<th>Situação</th>${temValor ? '<th class="text-right">Valor</th>' : ''}</tr></thead>
+        <tbody>${linhas.map(l => `<tr>
+          <td>${esc(l.hora)}</td><td>${esc(l.quem)}</td>${temNome ? `<td>${esc(l.nome)}</td>` : ''}
+          <td class="${l.ok === true ? 'ok' : l.ok === false ? 'falha' : 'pulado'}">${esc(l.situacao)}</td>
+          ${temValor ? `<td class="text-right">${l.valor === null || l.valor === undefined || l.valor === '' ? '' : moeda(l.valor)}</td>` : ''}
+        </tr>`).join('')}</tbody>
+      </table>${d.cortado ? '<div class="text-muted mt-1">Lista cortada em 5.000 linhas.</div>' : ''}`
+      : '<div class="text-muted">Nada nesta aba hoje.</div>';
+  }
+
+  document.getElementById('robo-filtros').addEventListener('click', e => {
+    const b = e.target.closest('[data-filtro]');
+    if (!b || !_robo?.dados) return;
+    _robo.filtro = b.dataset.filtro;
+    desenharRobo();
+  });
+  document.getElementById('robo-postos').addEventListener('click', e => {
+    const b = e.target.closest('[data-posto]');
+    if (!b || !_robo) return;
+    _robo.posto = b.dataset.posto;
+    carregarRobo();
+  });
 
   /* ── Render do painel ───────────────────────────────────────── */
   async function loadAll() {
@@ -1263,6 +1405,13 @@
     painel.innerHTML = `<div class="ind-group">${todos.map(i => i.html).join('')}</div>`;
   }
 
+  document.getElementById('painelIndicadores').addEventListener('click', e => {
+    if (e.target.closest('button, a')) return;          // o sino de alarme continua sendo o sino
+    const bar = e.target.closest('.ind-bar[data-robo]');
+    if (!bar || !bar.dataset.postos) return;
+    abrirRobo(bar.dataset.robo, bar.dataset.nome, bar.dataset.postos.split(','));
+  });
+
   /* ── Init ───────────────────────────────────────────────────── */
   async function init() {
     try {
@@ -1274,10 +1423,19 @@
       POSTOS_USER = [];
     }
 
+    // Link do painel dos gestores: ?posto=Y&robo=tef[&nome=TEF Recorrente]
+    // abre o monitor naquele posto com a lista do robô aberta
+    const q = new URLSearchParams(location.search);
+    const postoQ = (q.get('posto') || '').toUpperCase();
+    if (postoQ && POSTOS_USER.includes(postoQ)) postosSel = new Set([postoQ]);
+
     buildPostoTabs();
     wireGrupoButtons();
     await loadAlarmResumo();
     await loadAll();
+    if (q.get('robo') && postoQ && POSTOS_USER.includes(postoQ)) {
+      abrirRobo(q.get('robo'), q.get('nome') || q.get('robo'), [postoQ]);
+    }
 
     const overlay = document.getElementById('loadingOverlay');
     if (overlay) {

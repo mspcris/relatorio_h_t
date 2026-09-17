@@ -89,12 +89,20 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 # ── Status da transação ───────────────────────────────────────────────────────
 
-def is_aprovado(erro: str) -> int:
-    """1 = aprovada, 0 = negada/erro."""
-    if not erro:
-        return 1
-    e = erro.lower()
-    if any(k in e for k in ("autoriza", "sucesso", "aprovad")):
+def is_aprovado(erro: str, resposta: str = "") -> int:
+    """1 = aprovada (o cliente pagou), 0 = negada, erro ou sem resposta.
+
+    Só conta como pago o que a Cielo diz que capturou/autorizou COM SUCESSO.
+    A regra antiga ("autoriza" em qualquer lugar, erro vazio = aprovada)
+    contava "Transação não autorizada" e a cobrança sem resposta nenhuma como
+    pagas (17/09/2026: 116 sem resposta e 12 "não autorizada" numa semana).
+    Mesma regra de auth_routes._tef_is_aprovado — mudar nos DOIS.
+    """
+    r = (resposta or "").lower()
+    e = (erro or "").lower()
+    if "negad" in r or "não autoriza" in e or "nao autoriza" in e:
+        return 0
+    if "capturada com sucesso" in r or "autorizada com sucesso" in e:
         return 1
     return 0
 
@@ -127,7 +135,7 @@ def sync_posto(posto: str, odbc_str: str, kpi: sqlite3.Connection,
             str(resp or ""),
             str(erro or ""),
             float(valor) if valor is not None else None,
-            is_aprovado(str(erro or "")),
+            is_aprovado(str(erro or ""), str(resp or "")),
             agora,
         )
         for dh, mat, resp, erro, valor in rows
