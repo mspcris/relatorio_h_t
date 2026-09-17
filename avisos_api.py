@@ -244,6 +244,44 @@ def _status(dias: int) -> str:
     return STATUS_POR_DIA.get(dias, "horrivel")
 
 
+def envio_push(item: dict) -> dict | None:
+    """Números de hoje do Push Cobrança, no formato que as telas mostram.
+
+    None quando o JSON ainda é do export antigo (sem os campos do dia).
+    """
+    if "tentativas_hoje" not in (item or {}):
+        return None
+    return dict(tentativas=item.get("tentativas_hoje") or 0,
+                receberam=item.get("receberam_hoje") or 0,
+                nao_receberam=item.get("nao_receberam_hoje") or 0,
+                sem_app=item.get("sem_app_hoje") or 0,
+                falhas_tecnicas=item.get("falhas_tecnicas_hoje") or 0,
+                taxa=item.get("taxa_hoje"),
+                rodada=item.get("rodada"))
+
+
+def status_push(dias: int, envio: dict | None) -> str:
+    """Régua de dias, rebaixada quando o envio de HOJE foi ruim.
+
+    "Rodou hoje" não basta: em 17/09/2026 o robô rodou, parou no meio em dois
+    postos, e o monitor dizia Ótimo. Mesma regra em monitorarrobos.html
+    (statusPush) — mudar nos DOIS.
+    """
+    st = _status(dias)
+    if dias != 0 or not envio:
+        return st
+    rebaixa = None
+    if envio["tentativas"] and not envio["receberam"]:
+        rebaixa = "pessimo"          # tentou e ninguém recebeu
+    elif envio["rodada"] == "interrompida":
+        rebaixa = "ruim"             # parte dos clientes nem foi tentada
+    elif envio["tentativas"] and envio["falhas_tecnicas"] > 0.2 * envio["tentativas"]:
+        rebaixa = "ruim"             # falha da API/rede, não falta de app
+    if rebaixa and ORDEM_STATUS.index(rebaixa) < ORDEM_STATUS.index(st):
+        return rebaixa
+    return st
+
+
 def _robos_do_painel(painel: dict) -> list[dict]:
     """Normaliza as quatro famílias (push, e-mail, TEF, WhatsApp) numa lista só."""
     ind = painel.get("indicadores") or {}
@@ -251,7 +289,8 @@ def _robos_do_painel(painel: dict) -> list[dict]:
 
     for posto, item in (ind.get("push") or {}).items():
         robos.append(dict(familia="Push", nome="Push Cobrança", posto=posto,
-                          ultimo=item.get("ultimo_envio")))
+                          ultimo=item.get("ultimo_envio"),
+                          envio=envio_push(item)))
 
     for item in ((ind.get("email") or {}).get("data") or {}).values():
         robos.append(dict(familia="E-mail", nome=item.get("categoria") or "E-mail",
@@ -268,7 +307,8 @@ def _robos_do_painel(painel: dict) -> list[dict]:
 
     for r in robos:
         r["dias"] = _dias_desde(r["ultimo"])
-        r["status"] = _status(r["dias"])
+        r["status"] = (status_push(r["dias"], r.get("envio"))
+                       if r["familia"] == "Push" else _status(r["dias"]))
     return robos
 
 

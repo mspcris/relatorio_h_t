@@ -1620,6 +1620,12 @@ def indicadores_push():
 
     push = painel.get("indicadores", {}).get("push", {}) or {}
     hoje = date.today()
+    try:
+        # import tardio: auth_routes é o núcleo do login; se avisos_api não
+        # carregar, a página segue funcionando só com os dias.
+        from avisos_api import envio_push
+    except Exception:
+        envio_push = lambda _item: None  # noqa: E731
     result = {}
     for posto, item in push.items():
         if user_postos and posto not in user_postos:
@@ -1628,6 +1634,8 @@ def indicadores_push():
         result[posto] = {
             "ultimo_envio": ultimo,
             "dias":         _calc_dias(ultimo, hoje),
+            # tentados / receberam / não receberam de hoje + estado da rodada
+            "envio":        envio_push(item),
         }
     return jsonify(result)
 

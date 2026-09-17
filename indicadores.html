@@ -859,6 +859,25 @@
   }
 
   /* ── Indicador: Push de Cobrança ────────────────────────────── */
+  // Cópia de monitorarrobos.html (statusPush/textoEnvioPush) — mudar nos DOIS.
+  const ORDEM_PIOR = ['horrivel', 'pessimo', 'ruim', 'ok', 'bom', 'otimo'];
+  function statusPush(dias, envio) {
+    const st = diasParaStatus(dias);
+    if (dias !== 0 || !envio) return st;
+    let rebaixa = null;
+    if (envio.tentativas && !envio.receberam) rebaixa = 'pessimo';
+    else if (envio.rodada === 'interrompida') rebaixa = 'ruim';
+    else if (envio.tentativas && envio.falhas_tecnicas > 0.2 * envio.tentativas) rebaixa = 'ruim';
+    return rebaixa && ORDEM_PIOR.indexOf(rebaixa) < ORDEM_PIOR.indexOf(st) ? rebaixa : st;
+  }
+  function textoEnvioPush(envio) {
+    if (!envio) return '';
+    const n = v => (v || 0).toLocaleString('pt-BR');
+    let t = ` · ${n(envio.tentativas)} tentados · ${n(envio.receberam)} enviados · ${n(envio.nao_receberam)} falharam`;
+    if (envio.rodada === 'interrompida') t += ' · robô parou no meio';
+    return t;
+  }
+
   async function loadPush(postos) {
     const resp = await fetch('/api/indicadores/push', { credentials: 'same-origin' });
     if (!resp.ok) throw new Error(`Push API: ${resp.status}`);
@@ -868,25 +887,25 @@
     // Filtra pelos postos selecionados e monta itens
     const itens = postos.map(p => {
       const d = data[p];
-      if (!d) return { posto: p, dias: 999, ultimo: null };
-      return { posto: p, dias: d.dias, ultimo: d.ultimo_envio };
+      if (!d) return { posto: p, dias: 999, ultimo: null, envio: null };
+      return { posto: p, dias: d.dias, ultimo: d.ultimo_envio, envio: d.envio };
     });
 
     // Ordena do pior (menor order) ao melhor
     itens.sort((a, b) => {
-      const oa = STATUS[diasParaStatus(a.dias)].order;
-      const ob = STATUS[diasParaStatus(b.dias)].order;
+      const oa = STATUS[statusPush(a.dias, a.envio)].order;
+      const ob = STATUS[statusPush(b.dias, b.envio)].order;
       return oa - ob;
     });
 
     const mostrar1Posto = postos.length === 1;
 
     return itens.map(it => {
-      const sKey = diasParaStatus(it.dias);
+      const sKey = statusPush(it.dias, it.envio);
       const s    = STATUS[sKey];
       const nome = mostrar1Posto ? 'Push Cobrança' : `Push Cobrança — Posto ${it.posto}`;
       const texto = it.ultimo
-        ? `${fmtDias(it.dias)} · ${it.ultimo.slice(0, 16)}`
+        ? `${fmtDias(it.dias)} · ${it.ultimo.slice(0, 16)}${it.dias === 0 ? textoEnvioPush(it.envio) : ''}`
         : fmtDias(it.dias);
       return { html: barraHTML('PUSH', nome, sKey, texto), order: s.order };
     });

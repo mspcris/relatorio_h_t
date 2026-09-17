@@ -135,44 +135,83 @@ def _coletar_tef() -> dict:
 
 
 def _coletar_push() -> dict:
+    """Push de cobrança por posto: último envio + números de HOJE.
+
+    Lê o push_log.db do push_clientes (mesma VM). Mesma conta de
+    push_clientes/push_api.resumo_envios() — mudar nos dois:
+      tentativas    = linhas de produção do dia
+      receberam     = status 'success' (a API devolveu id da mensagem)
+      nao_receberam = status 'error'
+      sem_app       = motivo sem_token/nao_inscrito (cliente sem o app novo)
+      falhas_tec    = api_erro/http_erro/conexao (problema nosso ou da API)
+      rodada        = concluida | em_andamento | interrompida | nao_rodou,
+                      pela auditoria (cron_inicio/cron_fim) — "0 tentativas"
+                      de posto sem cliente e de robô que morreu no meio têm
+                      a mesma cara no log de envios.
+    `sent_at` é hora local desde 17/09/2026 (antes era UTC).
+    """
     conn = _connect_ro(PUSH_DB)
-    tables = [r[0] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    ).fetchall()]
-    tabela = next(
-        (t for t in tables if "push" in t.lower() or "log" in t.lower()),
-        tables[0] if tables else None,
-    )
-    if not tabela:
-        conn.close()
-        return {}
+    hoje = datetime.now().date().isoformat()
+    agora = datetime.now()
 
-    cols = [r[1] for r in conn.execute(f"PRAGMA table_info({tabela})").fetchall()]
-    col_data  = next((c for c in cols if any(k in c.lower()
-                       for k in ("data", "hora", "created", "time", "sent"))), None)
-    col_posto = next((c for c in cols if "posto" in c.lower()), None)
-    col_modo  = next((c for c in cols if "modo"  in c.lower()), None)
-    if not col_data or not col_posto:
-        conn.close()
-        return {}
+    ultimos = dict(conn.execute("""
+        SELECT posto, MAX(sent_at) FROM push_log
+        WHERE modo = 'producao' GROUP BY posto""").fetchall())
 
-    where = f"WHERE {col_modo}='producao'" if col_modo else ""
-    rows = conn.execute(f"""
-        SELECT {col_posto} AS posto,
-               MAX({col_data}) AS ultimo,
-               COUNT(*) AS total
-        FROM   {tabela}
-        {where}
-        GROUP BY {col_posto}
-    """).fetchall()
+    hoje_rows = conn.execute("""
+        SELECT posto, COUNT(*),
+               SUM(status = 'success'),
+               SUM(status = 'error'),
+               SUM(motivo IN ('sem_token', 'nao_inscrito')),
+               SUM(status = 'error' AND ifnull(motivo, 'api_erro')
+                   IN ('api_erro', 'http_erro', 'conexao'))
+        FROM push_log
+        WHERE modo = 'producao' AND date(sent_at) = ?
+        GROUP BY posto""", (hoje,)).fetchall()
+    numeros = {r[0]: r[1:] for r in hoje_rows}
+
+    ini, fim = {}, {}
+    try:
+        for posto, acao, ts in conn.execute("""
+                SELECT entidade_id, acao, ts FROM auditoria
+                WHERE acao IN ('cron_inicio', 'cron_fim') AND date(ts) = ?
+                ORDER BY ts""", (hoje,)):
+            (ini if acao == 'cron_inicio' else fim)[posto] = ts
+    except sqlite3.OperationalError:
+        pass  # push_clientes antigo, sem auditoria
     conn.close()
 
     data = {}
-    for posto_raw, ultimo, total in rows:
+    for posto_raw in set(ultimos) | set(ini):
         posto = str(posto_raw).strip().upper() if posto_raw else None
         if not posto:
             continue
-        data[posto] = {"ultimo_envio": ultimo, "total_dia": total}
+        tent, rec, nrec, sem_app, tec = (numeros.get(posto_raw) or (0, 0, 0, 0, 0))
+        i, f = ini.get(posto_raw), fim.get(posto_raw)
+        ultimo = ultimos.get(posto_raw)
+        if not i:
+            rodada = "nao_rodou"
+        elif f and f >= i:
+            rodada = "concluida"
+        else:
+            atividade = max(i, ultimo or "")
+            try:
+                parado = agora - datetime.fromisoformat(atividade[:19])
+            except ValueError:
+                parado = None
+            rodada = ("em_andamento" if parado is not None
+                      and parado.total_seconds() < 600 else "interrompida")
+        data[posto] = {
+            "ultimo_envio": ultimo,
+            "total_dia": tent or 0,          # compat: agora é mesmo o do dia
+            "tentativas_hoje": tent or 0,
+            "receberam_hoje": rec or 0,
+            "nao_receberam_hoje": nrec or 0,
+            "sem_app_hoje": sem_app or 0,
+            "falhas_tecnicas_hoje": tec or 0,
+            "taxa_hoje": round(100 * rec / tent, 1) if tent else None,
+            "rodada": rodada,
+        }
     return data
 
 
