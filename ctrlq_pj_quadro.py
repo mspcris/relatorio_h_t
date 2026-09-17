@@ -238,11 +238,14 @@ def _resumir(j: dict) -> dict:
 
 
 def quadro_do_posto(dados: dict, posto: str, meses: list[str], itens: list[dict]) -> dict:
-    """Por competência: quantos sem PJ, quantos justificados naquele mês e quem falta."""
+    """Por competência: total de médicos, quantos sem PJ, quantos justificados
+    naquele mês e quem falta. `total` passa pela mesma canonização (sem medicina
+    alternativa, um por CRM) — é o denominador do "X de Y ainda não PJ"."""
     por_med, por_crm = indexar_justificativas(itens)
     saida = {}
     for mes in meses:
-        medicos = [d for d in medicos_do_mes(dados, posto, mes) if not d["pj"]]
+        todos = medicos_do_mes(dados, posto, mes)
+        medicos = [d for d in todos if not d["pj"]]
         linhas, justificados = [], 0
         for d in medicos:
             justs = justificativas_de(d, por_med, por_crm)
@@ -256,7 +259,7 @@ def quadro_do_posto(dados: dict, posto: str, meses: list[str], itens: list[dict]
             ))
         linhas.sort(key=lambda x: (x["justificado"], x["nome"]))
         saida[mes] = dict(
-            sem_pj=len(medicos), justificados=justificados, pendentes=len(medicos) - justificados,
+            total=len(todos), sem_pj=len(medicos), justificados=justificados, pendentes=len(medicos) - justificados,
             sem_dados=posto not in (dados.get("dados", {}).get(mes) or {}), medicos=linhas,
         )
     return saida
