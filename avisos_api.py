@@ -142,6 +142,22 @@ def _somar(dias: list, campo: str) -> float:
     return sum(_num(d.get(campo)) for d in dias or [])
 
 
+def _ritmo(posto: str, ym: str, d: dict, mes_corrente: bool, dias_no_mes: int) -> dict:
+    """Ritmo cortado na HORA DA FOTO do posto: o JSON gerado às 10h05 tem os
+    pagamentos até as 10h, e é contra 10h dos outros meses que se compara.
+    Mês fechado compara o mês inteiro."""
+    if not mes_corrente:
+        return metas_historico.ritmo_do_posto(METAS_DIR, posto, ym, dias_no_mes)
+    try:
+        foto = datetime.fromisoformat(d.get("gerado_em") or "")
+    except ValueError:
+        foto = None
+    if not foto or foto.strftime("%Y-%m") != ym:
+        # Sem carimbo (ou foto do mês passado): até o último dia inteiro
+        return metas_historico.ritmo_do_posto(METAS_DIR, posto, ym, date.today().day - 1)
+    return metas_historico.ritmo_do_posto(METAS_DIR, posto, ym, foto.day, foto.hour)
+
+
 @avisos_bp.get("/api/avisos/metas")
 def api_metas():
     """Mensalidades e vendas do mês contra a meta cadastrada, por posto.
@@ -161,9 +177,7 @@ def api_metas():
     dias_no_mes = (date(ano + (mes == 12), (mes % 12) + 1, 1) - date(ano, mes, 1)).days
     # Mês passado conta o mês inteiro; o corrente conta até hoje
     dia_corrente = hoje.day if (hoje.year, hoje.month) == (ano, mes) else dias_no_mes
-    # O dia de hoje ainda está entrando (export de 6 em 6 horas): o ritmo corta
-    # no último dia inteiro
-    dia_fechado = hoje.day - 1 if (hoje.year, hoje.month) == (ano, mes) else dias_no_mes
+    mes_corrente = (hoje.year, hoje.month) == (ano, mes)
 
     saida, erros = {}, {}
     for posto in postos:
@@ -187,7 +201,7 @@ def api_metas():
             # a conta é adivinhação com cara de ciência.
             # Quantidade até o último dia fechado contra a média dos 12 meses
             # anteriores — sem meta, e somável entre postos.
-            ritmo=metas_historico.ritmo_do_posto(METAS_DIR, posto, ym, dia_fechado),
+            ritmo=_ritmo(posto, ym, d, mes_corrente, dias_no_mes),
             previsao=metas_historico.previsao_do_posto(
                 METAS_DIR, posto, ym, dia_corrente,
                 (mens / meta_mens * 100.0) if meta_mens else None,

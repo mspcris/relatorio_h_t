@@ -7,6 +7,7 @@
 # Política de atualização:
 # - backfill incremental desde 2024-01: se JSON do mês existe -> skip
 # - sempre reprocessa mês atual e mês anterior
+# - nos últimos 13 meses, refaz o JSON que ainda não tem a série `por_hora`
 
 import os
 import re
@@ -31,6 +32,12 @@ SQL_DIR = os.path.join(BASE_DIR, "sql_metas")
 SQL_MENS_PATH  = os.path.join(SQL_DIR, "sql_mensalidades_por_dia.sql")
 SQL_VENDAS_PATH = os.path.join(SQL_DIR, "sql_vendas_por_dia.sql")
 SQL_METAS_PATH = os.path.join(SQL_DIR, "sql_metas.sql")
+SQL_HORA_PATH = os.path.join(SQL_DIR, "sql_por_hora.sql")
+
+# Meses para trás que precisam ter a série POR HORA (o ritmo do dia compara
+# com os 12 meses fechados anteriores). JSON antigo sem `por_hora` dentro dessa
+# janela é refeito uma vez, sozinho, na rodada seguinte.
+MESES_COM_HORA = 13
 
 OUT_JSON_DIR = os.path.join(BASE_DIR, "json_metas")
 os.makedirs(OUT_JSON_DIR, exist_ok=True)
@@ -141,10 +148,22 @@ def month_iter(start: date, end_exclusive: date):
 def json_path(posto: str, ym: str) -> str:
     return os.path.join(OUT_JSON_DIR, f"{posto}_metas_{ym}.json")
 
-def should_write(out_path: str, force: bool) -> bool:
+def should_write(out_path: str, force: bool, precisa_hora: bool = False) -> bool:
     if force:
         return True
-    return not os.path.exists(out_path)
+    if not os.path.exists(out_path):
+        return True
+    if precisa_hora:
+        try:
+            with open(out_path, encoding="utf-8") as f:
+                return "por_hora" not in json.load(f)
+        except (OSError, ValueError):
+            return True
+    return False
+
+
+def meses_atras(ym: str, hoje: date) -> int:
+    return (hoje.year - int(ym[:4])) * 12 + hoje.month - int(ym[5:7])
 
 
 # =========================
@@ -193,7 +212,8 @@ def _df_to_records(df: pd.DataFrame):
     return df2.to_dict(orient="records")
 
 def write_outputs(posto: str, ym: str, ini: date, fim: date,
-                  df_mens: pd.DataFrame, df_vendas: pd.DataFrame, df_meta: pd.DataFrame):
+                  df_mens: pd.DataFrame, df_vendas: pd.DataFrame, df_meta: pd.DataFrame,
+                  df_hora: pd.DataFrame | None = None):
 
     meta_obj = None
     if df_meta is not None and not df_meta.empty:
@@ -219,6 +239,12 @@ def write_outputs(posto: str, ym: str, ini: date, fim: date,
         "vendas_por_dia": _df_to_records(df_vendas),
         "gerado_em": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
     }
+
+    # [{dia, hora, mens, vendas}] — o ritmo do dia compara até a mesma hora.
+    # A chave só entra quando a consulta deu certo: sem ela, a próxima rodada
+    # tenta de novo.
+    if df_hora is not None:
+        payload["por_hora"] = _df_to_records(df_hora)
 
     out_json = json_path(posto, ym)
     with open(out_json, "w", encoding="utf-8") as f:
@@ -259,6 +285,7 @@ def run_incremental_all_postos(postos=None, force_months=None):
         raise FileNotFoundError(f"SQL não encontrado: {SQL_METAS_PATH}")
 
     sql_meta = load_sql_strip_go(SQL_METAS_PATH)
+    sql_hora = load_sql_strip_go(SQL_HORA_PATH)
     if not sql_meta:
         raise RuntimeError(f"SQL vazio: {SQL_METAS_PATH}")
     
@@ -283,8 +310,9 @@ def run_incremental_all_postos(postos=None, force_months=None):
         for posto, odbc_str in conns.items():
             out_json = json_path(posto, ym)
             force = (ym in forced)
+            precisa_hora = meses_atras(ym, today) <= MESES_COM_HORA
 
-            if not should_write(out_json, force=force):
+            if not should_write(out_json, force=force, precisa_hora=precisa_hora):
                 continue
 
             try:
@@ -314,8 +342,17 @@ def run_incremental_all_postos(postos=None, force_months=None):
                 meta.error(posto, str(e))
                 continue
 
+            df_hora = None
+            if precisa_hora:
+                try:
+                    df_hora = run_query(engine, sql_hora, ini, fim, retries=4)
+                except Exception as e:
+                    # Sem a série por hora o mês ainda serve às metas: grava
+                    # sem ela (o ritmo cai para "até ontem" nesse posto)
+                    print(f"[{posto}] AVISO por_hora {ym}: {e}")
+
             try:
-                write_outputs(posto, ym, ini, fim, df_mens, df_vendas, df_meta)
+                write_outputs(posto, ym, ini, fim, df_mens, df_vendas, df_meta, df_hora)
                 meta.ok(posto)
             except Exception as e:
                 print(f"[{posto}] ERRO salvar {ym}: {e} (pulando)")

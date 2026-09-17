@@ -264,32 +264,59 @@ def do_posto(metas_dir: str, posto: str, ym: str, dia: int) -> dict:
     }
 
 
-# ── Ritmo do dia: quanto costuma ter entrado até hoje, sem meta ─────────────
+# ── Ritmo do dia: quanto costuma ter entrado até agora, sem meta ────────────
 # Pedido do Cristiano (16/09/2026): "em média eu, no dia X, recebo 400
 # mensalidades, mas recebi 390". É a régua em QUANTIDADE, não em % da meta —
 # vale para posto sem meta cadastrada (vendas, quase todos) e se soma entre
 # postos sem ponderação nenhuma: a média do agrupamento é a soma das médias.
 #
-# O corte é o último dia FECHADO: o `export_metas.py` roda de 6 em 6 horas e
-# o dia de hoje chega pela metade (A tinha 154 mensalidades às 18h do dia 16,
-# num dia que costuma dar 300). Comparar com ele pintaria toda manhã de
-# vermelho. A régua olha os 12 meses fechados anteriores.
+# O corte é a HORA da foto (17/09/2026). O pagamento entra em lotes — na
+# Anchieta, dia 15, 189 das 337 mensalidades caíram entre 13h e 14h (retorno
+# do banco) —, então "fração do dia" mente e "até ontem" esconde o dia mais
+# importante. Com a série `por_hora` do export_metas, hoje até as 10h é
+# comparado com os outros meses até as 10h do mesmo dia.
+#
+# Sem a série por hora (JSON antigo, consulta que falhou) vale a régua antiga:
+# até o último dia inteiro — e a resposta diz qual das duas foi usada.
 
 MESES_RITMO = 12
 MINIMO_RITMO = 3   # com menos de três meses, "média" é só um mês bom ou ruim
+_METRICAS_RITMO = (("mensalidades", "mensalidades_por_dia", "mens_dia", "mens"),
+                   ("vendas", "vendas_por_dia", "vendas_dia", "vendas"))
 
 
-def ritmo_do_posto(metas_dir: str, posto: str, ym: str, dia: int) -> dict:
-    """Acumulado de mensalidades e vendas até o dia `dia` no mês `ym`, e a
-    média do mesmo acumulado nos 12 meses fechados anteriores.
+def _ate_a_hora(d: dict, lista: str, campo: str, campo_hora: str, dia: int, hora: int) -> float | None:
+    """Do dia 1 até `dia` às `hora`h (exclusive). None = mês sem série por hora."""
+    if "por_hora" not in d:
+        return None
+    antes = _acumulado(d.get(lista), campo, dia - 1)
+    no_dia = sum(float(h.get(campo_hora) or 0) for h in d["por_hora"]
+                 if int(h.get("dia") or 0) == dia and int(h.get("hora") or 0) < hora)
+    return antes + no_dia
 
-    `dia` = 0 (primeiro dia do mês, nada fechou ainda) devolve tudo zerado
-    com `suficiente=False` — não há o que comparar."""
-    dias_alvo = dias_no_mes(ym)
+
+def ritmo_do_posto(metas_dir: str, posto: str, ym: str, dia: int, hora: int | None = None) -> dict:
+    """Acumulado de mensalidades e vendas no mês `ym` até o dia `dia` às `hora`h,
+    e a média do mesmo acumulado nos 12 meses fechados anteriores.
+
+    `hora=None` corta no fim do dia `dia` (régua antiga, dia inteiro). Quando
+    falta a série por hora — no mês corrente ou em meses demais do passado —
+    cai para o último dia inteiro (`dia - 1`) e diz isso em `corte`."""
     atual = _ler(metas_dir, posto, ym) or {}
-    saida = {"dia": dia, "meses_janela": MESES_RITMO}
-    for metrica, lista, campo in (("mensalidades", "mensalidades_por_dia", "mens_dia"),
-                                  ("vendas", "vendas_por_dia", "vendas_dia")):
+    if hora is not None and "por_hora" in atual:
+        saida = _ritmo(metas_dir, atual, ym, dia, hora)
+        if all(saida[m]["suficiente"] for m, *_ in _METRICAS_RITMO):
+            return saida
+    dia_inteiro = dia - 1 if hora is not None else dia
+    return _ritmo(metas_dir, atual, ym, dia_inteiro, None, posto=posto)
+
+
+def _ritmo(metas_dir: str, atual: dict, ym: str, dia: int, hora: int | None, posto: str = "") -> dict:
+    posto = posto or atual.get("posto") or ""
+    dias_alvo = dias_no_mes(ym)
+    saida = {"dia": dia, "hora": hora, "corte": "hora" if hora is not None else "dia",
+             "meses_janela": MESES_RITMO}
+    for metrica, lista, campo, campo_hora in _METRICAS_RITMO:
         valores = []
         if dia > 0:
             for anterior in _meses_antes(ym, MESES_RITMO):
@@ -297,9 +324,21 @@ def ritmo_do_posto(metas_dir: str, posto: str, ym: str, dia: int) -> dict:
                 dias = (d or {}).get(lista) or []
                 if not d or not _fechado(dias):
                     continue
-                ate = _corte(dia, dias_alvo, dias_no_mes(anterior))
-                valores.append(_acumulado(dias, campo, ate))
-        realizado = _acumulado(atual.get(lista), campo, dia) if dia > 0 else 0.0
+                if hora is None:
+                    valores.append(_acumulado(dias, campo, _corte(dia, dias_alvo, dias_no_mes(anterior))))
+                    continue
+                # O mesmo dia naquele mês; último dia do mês casa com último dia
+                daquele = dias_no_mes(anterior)
+                mesmo_dia = daquele if dia >= dias_alvo else min(dia, daquele)
+                v = _ate_a_hora(d, lista, campo, campo_hora, mesmo_dia, hora)
+                if v is not None:
+                    valores.append(v)
+        if dia <= 0:
+            realizado = 0.0
+        elif hora is None:
+            realizado = _acumulado(atual.get(lista), campo, dia)
+        else:
+            realizado = _ate_a_hora(atual, lista, campo, campo_hora, dia, hora) or 0.0
         suficiente = len(valores) >= MINIMO_RITMO
         saida[metrica] = dict(
             realizado=round(realizado), meses=len(valores), suficiente=suficiente,
