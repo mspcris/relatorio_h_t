@@ -22,6 +22,8 @@ from datetime import date, datetime, timedelta
 import pyodbc
 from dotenv import load_dotenv
 
+from email_resultado import email_falhou
+
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 POSTOS      = list("ANXYBRPCDGIMJ")
 ODBC_DRIVER = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
@@ -97,11 +99,12 @@ CREATE TABLE IF NOT EXISTS ind_sync_log (
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(DDL)
-    # Migration: adiciona mensagem se a coluna ainda não existir
-    try:
-        conn.execute("ALTER TABLE ind_email ADD COLUMN mensagem TEXT")
-    except sqlite3.OperationalError:
-        pass  # coluna já existe
+    # Migrations: colunas acrescentadas depois da tabela existir
+    for coluna in ("mensagem TEXT", "erro TEXT", "falhou INTEGER DEFAULT 0"):
+        try:
+            conn.execute(f"ALTER TABLE ind_email ADD COLUMN {coluna}")
+        except sqlite3.OperationalError:
+            pass  # coluna já existe
     conn.commit()
 
 
@@ -164,7 +167,7 @@ def sync_posto(posto: str, odbc_str: str, kpi: sqlite3.Connection,
     srv    = pyodbc.connect(odbc_str, timeout=30)
     cursor = srv.cursor()
     cursor.execute("""
-        SELECT Titulo, Datahora, Matricula, ProgramaOrigem, Mensagem
+        SELECT Titulo, Datahora, Matricula, ProgramaOrigem, Mensagem, Erro
         FROM   vw_cad_email
         WHERE  Desativado = 0
           AND  Datahora >= ?
@@ -188,14 +191,17 @@ def sync_posto(posto: str, odbc_str: str, kpi: sqlite3.Connection,
             str(origem   or ""),
             str(msg      or ""),
             agora,
+            str(erro     or ""),
+            email_falhou(str(erro or "")),
         )
-        for titulo, dh, mat, origem, msg in rows
+        for titulo, dh, mat, origem, msg, erro in rows
     ]
 
     kpi.executemany("""
         INSERT INTO ind_email
-            (posto, titulo_original, titulo_categoria, datahora, matricula, status, mensagem, synced_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (posto, titulo_original, titulo_categoria, datahora, matricula, status, mensagem, synced_at,
+             erro, falhou)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, registros)
 
     return len(registros)

@@ -740,6 +740,17 @@
         <div id="robo-postos" class="mb-2"></div>
         <div id="robo-filtros" class="mb-2"></div>
         <div id="robo-motivos" class="mb-2" style="font-size:.82rem"></div>
+        <div id="robo-codigos" class="mb-2" hidden style="font-size:.8rem;background:#f5f7fa;border:1px solid #e3e7ee;border-radius:8px;padding:8px 12px">
+          <b>Como ler o resultado do e-mail</b> (coluna <i>Erro</i> do cadastro de e-mails do sistema)
+          <ul class="mb-0 pl-3">
+            <li><b>Vazio</b> — o programa que mandou não grava o resultado (boleto, exame, prescrição, boas-vindas…). O e-mail foi gerado; se chegou, o sistema não sabe.</li>
+            <li><b>Código tipo <code>010301a0919…-000000</code></b> — é o <b>ID da mensagem na Amazon SES</b>: a Amazon aceitou o e-mail para entrega. Não é erro.</li>
+            <li><b>EMAIL EXCECAO HTTP: HTTP/1.1 500</b> — a API de e-mail deu erro interno; o e-mail não saiu.</li>
+            <li><b>Error sending data (12002)</b> — código 12002 do Windows (WinHTTP): a API não respondeu a tempo; o e-mail não saiu.</li>
+            <li><b>Error receiving data (12002)</b> — o pedido foi, a resposta não voltou a tempo; pode ter saído.</li>
+          </ul>
+          <span class="text-muted">Hoje só o "Pré agendamento Cancelado" grava o resultado.</span>
+        </div>
         <div id="robo-lista"></div>
       </div>
     </div>
@@ -1158,7 +1169,7 @@
         const texto = it.ultimo_envio
           ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo_envio)}${it.numeros ? textoNumeros(it.numeros) : ''}`
           : fmtDias(it.dias);
-        const abrir = cat === 'Boleto' ? { robo: 'email', postos: [it.posto] } : null;
+        const abrir = { robo: cat === 'Boleto' ? 'email' : 'email_outros', postos: [it.posto] };
         itens.push({ html: barraHTML('EMAIL', cat, sKey, texto, it.posto, abrir), order: STATUS[sKey].order });
       } else {
         // vários postos: um item por posto dentro da categoria
@@ -1168,7 +1179,7 @@
             ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo_envio)}${it.numeros ? textoNumeros(it.numeros) : ''}`
             : fmtDias(it.dias);
           const nome = `${cat} — Posto ${it.posto}`;
-          const abrir = cat === 'Boleto' ? { robo: 'email', postos: [it.posto] } : null;
+          const abrir = { robo: cat === 'Boleto' ? 'email' : 'email_outros', postos: [it.posto] };
           itens.push({ html: barraHTML('EMAIL', nome, sKey, texto, it.posto, abrir), order: STATUS[sKey].order });
         }
       }
@@ -1276,6 +1287,7 @@
   async function abrirRobo(robo, nome, postos) {
     _robo = { robo, nome, postos, posto: postos[0], dados: null, filtro: null };
     document.getElementById('robo-titulo').textContent = `${nome} — hoje`;
+    document.getElementById('robo-codigos').hidden = !robo.startsWith('email');
     $('#modalRobo').modal('show');
     await carregarRobo();
   }
@@ -1326,7 +1338,7 @@
         <thead><tr><th>Hora</th><th>Matrícula</th>${temNome ? '<th>Cliente / título</th>' : ''}<th>Situação</th>${temValor ? '<th class="text-right">Valor</th>' : ''}</tr></thead>
         <tbody>${linhas.map(l => `<tr>
           <td>${esc(l.hora)}</td><td>${esc(l.quem)}</td>${temNome ? `<td>${esc(l.nome)}</td>` : ''}
-          <td class="${l.ok === true ? 'ok' : l.ok === false ? 'falha' : 'pulado'}">${esc(l.situacao)}</td>
+          <td class="${l.ok === true ? 'ok' : l.ok === false ? 'falha' : 'pulado'}">${esc(l.situacao)}${l.codigo ? `<div class="text-muted" style="font-size:.72rem;font-weight:400;word-break:break-all">${esc(l.codigo)}</div>` : ''}</td>
           ${temValor ? `<td class="text-right">${l.valor === null || l.valor === undefined || l.valor === '' ? '' : moeda(l.valor)}</td>` : ''}
         </tr>`).join('')}</tbody>
       </table>${d.cortado ? '<div class="text-muted mt-1">Lista cortada em 5.000 linhas.</div>' : ''}`

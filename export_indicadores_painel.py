@@ -59,14 +59,15 @@ def _connect_ro(path: str) -> sqlite3.Connection:
 
 def _coletar_email() -> dict:
     conn = _connect_ro(KPI_DB)
+    # Boleto é um robô; o resto (exame, prescrição, cancelamento, boas-vindas…)
+    # vira UMA linha "Outros e-mails" — muitos programas, nenhum com hora certa
     rows = conn.execute("""
         SELECT posto,
-               titulo_categoria,
+               CASE WHEN titulo_categoria = 'Boleto' THEN 'Boleto' ELSE 'Outros e-mails' END,
                MAX(datahora)                                                    AS ultimo_envio,
                COUNT(CASE WHEN DATE(datahora)=DATE('now','localtime') THEN 1 END) AS total
         FROM ind_email
-        WHERE titulo_categoria = 'Boleto'
-        GROUP BY posto, titulo_categoria
+        GROUP BY 1, 2
     """).fetchall()
     sync = conn.execute("""
         SELECT synced_at, total_records, status, mensagem
@@ -78,16 +79,16 @@ def _coletar_email() -> dict:
     conn.close()
 
     data = {}
-    for posto, _cat, ultimo, total in rows:
+    for posto, cat, ultimo, total in rows:
         posto = (posto or "").strip().upper()
         if not posto:
             continue
-        data[f"{posto}|Boleto"] = {
+        data[f"{posto}|{cat}"] = {
             "posto":        posto,
-            "categoria":    "Boleto",
+            "categoria":    cat,
             "ultimo_envio": ultimo,
             "total":        total,
-            "hoje":         hoje.get(posto, {"emails": 0, "cobrancas": 0, "repetidos": 0}),
+            "hoje":         hoje.get((posto, cat)),
         }
     return {
         "data": data,
@@ -101,24 +102,57 @@ def _coletar_email() -> dict:
 
 
 def _hoje_email(conn: sqlite3.Connection) -> dict:
-    """Boleto por e-mail HOJE, por posto.
+    """E-mails de HOJE por (posto, Boleto | Outros e-mails).
 
-    O ERP não registra falha de entrega (vw_cad_email.Erro vem sempre vazio),
-    então a realidade que dá para mostrar é: quantas cobranças saíram e
-    quantos e-mails foram REPETIDOS para a mesma cobrança (em 14/09/2026 o Y
-    mandou 75 e-mails para 17 boletos). O título traz matrícula + mês, então
-    título igual no mesmo dia = mesma cobrança.
+    Falhou = ind_email.falhou, gravado pelo sync_email com a regra de
+    email_resultado (coluna Erro da vw_cad_email). Só o "Pré agendamento
+    Cancelado" grava o resultado; os outros programas deixam Erro vazio, e aí
+    não há falha para contar — `sem_registro` diz quantos são.
+    Repetido (só boleto): título igual no mesmo dia = mesma cobrança (em
+    14/09/2026 o Y mandou 75 e-mails para 17 boletos).
     """
-    rows = conn.execute("""
-        SELECT posto, COUNT(*), COUNT(DISTINCT titulo_original)
+    colunas = {r[1] for r in conn.execute("PRAGMA table_info(ind_email)")}
+    falhou = "falhou" if "falhou" in colunas else "0"
+    registra = "(erro <> '')" if "erro" in colunas else "0"
+    rows = conn.execute(f"""
+        SELECT posto,
+               CASE WHEN titulo_categoria = 'Boleto' THEN 'Boleto' ELSE 'Outros e-mails' END AS grupo,
+               titulo_categoria, COUNT(*), COUNT(DISTINCT titulo_original),
+               SUM({falhou}), SUM(CASE WHEN {registra} THEN 0 ELSE 1 END)
         FROM   ind_email
-        WHERE  titulo_categoria = 'Boleto' AND date(datahora) = date('now','localtime')
-        GROUP BY posto
+        WHERE  date(datahora) = date('now','localtime')
+        GROUP BY 1, 2, 3
     """).fetchall()
-    return {
-        (p or "").strip().upper(): {"emails": n, "cobrancas": d, "repetidos": n - d}
-        for p, n, d in rows if p
-    }
+    motivos = {}
+    if "erro" in colunas:
+        from email_resultado import explicar_erro_email
+        for posto, grupo, erro, n in conn.execute(f"""
+                SELECT posto, CASE WHEN titulo_categoria = 'Boleto' THEN 'Boleto' ELSE 'Outros e-mails' END,
+                       erro, COUNT(*)
+                FROM ind_email
+                WHERE date(datahora) = date('now','localtime') AND {falhou} = 1
+                GROUP BY 1, 2, 3"""):
+            m = explicar_erro_email(erro).removeprefix("falhou: ").split(" — ")[0]
+            chave = ((posto or "").strip().upper(), grupo)
+            motivos.setdefault(chave, {})
+            motivos[chave][m] = motivos[chave].get(m, 0) + n
+    saida = {}
+    for posto, grupo, cat, n, distintos, falhas, sem_registro in rows:
+        chave = ((posto or "").strip().upper(), grupo)
+        h = saida.setdefault(chave, {"emails": 0, "falharam": 0, "repetidos": 0, "sem_registro": 0, "tipos": {}})
+        h["emails"] += n
+        h["falharam"] += falhas or 0
+        h["sem_registro"] += sem_registro or 0
+        if grupo == "Boleto":
+            h["repetidos"] += n - distintos
+        else:
+            h["tipos"][cat] = h["tipos"].get(cat, 0) + n
+    for chave, h in saida.items():
+        h["enviados"] = h["emails"] - h["falharam"]
+        h["cobrancas"] = h["emails"] - h["repetidos"]          # compat: boleto
+        h["tipos"] = sorted(h["tipos"].items(), key=lambda kv: -kv[1])
+        h["motivos"] = sorted((motivos.get(chave) or {}).items(), key=lambda kv: -kv[1])
+    return saida
 
 
 # Recusa do TEF em texto de gente. O que não está aqui aparece como veio.

@@ -30,6 +30,7 @@ import hmac
 import json
 import logging
 import os
+import re
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, jsonify, request
@@ -306,7 +307,7 @@ def _numeros(taxa, rotulo_taxa, partes, obs=()) -> dict:
 
 
 def _motivos(motivos, quantos=2) -> str:
-    return " · ".join(f"{_milhar(n)} {m.lower()}" for m, n in (motivos or [])[:quantos])
+    return " · ".join(f"{_milhar(n)} {m[:1].lower()}{m[1:]}" for m, n in (motivos or [])[:quantos])
 
 
 def numeros_push(envio: dict | None) -> dict | None:
@@ -335,14 +336,25 @@ def numeros_tef(hoje: dict | None) -> dict | None:
 
 
 def numeros_email(hoje: dict | None) -> dict | None:
-    """O ERP não registra falha de entrega de e-mail: não há taxa. O que dá
-    para ver é quanto saiu e o que saiu REPETIDO para a mesma cobrança."""
+    """Enviados × falharam, pela coluna Erro da vw_cad_email (email_resultado).
+    Sem taxa: quase todos os programas NÃO gravam o resultado (Erro vazio), e
+    uma % sobre eles seria 100% de mentira. `sem_registro` diz quantos são.
+    Boleto: + e-mails repetidos para a mesma cobrança. Outros: os tipos."""
     if not hoje or not hoje.get("emails"):
         return None
-    partes = [(hoje["cobrancas"], "cobranças enviadas", "ok")]
-    if hoje["repetidos"]:
+    partes = [(hoje.get("enviados", hoje["emails"]), "enviados", "ok"),
+              (hoje.get("falharam", 0), "falharam", "falha")]
+    if hoje.get("repetidos"):
         partes.append((hoje["repetidos"], "repetidos", "falha"))
-    return _numeros(None, "", partes, ["o ERP não registra falha de entrega"])
+    obs = [_motivos(hoje.get("motivos"))]
+    if hoje.get("tipos"):
+        obs.append(" · ".join(f"{_milhar(n)} {re.sub(r'^camim\s*[-–]\s*', '', t, flags=re.I).lower()}"
+                              for t, n in hoje["tipos"][:3]))
+    if hoje.get("sem_registro") == hoje["emails"]:
+        obs.append("o programa não grava se falhou")
+    elif hoje.get("sem_registro"):
+        obs.append(f"{_milhar(hoje['sem_registro'])} sem registro de resultado")
+    return _numeros(None, "", partes, obs)
 
 
 def numeros_wpp(hoje: dict | None) -> dict | None:
@@ -368,9 +380,14 @@ def _robos_do_painel(painel: dict) -> list[dict]:
                           envio=envio, numeros=numeros_push(envio), robo="push"))
 
     for item in ((ind.get("email") or {}).get("data") or {}).values():
+        outros = item.get("categoria") == "Outros e-mails"
         robos.append(dict(familia="E-mail", nome=item.get("categoria") or "E-mail",
                           posto=item.get("posto"), ultimo=item.get("ultimo_envio"),
-                          numeros=numeros_email(item.get("hoje")), robo="email"))
+                          numeros=numeros_email(item.get("hoje")),
+                          robo="email_outros" if outros else "email",
+                          # Muitos programas, sem hora certa: dia sem e-mail
+                          # não é robô parado — fica fora da conta de parados
+                          vigia=not outros))
 
     for item in ((ind.get("tef") or {}).get("data") or {}).values():
         robos.append(dict(familia="TEF", nome="TEF Recorrente",
@@ -411,6 +428,8 @@ def api_robos():
             continue
         posto = saida.setdefault(r["posto"], dict(robos=[], total=0, parados=0, contagem={}))
         posto["robos"].append(r)
+        if r.get("vigia") is False:
+            continue    # aparece com os números, mas não conta como robô parado
         posto["total"] += 1
         posto["parados"] += int(r["dias"] >= 1)
         posto["contagem"][r["status"]] = posto["contagem"].get(r["status"], 0) + 1

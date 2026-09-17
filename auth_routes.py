@@ -2140,21 +2140,35 @@ def _lista_tef(posto: str) -> list:
             for dh, mat, apr, valor, erro, resp in rows]
 
 
-def _lista_email(posto: str) -> list:
+def _lista_email(posto: str, outros: bool = False) -> list:
+    """Boleto (outros=False) ou todo o resto. A situação explica a coluna Erro
+    da vw_cad_email (email_resultado): ID da Amazon SES = aceito; "EMAIL
+    EXCECAO HTTP" = falhou; vazio = o programa não grava o resultado."""
+    from email_resultado import explicar_erro_email
     from export_indicadores_painel import KPI_DB, _connect_ro
     conn = _connect_ro(KPI_DB)
-    rows = conn.execute("""
-        SELECT datahora, matricula, titulo_original
+    colunas = {r[1] for r in conn.execute("PRAGMA table_info(ind_email)")}
+    erro = "erro" if "erro" in colunas else "''"
+    falhou = "falhou" if "falhou" in colunas else "0"
+    rows = conn.execute(f"""
+        SELECT datahora, matricula, titulo_original, {erro}, {falhou}
         FROM ind_email
-        WHERE posto = ? AND titulo_categoria = 'Boleto' AND date(datahora) = date('now','localtime')
+        WHERE posto = ? AND date(datahora) = date('now','localtime')
+          AND titulo_categoria {'<>' if outros else '='} 'Boleto'
         ORDER BY datahora LIMIT ?""", (posto, _LISTA_MAX)).fetchall()
     conn.close()
     vistos, saida = set(), []
-    for dh, mat, titulo in rows:
-        repetido = titulo in vistos
+    for dh, mat, titulo, texto_erro, deu_erro in rows:
+        repetido = not outros and titulo in vistos
         vistos.add(titulo)
+        if deu_erro:
+            ok, situacao = False, explicar_erro_email(texto_erro)
+        elif repetido:
+            ok, situacao = False, "repetido (mesma cobrança já enviada hoje)"
+        else:
+            ok, situacao = True, explicar_erro_email(texto_erro)
         saida.append(dict(hora=(dh or "")[11:16], quem=mat or "", nome=titulo or "",
-                          ok=not repetido, situacao="repetido" if repetido else "enviado", valor=None))
+                          ok=ok, situacao=situacao, valor=None, codigo=(texto_erro or "")[:120]))
     return saida
 
 
@@ -2204,6 +2218,8 @@ def indicadores_robo_lista():
             linhas = _lista_tef(posto)
         elif robo == "email":
             linhas = _lista_email(posto)
+        elif robo == "email_outros":
+            linhas = _lista_email(posto, outros=True)
         elif robo.startswith("wpp:") and robo[4:].isdigit():
             linhas = _lista_wpp(posto, int(robo[4:]))
         else:
