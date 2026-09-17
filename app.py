@@ -2691,20 +2691,26 @@ def api_get_metas():
             "detail": str(e)
         }), 503
 
+    # A linha canônica do mês é a de MENOR id ativo — a mesma que o ETL lê
+    # (sql_metas/sql_metas.sql). Ler por ids diferentes aqui e lá foi o que fez
+    # o modal mostrar 220 e o card do KPI mostrar 0 em set/2026.
     sql = """
     SET NOCOUNT ON;
-    SELECT TOP 1
+    SELECT
         idMetaFilial, ano, mes, DataReferencia,
         Meta1Venda, Meta2Venda, Meta1Mensalidade, Meta2Mensalidade, desativado
     FROM Cad_MetaFilial
     WHERE desativado = 0
       AND ano = :ano
       AND mes = :mes
-    ORDER BY idMetaFilial DESC;
+    ORDER BY idMetaFilial;
     """
 
     with eng.connect() as con:
-        row = con.execute(text(sql), {"ano": y, "mes": mo}).mappings().first()
+        rows = con.execute(text(sql), {"ano": y, "mes": mo}).mappings().all()
+
+    row = rows[0] if rows else None
+    duplicadas = max(len(rows) - 1, 0)
 
     if not row:
         return jsonify({
@@ -2712,7 +2718,8 @@ def api_get_metas():
             "exists": False,
             "posto": posto,
             "ym": ym,
-            "meta": None
+            "meta": None,
+            "duplicadas": 0
         })
 
     meta = {
@@ -2732,7 +2739,8 @@ def api_get_metas():
         "exists": True,
         "posto": posto,
         "ym": ym,
-        "meta": meta
+        "meta": meta,
+        "duplicadas": duplicadas
     })
 
 
@@ -2761,22 +2769,27 @@ def api_upsert_metas():
     except Exception as e:
         return jsonify({"ok": False, "code": "BAD_REQUEST", "message": str(e)}), 400
 
-    def _fnum(x):
+    # Campo ausente ou vazio significa "não mexe nesse valor".
+    # Salvar só a meta de vendas com o campo de mensalidade em branco NÃO pode
+    # apagar a meta de mensalidade que o ERP cadastrou — foi o que aconteceu em
+    # set/2026 no posto A (Meta2Mensalidade 6.512 virou 0). Cad_MetaFilial não
+    # está em Sis_HistoricoTabela: valor sobrescrito aqui não tem como voltar.
+    def _fnum_opt(x):
+        if x is None:
+            return None
+        if isinstance(x, str) and not x.strip():
+            return None
         try:
             n = float(x)
-            return n if n >= 0 else 0.0
-        except Exception:
-            return 0.0
+        except (TypeError, ValueError):
+            return None
+        return n if n >= 0 else 0.0
 
-    meta2_mens = _fnum(payload.get("meta2_mens"))
-    meta2_venda = _fnum(payload.get("meta2_venda"))
-
-    # regra: meta1 sugere 90% da meta2, mas pode editar
-    meta1_mens = payload.get("meta1_mens", None)
-    meta1_venda = payload.get("meta1_venda", None)
-
-    meta1_mens = _fnum(meta1_mens) if meta1_mens is not None else round(meta2_mens * 0.90, 2)
-    meta1_venda = _fnum(meta1_venda) if meta1_venda is not None else round(meta2_venda * 0.90, 2)
+    in_m2m = _fnum_opt(payload.get("meta2_mens"))
+    in_m2v = _fnum_opt(payload.get("meta2_venda"))
+    in_m1m = _fnum_opt(payload.get("meta1_mens"))
+    in_m1v = _fnum_opt(payload.get("meta1_venda"))
+    zerar = bool(payload.get("zerar"))
 
     try:
         eng = _try_build_engine_for_posto(posto, retries=4)
@@ -2788,43 +2801,105 @@ def api_upsert_metas():
             "detail": str(e)
         }), 503
 
-    # UPSERT por (ano, mes, desativado=0)
-    merge_sql = """
-    SET NOCOUNT ON;
-
-    MERGE Cad_MetaFilial AS tgt
-    USING (SELECT :ano AS ano, :mes AS mes) AS src
-      ON (tgt.ano = src.ano AND tgt.mes = src.mes AND tgt.desativado = 0)
-    WHEN MATCHED THEN
-      UPDATE SET
-        DataReferencia = :dataref,
-        Meta1Venda = :m1v,
-        Meta2Venda = :m2v,
-        Meta1Mensalidade = :m1m,
-        Meta2Mensalidade = :m2m,
-        desativado = 0
-    WHEN NOT MATCHED THEN
-      INSERT (ano, mes, DataReferencia, Meta1Venda, Meta2Venda, Meta1Mensalidade, Meta2Mensalidade, desativado)
-      VALUES (:ano, :mes, :dataref, :m1v, :m2v, :m1m, :m2m, 0);
-
-    SELECT TOP 1 idMetaFilial
-    FROM Cad_MetaFilial
-    WHERE desativado = 0 AND ano = :ano AND mes = :mes
-    ORDER BY idMetaFilial DESC;
-    """
-
-    params = {
-        "ano": y,
-        "mes": mo,
-        "dataref": ini,
-        "m1v": meta1_venda,
-        "m2v": meta2_venda,
-        "m1m": meta1_mens,
-        "m2m": meta2_mens,
+    ROTULOS_META = {
+        "Meta2Mensalidade": "Meta 2 de mensalidade",
+        "Meta1Mensalidade": "Meta 1 de mensalidade",
+        "Meta2Venda": "Meta 2 de vendas",
+        "Meta1Venda": "Meta 1 de vendas",
     }
 
-    with eng.begin() as con:
-        new_id = con.execute(text(merge_sql), params).scalar()
+    class _ZerariaMeta(Exception):
+        def __init__(self, campos):
+            self.campos = campos
+
+    # UPDLOCK/HOLDLOCK: sem isso dois cliques no Salvar (ou duas abas) inserem
+    # duas linhas para o mesmo mês. Foi assim que set/2026 do posto A ficou com
+    # duas linhas ativas, cada leitor pegando uma.
+    sel_sql = """
+    SET NOCOUNT ON;
+    SELECT idMetaFilial, Meta1Venda, Meta2Venda, Meta1Mensalidade, Meta2Mensalidade
+    FROM Cad_MetaFilial WITH (UPDLOCK, HOLDLOCK)
+    WHERE desativado = 0
+      AND ano = :ano
+      AND mes = :mes
+    ORDER BY idMetaFilial;
+    """
+
+    upd_sql = """
+    UPDATE Cad_MetaFilial
+       SET DataReferencia   = :dataref,
+           Meta1Venda       = :m1v,
+           Meta2Venda       = :m2v,
+           Meta1Mensalidade = :m1m,
+           Meta2Mensalidade = :m2m
+     WHERE idMetaFilial = :alvo;
+    """
+
+    ins_sql = """
+    INSERT INTO Cad_MetaFilial
+        (ano, mes, DataReferencia, Meta1Venda, Meta2Venda, Meta1Mensalidade, Meta2Mensalidade, desativado)
+    OUTPUT INSERTED.idMetaFilial
+    VALUES (:ano, :mes, :dataref, :m1v, :m2v, :m1m, :m2m, 0);
+    """
+
+    try:
+        with eng.begin() as con:
+            linhas = con.execute(text(sel_sql), {"ano": y, "mes": mo}).mappings().all()
+            atual = dict(linhas[0]) if linhas else {}
+            duplicadas = [int(r["idMetaFilial"]) for r in linhas[1:]]
+
+            def _atual(col):
+                return float(atual.get(col) or 0)
+
+            m2m = _atual("Meta2Mensalidade") if in_m2m is None else in_m2m
+            m2v = _atual("Meta2Venda") if in_m2v is None else in_m2v
+            # meta1 em branco preserva a que existe; em linha nova, sugere 90%
+            if in_m1m is not None:
+                m1m = in_m1m
+            else:
+                m1m = _atual("Meta1Mensalidade") if linhas else round(m2m * 0.90)
+            if in_m1v is not None:
+                m1v = in_m1v
+            else:
+                m1v = _atual("Meta1Venda") if linhas else round(m2v * 0.90)
+
+            m2m, m2v, m1m, m1v = (int(round(v)) for v in (m2m, m2v, m1m, m1v))
+
+            # Recusa com a lista na mão (não é bloqueio): zerar meta que existe
+            # exige o "zerar" explícito, que a tela pede por confirmação.
+            zerados = [
+                {"campo": col, "rotulo": ROTULOS_META[col], "valor_atual": _atual(col)}
+                for col, novo in (("Meta2Mensalidade", m2m), ("Meta1Mensalidade", m1m),
+                                  ("Meta2Venda", m2v), ("Meta1Venda", m1v))
+                if novo <= 0 < _atual(col)
+            ]
+            if zerados and not zerar:
+                raise _ZerariaMeta(zerados)
+
+            # Duplicata do mês vira desativada: o UPDATE abaixo tocaria todas as
+            # linhas que casam por (ano, mes), e o ETL lê só a de menor id.
+            for dup in duplicadas:
+                con.execute(
+                    text("UPDATE Cad_MetaFilial SET desativado = 1 WHERE idMetaFilial = :i"),
+                    {"i": dup}
+                )
+
+            params = {
+                "ano": y, "mes": mo, "dataref": ini,
+                "m1v": m1v, "m2v": m2v, "m1m": m1m, "m2m": m2m,
+            }
+            if linhas:
+                new_id = int(atual["idMetaFilial"])
+                con.execute(text(upd_sql), dict(params, alvo=new_id))
+            else:
+                new_id = con.execute(text(ins_sql), params).scalar()
+    except _ZerariaMeta as z:
+        return jsonify({
+            "ok": False,
+            "code": "ZERARIA_META",
+            "message": "Este salvamento apagaria meta já cadastrada.",
+            "campos": z.campos
+        }), 409
 
     # Patch do JSON (se possível) para refletir imediato na tela
     meta_obj_json = {
@@ -2832,8 +2907,8 @@ def api_upsert_metas():
         "ano": y,
         "mes": mo,
         "data_referencia": ini.isoformat(),
-        "meta_mens": float(meta2_mens),
-        "meta_venda": float(meta2_venda),
+        "meta_mens": float(m2m),
+        "meta_venda": float(m2v),
     }
     try:
         patch_result = _patch_json_meta(posto, ym, meta_obj_json)
@@ -2846,11 +2921,12 @@ def api_upsert_metas():
         "posto": posto,
         "ym": ym,
         "saved": {
-            "Meta1Mensalidade": meta1_mens,
-            "Meta2Mensalidade": meta2_mens,
-            "Meta1Venda": meta1_venda,
-            "Meta2Venda": meta2_venda,
+            "Meta1Mensalidade": m1m,
+            "Meta2Mensalidade": m2m,
+            "Meta1Venda": m1v,
+            "Meta2Venda": m2v,
         },
+        "duplicadas_desativadas": duplicadas,
         "json_patch": patch_result
     })
 

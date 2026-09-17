@@ -843,7 +843,10 @@
             meta2Vend.value = Math.round(Number(resp.meta.Meta2Venda || 0));
             meta1Mens.value = Math.round(Number(resp.meta.Meta1Mensalidade || sugest90(meta2Mens.value)));
             meta1Vend.value = Math.round(Number(resp.meta.Meta1Venda || sugest90(meta2Vend.value)));
-            setMetaMsg('Meta existente carregada. Ajuste e salve.', false);
+            const dupAviso = (Number(resp.duplicadas) > 0)
+              ? ` Atenção: ${resp.duplicadas} linha(s) duplicada(s) deste mês serão desativadas ao salvar.`
+              : '';
+            setMetaMsg('Meta existente carregada. Ajuste e salve.' + dupAviso, false);
           }else{
             setMetaMsg('Sem meta cadastrada para este mês. Informe e salve.', false);
           }
@@ -873,7 +876,10 @@
             meta2Vend.value = Math.round(Number(resp.meta.Meta2Venda || 0));
             meta1Mens.value = Math.round(Number(resp.meta.Meta1Mensalidade || sugest90(meta2Mens.value)));
             meta1Vend.value = Math.round(Number(resp.meta.Meta1Venda || sugest90(meta2Vend.value)));
-            setMetaMsg('Meta existente carregada. Ajuste e salve.', false);
+            const dupAviso = (Number(resp.duplicadas) > 0)
+              ? ` Atenção: ${resp.duplicadas} linha(s) duplicada(s) deste mês serão desativadas ao salvar.`
+              : '';
+            setMetaMsg('Meta existente carregada. Ajuste e salve.' + dupAviso, false);
           }else{
             setMetaMsg('Sem meta cadastrada para este mês. Informe e salve.', false);
           }
@@ -905,21 +911,40 @@
         try{
           setMetaMsg('Salvando...', false);
 
+          // Campo em branco vai como null e o backend preserva o que já existe.
+          // Mandar 0 aqui apagava a meta cadastrada no ERP (set/2026, posto A).
+          const emBranco = (v) => (String(v ?? '').trim() === '' ? null : Number(v));
+
           const body = {
             posto: selPosto.value,
             ym: inpYm.value,
-            meta2_mens: Number(meta2Mens.value || 0),
-            meta2_venda: Number(meta2Vend.value || 0),
-            meta1_mens: Number(meta1Mens.value || sugest90(meta2Mens.value)),
-            meta1_venda: Number(meta1Vend.value || sugest90(meta2Vend.value)),
+            meta2_mens: emBranco(meta2Mens.value),
+            meta2_venda: emBranco(meta2Vend.value),
+            meta1_mens: emBranco(meta1Mens.value),
+            meta1_venda: emBranco(meta1Vend.value),
           };
 
-          const resp = await apiSaveMeta(body);
+          let resp;
+          try{
+            resp = await apiSaveMeta(body);
+          }catch(err){
+            if(err.code !== 'ZERARIA_META') throw err;
+            const campos = (err.payload && err.payload.campos) || [];
+            const lista = campos.map(c => `- ${c.rotulo}: ${fmtInt.format(c.valor_atual)} vai virar 0`).join('\n');
+            const ok = confirm(`Este salvamento APAGA meta já cadastrada:\n\n${lista}\n\nConfirma zerar?`);
+            if(!ok){
+              setMetaMsg('Cancelado — nada foi alterado.', true);
+              return;
+            }
+            resp = await apiSaveMeta(Object.assign({}, body, {zerar: true}));
+          }
 
           // se o backend não conseguiu patch do JSON, avisa mas não falha
           const jp = resp.json_patch || {};
+          const dups = (resp.duplicadas_desativadas || []).length;
+          const dupTxt = dups ? ` (${dups} linha(s) duplicada(s) desativada(s))` : '';
           if(jp.patched){
-            setMetaMsg('Salvo. Atualizando tela...', false);
+            setMetaMsg('Salvo' + dupTxt + '. Atualizando tela...', false);
           }else{
             setMetaMsg(`Salvo no posto, mas o JSON não foi atualizado agora (${jp.reason || 'sem detalhe'}). Recarregue se necessário.`, false);
           }
