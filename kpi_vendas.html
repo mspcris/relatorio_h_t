@@ -603,6 +603,36 @@
                     </div>
                 </div>
 
+                <!-- VENDAS POR VENDEDOR (regra ERP × Broker) -->
+                <div class="card">
+                    <div class="card-header d-flex align-items-center justify-content-between flex-wrap">
+                        <h3 class="card-title mb-0">Vendas por vendedor</h3>
+                        <div class="mini muted">clique no vendedor para ver onde ele vendeu</div>
+                    </div>
+                    <div class="card-body py-2 mini muted">
+                        Quem vendeu: cadastro pelo <b>Broker</b> (corretor "BROKER …") → o vendedor é o <b>subcorretor</b>;
+                        cadastro pelo <b>ERP</b> → o vendedor é o <b>corretor</b> (usuário que cadastrou);
+                        <b>sem corretor</b> → vale o subcorretor. Mesmo nome em postos/canais diferentes vira uma linha só
+                        (sem diferença de acento ou maiúscula — grafias diferentes continuam separadas).
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0" id="tblVendedorWrap">
+                                <thead>
+                                    <tr>
+                                        <th>Vendedor</th>
+                                        <th>Onde vendeu</th>
+                                        <th class="text-right">Qtd</th>
+                                        <th class="text-right">Valor</th>
+                                        <th class="text-right">Ticket</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tblVendedor"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- GRÁFICOS -->
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
@@ -2061,6 +2091,93 @@
 </tr>`);
         }
 
+        // ====== Vendas por vendedor ======
+        // Regra do Cristiano (2026-09-18): cadastro pelo Broker grava o canal no
+        // corretor ("BROKER SEDE - ANCHIETA") e o vendedor real no subcorretor;
+        // cadastro pelo ERP grava o usuário que cadastrou no corretor.
+        const SEM_CORR = '(sem corretor)', SEM_SUB = '(sem subcorretor)';
+        const normNome = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase().replace(/\s+/g, ' ').trim();
+        function vendedorDe(corretor, sub) {
+            const c = String(corretor || '').trim() || SEM_CORR;
+            const sb = String(sub || '').trim() || SEM_SUB;
+            const temSub = sb !== SEM_SUB;
+            if (/BROKER/i.test(c)) return { nome: temSub ? sb : '(broker sem subcorretor)', canal: c };
+            if (c === SEM_CORR)   return { nome: temSub ? sb : '(sem vendedor)', canal: 'sem corretor' };
+            return { nome: c, canal: 'ERP' };
+        }
+        let _vendAbertos = new Set();
+        function buildVendedorTable(pairList) {
+            const tb = el('#tblVendedor'); if (!tb) return;
+            const agg = new Map();   // chave normalizada -> {grafias, qtd, valor, onde: Map(canal|posto -> {qtd, valor})}
+            for (const p of pairList) {
+                for (const [posto, q] of Object.entries(p.postos || {})) {
+                    const v = vendedorDe(p.corretor, p.subcorretor);
+                    const k = normNome(v.nome);
+                    const cur = agg.get(k) || { grafias: new Map(), qtd: 0, valor: 0, onde: new Map() };
+                    cur.grafias.set(v.nome, (cur.grafias.get(v.nome) || 0) + q.qtd);
+                    cur.qtd += q.qtd; cur.valor += q.valor;
+                    const ko = v.canal + '||' + posto;
+                    const o = cur.onde.get(ko) || { canal: v.canal, posto, qtd: 0, valor: 0 };
+                    o.qtd += q.qtd; o.valor += q.valor; cur.onde.set(ko, o);
+                    agg.set(k, cur);
+                }
+            }
+            const lista = [...agg.entries()].map(([k, v]) => ({
+                k, ...v,
+                nome: [...v.grafias.entries()].sort((a, b) => b[1] - a[1])[0][0],
+                ondeList: [...v.onde.values()].sort((a, b) => b.qtd - a.qtd || b.valor - a.valor)
+            })).sort((a, b) => b.qtd - a.qtd || b.valor - a.valor);
+
+            tb.innerHTML = '';
+            if (!lista.length) {
+                tb.innerHTML = `<tr><td colspan="5" class="muted text-center">Sem vendas no período/posto selecionado.</td></tr>`;
+                return;
+            }
+            const tk = (q, v) => q ? fmt2.format(v / q) : '-';
+            let tQ = 0, tV = 0;
+            for (const r of lista) {
+                tQ += r.qtd; tV += r.valor;
+                const aberto = _vendAbertos.has(r.k);
+                const resumo = r.ondeList.map(o => `${o.canal === 'ERP' ? 'ERP' : o.canal} (${o.posto})`);
+                const txtOnde = resumo.length > 2 ? `${resumo.slice(0, 2).join(' · ')} +${resumo.length - 2}` : resumo.join(' · ');
+                const outras = r.grafias.size > 1 ? ` <span class="mini muted" title="${[...r.grafias.keys()].join(' | ')}">(${r.grafias.size} grafias)</span>` : '';
+                tb.insertAdjacentHTML('beforeend', `
+<tr class="vend-row" data-k="${r.k}" style="cursor:pointer;background:#fff">
+  <td><i class="fas fa-caret-${aberto ? 'down' : 'right'} mr-1 muted"></i><b>${r.nome}</b>${outras}</td>
+  <td class="mini">${txtOnde}</td>
+  <td class="text-right"><b>${fmtInt.format(r.qtd)}</b></td>
+  <td class="text-right">${fmtInt.format(r.valor)}</td>
+  <td class="text-right">${tk(r.qtd, r.valor)}</td>
+</tr>`);
+                if (aberto) {
+                    for (const o of r.ondeList) {
+                        tb.insertAdjacentHTML('beforeend', `
+<tr class="mini" style="background:#f8f9fa">
+  <td class="pl-4 muted">${o.canal === 'ERP' ? 'Cadastro pelo ERP' : (o.canal === 'sem corretor' ? 'Sem corretor' : 'Broker')}</td>
+  <td>${o.canal === 'ERP' || o.canal === 'sem corretor' ? '' : o.canal + ' · '}posto ${o.posto}</td>
+  <td class="text-right">${fmtInt.format(o.qtd)}</td>
+  <td class="text-right">${fmtInt.format(o.valor)}</td>
+  <td class="text-right">${tk(o.qtd, o.valor)}</td>
+</tr>`);
+                    }
+                }
+            }
+            tb.insertAdjacentHTML('beforeend', `
+<tr style="background:#f1f3f5">
+  <td colspan="2"><b>Total</b></td>
+  <td class="text-right"><b>${fmtInt.format(tQ)}</b></td>
+  <td class="text-right"><b>${fmtInt.format(tV)}</b></td>
+  <td class="text-right"><b>${tk(tQ, tV)}</b></td>
+</tr>`);
+            tb.onclick = e => {
+                const tr = e.target.closest('.vend-row'); if (!tr) return;
+                const k = tr.dataset.k;
+                _vendAbertos.has(k) ? _vendAbertos.delete(k) : _vendAbertos.add(k);
+                buildVendedorTable(pairList);
+            };
+        }
+
         // ====== Ranking por Corretor / Subcorretor ======
         function buildCorretorTables(meses, selection) {
             const tbC = el('#tblCorretor');
@@ -2089,9 +2206,11 @@
                     const ps = bucket.por_corretor_subcorretor || [];
                     for (const p of ps) {
                         const k = p.corretor + '||' + p.subcorretor;
-                        const cur = pairAgg.get(k) || { corretor: p.corretor, subcorretor: p.subcorretor, qtd: 0, valor: 0 };
+                        const cur = pairAgg.get(k) || { corretor: p.corretor, subcorretor: p.subcorretor, qtd: 0, valor: 0, postos: {} };
                         cur.qtd   += num(p.qtd_vendas);
                         cur.valor += num(p.valor_total);
+                        const pp = cur.postos[posto] || (cur.postos[posto] = { qtd: 0, valor: 0 });
+                        pp.qtd += num(p.qtd_vendas); pp.valor += num(p.valor_total);
                         pairAgg.set(k, cur);
                     }
                 }
@@ -2128,6 +2247,8 @@
             const pairList = [...pairAgg.values()]
                 .map(p => ({ ...p, ticket: p.qtd ? p.valor / p.qtd : null }))
                 .sort((a, b) => b.qtd - a.qtd || b.valor - a.valor);
+
+            buildVendedorTable(pairList);
 
             tbS.innerHTML = '';
             if (!pairList.length) {
