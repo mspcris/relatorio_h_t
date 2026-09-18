@@ -83,6 +83,10 @@
     .kpi .card { border-radius:12px; margin:0; }
     .chart-card .card-body { height:360px; }
     .pill { display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:999px; background:#f3f4f6; }
+    .kpi .razao { font-size:.85rem; margin-top:2px; }
+    .kpi .razao b { font-size:1rem; }
+    .pct-baixo { color:#c0392b; } .pct-medio { color:#b7791f; } .pct-ok { color:#1e7e34; }
+    #avisoAtend { display:none; }
     .kpi-type-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; }
   </style>
 </head>
@@ -215,6 +219,7 @@
                         <h3 class="card-title mb-0">KPIs</h3>
                         <span class="mini muted">Fonte: prescricao_hoje.json</span>
                     </div>
+                    <div class="card-body pb-0"><div id="avisoAtend" class="alert alert-warning py-2 mb-0 small"></div></div>
                     <div class="card-body kpi" id="kpis"></div>
                     <div class="card-body">
                         <div class="kpi-type-grid" id="kpiTipos"></div>
@@ -224,7 +229,7 @@
                 <!-- TOP MÉDICOS -->
                 <div class="card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Top Médicos no período filtrado</h3>
+                        <h3 class="card-title mb-0">Médicos no período — receitas × atendimentos</h3>
                         <span class="mini muted"><span class="pill" id="selResumo"></span></span>
                     </div>
                     <div class="card-body p-0">
@@ -233,8 +238,10 @@
                                 <thead>
                                     <tr>
                                         <th>Médico</th>
-                                        <th class="text-right">Qtd</th>
-                                        <th class="text-right small-td">Share</th>
+                                        <th class="text-right">Atendidos</th>
+                                        <th class="text-right">Prescrições</th>
+                                        <th class="text-right" title="Prescrições ÷ atendidos. Meta mínima: 1 por atendimento (100%).">Receitas / atend.</th>
+                                        <th class="text-right small-td">Share das prescrições</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tblMedicos"></tbody>
@@ -246,7 +253,7 @@
                 <!-- GRÁFICOS -->
                 <div class="card chart-card">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h3 class="card-title mb-0">Prescrições por dia — período filtrado</h3>
+                        <h3 class="card-title mb-0">Prescrições × atendimentos por dia — período filtrado</h3>
                     </div>
                     <div class="card-body"><canvas id="chDia"></canvas></div>
                 </div>
@@ -373,6 +380,21 @@
                 valor: Number(r.valor) || 1
             };
         }
+        // Denominador: atendidos (sql/atendimento.sql) — mesma regra de "Atendido"
+        // da Agenda do Dia do F3. Um atendimento = uma consulta.
+        function parseAtend(r) {
+            return {
+                data_consulta: String(r.data_consulta || '').slice(0, 10),
+                medico: (r.medico || '').trim(),
+                posto: (r.posto || '').trim(),
+                valor: Number(r.atendidos) || 0
+            };
+        }
+        function getAtendRows() { return (H?.atendimentos || []).map(parseAtend); }
+        function pctRazao(presc, atend) { return atend > 0 ? (presc * 100 / atend) : null; }
+        // Meta é 1 receita por atendimento: abaixo de 50% vermelho, até 100% amarelo, 100%+ verde.
+        function pctClasse(p) { return p == null ? 'muted' : (p < 50 ? 'pct-baixo' : (p < 100 ? 'pct-medio' : 'pct-ok')); }
+        function pctTxt(p) { return p == null ? '—' : fmt2.format(p) + '%'; }
         function groupCount(rows, key) {
             const m = new Map();
             rows.forEach(r => {
@@ -403,6 +425,14 @@
             return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0">${out}</div></div></div>`;
         }
 
+        function kpiRazao(title, presc, atend) {
+            const p = pctRazao(presc, atend);
+            const sub = atend > 0
+                ? `<div class="razao muted">de ${fmtInt.format(atend)} atendidos · <b class="${pctClasse(p)}">${pctTxt(p)}</b></div>`
+                : `<div class="razao muted">sem atendimentos no período</div>`;
+            return `<div class="card"><div class="card-body p-2"><div class="small muted">${title}</div><div class="h5 mb-0">${fmtInt.format(presc)}</div>${sub}</div></div>`;
+        }
+
         /* =================== Estado =================== */
         let H = null;
         let POSTOS = [];
@@ -424,7 +454,8 @@
             H = raw || {};
             const all = (H.linhas || []).map(parseRow);
 
-            POSTOS = [...new Set(all.map(r => r.posto).filter(x => /^[A-Z]$/.test(x)))].sort();
+            const allAt = getAtendRows();
+            POSTOS = [...new Set(all.concat(allAt).map(r => r.posto).filter(x => /^[A-Z]$/.test(x)))].sort();
 
             // datas default: mês atual 1º dia -> hoje (sempre em SP)
             setRangeMesAtual();
@@ -713,6 +744,9 @@
 
             const all = getAllRows();
             const rowsSel = filterRows(all, { from: dateFrom, to: dateTo, postoSet });
+            const atSel = filterRows(getAtendRows(), { from: dateFrom, to: dateTo, postoSet });
+            const somaAt = (a, b) => (a && b && a <= b) ? sum(atSel.filter(r => r.data_consulta >= a && r.data_consulta <= b).map(r => r.valor)) : 0;
+            renderAvisoAtend();
 
             // resumo do filtro
             const filtroTxt = `${dateFrom || '-'} → ${dateTo || '-'} | ${selPosto === 'ALL' ? 'Todos' : selPosto}`;
@@ -759,18 +793,33 @@
                 ? new Set(rowsSel.filter(r => r.data_consulta === tKey).map(r => r.medico).filter(Boolean)).size
                 : 0;
 
+            // Atendidos nas MESMAS janelas das prescrições
+            const atHoje = temHojeNoFiltro ? somaAt(tKey, tKey) : 0;
+            const atOntem = temOntemNoFiltro ? somaAt(yKey, yKey) : 0;
+            const atSemAtual = somaAt(semAtualIni, semAtualFim);
+            const atSemPass = somaAt(semPassIni, semPassFim);
+            const atPeriodo = sum(atSel.map(r => r.valor));
+
             // Cartões principais
             box.innerHTML = [
-                kpiCard('Prescrições hoje', hoje),
-                kpiCard('Ontem', ontem),
-                kpiCard('Semana atual', semanaAtual),
-                kpiCard('Semana passada', semanaPassada),
+                kpiRazao('Prescrições no período', totalPeriodo, atPeriodo),
+                kpiRazao('Prescrições hoje', hoje, atHoje),
+                kpiRazao('Ontem', ontem, atOntem),
+                kpiRazao('Semana atual', semanaAtual, atSemAtual),
+                kpiRazao('Semana passada', semanaPassada, atSemPass),
                 kpiCard('Média diária', mediaDiaria),
                 kpiCard('Médicos ativos hoje', medicosAtivosHoje),
                 (selPosto === 'ALL' ? (() => {
-                    const porPosto = groupCount(rowsSel, 'posto');
-                    const txt = porPosto.map(([p, q]) => `${p}:${fmtInt.format(q)}`).join(' ');
-                    return kpiCard('Totais por posto', txt || '-', 'txt');
+                    // Todo posto com atendimento aparece — posto sem prescrição é o 0%.
+                    const pr = Object.fromEntries(groupCount(rowsSel, 'posto'));
+                    const at = Object.fromEntries(groupCount(atSel, 'posto'));
+                    const ps = [...new Set([...Object.keys(pr), ...Object.keys(at)])]
+                        .sort((a, b) => (pctRazao(pr[b] || 0, at[b] || 0) ?? -1) - (pctRazao(pr[a] || 0, at[a] || 0) ?? -1));
+                    const txt = ps.map(p => {
+                        const pc = pctRazao(pr[p] || 0, at[p] || 0);
+                        return `<div class="mini">${p}: ${fmtInt.format(pr[p] || 0)} / ${fmtInt.format(at[p] || 0)} · <b class="${pctClasse(pc)}">${pctTxt(pc)}</b></div>`;
+                    }).join('');
+                    return kpiCard('Por posto — prescrições / atendidos', txt || '-', 'txt');
                 })() : '')
             ].join('');
 
@@ -790,22 +839,49 @@
             const all = getAllRows();
             const rowsSel = filterRows(all, { from: dateFrom, to: dateTo, postoSet });
 
-            // Top médicos
+            // Médicos: união de quem prescreveu e de quem atendeu — quem atende e
+            // não prescreve é justamente o que se quer ver. Ordem: mais atendidos primeiro.
             const tot = sum(rowsSel.map(r => r.valor));
-            const top = groupCount(rowsSel, 'medico');
+            const pr = Object.fromEntries(groupCount(rowsSel, 'medico'));
+            const at = Object.fromEntries(groupCount(filterRows(getAtendRows(), { from: dateFrom, to: dateTo, postoSet }), 'medico'));
+            const meds = [...new Set([...Object.keys(pr), ...Object.keys(at)])]
+                .sort((a, b) => ((at[b] || 0) - (at[a] || 0)) || ((pr[b] || 0) - (pr[a] || 0)));
             const tb = el('#tblMedicos'); tb.innerHTML = '';
-            top.forEach(([med, qtd]) => {
+            meds.forEach(med => {
+                const qtd = pr[med] || 0, na = at[med] || 0;
                 const share = tot ? (qtd * 100 / tot) : 0;
+                const pc = pctRazao(qtd, na);
                 tb.insertAdjacentHTML('beforeend',
-                    `<tr><td>${med}</td><td class="text-right">${fmtInt.format(qtd)}</td><td class="text-right small-td">${fmt2.format(share)}%</td></tr>`);
+                    `<tr><td>${med}</td><td class="text-right">${na ? fmtInt.format(na) : '<span class="muted">—</span>'}</td>` +
+                    `<td class="text-right">${fmtInt.format(qtd)}</td><td class="text-right ${pctClasse(pc)}"><b>${pctTxt(pc)}</b></td>` +
+                    `<td class="text-right small-td">${fmt2.format(share)}%</td></tr>`);
             });
-            if (!top.length) tb.innerHTML = `<tr><td colspan="3" class="muted">Sem dados</td></tr>`;
+            if (!meds.length) tb.innerHTML = `<tr><td colspan="5" class="muted">Sem dados</td></tr>`;
+        }
+
+        // Posto×mês do período que tem prescrição mas nenhum atendimento no JSON:
+        // o % desses meses sairia inflado (ou infinito), então a tela avisa.
+        function renderAvisoAtend() {
+            const box = el('#avisoAtend'); if (!box) return;
+            if (!H || !Array.isArray(H.atendimentos)) {
+                box.style.display = 'block';
+                box.textContent = 'Atendimentos ainda não carregados pelo ETL — a comparação receitas × atendimentos aparece na próxima atualização.';
+                return;
+            }
+            const mesesAt = new Set(getAtendRows().map(r => r.posto + '|' + r.data_consulta.slice(0, 7)));
+            const faltam = new Set();
+            filterRows(getAllRows(), { from: dateFrom, to: dateTo, postoSet })
+                .forEach(r => { const k = r.posto + '|' + r.data_consulta.slice(0, 7); if (!mesesAt.has(k)) faltam.add(k.replace('|', ' ')); });
+            box.style.display = faltam.size ? 'block' : 'none';
+            box.textContent = faltam.size ? `Sem atendimentos carregados para: ${[...faltam].sort().join(', ')} — o % desses meses não é confiável.` : '';
         }
 
         /* =================== Gráficos =================== */
         function initCharts() {
             const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
-            chDia = new Chart(document.getElementById('chDia'), { type: 'line', data: { labels: [], datasets: [] }, options: base });
+            chDia = new Chart(document.getElementById('chDia'), { type: 'line', data: { labels: [], datasets: [] },
+                options: { ...base, scales: { y: { beginAtZero: true, title: { display: true, text: 'Qtd' } },
+                    y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '% receitas / atend.' } } } } });
             chTipo = new Chart(document.getElementById('chTipo'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
             chTopMed = new Chart(document.getElementById('chTopMed'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
             chPosto = new Chart(document.getElementById('chPosto'), { type: 'bar', data: { labels: [], datasets: [] }, options: base });
@@ -820,8 +896,17 @@
             rowsSel.forEach(r => { mapDia[r.data_consulta] = (mapDia[r.data_consulta] || 0) + (Number(r.valor) || 1); });
             const labelsDia = Object.keys(mapDia).sort();
             const dataDia = labelsDia.map(k => mapDia[k] || 0);
-            chDia.data.labels = labelsDia;
-            chDia.data.datasets = [{ label: 'Qtd', data: dataDia, tension: .2 }];
+            const mapAt = {};
+            filterRows(getAtendRows(), { from: dateFrom, to: dateTo, postoSet })
+                .forEach(r => { mapAt[r.data_consulta] = (mapAt[r.data_consulta] || 0) + r.valor; });
+            const labelsAll = [...new Set([...labelsDia, ...Object.keys(mapAt)])].sort();
+            chDia.data.labels = labelsAll;
+            chDia.data.datasets = [
+                { label: 'Atendidos', data: labelsAll.map(k => mapAt[k] || 0), tension: .2, borderColor: '#6c757d', backgroundColor: '#6c757d' },
+                { label: 'Prescrições', data: labelsAll.map(k => mapDia[k] || 0), tension: .2, borderColor: '#007bff', backgroundColor: '#007bff' },
+                { label: 'Receitas / atend. (%)', data: labelsAll.map(k => { const p = pctRazao(mapDia[k] || 0, mapAt[k] || 0); return p == null ? null : +p.toFixed(1); }),
+                  yAxisID: 'y1', borderDash: [5, 4], tension: .2, borderColor: '#28a745', backgroundColor: '#28a745' }
+            ];
             chDia.update();
 
             const tipos = groupCount(rowsSel, 'tipo_prescricao');
@@ -875,7 +960,9 @@
                 kpis: {
                     hoje: sum(rowsSel.filter(r => r.data_consulta === tKey).map(r => r.valor)),
                     medicos_ativos_hoje: new Set(rowsSel.filter(r => r.data_consulta === tKey).map(r => r.medico).filter(Boolean)).size,
-                    media_diaria: mediaDiaria
+                    media_diaria: mediaDiaria,
+                    atendidos_periodo: sum(filterRows(getAtendRows(), { from: dateFrom, to: dateTo, postoSet }).map(r => r.valor)),
+                    prescricoes_periodo: sum(rowsSel.map(r => r.valor))
                 }
             };
             return payload;

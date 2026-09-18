@@ -49,6 +49,9 @@ SRC_TEMPLATES_DIR   = os.path.join(BASE_DIR, "templates")  # opcional: front est
 TARGET_TEMPLATES_DIR = os.getenv("TARGET_TEMPLATES_DIR", os.path.join(BASE_DIR, "public"))
 
 EARLIEST_ALLOWED = date(2020, 1, 1)
+# Atendimentos só servem de denominador para a prescrição, que só existe a
+# partir de jun/2025. Sem este piso a 1ª execução buscaria 80 meses × 13 postos.
+ATENDIMENTO_DESDE = "2025-06"
 POSTOS = list("ANXYBRPCDGIMJ")
 ODBC_DRIVER = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 
@@ -160,6 +163,9 @@ def infer_key_from_filename(fn):
     # === PRESCRIÇÃO ===
     if name.startswith("prescricao"):
         return "prescricao"
+    # Denominador do KPI de Prescrições (atendidos por dia × médico)
+    if name.startswith("atendimento"):
+        return "atendimento"
 
     # === FALLBACK LEGADO ===
     for key, pat in KEY_PATTERNS.items():
@@ -787,6 +793,30 @@ def _dict_add_inplace(target, key, inc=1):
 def _sorted_dict(d):
     return dict(sorted(d.items(), key=lambda kv: (-kv[1], kv[0])))
 
+def _ler_atendimentos():
+    """Linhas {data_consulta, medico, posto, atendidos} de dados/*_atendimento.csv."""
+    pat = re.compile(r"^(?P<posto>[A-Z])_(?P<ym>\d{4}-\d{2})_atendimento\.csv$", re.I)
+    out = []
+    for fn in sorted(os.listdir(DADOS_DIR)):
+        m = pat.match(fn)
+        if not m:
+            continue
+        try:
+            df = pd.read_csv(os.path.join(DADOS_DIR, fn), dtype={"medico": str})
+        except Exception:
+            continue
+        if df.empty or "atendidos" not in df.columns:
+            continue
+        posto = m.group("posto").upper()
+        for r in df.itertuples(index=False):
+            out.append({
+                "data_consulta": str(r.data_consulta)[:10],
+                "medico": (r.medico if isinstance(r.medico, str) else "").strip(),
+                "posto": posto,
+                "atendidos": int(r.atendidos or 0),
+            })
+    return out
+
 def build_prescricao_jsons_enriquecidos():
     """
     Gera:
@@ -914,7 +944,10 @@ def build_prescricao_jsons_enriquecidos():
             "por_posto": _sorted_dict(por_posto_hoje)
         },
         "linhas_hoje": linhas_hoje,
-        "linhas": all_rows
+        "linhas": all_rows,
+        # Denominador: atendidos por dia × médico × posto (sql/atendimento.sql).
+        # Só entra posto×mês que tem o CSV — a tela avisa quando falta.
+        "atendimentos": _ler_atendimentos(),
     }
     with open(os.path.join(JSON_DIR, "prescricao_hoje.json"), "w", encoding="utf-8") as f:
         json.dump(out_hoje, f, ensure_ascii=False, indent=2)
@@ -1359,6 +1392,8 @@ def run():
 
             for entry in sqls_mensais:
                 key = entry["key"] or "desconhecido"
+                if key == "atendimento" and ym < ATENDIMENTO_DESDE:
+                    continue
                 sql_txt = entry["sql"]
                 out_path = target_csv_path(posto, ym, key)
 
