@@ -11,6 +11,7 @@ aqui é o token.
   GET /api/avisos/robos?postos=A,C                robôs do posto e há quanto tempo pararam
   GET /api/avisos/leads?postos=A,C                leads criados hoje, ontem e a média de 30d
   GET /api/avisos/agenda?postos=A,N,I             prazo da próxima vaga por especialidade
+  GET /api/avisos/prescricoes?postos=A,G          prescrições: hoje, ontem, semanas, mês, tipos e médicos
 
 Nenhuma delas recalcula regra de negócio; todas leem o que o KPI já produziu:
 as notas saem do `relatorio_nf.carregar_dados` (o mesmo agregado do relatório
@@ -567,3 +568,120 @@ def api_agenda():
         "gerado_em": meta.get("gerado_em"),
         "nomes": {k: v.get("nome") for k, v in (d.get("postos_info") or {}).items()},
     })
+
+
+# ── Prescrições ─────────────────────────────────────────────────────────────
+# O `prescricao_hoje.json` do export_governanca (de 15 em 15 min) — o MESMO
+# arquivo que a página KPI_prescricao.html lê. As contas repetem as do JS de
+# lá (renderKPIs), no filtro padrão da página (1º do mês até hoje):
+#   hoje / ontem           soma de `valor` no dia
+#   semana atual           segunda até hoje; semana passada = segunda a domingo
+#   média diária           total do mês ÷ dias corridos do mês (hoje incluso)
+#   médicos ativos hoje    médicos distintos com prescrição hoje
+# Única diferença consciente: a página corta a semana no 1º do mês porque o
+# filtro de datas corta; aqui semana é semana (no dia 3, "semana atual" conta
+# a segunda do mês anterior). Mudou a régua lá, muda aqui.
+# Só voltam postos com prescrição neste mês ou no anterior: um posto que parou
+# de prescrever pelo sistema há um ano não é "zero hoje", é "não usa".
+
+PRESCRICAO_JSON = os.getenv("PRESCRICAO_HOJE_JSON",
+                            "/opt/relatorio_h_t/json_consolidado/prescricao_hoje.json")
+_PRESCRICAO_CACHE: dict = {}
+TOP_MEDICOS = 15
+
+
+def _linhas_prescricao() -> tuple[list, float]:
+    """(linhas, mtime) — o JSON tem ~7 MB; só relê quando o arquivo muda."""
+    mtime = os.path.getmtime(PRESCRICAO_JSON)
+    if _PRESCRICAO_CACHE.get("mtime") != mtime:
+        with open(PRESCRICAO_JSON, encoding="utf-8") as f:
+            d = json.load(f)
+        _PRESCRICAO_CACHE.update(mtime=mtime, linhas=d.get("linhas") or [])
+    return _PRESCRICAO_CACHE["linhas"], mtime
+
+
+def resumo_prescricoes(linhas, postos=None, hoje: date | None = None) -> dict:
+    hoje = hoje or date.today()
+    h = hoje.isoformat()
+    ontem = (hoje - timedelta(days=1)).isoformat()
+    seg = hoje - timedelta(days=hoje.weekday())
+    seg_atual = seg.isoformat()
+    seg_passada, dom_passado = (seg - timedelta(days=7)).isoformat(), (seg - timedelta(days=1)).isoformat()
+    ini_mes = hoje.replace(day=1)
+    ini_anterior = (ini_mes - timedelta(days=1)).replace(day=1).isoformat()
+    ini_mes = ini_mes.isoformat()
+    quinze = (hoje - timedelta(days=13)).isoformat()
+
+    acc: dict = {}
+    for r in linhas:
+        d = str(r.get("data_consulta") or "")[:10]
+        posto = str(r.get("posto") or "").strip().upper()
+        if len(d) != 10 or d < min(ini_anterior, seg_passada) or d > h or len(posto) != 1:
+            continue
+        if postos and posto not in postos:
+            continue
+        v = int(_num(r.get("valor")) or 1)
+        p = acc.setdefault(posto, dict(hoje=0, ontem=0, semana_atual=0, semana_passada=0, mes=0,
+                                       mes_anterior=0, medicos_hoje=set(), medicos_mes=set(),
+                                       tipos={}, medicos={}, por_dia={}))
+        medico = str(r.get("medico") or "").strip()
+        if d == h:
+            p["hoje"] += v
+            if medico:
+                p["medicos_hoje"].add(medico)
+        if d == ontem:
+            p["ontem"] += v
+        if d >= seg_atual:
+            p["semana_atual"] += v
+        if seg_passada <= d <= dom_passado:
+            p["semana_passada"] += v
+        if d >= quinze:
+            p["por_dia"][d] = p["por_dia"].get(d, 0) + v
+        if d >= ini_mes:
+            p["mes"] += v
+            tipo = str(r.get("tipo_prescricao") or "").strip() or "Sem tipo"
+            p["tipos"][tipo] = p["tipos"].get(tipo, 0) + v
+            if medico:
+                p["medicos_mes"].add(medico)
+                p["medicos"][medico] = p["medicos"].get(medico, 0) + v
+        elif d >= ini_anterior:
+            p["mes_anterior"] += v
+
+    saida = {}
+    for posto, p in sorted(acc.items()):
+        if not (p["mes"] or p["mes_anterior"]):
+            continue    # só a semana passada caiu na janela: posto que não usa mais
+        por_n = lambda dic: sorted(dic.items(), key=lambda kv: (-kv[1], kv[0]))
+        saida[posto] = dict(
+            hoje=p["hoje"], ontem=p["ontem"],
+            semana_atual=p["semana_atual"], semana_passada=p["semana_passada"],
+            mes=p["mes"], mes_anterior=p["mes_anterior"],
+            media_diaria=round(p["mes"] / hoje.day),
+            medicos_hoje=len(p["medicos_hoje"]), medicos_mes=len(p["medicos_mes"]),
+            tipos_mes=[{"tipo": t, "n": n} for t, n in por_n(p["tipos"])],
+            medicos_top_mes=[{"medico": m, "n": n} for m, n in por_n(p["medicos"])[:TOP_MEDICOS]],
+            por_dia=[{"d": d, "n": n} for d, n in sorted(p["por_dia"].items())],
+        )
+    # O total do conjunto pedido: médico que atende em dois postos é UM médico
+    # ativo, então os distintos não se somam posto a posto.
+    somar = lambda campo: sum(p[campo] for p in saida.values())
+    total = {c: somar(c) for c in ("hoje", "ontem", "semana_atual", "semana_passada", "mes", "mes_anterior")}
+    total["media_diaria"] = round(total["mes"] / hoje.day)
+    for campo, conj in (("medicos_hoje", "medicos_hoje"), ("medicos_mes", "medicos_mes")):
+        total[campo] = len(set().union(*(acc[c][conj] for c in saida))) if saida else 0
+    return {"postos": saida, "total": total, "dia": h, "ym": h[:7], "dia_do_mes": hoje.day,
+            "semana_desde": seg_atual}
+
+
+@avisos_bp.get("/api/avisos/prescricoes")
+def api_prescricoes():
+    if not token_de_maquina():
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        linhas, mtime = _linhas_prescricao()
+    except (OSError, ValueError) as e:
+        logger.warning("prescrições indisponíveis: %s", e)
+        return jsonify({"error": f"prescricao_hoje.json indisponível: {str(e)[:120]}"}), 503
+    saida = resumo_prescricoes(linhas, set(_postos_pedidos()))
+    saida["gerado_em"] = datetime.fromtimestamp(mtime).strftime("%Y-%m-%dT%H:%M:%S")
+    return jsonify(saida)
