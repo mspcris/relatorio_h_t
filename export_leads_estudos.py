@@ -81,136 +81,122 @@ def _linhas(cur, sql):
     return cur.fetchall()
 
 
+def _pp_slot(store: dict, p: str) -> dict:
+    """Slot vazio de um posto dentro de um bloco (janela ou mês)."""
+    if p not in store:
+        store[p] = {"total": 0, "conv": 0, "fontes": [],
+                    "hora": [{"h": h, "n": 0, "c": 0} for h in range(24)],
+                    "dow": [{"d": d, "n": 0, "c": 0} for d in range(7)],
+                    "vendedores": []}
+    return store[p]
+
+
 def coletar_meses(cur, shift_l: str) -> dict:
-    """Um bloco por mês (YYYY-MM), últimos MESES_TENDENCIA meses, com a MESMA
-    quebra das janelas. Feito em 6 queries agrupadas por mês (não uma varredura
-    por mês) porque a tabela leads não tem índice em created_at. `shift_l` já vem
-    qualificado com o alias l. O mês usa o fuso LOCAL, igual à tendência mensal —
-    assim 'agosto' no seletor é o mesmo agosto do gráfico de tendência."""
+    """Um bloco por mês (YYYY-MM), últimos MESES_TENDENCIA meses, QUEBRADO POR
+    POSTO — o frontend soma só os postos do filtro do topo. Feito em 5 queries
+    agrupadas por mês+posto (não uma varredura por mês/posto) porque a tabela
+    leads não tem índice em created_at. `shift_l` já vem qualificado com o alias
+    l. O mês usa o fuso LOCAL, igual à tendência mensal — 'agosto' no seletor é o
+    mesmo agosto do gráfico de tendência."""
     janela = f"l.created_at >= NOW() - INTERVAL {MESES_TENDENCIA} MONTH"
     mes = f"DATE_FORMAT({shift_l}, '%Y-%m')"
     meses: dict = {}
 
-    def slot(m: str) -> dict:
-        if m not in meses:
-            meses[m] = {"total": 0, "conv": 0, "taxa": 0, "fontes": [], "postos": [],
-                        "hora": [{"h": h, "n": 0, "c": 0} for h in range(24)],
-                        "dow": [{"d": d, "n": 0, "c": 0} for d in range(7)],
-                        "vendedores": []}
-        return meses[m]
+    def slot(m: str, p: str) -> dict:
+        return _pp_slot(meses.setdefault(m, {"por_posto": {}})["por_posto"], p)
 
     # total + conversão
-    for r in _linhas(cur, f"SELECT {mes} m, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
-                          f"FROM leads l WHERE {janela} GROUP BY 1"):
-        s = slot(str(r["m"]))
+    for r in _linhas(cur, f"SELECT {mes} m, {POSTO_SQL} p, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+                          f"FROM leads l WHERE {janela} GROUP BY 1,2"):
+        s = slot(str(r["m"]), str(r["p"]))
         s["total"] = int(r["n"] or 0); s["conv"] = int(r["c"] or 0)
-        s["taxa"] = round(100 * s["conv"] / s["total"], 2) if s["total"] else 0
 
     # por fonte (canal)
     for r in _linhas(cur,
-            f"SELECT {mes} m, COALESCE(s.title, CONCAT('fonte #', l.leadsource_id), 'sem fonte') fonte, "
+            f"SELECT {mes} m, {POSTO_SQL} p, COALESCE(s.title, CONCAT('fonte #', l.leadsource_id), 'sem fonte') fonte, "
             f"COUNT(*) n, SUM(l.finish_lead_signup=1) c "
             f"FROM leads l LEFT JOIN leadsources s ON s.id = l.leadsource_id "
-            f"WHERE {janela} GROUP BY 1,2 ORDER BY n DESC"):
-        slot(str(r["m"]))["fontes"].append(
+            f"WHERE {janela} GROUP BY 1,2,3 ORDER BY n DESC"):
+        slot(str(r["m"]), str(r["p"]))["fontes"].append(
             {"fonte": str(r["fonte"]), "n": int(r["n"]), "c": int(r["c"] or 0)})
-
-    # por posto
-    for r in _linhas(cur,
-            f"SELECT {mes} m, {POSTO_SQL} p, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
-            f"FROM leads l WHERE {janela} GROUP BY 1,2 ORDER BY n DESC"):
-        slot(str(r["m"]))["postos"].append(
-            {"p": str(r["p"]), "n": int(r["n"]), "c": int(r["c"] or 0)})
 
     # por hora do dia
     for r in _linhas(cur,
-            f"SELECT {mes} m, HOUR({shift_l}) h, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
-            f"FROM leads l WHERE {janela} GROUP BY 1,2"):
-        slot(str(r["m"]))["hora"][int(r["h"])] = {
+            f"SELECT {mes} m, {POSTO_SQL} p, HOUR({shift_l}) h, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l WHERE {janela} GROUP BY 1,2,3"):
+        slot(str(r["m"]), str(r["p"]))["hora"][int(r["h"])] = {
             "h": int(r["h"]), "n": int(r["n"]), "c": int(r["c"] or 0)}
 
     # por dia da semana (1=dom..7=sáb → 0=dom..6=sáb)
     for r in _linhas(cur,
-            f"SELECT {mes} m, DAYOFWEEK({shift_l}) d, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
-            f"FROM leads l WHERE {janela} GROUP BY 1,2"):
-        slot(str(r["m"]))["dow"][int(r["d"]) - 1] = {
+            f"SELECT {mes} m, {POSTO_SQL} p, DAYOFWEEK({shift_l}) d, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l WHERE {janela} GROUP BY 1,2,3"):
+        slot(str(r["m"]), str(r["p"]))["dow"][int(r["d"]) - 1] = {
             "d": int(r["d"]) - 1, "n": int(r["n"]), "c": int(r["c"] or 0)}
 
-    # ranking de vendedores — top 20 por mês (ordena tudo e corta no Python)
+    # ranking de vendedores — top 20 por mês+posto (ordena tudo e corta no Python)
     vtmp: dict = {}
     for r in _linhas(cur,
-            f"SELECT {mes} m, l.finish_lead_user_id uid, u.name nome, COUNT(*) c "
+            f"SELECT {mes} m, {POSTO_SQL} p, l.finish_lead_user_id uid, u.name nome, COUNT(*) c "
             f"FROM leads l LEFT JOIN users u ON u.id = l.finish_lead_user_id "
             f"WHERE {janela} AND l.finish_lead_signup=1 AND l.finish_lead_user_id IS NOT NULL "
-            f"GROUP BY 1,2,3 ORDER BY c DESC"):
-        vtmp.setdefault(str(r["m"]), []).append(
+            f"GROUP BY 1,2,3,4 ORDER BY c DESC"):
+        vtmp.setdefault((str(r["m"]), str(r["p"])), []).append(
             {"nome": (r["nome"] or f"#{r['uid']}").strip(), "c": int(r["c"])})
-    for m, lst in vtmp.items():
-        slot(m)["vendedores"] = lst[:20]
+    for (m, p), lst in vtmp.items():
+        slot(m, p)["vendedores"] = lst[:20]
 
     return meses
 
 
-def coletar_janela(cur, shift: str, dias: int) -> dict:
-    """Todos os estudos de uma janela de N dias."""
-    filtro = f"created_at >= NOW() - INTERVAL {dias} DAY"
+def coletar_janela(cur, shift_l: str, dias: int) -> dict:
+    """Uma janela de N dias, QUEBRADA POR POSTO — o frontend soma só os postos
+    do filtro do topo. `shift_l` e o filtro vêm qualificados com o alias l."""
+    filtro = f"l.created_at >= NOW() - INTERVAL {dias} DAY"
+    pp: dict = {}
 
-    # total + conversão
-    tot = _linhas(cur, f"SELECT COUNT(*) n, SUM(finish_lead_signup=1) c "
-                       f"FROM leads WHERE {filtro}")[0]
-    total = int(tot["n"] or 0)
-    conv = int(tot["c"] or 0)
+    # total + conversão por posto
+    for r in _linhas(cur, f"SELECT {POSTO_SQL} p, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+                          f"FROM leads l WHERE {filtro} GROUP BY 1"):
+        s = _pp_slot(pp, str(r["p"]))
+        s["total"] = int(r["n"] or 0); s["conv"] = int(r["c"] or 0)
 
-    # por fonte (canal) — o "melhor retorno"
-    fontes = [
-        {"fonte": str(r["fonte"]), "n": int(r["n"]), "c": int(r["c"] or 0)}
-        for r in _linhas(cur,
-            f"SELECT COALESCE(s.title, CONCAT('fonte #', l.leadsource_id), 'sem fonte') fonte, "
+    # por fonte (canal)
+    for r in _linhas(cur,
+            f"SELECT {POSTO_SQL} p, COALESCE(s.title, CONCAT('fonte #', l.leadsource_id), 'sem fonte') fonte, "
             f"COUNT(*) n, SUM(l.finish_lead_signup=1) c "
             f"FROM leads l LEFT JOIN leadsources s ON s.id = l.leadsource_id "
-            f"WHERE l.{filtro} GROUP BY 1 HAVING n > 0 ORDER BY n DESC")
-    ]
-
-    # por posto
-    postos = [
-        {"p": str(r["p"]), "n": int(r["n"]), "c": int(r["c"] or 0)}
-        for r in _linhas(cur,
-            f"SELECT {POSTO_SQL} p, COUNT(*) n, SUM(finish_lead_signup=1) c "
-            f"FROM leads WHERE {filtro} GROUP BY 1 ORDER BY n DESC")
-    ]
+            f"WHERE {filtro} GROUP BY 1,2 ORDER BY n DESC"):
+        _pp_slot(pp, str(r["p"]))["fontes"].append(
+            {"fonte": str(r["fonte"]), "n": int(r["n"]), "c": int(r["c"] or 0)})
 
     # por hora do dia (0-23, hora local)
-    hmap = {int(r["h"]): {"n": int(r["n"]), "c": int(r["c"] or 0)}
-            for r in _linhas(cur,
-                f"SELECT HOUR({shift}) h, COUNT(*) n, SUM(finish_lead_signup=1) c "
-                f"FROM leads WHERE {filtro} GROUP BY 1")}
-    hora = [{"h": h, "n": hmap.get(h, {}).get("n", 0), "c": hmap.get(h, {}).get("c", 0)}
-            for h in range(24)]
+    for r in _linhas(cur,
+            f"SELECT {POSTO_SQL} p, HOUR({shift_l}) h, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l WHERE {filtro} GROUP BY 1,2"):
+        _pp_slot(pp, str(r["p"]))["hora"][int(r["h"])] = {
+            "h": int(r["h"]), "n": int(r["n"]), "c": int(r["c"] or 0)}
 
-    # por dia da semana (MySQL DAYOFWEEK: 1=dom..7=sáb → 0=dom..6=sáb)
-    dmap = {int(r["d"]) - 1: {"n": int(r["n"]), "c": int(r["c"] or 0)}
-            for r in _linhas(cur,
-                f"SELECT DAYOFWEEK({shift}) d, COUNT(*) n, SUM(finish_lead_signup=1) c "
-                f"FROM leads WHERE {filtro} GROUP BY 1")}
-    dow = [{"d": d, "n": dmap.get(d, {}).get("n", 0), "c": dmap.get(d, {}).get("c", 0)}
-           for d in range(7)]
+    # por dia da semana (1=dom..7=sáb → 0=dom..6=sáb)
+    for r in _linhas(cur,
+            f"SELECT {POSTO_SQL} p, DAYOFWEEK({shift_l}) d, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l WHERE {filtro} GROUP BY 1,2"):
+        _pp_slot(pp, str(r["p"]))["dow"][int(r["d"]) - 1] = {
+            "d": int(r["d"]) - 1, "n": int(r["n"]), "c": int(r["c"] or 0)}
 
-    # ranking de vendedores — quem FECHA matrícula (finish_lead_user_id)
-    vendedores = [
-        {"nome": (r["nome"] or f"#{r['uid']}").strip(), "c": int(r["c"])}
-        for r in _linhas(cur,
-            f"SELECT l.finish_lead_user_id uid, u.name nome, COUNT(*) c "
+    # ranking de vendedores — top 20 por posto (ordena tudo e corta no Python)
+    vtmp: dict = {}
+    for r in _linhas(cur,
+            f"SELECT {POSTO_SQL} p, l.finish_lead_user_id uid, u.name nome, COUNT(*) c "
             f"FROM leads l LEFT JOIN users u ON u.id = l.finish_lead_user_id "
-            f"WHERE l.{filtro} AND l.finish_lead_signup=1 AND l.finish_lead_user_id IS NOT NULL "
-            f"GROUP BY 1,2 ORDER BY c DESC LIMIT 20")
-    ]
+            f"WHERE {filtro} AND l.finish_lead_signup=1 AND l.finish_lead_user_id IS NOT NULL "
+            f"GROUP BY 1,2,3 ORDER BY c DESC"):
+        vtmp.setdefault(str(r["p"]), []).append(
+            {"nome": (r["nome"] or f"#{r['uid']}").strip(), "c": int(r["c"])})
+    for p, lst in vtmp.items():
+        _pp_slot(pp, p)["vendedores"] = lst[:20]
 
-    return {
-        "total": total, "conv": conv,
-        "taxa": round(100 * conv / total, 2) if total else 0,
-        "fontes": fontes, "postos": postos,
-        "hora": hora, "dow": dow, "vendedores": vendedores,
-    }
+    return {"por_posto": pp}
 
 
 def coletar() -> dict:
@@ -222,7 +208,7 @@ def coletar() -> dict:
         shift_l = f"l.created_at + INTERVAL {off} HOUR"   # mesmo shift, qualificado
         log(f"offset MySQL→local: {off:+d}h")
 
-        janelas = {str(d): coletar_janela(cur, shift, d) for d in JANELAS}
+        janelas = {str(d): coletar_janela(cur, shift_l, d) for d in JANELAS}
         meses = coletar_meses(cur, shift_l)
 
         # tendência mensal (24 meses) — período longo, volume × conversão
@@ -252,9 +238,12 @@ def main() -> int:
     log("=== export_leads_estudos: início ===")
     dry = "--dry-run" in sys.argv
     dados = coletar()
-    j90 = dados["janelas"].get("90", {})
-    log(f"90d: {j90.get('total')} leads · {j90.get('conv')} matrículas · "
-        f"{j90.get('taxa')}% · {len(dados['mensal'])} meses")
+    pp90 = dados["janelas"].get("90", {}).get("por_posto", {})
+    t90 = sum(b["total"] for b in pp90.values())
+    c90 = sum(b["conv"] for b in pp90.values())
+    log(f"90d: {t90} leads · {c90} matrículas · "
+        f"{round(100*c90/t90,2) if t90 else 0}% · {len(pp90)} postos · "
+        f"{len(dados.get('meses', {}))} meses")
     if dry:
         log("--dry-run: JSON NÃO gravado")
         print(json.dumps(dados, ensure_ascii=False)[:1500])

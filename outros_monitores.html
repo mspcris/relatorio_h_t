@@ -553,6 +553,7 @@ function ldAplicar() {
       (b.dataset.grupo === 'couto' && sel && sel === cou)));
   document.getElementById('ldEscopo').textContent = '· ' + ldEscopoTexto();
   desenharLeads(ldFiltrado());
+  if (EST) estRender();   // o mesmo filtro de posto vale para os Estudos
 }
 
 async function carregarLeads() {
@@ -752,56 +753,68 @@ function estCorTaxa(t){
   const k=(x-.5)/.5; return `rgb(${Math.round(220-190*k)},${Math.round(190-30*k)},${Math.round(60+40*k)})`;
 }
 
-// Lista de meses disponíveis (do mais recente ao mais antigo), a partir do bloco
-// por mês que o servidor manda. Cai na tendência mensal se o JSON for antigo.
-function estMesesDisp(){
-  const ks = Object.keys(EST.meses || {});
-  if (!ks.length && EST.mensal) return EST.mensal.map(x=>x.m).sort().reverse();
-  return ks.sort().reverse();
+// Lista de meses disponíveis (do mais recente ao mais antigo).
+function estMesesDisp(){ return Object.keys(EST.meses || {}).sort().reverse(); }
+
+// Postos escolhidos no filtro do topo (o mesmo de "Leads criados") — null = todos.
+// Reusa LD_SEL para os dois estudos andarem sempre juntos.
+function estPostosOK(){
+  return (typeof LD_SEL !== 'undefined' && LD_SEL.size) ? new Set(LD_SEL) : null;
 }
 
-// Soma vários blocos de mês num só recorte (mesma forma de uma janela).
-function estAgregaMeses(chaves){
-  const M = EST.meses || {};
-  const somaChave = (arr, key, get) => {
-    const map = new Map();
-    chaves.forEach(m => (M[m]?.[arr]||[]).forEach(x=>{
-      const k = key(x); const o = map.get(k) || get(x, true);
-      o.n = (o.n||0) + (x.n||0); o.c = (o.c||0) + (x.c||0); map.set(k, o);
-    }));
-    return [...map.values()];
-  };
-  let total=0, conv=0;
-  chaves.forEach(m=>{ total += M[m]?.total||0; conv += M[m]?.conv||0; });
-  // hora (24) e dow (7): índice fixo
-  const hora = Array.from({length:24}, (_,h)=>({h, n:0, c:0}));
-  const dow  = Array.from({length:7},  (_,d)=>({d, n:0, c:0}));
-  chaves.forEach(m=>{
-    (M[m]?.hora||[]).forEach(x=>{ hora[x.h].n+=x.n||0; hora[x.h].c+=x.c||0; });
-    (M[m]?.dow ||[]).forEach(x=>{ dow[x.d].n+=x.n||0; dow[x.d].c+=x.c||0; });
-  });
-  // vendedores: soma por nome, top 20
-  const vmap = new Map();
-  chaves.forEach(m=>(M[m]?.vendedores||[]).forEach(v=>
-    vmap.set(v.nome, (vmap.get(v.nome)||0) + (v.c||0))));
-  const vendedores = [...vmap.entries()].map(([nome,c])=>({nome,c}))
-    .sort((a,b)=>b.c-a.c).slice(0,20);
-  return {
-    total, conv, taxa: total ? +(100*conv/total).toFixed(2) : 0,
-    fontes: somaChave('fontes','fonte', x=>({fonte:x.fonte, n:0, c:0})).sort((a,b)=>b.n-a.n),
-    postos: somaChave('postos','p',     x=>({p:x.p, n:0, c:0})).sort((a,b)=>b.n-a.n),
-    hora, dow, vendedores
-  };
-}
-
-// Recorte atualmente selecionado: por mês (se escolhido) ou janela em dias.
-function estJanelaAtual(){
+// Blocos "por posto" do recorte atual: intervalo de meses OU janela em dias.
+function estBlocosAtuais(){
   if (EST_MES_INI && EST_MES_FIM){
     const [a,b] = [EST_MES_INI, EST_MES_FIM].sort();
-    const chaves = estMesesDisp().filter(m => m>=a && m<=b);
-    return estAgregaMeses(chaves);
+    return estMesesDisp().filter(m => m>=a && m<=b)
+      .map(m => (EST.meses[m]||{}).por_posto).filter(Boolean);
   }
-  return (EST.janelas||{})[EST_DIAS] || {};
+  const blk = (EST.janelas||{})[EST_DIAS] || {};
+  return blk.por_posto ? [blk.por_posto] : [];
+}
+
+// Soma os blocos por posto (só os postos permitidos) na forma que estRender usa.
+function estFlat(blocos, ok){
+  let total=0, conv=0;
+  const fontes=new Map(), vend=new Map(), postos=new Map();
+  const hora = Array.from({length:24}, (_,h)=>({h, n:0, c:0}));
+  const dow  = Array.from({length:7},  (_,d)=>({d, n:0, c:0}));
+  for (const pp of blocos){
+    for (const p in pp){
+      if (ok && !ok.has(p)) continue;
+      const blk = pp[p];
+      total += blk.total||0; conv += blk.conv||0;
+      const pe = postos.get(p) || {p, n:0, c:0};
+      pe.n += blk.total||0; pe.c += blk.conv||0; postos.set(p, pe);
+      (blk.fontes||[]).forEach(f=>{ const o=fontes.get(f.fonte)||{fonte:f.fonte,n:0,c:0};
+        o.n+=f.n||0; o.c+=f.c||0; fontes.set(f.fonte,o); });
+      (blk.hora||[]).forEach(x=>{ hora[x.h].n+=x.n||0; hora[x.h].c+=x.c||0; });
+      (blk.dow ||[]).forEach(x=>{ dow[x.d].n+=x.n||0; dow[x.d].c+=x.c||0; });
+      (blk.vendedores||[]).forEach(v=>{ vend.set(v.nome,(vend.get(v.nome)||0)+(v.c||0)); });
+    }
+  }
+  return {
+    total, conv, taxa: total ? +(100*conv/total).toFixed(2) : 0,
+    fontes: [...fontes.values()].sort((a,b)=>b.n-a.n),
+    postos: [...postos.values()].sort((a,b)=>b.n-a.n),
+    hora, dow,
+    vendedores: [...vend.entries()].map(([nome,c])=>({nome,c})).sort((a,b)=>b.c-a.c).slice(0,20)
+  };
+}
+
+// Recorte atual, achatado e já filtrado pelos postos do topo.
+function estJanelaAtual(){ return estFlat(estBlocosAtuais(), estPostosOK()); }
+
+// Tendência mensal (24m) filtrada por posto: soma os postos escolhidos em cada mês.
+function estMensalSerie(){
+  const M = EST.meses || {}; const ok = estPostosOK();
+  const ks = Object.keys(M).sort();
+  if (!ks.length) return EST.mensal || [];
+  return ks.map(m=>{
+    let n=0, c=0; const pp = M[m].por_posto || {};
+    for (const p in pp){ if (ok && !ok.has(p)) continue; n+=pp[p].total||0; c+=pp[p].conv||0; }
+    return {m, n, taxa: n ? +(100*c/n).toFixed(2) : 0};
+  });
 }
 
 // Popula os dois <select> de mês e liga os eventos (1x).
@@ -924,7 +937,7 @@ function estRender(){
     || '<tr><td colspan="3" class="text-muted">Sem matrícula fechada no período.</td></tr>';
 
   // Tendência mensal (24m, fixo)
-  const mm = EST.mensal||[];
+  const mm = estMensalSerie();
   estCombo('estChartMensal', {
     labels: mm.map(x=> x.m.slice(5)+'/'+x.m.slice(2,4)), bars: mm.map(x=>x.n), barCor:'#6366f1',
     barLabel:'Leads', line: mm.map(x=>x.taxa), lineLabel:'Conversão %'
