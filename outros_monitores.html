@@ -824,9 +824,10 @@ function estRender(){
   const ordem = EST.postos_ordem || [];
   const pmap = new Map((j.postos||[]).map(p=>[p.p, p]));
   const postos = ordem.filter(p=>pmap.has(p)).map(p=>pmap.get(p))
-    .concat((j.postos||[]).filter(p=> !ordem.includes(p.p)));
+    .concat((j.postos||[]).filter(p=> !ordem.includes(p.p)))
+    .filter(p=> p.n>0);   // unidade sem lead nenhum (fictícia) não entra
   estCombo('estChartPosto', {
-    labels: postos.map(p=> p.p+(EST_NOMES_POSTO[p.p]?' '+EST_NOMES_POSTO[p.p].slice(0,6):'')),
+    labels: postos.map(p=> p.p),   // só a letra da unidade — nome completo no tooltip
     bars: postos.map(p=>p.n), barCor:'#f59e0b', barLabel:'Leads',
     line: postos.map(p=> p.n?+(100*p.c/p.n).toFixed(1):0), lineLabel:'Conversão %',
     barTip:(v,i)=> `${EST_NOMES_POSTO[postos[i].p]||postos[i].p}: ${postos[i].n} leads, ${postos[i].c} matrículas`
