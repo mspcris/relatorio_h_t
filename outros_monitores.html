@@ -17,13 +17,29 @@
     body { font-family: "Source Sans Pro", system-ui, sans-serif; }
     .ld-postos .btn-posto { width:32px; height:32px; padding:0; border-radius:50%;
       font-weight:700; font-size:.8rem; margin-right:4px; margin-bottom:4px; }
-    .ld-postos .btn-posto.active { background:#007bff; border-color:#007bff; color:#fff; }
+    .ld-postos .btn-posto.active { background:#6366f1; border-color:#6366f1; color:#fff;
+      box-shadow:0 2px 8px rgba(99,102,241,.45); }
     .ld-postos .btn-posto.vazio { opacity:.45; }
-    .tile { border-radius:8px; padding:14px 16px; background:#fff;
-            border:1px solid #e3e6ea; border-left:5px solid #0d6e9e; }
-    .tile .num { font-size:1.8rem; font-weight:700; line-height:1.1; }
-    .tile .lbl { font-size:.8rem; color:#6c757d; }
+    /* KPI tiles — cada cartão com sua cor, não mais tudo azul */
+    .tile { border-radius:14px; padding:16px 18px; background:#fff;
+            border:1px solid #eceef3; border-left:6px solid var(--tcor,#6366f1);
+            box-shadow:0 2px 10px rgba(30,41,59,.06);
+            transition:transform .15s ease, box-shadow .15s ease;
+            position:relative; overflow:hidden; }
+    .tile::after { content:""; position:absolute; top:-32px; right:-32px;
+            width:92px; height:92px; border-radius:50%;
+            background:var(--tcor,#6366f1); opacity:.09; }
+    .tile:hover { transform:translateY(-3px); box-shadow:0 10px 22px rgba(30,41,59,.13); }
+    .tile .num { font-size:1.9rem; font-weight:800; line-height:1.1; color:var(--tcor,#1f2937);
+            position:relative; }
+    .tile .lbl { font-size:.8rem; color:#6c757d; position:relative; }
+    .tile .lbl i { color:var(--tcor,#6366f1); }
+    .tile-1{--tcor:#6366f1;} .tile-2{--tcor:#0ea5e9;}
+    .tile-3{--tcor:#10b981;} .tile-4{--tcor:#f59e0b;}
     .chart-wrap { position:relative; height:260px; }
+    .ld-sec { font-weight:700; letter-spacing:.01em; display:flex; align-items:center; gap:8px; }
+    .ld-fontes thead th { background:linear-gradient(90deg,#10b981,#0ea5e9);
+            color:#fff; border:0; }
     .ld-leg { display:flex; flex-wrap:wrap; gap:14px; font-size:.78rem;
               color:#6c757d; margin-top:8px; }
     .ld-leg span { display:inline-flex; align-items:center; gap:6px; }
@@ -118,39 +134,39 @@
           </div>
 
           <div class="row mb-3">
-            <div class="col-6 col-md-3 mb-2"><div class="tile">
+            <div class="col-6 col-md-3 mb-2"><div class="tile tile-1">
               <div class="num" id="ldUltimaHora">—</div>
               <div class="lbl"><i class="far fa-clock mr-1"></i>Última hora fechada (<span id="ldUltimaHoraLabel">—</span>)</div>
             </div></div>
-            <div class="col-6 col-md-3 mb-2"><div class="tile">
+            <div class="col-6 col-md-3 mb-2"><div class="tile tile-2">
               <div class="num" id="ldHoje">—</div>
               <div class="lbl"><i class="fas fa-calendar-day mr-1"></i>Hoje até agora</div>
             </div></div>
-            <div class="col-6 col-md-3 mb-2"><div class="tile">
+            <div class="col-6 col-md-3 mb-2"><div class="tile tile-3">
               <div class="num" id="ldOntem">—</div>
               <div class="lbl"><i class="fas fa-calendar-minus mr-1"></i>Ontem (dia todo)</div>
             </div></div>
-            <div class="col-6 col-md-3 mb-2"><div class="tile">
+            <div class="col-6 col-md-3 mb-2"><div class="tile tile-4">
               <div class="num" id="ldMedia30">—</div>
               <div class="lbl"><i class="fas fa-chart-line mr-1"></i>Média diária (30d)</div>
             </div></div>
           </div>
 
-          <h6 class="text-muted">Por hora — últimas 72h</h6>
+          <h6 class="ld-sec" style="color:#6366f1"><i class="fas fa-clock"></i>Por hora — últimas 72h</h6>
           <div class="chart-wrap"><canvas id="ldChartHoras"></canvas></div>
           <div class="ld-leg mb-4" id="ldLegHoras"></div>
 
           <div class="row">
             <div class="col-md-7">
-              <h6 class="text-muted">Por dia — últimos 30 dias</h6>
+              <h6 class="ld-sec" style="color:#0ea5e9"><i class="fas fa-calendar-alt"></i>Por dia — últimos 30 dias</h6>
               <div class="chart-wrap"><canvas id="ldChartDias"></canvas></div>
               <div class="ld-leg" id="ldLegDias"></div>
               <div class="ld-zerados" id="ldZerados" style="display:none"></div>
             </div>
             <div class="col-md-5">
-              <h6 class="text-muted">Fontes de hoje</h6>
-              <table class="table table-sm">
-                <thead class="thead-light"><tr><th>Fonte</th><th class="text-right">Leads</th></tr></thead>
+              <h6 class="ld-sec" style="color:#10b981"><i class="fas fa-stream"></i>Fontes de hoje</h6>
+              <table class="table table-sm ld-fontes">
+                <thead><tr><th>Fonte</th><th class="text-right">Leads</th></tr></thead>
                 <tbody id="ldFontes"><tr><td colspan="2" class="text-muted">—</td></tr></tbody>
               </table>
             </div>
@@ -242,12 +258,12 @@
 <script>
 if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
 
-const AZUL = '#0d6e9e';
-// Tons do MESMO matiz do azul CAMIM (seguro para daltonismo, mesma regra da
-// paleta de Custos de TI). Do mais antigo (claro) para o mais recente (forte).
-const TONS_DIA     = ['#dbe9f1','#b9d5e4','#8ebfd6','#4a95bb','#0d6e9e'];
-const AZUL_CLARO   = '#a3cbdf';                // fim de semana
-const PARCIAL_FILL = 'rgba(13,110,158,.20)';   // hora/dia ainda em andamento
+const AZUL = '#6366f1';                        // cor de acento / dia útil (indigo)
+// UMA cor viva por dia (não é ranking: identifica o dia). Paleta multicolor
+// distinta, mais recente = indigo forte. VERMELHO fica reservado para "sem lead".
+const TONS_DIA     = ['#c084fc','#22d3ee','#34d399','#fbbf24','#6366f1'];
+const AZUL_CLARO   = '#f59e0b';                // fim de semana (âmbar)
+const PARCIAL_FILL = 'rgba(99,102,241,.22)';   // hora/dia ainda em andamento
 const VERMELHO     = '#c0392b';                // dia sem nenhum lead
 const DIA_SEM = ['dom','seg','ter','qua','qui','sex','sáb'];
 let chartHoras = null, chartDias = null;
