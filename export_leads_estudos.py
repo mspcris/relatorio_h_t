@@ -38,6 +38,10 @@ OUT_PATH = os.path.join(BASE_DIR, "json_consolidado", "leads_estudos.json")
 # Janelas de análise (dias). "Períodos maiores" pedidos — inclui 12 meses.
 JANELAS = [30, 90, 365]
 MESES_TENDENCIA = 24
+# Detalhe por DIA para o "Selecione o período" (datas livres). 400 dias cobre o
+# botão de 12 meses com folga. Formato compacto e esparso (só o que tem lead)
+# porque 400 dias × 13 postos no formato das janelas passaria de 10 MB.
+DIAS_DETALHE = 400
 
 # Os 13 postos de atendimento, na mesma ordem do export_monitor_leads.py.
 POSTOS_REDE = ["A", "N", "I", "X", "G", "Y", "B", "R", "M", "C", "D", "J", "P"]
@@ -199,6 +203,54 @@ def coletar_janela(cur, shift_l: str, dias: int) -> dict:
     return {"por_posto": pp}
 
 
+def coletar_dias(cur, shift_l: str) -> dict:
+    """Um bloco por DIA local (YYYY-MM-DD) × posto, últimos DIAS_DETALHE dias.
+    Formato compacto — o frontend expande para o formato das janelas:
+      dias[dia][posto] = {"t": total, "c": conv,
+                          "f": [[i_fonte, n, c]],   # i_fonte → fontes_nomes
+                          "h": [[hora, n, c]],
+                          "v": [[nome, c]]}
+    Dia da semana não vai: sai da própria data. Só entra o que tem lead."""
+    janela = f"l.created_at >= NOW() - INTERVAL {DIAS_DETALHE} DAY"
+    dia = f"DATE_FORMAT({shift_l}, '%Y-%m-%d')"
+    dias: dict = {}
+    nomes: list = []
+    idx: dict = {}
+
+    def slot(d: str, p: str) -> dict:
+        return dias.setdefault(d, {}).setdefault(p, {"t": 0, "c": 0, "f": [], "h": [], "v": []})
+
+    for r in _linhas(cur, f"SELECT {dia} d, {POSTO_SQL} p, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+                          f"FROM leads l WHERE {janela} GROUP BY 1,2"):
+        s = slot(str(r["d"]), str(r["p"]))
+        s["t"] = int(r["n"] or 0); s["c"] = int(r["c"] or 0)
+
+    for r in _linhas(cur,
+            f"SELECT {dia} d, {POSTO_SQL} p, COALESCE(s.title, CONCAT('fonte #', l.leadsource_id), 'sem fonte') fonte, "
+            f"COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l LEFT JOIN leadsources s ON s.id = l.leadsource_id "
+            f"WHERE {janela} GROUP BY 1,2,3"):
+        f = str(r["fonte"])
+        if f not in idx:
+            idx[f] = len(nomes); nomes.append(f)
+        slot(str(r["d"]), str(r["p"]))["f"].append([idx[f], int(r["n"]), int(r["c"] or 0)])
+
+    for r in _linhas(cur,
+            f"SELECT {dia} d, {POSTO_SQL} p, HOUR({shift_l}) h, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l WHERE {janela} GROUP BY 1,2,3"):
+        slot(str(r["d"]), str(r["p"]))["h"].append([int(r["h"]), int(r["n"]), int(r["c"] or 0)])
+
+    for r in _linhas(cur,
+            f"SELECT {dia} d, {POSTO_SQL} p, l.finish_lead_user_id uid, u.name nome, COUNT(*) c "
+            f"FROM leads l LEFT JOIN users u ON u.id = l.finish_lead_user_id "
+            f"WHERE {janela} AND l.finish_lead_signup=1 AND l.finish_lead_user_id IS NOT NULL "
+            f"GROUP BY 1,2,3,4"):
+        slot(str(r["d"]), str(r["p"]))["v"].append(
+            [(r["nome"] or f"#{r['uid']}").strip(), int(r["c"])])
+
+    return {"dias": dias, "fontes_nomes": nomes}
+
+
 def coletar() -> dict:
     c = conn_leads()
     try:
@@ -210,6 +262,7 @@ def coletar() -> dict:
 
         janelas = {str(d): coletar_janela(cur, shift_l, d) for d in JANELAS}
         meses = coletar_meses(cur, shift_l)
+        det = coletar_dias(cur, shift_l)
 
         # tendência mensal (24 meses) — período longo, volume × conversão
         mensal = [
@@ -228,6 +281,8 @@ def coletar() -> dict:
         "gerado_em": datetime.now().astimezone().isoformat(timespec="seconds"),
         "janelas": janelas,
         "meses": meses,
+        "dias": det["dias"],
+        "fontes_nomes": det["fontes_nomes"],
         "mensal": mensal,
         "min_vol_taxa": MIN_VOL_TAXA,
         "postos_ordem": POSTOS_REDE,
@@ -243,7 +298,7 @@ def main() -> int:
     c90 = sum(b["conv"] for b in pp90.values())
     log(f"90d: {t90} leads · {c90} matrículas · "
         f"{round(100*c90/t90,2) if t90 else 0}% · {len(pp90)} postos · "
-        f"{len(dados.get('meses', {}))} meses")
+        f"{len(dados.get('meses', {}))} meses · {len(dados.get('dias', {}))} dias")
     if dry:
         log("--dry-run: JSON NÃO gravado")
         print(json.dumps(dados, ensure_ascii=False)[:1500])
