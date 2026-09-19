@@ -292,9 +292,23 @@
                 <table class="table table-sm est-tbl mb-0">
                   <thead><tr><th></th><th>Vendedor</th><th class="text-right">Matrículas</th></tr></thead>
                   <tbody id="estVendedores"></tbody>
+                  <tfoot id="estVendTotal"></tfoot>
                 </table>
               </div>
             </div>
+          </div>
+
+          <hr>
+          <h6 class="est-sec" style="color:#8b5cf6"><i class="fas fa-percentage"></i>Taxa de fechamento por corretor
+            <span class="est-note ml-1">— matrículas ÷ leads que ele recebeu</span></h6>
+          <p class="est-note mb-2">Recebeu 10, fechou 2 → 20 %. Ordenado pela taxa; quem recebeu menos de
+            <span class="estMinVol2"></span> leads fica no fim, em cinza (amostra pequena, taxa-ruído).</p>
+          <div class="table-responsive" style="max-height:360px;overflow:auto">
+            <table class="table table-sm est-tbl mb-0">
+              <thead><tr><th></th><th>Corretor</th><th class="text-right">Leads recebidos</th>
+                <th class="text-right">Fechados</th><th class="text-center">Taxa de fechamento</th></tr></thead>
+              <tbody id="estVendTaxa"></tbody>
+            </table>
           </div>
 
           <hr>
@@ -781,7 +795,7 @@ function estDiaPorPosto(dia){
       fontes: (b.f||[]).map(([i,n,c])=>({fonte:nomes[i]||('fonte '+i), n, c})),
       hora: (b.h||[]).map(([h,n,c])=>({h, n, c})),
       dow: [{d:dow, n:b.t||0, c:b.c||0}],
-      vendedores: (b.v||[]).map(([nome,c])=>({nome, c})) };
+      vendedores: (b.v||[]).map(([nome,c,n])=>({nome, c, n})) };
   }
   return pp;
 }
@@ -814,7 +828,8 @@ function estFlat(blocos, ok){
         o.n+=f.n||0; o.c+=f.c||0; fontes.set(f.fonte,o); });
       (blk.hora||[]).forEach(x=>{ hora[x.h].n+=x.n||0; hora[x.h].c+=x.c||0; });
       (blk.dow ||[]).forEach(x=>{ dow[x.d].n+=x.n||0; dow[x.d].c+=x.c||0; });
-      (blk.vendedores||[]).forEach(v=>{ vend.set(v.nome,(vend.get(v.nome)||0)+(v.c||0)); });
+      (blk.vendedores||[]).forEach(v=>{ const o=vend.get(v.nome)||{nome:v.nome,n:0,c:0};
+        o.n+=v.n||0; o.c+=v.c||0; vend.set(v.nome,o); });
     }
   }
   return {
@@ -822,7 +837,7 @@ function estFlat(blocos, ok){
     fontes: [...fontes.values()].sort((a,b)=>b.n-a.n),
     postos: [...postos.values()].sort((a,b)=>b.n-a.n),
     hora, dow,
-    vendedores: [...vend.entries()].map(([nome,c])=>({nome,c})).sort((a,b)=>b.c-a.c).slice(0,20)
+    vendedores: [...vend.values()].sort((a,b)=>b.c-a.c || a.nome.localeCompare(b.nome))
   };
 }
 
@@ -970,11 +985,32 @@ function estRender(){
     barTip:(v,i)=> `${EST_NOMES_POSTO[postos[i].p]||postos[i].p}: ${postos[i].n} leads, ${postos[i].c} matrículas`
   });
 
-  // Vendedores
-  document.getElementById('estVendedores').innerHTML = (j.vendedores||[]).map((v,i)=>
+  // Vendedores (1) — todos que fecharam, sem corte; o rodapé tem que bater com o tile de matrículas
+  const vend = j.vendedores || [];
+  const fech = vend.filter(v => v.c > 0);
+  const somaFech = fech.reduce((a,v)=>a+v.c, 0);
+  document.getElementById('estVendedores').innerHTML = fech.map((v,i)=>
     `<tr><td class="est-medal">${i<3?EST_MEDALHA[i]:''}</td><td>${escE(v.nome)}</td>
      <td class="text-right"><b>${v.c.toLocaleString('pt-BR')}</b></td></tr>`).join('')
     || '<tr><td colspan="3" class="text-muted">Sem matrícula fechada no período.</td></tr>';
+  document.getElementById('estVendTotal').innerHTML = fech.length
+    ? `<tr><td></td><td><b>Total · ${fech.length} vendedores</b>${somaFech!==j.conv
+        ? ' <span class="est-note">('+(j.conv-somaFech).toLocaleString('pt-BR')+' sem vendedor no lead)</span>' : ''}</td>
+       <td class="text-right"><b>${somaFech.toLocaleString('pt-BR')}</b></td></tr>` : '';
+
+  // Vendedores (2) — taxa de fechamento sobre os leads recebidos
+  document.querySelectorAll('.estMinVol2').forEach(x=>x.textContent=minVol);
+  const tx = vend.filter(v => v.n > 0).map(v => ({...v, taxa: +(100*v.c/v.n).toFixed(1)}));
+  const fortes = tx.filter(v => v.n >= minVol).sort((a,b)=> b.taxa-a.taxa || b.c-a.c);
+  const fracas = tx.filter(v => v.n <  minVol).sort((a,b)=> b.n-a.n);
+  document.getElementById('estVendTaxa').innerHTML = [...fortes, ...fracas].map((v,i)=>{
+    const fraca = v.n < minVol;
+    return `<tr${fraca?' class="est-vol"':''}><td class="est-medal">${!fraca && i<3?EST_MEDALHA[i]:''}</td>
+      <td>${escE(v.nome)}</td><td class="text-right">${v.n.toLocaleString('pt-BR')}</td>
+      <td class="text-right"><b>${v.c.toLocaleString('pt-BR')}</b></td>
+      <td class="text-center">${fraca ? estPct(v.taxa)
+        : '<span class="est-taxa" style="background:'+estCorTaxa(v.taxa)+'">'+estPct(v.taxa)+'</span>'}</td></tr>`;
+  }).join('') || '<tr><td colspan="5" class="text-muted">Sem lead com corretor no período.</td></tr>';
 
   // Tendência mensal (24m, fixo)
   const mm = estMensalSerie();

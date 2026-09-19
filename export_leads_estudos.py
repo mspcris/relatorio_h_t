@@ -47,6 +47,12 @@ DIAS_DETALHE = 400
 POSTOS_REDE = ["A", "N", "I", "X", "G", "Y", "B", "R", "M", "C", "D", "J", "P"]
 POSTO_SQL = "COALESCE(NULLIF(TRIM(filialCode), ''), '?')"
 
+# VENDEDOR_REGRA — o vendedor é o dono do lead (leads.user_id). Recebidos = leads
+# dele no período; fechados = desses, os com finish_lead_signup=1. Medido em
+# 19/09/2026 (90d): finish_lead_user_id == user_id em 1.109 de 1.109 fechados,
+# então "quem recebeu" e "quem fechou" são a mesma pessoa. Nada de corte por
+# top-N: o ranking tem que somar o total de matrículas do período.
+
 # Fonte com pouquíssimo volume dá taxa-ruído (1/1 = 100%). O corte fica no
 # frontend (que mostra o volume ao lado), mas guardo o mínimo sugerido no JSON.
 MIN_VOL_TAXA = 20
@@ -138,17 +144,14 @@ def coletar_meses(cur, shift_l: str) -> dict:
         slot(str(r["m"]), str(r["p"]))["dow"][int(r["d"]) - 1] = {
             "d": int(r["d"]) - 1, "n": int(r["n"]), "c": int(r["c"] or 0)}
 
-    # ranking de vendedores — top 20 por mês+posto (ordena tudo e corta no Python)
-    vtmp: dict = {}
+    # vendedores — ver VENDEDOR_REGRA no topo; todos, sem corte
     for r in _linhas(cur,
-            f"SELECT {mes} m, {POSTO_SQL} p, l.finish_lead_user_id uid, u.name nome, COUNT(*) c "
-            f"FROM leads l LEFT JOIN users u ON u.id = l.finish_lead_user_id "
-            f"WHERE {janela} AND l.finish_lead_signup=1 AND l.finish_lead_user_id IS NOT NULL "
-            f"GROUP BY 1,2,3,4 ORDER BY c DESC"):
-        vtmp.setdefault((str(r["m"]), str(r["p"])), []).append(
-            {"nome": (r["nome"] or f"#{r['uid']}").strip(), "c": int(r["c"])})
-    for (m, p), lst in vtmp.items():
-        slot(m, p)["vendedores"] = lst[:20]
+            f"SELECT {mes} m, {POSTO_SQL} p, l.user_id uid, u.name nome, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l LEFT JOIN users u ON u.id = l.user_id "
+            f"WHERE {janela} AND l.user_id IS NOT NULL "
+            f"GROUP BY 1,2,3,4"):
+        slot(str(r["m"]), str(r["p"]))["vendedores"].append(
+            {"nome": (r["nome"] or f"#{r['uid']}").strip(), "n": int(r["n"]), "c": int(r["c"] or 0)})
 
     return meses
 
@@ -188,17 +191,14 @@ def coletar_janela(cur, shift_l: str, dias: int) -> dict:
         _pp_slot(pp, str(r["p"]))["dow"][int(r["d"]) - 1] = {
             "d": int(r["d"]) - 1, "n": int(r["n"]), "c": int(r["c"] or 0)}
 
-    # ranking de vendedores — top 20 por posto (ordena tudo e corta no Python)
-    vtmp: dict = {}
+    # vendedores — ver VENDEDOR_REGRA no topo; todos, sem corte
     for r in _linhas(cur,
-            f"SELECT {POSTO_SQL} p, l.finish_lead_user_id uid, u.name nome, COUNT(*) c "
-            f"FROM leads l LEFT JOIN users u ON u.id = l.finish_lead_user_id "
-            f"WHERE {filtro} AND l.finish_lead_signup=1 AND l.finish_lead_user_id IS NOT NULL "
-            f"GROUP BY 1,2,3 ORDER BY c DESC"):
-        vtmp.setdefault(str(r["p"]), []).append(
-            {"nome": (r["nome"] or f"#{r['uid']}").strip(), "c": int(r["c"])})
-    for p, lst in vtmp.items():
-        _pp_slot(pp, p)["vendedores"] = lst[:20]
+            f"SELECT {POSTO_SQL} p, l.user_id uid, u.name nome, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l LEFT JOIN users u ON u.id = l.user_id "
+            f"WHERE {filtro} AND l.user_id IS NOT NULL "
+            f"GROUP BY 1,2,3"):
+        _pp_slot(pp, str(r["p"]))["vendedores"].append(
+            {"nome": (r["nome"] or f"#{r['uid']}").strip(), "n": int(r["n"]), "c": int(r["c"] or 0)})
 
     return {"por_posto": pp}
 
@@ -209,7 +209,7 @@ def coletar_dias(cur, shift_l: str) -> dict:
       dias[dia][posto] = {"t": total, "c": conv,
                           "f": [[i_fonte, n, c]],   # i_fonte → fontes_nomes
                           "h": [[hora, n, c]],
-                          "v": [[nome, c]]}
+                          "v": [[nome, fechados, recebidos]]}
     Dia da semana não vai: sai da própria data. Só entra o que tem lead."""
     janela = f"l.created_at >= NOW() - INTERVAL {DIAS_DETALHE} DAY"
     dia = f"DATE_FORMAT({shift_l}, '%Y-%m-%d')"
@@ -241,12 +241,12 @@ def coletar_dias(cur, shift_l: str) -> dict:
         slot(str(r["d"]), str(r["p"]))["h"].append([int(r["h"]), int(r["n"]), int(r["c"] or 0)])
 
     for r in _linhas(cur,
-            f"SELECT {dia} d, {POSTO_SQL} p, l.finish_lead_user_id uid, u.name nome, COUNT(*) c "
-            f"FROM leads l LEFT JOIN users u ON u.id = l.finish_lead_user_id "
-            f"WHERE {janela} AND l.finish_lead_signup=1 AND l.finish_lead_user_id IS NOT NULL "
+            f"SELECT {dia} d, {POSTO_SQL} p, l.user_id uid, u.name nome, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l LEFT JOIN users u ON u.id = l.user_id "
+            f"WHERE {janela} AND l.user_id IS NOT NULL "
             f"GROUP BY 1,2,3,4"):
         slot(str(r["d"]), str(r["p"]))["v"].append(
-            [(r["nome"] or f"#{r['uid']}").strip(), int(r["c"])])
+            [(r["nome"] or f"#{r['uid']}").strip(), int(r["c"] or 0), int(r["n"])])
 
     return {"dias": dias, "fontes_nomes": nomes}
 
