@@ -85,6 +85,25 @@ def dados_leads():
                              "aguarde a primeira passada do cron (a cada hora, aos 10 min)"}), 404
 
 
+@monitores_bp.get("/leads/estudos")
+def dados_leads_estudos():
+    """Estudos de retorno/vendas (export_leads_estudos.py). JSON separado do
+    volume horário para não inchar /leads nem mudar o robô existente."""
+    if not _email_logado():
+        return jsonify({"error": "unauthorized"}), 401
+    candidatos = [
+        "/opt/relatorio_h_t/json_consolidado/leads_estudos.json",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                     "json_consolidado", "leads_estudos.json"),
+    ]
+    for path in candidatos:
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                return Response(f.read(), mimetype="application/json")
+    return jsonify({"error": "leads_estudos.json ainda não gerado — "
+                             "aguarde a próxima passada do cron (a cada hora, aos 10 min)"}), 404
+
+
 @monitores_bp.get("/inscricao")
 def inscricao_get():
     email = _email_logado()

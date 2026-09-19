@@ -12,3 +12,7 @@ exec 9>/opt/relatorio_h_t/.monitor_leads.lock
 flock -n 9 || { echo "$(date -Is) execução anterior em andamento"; exit 0; }
 
 .venv/bin/python export_monitor_leads.py
+
+# Estudos de leads/vendas (retorno por canal, horário de pico, tendência).
+# Roda depois do volume horário; falha aqui NÃO derruba o robô principal.
+.venv/bin/python export_leads_estudos.py || echo "$(date -Is) export_leads_estudos falhou (segue)"

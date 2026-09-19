@@ -47,6 +47,26 @@
                   border:1px solid transparent; }
     .ld-zerados { font-size:.78rem; color:#c0392b; margin-top:4px; }
     @media (max-width:767px){ .content-wrapper{margin-left:0!important} .main-sidebar{z-index:1050} }
+
+    /* ═══ Estudos de retorno & vendas (seção nova, abaixo do monitor) ═══ */
+    .est-hero { background:linear-gradient(120deg,#4f46e5,#0ea5e9); color:#fff;
+      border-radius:16px; padding:14px 18px; }
+    .est-hero .est-tile { background:rgba(255,255,255,.12); border-radius:12px;
+      padding:10px 14px; }
+    .est-hero .est-tile .n { font-size:1.7rem; font-weight:800; line-height:1.1; }
+    .est-hero .est-tile .l { font-size:.76rem; opacity:.92; }
+    .est-per .btn { border-radius:20px; font-weight:700; font-size:.8rem; }
+    .est-sec { font-weight:700; display:flex; align-items:center; gap:8px; margin-top:6px; }
+    .est-note { font-size:.78rem; color:#6c757d; }
+    .est-tbl th { border:0; font-size:.72rem; text-transform:uppercase; letter-spacing:.02em;
+      color:#6c757d; }
+    .est-tbl td { vertical-align:middle; }
+    .est-taxa { font-weight:800; padding:2px 8px; border-radius:20px; color:#fff;
+      font-size:.82rem; display:inline-block; min-width:56px; text-align:center; }
+    .est-vol { color:#94a3b8; font-size:.78rem; }
+    .est-medal { width:22px; display:inline-block; text-align:center; }
+    .est-chart { position:relative; height:280px; }
+    .est-chart.sm { height:230px; }
   </style>
 </head>
 <body class="hold-transition sidebar-mini">
@@ -178,6 +198,103 @@
         <i class="fas fa-info-circle mr-1"></i>
         Próximos monitores de serviço entram nesta página. Os dados vêm do robô
         <code>export_monitor_leads.py</code>, que roda de hora em hora (aos 10 min).
+      </div>
+
+      <!-- ═══════════ Estudos de retorno & vendas (novo, 19/09/2026) ═══════════ -->
+      <div class="card" id="estCard">
+        <div class="card-header py-2 d-flex align-items-center flex-wrap" style="gap:10px">
+          <b><i class="fas fa-chart-pie text-primary mr-1"></i>Estudos de retorno &amp; vendas</b>
+          <span id="estGerado" class="text-muted" style="font-size:.8rem"></span>
+          <div class="ml-auto btn-group btn-group-sm est-per" id="estPeriodo" role="group">
+            <button type="button" class="btn btn-outline-primary" data-dias="30">30 dias</button>
+            <button type="button" class="btn btn-outline-primary active" data-dias="90">90 dias</button>
+            <button type="button" class="btn btn-outline-primary" data-dias="365">12 meses</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="estErro" class="alert alert-warning py-2" style="display:none"></div>
+
+          <!-- resumo do período -->
+          <div class="est-hero mb-3">
+            <div class="row text-center">
+              <div class="col-6 col-md-3 mb-2"><div class="est-tile">
+                <div class="n" id="estTotal">—</div><div class="l"><i class="fas fa-user-plus mr-1"></i>Leads no período</div>
+              </div></div>
+              <div class="col-6 col-md-3 mb-2"><div class="est-tile">
+                <div class="n" id="estConv">—</div><div class="l"><i class="fas fa-id-card mr-1"></i>Viraram matrícula</div>
+              </div></div>
+              <div class="col-6 col-md-3 mb-2"><div class="est-tile">
+                <div class="n" id="estTaxa">—</div><div class="l"><i class="fas fa-percentage mr-1"></i>Taxa de conversão</div>
+              </div></div>
+              <div class="col-6 col-md-3 mb-2"><div class="est-tile">
+                <div class="n" id="estMelhor" style="font-size:1.15rem">—</div><div class="l"><i class="fas fa-trophy mr-1"></i>Canal de melhor retorno</div>
+              </div></div>
+            </div>
+          </div>
+
+          <div class="alert alert-light border py-2 est-note" id="estLag">
+            <i class="fas fa-hourglass-half mr-1 text-warning"></i>
+            <b>Conversão precisa de tempo.</b> Um lead demora dias para virar matrícula,
+            então em janelas curtas a taxa aparece MENOR do que será — os leads recentes
+            ainda estão em negociação. Para medir retorno de canal, a janela de
+            <b>90 dias ou 12 meses</b> é mais justa que a de 30.
+          </div>
+
+          <!-- Melhor retorno por canal -->
+          <h6 class="est-sec" style="color:#4f46e5"><i class="fas fa-medal"></i>Melhor retorno por canal
+            <span class="est-note ml-1">— taxa de conversão (matrículas ÷ leads)</span></h6>
+          <p class="est-note mb-2">Ordenado pelo que MAIS FECHA, não pelo que mais aparece.
+            Canais com menos de <span id="estMinVol">20</span> leads no período ficam em cinza (amostra pequena, taxa instável).</p>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="table-responsive" style="max-height:340px;overflow:auto">
+                <table class="table table-sm est-tbl mb-0">
+                  <thead><tr><th></th><th>Canal</th><th class="text-right">Leads</th><th class="text-right">Matríc.</th><th class="text-center">Conversão</th></tr></thead>
+                  <tbody id="estFontes"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="col-md-6"><div class="est-chart"><canvas id="estChartFontes"></canvas></div></div>
+          </div>
+
+          <hr>
+          <div class="row">
+            <div class="col-md-6">
+              <h6 class="est-sec" style="color:#0ea5e9"><i class="fas fa-clock"></i>Que horas mais entra lead</h6>
+              <p class="est-note mb-2" id="estHoraPico">—</p>
+              <div class="est-chart sm"><canvas id="estChartHora"></canvas></div>
+            </div>
+            <div class="col-md-6">
+              <h6 class="est-sec" style="color:#10b981"><i class="fas fa-calendar-week"></i>Que dia da semana mais entra</h6>
+              <p class="est-note mb-2" id="estDowPico">—</p>
+              <div class="est-chart sm"><canvas id="estChartDow"></canvas></div>
+            </div>
+          </div>
+
+          <hr>
+          <div class="row">
+            <div class="col-md-6">
+              <h6 class="est-sec" style="color:#f59e0b"><i class="fas fa-store"></i>Conversão por posto</h6>
+              <p class="est-note mb-2">Barra = leads recebidos · linha = % que virou matrícula. Posto que recebe muito e converte pouco perde lead na recepção.</p>
+              <div class="est-chart sm"><canvas id="estChartPosto"></canvas></div>
+            </div>
+            <div class="col-md-6">
+              <h6 class="est-sec" style="color:#8b5cf6"><i class="fas fa-user-tie"></i>Ranking de vendedores (matrículas fechadas)</h6>
+              <div class="table-responsive" style="max-height:290px;overflow:auto">
+                <table class="table table-sm est-tbl mb-0">
+                  <thead><tr><th></th><th>Vendedor</th><th class="text-right">Matrículas</th></tr></thead>
+                  <tbody id="estVendedores"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <hr>
+          <h6 class="est-sec" style="color:#4f46e5"><i class="fas fa-chart-line"></i>Tendência dos últimos 24 meses
+            <span class="est-note ml-1">— período longo, independe do filtro acima</span></h6>
+          <p class="est-note mb-2">Barras = leads criados no mês · linha = % de conversão. Os 1-2 meses mais recentes ainda sobem (leads em negociação).</p>
+          <div class="est-chart"><canvas id="estChartMensal"></canvas></div>
+        </div>
       </div>
 
     </section>
@@ -599,6 +716,175 @@ document.addEventListener('DOMContentLoaded', () => {
   carregarInscricao();
   setInterval(carregarLeads, 5 * 60 * 1000);
 });
+</script>
+
+<script>
+// ═══════════ Estudos de retorno & vendas ═══════════
+// Consome /api/monitores/leads/estudos (export_leads_estudos.py). Independente
+// do monitor de volume acima — não compartilha estado com ele.
+const EST_NOMES_POSTO = { A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho',
+  G:'Campo Grande', I:'Nova Iguaçu', J:'Jacarepaguá', M:'Madureira', N:'Nilópolis',
+  P:'Rio das Pedras', R:'Realengo', X:'X Campo Grande', Y:'Y Campo Grande', '?':'sem posto' };
+const EST_DOW = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const EST_MEDALHA = ['🥇','🥈','🥉'];
+let EST = null, EST_DIAS = '90';
+const estCharts = {};
+const escE = (typeof esc === 'function') ? esc
+  : s => String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const estPct = t => (t==null?'—':String(t).replace('.',',')+'%');
+
+// Cor da taxa: vermelho baixo → âmbar → verde. Conversão de canal costuma
+// ficar entre 1% e 30%; a régua satura o verde em 20%.
+function estCorTaxa(t){
+  if (t==null) return '#94a3b8';
+  const x = Math.max(0, Math.min(1, t/20));
+  if (x < .5){ const k=x/.5; return `rgb(${220},${Math.round(80+150*k)},${60})`; }
+  const k=(x-.5)/.5; return `rgb(${Math.round(220-190*k)},${Math.round(190-30*k)},${Math.round(60+40*k)})`;
+}
+
+async function estCarregar(){
+  const erro = document.getElementById('estErro'); erro.style.display='none';
+  let r;
+  try { r = await fetch('/api/monitores/leads/estudos', {credentials:'same-origin'}); }
+  catch(e){ erro.textContent='Falha de rede ao carregar os estudos.'; erro.style.display=''; return; }
+  const d = await r.json().catch(()=>({}));
+  if (!r.ok){ erro.textContent = d.error || ('Erro '+r.status); erro.style.display=''; return; }
+  EST = d;
+  const g = new Date(d.gerado_em);
+  document.getElementById('estGerado').textContent =
+    '· atualizado ' + (isNaN(g)?d.gerado_em:g.toLocaleString('pt-BR').slice(0,17));
+  document.getElementById('estMinVol').textContent = d.min_vol_taxa || 20;
+  estRender();
+}
+
+function estRender(){
+  if (!EST) return;
+  const j = (EST.janelas||{})[EST_DIAS] || {};
+  const minVol = EST.min_vol_taxa || 20;
+
+  // Resumo
+  document.getElementById('estTotal').textContent = (j.total||0).toLocaleString('pt-BR');
+  document.getElementById('estConv').textContent = (j.conv||0).toLocaleString('pt-BR');
+  document.getElementById('estTaxa').textContent = estPct(j.taxa);
+
+  // Fontes com taxa e volume — melhor retorno = maior taxa entre as de volume relevante
+  const fontes = (j.fontes||[]).map(f => ({...f, taxa: f.n ? +(100*f.c/f.n).toFixed(1) : 0}));
+  const relevantes = fontes.filter(f => f.n >= minVol);
+  const porTaxa = [...relevantes].sort((a,b)=> b.taxa-a.taxa || b.c-a.c);
+  document.getElementById('estMelhor').innerHTML = porTaxa.length
+    ? escE(porTaxa[0].fonte) + ' <span style="opacity:.85">('+estPct(porTaxa[0].taxa)+')</span>' : '—';
+
+  // Tabela de canais (ordenada por taxa; irrelevantes ao fim, em cinza)
+  const ordenadas = porTaxa.concat(fontes.filter(f=>f.n<minVol).sort((a,b)=>b.n-a.n));
+  document.getElementById('estFontes').innerHTML = ordenadas.map((f,i)=>{
+    const fraca = f.n < minVol;
+    const medal = (!fraca && i<3) ? EST_MEDALHA[i] : '';
+    return `<tr${fraca?' class="est-vol"':''}>
+      <td class="est-medal">${medal}</td>
+      <td>${escE(f.fonte)}</td>
+      <td class="text-right">${f.n.toLocaleString('pt-BR')}</td>
+      <td class="text-right">${f.c.toLocaleString('pt-BR')}</td>
+      <td class="text-center">${fraca ? '<span class="est-vol">'+estPct(f.taxa)+' <i class="fas fa-info-circle" title="amostra pequena"></i></span>'
+        : '<span class="est-taxa" style="background:'+estCorTaxa(f.taxa)+'">'+estPct(f.taxa)+'</span>'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="text-muted">Sem dados no período.</td></tr>';
+
+  // Gráfico de barras horizontais das melhores taxas (top 12 relevantes)
+  const topF = porTaxa.slice(0,12);
+  estCombo('estChartFontes', {
+    type:'bar', labels: topF.map(f=>f.fonte),
+    bars: topF.map(f=>f.taxa), barCor: topF.map(f=>estCorTaxa(f.taxa)),
+    barLabel:'Conversão %', indexAxis:'y',
+    barTip:(v,i)=> `${topF[i].fonte}: ${estPct(topF[i].taxa)} (${topF[i].c} de ${topF[i].n})`
+  });
+
+  // Hora do dia
+  const hora = j.hora||[];
+  const pico = hora.reduce((a,x)=> x.n>(a?a.n:-1)?x:a, null);
+  document.getElementById('estHoraPico').innerHTML = pico
+    ? `Pico às <b>${pico.h}h</b> (${pico.n.toLocaleString('pt-BR')} leads no período). Barra = leads · linha = % que fechou.`
+    : '—';
+  estCombo('estChartHora', {
+    labels: hora.map(x=>x.h+'h'), bars: hora.map(x=>x.n), barCor:'#0ea5e9',
+    barLabel:'Leads', line: hora.map(x=> x.n ? +(100*x.c/x.n).toFixed(1):0), lineLabel:'Conversão %'
+  });
+
+  // Dia da semana
+  const dow = j.dow||[];
+  const picoD = dow.reduce((a,x)=> x.n>(a?a.n:-1)?x:a, null);
+  document.getElementById('estDowPico').innerHTML = picoD
+    ? `Dia mais forte: <b>${EST_DOW[picoD.d]}</b> (${picoD.n.toLocaleString('pt-BR')} leads).`
+    : '—';
+  estCombo('estChartDow', {
+    labels: dow.map(x=>EST_DOW[x.d].slice(0,3)), bars: dow.map(x=>x.n), barCor:'#10b981',
+    barLabel:'Leads', line: dow.map(x=> x.n ? +(100*x.c/x.n).toFixed(1):0), lineLabel:'Conversão %'
+  });
+
+  // Conversão por posto (na ordem da rede; só os que aparecem)
+  const ordem = EST.postos_ordem || [];
+  const pmap = new Map((j.postos||[]).map(p=>[p.p, p]));
+  const postos = ordem.filter(p=>pmap.has(p)).map(p=>pmap.get(p))
+    .concat((j.postos||[]).filter(p=> !ordem.includes(p.p)));
+  estCombo('estChartPosto', {
+    labels: postos.map(p=> p.p+(EST_NOMES_POSTO[p.p]?' '+EST_NOMES_POSTO[p.p].slice(0,6):'')),
+    bars: postos.map(p=>p.n), barCor:'#f59e0b', barLabel:'Leads',
+    line: postos.map(p=> p.n?+(100*p.c/p.n).toFixed(1):0), lineLabel:'Conversão %',
+    barTip:(v,i)=> `${EST_NOMES_POSTO[postos[i].p]||postos[i].p}: ${postos[i].n} leads, ${postos[i].c} matrículas`
+  });
+
+  // Vendedores
+  document.getElementById('estVendedores').innerHTML = (j.vendedores||[]).map((v,i)=>
+    `<tr><td class="est-medal">${i<3?EST_MEDALHA[i]:''}</td><td>${escE(v.nome)}</td>
+     <td class="text-right"><b>${v.c.toLocaleString('pt-BR')}</b></td></tr>`).join('')
+    || '<tr><td colspan="3" class="text-muted">Sem matrícula fechada no período.</td></tr>';
+
+  // Tendência mensal (24m, fixo)
+  const mm = EST.mensal||[];
+  estCombo('estChartMensal', {
+    labels: mm.map(x=> x.m.slice(5)+'/'+x.m.slice(2,4)), bars: mm.map(x=>x.n), barCor:'#6366f1',
+    barLabel:'Leads', line: mm.map(x=>x.taxa), lineLabel:'Conversão %'
+  });
+}
+
+// Combo bar + (opcional) linha de %; ou barra horizontal só.
+function estCombo(id, o){
+  const ctx = document.getElementById(id); if (!ctx) return;
+  if (estCharts[id]) estCharts[id].destroy();
+  const ds = [{ type:'bar', label:o.barLabel, data:o.bars, backgroundColor:o.barCor,
+    borderRadius:3, maxBarThickness: o.indexAxis==='y'?16:22, order:2,
+    yAxisID: o.line?'y':undefined }];
+  if (o.line){
+    ds.push({ type:'line', label:o.lineLabel, data:o.line, borderColor:'#dc2626',
+      backgroundColor:'#dc2626', borderWidth:2, pointRadius:2, tension:.3,
+      yAxisID:'y1', order:1 });
+  }
+  const scales = o.indexAxis==='y'
+    ? { x:{beginAtZero:true, grid:{color:'#eef1f4'}, ticks:{callback:v=>v+'%'}},
+        y:{grid:{display:false}, ticks:{autoSkip:false, font:{size:10}}} }
+    : { x:{grid:{display:false}, ticks:{maxTicksLimit:24, font:{size:10}}},
+        y:{beginAtZero:true, position:'left', grid:{color:'#eef1f4'}, ticks:{precision:0},
+           title:{display:true,text:o.barLabel,font:{size:10}}} };
+  if (o.line){ scales.y1 = {beginAtZero:true, position:'right', grid:{display:false},
+    ticks:{callback:v=>v+'%'}, title:{display:true,text:'Conversão %',font:{size:10}}}; }
+  estCharts[id] = new Chart(ctx, {
+    data:{ labels:o.labels, datasets:ds },
+    options:{ maintainAspectRatio:false, indexAxis:o.indexAxis||'x',
+      plugins:{ legend:{display:!!o.line, labels:{boxWidth:12,font:{size:10}}},
+        tooltip:{ callbacks:{ label: it => o.barTip && it.dataset.type==='bar'
+          ? o.barTip(it.raw, it.dataIndex)
+          : it.dataset.label+': '+(it.dataset.type==='line'?estPct(it.raw):it.raw) } } },
+      scales }
+  });
+}
+
+document.getElementById('estPeriodo').addEventListener('click', ev=>{
+  const b = ev.target.closest('[data-dias]'); if(!b) return;
+  EST_DIAS = b.dataset.dias;
+  document.querySelectorAll('#estPeriodo [data-dias]').forEach(x=>x.classList.toggle('active', x===b));
+  estRender();
+});
+
+document.addEventListener('DOMContentLoaded', estCarregar);
 </script>
 
 <script src="/js/menu_enforce.js" defer></script>
