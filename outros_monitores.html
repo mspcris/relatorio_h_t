@@ -210,6 +210,13 @@
             <button type="button" class="btn btn-outline-primary active" data-dias="90">90 dias</button>
             <button type="button" class="btn btn-outline-primary" data-dias="365">12 meses</button>
           </div>
+          <div class="est-mes w-100 d-flex align-items-center flex-wrap" style="gap:6px; font-size:.8rem">
+            <span class="text-muted"><i class="far fa-calendar-alt mr-1"></i>ou por mês:</span>
+            <select id="estMesIni" class="form-control form-control-sm" style="width:auto"></select>
+            <span class="text-muted">até</span>
+            <select id="estMesFim" class="form-control form-control-sm" style="width:auto"></select>
+            <button type="button" id="estMesLimpar" class="btn btn-sm btn-outline-secondary" style="display:none">voltar aos dias</button>
+          </div>
         </div>
         <div class="card-body">
           <div id="estErro" class="alert alert-warning py-2" style="display:none"></div>
@@ -728,6 +735,9 @@ const EST_NOMES_POSTO = { A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho
 const EST_DOW = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 const EST_MEDALHA = ['🥇','🥈','🥉'];
 let EST = null, EST_DIAS = '90';
+let EST_MES_INI = null, EST_MES_FIM = null;   // recorte por mês; null = janela em dias
+const EST_MES_ABBR = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const estMesLabel = m => EST_MES_ABBR[+m.slice(5,7)-1] + '/' + m.slice(2,4);
 const estCharts = {};
 const escE = (typeof esc === 'function') ? esc
   : s => String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -742,6 +752,79 @@ function estCorTaxa(t){
   const k=(x-.5)/.5; return `rgb(${Math.round(220-190*k)},${Math.round(190-30*k)},${Math.round(60+40*k)})`;
 }
 
+// Lista de meses disponíveis (do mais recente ao mais antigo), a partir do bloco
+// por mês que o servidor manda. Cai na tendência mensal se o JSON for antigo.
+function estMesesDisp(){
+  const ks = Object.keys(EST.meses || {});
+  if (!ks.length && EST.mensal) return EST.mensal.map(x=>x.m).sort().reverse();
+  return ks.sort().reverse();
+}
+
+// Soma vários blocos de mês num só recorte (mesma forma de uma janela).
+function estAgregaMeses(chaves){
+  const M = EST.meses || {};
+  const somaChave = (arr, key, get) => {
+    const map = new Map();
+    chaves.forEach(m => (M[m]?.[arr]||[]).forEach(x=>{
+      const k = key(x); const o = map.get(k) || get(x, true);
+      o.n = (o.n||0) + (x.n||0); o.c = (o.c||0) + (x.c||0); map.set(k, o);
+    }));
+    return [...map.values()];
+  };
+  let total=0, conv=0;
+  chaves.forEach(m=>{ total += M[m]?.total||0; conv += M[m]?.conv||0; });
+  // hora (24) e dow (7): índice fixo
+  const hora = Array.from({length:24}, (_,h)=>({h, n:0, c:0}));
+  const dow  = Array.from({length:7},  (_,d)=>({d, n:0, c:0}));
+  chaves.forEach(m=>{
+    (M[m]?.hora||[]).forEach(x=>{ hora[x.h].n+=x.n||0; hora[x.h].c+=x.c||0; });
+    (M[m]?.dow ||[]).forEach(x=>{ dow[x.d].n+=x.n||0; dow[x.d].c+=x.c||0; });
+  });
+  // vendedores: soma por nome, top 20
+  const vmap = new Map();
+  chaves.forEach(m=>(M[m]?.vendedores||[]).forEach(v=>
+    vmap.set(v.nome, (vmap.get(v.nome)||0) + (v.c||0))));
+  const vendedores = [...vmap.entries()].map(([nome,c])=>({nome,c}))
+    .sort((a,b)=>b.c-a.c).slice(0,20);
+  return {
+    total, conv, taxa: total ? +(100*conv/total).toFixed(2) : 0,
+    fontes: somaChave('fontes','fonte', x=>({fonte:x.fonte, n:0, c:0})).sort((a,b)=>b.n-a.n),
+    postos: somaChave('postos','p',     x=>({p:x.p, n:0, c:0})).sort((a,b)=>b.n-a.n),
+    hora, dow, vendedores
+  };
+}
+
+// Recorte atualmente selecionado: por mês (se escolhido) ou janela em dias.
+function estJanelaAtual(){
+  if (EST_MES_INI && EST_MES_FIM){
+    const [a,b] = [EST_MES_INI, EST_MES_FIM].sort();
+    const chaves = estMesesDisp().filter(m => m>=a && m<=b);
+    return estAgregaMeses(chaves);
+  }
+  return (EST.janelas||{})[EST_DIAS] || {};
+}
+
+// Popula os dois <select> de mês e liga os eventos (1x).
+function estInitMeses(){
+  const disp = Object.keys(EST.meses || {}).sort().reverse();   // só com dado por mês real
+  const ini = document.getElementById('estMesIni');
+  const fim = document.getElementById('estMesFim');
+  if (!ini || !fim) return;
+  if (!disp.length){ document.querySelector('.est-mes').style.display='none'; return; }
+  const opts = m => `<option value="${m}">${estMesLabel(m)}</option>`;
+  ini.innerHTML = disp.map(opts).join('');
+  fim.innerHTML = disp.map(opts).join('');
+  ini.value = disp[0]; fim.value = disp[0];   // default: mês mais recente
+}
+
+function estAplicaMes(){
+  EST_MES_INI = document.getElementById('estMesIni').value;
+  EST_MES_FIM = document.getElementById('estMesFim').value;
+  document.querySelectorAll('#estPeriodo [data-dias]').forEach(x=>x.classList.remove('active'));
+  document.getElementById('estMesLimpar').style.display='';
+  estRender();
+}
+
 async function estCarregar(){
   const erro = document.getElementById('estErro'); erro.style.display='none';
   let r;
@@ -754,12 +837,13 @@ async function estCarregar(){
   document.getElementById('estGerado').textContent =
     '· atualizado ' + (isNaN(g)?d.gerado_em:g.toLocaleString('pt-BR').slice(0,17));
   document.getElementById('estMinVol').textContent = d.min_vol_taxa || 20;
+  estInitMeses();
   estRender();
 }
 
 function estRender(){
   if (!EST) return;
-  const j = (EST.janelas||{})[EST_DIAS] || {};
+  const j = estJanelaAtual();
   const minVol = EST.min_vol_taxa || 20;
 
   // Resumo
@@ -881,7 +965,18 @@ function estCombo(id, o){
 document.getElementById('estPeriodo').addEventListener('click', ev=>{
   const b = ev.target.closest('[data-dias]'); if(!b) return;
   EST_DIAS = b.dataset.dias;
+  EST_MES_INI = EST_MES_FIM = null;   // volta ao modo de dias
+  document.getElementById('estMesLimpar').style.display='none';
   document.querySelectorAll('#estPeriodo [data-dias]').forEach(x=>x.classList.toggle('active', x===b));
+  estRender();
+});
+
+document.getElementById('estMesIni').addEventListener('change', estAplicaMes);
+document.getElementById('estMesFim').addEventListener('change', estAplicaMes);
+document.getElementById('estMesLimpar').addEventListener('click', ()=>{
+  EST_MES_INI = EST_MES_FIM = null;
+  document.getElementById('estMesLimpar').style.display='none';
+  document.querySelector('#estPeriodo [data-dias="'+EST_DIAS+'"]').classList.add('active');
   estRender();
 });
 

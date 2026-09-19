@@ -81,6 +81,76 @@ def _linhas(cur, sql):
     return cur.fetchall()
 
 
+def coletar_meses(cur, shift_l: str) -> dict:
+    """Um bloco por mês (YYYY-MM), últimos MESES_TENDENCIA meses, com a MESMA
+    quebra das janelas. Feito em 6 queries agrupadas por mês (não uma varredura
+    por mês) porque a tabela leads não tem índice em created_at. `shift_l` já vem
+    qualificado com o alias l. O mês usa o fuso LOCAL, igual à tendência mensal —
+    assim 'agosto' no seletor é o mesmo agosto do gráfico de tendência."""
+    janela = f"l.created_at >= NOW() - INTERVAL {MESES_TENDENCIA} MONTH"
+    mes = f"DATE_FORMAT({shift_l}, '%Y-%m')"
+    meses: dict = {}
+
+    def slot(m: str) -> dict:
+        if m not in meses:
+            meses[m] = {"total": 0, "conv": 0, "taxa": 0, "fontes": [], "postos": [],
+                        "hora": [{"h": h, "n": 0, "c": 0} for h in range(24)],
+                        "dow": [{"d": d, "n": 0, "c": 0} for d in range(7)],
+                        "vendedores": []}
+        return meses[m]
+
+    # total + conversão
+    for r in _linhas(cur, f"SELECT {mes} m, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+                          f"FROM leads l WHERE {janela} GROUP BY 1"):
+        s = slot(str(r["m"]))
+        s["total"] = int(r["n"] or 0); s["conv"] = int(r["c"] or 0)
+        s["taxa"] = round(100 * s["conv"] / s["total"], 2) if s["total"] else 0
+
+    # por fonte (canal)
+    for r in _linhas(cur,
+            f"SELECT {mes} m, COALESCE(s.title, CONCAT('fonte #', l.leadsource_id), 'sem fonte') fonte, "
+            f"COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l LEFT JOIN leadsources s ON s.id = l.leadsource_id "
+            f"WHERE {janela} GROUP BY 1,2 ORDER BY n DESC"):
+        slot(str(r["m"]))["fontes"].append(
+            {"fonte": str(r["fonte"]), "n": int(r["n"]), "c": int(r["c"] or 0)})
+
+    # por posto
+    for r in _linhas(cur,
+            f"SELECT {mes} m, {POSTO_SQL} p, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l WHERE {janela} GROUP BY 1,2 ORDER BY n DESC"):
+        slot(str(r["m"]))["postos"].append(
+            {"p": str(r["p"]), "n": int(r["n"]), "c": int(r["c"] or 0)})
+
+    # por hora do dia
+    for r in _linhas(cur,
+            f"SELECT {mes} m, HOUR({shift_l}) h, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l WHERE {janela} GROUP BY 1,2"):
+        slot(str(r["m"]))["hora"][int(r["h"])] = {
+            "h": int(r["h"]), "n": int(r["n"]), "c": int(r["c"] or 0)}
+
+    # por dia da semana (1=dom..7=sáb → 0=dom..6=sáb)
+    for r in _linhas(cur,
+            f"SELECT {mes} m, DAYOFWEEK({shift_l}) d, COUNT(*) n, SUM(l.finish_lead_signup=1) c "
+            f"FROM leads l WHERE {janela} GROUP BY 1,2"):
+        slot(str(r["m"]))["dow"][int(r["d"]) - 1] = {
+            "d": int(r["d"]) - 1, "n": int(r["n"]), "c": int(r["c"] or 0)}
+
+    # ranking de vendedores — top 20 por mês (ordena tudo e corta no Python)
+    vtmp: dict = {}
+    for r in _linhas(cur,
+            f"SELECT {mes} m, l.finish_lead_user_id uid, u.name nome, COUNT(*) c "
+            f"FROM leads l LEFT JOIN users u ON u.id = l.finish_lead_user_id "
+            f"WHERE {janela} AND l.finish_lead_signup=1 AND l.finish_lead_user_id IS NOT NULL "
+            f"GROUP BY 1,2,3 ORDER BY c DESC"):
+        vtmp.setdefault(str(r["m"]), []).append(
+            {"nome": (r["nome"] or f"#{r['uid']}").strip(), "c": int(r["c"])})
+    for m, lst in vtmp.items():
+        slot(m)["vendedores"] = lst[:20]
+
+    return meses
+
+
 def coletar_janela(cur, shift: str, dias: int) -> dict:
     """Todos os estudos de uma janela de N dias."""
     filtro = f"created_at >= NOW() - INTERVAL {dias} DAY"
@@ -149,9 +219,11 @@ def coletar() -> dict:
         cur = c.cursor()
         off = offset_horas(cur)
         shift = f"created_at + INTERVAL {off} HOUR"
+        shift_l = f"l.created_at + INTERVAL {off} HOUR"   # mesmo shift, qualificado
         log(f"offset MySQL→local: {off:+d}h")
 
         janelas = {str(d): coletar_janela(cur, shift, d) for d in JANELAS}
+        meses = coletar_meses(cur, shift_l)
 
         # tendência mensal (24 meses) — período longo, volume × conversão
         mensal = [
@@ -169,6 +241,7 @@ def coletar() -> dict:
     return {
         "gerado_em": datetime.now().astimezone().isoformat(timespec="seconds"),
         "janelas": janelas,
+        "meses": meses,
         "mensal": mensal,
         "min_vol_taxa": MIN_VOL_TAXA,
         "postos_ordem": POSTOS_REDE,
