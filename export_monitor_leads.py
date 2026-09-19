@@ -179,7 +179,12 @@ def coletar() -> dict:
         "dias": dias,
         "hoje": total_hoje,
         "ontem": total_ontem,
-        "ultima_hora": {"label": ult[-5:], "n": n_ult},
+        "hoje_data": hoje,
+        "ontem_data": ontem,
+        # `h` = timestamp COMPLETO da última hora fechada. A página filtrada casa
+        # por ele; sem ele, casava só por "HH:00" e pegava o balde mais antigo de
+        # 72h com aquele horário (bug do "9 na última hora, 8 no dia", 19/09/2026).
+        "ultima_hora": {"label": ult[-5:], "h": ult, "n": n_ult},
         "fontes_hoje": fontes,
         # Séries por posto: a página filtra sem ir ao servidor de novo.
         "postos": [p for p in POSTOS_REDE if p in vistos],

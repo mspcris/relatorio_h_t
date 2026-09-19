@@ -469,17 +469,24 @@ function ldFiltrado() {
   const dias = ldSomar(LD.dias_posto, 'd');
   const horas = ldSomar(LD.horas_posto, 'h');
   const fontes = ldSomar(LD.fontes_posto, 'fonte').sort((a, b) => b.n - a.n);
-  const hoje = new Date(); const iso = dt => dt.toISOString().slice(0, 10);
-  const hojeStr = iso(hoje);
-  const ontemStr = iso(new Date(hoje.getTime() - 86400000));
+  // Data de HOJE/ONTEM vem do servidor (fuso local); só cai no relógio do
+  // navegador se o JSON for antigo. Evita usar data em UTC de madrugada.
+  const iso = dt => dt.toISOString().slice(0, 10);
+  const hojeStr = LD.hoje_data || iso(new Date());
+  const ontemStr = LD.ontem_data || iso(new Date(Date.now() - 86400000));
   const somaDia = alvo => dias.filter(x => x.d === alvo).reduce((a, x) => a + x.n, 0);
-  const ult = LD.ultima_hora && LD.ultima_hora.label
-    ? (horas.find(x => String(x.h).slice(-5) === LD.ultima_hora.label) || {}).n || 0
-    : 0;
+  // Última hora fechada: casa pelo timestamp COMPLETO. Sem ele (JSON antigo),
+  // pega o balde MAIS RECENTE com aquele "HH:00", nunca o mais antigo de 72h.
+  const uh = LD.ultima_hora || {};
+  const ult = uh.h
+    ? (horas.find(x => x.h === uh.h) || {}).n || 0
+    : uh.label
+      ? ([...horas].reverse().find(x => String(x.h).slice(-5) === uh.label) || {}).n || 0
+      : 0;
   return Object.assign({}, LD, {
     dias, horas, fontes_hoje: fontes,
     hoje: somaDia(hojeStr), ontem: somaDia(ontemStr),
-    ultima_hora: { label: LD.ultima_hora.label, n: ult },
+    ultima_hora: { label: uh.label, h: uh.h, n: ult },
   });
 }
 
