@@ -44,7 +44,24 @@ SQL_VENDAS_DIR    = os.path.join(BASE_DIR, "sql_vendas")
 DADOS_VENDAS_DIR  = os.path.join(BASE_DIR, "dados_vendas")
 JSON_VENDAS_DIR   = os.path.join(BASE_DIR, "json_vendas")
 
-SQL_VENDAS_FILE   = os.path.join(SQL_VENDAS_DIR, "fin_receita_vendas.sql")
+# Desde 2026-09-19 a venda é o PLANO (mensalidade paga + taxa de inscrição
+# paga + cliente ativo), no mês em que ficou completo — ver o cabeçalho do .sql.
+# É a regra ÚNICA: o export_metas lê estes mesmos CSVs (ler_planos_csv).
+# Os CSVs antigos (*_vendas.csv, 1 linha por mensalidade paga) não são mais lidos.
+SQL_VENDAS_FILE   = os.path.join(SQL_VENDAS_DIR, "vendas_planos.sql")
+DETALHE_DIR       = os.path.join(JSON_VENDAS_DIR, "detalhe")
+
+# Mensalidade e taxa podem ser pagas meses depois da admissão: os últimos
+# N meses são sempre refeitos para o status de cada matrícula acompanhar.
+MESES_REPROCESSA  = 6   # também pega desativação posterior (tira a venda do mês)
+
+# Colunas do detalhe (json_vendas/detalhe/<ym>.json) — a página lê por nome.
+DETALHE_COLS = ["posto", "matricula", "nome", "admissao", "plano", "corretor",
+                "subcorretor", "posto_cliente", "desativado",
+                "mens_lancadas", "mens_pagas", "mens_abonadas", "mens_canceladas",
+                "mens_valor", "mens_data",
+                "taxa_lancadas", "taxa_pagas", "taxa_abonadas", "taxa_canceladas",
+                "taxa_valor", "taxa_data", "data_completo", "conta", "problemas"]
 
 
 def _set_mtime(path: str) -> None:
@@ -73,7 +90,7 @@ def run_query(engine, sql_txt, ini, fim):
 
 
 def target_csv_path(posto: str, ym: str) -> str:
-    return os.path.join(DADOS_VENDAS_DIR, f"{posto}_{ym}_vendas.csv")
+    return os.path.join(DADOS_VENDAS_DIR, f"{posto}_{ym}_planos.csv")
 
 
 # =============================================================================
@@ -91,17 +108,27 @@ def previous_month_slug():
     return f"{y:04d}-{m:02d}"
 
 
+def meses_recentes(n: int = MESES_REPROCESSA) -> set:
+    """'YYYY-MM' do mês corrente e dos n-1 anteriores."""
+    t = date.today()
+    y, m = t.year, t.month
+    out = set()
+    for _ in range(n):
+        out.add(f"{y:04d}-{m:02d}")
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    return out
+
+
 def should_write_file_vendas(path: str, ym: str, ym_current: str, ym_prev: str, force: bool, only_month: str):
     """
     Lógica oficial:
-      - mês atual  => sempre reprocessa
-      - mês anterior => sempre reprocessa
+      - últimos MESES_REPROCESSA meses => sempre reprocessa (pagamento atrasado
+        muda o status da matrícula)
       - demais => só se não existir, ou se --force, ou se --only-month foi usado
     """
-    if ym == ym_current:
-        return True
-
-    if ym == ym_prev:
+    if ym == ym_current or ym == ym_prev or ym in meses_recentes():
         return True
 
     if force:
@@ -116,138 +143,200 @@ def should_write_file_vendas(path: str, ym: str, ym_current: str, ym_prev: str, 
 # =============================================================================
 # GERA JSON CONSOLIDADO
 # =============================================================================
+def _int(v) -> int:
+    try:
+        return int(float(v)) if pd.notna(v) else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _txt(v) -> str:
+    return "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v).strip()
+
+
+def _data(v) -> str:
+    t = pd.to_datetime(v, errors="coerce")
+    return "" if pd.isna(t) else t.strftime("%Y-%m-%d")
+
+
+def _data_hora(v) -> str:
+    t = pd.to_datetime(v, errors="coerce")
+    return "" if pd.isna(t) else t.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def problemas_da_linha(r: dict) -> list:
+    """Motivos, em código, pelos quais a matrícula precisa de atenção.
+    'conta' (virou plano) = mensalidade paga + taxa paga + cliente ativo
+    (taxa ABONADA não é paga — Cristiano, 2026-09-19). O resto é aviso de
+    cadastro e não tira a venda da contagem."""
+    pr = []
+    for pre in ("mens", "taxa"):
+        if r[f"{pre}_pagas"] > 0:
+            continue
+        if r[f"{pre}_lancadas"] == 0:
+            pr.append(f"{pre}_sem_lancamento")
+        elif r[f"{pre}_abonadas"] > 0:
+            pr.append(f"{pre}_abonada")
+        elif r[f"{pre}_canceladas"] >= r[f"{pre}_lancadas"]:
+            pr.append(f"{pre}_cancelada")
+        else:
+            pr.append(f"{pre}_em_aberto")
+    corr, sub = r["corretor"], r["subcorretor"]
+    if not corr and not sub:
+        pr.append("sem_corretor_sem_sub")
+    elif not corr:
+        pr.append("sem_corretor")
+    elif "BROKER" in corr.upper() and not sub:
+        pr.append("broker_sem_sub")
+    if r["posto_cliente"] and r["posto_cliente"] != r["posto"]:
+        pr.append("outro_posto")
+    if r["desativado"]:
+        pr.append("desativado")
+    return pr
+
+
+def linhas_do_csv(df: pd.DataFrame, posto: str) -> list:
+    """Linhas do CSV de planos (vendas_planos.sql) já classificadas: conta,
+    problemas, data_completo. É a ÚNICA regra de venda — o export_metas usa
+    esta mesma função para vendas por dia/hora."""
+    out = []
+    for rec in df.to_dict("records"):
+        r = {
+            "posto": posto,
+            "matricula": _txt(rec.get("Matricula")),
+            "nome": _txt(rec.get("Nome")),
+            "admissao": _data(rec.get("DataAdmissao")),
+            "plano": _txt(rec.get("plano")),
+            "corretor": _txt(rec.get("corretor")),
+            "subcorretor": _txt(rec.get("subcorretor")),
+            "posto_cliente": _txt(rec.get("posto_cliente")),
+            "desativado": 1 if _int(rec.get("Desativado")) else 0,
+        }
+        for pre in ("mens", "taxa"):
+            for k in ("lancadas", "pagas", "abonadas", "canceladas"):
+                r[f"{pre}_{k}"] = _int(rec.get(f"{pre}_{k}"))
+            v = pd.to_numeric(rec.get(f"{pre}_valor"), errors="coerce")
+            r[f"{pre}_valor"] = None if pd.isna(v) else round(float(v), 2)
+            r[f"{pre}_data"] = _data(rec.get(f"{pre}_data"))
+        r["data_completo"] = _data_hora(rec.get("data_completo"))
+        r["conta"] = 1 if (r["mens_pagas"] > 0 and r["taxa_pagas"] > 0 and not r["desativado"]) else 0
+        r["problemas"] = problemas_da_linha(r)
+        out.append(r)
+    return out
+
+
+def ler_planos_csv(posto: str, ym: str):
+    """Linhas classificadas de um posto/mês, ou None se o CSV não existe."""
+    path = target_csv_path(posto, ym)
+    if not os.path.exists(path):
+        return None
+    try:
+        df = pd.read_csv(path, dtype={"Matricula": str})
+    except pd.errors.EmptyDataError:
+        return []
+    return linhas_do_csv(df, posto)
+
+
 def build_vendas_json():
     ensure_dir(JSON_VENDAS_DIR)
+    ensure_dir(DETALHE_DIR)
 
     if not os.path.isdir(DADOS_VENDAS_DIR):
         print("[VENDAS][JSON] Pasta de dados de vendas inexistente; etapa pulada.")
         return
 
-    pattern = re.compile(r"^(?P<posto>[A-Z])_(?P<ym>\d{4}-\d{2})_vendas\.csv$", re.I)
+    pattern = re.compile(r"^(?P<posto>[A-Z])_(?P<ym>\d{4}-\d{2})_planos\.csv$", re.I)
     agregados = {}
+    detalhe = {}   # ym -> [linhas]
 
-    for fn in os.listdir(DADOS_VENDAS_DIR):
+    SEM_CORR, SEM_SUB = "(sem corretor)", "(sem subcorretor)"
+
+    for fn in sorted(os.listdir(DADOS_VENDAS_DIR)):
         m = pattern.match(fn)
         if not m:
             continue
-
         posto = m.group("posto").upper()
         ym    = m.group("ym")
-        path  = os.path.join(DADOS_VENDAS_DIR, fn)
-
         try:
-            df = pd.read_csv(path)
+            df = pd.read_csv(os.path.join(DADOS_VENDAS_DIR, fn), dtype={"Matricula": str})
+        except pd.errors.EmptyDataError:
+            continue
         except Exception as e:
             print(f"[VENDAS][JSON] ERRO lendo {fn}: {e}")
             continue
 
-        # descobrir nome da coluna de valor
-        cols_lower = {c.lower(): c for c in df.columns}
-        col_valor = None
-        for cand in ["valor pago", "valorpago", "valor", "total"]:
-            if cand.lower() in cols_lower:
-                col_valor = cols_lower[cand.lower()]
-                break
+        mes = agregados.setdefault(ym, {"valor_total": 0.0, "qtd_vendas": 0, "qtd_pendentes": 0,
+                                        "ticket_medio": None, "por_posto": {}})
+        pp = mes["por_posto"].setdefault(posto, {"valor_total": 0.0, "qtd_vendas": 0, "qtd_pendentes": 0,
+                                                 "qtd_alertas": 0, "ticket_medio": None,
+                                                 "por_corretor": {}, "por_corretor_subcorretor": {}})
+        linhas = detalhe.setdefault(ym, [])
 
-        if not col_valor:
-            print(f"[VENDAS][JSON] AVISO: {fn} sem coluna de valor; pulando.")
-            continue
+        for r in linhas_do_csv(df, posto):
+            linhas.append([r[c] for c in DETALHE_COLS])
 
-        v_total = float(pd.to_numeric(df[col_valor], errors="coerce").fillna(0).sum())
-        qtd     = len(df)
+            valor = (r["mens_valor"] or 0.0) if r["conta"] else 0.0
+            alerta = 1 if (r["conta"] and r["problemas"]) else 0
+            corr = r["corretor"] or SEM_CORR
+            sub = r["subcorretor"] or SEM_SUB
 
-        agregados.setdefault(ym, {
-            "valor_total": 0.0,
-            "qtd_vendas": 0,
-            "ticket_medio": None,
-            "por_posto": {}
-        })
+            for alvo in (mes, pp):
+                alvo["qtd_vendas"] += r["conta"]
+                alvo["qtd_pendentes"] += 1 - r["conta"]
+                alvo["valor_total"] += valor
+            pp["qtd_alertas"] += alerta
 
-        agregados[ym]["valor_total"] += v_total
-        agregados[ym]["qtd_vendas"]  += qtd
+            bc = pp["por_corretor"].setdefault(corr, {"valor_total": 0.0, "qtd_vendas": 0, "pend": 0,
+                                                      "alertas": 0, "ticket_medio": None})
+            bp = pp["por_corretor_subcorretor"].setdefault(corr + "||" + sub, {
+                "corretor": corr, "subcorretor": sub, "valor_total": 0.0, "qtd_vendas": 0,
+                "pend": 0, "alertas": 0, "ticket_medio": None})
+            for b in (bc, bp):
+                b["qtd_vendas"] += r["conta"]
+                b["pend"] += 1 - r["conta"]
+                b["alertas"] += alerta
+                b["valor_total"] += valor
 
-        por_posto = agregados[ym]["por_posto"]
-        por_posto.setdefault(posto, {
-            "valor_total": 0.0,
-            "qtd_vendas": 0,
-            "ticket_medio": None,
-            "por_corretor": {},
-            "por_corretor_subcorretor": {}
-        })
+    def _fecha(b):
+        b["ticket_medio"] = round(b["valor_total"] / b["qtd_vendas"], 2) if b["qtd_vendas"] else None
+        b["valor_total"] = round(b["valor_total"], 2)
 
-        por_posto[posto]["valor_total"] += v_total
-        por_posto[posto]["qtd_vendas"]  += qtd
-
-        # Agregação por corretor / subcorretor dentro do posto
-        col_corr = cols_lower.get("corretor")
-        col_sub  = cols_lower.get("subcorretor")
-        valores_num = pd.to_numeric(df[col_valor], errors="coerce").fillna(0)
-
-        if col_corr:
-            corr_series = df[col_corr].fillna("(sem corretor)").astype(str).str.strip().replace("", "(sem corretor)")
-            por_corr = por_posto[posto]["por_corretor"]
-            for nome, grupo in valores_num.groupby(corr_series):
-                bucket = por_corr.setdefault(nome, {"valor_total": 0.0, "qtd_vendas": 0, "ticket_medio": None})
-                bucket["valor_total"] += float(grupo.sum())
-                bucket["qtd_vendas"]  += int(grupo.size)
-
-            if col_sub:
-                sub_series = df[col_sub].fillna("(sem subcorretor)").astype(str).str.strip().replace("", "(sem subcorretor)")
-                chave = corr_series + "||" + sub_series
-                por_pair = por_posto[posto]["por_corretor_subcorretor"]
-                for k, grupo in valores_num.groupby(chave):
-                    corr_nome, sub_nome = k.split("||", 1)
-                    bucket = por_pair.setdefault(k, {
-                        "corretor": corr_nome,
-                        "subcorretor": sub_nome,
-                        "valor_total": 0.0,
-                        "qtd_vendas": 0,
-                        "ticket_medio": None
-                    })
-                    bucket["valor_total"] += float(grupo.sum())
-                    bucket["qtd_vendas"]  += int(grupo.size)
-
-    # pós-processamento
     for ym, info in agregados.items():
-        if info["qtd_vendas"] > 0:
-            info["ticket_medio"] = round(info["valor_total"] / info["qtd_vendas"], 2)
-        info["valor_total"] = round(info["valor_total"], 2)
-
+        _fecha(info)
         for posto, v in info["por_posto"].items():
-            if v["qtd_vendas"] > 0:
-                v["ticket_medio"] = round(v["valor_total"] / v["qtd_vendas"], 2)
-            v["valor_total"] = round(v["valor_total"], 2)
+            _fecha(v)
+            for c in v["por_corretor"].values():
+                _fecha(c)
+            lst = list(v["por_corretor_subcorretor"].values())
+            for p in lst:
+                _fecha(p)
+            lst.sort(key=lambda x: (-x["qtd_vendas"], -x["pend"], -x["valor_total"]))
+            v["por_corretor_subcorretor"] = lst
 
-            for nome, c in v.get("por_corretor", {}).items():
-                if c["qtd_vendas"] > 0:
-                    c["ticket_medio"] = round(c["valor_total"] / c["qtd_vendas"], 2)
-                c["valor_total"] = round(c["valor_total"], 2)
-
-            pair_dict = v.get("por_corretor_subcorretor", {}) or {}
-            pair_list = []
-            for p in pair_dict.values():
-                if p["qtd_vendas"] > 0:
-                    p["ticket_medio"] = round(p["valor_total"] / p["qtd_vendas"], 2)
-                p["valor_total"] = round(p["valor_total"], 2)
-                pair_list.append(p)
-            pair_list.sort(key=lambda x: (-x["qtd_vendas"], -x["valor_total"]))
-            v["por_corretor_subcorretor"] = pair_list
-
-    # ordena meses
-    out = {}
-    for ym in sorted(agregados.keys()):
-        out[ym] = agregados[ym]
-
-    # injeta metadados
+    out = {ym: agregados[ym] for ym in sorted(agregados)}
     out = add_metadata(out)
+    out["_meta"]["regra"] = ("plano = mensalidade paga + taxa de inscrição paga (abonada não conta) + cliente ativo; "
+                             "cai no mês em que ficou completo (a mais tarde das duas, data de lançamento); "
+                             "pendente = admitido no mês sem completar, aparece no mês da admissão")
+    out["_meta"]["detalhe"] = "json_vendas/detalhe/<YYYY-MM>.json"
 
-    # salvar
     out_path = os.path.join(JSON_VENDAS_DIR, "vendas_mensal.json")
-    with open(out_path, "w", encoding="utf-8") as f:
+    tmp = out_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
-
+    os.replace(tmp, out_path)
     _set_mtime(out_path)
     print(f"[VENDAS][JSON] Gerado -> {os.path.relpath(out_path, BASE_DIR)}")
+
+    # Detalhe por mês (modal de auditoria da página). Escrita atômica: o
+    # sync_www copia enquanto o ETL roda e JSON pela metade quebra o modal.
+    for ym, linhas in detalhe.items():
+        path = os.path.join(DETALHE_DIR, f"{ym}.json")
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"cols": DETALHE_COLS, "rows": linhas}, f, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp, path)
+    print(f"[VENDAS][JSON] Detalhe -> {len(detalhe)} meses em {os.path.relpath(DETALHE_DIR, BASE_DIR)}")
 
 
 # =============================================================================
@@ -335,7 +424,9 @@ def run():
                 continue
 
             try:
-                df.to_csv(out_path, index=False, encoding="utf-8-sig")
+                tmp = out_path + ".tmp"   # o export_metas lê este CSV de hora em hora
+                df.to_csv(tmp, index=False, encoding="utf-8-sig")
+                os.replace(tmp, out_path)
                 print(f"   [{posto}] OK linhas={len(df)}")
                 meta.ok(posto)
             except Exception as e:
