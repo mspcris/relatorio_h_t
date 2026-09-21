@@ -23,6 +23,12 @@ arquivo lá ficava parado no mtime antigo. Agora paths relativos são
 resolvidos contra o diretório do script principal (sys.argv[0]).
 """
 import json, os, sys
+
+try:
+    import sentry_setup
+    sentry_setup.init_sentry("etl:" + os.path.basename(sys.argv[0] or "?"))
+except Exception:  # monitoramento nunca derruba um export
+    sentry_setup = None
 from datetime import datetime
 
 
@@ -46,6 +52,11 @@ class ETLMeta:
         }
 
     def error(self, posto, msg, **extra):
+        if sentry_setup is not None:
+            try:
+                sentry_setup.capturar_erro_posto(self.script, posto, msg)
+            except Exception:
+                pass
         self.postos[posto] = {
             'status': 'error',
             'at': datetime.now().isoformat(timespec='seconds'),

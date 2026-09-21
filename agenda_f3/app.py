@@ -28,6 +28,28 @@ from dotenv import load_dotenv
 
 load_dotenv('/opt/agenda_f3/.env')
 
+# Sentry — monitoramento de erros. Só liga se SENTRY_DSN estiver no ambiente; sem ele
+# o sentry-sdk nem é importado.
+_SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+if _SENTRY_DSN:
+    import logging as _sentry_logging
+
+    import sentry_sdk
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        environment=os.environ.get("SENTRY_ENVIRONMENT", "prod"),
+        release=os.environ.get("SENTRY_RELEASE", "").strip() or None,
+        # False por padrão: dado de paciente, e o Sentry guarda os eventos nos EUA.
+        send_default_pii=os.environ.get("SENTRY_SEND_PII", "false").lower() == "true",
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.05")),
+        # só WARNING pra cima vira log no Sentry; INFO fica de fora de propósito
+        enable_logs=os.environ.get("SENTRY_ENABLE_LOGS", "true").lower() == "true",
+        integrations=[LoggingIntegration(sentry_logs_level=_sentry_logging.WARNING)],
+    )
+    sentry_sdk.set_tag("componente", "agenda_f3")
+
 # ── Flask app ────────────────────────────────────────────────────────────────
 
 app = Flask(__name__, template_folder='/opt/agenda_f3/templates')
