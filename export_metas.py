@@ -421,9 +421,15 @@ def por_hora_com_vendas(df_hora: pd.DataFrame, vend: list) -> pd.DataFrame:
 def sincronizar_vendas(postos) -> None:
     """Meses antigos não são refeitos aqui (a query de mensalidade é cara), mas
     as vendas deles mudam: o export_vendas refaz os últimos meses toda noite
-    (pagamento atrasado, cliente desativado). Quando o CSV de planos é mais
-    novo que o JSON do metas, reescreve só vendas_por_dia e por_hora.vendas —
-    senão o KPI Vendas e o Metas mostrariam números diferentes do mesmo mês."""
+    (pagamento atrasado, cliente desativado). Este passo reescreve só
+    vendas_por_dia e por_hora.vendas a partir do CSV de planos — senão o KPI
+    Vendas e o Metas mostrariam números diferentes do mesmo mês.
+
+    O controle é a MARCA do CSV usado (`vendas_csv_mtime`), não a data do
+    arquivo JSON: posto que falhou na query de mensalidade sai do laço acima
+    pelo `continue` e fica com o JSON ANTIGO, mais novo que o CSV — comparar
+    datas deixava esse mês com o número da regra velha (visto no posto X,
+    ago/2026: 91 no KPI Vendas e 88 aqui)."""
     n = 0
     for fn in sorted(os.listdir(OUT_JSON_DIR)):
         m = re.match(r"^([A-Z])_metas_(\d{4}-\d{2})\.json$", fn)
@@ -432,20 +438,24 @@ def sincronizar_vendas(postos) -> None:
         posto, ym = m.group(1), m.group(2)
         path = os.path.join(OUT_JSON_DIR, fn)
         csv_path = vendas_regra.target_csv_path(posto, ym)
-        if not os.path.exists(csv_path) or os.path.getmtime(csv_path) <= os.path.getmtime(path):
+        if not os.path.exists(csv_path):
             continue
-        vend = vendas_do_mes(posto, ym)
-        if vend is None:
-            continue
+        marca = round(os.path.getmtime(csv_path), 3)
         try:
             with open(path, encoding="utf-8") as f:
                 payload = json.load(f)
         except (OSError, ValueError):
             continue
+        if payload.get("vendas_csv_mtime") == marca:
+            continue
+        vend = vendas_do_mes(posto, ym)
+        if vend is None:
+            continue
         ini = date(int(ym[:4]), int(ym[5:7]), 1)
         payload["vendas_por_dia"] = _df_to_records(vendas_por_dia_df(vend, ini))
         if "por_hora" in payload:
             payload["por_hora"] = _df_to_records(por_hora_com_vendas(pd.DataFrame(payload["por_hora"]), vend))
+        payload["vendas_csv_mtime"] = marca
         payload["vendas_sincronizadas_em"] = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
