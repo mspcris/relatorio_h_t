@@ -2043,6 +2043,15 @@ function uniqueDoctors(rows) {
 
           const info = document.querySelector('#jsonInfo');
           if (info && RAW.meta?.dados_gerados_em) info.textContent = '• dados gerados em ' + RAW.meta.dados_gerados_em;
+          // Posto que falhou na última rodada do ETL fica com o dado da última leitura boa
+          // (não some do KPI). Dizer qual e de quando, senão o dado velho passa por atual.
+          const semLeitura = Object.entries(RAW.meta?.postos_desatualizados || {});
+          if (info && semLeitura.length) {
+            const aviso = document.createElement('span');
+            aviso.style.cssText = 'color:#c0392b;font-weight:600;margin-left:8px';
+            aviso.textContent = '• sem leitura agora: ' + semLeitura.map(([p, q]) => `${p} (dado de ${q})`).join(', ');
+            info.appendChild(aviso);
+          }
 
           // Default: últimos 12 meses completos (até o mês anterior à data atual)
           const endDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);

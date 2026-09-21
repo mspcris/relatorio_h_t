@@ -66,13 +66,13 @@ LEGACY_KEYS_CONSOLIDADO = {
 }
 
 
-KEY_PATTERNS = {
-    "mensalidade": re.compile(r"(mensal|mensalid|receita|fin_?receita)", re.I),
-    "medico":      re.compile(r"(medic|custo_?med|assist|sinistral)", re.I),
-    "alimentacao": re.compile(r"(alimenta|refeic|cozinha|posto)", re.I),
-    "prescricao":  re.compile(r"\bprescri(ção|cao|c)(es|o|oes)?\b", re.I),
-    # NOVO: dados financeiros específicos do plano CAMIM LIBERTY
-    "liberty":     re.compile(r"liberty", re.I),
+# SQLs legados deste ETL, pelo nome exato do arquivo -> chave do CSV.
+# Arquivo novo do governanca entra aqui (ou num startswith de infer_key_from_filename);
+# o que não for reconhecido é tratado como SQL de outro ETL e NÃO roda.
+SQL_LEGADO = {
+    "fin_receita_mensalidades.sql": "mensalidade",
+    "fin_despesa_medicos.sql":      "medico",
+    "fin_despesa_alimentacao.sql":  "alimentacao",
 }
 
 PREFER_NOMES = {
@@ -167,10 +167,12 @@ def infer_key_from_filename(fn):
     if name.startswith("atendimento"):
         return "atendimento"
 
-    # === FALLBACK LEGADO ===
-    for key, pat in KEY_PATTERNS.items():
-        if pat.search(name):
-            return key
+    # === LEGADO — por NOME EXATO ===
+    # Era um regex solto (KEY_PATTERNS). "medic" casava com medico_custo_efetivo.sql,
+    # que é do export_medico_custo.py, e mirava o MESMO {posto}_{ym}_medico.csv do
+    # fin_despesa_medicos — só não sobrescreveu o custo médico porque a query falhava.
+    if name in SQL_LEGADO:
+        return SQL_LEGADO[name]
 
     return None
 
@@ -227,10 +229,17 @@ def validate_sql(sql_txt, path):
             raise ValueError(f"Arquivo SQL contém código Python: {os.path.basename(path)}")
 
 def collect_sql_files(validate=True):
+    """Só os .sql DESTE ETL. A pasta sql/ é compartilhada (farmácia, pré-agendamento,
+    médico custo): arquivo que infer_key_from_filename não reconhece é de outro ETL e
+    fica de fora. Antes ele rodava assim mesmo — 13 postos, a cada 15 min — e caía em
+    {posto}_{ym}_desconhecido.csv, ou falhava por bind/placeholder que só o dono resolve."""
     files = sorted(glob.glob(os.path.join(SQL_DIR, "*.sql")))
     items = []
     for f in files:
         key = infer_key_from_filename(f)
+        if key is None:
+            print(f"- IGNORADO {os.path.basename(f)} (SQL de outro ETL)")
+            continue
         txt = load_sql_strip_go(f)
         if validate:
             validate_sql(txt, f)

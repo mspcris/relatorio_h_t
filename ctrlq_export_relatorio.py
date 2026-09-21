@@ -6,12 +6,16 @@
 #   - Salvar:
 #       1) 1 JSON por posto (NOME FIXO): json_ctrlq_relatorio/CTRLQ_RELATORIO_<POSTO>.json
 #       2) 1 JSON consolidado (NOME FIXO): json_ctrlq_relatorio/CTRLQ_RELATORIO_CONSOLIDADO.json
-#   - Antes de salvar: limpar os .json antigos da pasta json_ctrlq_relatorio
+#   - Posto que falha MANTÉM o JSON da última leitura boa e sai marcado em
+#     meta.postos_desatualizados — falha de posto não pode parecer posto sem médico.
+#     (Até 2026-09-21 a pasta era apagada no início de cada rodada: posto com link
+#     fora sumia do consolidado até a rodada seguinte.)
 #
 # Dependências: pandas, sqlalchemy, pyodbc, python-dotenv
 
 import os
 import json
+import time
 import decimal
 from datetime import datetime, date, timezone
 from urllib.parse import quote_plus
@@ -55,18 +59,32 @@ def atomic_write_json(path_out: str, payload):
         os.fsync(f.fileno())
     os.replace(tmp, path_out)
 
-def cleanup_json_dir(json_dir: str):
-    """Remove apenas *.json dentro do diretório alvo."""
+def cleanup_json_dir(json_dir: str, manter: set):
+    """Remove os *.json que NÃO são desta rodada (posto que saiu do .env, nome antigo).
+    Roda no FIM: apagar antes deixava a pasta sem consolidado durante a rodada inteira
+    e sem o posto que falhasse."""
     ensure_dir(json_dir)
     removed = 0
     for name in os.listdir(json_dir):
-        if name.lower().endswith(".json"):
+        if name.lower().endswith(".json") and name not in manter and not name.startswith("_etl_meta"):
             try:
                 os.remove(os.path.join(json_dir, name))
                 removed += 1
             except Exception:
                 pass
-    print(f"[CLEANUP] Removidos {removed} arquivos .json em {json_dir}")
+    print(f"[CLEANUP] Removidos {removed} arquivos .json órfãos em {json_dir}")
+
+def carregar_anterior(path_json: str):
+    """Linhas da última leitura boa do posto + quando foi. None se não houver."""
+    try:
+        with open(path_json, "r", encoding="utf-8") as f:
+            rows = json.load(f)
+        if not isinstance(rows, list):
+            return None
+        quando = datetime.fromtimestamp(os.path.getmtime(path_json)).strftime("%d/%m/%Y, %H:%M")
+        return rows, quando
+    except Exception:
+        return None
 
 
 # ---------------------------------------------
@@ -134,10 +152,33 @@ def build_conns_from_env(postos=None):
 # ---------------------------------------------
 # SELECT
 # ---------------------------------------------
+TENTATIVAS = 3
+ESPERA_S = (3, 8)
+# Queda de link, não erro de SQL: vale tentar de novo. Erro de sintaxe/coluna não entra.
+_MARCAS_CONEXAO = ("connection is closed", "08s01", "08001", "hyt00", "hyt01", "tcp provider",
+                   "login timeout", "communication link", "connection reset", "timeout expired")
+
+def _erro_de_conexao(e: BaseException) -> bool:
+    while e is not None:
+        if any(m in str(e).lower() for m in _MARCAS_CONEXAO):
+            return True
+        e = e.__cause__ or e.__context__
+    return False
+
 def run_select(engine, sql):
-    with engine.connect() as con:
-        df = pd.read_sql_query(text(sql), con)
-    return df
+    """SELECT com nova tentativa. O link de alguns postos cai no meio da consulta
+    ("This Connection is closed", 08S01, login timeout) e volta em segundos. É só
+    leitura, repetir é seguro; o dispose() descarta a conexão morta do pool."""
+    for n in range(1, TENTATIVAS + 1):
+        try:
+            with engine.connect() as con:
+                return pd.read_sql_query(text(sql), con)
+        except Exception as e:
+            if n == TENTATIVAS or not _erro_de_conexao(e):
+                raise
+            print(f"    tentativa {n}/{TENTATIVAS} falhou ({str(e)[:140]}); nova tentativa em {ESPERA_S[n - 1]}s")
+            engine.dispose()
+            time.sleep(ESPERA_S[n - 1])
 
 
 # ---------------------------------------------
@@ -195,7 +236,7 @@ def month_key_from_record(rec: dict):
         return v[:7]
     return "UNKNOWN"
 
-def build_consolidated_json(all_rows_by_posto: dict):
+def build_consolidated_json(all_rows_by_posto: dict, desatualizados: dict = None):
     agora_br = datetime.now().strftime("%d/%m/%Y, %H:%M")
     agora_iso = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
@@ -216,6 +257,8 @@ def build_consolidated_json(all_rows_by_posto: dict):
             "dados_gerados_em": agora_br,
             "export_timestamp": agora_iso,
             "origem": "ctrlq_relatorio",
+            # posto -> quando foi a última leitura boa (o dado dele aqui é dessa hora)
+            "postos_desatualizados": desatualizados or {},
         },
         "meses": meses,
         "postos": postos,
@@ -248,11 +291,17 @@ def main():
 
     print(f"Postos detectados: {list(conns.keys())}")
 
-    # 1) limpa outputs antigos (antes de gerar novos)
-    cleanup_json_dir(JSON_DIR)
-
     meta = ETLMeta('ctrlq_export_relatorio', 'json_ctrlq_relatorio')
     all_rows_by_posto = {}
+    desatualizados = {}
+
+    def manter_anterior(posto):
+        ant = carregar_anterior(os.path.join(JSON_DIR, filename_posto(posto)))
+        if ant:
+            all_rows_by_posto[posto], desatualizados[posto] = ant
+            print(f"[{posto}] mantida a leitura de {ant[1]} ({len(ant[0])} registros)")
+        else:
+            print(f"[{posto}] sem leitura anterior para manter — posto fica fora do consolidado")
 
     # Executar por posto
     for posto, odbc in conns.items():
@@ -262,6 +311,7 @@ def main():
         except Exception as e:
             print(f"[{posto}] ERRO criando engine: {e}")
             meta.error(posto, str(e))
+            manter_anterior(posto)
             continue
 
         print(f"[{posto}] Executando SELECT...")
@@ -270,6 +320,7 @@ def main():
         except Exception as e:
             print(f"[{posto}] ERRO ao executar SQL: {e}")
             meta.error(posto, str(e))
+            manter_anterior(posto)
             continue
 
         rows = []
@@ -296,7 +347,7 @@ def main():
         return
 
     # Salvar consolidado (NOME FIXO)
-    consolidado = build_consolidated_json(all_rows_by_posto)
+    consolidado = build_consolidated_json(all_rows_by_posto, desatualizados)
     path_cons = os.path.join(JSON_DIR, filename_consolidado())
     try:
         atomic_write_json(path_cons, consolidado)
@@ -304,6 +355,8 @@ def main():
         print(f"\n[CONSOLIDADO] OK -> {path_cons}  (total registros={total})")
     except Exception as e:
         print(f"\n[CONSOLIDADO] ERRO salvando JSON: {e}")
+
+    cleanup_json_dir(JSON_DIR, {filename_consolidado()} | {filename_posto(p) for p in conns})
 
     meta.save()
     print("\n=== Concluído ===")
