@@ -562,7 +562,13 @@
                 <div class="card">
                     <div class="card-header d-flex align-items-center justify-content-between flex-wrap">
                         <h3 class="card-title mb-0">Vendas por Corretor / Subcorretor</h3>
-                        <div class="mini muted">ranking por QTD de vendas no período selecionado</div>
+                        <div class="mini muted">ranking por QTD de planos no período selecionado · clique no nome para ver as matrículas</div>
+                    </div>
+                    <div class="card-body py-2 mini muted">
+                        <b>Plano</b> = cliente admitido no mês com <b>mensalidade paga</b> e <b>taxa de inscrição paga</b>
+                        (em qualquer mês). <b>Pend.</b> = admitido no mês em que falta uma das duas — não entra na Qtd, mas aparece.
+                        <span class="text-danger font-weight-bold">Nome em vermelho</span> = tem matrícula pendente ou com problema de cadastro
+                        (sem corretor, Broker sem subcorretor, matrícula de outro posto pagando aqui, cliente desativado). Clique para auditar no ERP.
                     </div>
                     <div class="card-body p-0">
                         <div class="row no-gutters">
@@ -574,6 +580,7 @@
                                             <tr>
                                                 <th>Corretor</th>
                                                 <th class="text-right">Qtd</th>
+                                                <th class="text-right">Pend.</th>
                                                 <th class="text-right">Valor</th>
                                                 <th class="text-right">Ticket</th>
                                             </tr>
@@ -591,6 +598,7 @@
                                                 <th>Corretor</th>
                                                 <th>Subcorretor</th>
                                                 <th class="text-right">Qtd</th>
+                                                <th class="text-right">Pend.</th>
                                                 <th class="text-right">Valor</th>
                                                 <th class="text-right">Ticket</th>
                                             </tr>
@@ -607,12 +615,13 @@
                 <div class="card">
                     <div class="card-header d-flex align-items-center justify-content-between flex-wrap">
                         <h3 class="card-title mb-0">Vendas por vendedor</h3>
-                        <div class="mini muted">clique no vendedor para ver onde ele vendeu</div>
+                        <div class="mini muted">clique no nome para ver as matrículas · na seta para ver onde vendeu</div>
                     </div>
                     <div class="card-body py-2 mini muted">
-                        Quem vendeu: cadastro pelo <b>Broker</b> (corretor "BROKER …") → o vendedor é o <b>subcorretor</b>;
-                        cadastro pelo <b>ERP</b> → o vendedor é o <b>corretor</b> (usuário que cadastrou);
-                        <b>sem corretor</b> → vale o subcorretor. Mesmo nome em postos/canais diferentes vira uma linha só
+                        Quem vendeu: plano feito no <b>Broker</b> → o corretor é o canal ("BROKER …") e o vendedor é o
+                        <b>subcorretor</b>; plano feito no <b>ERP</b> → o vendedor é o <b>corretor</b> (usuário que cadastrou).
+                        Sem corretor → vale o subcorretor. Broker sem subcorretor e sem corretor nem subcorretor aparecem
+                        como linhas próprias, em vermelho. Mesmo nome em postos/canais diferentes vira uma linha só
                         (sem diferença de acento ou maiúscula — grafias diferentes continuam separadas).
                     </div>
                     <div class="card-body p-0">
@@ -623,12 +632,40 @@
                                         <th>Vendedor</th>
                                         <th>Onde vendeu</th>
                                         <th class="text-right">Qtd</th>
+                                        <th class="text-right">Pend.</th>
                                         <th class="text-right">Valor</th>
                                         <th class="text-right">Ticket</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tblVendedor"></tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MODAL — matrículas de um corretor / par / vendedor (auditoria no ERP) -->
+                <div class="modal fade" id="mdlMatriculas" tabindex="-1" role="dialog" aria-hidden="true">
+                    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+                        <div class="modal-content">
+                            <div class="modal-header py-2">
+                                <div>
+                                    <h5 class="modal-title mb-0" id="mdlMatTitulo">Matrículas</h5>
+                                    <div class="mini muted" id="mdlMatSub"></div>
+                                </div>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Fechar"><span aria-hidden="true">&times;</span></button>
+                            </div>
+                            <div class="modal-body p-0">
+                                <div class="px-3 py-2 d-flex flex-wrap align-items-center" style="gap:8px" id="mdlMatResumo"></div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm mb-0 mini">
+                                        <thead style="position:sticky;top:0;background:#fff;z-index:1">
+                                            <tr><th>Posto</th><th>Matrícula</th><th>Cliente</th><th>Admissão</th><th>Plano</th>
+                                                <th>Corretor / Subcorretor</th><th>Mensalidade</th><th>Taxa de inscrição</th><th>Situação</th></tr>
+                                        </thead>
+                                        <tbody id="mdlMatCorpo"></tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2092,61 +2129,75 @@
         }
 
         // ====== Vendas por vendedor ======
-        // Regra do Cristiano (2026-09-18): cadastro pelo Broker grava o canal no
-        // corretor ("BROKER SEDE - ANCHIETA") e o vendedor real no subcorretor;
-        // cadastro pelo ERP grava o usuário que cadastrou no corretor.
+        // Regra do Cristiano (reafirmada em 2026-09-19): plano feito no Broker →
+        // corretor é o canal ("BROKER SEDE - ANCHIETA") e o vendedor é o
+        // subcorretor; plano feito no ERP → o corretor é o vendedor (usuário que
+        // cadastrou). Nada some: Broker sem subcorretor e "sem corretor e sem
+        // subcorretor" viram linhas próprias, em vermelho, para tratar caso a caso.
         const SEM_CORR = '(sem corretor)', SEM_SUB = '(sem subcorretor)';
-        const normNome = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        const normNome = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
             .toUpperCase().replace(/\s+/g, ' ').trim();
+        const escH = s => String(s == null ? '' : s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
         function vendedorDe(corretor, sub) {
             const c = String(corretor || '').trim() || SEM_CORR;
             const sb = String(sub || '').trim() || SEM_SUB;
             const temSub = sb !== SEM_SUB;
             if (/BROKER/i.test(c)) return { nome: temSub ? sb : '(broker sem subcorretor)', canal: c };
-            if (c === SEM_CORR)   return { nome: temSub ? sb : '(sem vendedor)', canal: 'sem corretor' };
+            if (c === SEM_CORR)   return { nome: temSub ? sb : '(sem corretor e sem subcorretor)', canal: 'sem corretor' };
             return { nome: c, canal: 'ERP' };
         }
+        // Nome em vermelho quando há pendente (não virou plano) ou aviso de cadastro.
+        function nomeFlag(nome, pend, alertas) {
+            const n = (pend || 0) + (alertas || 0);
+            if (!n) return escH(nome);
+            const t = [pend ? `${pend} pendente(s): falta mensalidade ou taxa paga` : '',
+                       alertas ? `${alertas} plano(s) com aviso de cadastro` : ''].filter(Boolean).join(' · ');
+            return `<span class="text-danger font-weight-bold" title="${escH(t)}">${escH(nome)}</span>`;
+        }
+        const pendCell = q => q ? `<span class="text-danger font-weight-bold">${fmtInt.format(q)}</span>` : '<span class="muted">0</span>';
+
         let _vendAbertos = new Set();
         function buildVendedorTable(pairList) {
             const tb = el('#tblVendedor'); if (!tb) return;
-            const agg = new Map();   // chave normalizada -> {grafias, qtd, valor, onde: Map(canal|posto -> {qtd, valor})}
+            const agg = new Map();   // chave normalizada -> {grafias, qtd, pend, alertas, valor, onde}
             for (const p of pairList) {
                 for (const [posto, q] of Object.entries(p.postos || {})) {
                     const v = vendedorDe(p.corretor, p.subcorretor);
                     const k = normNome(v.nome);
-                    const cur = agg.get(k) || { grafias: new Map(), qtd: 0, valor: 0, onde: new Map() };
-                    cur.grafias.set(v.nome, (cur.grafias.get(v.nome) || 0) + q.qtd);
-                    cur.qtd += q.qtd; cur.valor += q.valor;
+                    const cur = agg.get(k) || { grafias: new Map(), qtd: 0, pend: 0, alertas: 0, valor: 0, onde: new Map() };
+                    cur.grafias.set(v.nome, (cur.grafias.get(v.nome) || 0) + q.qtd + q.pend);
+                    cur.qtd += q.qtd; cur.pend += q.pend; cur.alertas += q.alertas; cur.valor += q.valor;
                     const ko = v.canal + '||' + posto;
-                    const o = cur.onde.get(ko) || { canal: v.canal, posto, qtd: 0, valor: 0 };
-                    o.qtd += q.qtd; o.valor += q.valor; cur.onde.set(ko, o);
+                    const o = cur.onde.get(ko) || { canal: v.canal, posto, qtd: 0, pend: 0, valor: 0 };
+                    o.qtd += q.qtd; o.pend += q.pend; o.valor += q.valor; cur.onde.set(ko, o);
                     agg.set(k, cur);
                 }
             }
             const lista = [...agg.entries()].map(([k, v]) => ({
                 k, ...v,
                 nome: [...v.grafias.entries()].sort((a, b) => b[1] - a[1])[0][0],
-                ondeList: [...v.onde.values()].sort((a, b) => b.qtd - a.qtd || b.valor - a.valor)
-            })).sort((a, b) => b.qtd - a.qtd || b.valor - a.valor);
+                ondeList: [...v.onde.values()].sort((a, b) => b.qtd - a.qtd || b.pend - a.pend || b.valor - a.valor)
+            })).sort((a, b) => b.qtd - a.qtd || b.pend - a.pend || b.valor - a.valor);
 
             tb.innerHTML = '';
             if (!lista.length) {
-                tb.innerHTML = `<tr><td colspan="5" class="muted text-center">Sem vendas no período/posto selecionado.</td></tr>`;
+                tb.innerHTML = `<tr><td colspan="6" class="muted text-center">Sem vendas no período/posto selecionado.</td></tr>`;
                 return;
             }
             const tk = (q, v) => q ? fmt2.format(v / q) : '-';
-            let tQ = 0, tV = 0;
+            let tQ = 0, tP = 0, tV = 0;
             for (const r of lista) {
-                tQ += r.qtd; tV += r.valor;
+                tQ += r.qtd; tP += r.pend; tV += r.valor;
                 const aberto = _vendAbertos.has(r.k);
                 const resumo = r.ondeList.map(o => `${o.canal === 'ERP' ? 'ERP' : o.canal} (${o.posto})`);
                 const txtOnde = resumo.length > 2 ? `${resumo.slice(0, 2).join(' · ')} +${resumo.length - 2}` : resumo.join(' · ');
-                const outras = r.grafias.size > 1 ? ` <span class="mini muted" title="${[...r.grafias.keys()].join(' | ')}">(${r.grafias.size} grafias)</span>` : '';
+                const outras = r.grafias.size > 1 ? ` <span class="mini muted" title="${escH([...r.grafias.keys()].join(' | '))}">(${r.grafias.size} grafias)</span>` : '';
                 tb.insertAdjacentHTML('beforeend', `
-<tr class="vend-row" data-k="${r.k}" style="cursor:pointer;background:#fff">
-  <td><i class="fas fa-caret-${aberto ? 'down' : 'right'} mr-1 muted"></i><b>${r.nome}</b>${outras}</td>
-  <td class="mini">${txtOnde}</td>
+<tr class="vend-row" data-k="${escH(r.k)}" style="cursor:pointer;background:#fff">
+  <td><i class="fas fa-caret-${aberto ? 'down' : 'right'} mr-1 muted"></i><a href="#" class="mat-open" data-tipo="vendedor" data-k="${escH(r.k)}" data-nome="${escH(r.nome)}"><b>${nomeFlag(r.nome, r.pend, r.alertas)}</b></a>${outras}</td>
+  <td class="mini">${escH(txtOnde)}</td>
   <td class="text-right"><b>${fmtInt.format(r.qtd)}</b></td>
+  <td class="text-right">${pendCell(r.pend)}</td>
   <td class="text-right">${fmtInt.format(r.valor)}</td>
   <td class="text-right">${tk(r.qtd, r.valor)}</td>
 </tr>`);
@@ -2155,8 +2206,9 @@
                         tb.insertAdjacentHTML('beforeend', `
 <tr class="mini" style="background:#f8f9fa">
   <td class="pl-4 muted">${o.canal === 'ERP' ? 'Cadastro pelo ERP' : (o.canal === 'sem corretor' ? 'Sem corretor' : 'Broker')}</td>
-  <td>${o.canal === 'ERP' || o.canal === 'sem corretor' ? '' : o.canal + ' · '}posto ${o.posto}</td>
+  <td>${o.canal === 'ERP' || o.canal === 'sem corretor' ? '' : escH(o.canal) + ' · '}posto ${o.posto}</td>
   <td class="text-right">${fmtInt.format(o.qtd)}</td>
+  <td class="text-right">${pendCell(o.pend)}</td>
   <td class="text-right">${fmtInt.format(o.valor)}</td>
   <td class="text-right">${tk(o.qtd, o.valor)}</td>
 </tr>`);
@@ -2167,10 +2219,12 @@
 <tr style="background:#f1f3f5">
   <td colspan="2"><b>Total</b></td>
   <td class="text-right"><b>${fmtInt.format(tQ)}</b></td>
+  <td class="text-right"><b>${pendCell(tP)}</b></td>
   <td class="text-right"><b>${fmtInt.format(tV)}</b></td>
   <td class="text-right"><b>${tk(tQ, tV)}</b></td>
 </tr>`);
             tb.onclick = e => {
+                if (e.target.closest('.mat-open')) return;   // o modal é tratado no listener do documento
                 const tr = e.target.closest('.vend-row'); if (!tr) return;
                 const k = tr.dataset.k;
                 _vendAbertos.has(k) ? _vendAbertos.delete(k) : _vendAbertos.add(k);
@@ -2179,6 +2233,7 @@
         }
 
         // ====== Ranking por Corretor / Subcorretor ======
+        let _corrCtx = { meses: [], postos: new Set() };   // recorte atual, usado pelo modal
         function buildCorretorTables(meses, selection) {
             const tbC = el('#tblCorretor');
             const tbS = el('#tblCorretorSub');
@@ -2186,9 +2241,10 @@
 
             const postos = postosFromSelection(selection);
             const setPostos = new Set(postos);
+            _corrCtx = { meses: [...meses], postos: setPostos };
 
-            const corrAgg = new Map();       // nome -> {qtd, valor}
-            const pairAgg = new Map();       // "corr||sub" -> {corretor, subcorretor, qtd, valor}
+            const corrAgg = new Map();       // nome -> {qtd, pend, alertas, valor}
+            const pairAgg = new Map();       // "corr||sub" -> {corretor, subcorretor, qtd, pend, alertas, valor, postos}
 
             meses.forEach(ym => {
                 const rowC = porPostoCorretor[ym] || {};
@@ -2197,40 +2253,45 @@
 
                     const pc = bucket.por_corretor || {};
                     for (const [nome, v] of Object.entries(pc)) {
-                        const cur = corrAgg.get(nome) || { qtd: 0, valor: 0 };
-                        cur.qtd   += num(v.qtd_vendas);
-                        cur.valor += num(v.valor_total);
+                        const cur = corrAgg.get(nome) || { qtd: 0, pend: 0, alertas: 0, valor: 0 };
+                        cur.qtd     += num(v.qtd_vendas);
+                        cur.pend    += num(v.pend);
+                        cur.alertas += num(v.alertas);
+                        cur.valor   += num(v.valor_total);
                         corrAgg.set(nome, cur);
                     }
 
                     const ps = bucket.por_corretor_subcorretor || [];
                     for (const p of ps) {
                         const k = p.corretor + '||' + p.subcorretor;
-                        const cur = pairAgg.get(k) || { corretor: p.corretor, subcorretor: p.subcorretor, qtd: 0, valor: 0, postos: {} };
-                        cur.qtd   += num(p.qtd_vendas);
-                        cur.valor += num(p.valor_total);
-                        const pp = cur.postos[posto] || (cur.postos[posto] = { qtd: 0, valor: 0 });
-                        pp.qtd += num(p.qtd_vendas); pp.valor += num(p.valor_total);
+                        const cur = pairAgg.get(k) || { corretor: p.corretor, subcorretor: p.subcorretor, qtd: 0, pend: 0, alertas: 0, valor: 0, postos: {} };
+                        cur.qtd     += num(p.qtd_vendas);
+                        cur.pend    += num(p.pend);
+                        cur.alertas += num(p.alertas);
+                        cur.valor   += num(p.valor_total);
+                        const pp = cur.postos[posto] || (cur.postos[posto] = { qtd: 0, pend: 0, alertas: 0, valor: 0 });
+                        pp.qtd += num(p.qtd_vendas); pp.pend += num(p.pend); pp.alertas += num(p.alertas); pp.valor += num(p.valor_total);
                         pairAgg.set(k, cur);
                     }
                 }
             });
 
             const corrList = [...corrAgg.entries()]
-                .map(([nome, v]) => ({ nome, qtd: v.qtd, valor: v.valor, ticket: v.qtd ? v.valor / v.qtd : null }))
-                .sort((a, b) => b.qtd - a.qtd || b.valor - a.valor);
+                .map(([nome, v]) => ({ nome, ...v, ticket: v.qtd ? v.valor / v.qtd : null }))
+                .sort((a, b) => b.qtd - a.qtd || b.pend - a.pend || b.valor - a.valor);
 
             tbC.innerHTML = '';
             if (!corrList.length) {
-                tbC.insertAdjacentHTML('beforeend', `<tr><td colspan="4" class="muted text-center">Sem vendas no período/posto selecionado.</td></tr>`);
+                tbC.insertAdjacentHTML('beforeend', `<tr><td colspan="5" class="muted text-center">Sem vendas no período/posto selecionado.</td></tr>`);
             } else {
-                let tQ = 0, tV = 0;
+                let tQ = 0, tP = 0, tV = 0;
                 for (const r of corrList) {
-                    tQ += r.qtd; tV += r.valor;
+                    tQ += r.qtd; tP += r.pend; tV += r.valor;
                     tbC.insertAdjacentHTML('beforeend', `
 <tr>
-  <td>${r.nome}</td>
+  <td><a href="#" class="mat-open" data-tipo="corretor" data-corretor="${escH(r.nome)}">${nomeFlag(r.nome, r.pend, r.alertas)}</a></td>
   <td class="text-right">${fmtInt.format(r.qtd)}</td>
+  <td class="text-right">${pendCell(r.pend)}</td>
   <td class="text-right">${fmtInt.format(r.valor)}</td>
   <td class="text-right">${r.ticket == null ? '-' : fmt2.format(r.ticket)}</td>
 </tr>`);
@@ -2239,6 +2300,7 @@
 <tr style="background:#f8f9fa">
   <td><b>Total</b></td>
   <td class="text-right"><b>${fmtInt.format(tQ)}</b></td>
+  <td class="text-right"><b>${pendCell(tP)}</b></td>
   <td class="text-right"><b>${fmtInt.format(tV)}</b></td>
   <td class="text-right"><b>${tQ ? fmt2.format(tV / tQ) : '-'}</b></td>
 </tr>`);
@@ -2246,22 +2308,24 @@
 
             const pairList = [...pairAgg.values()]
                 .map(p => ({ ...p, ticket: p.qtd ? p.valor / p.qtd : null }))
-                .sort((a, b) => b.qtd - a.qtd || b.valor - a.valor);
+                .sort((a, b) => b.qtd - a.qtd || b.pend - a.pend || b.valor - a.valor);
 
             buildVendedorTable(pairList);
 
             tbS.innerHTML = '';
             if (!pairList.length) {
-                tbS.insertAdjacentHTML('beforeend', `<tr><td colspan="5" class="muted text-center">Sem vendas no período/posto selecionado.</td></tr>`);
+                tbS.insertAdjacentHTML('beforeend', `<tr><td colspan="6" class="muted text-center">Sem vendas no período/posto selecionado.</td></tr>`);
             } else {
-                let tQ = 0, tV = 0;
+                let tQ = 0, tP = 0, tV = 0;
                 for (const r of pairList) {
-                    tQ += r.qtd; tV += r.valor;
+                    tQ += r.qtd; tP += r.pend; tV += r.valor;
+                    const a = `class="mat-open" data-tipo="par" data-corretor="${escH(r.corretor)}" data-sub="${escH(r.subcorretor)}"`;
                     tbS.insertAdjacentHTML('beforeend', `
 <tr>
-  <td>${r.corretor}</td>
-  <td>${r.subcorretor}</td>
+  <td><a href="#" ${a}>${nomeFlag(r.corretor, r.pend, r.alertas)}</a></td>
+  <td><a href="#" ${a}>${nomeFlag(r.subcorretor, r.pend, r.alertas)}</a></td>
   <td class="text-right">${fmtInt.format(r.qtd)}</td>
+  <td class="text-right">${pendCell(r.pend)}</td>
   <td class="text-right">${fmtInt.format(r.valor)}</td>
   <td class="text-right">${r.ticket == null ? '-' : fmt2.format(r.ticket)}</td>
 </tr>`);
@@ -2270,11 +2334,105 @@
 <tr style="background:#f8f9fa">
   <td colspan="2"><b>Total</b></td>
   <td class="text-right"><b>${fmtInt.format(tQ)}</b></td>
+  <td class="text-right"><b>${pendCell(tP)}</b></td>
   <td class="text-right"><b>${fmtInt.format(tV)}</b></td>
   <td class="text-right"><b>${tQ ? fmt2.format(tV / tQ) : '-'}</b></td>
 </tr>`);
             }
         }
+
+        // ====== Modal de matrículas (auditoria no ERP) ======
+        // Detalhe por mês gerado pelo export_vendas.py (json_vendas/detalhe/<ym>.json),
+        // carregado só quando o modal abre.
+        const _detCache = new Map();
+        async function detalheMes(ym) {
+            if (_detCache.has(ym)) return _detCache.get(ym);
+            const pr = fetch(new URL(`json_vendas/detalhe/${ym}.json`, BASE).href, { cache: 'no-store' })
+                .then(r => r.ok ? r.json() : { cols: [], rows: [], erro: `HTTP ${r.status}` })
+                .then(d => (d.rows || []).map(row => Object.fromEntries((d.cols || []).map((c, i) => [c, row[i]]))))
+                .catch(() => null);
+            _detCache.set(ym, pr);
+            return pr;
+        }
+        const PROB_TXT = {
+            mens_sem_lancamento: 'sem mensalidade lançada', mens_em_aberto: 'mensalidade em aberto',
+            mens_abonada: 'mensalidade abonada', mens_cancelada: 'mensalidade cancelada',
+            taxa_sem_lancamento: 'sem taxa de inscrição lançada', taxa_em_aberto: 'taxa de inscrição em aberto',
+            taxa_abonada: 'taxa de inscrição abonada', taxa_cancelada: 'taxa de inscrição cancelada',
+            sem_corretor_sem_sub: 'sem corretor e sem subcorretor', sem_corretor: 'sem corretor',
+            broker_sem_sub: 'Broker sem subcorretor', desativado: 'cliente desativado',
+            outro_posto: 'matrícula de outro posto com lançamento aqui — investigar',
+            taxa_simbolica: 'taxa de inscrição paga com valor simbólico (R$ 0,01)'
+        };
+        const dBR = s => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(2, 4) : '';
+        function celPag(r, pre) {
+            if (r[pre + '_pagas'] > 0) {
+                const extra = r[pre + '_pagas'] > 1 && pre === 'mens' ? ` <span class="muted">(${r[pre + '_pagas']} pagas)</span>` : '';
+                return `${r[pre + '_valor'] == null ? '' : fmt2.format(r[pre + '_valor'])} · pago ${dBR(r[pre + '_data'])}${extra}`;
+            }
+            const p = (r.problemas || []).find(x => x.startsWith(pre + '_'));
+            const det = r[pre + '_lancadas'] ? ` (${r[pre + '_lancadas']} lançada${r[pre + '_lancadas'] > 1 ? 's' : ''})` : '';
+            return `<span class="text-danger font-weight-bold">${PROB_TXT[p] || 'não paga'}${det}</span>`;
+        }
+        async function abrirMatriculas(a) {
+            const tipo = a.dataset.tipo;
+            let titulo, filtro;
+            if (tipo === 'corretor') {
+                const c = a.dataset.corretor;
+                titulo = `Corretor: ${c}`;
+                filtro = r => (r.corretor || SEM_CORR) === c;
+            } else if (tipo === 'par') {
+                const c = a.dataset.corretor, sb = a.dataset.sub;
+                titulo = `${c} · ${sb}`;
+                filtro = r => (r.corretor || SEM_CORR) === c && (r.subcorretor || SEM_SUB) === sb;
+            } else {
+                const k = a.dataset.k;
+                titulo = `Vendedor: ${a.dataset.nome}`;
+                filtro = r => normNome(vendedorDe(r.corretor, r.subcorretor).nome) === k;
+            }
+            const { meses, postos } = _corrCtx;
+            el('#mdlMatTitulo').textContent = titulo;
+            el('#mdlMatSub').textContent = `${meses.length > 1 ? meses[0] + ' a ' + meses[meses.length - 1] : (meses[0] || '')} · postos ${[...postos].sort().join(', ')} · plano no mês do pagamento · pendente no mês da admissão`;
+            el('#mdlMatResumo').innerHTML = '<span class="muted">carregando…</span>';
+            el('#mdlMatCorpo').innerHTML = '';
+            $('#mdlMatriculas').modal('show');
+
+            const partes = await Promise.all(meses.map(detalheMes));
+            const faltou = meses.filter((ym, i) => partes[i] == null);
+            const linhas = partes.flat().filter(Boolean).filter(r => postos.has(r.posto) && filtro(r));
+            // problemas primeiro (não conta, depois conta com aviso), dentro disso por admissão
+            const peso = r => !r.conta ? 0 : (r.problemas.length ? 1 : 2);
+            linhas.sort((x, y) => peso(x) - peso(y) || (x.admissao < y.admissao ? -1 : x.admissao > y.admissao ? 1 : 0));
+
+            const nOk = linhas.filter(r => r.conta).length, nPend = linhas.length - nOk;
+            const nAviso = linhas.filter(r => r.conta && r.problemas.length).length;
+            el('#mdlMatResumo').innerHTML =
+                `<span class="badge badge-success p-2">${fmtInt.format(nOk)} plano(s)</span>` +
+                `<span class="badge ${nPend ? 'badge-danger' : 'badge-light'} p-2">${fmtInt.format(nPend)} pendente(s) — não contam</span>` +
+                `<span class="badge ${nAviso ? 'badge-warning' : 'badge-light'} p-2">${fmtInt.format(nAviso)} plano(s) com aviso de cadastro</span>` +
+                (faltou.length ? `<span class="text-danger mini">sem detalhe para ${faltou.join(', ')} — o ETL ainda não gerou</span>` : '');
+            el('#mdlMatCorpo').innerHTML = linhas.map(r => {
+                const cls = !r.conta ? 'table-danger' : (r.problemas.length ? 'table-warning' : '');
+                const probs = r.problemas.filter(x => !x.startsWith('mens_') && !x.startsWith('taxa_')).map(x => PROB_TXT[x] || x);
+                const outro = r.posto_cliente && r.posto_cliente !== r.posto ? ` <span class="muted" title="posto do cadastro do cliente">(cad. ${escH(r.posto_cliente)})</span>` : '';
+                return `<tr class="${cls}">
+  <td>${escH(r.posto)}${outro}</td>
+  <td><b>${escH(r.matricula)}</b></td>
+  <td>${escH(r.nome)}</td>
+  <td>${dBR(r.admissao)}</td>
+  <td>${escH(r.plano) || '<span class="text-danger">sem plano</span>'}</td>
+  <td>${escH(r.corretor) || '<span class="text-danger">(sem corretor)</span>'}<br><span class="muted">${escH(r.subcorretor) || '(sem subcorretor)'}</span></td>
+  <td>${celPag(r, 'mens')}</td>
+  <td>${celPag(r, 'taxa')}</td>
+  <td>${r.conta ? '<span class="text-success font-weight-bold">plano</span>' : '<span class="text-danger font-weight-bold">não conta</span>'}${probs.length ? '<br><span class="text-danger">' + probs.map(escH).join(' · ') + '</span>' : ''}</td>
+</tr>`;
+            }).join('') || '<tr><td colspan="9" class="muted text-center">Nenhuma matrícula no recorte.</td></tr>';
+        }
+        document.addEventListener('click', e => {
+            const a = e.target.closest('.mat-open'); if (!a) return;
+            e.preventDefault(); e.stopPropagation();
+            abrirMatriculas(a);
+        });
     </script>
 
     <!-- SNAPSHOT COMPLETO PARA A IA, incluindo macro -->

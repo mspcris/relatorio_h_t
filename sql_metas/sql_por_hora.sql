@@ -1,5 +1,7 @@
--- Mensalidades e vendas por DIA e HORA do pagamento — mesmas regras de
--- sql_mensalidades_por_dia.sql e sql_vendas_por_dia.sql, só que com a hora.
+-- Mensalidades por DIA e HORA do pagamento — mesma regra de
+-- sql_mensalidades_por_dia.sql, só que com a hora. A coluna `vendas` sai 0
+-- daqui: o export_metas preenche com a regra única de venda (CSV de planos do
+-- export_vendas, 2026-09-19).
 -- Serve ao "ritmo do dia" do avisos_gerenciais: comparar hoje até as 10h com
 -- os outros meses até as 10h do mesmo dia. O pagamento entra em lotes (retorno
 -- do banco no começo da tarde), então "até ontem" ou "fração do dia" enganam.
@@ -9,11 +11,7 @@ SELECT
     DAY(r.DataPagamentoAuto)               AS dia,
     DATEPART(HOUR, r.DataPagamentoAuto)    AS hora,
     COUNT(*)                               AS mens,
-    COUNT(DISTINCT CASE
-        WHEN MONTH(r.DataMensalidade) = MONTH(cl.DataAdmissao)
-         AND YEAR(r.DataMensalidade)  = YEAR(cl.DataAdmissao)
-        THEN r.idCliente
-    END)                                   AS vendas
+    0                                      AS vendas
 FROM Fin_Receita r
 JOIN Cad_Cliente cl ON cl.idCliente = r.idCliente
 WHERE

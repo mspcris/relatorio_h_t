@@ -4,6 +4,15 @@
 # - mensalidades_por_dia (records)
 # - vendas_por_dia (records)
 #
+# VENDAS NÃO TÊM QUERY PRÓPRIA AQUI (desde 2026-09-19). Vendas por dia e por
+# hora saem do CSV de planos do export_vendas.py (dados_vendas/<P>_<ym>_planos.csv),
+# classificado pela MESMA função (export_vendas.linhas_do_csv): plano =
+# mensalidade paga + taxa paga + cliente ativo, no dia/hora em que ficou
+# completo. Pedido do Cristiano: "vendeu 10 em A tem de aparecer 10 em todas
+# as telas". Mudou a regra? Muda no vendas_planos.sql / export_vendas.py — e
+# aqui, KPI Vendas e avisos acompanham sozinhos.
+# O export_metas.sh roda o export_vendas do mês corrente antes deste script.
+#
 # Política de atualização:
 # - backfill incremental desde 2024-01: se JSON do mês existe -> skip
 # - sempre reprocessa mês atual e mês anterior
@@ -21,6 +30,7 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 from etl_meta import ETLMeta
+import export_vendas as vendas_regra
 
 
 # =========================
@@ -30,7 +40,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 SQL_DIR = os.path.join(BASE_DIR, "sql_metas")
 SQL_MENS_PATH  = os.path.join(SQL_DIR, "sql_mensalidades_por_dia.sql")
-SQL_VENDAS_PATH = os.path.join(SQL_DIR, "sql_vendas_por_dia.sql")
 SQL_METAS_PATH = os.path.join(SQL_DIR, "sql_metas.sql")
 SQL_HORA_PATH = os.path.join(SQL_DIR, "sql_por_hora.sql")
 
@@ -270,17 +279,12 @@ def run_incremental_all_postos(postos=None, force_months=None):
 
     if not os.path.exists(SQL_MENS_PATH):
         raise FileNotFoundError(f"SQL não encontrado: {SQL_MENS_PATH}")
-    if not os.path.exists(SQL_VENDAS_PATH):
-        raise FileNotFoundError(f"SQL não encontrado: {SQL_VENDAS_PATH}")
 
     sql_mens  = load_sql_strip_go(SQL_MENS_PATH)
-    sql_vendas = load_sql_strip_go(SQL_VENDAS_PATH)
 
     
     if not sql_mens:
         raise RuntimeError(f"SQL vazio: {SQL_MENS_PATH}")
-    if not sql_vendas:
-        raise RuntimeError(f"SQL vazio: {SQL_VENDAS_PATH}")
     if not os.path.exists(SQL_METAS_PATH):
         raise FileNotFoundError(f"SQL não encontrado: {SQL_METAS_PATH}")
 
@@ -329,12 +333,15 @@ def run_incremental_all_postos(postos=None, force_months=None):
                 meta.error(posto, str(e))
                 continue
 
-            try:
-                df_vendas = run_query(engine, sql_vendas, ini, fim, retries=4)
-            except Exception as e:
-                print(f"[{posto}] ERRO vendas {ym}: {e} (pulando)")
-                meta.error(posto, str(e))
+            vend = vendas_do_mes(posto, ym)
+            if vend is None:
+                # Sem o CSV de planos não há venda para mostrar — e inventar
+                # por outra regra faria esta tela divergir do KPI Vendas.
+                print(f"[{posto}] ERRO vendas {ym}: sem {os.path.basename(vendas_regra.target_csv_path(posto, ym))} "
+                      f"(rodar export_vendas.py) — mês não gravado")
+                meta.error(posto, f"sem CSV de planos {ym}")
                 continue
+            df_vendas = vendas_por_dia_df(vend, ini)
             try:
                 df_meta = run_query(engine, sql_meta, ini, fim, retries=4)
             except Exception as e:
@@ -351,6 +358,8 @@ def run_incremental_all_postos(postos=None, force_months=None):
                     # sem ela (o ritmo cai para "até ontem" nesse posto)
                     print(f"[{posto}] AVISO por_hora {ym}: {e}")
 
+            if df_hora is not None:
+                df_hora = por_hora_com_vendas(df_hora, vend)
             try:
                 write_outputs(posto, ym, ini, fim, df_mens, df_vendas, df_meta, df_hora)
                 meta.ok(posto)
@@ -359,7 +368,91 @@ def run_incremental_all_postos(postos=None, force_months=None):
                 meta.error(posto, str(e))
                 continue
 
+    sincronizar_vendas(conns.keys())
     meta.save()
+
+
+# =========================
+# Vendas = CSV de planos do export_vendas (regra única)
+# =========================
+MESES_PT = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
+            "agosto", "setembro", "outubro", "novembro", "dezembro"]
+DIAS_PT = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
+           "sexta-feira", "sábado", "domingo"]
+
+
+def vendas_do_mes(posto: str, ym: str):
+    """[datetime] de cada plano que ficou completo no mês, ou None sem CSV."""
+    linhas = vendas_regra.ler_planos_csv(posto, ym)
+    if linhas is None:
+        return None
+    out = []
+    for r in linhas:
+        if r["conta"] and r["data_completo"].startswith(ym):
+            out.append(datetime.fromisoformat(r["data_completo"]))
+    return out
+
+
+def vendas_por_dia_df(vend: list, ini: date) -> pd.DataFrame:
+    """Mesmo formato do antigo sql_vendas_por_dia.sql."""
+    cont = {}
+    for dt in vend:
+        cont[dt.day] = cont.get(dt.day, 0) + 1
+    rows = []
+    for dia in sorted(cont):
+        d = date(ini.year, ini.month, dia)
+        rows.append({"ano": d.year, "mes": d.month, "mes_nome": MESES_PT[d.month - 1],
+                     "dia": dia, "dia_sem": DIAS_PT[d.weekday()], "vendas_dia": cont[dia]})
+    return pd.DataFrame(rows, columns=["ano", "mes", "mes_nome", "dia", "dia_sem", "vendas_dia"])
+
+
+def por_hora_com_vendas(df_hora: pd.DataFrame, vend: list) -> pd.DataFrame:
+    """Mantém `mens` da query por hora e troca `vendas` pela regra única."""
+    base = {}
+    for r in (df_hora.to_dict("records") if df_hora is not None else []):
+        base[(int(r["dia"]), int(r["hora"]))] = {"dia": int(r["dia"]), "hora": int(r["hora"]),
+                                                 "mens": int(r.get("mens") or 0), "vendas": 0}
+    for dt in vend:
+        k = (dt.day, dt.hour)
+        base.setdefault(k, {"dia": dt.day, "hora": dt.hour, "mens": 0, "vendas": 0})["vendas"] += 1
+    return pd.DataFrame([base[k] for k in sorted(base)], columns=["dia", "hora", "mens", "vendas"])
+
+
+def sincronizar_vendas(postos) -> None:
+    """Meses antigos não são refeitos aqui (a query de mensalidade é cara), mas
+    as vendas deles mudam: o export_vendas refaz os últimos meses toda noite
+    (pagamento atrasado, cliente desativado). Quando o CSV de planos é mais
+    novo que o JSON do metas, reescreve só vendas_por_dia e por_hora.vendas —
+    senão o KPI Vendas e o Metas mostrariam números diferentes do mesmo mês."""
+    n = 0
+    for fn in sorted(os.listdir(OUT_JSON_DIR)):
+        m = re.match(r"^([A-Z])_metas_(\d{4}-\d{2})\.json$", fn)
+        if not m or m.group(1) not in postos:
+            continue
+        posto, ym = m.group(1), m.group(2)
+        path = os.path.join(OUT_JSON_DIR, fn)
+        csv_path = vendas_regra.target_csv_path(posto, ym)
+        if not os.path.exists(csv_path) or os.path.getmtime(csv_path) <= os.path.getmtime(path):
+            continue
+        vend = vendas_do_mes(posto, ym)
+        if vend is None:
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                payload = json.load(f)
+        except (OSError, ValueError):
+            continue
+        ini = date(int(ym[:4]), int(ym[5:7]), 1)
+        payload["vendas_por_dia"] = _df_to_records(vendas_por_dia_df(vend, ini))
+        if "por_hora" in payload:
+            payload["por_hora"] = _df_to_records(por_hora_com_vendas(pd.DataFrame(payload["por_hora"]), vend))
+        payload["vendas_sincronizadas_em"] = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+        n += 1
+    print(f"[VENDAS] {n} JSON(s) de metas com vendas sincronizadas do CSV de planos")
 
 
 def parse_args():

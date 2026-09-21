@@ -21,6 +21,11 @@ flock -n 9 || { echo "$(date -Is) já existe execução em andamento" >> logs/ex
 source .venv/bin/activate
 
 # Run + log
+# Vendas do mês corrente primeiro: o export_metas monta vendas por dia/hora
+# a partir do CSV de planos do export_vendas (regra única de venda).
+# Falha aqui não impede as metas de mensalidade — o mês sem CSV sai no log.
+python3 export_vendas.py --only-month "$(date +%Y-%m)" >> logs/export_metas.log 2>&1 \
+  || echo "$(date -Is) export_vendas do mês falhou" >> logs/export_metas.log
 python3 export_metas.py >> logs/export_metas.log 2>&1
 
 # Publica JSONs no www (mesma estratégia do governança)
