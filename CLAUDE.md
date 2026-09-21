@@ -630,6 +630,50 @@ página mostra "dado de <data>" em vermelho. Falha não vira consumo zero.
 
 ---
 
+## Venda de plano — REGRA ÚNICA em todas as telas (2026-09-20)
+
+Pedido do Cristiano: *"vendeu 10 em A tem de aparecer 10 em todas as telas"*.
+A fonte de verdade é o ERP, não o banco de leads.
+
+**Plano = mensalidade PAGA + taxa de inscrição PAGA + cliente ATIVO.**
+- As duas podem ser pagas em meses diferentes; não precisa ser o da admissão.
+- Taxa **abonada** não é paga (85 casos em ago/2026 — é a maior parte da
+  diferença para o KPI antigo). Taxa de R$ 0,01 é isenção simbólica: conta,
+  mas sai marcada na tela.
+- Cliente **desativado** não conta (mesma régua que o kpi_metas já usava).
+- A venda cai no **mês do pagamento** = quando ficou completo, a data mais
+  tarde entre a 1a mensalidade paga e a 1a taxa paga, pela `DataPagamentoAuto`
+  (data de lançamento, a mesma que o ritmo por hora usa).
+- Quem não completou aparece no **mês da admissão**, em vermelho, com o motivo.
+  Nada é escondido: é painel indicador, não filtro.
+
+| Peça | Papel |
+|---|---|
+| `sql_vendas/vendas_planos.sql` | 1 linha por matrícula, com mensalidade/taxa lançadas, pagas, abonadas, canceladas e `data_completo` |
+| `export_vendas.py` | `linhas_do_csv()` classifica (conta/problemas) — **a regra mora aqui**; gera `json_vendas/vendas_mensal.json` + `json_vendas/detalhe/<ym>.json` |
+| `export_metas.py` | **não tem mais query de venda**: lê os mesmos CSVs (`ler_planos_csv`) e monta `vendas_por_dia` e `por_hora.vendas` |
+| `kpi_vendas.html` | colunas Qtd/Pend., nome em vermelho, modal com as matrículas para auditar no ERP |
+
+- **Cada posto é tratado sozinho.** Cliente que se consulta em outro posto ganha
+  cópia do cadastro lá, mas plano e pagamentos moram no banco do posto dele —
+  a cópia sem lançamento fica fora (aparece no posto de origem). Matrícula de
+  outro posto **com** lançamento aqui é aberração e sai marcada (`outro_posto`).
+  Cadastro sem plano (matrícula 0 ou CPF, particular) não é venda.
+- **Ao mudar a regra, mude em `export_vendas.py`** — metas, avisos e KPI Vendas
+  acompanham sozinhos. Nunca escrever uma segunda contagem de venda.
+- `export_metas.sh` roda `export_vendas.py --only-month <mês>` ANTES do metas
+  (de hora em hora); o `export_vendas` reprocessa os últimos 6 meses (pagamento
+  atrasado e desativação posterior mudam meses já fechados).
+- **A sincronização do metas usa a MARCA do CSV** (`vendas_csv_mtime`), não a
+  data do JSON: posto que falha na query de mensalidade sai pelo `continue` e
+  fica com o JSON antigo, mais novo que o CSV — foi assim que o posto X ficou
+  com 88 em ago/2026 enquanto o KPI Vendas dizia 91.
+- Medido em 2026-09-20 (backfill 2020→2026, 1.053 posto-meses): 115.223 planos
+  e 38.168 pendentes; o KPI antigo dizia 128.157. Ago/2026: 1.192 contra 1.292.
+  Conferido: 0 divergência entre KPI Vendas e kpi_metas em 429 posto-meses.
+
+---
+
 ## Custos de TI (ex-"Custos com IA") — adicionado 2026-08-02
 
 Consolida **todos** os custos de tecnologia por centro de custo. O painel
