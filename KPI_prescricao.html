@@ -638,14 +638,27 @@
             ul.innerHTML = '';
             ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="ALL" class="nav-link active" href="#">Todos</a></li>`);
             POSTOS.forEach(p => ul.insertAdjacentHTML('beforeend', `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#">${p}</a></li>`));
-            ul.addEventListener('click', e => {
-                if (!e.target.matches('.nav-link')) return; e.preventDefault();
-                const p = e.target.dataset.posto;
-                if (p === 'ALL') { selPosto = 'ALL'; postoSet = null; } else { selPosto = p; postoSet = new Set([p]); }
-                ul.querySelectorAll('.nav-link').forEach(a => a.classList.toggle('active', a.dataset.posto === selPosto));
-                _atualizarBotoesGrupo();
-                renderAll();
-            });
+            // buildPostoTabs roda de novo no "Todos" e no Reset: o listener entra UMA vez,
+            // senão o clique alternaria o posto duas vezes e pareceria não fazer nada.
+            if (!ul.dataset.wired) {
+                ul.dataset.wired = '1';
+                ul.addEventListener('click', e => {
+                    if (!e.target.matches('.nav-link')) return; e.preventDefault();
+                    const p = e.target.dataset.posto;
+                    if (p === 'ALL') { postoSet = null; }
+                    else {
+                        // Multiseleção: o clique liga/desliga o posto. Esvaziou, volta a "Todos".
+                        const s = new Set(postoSet || []);
+                        if (s.has(p)) s.delete(p); else s.add(p);
+                        postoSet = s.size ? s : null;
+                    }
+                    selPosto = postoSet ? [...postoSet].sort().join('+') : 'ALL';
+                    ul.querySelectorAll('.nav-link').forEach(a => a.classList.toggle('active',
+                        postoSet ? postoSet.has(a.dataset.posto) : a.dataset.posto === 'ALL'));
+                    _atualizarBotoesGrupo();
+                    renderAll();
+                });
+            }
             _atualizarBotoesGrupo();
         }
 
@@ -809,11 +822,14 @@
                 kpiRazao('Semana passada', semanaPassada, atSemPass),
                 kpiCard('Média diária', mediaDiaria),
                 kpiCard('Médicos ativos hoje', medicosAtivosHoje),
-                (selPosto === 'ALL' ? (() => {
+                // Só some com UM posto selecionado (repetiria o card principal). Com "Todos",
+                // grupo (Altamiro/Couto) ou vários postos marcados, lista os que estão no filtro.
+                ((!postoSet || postoSet.size !== 1) ? (() => {
                     // Todo posto com atendimento aparece — posto sem prescrição é o 0%.
+                    // Posto marcado sem movimento no período entra como 0 / 0, não some.
                     const pr = Object.fromEntries(groupCount(rowsSel, 'posto'));
                     const at = Object.fromEntries(groupCount(atSel, 'posto'));
-                    const ps = [...new Set([...Object.keys(pr), ...Object.keys(at)])]
+                    const ps = [...new Set([...Object.keys(pr), ...Object.keys(at), ...(postoSet || [])])]
                         .sort((a, b) => (pctRazao(pr[b] || 0, at[b] || 0) ?? -1) - (pctRazao(pr[a] || 0, at[a] || 0) ?? -1));
                     const txt = ps.map(p => {
                         const pc = pctRazao(pr[p] || 0, at[p] || 0);
