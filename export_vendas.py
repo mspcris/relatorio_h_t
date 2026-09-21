@@ -181,6 +181,10 @@ def problemas_da_linha(r: dict) -> list:
             pr.append(f"{pre}_cancelada")
         else:
             pr.append(f"{pre}_em_aberto")
+    # Taxa de R$ 0,01 é isenção lançada como centavo simbólico — conta como
+    # paga (tem pagamento), mas fica marcada para o Cristiano decidir caso a caso.
+    if r["taxa_pagas"] > 0 and (r["taxa_valor"] or 0) <= 0.01:
+        pr.append("taxa_simbolica")
     corr, sub = r["corretor"], r["subcorretor"]
     if not corr and not sub:
         pr.append("sem_corretor_sem_sub")

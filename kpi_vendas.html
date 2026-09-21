@@ -2361,7 +2361,8 @@
             taxa_abonada: 'taxa de inscrição abonada', taxa_cancelada: 'taxa de inscrição cancelada',
             sem_corretor_sem_sub: 'sem corretor e sem subcorretor', sem_corretor: 'sem corretor',
             broker_sem_sub: 'Broker sem subcorretor', desativado: 'cliente desativado',
-            outro_posto: 'matrícula de outro posto com lançamento aqui — investigar'
+            outro_posto: 'matrícula de outro posto com lançamento aqui — investigar',
+            taxa_simbolica: 'taxa de inscrição paga com valor simbólico (R$ 0,01)'
         };
         const dBR = s => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(2, 4) : '';
         function celPag(r, pre) {
@@ -2391,7 +2392,7 @@
             }
             const { meses, postos } = _corrCtx;
             el('#mdlMatTitulo').textContent = titulo;
-            el('#mdlMatSub').textContent = `${meses.length > 1 ? meses[0] + ' a ' + meses[meses.length - 1] : (meses[0] || '')} · postos ${[...postos].sort().join(', ')} · por mês de admissão`;
+            el('#mdlMatSub').textContent = `${meses.length > 1 ? meses[0] + ' a ' + meses[meses.length - 1] : (meses[0] || '')} · postos ${[...postos].sort().join(', ')} · plano no mês do pagamento · pendente no mês da admissão`;
             el('#mdlMatResumo').innerHTML = '<span class="muted">carregando…</span>';
             el('#mdlMatCorpo').innerHTML = '';
             $('#mdlMatriculas').modal('show');
