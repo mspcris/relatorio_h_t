@@ -592,7 +592,7 @@ def _resumo_e_acao(d: dict) -> tuple[str, str]:
 
     if cls == "sem_clientes":
         dias_txt = _plural(bat["dias_com_rodada"], "dia", "dias")
-        return (f"🤖 O robô está funcionando. Rodou {n_rod} vezes para esta campanha no posto {posto} nos "
+        return (f"🤖 O robô está funcionando. Rodou {_plural(n_rod, 'vez', 'vezes')} para esta campanha no posto {posto} nos "
                 f"últimos {DIAS_GATILHO} dias ({dias_txt} com rodada) e não encontrou NENHUM cliente nas "
                 f"condições abaixo. Não há defeito para acionar o TI.{aviso_tel}",
                 f"Confira no contas a receber se realmente não houve cliente do posto {posto} nas condições "
