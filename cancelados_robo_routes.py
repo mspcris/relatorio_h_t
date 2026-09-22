@@ -280,8 +280,14 @@ def api_listar():
 #                  "Pacientes prejudicados, não importa se remarcados."
 #   atendidos      StatusAtendimento = 1.
 #   marcou já      DataConfirmacaoAgendamentoConsulta gravada até 1 min depois
-#   confirmado     do lançamento (o ERP preenche no ato quando marca dentro da
-#                  janela ou quando o atendente já confirma ao marcar).
+#   confirmado     do lançamento. DBA Carneiro (2026-09-22): o ERP preenche no
+#                  ato quando a marcação cai dentro da janela, mas "nem todos os
+#                  processos de marcação foram reprogramados". Medido ago-set/26
+#                  em marcações com 0-5 dias: nasceram confirmadas 76% (G), 77%
+#                  (B), 88% (A) — a exceção NÃO é 0,01%, é 12-24%, por isso o
+#                  card 3 mostra "marcadas com até 5 dias sem confirmação no
+#                  ato" separado. De 6 dias em diante cai para 5-13% (é o
+#                  atendente confirmando ao marcar). Corte do ERP = até 5 dias.
 #   confirmou      DataConfirmacaoAgendamentoConsulta gravada DEPOIS disso —
 #   (app ou F5)    pelo app ou pela central no F5. O ERP não grava a origem e a
 #                  auditoria (Sis_Historico) não registra essa alteração
@@ -397,6 +403,8 @@ SELECT CONVERT(varchar(10), c.DataConsulta, 120)                                
        SUM(CASE WHEN c.cat = 'compareceu' AND c.conf_no_ato = 0 AND c.conf_depois = 0 THEN 1 ELSE 0 END) AS sem_conf_compareceu,
        SUM(CASE WHEN c.desist = 0 AND c.dif_dias <= 5 THEN 1 ELSE 0 END)                       AS dentro5,
        SUM(CASE WHEN c.cat = 'falta' AND c.dif_dias <= 5 THEN 1 ELSE 0 END)                    AS dentro5_falta,
+       SUM(CASE WHEN c.dif_dias BETWEEN 0 AND 5 THEN 1 ELSE 0 END)                             AS dentro5_total,
+       SUM(CASE WHEN c.dif_dias BETWEEN 0 AND 5 AND c.conf_no_ato = 0 THEN 1 ELSE 0 END)       AS dentro5_sem_conf_ato,
        SUM(CASE WHEN c.desist = 0 AND c.push = 1 THEN 1 ELSE 0 END)                            AS push,
        SUM(ISNULL(r.r2d, 0))                                                                  AS reaprov2d,
        SUM(ISNULL(r.rqq, 0))                                                                  AS reaprov_qq,
@@ -459,7 +467,7 @@ _COLS_REL = (
     "conf_no_ato_total", "conf_no_ato", "conf_no_ato_falta", "conf_no_ato_compareceu",
     "conf_depois", "conf_depois_falta", "conf_depois_compareceu", "conf_depois_marc_app",
     "sem_conf", "sem_conf_falta", "sem_conf_compareceu",
-    "dentro5", "dentro5_falta", "push",
+    "dentro5", "dentro5_falta", "dentro5_total", "dentro5_sem_conf_ato", "push",
     "reaprov2d", "reaprov_qq", "reaprov2d_atendido",
 )
 

@@ -282,7 +282,12 @@ Responde 9 perguntas; definições fechadas com o Petterson e escritas no bloco
   (qualquer duração, não só dia inteiro) e cancelada, por quem for — "pacientes
   prejudicados, remarcados ou não";
 - **marcou já confirmado** = `DataConfirmacaoAgendamentoConsulta` até 1 min após
-  o lançamento (o ERP preenche no ato dentro da janela); **confirmou depois** =
+  o lançamento (o ERP preenche no ato dentro da janela). DBA Carneiro
+  (2026-09-22): não há tabela de agendamento, é `cad_lancamento` + esse campo;
+  "nem todo processo de marcação foi reprogramado" — medido: das marcações com
+  0-5 dias, nasceram confirmadas 76 % (G), 77 % (B), 88 % (A); de 6 dias em
+  diante 5-13 %. **A exceção é 12-24 %, não 0,01 %** — o card 3 mostra
+  "marcadas com até 5 dias sem confirmação no ato"; **confirmou depois** =
   o resto (app OU F5 — **o ERP não grava a origem e a auditoria não registra a
   alteração**: medido 1 em 940 em G/set-26). O filtro da aba separa "no ato ×
   depois", não app × F5. Fase 2: Égide `doctorappointments` tem

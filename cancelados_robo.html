@@ -294,7 +294,7 @@
               <li><b>Base</b>: consultas (com hora prevista) cuja <b>data da consulta</b> está no período, nas mesmas tabelas e filtros do dashboard de Pré-Agendamento (agenda exibida no F3, sem estornos). Teto de 92 dias por consulta.</li>
               <li><b>Cancelamentos por falta médica</b>: consulta cujo horário cai dentro de uma falta do médico registrada no ERP (Cad_MedicoFalta, dia inteiro ou parte do dia) e que foi cancelada, por quem for (recepção, cliente pelo app, robô). É o total de pacientes prejudicados, remarcados ou não. Ao lado, quantas consultas no mesmo caso <b>não</b> foram canceladas (ficam como "médico faltou" e fora da conta de faltas).</li>
               <li><b>Atendimentos realizados</b>: status Atendido (StatusAtendimento = 1). "Compareceram" soma também quem está aguardando.</li>
-              <li><b>Marcou já confirmado</b>: a data de confirmação foi gravada até 1 minuto depois do lançamento. É o que o ERP faz quando a marcação já cai dentro da janela (ou o atendente confirma na hora). No dashboard esses são os "isentos".</li>
+              <li><b>Marcou já confirmado</b>: a data de confirmação foi gravada até 1 minuto depois do lançamento. É o que o ERP faz quando a marcação já cai dentro da janela de 5 dias (ou o atendente confirma na hora). No dashboard esses são os "isentos". Segundo o DBA (22/09/2026), nem todo processo de marcação preenche o campo: medido em ago-set/2026, das marcações com até 5 dias de antecedência nasceram confirmadas 76% em Campo Grande, 77% em Bangu e 88% em Anchieta. O card 3 mostra essa exceção para o período filtrado.</li>
               <li><b>Confirmou depois (app ou F5)</b>: data de confirmação gravada depois disso, seja pelo cliente no app ou pela central no F5.</li>
               <li><b>Faltas</b>: mesma régua do dashboard — não compareceu e já passou 1 hora da hora prevista. Antes disso a consulta está "pendente". Médico faltou fica fora.</li>
               <li><b>Canceladas por falta de confirmação</b>: cancelamento automático do robô de pré-agendamento (a mesma assinatura da aba Lista).</li>
@@ -623,8 +623,8 @@ function renderRelatorio() {
       'Status "Atendido" no ERP. Válidos = compareceram + faltaram (sem canceladas, pendentes e médico faltou).') +
     card('c-azul', '3 · Marcaram já confirmados',
       `${fmtN(t.conf_no_ato_total)}<small>${pct(t.conf_no_ato_total, t.total)} das marcações</small>`,
-      `${fmtN(t.conf_no_ato)} seguem ativas · ${fmtN(t.dentro5)} marcadas com até 5 dias de antecedência`,
-      'Data de confirmação gravada até 1 minuto após o lançamento (marcação dentro da janela ou atendente confirmou na hora).') +
+      `${fmtN(t.conf_no_ato)} seguem ativas · marcadas com até 5 dias de antecedência: ${fmtN(t.dentro5_total)}, das quais <b>${fmtN(t.dentro5_sem_conf_ato)}</b> (${pct(t.dentro5_sem_conf_ato, t.dentro5_total)}) NÃO nasceram confirmadas`,
+      'Data de confirmação gravada até 1 minuto após o lançamento. O ERP faz isso ao marcar dentro da janela, mas nem toda tela de marcação foi ajustada: a linha acima mede a exceção.') +
     card('c-azul', '4 · Confirmaram a consulta',
       `${fmtN(conf)}<small>${pct(conf, naoCanc)} das ativas</small>`,
       `${rotConf} · ${fmtN(t.sem_conf)} ativas sem nenhuma confirmação · ${fmtN(t.push)} receberam push`,
