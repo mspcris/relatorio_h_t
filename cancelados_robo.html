@@ -97,7 +97,42 @@
     .vazio { background:#fff; border-radius:.5rem; padding:3rem 1rem; text-align:center;
              color:#8a939c; box-shadow:0 1px 3px rgba(0,0,0,.08); }
 
+    /* ── Abas (lista × relatório) ── */
+    .abas { display:flex; gap:.35rem; margin-bottom:.75rem; }
+    .abas button { border:1px solid #ccd3da; background:#fff; color:#4a5560; border-radius:.5rem .5rem 0 0;
+                   padding:.5rem 1rem; font-weight:700; font-size:.92rem; cursor:pointer; }
+    .abas button.on { background:#b93a2b; border-color:#b93a2b; color:#fff; }
+    .abas button i { margin-right:.35rem; }
+
+    /* ── Relatório para gestão ── */
+    .rel-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:.75rem; margin-bottom:1rem; }
+    .rel-card { background:#fff; border-radius:.5rem; padding:.85rem 1rem; box-shadow:0 1px 3px rgba(0,0,0,.08);
+                border-left:4px solid #ced4da; display:flex; flex-direction:column; }
+    .rel-card .q { font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; color:#5a6672; font-weight:700; }
+    .rel-card .n { font-size:1.9rem; font-weight:700; line-height:1.15; margin:.2rem 0 .1rem; color:#212529; }
+    .rel-card .n small { font-size:1rem; font-weight:600; color:#6c757d; margin-left:.3rem; }
+    .rel-card .base { font-size:.8rem; color:#6c757d; }
+    .rel-card .def { font-size:.78rem; color:#7a838d; margin-top:auto; padding-top:.5rem; border-top:1px dashed #e3e7eb; }
+    .rel-card .quebra { font-size:.8rem; color:#4a5560; margin-top:.35rem; }
+    .rel-card .quebra b { color:#212529; }
+    .rel-card.c-vermelho { border-left-color:#d9534f; } .rel-card.c-verde { border-left-color:#28a745; }
+    .rel-card.c-azul { border-left-color:#1565c0; } .rel-card.c-laranja { border-left-color:#f0ad4e; }
+    .rel-card.c-roxo { border-left-color:#6f42c1; } .rel-card.c-cinza { border-left-color:#78909c; }
+    .rel-sec { background:#fff; border-radius:.5rem; padding:.85rem 1rem; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:1rem; }
+    .rel-sec h3 { font-size:1rem; font-weight:700; margin:0 0 .5rem; color:#37424c; }
+    .rel-sec h3 .sub { font-weight:400; }
+    table.rel { width:100%; font-size:.85rem; }
+    table.rel th { background:#f4f6f8; color:#5a6672; font-size:.74rem; text-transform:uppercase; padding:.45rem .5rem; white-space:nowrap; border-bottom:2px solid #e3e7eb; }
+    table.rel td { padding:.4rem .5rem; border-bottom:1px solid #eef1f4; text-align:right; white-space:nowrap; }
+    table.rel td:first-child, table.rel th:first-child { text-align:left; }
+    table.rel tr.tot td { font-weight:700; background:#f8f9fb; }
+    .como { font-size:.86rem; color:#4a5560; }
+    .como li { margin-bottom:.3rem; }
+    .como .lim { background:#fff8e6; border-left:4px solid #f0ad4e; padding:.5rem .75rem; border-radius:.3rem; margin-top:.5rem; }
+    details.rel-det summary { cursor:pointer; font-weight:700; color:#37424c; font-size:.95rem; }
+
     @media print {
+      .abas { display:none !important; }
       .main-sidebar, .main-header, .barra, .no-print, .page-head p { display:none !important; }
       .content-wrapper { margin-left:0 !important; }
       body { background:#fff; }
@@ -171,6 +206,11 @@
           sabe que cancelou. Marcar como "tratado" continua restrito aos postos do seu acesso.
         </div>
 
+        <div class="abas no-print">
+          <button id="abaBtnLista" class="on" onclick="mostrarAba('lista')"><i class="fas fa-list"></i>Lista para a recepção</button>
+          <button id="abaBtnRel" onclick="mostrarAba('relatorio')"><i class="fas fa-chart-bar"></i>Relatório para gestão</button>
+        </div>
+
         <div class="barra no-print">
           <div class="form-row align-items-end">
             <div class="col-auto mb-2">
@@ -187,26 +227,35 @@
               <button class="btn btn-sm btn-outline-secondary" onclick="setRange(7)" title="Últimos 7 dias até hoje">7 dias</button>
               <button class="btn btn-sm btn-outline-secondary" onclick="setMes()" title="Do dia 1º até hoje">Mês</button>
             </div>
-            <div class="col-auto mb-2">
+            <div class="col-auto mb-2 so-lista">
               <label class="mb-1" style="font-size:.8rem;font-weight:700;color:#5a6672">ESPECIALIDADE</label>
               <select id="fEsp" class="form-control form-control-sm"><option value="">Todas</option></select>
             </div>
-            <div class="col-auto mb-2">
+            <div class="col-auto mb-2 so-lista">
               <label class="mb-1" style="font-size:.8rem;font-weight:700;color:#5a6672">MÉDICO</label>
               <select id="fMed" class="form-control form-control-sm"><option value="">Todos</option></select>
             </div>
+            <div class="col-auto mb-2 so-rel" hidden>
+              <label class="mb-1" style="font-size:.8rem;font-weight:700;color:#5a6672" title="Como o ERP não grava se a confirmação veio do app ou do F5, o filtro separa o que o dado permite: confirmação no ato da marcação × confirmação feita depois.">CONFIRMAÇÃO CONSIDERADA</label>
+              <select id="fConf" class="form-control form-control-sm" onchange="renderRelatorio()">
+                <option value="todas">Todas (no ato + depois)</option>
+                <option value="depois">Só confirmadas depois (app ou F5)</option>
+                <option value="ato">Só confirmadas no ato da marcação</option>
+              </select>
+            </div>
             <div class="col-auto mb-2">
-              <button class="btn btn-sm btn-danger" onclick="carregar()"><i class="fas fa-sync"></i> Atualizar</button>
+              <button class="btn btn-sm btn-danger" onclick="recarregarAba()"><i class="fas fa-sync"></i> Atualizar</button>
             </div>
           </div>
           <div id="chipsPosto" style="margin-top:.25rem"></div>
-          <div class="mt-2">
+          <div class="mt-2 so-lista">
             <label class="mb-0" style="font-size:.88rem;cursor:pointer">
               <input type="checkbox" id="fPend"> Mostrar só os que ainda não foram tratados
             </label>
           </div>
         </div>
 
+        <div id="abaLista">
         <div class="row mb-3">
           <div class="col-4"><div class="tile total"><div class="n" id="tTotal">—</div><div class="l" id="tTotalLbl">Cancelados no dia</div></div></div>
           <div class="col-4"><div class="tile pendente"><div class="n" id="tPend">—</div><div class="l">A tratar</div></div></div>
@@ -220,6 +269,41 @@
         </div>
 
         <p class="text-muted mt-2" style="font-size:.8rem" id="rodape"></p>
+        </div>
+
+        <!-- ── RELATÓRIO PARA GESTÃO (2026-09-22) — as 9 perguntas do Petterson ── -->
+        <div id="abaRel" hidden>
+          <div id="relAlerta"></div>
+          <div id="relCards" class="rel-grid"></div>
+          <div class="rel-sec">
+            <h3>Por posto <span class="sub text-muted">— consultas com data no período</span></h3>
+            <div id="relPorPosto" style="overflow:auto"></div>
+          </div>
+          <div class="rel-sec">
+            <details class="rel-det"><summary>Por dia de consulta</summary><div id="relPorDia" class="mt-2" style="overflow:auto"></div></details>
+          </div>
+          <div class="rel-sec">
+            <details class="rel-det" id="relDetReaprov" ontoggle="if(this.open) carregarReaproveitadas()">
+              <summary>Vagas reaproveitadas — lista para conferir uma a uma</summary>
+              <div id="relReaprov" class="mt-2" style="overflow:auto"><div class="text-muted">Abra para carregar.</div></div>
+            </details>
+          </div>
+          <div class="rel-sec como">
+            <h3>Como foi calculado</h3>
+            <ul class="mb-0 pl-3">
+              <li><b>Base</b>: consultas (com hora prevista) cuja <b>data da consulta</b> está no período, nas mesmas tabelas e filtros do dashboard de Pré-Agendamento (agenda exibida no F3, sem estornos). Teto de 92 dias por consulta.</li>
+              <li><b>Cancelamentos por falta médica</b>: consulta cujo horário cai dentro de uma falta do médico registrada no ERP (Cad_MedicoFalta, dia inteiro ou parte do dia) e que foi cancelada, por quem for (recepção, cliente pelo app, robô). É o total de pacientes prejudicados, remarcados ou não. Ao lado, quantas consultas no mesmo caso <b>não</b> foram canceladas (ficam como "médico faltou" e fora da conta de faltas).</li>
+              <li><b>Atendimentos realizados</b>: status Atendido (StatusAtendimento = 1). "Compareceram" soma também quem está aguardando.</li>
+              <li><b>Marcou já confirmado</b>: a data de confirmação foi gravada até 1 minuto depois do lançamento. É o que o ERP faz quando a marcação já cai dentro da janela (ou o atendente confirma na hora). No dashboard esses são os "isentos".</li>
+              <li><b>Confirmou depois (app ou F5)</b>: data de confirmação gravada depois disso, seja pelo cliente no app ou pela central no F5.</li>
+              <li><b>Faltas</b>: mesma régua do dashboard — não compareceu e já passou 1 hora da hora prevista. Antes disso a consulta está "pendente". Médico faltou fica fora.</li>
+              <li><b>Canceladas por falta de confirmação</b>: cancelamento automático do robô de pré-agendamento (a mesma assinatura da aba Lista).</li>
+              <li><b>Reaproveitadas</b>: a vaga (agenda + dia + número) de um cancelado pelo robô recebeu <b>outra marcação ativa, feita com menos de 2 dias de antecedência e depois do cancelamento</b> (encaixe). Ao lado, quantas dessas foram atendidas.</li>
+            </ul>
+            <div class="lim"><b>Limite do dado:</b> o ERP grava a data da confirmação, mas não se ela veio do <b>app</b> ou do <b>F5</b>, e a auditoria não registra essa alteração. Por isso o filtro separa "no ato" × "depois", e não app × F5. Separar app × F5 exige cruzar com o Égide (backend do app), que registra quem confirmou — fica como próximo passo.</div>
+          </div>
+          <p class="text-muted mt-2" style="font-size:.8rem" id="relRodape"></p>
+        </div>
 
       </div>
     </section>
@@ -440,8 +524,191 @@ async function marcar(posto, id, el) {
 ['#fEsp', '#fMed', '#fPend'].forEach(s => document.addEventListener('change', ev => {
   if (ev.target.matches(s)) render();
 }));
-$('#fIni').addEventListener('change', carregar);
-$('#fFim').addEventListener('change', carregar);
+$('#fIni').addEventListener('change', recarregarAba);
+$('#fFim').addEventListener('change', recarregarAba);
+
+/* ═══════════════ RELATÓRIO PARA GESTÃO (2026-09-22) ═══════════════
+   As 9 perguntas do Petterson, respondidas pela API /api/cancelados_robo/relatorio
+   (agregado por posto × dia, mesmas tabelas do dashboard de pré-agendamento).
+   Definições estão no bloco "Como foi calculado" da página e no topo de
+   cancelados_robo_routes.py — mudar num lugar, mudar no outro. */
+let ABA = 'lista';
+let REL = null;              // resposta da API
+let REL_POSTOS_OFF = new Set();
+let REL_REAPROV = null;      // lista carregada sob demanda
+let REL_PERIODO = '';        // período do REL carregado (evita recarga à toa)
+
+function mostrarAba(aba) {
+  ABA = aba;
+  const rel = aba === 'relatorio';
+  $('#abaLista').hidden = rel; $('#abaRel').hidden = !rel;
+  $('#abaBtnLista').classList.toggle('on', !rel); $('#abaBtnRel').classList.toggle('on', rel);
+  document.querySelectorAll('.so-lista').forEach(e => e.hidden = rel);
+  document.querySelectorAll('.so-rel').forEach(e => e.hidden = !rel);
+  if (rel) carregarRelatorio(); else montarFiltros();
+}
+function recarregarAba() { ABA === 'relatorio' ? carregarRelatorio(true) : carregar(); }
+
+const fmtN = v => (v || 0).toLocaleString('pt-BR');
+const pct = (a, b) => b ? (100 * a / b).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%' : '—';
+
+async function carregarRelatorio(forcar) {
+  const ini = $('#fIni').value || hojeISO(), fim = $('#fFim').value || ini;
+  const chave = ini + '|' + fim;
+  if (REL && REL_PERIODO === chave && !forcar) { renderRelatorio(); return; }
+  $('#relCards').innerHTML = '<div class="vazio" style="grid-column:1/-1"><i class="fas fa-spinner fa-spin fa-2x"></i><div class="mt-2">Consultando os postos… (até 30 s para 3 meses da rede inteira)</div></div>';
+  $('#relPorPosto').innerHTML = ''; $('#relPorDia').innerHTML = ''; $('#relAlerta').innerHTML = '';
+  REL_REAPROV = null; $('#relReaprov').innerHTML = '<div class="text-muted">Abra para carregar.</div>';
+  try {
+    const r = await fetch('/api/cancelados_robo/relatorio?ini=' + encodeURIComponent(ini) + '&fim=' + encodeURIComponent(fim), { credentials: 'same-origin' });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || ('HTTP ' + r.status)); }
+    REL = await r.json(); REL_PERIODO = chave;
+    const errs = Object.keys(REL.postos_erro || {});
+    $('#relAlerta').innerHTML = errs.length
+      ? `<div class="alert alert-warning py-2"><i class="fas fa-exclamation-triangle"></i> <strong>Relatório incompleto.</strong> Não consegui consultar: ${errs.map(p => 'posto ' + esc(p)).join(', ')}. Os números abaixo não incluem esses postos.</div>` : '';
+    renderRelatorio();
+  } catch (e) {
+    $('#relCards').innerHTML = `<div class="vazio text-danger" style="grid-column:1/-1"><i class="fas fa-times-circle fa-2x"></i><div class="mt-2">${esc(e.message)}</div></div>`;
+  }
+}
+
+function relPostosSel() {
+  return (REL.postos_com_dados || []).filter(p => !REL_POSTOS_OFF.has(p));
+}
+function relToggle(p) { REL_POSTOS_OFF.has(p) ? REL_POSTOS_OFF.delete(p) : REL_POSTOS_OFF.add(p); renderRelatorio(); }
+
+function relSoma(linhas) {
+  const t = {};
+  for (const ln of linhas) for (const k in ln) if (typeof ln[k] === 'number') t[k] = (t[k] || 0) + ln[k];
+  return t;
+}
+
+function card(cls, pergunta, n, base, def, quebra) {
+  return `<div class="rel-card ${cls}">
+    <div class="q">${pergunta}</div>
+    <div class="n">${n}</div>
+    ${base ? `<div class="base">${base}</div>` : ''}
+    ${quebra ? `<div class="quebra">${quebra}</div>` : ''}
+    <div class="def">${def}</div>
+  </div>`;
+}
+
+function renderRelatorio() {
+  if (!REL) return;
+  const postos = REL.postos_com_dados || [];
+  $('#chipsPosto').innerHTML = postos.length
+    ? '<span style="font-size:.8rem;font-weight:700;color:#5a6672;margin-right:.4rem">POSTO</span>' +
+      postos.map(p => `<span class="chip ${REL_POSTOS_OFF.has(p) ? '' : 'on'}" onclick="relToggle('${p}')">${p}</span>`).join('')
+    : '<span class="text-muted" style="font-size:.85rem">Nenhum posto com consulta no período.</span>';
+  const sel = new Set(relPostosSel());
+  const linhas = (REL.por_posto || []).filter(x => sel.has(x.posto));
+  const t = relSoma(linhas);
+  const modo = $('#fConf').value;   // todas | depois | ato
+  const conf      = modo === 'ato' ? t.conf_no_ato : modo === 'depois' ? t.conf_depois : (t.conf_no_ato + t.conf_depois);
+  const confFalta = modo === 'ato' ? t.conf_no_ato_falta : modo === 'depois' ? t.conf_depois_falta : (t.conf_no_ato_falta + t.conf_depois_falta);
+  const confComp  = modo === 'ato' ? t.conf_no_ato_compareceu : modo === 'depois' ? t.conf_depois_compareceu : (t.conf_no_ato_compareceu + t.conf_depois_compareceu);
+  const rotConf   = modo === 'ato' ? 'confirmadas no ato da marcação' : modo === 'depois' ? 'confirmadas depois (app ou F5)' : 'confirmadas (no ato ou depois)';
+  const validos = t.compareceram + t.faltas;   // base de % de falta, como no dashboard
+  const naoCanc = t.total - t.canceladas;
+
+  $('#relCards').innerHTML =
+    card('c-vermelho', '1 · Cancelamentos por falta médica',
+      `${fmtN(t.canc_falta_medico)}<small>${pct(t.canc_falta_medico, t.canceladas)} das canceladas</small>`,
+      `${fmtN(t.canceladas)} cancelamentos no período · ${fmtN(t.medico_faltou)} consultas em falta do médico <b>não</b> canceladas`,
+      'Consulta dentro de uma falta do médico registrada no ERP e cancelada, por quem for. Pacientes prejudicados, remarcados ou não.',
+      `Quem cancelou: <b>${fmtN(t.canc_falta_medico - t.canc_falta_medico_robo - t.canc_falta_medico_app)}</b> recepção/ERP · <b>${fmtN(t.canc_falta_medico_app)}</b> cliente no app · <b>${fmtN(t.canc_falta_medico_robo)}</b> robô`) +
+    card('c-verde', '2 · Atendimentos realizados',
+      `${fmtN(t.atendidos)}<small>${pct(t.atendidos, validos)} dos válidos</small>`,
+      `${fmtN(t.compareceram)} compareceram (atendidos + aguardando) · base ${fmtN(validos)} válidos`,
+      'Status "Atendido" no ERP. Válidos = compareceram + faltaram (sem canceladas, pendentes e médico faltou).') +
+    card('c-azul', '3 · Marcaram já confirmados',
+      `${fmtN(t.conf_no_ato_total)}<small>${pct(t.conf_no_ato_total, t.total)} das marcações</small>`,
+      `${fmtN(t.conf_no_ato)} seguem ativas · ${fmtN(t.dentro5)} marcadas com até 5 dias de antecedência`,
+      'Data de confirmação gravada até 1 minuto após o lançamento (marcação dentro da janela ou atendente confirmou na hora).') +
+    card('c-azul', '4 · Confirmaram a consulta',
+      `${fmtN(conf)}<small>${pct(conf, naoCanc)} das ativas</small>`,
+      `${rotConf} · ${fmtN(t.sem_conf)} ativas sem nenhuma confirmação · ${fmtN(t.push)} receberam push`,
+      'App ou F5: o ERP não grava a origem. Use o filtro "Confirmação considerada" para separar no ato × depois.',
+      modo === 'todas' ? `<b>${fmtN(t.conf_no_ato)}</b> no ato · <b>${fmtN(t.conf_depois)}</b> depois (app ou F5), das quais <b>${fmtN(t.conf_depois_marc_app)}</b> marcadas pelo app` : '') +
+    card('c-vermelho', '5 · Faltas no total',
+      `${fmtN(t.faltas)}<small>${pct(t.faltas, validos)} dos válidos</small>`,
+      `${fmtN(t.pendentes)} ainda pendentes (consulta futura ou há menos de 1 h) · ${fmtN(t.medico_faltou)} médico faltou (fora)`,
+      'Não compareceu e já passou 1 hora da hora prevista — mesma régua do dashboard de Pré-Agendamento.') +
+    card('c-laranja', '6 · Confirmaram e mesmo assim faltaram',
+      `${fmtN(confFalta)}<small>${pct(confFalta, confFalta + confComp)} das ${rotConf}</small>`,
+      `${fmtN(confComp)} confirmaram e compareceram · sem confirmação: ${fmtN(t.sem_conf_falta)} faltaram, ${fmtN(t.sem_conf_compareceu)} compareceram`,
+      'Confirmação (conforme o filtro) e falta na consulta.') +
+    card('c-laranja', '7 · Marcaram já confirmados e faltaram',
+      `${fmtN(t.conf_no_ato_falta)}<small>${pct(t.conf_no_ato_falta, t.conf_no_ato_falta + t.conf_no_ato_compareceu)} desses</small>`,
+      `${fmtN(t.conf_no_ato_compareceu)} compareceram · marcados com até 5 dias: ${fmtN(t.dentro5_falta)} faltaram de ${fmtN(t.dentro5)}`,
+      'Lançamento que já nasceu com a data de confirmação preenchida e o paciente faltou.') +
+    card('c-roxo', '8 · Canceladas por falta de confirmação',
+      `${fmtN(t.canc_robo)}<small>${pct(t.canc_robo, t.total)} das marcações</small>`,
+      `outros cancelamentos: ${fmtN(t.canc_app)} cliente no app · ${fmtN(t.canc_sem_pag)} sem pagamento (sistema) · ${fmtN(t.canceladas - t.canc_robo - t.canc_app - t.canc_sem_pag)} recepção/outros`,
+      'Cancelamento automático do robô de pré-agendamento (janela 5-2 dias). É a mesma lista da aba ao lado.') +
+    card('c-cinza', '9 · Canceladas reaproveitadas com encaixe',
+      `${fmtN(t.reaprov2d)}<small>${pct(t.reaprov2d, t.canc_robo)} das canceladas pelo robô</small>`,
+      `${fmtN(t.reaprov2d_atendido)} encaixes atendidos · ${fmtN(t.canc_robo - t.reaprov_qq)} vagas ficaram vazias · ${fmtN(t.reaprov_qq - t.reaprov2d)} reocupadas com 2+ dias`,
+      'Vaga (agenda + dia + número) do cancelado pelo robô que recebeu outra marcação ativa feita com menos de 2 dias de antecedência, depois do cancelamento.');
+
+  // por posto
+  const cols = [['posto', 'Posto'], ['total', 'Marcações'], ['canceladas', 'Canceladas'], ['canc_falta_medico', '1 Falta méd.'], ['atendidos', '2 Atendidos'],
+                ['conf_no_ato_total', '3 Marc. já conf.'], ['_conf', '4 Confirm.'], ['faltas', '5 Faltas'], ['_confFalta', '6 Conf.+faltou'],
+                ['conf_no_ato_falta', '7 Já conf.+faltou'], ['canc_robo', '8 Robô'], ['reaprov2d', '9 Reaprov.'], ['reaprov2d_atendido', 'Reaprov. atend.'], ['pendentes', 'Pendentes']];
+  const val = (x, k) => k === '_conf' ? (modo === 'ato' ? x.conf_no_ato : modo === 'depois' ? x.conf_depois : x.conf_no_ato + x.conf_depois)
+                    : k === '_confFalta' ? (modo === 'ato' ? x.conf_no_ato_falta : modo === 'depois' ? x.conf_depois_falta : x.conf_no_ato_falta + x.conf_depois_falta)
+                    : x[k];
+  const tr = (x, cls) => `<tr class="${cls || ''}">${cols.map(([k]) => `<td>${k === 'posto' ? esc(x.posto) : fmtN(val(x, k))}</td>`).join('')}</tr>`;
+  $('#relPorPosto').innerHTML = linhas.length
+    ? `<table class="rel"><thead><tr>${cols.map(([, r]) => `<th>${r}</th>`).join('')}</tr></thead>
+       <tbody>${linhas.map(x => tr(x)).join('')}${tr({ ...t, posto: 'Total' }, 'tot')}</tbody></table>`
+    : '<div class="text-muted">Nenhum posto selecionado.</div>';
+
+  // por dia (somando os postos selecionados)
+  const porDia = new Map();
+  for (const ln of (REL.por_dia || [])) {
+    if (!sel.has(ln.posto)) continue;
+    const acc = porDia.get(ln.dia) || { posto: ln.dia };
+    for (const k in ln) if (typeof ln[k] === 'number') acc[k] = (acc[k] || 0) + ln[k];
+    porDia.set(ln.dia, acc);
+  }
+  const dias = [...porDia.values()].map(x => ({ ...x, posto: x.posto.split('-').reverse().join('/') }));
+  $('#relPorDia').innerHTML = dias.length
+    ? `<table class="rel"><thead><tr>${cols.map(([k, r]) => `<th>${k === 'posto' ? 'Dia' : r}</th>`).join('')}</tr></thead><tbody>${dias.map(x => tr(x)).join('')}</tbody></table>`
+    : '<div class="text-muted">—</div>';
+
+  $('#relRodape').textContent = `Período ${REL.ini.split('-').reverse().join('/')} a ${REL.fim.split('-').reverse().join('/')} · postos consultados: ${(REL.postos || []).join(', ')} · gerado às ${REL.gerado_em}`;
+  if (REL_REAPROV) renderReaproveitadas();
+}
+
+async function carregarReaproveitadas() {
+  if (!REL || REL_REAPROV) return;
+  $('#relReaprov').innerHTML = '<div class="text-muted"><i class="fas fa-spinner fa-spin"></i> Consultando os postos…</div>';
+  try {
+    const r = await fetch('/api/cancelados_robo/relatorio/reaproveitadas?ini=' + encodeURIComponent(REL.ini) + '&fim=' + encodeURIComponent(REL.fim), { credentials: 'same-origin' });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || ('HTTP ' + r.status)); }
+    REL_REAPROV = await r.json();
+    renderReaproveitadas();
+  } catch (e) {
+    $('#relReaprov').innerHTML = `<div class="text-danger">${esc(e.message)}</div>`;
+  }
+}
+function renderReaproveitadas() {
+  const sel = new Set(relPostosSel());
+  const L = (REL_REAPROV.linhas || []).filter(x => sel.has(x.posto));
+  if (!L.length) { $('#relReaprov').innerHTML = '<div class="text-muted">Nenhuma vaga reaproveitada nos postos selecionados.</div>'; return; }
+  const d = s => (s || '').slice(0, 10).split('-').reverse().join('/');
+  const dh = s => s ? d(s) + ' ' + s.slice(11, 16) : '';
+  $('#relReaprov').innerHTML = `<div class="text-muted mb-1" style="font-size:.82rem">${fmtN(L.length)} vaga(s) · a nova marcação foi feita depois do cancelamento e com menos de 2 dias de antecedência${REL_REAPROV.total >= 3000 ? ' · lista cortada em 3.000 por posto' : ''}</div>
+    <table class="rel"><thead><tr><th>Consulta</th><th>Posto</th><th>Especialidade / médico</th><th>Vaga</th><th>Cancelado (robô)</th><th>Cancelado em</th><th>Novo paciente</th><th>Marcado em</th><th>Canal</th><th>Atendido</th></tr></thead>
+    <tbody>${L.map(x => `<tr>
+      <td>${d(x.data_consulta)} ${esc(x.hora_consulta)}</td><td><span class="posto-badge">${esc(x.posto)}</span></td>
+      <td style="text-align:left">${esc(x.especialidade)}<div class="sub">${esc(x.medico)}</div></td><td>${esc(x.vaga)}</td>
+      <td style="text-align:left">${esc(x.cancelado_paciente)}</td><td>${dh(x.cancelado_em)}</td>
+      <td style="text-align:left">${esc(x.novo_paciente)}</td><td>${dh(x.novo_marcado_em)} <span class="sub">(${x.novo_antecedencia}d antes)</span></td>
+      <td>${esc(x.novo_canal)}</td><td>${x.novo_atendido ? '<span class="text-success font-weight-bold">sim</span>' : '<span class="text-muted">não</span>'}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
 
 $('#fIni').value = hojeISO();
 $('#fFim').value = hojeISO();

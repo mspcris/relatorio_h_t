@@ -272,6 +272,30 @@ via Cristiano):**
 - Período de mais de um dia agrupa a grid por dia de consulta (linha
   separadora com dia da semana + data + contagem), pedido do Petterson.
 
+**`/cancelados_robo` — aba "Relatório para gestão" (2026-09-22, perguntas do
+Petterson/CG):** `GET /api/cancelados_robo/relatorio?ini&fim&posto` (agregado
+por posto × dia, mesmas tabelas/filtros do `sql/preagendamento.sql`, cache 5
+min, 92 dias no máximo, ~4 s por posto) e `/relatorio/reaproveitadas` (lista).
+Responde 9 perguntas; definições fechadas com o Petterson e escritas no bloco
+"Como foi calculado" da página E no topo de `cancelados_robo_routes.py`:
+- **falta médica** = consulta dentro de uma falta registrada em `Cad_MedicoFalta`
+  (qualquer duração, não só dia inteiro) e cancelada, por quem for — "pacientes
+  prejudicados, remarcados ou não";
+- **marcou já confirmado** = `DataConfirmacaoAgendamentoConsulta` até 1 min após
+  o lançamento (o ERP preenche no ato dentro da janela); **confirmou depois** =
+  o resto (app OU F5 — **o ERP não grava a origem e a auditoria não registra a
+  alteração**: medido 1 em 940 em G/set-26). O filtro da aba separa "no ato ×
+  depois", não app × F5. Fase 2: Égide `doctorappointments` tem
+  `confirmationDate`/`confirmationInfo`/`externalData` — cruzar por lá.
+- **reaproveitada** = vaga (idEspecialidade + DataConsulta + `consulta`) de um
+  cancelado pelo robô que recebeu marcação ativa com `DATEDIFF(day) < 2`
+  depois do cancelamento. Validado G/ago-26: 313 cancelados → 132 reaproveitadas
+  (110 atendidas), 178 vagas vazias.
+- Temp tables `#b/#c/#r` no SQL (CTE seria avaliado duas vezes). `SUM(CASE WHEN
+  EXISTS…)` não existe no SQL Server — agregar num derived table.
+- Números conferem com a lista da aba (canc_robo = mesma assinatura) e fecham:
+  canceladas + compareceram + faltas + pendentes + médico faltou = total.
+
 **Pendências conhecidas (2026-07-21):**
 - `/cancelados_robo` ([cancelados_robo_routes.py](cancelados_robo_routes.py)) ainda
   usa `vw_Cad_LancamentoProntuarioComDesistencia` (~1,8s/posto no balcão). Cabe o
