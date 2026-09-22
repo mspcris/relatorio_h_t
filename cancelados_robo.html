@@ -648,8 +648,11 @@ function renderRelatorio() {
       'Cancelamento automático do robô de pré-agendamento (janela 5-2 dias). É a mesma lista da aba ao lado.') +
     card('c-cinza', '9 · Canceladas reaproveitadas com encaixe',
       `${fmtN(t.reaprov2d)}<small>${pct(t.reaprov2d, t.canc_robo)} das canceladas pelo robô</small>`,
-      `${fmtN(t.reaprov2d_atendido)} encaixes atendidos · ${fmtN(t.canc_robo - t.reaprov_qq)} vagas ficaram vazias · ${fmtN(t.reaprov_qq - t.reaprov2d)} reocupadas com 2+ dias`,
-      'Vaga (agenda + dia + número) do cancelado pelo robô que recebeu outra marcação ativa feita com menos de 2 dias de antecedência, depois do cancelamento.');
+      `Dos ${fmtN(t.reaprov2d)} encaixes: <b>${fmtN(t.reaprov2d_atendido)}</b> atendidos e <b>${fmtN(t.reaprov2d - t.reaprov2d_atendido)}</b> não (faltaram ou ainda pendentes)`,
+      'Vaga (agenda + dia + número) do cancelado pelo robô que recebeu outra marcação ativa feita com menos de 2 dias de antecedência, depois do cancelamento.',
+      `Conta fechada: <b>${fmtN(t.reaprov2d)}</b> reaproveitadas + <b>${fmtN(t.canc_robo - t.reaprov_qq)}</b> vagas que ficaram vazias` +
+      (t.reaprov_qq - t.reaprov2d ? ` + <b>${fmtN(t.reaprov_qq - t.reaprov2d)}</b> reocupadas com 2 dias ou mais` : '') +
+      ` = <b>${fmtN(t.canc_robo)}</b> canceladas pelo robô`);
 
   // por posto
   const cols = [['posto', 'Posto'], ['total', 'Marcações'], ['canceladas', 'Canceladas'], ['canc_falta_medico', '1 Falta méd.'], ['atendidos', '2 Atendidos'],
