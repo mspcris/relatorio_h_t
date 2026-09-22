@@ -254,16 +254,63 @@ def collect_sql_files(validate=True):
 def _ensure_nocount(sql_text: str) -> str:
     return sql_text if sql_text.lstrip().upper().startswith("SET NOCOUNT ON") else "SET NOCOUNT ON;\n" + sql_text
 
+# Retentativa em QUEDA DE CONEXÃO (2026-09-22). Sentry mostrou, em 49 rodadas de
+# um dia: A com "This Connection is closed" 2× (o link caiu na 1ª query do
+# engine, a de versão do servidor) e N com TCP 10060 1× (N leva ~7 s para
+# conectar). Cada queda dessas reabria a issue do posto e deixava o CSV do mês
+# corrente sem regravar até a rodada seguinte. Erro de SQL (sintaxe, coluna
+# inexistente) NÃO é retentado — repetir não conserta e só atrasa a rodada.
+RETRY_TENTATIVAS = 3
+RETRY_ESPERA_S = (3, 10)
+_SINAIS_CONEXAO = ("08S01", "HYT00", "HYT01", "Communication link failure",
+                   "Connection is closed", "TCP Provider", "Login timeout",
+                   "10060", "10054", "connection_invalidated")
+
+
+def _e_erro_de_conexao(e: Exception) -> bool:
+    from sqlalchemy.exc import DBAPIError, ResourceClosedError
+    if isinstance(e, ResourceClosedError):
+        return True
+    if isinstance(e, DBAPIError) and getattr(e, "connection_invalidated", False):
+        return True
+    s = str(e)  # pandas embrulha em "Execution failed on sql '…': <erro>"
+    return any(k in s for k in _SINAIS_CONEXAO)
+
+
+def _com_retry(fn, engine):
+    import time as _time
+    for k in range(1, RETRY_TENTATIVAS + 1):
+        try:
+            return fn()
+        except Exception as e:
+            if not _e_erro_de_conexao(e) or k == RETRY_TENTATIVAS:
+                raise
+            espera = RETRY_ESPERA_S[min(k, len(RETRY_ESPERA_S)) - 1]
+            print(f"      conexão caiu (tentativa {k}/{RETRY_TENTATIVAS}): "
+                  f"{str(e).splitlines()[-1][:110]} — nova tentativa em {espera}s")
+            try:
+                engine.dispose()  # descarta a conexão morta do pool
+            except Exception:
+                pass
+            _time.sleep(espera)
+
+
 def run_query(engine, sql_txt, ini, fim):
     body = _ensure_nocount(sql_txt)
-    with engine.connect() as con:
-        return pd.read_sql_query(text(body), con, params={"ini": ini, "fim": fim})
+
+    def _exec():
+        with engine.connect() as con:
+            return pd.read_sql_query(text(body), con, params={"ini": ini, "fim": fim})
+    return _com_retry(_exec, engine)
 
 # NOVO: consulta simples, sem parâmetros de período (usado em liberty_vidas)
 def run_query_simple(engine, sql_txt):
     body = _ensure_nocount(sql_txt)
-    with engine.connect() as con:
-        return pd.read_sql_query(text(body), con)
+
+    def _exec():
+        with engine.connect() as con:
+            return pd.read_sql_query(text(body), con)
+    return _com_retry(_exec, engine)
 
 # =========================
 # Funções de cálculo (KPIs)

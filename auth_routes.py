@@ -19,6 +19,7 @@ Rotas:
 """
 
 import json
+import logging
 import os
 import secrets
 import smtplib

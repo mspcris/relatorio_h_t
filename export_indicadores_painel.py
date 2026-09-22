@@ -36,6 +36,7 @@ calcula `dias` em runtime para refletir o momento da request, não o do ETL):
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import sys
@@ -52,9 +53,28 @@ WPP_DB  = os.environ.get("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
 
 
 def _connect_ro(path: str) -> sqlite3.Connection:
+    """Somente leitura. Um banco em WAL de outro dono (push_log.db é root 644,
+    escrito pelo push_clientes.service) não abre em mode=ro para o www-data:
+    todo leitor WAL precisa escrever no -shm. Sentry 2026-09-22: o modal do
+    Push no Monitorar Robôs caía em "attempt to write a readonly database".
+    Aqui cai em immutable=1 — lê o arquivo principal ignorando o WAL (pode não
+    ver o que ainda não foi checkpointado; atraso pequeno, nunca erro 500) e
+    avisa no log. A ACL u:www-data:rw no -shm/-wal (feita à mão na VM) evita
+    o fallback enquanto o serviço de push não recriar os arquivos."""
     conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=30)
-    conn.execute("PRAGMA busy_timeout=30000")
-    return conn
+    try:
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchall()
+        return conn
+    except sqlite3.OperationalError as e:
+        if "readonly" not in str(e).lower():
+            raise
+        conn.close()
+        logging.getLogger(__name__).warning(
+            "%s: mode=ro falhou (%s) — lendo como immutable=1 (sem WAL)", path, e)
+        conn = sqlite3.connect(f"file:{path}?immutable=1", uri=True, timeout=30)
+        conn.execute("PRAGMA busy_timeout=30000")
+        return conn
 
 
 def _coletar_email() -> dict:
