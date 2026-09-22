@@ -111,12 +111,62 @@
     .rel-card .q { font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; color:#5a6672; font-weight:700; }
     .rel-card .n { font-size:1.9rem; font-weight:700; line-height:1.15; margin:.2rem 0 .1rem; color:#212529; }
     .rel-card .n small { font-size:1rem; font-weight:600; color:#6c757d; margin-left:.3rem; }
-    .rel-card .base { font-size:.8rem; color:#6c757d; }
-    .rel-card .frase { font-size:.9rem; color:#37424c; line-height:1.45; margin:.25rem 0 .4rem; }
+    .rel-card .base { font-size:.82rem; color:#6c757d; }
+    .rel-card .base b { color:#37424c; }
+    .rel-card .frase { font-size:.9rem; color:#37424c; line-height:1.45; margin:.4rem 0 .5rem; }
     .rel-card .frase b { color:#212529; }
-    .rel-card .def { font-size:.78rem; color:#7a838d; margin-top:auto; padding-top:.5rem; border-top:1px dashed #e3e7eb; }
-    .rel-card .quebra { font-size:.8rem; color:#4a5560; margin-top:.35rem; }
-    .rel-card .quebra b { color:#212529; }
+    .rel-card .ver { font-size:.8rem; font-weight:700; color:#1565c0; margin-top:auto; padding-top:.5rem; border-top:1px dashed #e3e7eb; }
+    .rel-card[onclick] { cursor:pointer; transition:box-shadow .12s, transform .12s; }
+    .rel-card[onclick]:hover { box-shadow:0 3px 10px rgba(0,0,0,.14); transform:translateY(-1px); }
+
+    /* ── Âncora: o total do período, o mesmo para todos os cards ── */
+    .rel-ancora { background:#fff; border-radius:.5rem; padding:1rem 1.15rem; margin-bottom:1rem;
+                  box-shadow:0 1px 3px rgba(0,0,0,.08); border-left:5px solid #37424c; }
+    .rel-ancora .tit { font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; color:#5a6672; font-weight:700; }
+    .rel-ancora .tot { font-size:2.4rem; font-weight:700; line-height:1.1; color:#212529; }
+    .rel-ancora .exp { font-size:.92rem; color:#37424c; margin-bottom:.5rem; }
+    .barra-seg { display:flex; height:30px; border-radius:.35rem; overflow:hidden; margin:.15rem 0 .55rem; }
+    .barra-seg span { display:flex; align-items:center; justify-content:center; color:#fff;
+                      font-size:.78rem; font-weight:700; min-width:0; overflow:hidden; white-space:nowrap; }
+    .leg { display:flex; flex-wrap:wrap; gap:.2rem 1.4rem; font-size:.88rem; color:#37424c; }
+    .leg span i { width:.75rem; height:.75rem; border-radius:2px; display:inline-block; margin-right:.4rem; }
+    .leg b { font-variant-numeric:tabular-nums; }
+    .confere { font-size:.83rem; color:#5a6672; margin-top:.6rem; background:#f4f6f8;
+               border-radius:.3rem; padding:.45rem .65rem; font-variant-numeric:tabular-nums; }
+    .confere .ok { color:#1e7e34; font-weight:700; }
+
+    /* ── Modal da conta (overlay próprio: não depende de Bootstrap JS) ── */
+    .mdl { position:fixed; inset:0; background:rgba(20,25,30,.55); z-index:1200;
+           display:flex; align-items:flex-start; justify-content:center; padding:2.5vh 1rem; overflow:auto; }
+    .mdl[hidden] { display:none; }
+    .mdl .cx { background:#fff; border-radius:.5rem; max-width:720px; width:100%; box-shadow:0 10px 40px rgba(0,0,0,.3); }
+    .mdl .hd { padding:.9rem 1.1rem; border-bottom:1px solid #e3e7eb; display:flex; align-items:flex-start; gap:1rem; }
+    .mdl .hd h4 { font-size:1.05rem; font-weight:700; margin:0; color:#212529; flex:1; }
+    .mdl .hd button { border:0; background:none; font-size:1.5rem; line-height:1; color:#8a949e; cursor:pointer; }
+    .mdl .bd { padding:1rem 1.1rem; }
+
+    /* ── Cascata: a conta descendo a partir do total ── */
+    .casc { font-size:.93rem; color:#37424c; }
+    .casc .lin { display:flex; align-items:baseline; gap:.7rem; padding:.4rem .6rem; border-radius:.3rem; }
+    .casc .lin .num { font-variant-numeric:tabular-nums; font-weight:700; min-width:5.2rem;
+                      text-align:right; font-size:1.05rem; color:#212529; }
+    .casc .lin.base { background:#eef2f6; }
+    .casc .lin.foco { background:#f7f9fb; }
+    .casc .lin.res  { background:#fff4d6; border:1px solid #f0d491; }
+    .casc .lin.res .num { color:#8a6100; font-size:1.25rem; }
+    .casc .op { display:flex; align-items:baseline; gap:.7rem; padding:.2rem .6rem; color:#b93a2b; font-size:.88rem; }
+    .casc .op .num { font-variant-numeric:tabular-nums; font-weight:700; min-width:5.2rem; text-align:right; }
+    .casc .soma { border:1px dashed #cdd4db; border-radius:.35rem; padding:.5rem .6rem; margin:.55rem 0; background:#fbfcfd; }
+    .casc .soma .st { font-size:.82rem; font-weight:700; color:#5a6672; text-transform:uppercase; letter-spacing:.03em; margin-bottom:.2rem; }
+    .casc .soma .lin { padding:.22rem .1rem; }
+    .casc .soma .lin .num { font-size:.98rem; }
+    .casc .eq { font-size:.85rem; color:#5a6672; border-top:1px solid #e8ecef; margin-top:.35rem;
+                padding-top:.35rem; font-variant-numeric:tabular-nums; }
+    .casc .eq .ok { color:#1e7e34; font-weight:700; }
+    .casc .nota { font-size:.87rem; color:#5a6672; background:#f6f8fa; border-left:3px solid #ced4da;
+                  padding:.45rem .65rem; border-radius:.25rem; margin:.5rem 0; }
+    .casc .pctres { font-size:.88rem; color:#37424c; margin:.4rem 0 .2rem; }
+    .casc .regra { font-size:.8rem; color:#7a838d; border-top:1px dashed #e3e7eb; padding-top:.5rem; margin-top:.7rem; }
     .rel-card.c-vermelho { border-left-color:#d9534f; } .rel-card.c-verde { border-left-color:#28a745; }
     .rel-card.c-azul { border-left-color:#1565c0; } .rel-card.c-laranja { border-left-color:#f0ad4e; }
     .rel-card.c-roxo { border-left-color:#6f42c1; } .rel-card.c-cinza { border-left-color:#78909c; }
@@ -276,6 +326,7 @@
         <!-- ── RELATÓRIO PARA GESTÃO (2026-09-22) — as 9 perguntas do Petterson ── -->
         <div id="abaRel" hidden>
           <div id="relAlerta"></div>
+          <div id="relAncora"></div>
           <div id="relCards" class="rel-grid"></div>
           <div class="rel-sec">
             <h3>Por posto <span class="sub text-muted">— consultas com data no período</span></h3>
@@ -293,6 +344,7 @@
           <div class="rel-sec como">
             <h3>Como foi calculado</h3>
             <ul class="mb-0 pl-3">
+              <li><b>Todo card sai do mesmo número</b>: o total de marcações do período, que aparece no painel no topo. O percentual de cada card é sempre sobre esse total — e o modal de cada card ("Ver a conta") mostra a conta descendo passo a passo do total até o número do card, com a linha que soma de volta.</li>
               <li><b>Base</b>: consultas (com hora prevista) cuja <b>data da consulta</b> está no período, nas mesmas tabelas e filtros do dashboard de Pré-Agendamento (agenda exibida no F3, sem estornos). Teto de 92 dias por consulta.</li>
               <li><b>Cancelamentos por falta médica</b>: consulta cujo horário cai dentro de uma falta do médico registrada no ERP (Cad_MedicoFalta, dia inteiro ou parte do dia) e que foi cancelada, por quem for (recepção, cliente pelo app, robô). É o total de pacientes prejudicados, remarcados ou não. Ao lado, quantas consultas no mesmo caso <b>não</b> foram canceladas (ficam como "médico faltou" e fora da conta de faltas).</li>
               <li><b>Atendimentos realizados</b>: status Atendido (StatusAtendimento = 1). "Compareceram" soma também quem está aguardando.</li>
@@ -309,6 +361,18 @@
 
       </div>
     </section>
+  </div>
+</div>
+
+<!-- Modal "a conta" de cada card do relatório. Overlay próprio de propósito:
+     não depende do Bootstrap JS (ver CLAUDE.md — modal que morre calado). -->
+<div class="mdl no-print" id="relModal" hidden onclick="if(event.target===this) fecharCardRel()">
+  <div class="cx">
+    <div class="hd">
+      <h4 id="relModalTit"></h4>
+      <button type="button" onclick="fecharCardRel()" aria-label="Fechar">&times;</button>
+    </div>
+    <div class="bd" id="relModalBody"></div>
   </div>
 </div>
 
@@ -559,7 +623,7 @@ async function carregarRelatorio(forcar) {
   const chave = ini + '|' + fim;
   if (REL && REL_PERIODO === chave && !forcar) { renderRelatorio(); return; }
   $('#relCards').innerHTML = '<div class="vazio" style="grid-column:1/-1"><i class="fas fa-spinner fa-spin fa-2x"></i><div class="mt-2">Consultando os postos… (até 30 s para 3 meses da rede inteira)</div></div>';
-  $('#relPorPosto').innerHTML = ''; $('#relPorDia').innerHTML = ''; $('#relAlerta').innerHTML = '';
+  $('#relPorPosto').innerHTML = ''; $('#relPorDia').innerHTML = ''; $('#relAlerta').innerHTML = ''; $('#relAncora').innerHTML = '';
   REL_REAPROV = null; $('#relReaprov').innerHTML = '<div class="text-muted">Abra para carregar.</div>';
   try {
     const r = await fetch('/api/cancelados_robo/relatorio?ini=' + encodeURIComponent(ini) + '&fim=' + encodeURIComponent(fim), { credentials: 'same-origin' });
@@ -585,18 +649,102 @@ function relSoma(linhas) {
   return t;
 }
 
-function card(cls, pergunta, n, frase, def) {
-  // frase = a resposta contada em português, com os números em negrito. É o
-  // que o gestor lê; a "def" embaixo é a regra técnica, em letra menor.
-  return `<div class="rel-card ${cls}">
-    <div class="q">${pergunta}</div>
-    <div class="n">${n}</div>
-    <div class="frase">${frase}</div>
-    <div class="def">${def}</div>
-  </div>`;
-}
+/* ── REGRA DESTA ABA (pedido do Cristiano, 22/09/2026) ─────────────────────
+   TODO card usa o MESMO denominador na frente: o total de marcações do
+   período, que está escrito em cima, no painel âncora. Antes cada card tinha
+   a sua base ("30,3% desses", "29,9% dos válidos", "4% das marcações") e não
+   dava para somar nada nem saber de onde cada percentual saía.
+   A base específica de cada pergunta (válidos, confirmadas, canceladas pelo
+   robô…) só aparece DENTRO do modal, e sempre descendo passo a passo a partir
+   do total, com a linha de conferência somando de volta.
+   Card novo segue a mesma regra: número + % do total + frase curta + a conta
+   no modal. Sem isso, não entra. */
 const B = v => `<b>${fmtN(v)}</b>`;
 const plural = (v, um, muitos) => `${B(v)} ${v === 1 ? um : muitos}`;
+const emCada100 = (a, b) => b ? Math.round(100 * a / b) : 0;
+
+let REL_CARDS = [];
+
+function relCardHTML(c, i) {
+  return `<div class="rel-card ${c.cls}" onclick="abrirCardRel(${i})">
+    <div class="q">${c.q}</div>
+    <div class="n">${fmtN(c.n)}</div>
+    <div class="base">${pct(c.n, c.total)} das <b>${fmtN(c.total)}</b> marcações do período
+      — ${fmtN(emCada100(c.n, c.total))} em cada 100</div>
+    <div class="frase">${c.frase}</div>
+    <div class="ver">Ver a conta <i class="fas fa-chevron-right"></i></div>
+  </div>`;
+}
+
+/* Cascata: a conta descendo a partir do total. Tipos de passo:
+     base  {n, txt}                        linha de partida
+     tira  {n, txt, resta, restaTxt}       "− N …, sobram R"
+     foco  {n, txt}                        "dessas, N …"
+     soma  {st, itens:[{n,txt}], total}    reparte um grupo e confere a soma
+     res   {n, txt}                        o número do card
+     nota  {txt}                           observação em português             */
+function cascHTML(passos, total) {
+  return '<div class="casc">' + passos.map(p => {
+    if (p.t === 'base') return `<div class="lin base"><span class="num">${fmtN(p.n)}</span><span>${p.txt}</span></div>`;
+    if (p.t === 'tira') return `<div class="op"><span class="num">− ${fmtN(p.n)}</span><span>${p.txt}</span></div>` +
+      `<div class="lin"><span class="num">${fmtN(p.resta)}</span><span>${p.restaTxt}</span></div>`;
+    if (p.t === 'foco') return `<div class="lin foco"><span class="num">${fmtN(p.n)}</span><span>${p.txt}</span></div>`;
+    if (p.t === 'res')  return `<div class="lin res"><span class="num">${fmtN(p.n)}</span><span>${p.txt}</span></div>` +
+      `<div class="pctres">É o número do card: <b>${fmtN(p.n)}</b> de <b>${fmtN(total)}</b> marcações do período
+        (${pct(p.n, total)}) — ${fmtN(emCada100(p.n, total))} em cada 100.</div>`;
+    if (p.t === 'soma') {
+      const soma = p.itens.reduce((a, x) => a + (x.n || 0), 0);
+      return `<div class="soma"><div class="st">${p.st}</div>` +
+        p.itens.map(x => `<div class="lin"><span class="num">${fmtN(x.n)}</span><span>${x.txt}</span></div>`).join('') +
+        `<div class="eq">${p.itens.map(x => fmtN(x.n)).join(' + ')} = <b>${fmtN(soma)}</b>` +
+        (soma === p.total ? ' <span class="ok">✔ fecha</span>' : ` (esperado ${fmtN(p.total)})`) + `</div></div>`;
+    }
+    if (p.t === 'nota') return `<div class="nota">${p.txt}</div>`;
+    return '';
+  }).join('') + '</div>';
+}
+
+function abrirCardRel(i) {
+  const c = REL_CARDS[i];
+  if (!c) return;
+  $('#relModalTit').innerHTML = c.q;
+  $('#relModalBody').innerHTML = cascHTML(c.passos, c.total) +
+    `<div class="casc"><div class="regra"><b>Regra usada:</b> ${c.def}</div></div>`;
+  $('#relModal').hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+function fecharCardRel() { $('#relModal').hidden = true; document.body.style.overflow = ''; }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharCardRel(); });
+
+/* Painel âncora: o total do período e como ele se reparte. Os 5 grupos são
+   exclusivos e somam o total — é essa soma que dá sentido a todos os cards. */
+function ancoraHTML(t) {
+  const T = t.total || 0;
+  if (!T) return `<div class="rel-ancora"><div class="tit">Total do período</div>
+    <div class="exp">Nenhuma consulta com data no período selecionado.</div></div>`;
+  const partes = [
+    { n: t.canceladas,    txt: 'foram canceladas (não aconteceram)', cor: '#6f42c1' },
+    { n: t.compareceram,  txt: 'o paciente veio',                    cor: '#28a745' },
+    { n: t.faltas,        txt: 'o paciente não veio (falta)',        cor: '#d9534f' },
+    { n: t.medico_faltou, txt: 'o médico faltou',                    cor: '#f0ad4e' },
+    { n: t.pendentes,     txt: 'ainda sem resultado',                cor: '#adb5bd' },
+  ];
+  const soma = partes.reduce((a, x) => a + (x.n || 0), 0);
+  return `<div class="rel-ancora">
+    <div class="tit">O número que vale para todos os cards</div>
+    <div class="tot">${fmtN(T)}</div>
+    <div class="exp">consultas marcadas com data no período.
+      <b>Todo card abaixo é uma fatia destas ${fmtN(T)}</b> — o percentual de cada um é sempre sobre este mesmo total.</div>
+    <div class="barra-seg">${partes.map(x => {
+      const w = 100 * (x.n || 0) / T;
+      return `<span style="width:${w}%;background:${x.cor}" title="${esc(x.txt)}: ${fmtN(x.n)}">${w >= 7 ? fmtN(x.n) : ''}</span>`;
+    }).join('')}</div>
+    <div class="leg">${partes.map(x =>
+      `<span><i style="background:${x.cor}"></i><b>${fmtN(x.n)}</b> ${x.txt} (${pct(x.n, T)})</span>`).join('')}</div>
+    <div class="confere">Conferindo: ${partes.map(x => fmtN(x.n)).join(' + ')} = <b>${fmtN(soma)}</b>` +
+    (soma === T ? ' <span class="ok">✔ fecha com o total</span>' : ` (total ${fmtN(T)})`) + `</div>
+  </div>`;
+}
 
 function renderRelatorio() {
   if (!REL) return;
@@ -620,47 +768,171 @@ function renderRelatorio() {
   const reocup = t.reaprov_qq - t.reaprov2d;
   const naoAtend = t.reaprov2d - t.reaprov2d_atendido;
 
-  $('#relCards').innerHTML =
-    card('c-vermelho', '1 · Cancelamentos por falta médica',
-      `${fmtN(t.canc_falta_medico)}<small>${pct(t.canc_falta_medico, t.canceladas)} das canceladas</small>`,
-      `No período, ${plural(t.canceladas, 'consulta foi cancelada', 'consultas foram canceladas')}. ${B(t.canc_falta_medico)} delas eram de horários em que o médico tinha falta registrada: são os pacientes prejudicados pela falta do médico, remarcados ou não. Quem cancelou: ${B(recep)} a recepção, ${B(t.canc_falta_medico_app)} o próprio cliente pelo app e ${B(t.canc_falta_medico_robo)} o robô. Outras ${plural(t.medico_faltou, 'consulta em horário de falta do médico', 'consultas em horário de falta do médico')} não chegaram a ser canceladas no sistema (ficam fora da conta de faltas).`,
-      'Consulta cujo horário cai dentro de uma falta do médico registrada no ERP (Cad_MedicoFalta) e que foi cancelada, por quem for.') +
-    card('c-verde', '2 · Atendimentos realizados',
-      `${fmtN(t.atendidos)}<small>${pct(t.atendidos, validos)} dos válidos</small>`,
-      `Das ${plural(naoCanc, 'consulta ativa', 'consultas ativas')} (não canceladas) do período, ${B(t.atendidos)} terminaram com status Atendido. Somando quem chegou e ficou aguardando, ${B(t.compareceram)} compareceram. A base "válidos" são as ${B(validos)} consultas em que a pessoa compareceu ou faltou (sem canceladas, pendentes e médico faltou).`,
-      'Status "Atendido" no ERP (StatusAtendimento = 1).') +
-    card('c-azul', '3 · Marcaram já confirmados',
-      `${fmtN(t.conf_no_ato_total)}<small>${pct(t.conf_no_ato_total, t.total)} das marcações</small>`,
-      `Das ${plural(t.total, 'marcação', 'marcações')} do período, ${B(t.conf_no_ato_total)} já nasceram com a confirmação preenchida (${B(t.conf_no_ato)} continuam ativas). Das ${plural(t.dentro5_total, 'marcação feita', 'marcações feitas')} com até 5 dias de antecedência, ${B(t.dentro5_sem_conf_ato)} (${pct(t.dentro5_sem_conf_ato, t.dentro5_total)}) <b>não</b> nasceram confirmadas — é a exceção do ERP, que nem toda tela de marcação preenche.`,
-      'Data de confirmação gravada até 1 minuto após o lançamento. O ERP faz isso ao marcar dentro da janela de 5 dias.') +
-    card('c-azul', '4 · Confirmaram a consulta',
-      `${fmtN(conf)}<small>${pct(conf, naoCanc)} das ativas</small>`,
-      `Das ${plural(naoCanc, 'consulta ativa', 'consultas ativas')}, ${B(conf)} foram ${rotConf}. ` +
-      (modo === 'todas' ? `${B(t.conf_no_ato)} já nasceram confirmadas e ${B(t.conf_depois)} foram confirmadas depois, pelo app ou pela central no F5 (dessas, ${B(t.conf_depois_marc_app)} tinham sido marcadas pelo app). ` : '') +
-      `${plural(t.sem_conf, 'consulta ativa não teve', 'consultas ativas não tiveram')} confirmação nenhuma. ${B(t.push)} receberam o push do pré-agendamento.`,
-      'O ERP não grava se a confirmação veio do app ou do F5. O filtro "Confirmação considerada" separa no ato × depois.') +
-    card('c-vermelho', '5 · Faltas no total',
-      `${fmtN(t.faltas)}<small>${pct(t.faltas, validos)} dos válidos</small>`,
-      `Das ${plural(validos, 'consulta válida', 'consultas válidas')} (a pessoa compareceu ou faltou), ${B(t.faltas)} foram faltas e ${B(t.compareceram)} comparecimentos. ${plural(t.pendentes, 'consulta ainda está pendente', 'consultas ainda estão pendentes')} (é futura ou passou menos de 1 hora da hora prevista) e ${B(t.medico_faltou)} ficaram fora por falta do médico.`,
-      'Mesma régua do dashboard de Pré-Agendamento: não compareceu e já passou 1 hora da hora prevista.') +
-    card('c-laranja', '6 · Confirmaram e mesmo assim faltaram',
-      `${fmtN(confFalta)}<small>${pct(confFalta, confFalta + confComp)} das ${rotConf.split(' ')[0]}</small>`,
-      `Entre as ${plural(confFalta + confComp, 'consulta', 'consultas')} ${rotConf} que já aconteceram, ${B(confFalta)} faltaram e ${B(confComp)} compareceram. Para comparar, entre as sem confirmação nenhuma: ${B(t.sem_conf_falta)} faltaram e ${B(t.sem_conf_compareceu)} compareceram.`,
-      'Confirmação (conforme o filtro) e falta na consulta. Pendentes e médico faltou ficam fora.') +
-    card('c-laranja', '7 · Marcaram já confirmados e faltaram',
-      `${fmtN(t.conf_no_ato_falta)}<small>${pct(t.conf_no_ato_falta, t.conf_no_ato_falta + t.conf_no_ato_compareceu)} desses</small>`,
-      `Das ${plural(t.conf_no_ato_falta + t.conf_no_ato_compareceu, 'consulta que nasceu confirmada', 'consultas que nasceram confirmadas')} e já aconteceram, ${B(t.conf_no_ato_falta)} faltaram e ${B(t.conf_no_ato_compareceu)} compareceram. Olhando só pela antecedência: das marcadas com até 5 dias, ${B(t.dentro5_falta)} faltaram.`,
-      'Lançamento que já nasceu com a data de confirmação preenchida e o paciente faltou.') +
-    card('c-roxo', '8 · Canceladas por falta de confirmação',
-      `${fmtN(t.canc_robo)}<small>${pct(t.canc_robo, t.total)} das marcações</small>`,
-      `O robô cancelou ${plural(t.canc_robo, 'consulta', 'consultas')} porque o cliente não confirmou na janela de 5 a 2 dias — é a mesma lista da aba ao lado. Os outros cancelamentos do período: ${B(t.canc_app)} pelo cliente no app, ${B(t.canc_sem_pag)} pelo sistema por falta de pagamento e ${B(t.canceladas - t.canc_robo - t.canc_app - t.canc_sem_pag)} pela recepção ou outros motivos. Total: ${B(t.canceladas)}.`,
-      'Cancelamento automático do robô de pré-agendamento (assinatura no motivo da desistência).') +
-    card('c-cinza', '9 · Canceladas reaproveitadas com encaixe',
-      `${fmtN(t.reaprov2d)}<small>${pct(t.reaprov2d, t.canc_robo)} das canceladas pelo robô</small>`,
-      `O robô cancelou ${plural(t.canc_robo, 'consulta', 'consultas')}. Em ${B(t.reaprov2d)} dessas vagas outro paciente foi encaixado com menos de 2 dias de antecedência` +
-      (reocup ? `, ${B(reocup)} foram reocupadas com 2 dias ou mais` : '') +
-      ` e ${B(vazias)} ficaram vazias (${fmtN(t.reaprov2d)}${reocup ? ' + ' + fmtN(reocup) : ''} + ${fmtN(vazias)} = ${fmtN(t.canc_robo)}). Dos ${plural(t.reaprov2d, 'encaixe', 'encaixes')}, ${B(t.reaprov2d_atendido)} foram atendidos e ${B(naoAtend)} não vieram ou ainda estão pendentes.`,
-      'Vaga (agenda + dia + número) do cancelado pelo robô que recebeu outra marcação ativa feita com menos de 2 dias de antecedência, depois do cancelamento.');
+  const T = t.total || 0;
+  const aguardando   = t.compareceram - t.atendidos;
+  const confAconteceu = confFalta + confComp;
+  const atoAconteceu  = t.conf_no_ato_falta + t.conf_no_ato_compareceu;
+  const semConfAconteceu = t.sem_conf_falta + t.sem_conf_compareceu;
+  const outrosCanc   = t.canceladas - t.canc_robo - t.canc_app - t.canc_sem_pag;
+  const dentro5Conf  = t.dentro5_total - t.dentro5_sem_conf_ato;
+  const pctFaltaConf = pct(confFalta, confAconteceu);
+  const pctFaltaSem  = pct(t.sem_conf_falta, semConfAconteceu);
+
+  // Passos que várias contas repetem: do total até as consultas que já têm
+  // resultado (compareceu ou faltou). Escritos uma vez só para as telas não
+  // divergirem entre si.
+  const ateValidos = () => ([
+    { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
+    { t: 'tira', n: t.canceladas, txt: 'foram canceladas antes de acontecer',
+      resta: naoCanc, restaTxt: 'continuaram de pé' },
+    { t: 'tira', n: t.medico_faltou, txt: 'o médico faltou (a culpa não é do paciente, saem da conta)',
+      resta: naoCanc - t.medico_faltou, restaTxt: 'sobraram' },
+    { t: 'tira', n: t.pendentes, txt: 'ainda não têm resultado (é consulta futura, ou passou menos de 1 hora da hora marcada)',
+      resta: validos, restaTxt: 'consultas já com resultado: ou a pessoa veio, ou faltou' },
+  ]);
+
+  REL_CARDS = [
+    { cls: 'c-vermelho', total: T, n: t.canc_falta_medico,
+      q: '1 · O médico faltou e a consulta foi desmarcada',
+      frase: `Pacientes que perderam a consulta sem ter culpa nenhuma. Outras ${plural(t.medico_faltou, 'consulta ficou', 'consultas ficaram')} no horário da falta sem ninguém desmarcar.`,
+      def: 'Consulta cujo horário cai dentro de uma falta do médico registrada no ERP (Cad_MedicoFalta) e que foi cancelada, por quem for.',
+      passos: [
+        { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
+        { t: 'foco', n: t.canceladas, txt: 'foram canceladas, por qualquer motivo' },
+        { t: 'res',  n: t.canc_falta_medico, txt: 'dessas canceladas, o médico tinha falta registrada naquele horário' },
+        { t: 'soma', st: 'Quem apertou o botão de cancelar', total: t.canc_falta_medico, itens: [
+          { n: recep, txt: 'canceladas pela recepção do posto' },
+          { n: t.canc_falta_medico_app, txt: 'canceladas pelo próprio cliente, no app' },
+          { n: t.canc_falta_medico_robo, txt: 'canceladas pelo robô do pré-agendamento' } ] },
+        { t: 'nota', txt: `Fora dessas, ${plural(t.medico_faltou, 'consulta caiu', 'consultas caíram')} no horário de uma falta do médico e <b>ninguém cancelou no sistema</b>. Essas pessoas podem ter ido ao posto à toa. Elas não entram na conta de faltas do paciente.` },
+      ] },
+
+    { cls: 'c-verde', total: T, n: t.atendidos,
+      q: '2 · O paciente veio e foi atendido',
+      frase: `Consulta que aconteceu do começo ao fim. Somando quem chegou e ficou aguardando, ${plural(t.compareceram, 'pessoa apareceu', 'pessoas apareceram')} no posto.`,
+      def: 'Status "Atendido" no ERP (StatusAtendimento = 1). "Compareceram" soma também quem está aguardando atendimento.',
+      passos: [
+        ...ateValidos(),
+        { t: 'soma', st: 'Dessas, o que aconteceu', total: validos, itens: [
+          { n: t.compareceram, txt: 'apareceram no posto' },
+          { n: t.faltas, txt: 'não apareceram' } ] },
+        { t: 'res', n: t.atendidos, txt: 'foram efetivamente atendidas (o resto chegou e ficou aguardando)' },
+        { t: 'nota', txt: `${plural(t.compareceram, 'pessoa apareceu', 'pessoas apareceram')}: ${B(t.atendidos)} saíram com o atendimento registrado e ${plural(aguardando, 'ainda estava aguardando', 'ainda estavam aguardando')} quando o dado foi lido.` },
+      ] },
+
+    { cls: 'c-azul', total: T, n: t.conf_no_ato_total,
+      q: '3 · Já nasceram confirmadas na hora da marcação',
+      frase: `Quem marca para daqui a 5 dias ou menos sai confirmado sem fazer nada — é o sistema que grava. Mas ${plural(t.dentro5_sem_conf_ato, 'marcação nesse prazo não saiu', 'marcações nesse prazo não saíram')} confirmadas.`,
+      def: 'Data de confirmação gravada até 1 minuto após o lançamento. O ERP faz isso ao marcar dentro da janela de 5 dias.',
+      passos: [
+        { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
+        { t: 'res',  n: t.conf_no_ato_total, txt: 'já saíram confirmadas no mesmo minuto da marcação (o paciente não confirmou nada — foi o sistema)' },
+        { t: 'nota', txt: 'O ERP confirma sozinho quando a consulta é marcada para daqui a <b>5 dias ou menos</b>: não daria tempo de o robô pedir confirmação na janela de 5 a 2 dias. Aí é como se a pessoa já estivesse confirmada.' },
+        { t: 'foco', n: t.dentro5_total, txt: 'do total, foram marcadas com 5 dias ou menos de antecedência' },
+        { t: 'soma', st: 'Dessas marcadas em cima da hora, quantas o sistema confirmou', total: t.dentro5_total, itens: [
+          { n: dentro5Conf, txt: 'saíram confirmadas, como deveriam' },
+          { n: t.dentro5_sem_conf_ato, txt: 'NÃO saíram confirmadas — é a falha do ERP' } ] },
+        { t: 'nota', txt: `Segundo o DBA (22/09/2026), nem toda tela de marcação do ERP foi reprogramada para gravar a confirmação. Aqui isso deu <b>${pct(t.dentro5_sem_conf_ato, t.dentro5_total)}</b> das marcações em cima da hora.` },
+      ] },
+
+    { cls: 'c-azul', total: T, n: conf,
+      q: '4 · Tinham confirmação antes da consulta',
+      frase: `Confirmação gravada no ERP, no ato da marcação ou depois (pelo app ou pela central). ${plural(t.sem_conf, 'consulta de pé não teve', 'consultas de pé não tiveram')} confirmação nenhuma.`,
+      def: 'O ERP não grava se a confirmação veio do app ou do F5. O filtro "Confirmação considerada" separa no ato × depois, que é o que o dado permite.',
+      passos: [
+        { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
+        { t: 'tira', n: t.canceladas, txt: 'foram canceladas (não faz sentido falar de confirmação nelas)',
+          resta: naoCanc, restaTxt: 'continuaram de pé' },
+        { t: 'soma', st: 'Dessas que continuaram de pé', total: naoCanc, itens: [
+          { n: t.conf_no_ato, txt: 'já nasceram confirmadas (foi o sistema)' },
+          { n: t.conf_depois, txt: 'foram confirmadas depois — pelo app ou pela central no F5' },
+          { n: t.sem_conf, txt: 'nunca tiveram confirmação' } ] },
+        { t: 'res', n: conf, txt: `estão ${rotConf} (o filtro "Confirmação considerada" escolhe quais entram aqui)` },
+        { t: 'nota', txt: `Das confirmadas depois, ${plural(t.conf_depois_marc_app, 'tinha sido marcada', 'tinham sido marcadas')} pelo app. ${plural(t.push, 'consulta de pé recebeu', 'consultas de pé receberam')} o push pedindo confirmação.` },
+      ] },
+
+    { cls: 'c-vermelho', total: T, n: t.faltas,
+      q: '5 · O paciente não veio e não avisou',
+      frase: `A hora marcada passou há mais de 1 hora e ninguém apareceu nem cancelou. É a falta pura.`,
+      def: 'Mesma régua do dashboard de Pré-Agendamento: não compareceu e já passou 1 hora da hora prevista. Antes disso a consulta ainda é "pendente".',
+      passos: [
+        ...ateValidos(),
+        { t: 'soma', st: 'Dessas que já têm resultado', total: validos, itens: [
+          { n: t.compareceram, txt: 'apareceram' },
+          { n: t.faltas, txt: 'faltaram' } ] },
+        { t: 'res', n: t.faltas, txt: 'faltas' },
+        { t: 'nota', txt: `Olhando só as consultas que já têm resultado, a falta é de <b>${pct(t.faltas, validos)}</b>. Olhando o total de marcações do período, é de <b>${pct(t.faltas, T)}</b>. Os dois números estão certos — mudam só o grupo sobre o qual a conta é feita.` },
+      ] },
+
+    { cls: 'c-laranja', total: T, n: confFalta,
+      q: '6 · Confirmaram e faltaram mesmo assim',
+      frase: `Disseram que viriam e não vieram. Quem confirmou faltou ${pctFaltaConf} das vezes; quem não confirmou, ${pctFaltaSem}.`,
+      def: 'Confirmação (conforme o filtro escolhido) e falta na consulta. Pendentes e médico faltou ficam fora.',
+      passos: [
+        ...ateValidos(),
+        { t: 'foco', n: confAconteceu, txt: `dessas, estão ${rotConf}` },
+        { t: 'soma', st: 'O que aconteceu com quem confirmou', total: confAconteceu, itens: [
+          { n: confFalta, txt: 'faltaram mesmo tendo confirmado' },
+          { n: confComp, txt: 'apareceram' } ] },
+        { t: 'res', n: confFalta, txt: 'confirmaram e faltaram' },
+        { t: 'soma', st: 'Para comparar: quem NÃO confirmou nada', total: semConfAconteceu, itens: [
+          { n: t.sem_conf_falta, txt: 'faltaram' },
+          { n: t.sem_conf_compareceu, txt: 'apareceram' } ] },
+        { t: 'nota', txt: `Confirmar reduz a falta, mas não resolve: <b>${pctFaltaConf}</b> de quem confirmou faltou, contra <b>${pctFaltaSem}</b> de quem não confirmou.` },
+      ] },
+
+    { cls: 'c-laranja', total: T, n: t.conf_no_ato_falta,
+      q: '7 · O sistema confirmou por ela e ela faltou',
+      frase: `Confirmação que o paciente não fez: o ERP gravou sozinho na marcação. Dessas, ${plural(t.conf_no_ato_falta, 'terminou em falta', 'terminaram em falta')}.`,
+      def: 'Lançamento que já nasceu com a data de confirmação preenchida (até 1 min após a marcação) e o paciente faltou.',
+      passos: [
+        { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
+        { t: 'foco', n: t.conf_no_ato_total, txt: 'nasceram confirmadas pelo sistema (card 3)' },
+        { t: 'foco', n: atoAconteceu, txt: 'dessas, já aconteceram (fora canceladas, pendentes e médico faltou)' },
+        { t: 'soma', st: 'O que aconteceu com elas', total: atoAconteceu, itens: [
+          { n: t.conf_no_ato_falta, txt: 'faltaram' },
+          { n: t.conf_no_ato_compareceu, txt: 'apareceram' } ] },
+        { t: 'res', n: t.conf_no_ato_falta, txt: 'nasceram confirmadas e faltaram' },
+        { t: 'nota', txt: `É o custo de tratar essa marcação como confirmada: a pessoa nunca disse que viria. Olhando só pela antecedência, das marcadas com até 5 dias, ${plural(t.dentro5_falta, 'faltou', 'faltaram')}.` },
+      ] },
+
+    { cls: 'c-roxo', total: T, n: t.canc_robo,
+      q: '8 · O robô desmarcou por falta de confirmação',
+      frase: `Ninguém confirmou entre 5 e 2 dias antes e o robô cancelou. É a mesma lista da aba ao lado.`,
+      def: 'Cancelamento automático do robô de pré-agendamento (assinatura no motivo da desistência).',
+      passos: [
+        { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
+        { t: 'foco', n: t.canceladas, txt: 'foram canceladas, por qualquer motivo' },
+        { t: 'soma', st: 'Quem cancelou cada uma', total: t.canceladas, itens: [
+          { n: t.canc_robo, txt: 'canceladas pelo robô, porque o cliente não confirmou' },
+          { n: t.canc_app, txt: 'canceladas pelo próprio cliente, no site ou app' },
+          { n: t.canc_sem_pag, txt: 'canceladas pelo sistema, por falta de pagamento' },
+          { n: outrosCanc, txt: 'canceladas pela recepção ou por outros motivos' } ] },
+        { t: 'res', n: t.canc_robo, txt: 'canceladas pelo robô do pré-agendamento' },
+      ] },
+
+    { cls: 'c-cinza', total: T, n: t.reaprov2d,
+      q: '9 · Vaga liberada pelo robô que outro paciente pegou',
+      frase: `Encaixe: alguém entrou na vaga com menos de 2 dias de antecedência. ${plural(vazias, 'vaga ficou', 'vagas ficaram')} vazias.`,
+      def: 'Vaga (agenda + dia + número) do cancelado pelo robô que recebeu outra marcação ativa feita com menos de 2 dias de antecedência, depois do cancelamento.',
+      passos: [
+        { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
+        { t: 'foco', n: t.canceladas, txt: 'foram canceladas, por qualquer motivo' },
+        { t: 'foco', n: t.canc_robo, txt: 'dessas, o robô cancelou por falta de confirmação (card 8)' },
+        { t: 'soma', st: 'O que aconteceu com cada vaga liberada', total: t.canc_robo, itens: [
+          { n: t.reaprov2d, txt: 'outro paciente foi encaixado em cima da hora (menos de 2 dias antes)' },
+          { n: reocup, txt: 'foram reocupadas, mas com 2 dias ou mais de antecedência' },
+          { n: vazias, txt: 'ficaram vazias — ninguém usou' } ] },
+        { t: 'res', n: t.reaprov2d, txt: 'vagas reaproveitadas com encaixe' },
+        { t: 'soma', st: 'E os encaixes deram em quê', total: t.reaprov2d, itens: [
+          { n: t.reaprov2d_atendido, txt: 'foram atendidos' },
+          { n: naoAtend, txt: 'não vieram ou ainda estão pendentes' } ] },
+        { t: 'nota', txt: 'A lista dessas vagas, uma a uma, está mais abaixo em "Vagas reaproveitadas".' },
+      ] },
+  ];
+
+  $('#relAncora').innerHTML = ancoraHTML(t);
+  $('#relCards').innerHTML = REL_CARDS.map(relCardHTML).join('');
 
   // por posto
   const cols = [['posto', 'Posto'], ['total', 'Marcações'], ['canceladas', 'Canceladas'], ['canc_falta_medico', '1 Falta méd.'], ['atendidos', '2 Atendidos'],

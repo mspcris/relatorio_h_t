@@ -301,6 +301,32 @@ Responde 9 perguntas; definições fechadas com o Petterson e escritas no bloco
 - Números conferem com a lista da aba (canc_robo = mesma assinatura) e fecham:
   canceladas + compareceram + faltas + pendentes + médico faltou = total.
 
+**REGRA — todo card do relatório tem o MESMO denominador (2026-09-22, reclamação
+do Cristiano: "vou ter de fazer pós-graduação para entender estes números").**
+A primeira versão dava a cada card a base da própria pergunta — "30,3% desses",
+"29,9% dos válidos", "4% das marcações", "42,6% das canceladas pelo robô". Cada
+percentual estava certo e o conjunto não dizia nada: não dá para somar cards que
+não dividem a mesma base, e ninguém sabia quem eram "os válidos".
+Agora:
+- **Painel âncora** no topo da aba (`ancoraHTML`): o total de marcações do
+  período em corpo grande, barra segmentada e a linha que soma os 5 grupos
+  exclusivos de volta ao total (`canceladas + compareceram + faltas + médico
+  faltou + pendentes`). É a identidade que já existia — o que faltava era estar
+  escrita na tela.
+- **Na frente do card** vai só: número, `% do total` + "N em cada 100", e uma
+  frase curta. A base específica da pergunta saiu da frente.
+- **Clicar abre o modal com a cascata** (`cascHTML`): parte do total e desce
+  passo a passo (`tira` / `foco`) até o número do card, com caixas `soma` que
+  repartem cada grupo e imprimem "a + b + c = grupo ✔ fecha". O card 5 mostra
+  explicitamente os dois percentuais (19% do total × 29,9% dos que já têm
+  resultado) e diz que ambos estão certos, mudando só o grupo — era exatamente
+  aí que ele se perdia.
+- O modal é overlay CSS próprio (`.mdl`), **não** modal do Bootstrap: mesma
+  lição do custos_ti, modal que depende de JS externo morre calado.
+- **Card novo nesta aba segue a regra**: número + % do total + frase curta + a
+  conta no modal, com linha de conferência. Percentual sobre base própria na
+  frente do card não entra.
+
 **Pendências conhecidas (2026-07-21):**
 - `/cancelados_robo` ([cancelados_robo_routes.py](cancelados_robo_routes.py)) ainda
   usa `vw_Cad_LancamentoProntuarioComDesistencia` (~1,8s/posto no balcão). Cabe o
