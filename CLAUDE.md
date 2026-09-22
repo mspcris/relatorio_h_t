@@ -290,6 +290,57 @@ via Cristiano):**
 
 ---
 
+## KPI Prescrições — card "Médicos × certificado digital válido" (2026-09-21)
+
+Pedido do Cristiano: *"A - 100 médicos / 10 com certificado digital"*, proporção
+médicos × certificados **válidos** × receitas emitidas, por posto, para decidir
+entre comprar certificado e cobrar receita digital de quem já tem. O card fica
+em `KPI_prescricao.html` ao lado de "Por posto"; o clique abre o modal com a
+lista (nome, CRM, especialidade, posto, situação do certificado, atendidos,
+receitas e % no período).
+
+| Peça | Papel |
+|---|---|
+| `js/medicos_regras.js` | **Regra compartilhada** "quem é médico" (lista + radicais de medicina alternativa/exames), dedupe por CRM×posto, `nomeChave()`, `certStatus()` |
+| `sql_ctrlq_relatorio/sql_ctrlq_relatorio.sql` | passou a exportar `certificado_validade` (= `cad_medico.DataValidadeCertificadoPFX`; existe nos 13 postos) |
+| `KPI_prescricao.html` | lê também `json_ctrlq_relatorio/CTRLQ_RELATORIO_CONSOLIDADO.json`; `certDados()`, `certCard()`, `openCertModal()` |
+| `ctrlq_relatorio.html` | bloco inline de medicina alternativa **removido**; usa `window.MedicosRegras`. Drill mostra Válido até / Vencido; card diz quantos vencidos |
+
+- **Fonte do certificado é o CTRL-Q, não uma segunda leitura.** Médico = foto
+  mensal de `Cad_EspecialidadeHistorico` (agenda no mês, `Temporario=0`),
+  filtrada por `medicos_regras.js`. É o que faz o "Total de médicos" bater nas
+  duas telas (validado: 381 / 99 em ago-26 nas duas). Sem o arquivo compartilhado
+  o `ctrlq_relatorio` **para com aviso** em vez de mostrar 497 "médicos".
+  `ctrlq_pj_quadro.py` continua sendo a cópia em Python — mudou a regra, muda lá.
+- **"Certificado" no ERP = `CertificadoPFX` preenchido.** Medido em 2026-09-21
+  (cad_medico dos 13 postos, incluindo inativos): 132 com PFX, **59 vencidos,
+  44 válidos, 29 sem data de validade**. Na foto de set/26 (378 médicos):
+  **33 válidos, 44 vencidos, 21 sem data, 280 sem certificado**. O card do
+  CTRL-Q dizia "99 com certificado" — dois terços disso não assina mais nada.
+- `certStatus()` devolve `valido` / `vencido` / `sem_data` / `nao`. **`sem_data`
+  não soma em válido nem em vencido** — o ERP não gravou a data (não sabemos), a
+  tela mostra como bucket próprio. Decisão minha; se o Cristiano preferir tratar
+  sem data como válido, é um `if` em `certStatus`.
+- **JSON anterior a 2026-09-21 não tem `certificado_validade`.** As duas telas
+  detectam (`temValidade`) e degradam: o KPI conta PFX como válido e avisa em
+  vermelho "validade ainda não carregada pelo ETL"; o CTRL-Q simplesmente não
+  mostra vencidos. O cron do `ctrlq_export_relatorio` roda a cada 15 min, então
+  o aviso dura no máximo uma rodada depois do deploy.
+- **Cruzamento por nome dentro do posto** (`nomeChave`: sem acento, maiúsculas,
+  espaços colapsados): prescrição e atendimento só trazem `cad_medico.Nome`.
+  Medido em set/26: 93-100 % dos nomes de atendimento casam; quem emitiu receita
+  e não está no cadastro do mês (agenda temporária, exame, "SEDE / PMP / SPM")
+  aparece no rodapé do modal como "fora do cadastro", nunca somado em "sem
+  certificado".
+- Mês do cadastro = mês do fim do filtro de datas (fallback: o mais recente
+  anterior). A escala de cor do "% dos válidos que emitiram" é a mesma
+  `pctClasse` do resto da página (<50 vermelho, <100 amarelo).
+- Achado de set/26 que motiva o card: **0 médicos sem certificado emitiram** —
+  só quem tem PFX assina; em Anchieta 28 médicos com PFX atenderam e não
+  emitiram nenhuma receita no mês.
+
+---
+
 ## KPI Médicos (Qualidade) — aba "Sem contrato PJ" + justificativa mensal (2026-08-17)
 
 Em `ctrlq_relatorio.html`, os cards **Com contrato PJ** e **Sem contrato PJ**

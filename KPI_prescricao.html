@@ -34,6 +34,8 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Regras "quem é médico" + dedupe por CRM, compartilhadas com o KPI Médicos (Qualidade) -->
+    <script src="/js/medicos_regras.js?v=20260921"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Chat IA (mantido) -->
@@ -88,6 +90,18 @@
     .pct-baixo { color:#c0392b; } .pct-medio { color:#b7791f; } .pct-ok { color:#1e7e34; }
     #avisoAtend { display:none; }
     .kpi-type-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; }
+    /* Card + modal "Médicos × certificado digital" */
+    .kpi .card.clicavel { cursor:pointer; }
+    .kpi .card.clicavel:hover { box-shadow:0 0 0 2px rgba(0,123,255,.25); }
+    #certModal .cert-toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+    #certModal .cert-resumo { font-size:.9rem; display:flex; flex-wrap:wrap; gap:6px; }
+    #certModal td.cert-nome { min-width:220px; }
+    #certModal tr.cert-alerta > td { background: rgba(220,53,69,.06); }
+    @media (max-width: 767.98px) {
+      #certModal.modal .modal-dialog { margin:0; width:100%; max-width:100%; height:100%; }
+      #certModal.modal .modal-content { border-radius:0; height:100%; }
+      #certModal.modal .modal-body { overflow:auto; -webkit-overflow-scrolling: touch; }
+    }
   </style>
 </head>
 
@@ -217,7 +231,7 @@
                 <div class="card">
                     <div class="card-header d-flex align-items-center justify-content-between">
                         <h3 class="card-title mb-0">KPIs</h3>
-                        <span class="mini muted">Fonte: prescricao_hoje.json</span>
+                        <span class="mini muted">Fonte: prescricao_hoje.json · cadastro de médicos: CTRLQ_RELATORIO_CONSOLIDADO.json</span>
                     </div>
                     <div class="card-body pb-0"><div id="avisoAtend" class="alert alert-warning py-2 mb-0 small"></div></div>
                     <div class="card-body kpi" id="kpis"></div>
@@ -306,6 +320,48 @@
         </div>
     </div>
 
+    <!-- Modal: Médicos × certificado digital — cadastro do CTRL-Q cruzado com receitas/atendidos do período -->
+    <div class="modal fade" id="certModal" tabindex="-1" role="dialog" aria-labelledby="certTitle" aria-hidden="true">
+      <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="certTitle">Médicos × certificado digital</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Fechar"><span aria-hidden="true">&times;</span></button>
+          </div>
+          <div class="modal-body">
+            <div id="certMeta" class="mini muted mb-2"></div>
+            <div id="certResumo" class="cert-resumo mb-2"></div>
+            <div class="cert-toolbar">
+              <div class="btn-group btn-group-sm" role="group" id="certFiltro">
+                <button type="button" class="btn btn-outline-secondary active" data-f="todos">Todos</button>
+                <button type="button" class="btn btn-outline-secondary" data-f="valido">Válido</button>
+                <button type="button" class="btn btn-outline-secondary" data-f="valido_sem_receita">Válido e SEM receita</button>
+                <button type="button" class="btn btn-outline-secondary" data-f="vencido">Vencido</button>
+                <button type="button" class="btn btn-outline-secondary" data-f="sem_data">PFX sem data</button>
+                <button type="button" class="btn btn-outline-secondary" data-f="nao">Sem certificado</button>
+                <button type="button" class="btn btn-outline-secondary" data-f="emitiram_sem_valido">Emitiram SEM cert. válido</button>
+              </div>
+              <input id="certBusca" class="form-control form-control-sm ml-auto" style="width:min(360px,100%)"
+                placeholder="Buscar por nome/CRM/especialidade/posto...">
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm table-striped mb-1">
+                <thead>
+                  <tr>
+                    <th>Médico</th><th>CRM</th><th>Especialidade</th><th>Posto</th>
+                    <th class="text-center">Cert. digital</th>
+                    <th class="text-right">Atendidos</th><th class="text-right">Receitas</th><th class="text-right">% rec./atend.</th>
+                  </tr>
+                </thead>
+                <tbody id="certBody"></tbody>
+              </table>
+            </div>
+            <div id="certFora" class="mini muted mt-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- AQUI COMEÇA A LOUCURA -->
 
 
@@ -314,6 +370,14 @@
         /* =================== Constantes e helpers =================== */
         const BASE = new URL('.', location.href);
         const URL_HOJE = new URL('json_consolidado/prescricao_hoje.json', BASE).href;
+        // Cadastro de médicos com a flag de certificado digital: o MESMO JSON que o
+        // KPI Médicos (Qualidade) lê. Só leitura; a regra "quem é médico" e o dedupe
+        // por CRM vêm de /js/medicos_regras.js, compartilhado com aquela tela — é o
+        // que faz o "Total de médicos" bater nas duas páginas.
+        const URL_CTRLQ = new URL('json_ctrlq_relatorio/CTRLQ_RELATORIO_CONSOLIDADO.json', BASE).href;
+        const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+        const mesFmt = ym => { const [y, m] = String(ym).split('-').map(Number); return `${MES_ABBR[m - 1]}-${String(y).slice(-2)}`; };
+        const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
         const el = s => document.querySelector(s);
         const fmtInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
@@ -435,6 +499,8 @@
 
         /* =================== Estado =================== */
         let H = null;
+        let CQ = null;        // CTRLQ_RELATORIO_CONSOLIDADO.json (cadastro de médicos)
+        let CQ_ERRO = null;   // por que o cadastro não carregou (a tela diz)
         let POSTOS = [];
         let selPosto = 'ALL';
         let postoSet = null;
@@ -447,11 +513,21 @@
         init().catch(showErr);
 
         async function init() {
-            const rH = await fetch(URL_HOJE, { cache: 'no-store' });
+            const [rH, rC] = await Promise.all([
+                fetch(URL_HOJE, { cache: 'no-store' }),
+                fetch(URL_CTRLQ, { cache: 'no-store' }).catch(e => e)
+            ]);
             if (!rH.ok) throw new Error(`HTTP ${rH.status} em prescricao_hoje.json`);
             trySetJsonInfo(rH, 'hoje');
             const raw = await rH.json();
             H = raw || {};
+            // Cadastro do CTRL-Q é complemento: se falhar, a página segue e o card diz por quê.
+            try {
+                if (rC instanceof Error) throw rC;
+                if (!rC.ok) throw new Error(`HTTP ${rC.status}`);
+                CQ = await rC.json();
+                if (!window.MedicosRegras) throw new Error('/js/medicos_regras.js não carregou');
+            } catch (e) { CQ = null; CQ_ERRO = e?.message || String(e); console.error('cadastro CTRL-Q:', e); }
             const all = (H.linhas || []).map(parseRow);
 
             const allAt = getAtendRows();
@@ -836,8 +912,10 @@
                         return `<div class="mini">${p}: ${fmtInt.format(pr[p] || 0)} / ${fmtInt.format(at[p] || 0)} · <b class="${pctClasse(pc)}">${pctTxt(pc)}</b></div>`;
                     }).join('');
                     return kpiCard('Por posto — prescrições / atendidos', txt || '-', 'txt');
-                })() : '')
+                })() : ''),
+                certCard()
             ].join('');
+            el('#certCard')?.addEventListener('click', openCertModal);
 
             // Totais por tipo (cartões individuais)
             const tipos = groupCount(rowsSel, 'tipo_prescricao');
@@ -849,6 +927,221 @@
            <div class="mini muted">Qtd: ${fmtInt.format(qtd)}</div>
          </div></div>`);
             });
+        }
+
+        /* =================== Médicos × certificado digital =================== */
+        // Pergunta do Cristiano (2026-09-21): "A - 100 médicos / 10 com certificado";
+        // proporção médicos × certificados VÁLIDOS × receitas emitidas, para decidir
+        // entre comprar certificado e cobrar receita digital de quem já tem.
+        //
+        // Médicos e a flag vêm da foto mensal do CTRL-Q (cad_medico.CertificadoPFX
+        // preenchido = tem certificado; DataValidadeCertificadoPFX = validade que o
+        // ERP gravou). Receitas e atendidos são do período filtrado. Cruzamento por
+        // NOME normalizado dentro do posto: prescrição e atendimento só trazem o
+        // nome, e as três fontes leem cad_medico.Nome.
+        //
+        // Situação do certificado (MedicosRegras.certStatus): valido / vencido /
+        // sem_data (PFX sem validade gravada — NÃO soma em válido nem em vencido) / nao.
+
+        // Mês do cadastro: o do fim do filtro, se o CTRL-Q tiver; senão o mais
+        // recente anterior; senão o último disponível.
+        function cqMes() {
+            const meses = (CQ?.meses || []).filter(m => /^\d{4}-\d{2}$/.test(m)).sort();
+            if (!meses.length) return null;
+            const alvo = (dateTo || todayKey()).slice(0, 7);
+            if (meses.includes(alvo)) return alvo;
+            const antes = meses.filter(m => m < alvo);
+            return antes.length ? antes[antes.length - 1] : meses[meses.length - 1];
+        }
+        function postosDoFiltro() {
+            return (postoSet && postoSet.size) ? [...postoSet].sort() : POSTOS.slice();
+        }
+        const CERT_ZERO = () => ({ medicos: 0, cert: 0, validos: 0, vencidos: 0, semData: 0,
+            validosEmitiram: 0, vencidosEmitiram: 0, semDataEmitiram: 0, semCertEmitiram: 0,
+            receitas: 0, receitasValidos: 0 });
+        function certDados() {
+            const ym = cqMes(); if (!ym || !CQ?.dados?.[ym]) return null;
+            const MR = window.MedicosRegras;
+            const postos = postosDoFiltro();
+            const linhas = [];
+            for (const p of postos) for (const r of (CQ.dados[ym][p]?.linhas || [])) linhas.push(r);
+            // JSON gerado antes de 2026-09-21 não tem certificado_validade: sem a coluna
+            // todo certificado cairia em "sem data", então a tela avisa em vez de fingir.
+            const temValidade = linhas.some(r => Object.prototype.hasOwnProperty.call(r, 'certificado_validade'));
+            const meds = MR.medicosUnicos(linhas);   // só médicos (sem terapias/exames), 1 por CRM×posto
+            const hoje = todayKey();
+
+            const rowsSel = filterRows(getAllRows(), { from: dateFrom, to: dateTo, postoSet });
+            const atSel = filterRows(getAtendRows(), { from: dateFrom, to: dateTo, postoSet });
+            const rec = new Map(), at = new Map(), nomes = new Map();
+            const add = (m, k, v) => m.set(k, (m.get(k) || 0) + v);
+            rowsSel.forEach(r => { const k = r.posto + '|' + MR.nomeChave(r.medico); add(rec, k, r.valor); nomes.set(k, r.medico); });
+            atSel.forEach(r => add(at, r.posto + '|' + MR.nomeChave(r.medico), r.valor));
+
+            const casados = new Set();
+            const lista = meds.map(d => {
+                const k = d.posto + '|' + MR.nomeChave(d.nome);
+                casados.add(k);
+                // Sem a coluna no JSON, PFX cadastrado conta como válido (é o que o CTRL-Q
+                // sempre mostrou) e a tela avisa que a validade ainda não foi carregada.
+                const status = temValidade ? MR.certStatus(d, hoje) : (d.cert ? 'valido' : 'nao');
+                return { ...d, status, receitas: rec.get(k) || 0, atendidos: at.get(k) || 0 };
+            });
+            // Quem emitiu receita no período e não está no cadastro do mês (agenda
+            // temporária, exame, usuário de sistema, nome grafado diferente): fica
+            // visível na lista, sem flag — não é escondido nem contado como "sem cert".
+            const fora = [];
+            for (const [k, nome] of nomes) if (!casados.has(k))
+                fora.push({ posto: k.split('|')[0], nome, receitas: rec.get(k) || 0, atendidos: at.get(k) || 0 });
+            fora.sort((a, b) => b.receitas - a.receitas);
+
+            const porPosto = {}; postos.forEach(p => porPosto[p] = CERT_ZERO());
+            lista.forEach(d => {
+                const s = porPosto[d.posto]; if (!s) return;
+                s.medicos++;
+                if (d.cert) s.cert++;
+                if (d.status === 'valido') s.validos++;
+                else if (d.status === 'vencido') s.vencidos++;
+                else if (d.status === 'sem_data') s.semData++;
+                if (d.receitas > 0) {
+                    s.receitas += d.receitas;
+                    if (d.status === 'valido') { s.validosEmitiram++; s.receitasValidos += d.receitas; }
+                    else if (d.status === 'vencido') s.vencidosEmitiram++;
+                    else if (d.status === 'sem_data') s.semDataEmitiram++;
+                    else s.semCertEmitiram++;
+                }
+            });
+            const tot = CERT_ZERO();
+            Object.values(porPosto).forEach(s => Object.keys(tot).forEach(k => tot[k] += s[k]));
+            const desat = CQ?.meta?.postos_desatualizados || {};
+            return { ym, postos, lista, fora, porPosto, tot, temValidade,
+                     desatualizados: postos.filter(p => desat[p]).map(p => `${p} (lido em ${desat[p]})`) };
+        }
+        const pctDe = (a, b) => b ? (fmt2.format(a * 100 / b) + '%') : '—';
+
+        function certCard() {
+            const titulo = 'Médicos × certificado digital válido';
+            const shell = (corpo, sub, clicavel) =>
+                `<div class="card${clicavel ? ' clicavel' : ''}" id="certCard" title="${clicavel ? 'Clique para listar os médicos' : ''}"><div class="card-body p-2">` +
+                `<div class="small muted">${titulo}</div>${corpo}<div class="razao muted">${sub}</div></div></div>`;
+            if (!CQ) return shell('<div class="h6 mb-0 muted">cadastro de médicos indisponível</div>',
+                                  escHtml(CQ_ERRO || 'CTRLQ_RELATORIO_CONSOLIDADO.json não carregou'), false);
+            const D = certDados();
+            if (!D) return shell('<div class="h6 mb-0 muted">sem cadastro para o mês do filtro</div>', 'CTRL-Q sem foto desse mês', false);
+            const t = D.tot;
+            const extras = s => (s.vencidos ? ` · <span class="pct-baixo">${fmtInt.format(s.vencidos)} vencidos</span>` : '') +
+                                (s.semData ? ` · ${fmtInt.format(s.semData)} sem data` : '');
+            let corpo;
+            if (D.postos.length === 1) {
+                corpo = `<div class="h5 mb-0">${fmtInt.format(t.validos)} <span class="mini muted">válidos de</span> ${fmtInt.format(t.medicos)} <span class="mini muted">médicos · ${pctDe(t.validos, t.medicos)}</span></div>` +
+                    `<div class="mini">${fmtInt.format(t.validosEmitiram)} dos ${fmtInt.format(t.validos)} com certificado válido emitiram receita · <b class="${pctClasse(t.validos ? t.validosEmitiram * 100 / t.validos : null)}">${pctDe(t.validosEmitiram, t.validos)}</b></div>` +
+                    `<div class="mini muted">${fmtInt.format(t.cert)} com PFX cadastrado${extras(t)}</div>` +
+                    `<div class="mini muted">emitiram sem certificado válido: ${fmtInt.format(t.vencidosEmitiram + t.semDataEmitiram + t.semCertEmitiram)}</div>`;
+            } else {
+                // Ordem: maior cobertura de certificado válido primeiro. Posto sem médico no cadastro aparece como 0.
+                const ps = D.postos.slice().sort((a, b) => {
+                    const sa = D.porPosto[a], sb = D.porPosto[b];
+                    return ((sb.medicos ? sb.validos / sb.medicos : -1) - (sa.medicos ? sa.validos / sa.medicos : -1)) || a.localeCompare(b);
+                });
+                corpo = ps.map(p => {
+                    const s = D.porPosto[p];
+                    const pe = s.validos ? s.validosEmitiram * 100 / s.validos : null;
+                    return `<div class="mini">${p}: ${fmtInt.format(s.medicos)} méd · ${fmtInt.format(s.validos)} válidos (${pctDe(s.validos, s.medicos)}) · ` +
+                        `<b class="${pctClasse(pe)}">${fmtInt.format(s.validosEmitiram)}/${fmtInt.format(s.validos)}</b> emitiram${extras(s)}</div>`;
+                }).join('') +
+                    `<div class="mini mt-1"><b>Rede: ${fmtInt.format(t.validos)} válidos de ${fmtInt.format(t.medicos)} méd (${pctDe(t.validos, t.medicos)}) · ${fmtInt.format(t.validosEmitiram)}/${fmtInt.format(t.validos)} emitiram</b>${extras(t)}</div>`;
+            }
+            const avisos = [];
+            if (!D.temValidade) avisos.push('validade ainda não carregada pelo ETL — "válido" aqui é só "PFX cadastrado" até a próxima rodada');
+            if (D.desatualizados.length) avisos.push(`cadastro desatualizado: ${D.desatualizados.join(', ')}`);
+            const aviso = avisos.map(a => `<div class="mini text-danger">${escHtml(a)}</div>`).join('');
+            return shell(corpo + aviso, `cadastro ${mesFmt(D.ym)} · receitas no período · clique para listar`, true);
+        }
+
+        let CERT_FILTRO = 'todos';
+        function openCertModal() {
+            const D = certDados(); if (!D) return;
+            const t = D.tot;
+            const todos = D.postos.length === POSTOS.length;
+            el('#certTitle').textContent = `Médicos × certificado digital — ${todos ? 'Todos os postos' : D.postos.join('+')}`;
+            el('#certMeta').innerHTML =
+                `Cadastro: <b>${mesFmt(D.ym)}</b> (foto do CTRL-Q, só médicos — sem terapias/exames; certificado = arquivo PFX no ERP, validade = a que o ERP gravou, comparada com hoje) · ` +
+                `Receitas e atendidos: <b>${isoToDisplay(dateFrom) || '-'} → ${isoToDisplay(dateTo) || '-'}</b> · cruzamento por nome dentro do posto` +
+                (!D.temValidade ? ` · <span class="text-danger">validade ainda não carregada pelo ETL: "válido" = PFX cadastrado</span>` : '') +
+                (D.desatualizados.length ? ` · <span class="text-danger">cadastro desatualizado em ${escHtml(D.desatualizados.join(', '))}</span>` : '');
+            el('#certResumo').innerHTML = [
+                `<span class="pill">Médicos: <b>${fmtInt.format(t.medicos)}</b></span>`,
+                `<span class="pill">Cert. válido: <b>${fmtInt.format(t.validos)}</b> (${pctDe(t.validos, t.medicos)})</span>`,
+                `<span class="pill">Vencido: <b class="${t.vencidos ? 'pct-baixo' : ''}">${fmtInt.format(t.vencidos)}</b></span>`,
+                `<span class="pill">PFX sem data: <b>${fmtInt.format(t.semData)}</b></span>`,
+                `<span class="pill">Sem certificado: <b>${fmtInt.format(t.medicos - t.cert)}</b></span>`,
+                `<span class="pill">Válidos que emitiram: <b>${fmtInt.format(t.validosEmitiram)}</b> (${pctDe(t.validosEmitiram, t.validos)})</span>`,
+                `<span class="pill">Válidos SEM receita: <b>${fmtInt.format(t.validos - t.validosEmitiram)}</b></span>`,
+                `<span class="pill">Emitiram com cert. vencido / sem data / sem cert.: <b>${fmtInt.format(t.vencidosEmitiram)}</b> / <b>${fmtInt.format(t.semDataEmitiram)}</b> / <b>${fmtInt.format(t.semCertEmitiram)}</b></span>`,
+                `<span class="pill">Receitas de quem tem cert. válido: <b>${fmtInt.format(t.receitasValidos)}</b> de ${fmtInt.format(t.receitas)}</span>`,
+            ].join(' ');
+
+            // Válidos primeiro (é quem tem que emitir), depois vencidos, sem data, sem
+            // certificado; dentro de cada grupo, quem mais atende no topo.
+            const ordem = { valido: 0, vencido: 1, sem_data: 2, nao: 3 };
+            const lista = D.lista.slice().sort((a, b) =>
+                (ordem[a.status] - ordem[b.status]) || (b.atendidos - a.atendidos) || (b.receitas - a.receitas) || a.nome.localeCompare(b.nome));
+            const filtros = {
+                todos: d => true,
+                valido: d => d.status === 'valido',
+                valido_sem_receita: d => d.status === 'valido' && d.receitas === 0,
+                vencido: d => d.status === 'vencido',
+                sem_data: d => d.status === 'sem_data',
+                nao: d => d.status === 'nao',
+                emitiram_sem_valido: d => d.status !== 'valido' && d.receitas > 0,
+            };
+            const badgeCert = d => {
+                const dt = d.cert_validade ? isoToDisplay(d.cert_validade) : '';
+                if (d.status === 'nao') return '<span class="badge badge-danger">Não</span>';
+                if (d.status === 'vencido') return `<span class="badge badge-warning">Vencido</span><div class="mini muted">${dt}</div>`;
+                if (d.status === 'sem_data') return '<span class="badge badge-secondary">Sim · sem data</span>';
+                return '<span class="badge badge-success">Válido</span>' + (dt ? `<div class="mini muted">até ${dt}</div>` : '');
+            };
+            const busca = el('#certBusca'); busca.value = '';
+            const render = () => {
+                const q = busca.value.trim().toLowerCase();
+                const fn = filtros[CERT_FILTRO] || filtros.todos;
+                const rows = lista.filter(fn).filter(d => !q || [d.nome, d.crm, d.especialidade, d.posto].some(x => String(x || '').toLowerCase().includes(q)));
+                const tb = el('#certBody'); tb.innerHTML = '';
+                rows.forEach(d => {
+                    const pc = pctRazao(d.receitas, d.atendidos);
+                    const alerta = d.status === 'valido' && d.receitas === 0 && d.atendidos > 0;   // tem certificado válido, atendeu e não emitiu
+                    tb.insertAdjacentHTML('beforeend', `<tr class="${alerta ? 'cert-alerta' : ''}">` +
+                        `<td class="cert-nome">${escHtml(d.nome)}</td><td>${escHtml(d.crm) || '-'}</td><td>${escHtml(d.especialidade) || '-'}</td><td>${escHtml(d.posto)}</td>` +
+                        `<td class="text-center">${badgeCert(d)}</td>` +
+                        `<td class="text-right">${d.atendidos ? fmtInt.format(d.atendidos) : '<span class="muted">—</span>'}</td>` +
+                        `<td class="text-right">${fmtInt.format(d.receitas)}</td>` +
+                        `<td class="text-right ${pctClasse(pc)}"><b>${pctTxt(pc)}</b></td></tr>`);
+                });
+                if (!rows.length) tb.innerHTML = '<tr><td colspan="8" class="muted">Nenhum médico neste filtro</td></tr>';
+                const meta = el('#certMeta');
+                meta.querySelector('.cert-n')?.remove();
+                meta.insertAdjacentHTML('beforeend', ` · <span class="cert-n">listados: <b>${fmtInt.format(rows.length)}</b> de ${fmtInt.format(lista.length)}</span>`);
+            };
+            const grp = el('#certFiltro');
+            grp.querySelectorAll('button').forEach(b => {
+                b.classList.toggle('active', b.dataset.f === CERT_FILTRO);
+                b.onclick = () => { CERT_FILTRO = b.dataset.f; grp.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b)); render(); };
+            });
+            busca.oninput = render;
+            el('#certFora').innerHTML = D.fora.length
+                ? `<b>Emitiram receita no período mas não estão no cadastro de ${mesFmt(D.ym)}</b> (agenda temporária, exame, usuário de sistema ou nome grafado diferente — certificado desconhecido, fora das contas acima): ` +
+                  D.fora.map(f => `${escHtml(f.nome)} (${escHtml(f.posto)}: ${fmtInt.format(f.receitas)} rec.)`).join(' · ')
+                : '';
+            render();
+            $('#certModal').modal('show');
+        }
+        // Para a IA da página: mesmos números do card.
+        function certSnapshot() {
+            const D = CQ ? certDados() : null;
+            if (!D) return { disponivel: false, motivo: CQ_ERRO || 'sem cadastro para o mês' };
+            return { disponivel: true, cadastro_mes: D.ym, validade_carregada: D.temValidade, ...D.tot,
+                     por_posto: D.porPosto, fora_do_cadastro: D.fora.length };
         }
 
         function renderTables() {
@@ -978,7 +1271,8 @@
                     medicos_ativos_hoje: new Set(rowsSel.filter(r => r.data_consulta === tKey).map(r => r.medico).filter(Boolean)).size,
                     media_diaria: mediaDiaria,
                     atendidos_periodo: sum(filterRows(getAtendRows(), { from: dateFrom, to: dateTo, postoSet }).map(r => r.valor)),
-                    prescricoes_periodo: sum(rowsSel.map(r => r.valor))
+                    prescricoes_periodo: sum(rowsSel.map(r => r.valor)),
+                    medicos_x_certificado_digital: certSnapshot()
                 }
             };
             return payload;

@@ -16,6 +16,7 @@ WITH base AS (
     eh.Especialidade,
 
     m.CertificadoPFX,
+    m.DataValidadeCertificadoPFX,   -- existe nos 13 postos (conferido 2026-09-21)
     eh.PermitirAgendamentoquenuncaconsultou,
     m.PessoaJuridica,
     eh.NumeroRQE,
@@ -70,6 +71,10 @@ SELECT
   especialidade,
   temporario,
   IIF(CertificadoPFX IS NULL, 0, 1) AS certificadodigital,
+  -- Validade do PFX gravada pelo ERP. NULL com PFX = ERP nao gravou a data
+  -- (29 casos na rede em 2026-09-21). Quem decide valido/vencido e a tela
+  -- (js/medicos_regras.js certStatus), comparando com o dia de hoje.
+  DataValidadeCertificadoPFX AS certificado_validade,
   permitiragendamentoquenuncaconsultou,
   pessoajuridica,
   IIF(NumeroRQE IS NULL, 0, 1) AS rqe

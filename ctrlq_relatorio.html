@@ -31,6 +31,7 @@
   </script>
   <script src="/js/calendar-picker.js?v=20260326"></script>
   <script src="/js/chat.js"></script>
+  <script src="/js/medicos_regras.js?v=20260921"></script>
 
 
   <style>
@@ -861,87 +862,18 @@ window.USER_POSTOS = {{ USER_POSTOS | tojson | default('[]') }};
       const ESP_PEDIATRA_MATCH = /pediatr/i;
       const ESP_CLINICO_MATCH = /(cl[ií]nico|cl[ií]nica|clínico geral|cl[ií]nico geral|medicina de fam[ií]lia)/i;
       // ================== MEDICINA ALTERNATIVA ==================
-      const MED_ALT_LIST = [
-        'ACUPUNTURISTA',
-        'ENDOSCOPISTA',
-        'DENSITOMETRISTA',
-        'TERAPEUTA OCUPACIONAL ON LINE',
-        'FONIATRA',
-        'PSICOTERAPEUTA',
-        'ENFERMEIRO',
-        'AGENDAMENTO DE EXAMES',
-        'FISIOTERAPEUTA',
-        'FISIOTERAPEUTA ACUPUNTURISTA',
-        'TERAPEUTA OCUPACIONAL',
-        'NUTRICIONISTA',
-        'FONOAUDIÓLOGO',
-        'PSICÓLOGO',
-        'PSICÓLOGO ON LINE',
-        'TERAPEUTA',
-        'NEUROPSICÓLOGO',
-        'PSICANALISTA',
-        'TÉCNICO EM RADIOLOGIA',
-        'TÉCNICO EM TOMOGRAFIA',
-        'ELETROENCEFALOGRAMA',
-        'EMAGRECIMENTO ESTÉTICA',
-        'ELETROCARDIOGRAMA',
-        'MAPA',
-        'ESPIROMETRIA',
-        'HOLTER 24 HRS',
-        'NUTRICIONISTA ON LINE',
-        'PSICOPEDAGOGO',
-        'NEUROPSICOPEDAGOGO',
-        'PSICOMOTRICIDADE CLÍNICA',
-        'PILATES',
-        'NEUROPSICOPEDAGOGO ABA',
-        'PSICOPEDAGOGO ABA',
-        'ECOCARDIOGRAMA',
-        'ULTRA-SONOGRAFISTA'
-      ].map(e => e.toUpperCase().trim());
-
-      // Cada posto grava a especialidade de um jeito (PSICÓLOGO, PSICOLOGIA,
-      // PSICOLOGIA ON LINE...), então além da lista exata acima o filtro casa
-      // por radical, com acento removido. Chamado 7ER-HUJ-L3A5: com o bit
-      // desmarcado ficam SÓ médicos — sai terapia, exame e procedimento.
-      const MED_ALT_PATTERNS = [
-        // terapias / não médicos
-        /PSIC/,               // psicologia, psicopedagogia, neuropsic..., psicanalista (PSIQUIATRIA não tem "PSIC")
-        /FONOAUDI/,
-        /FISIOTERAP/,
-        /TERAPIA|TERAPEUTA/,  // terapia ABA, terapia alimentar, terapeuta ocupacional
-        /NUTRICION|NUTRICAO/, // nutricionista, nutrição (NUTROLOGIA é médico e não casa)
-        /ACUPUNT/,
-        /ENFERM/,
-        /PILATES/,
-        /EMAGRECIMENTO/,
-        /BIOLOG/,
-        /LABORATOR/,
-        /MEDICAMENTO/,
-        // exames / equipamento — o "médico" é o aparelho ou a sala
-        /ELETRO(CARDIO|ENCEFALO|NEURO)/,
-        /ECOCARDIOGRAMA|ECO DOPPLER/,
-        /HOLTER/,
-        /\bMAPA\b/,
-        /RAIO ?X|RADIOLOG|MAMOGRAFIA|DENSITOMETR/,
-        /ULTRA.?SON/,
-        /ENDOSCOP|COLONOSCOP/,
-        /ESPIROMETRIA|RESSONANCIA|TOMOGRAF/,
-        /\bTESTE\b/,          // teste ergométrico, teste e vacina alérgica
-        /AGENDAMENTO/,
-        /TECNICO/
-      ];
-
-      const semAcento = (s) => String(s ?? '')
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .toUpperCase().trim();
-
-      function isMedicinaAlternativa(esp) {
-        if (!esp) return false;
-        const e = String(esp).toUpperCase().trim();
-        if (MED_ALT_LIST.includes(e)) return true;
-        const norm = semAcento(e);
-        return MED_ALT_PATTERNS.some(rx => rx.test(norm));
+      // A lista exata, os radicais e o normalizador moram em /js/medicos_regras.js,
+      // compartilhado com o KPI Prescrições (card "Médicos × certificado digital").
+      // Regra editada lá vale para as duas telas — e para ctrlq_pj_quadro.py, que
+      // é a cópia em Python (avisos_gerenciais). Sem o arquivo a página PARA com
+      // aviso: mostrar 497 "médicos" onde são 381 é pior do que não mostrar.
+      if (!window.MedicosRegras) {
+        const alvo = document.querySelector('#kpiScopeInfo') || document.body;
+        alvo.insertAdjacentHTML('beforeend',
+          '<div class="alert alert-danger py-2 my-2">/js/medicos_regras.js não carregou — a regra de "só médicos" não está disponível. Recarregue a página; se persistir, avise o suporte.</div>');
+        throw new Error('medicos_regras.js não carregou');
       }
+      const { MED_ALT_LIST, MED_ALT_PATTERNS, semAcento, isMedicinaAlternativa } = window.MedicosRegras;
 
 
 
@@ -1280,6 +1212,8 @@ function getPickerYM(sel) {
           rqe,
           pj,
           cert,
+          // validade do PFX (ETL exporta desde 2026-09-21; JSON antigo → null)
+          cert_validade: r.certificado_validade ? String(r.certificado_validade).slice(0, 10) : null,
           agendaAberta,
           posto: posto || '',
           idmedico,
@@ -1320,11 +1254,17 @@ function uniqueDoctors(rows) {
         const comPJ = doctors.filter(d => d.pj).length;
         const agendaRestrita = doctors.filter(d => !d.agendaAberta).length;
         const comCert = doctors.filter(d => d.cert).length;
+        // Validade: só vale se o JSON já traz a coluna (senão todo PFX pareceria "sem data").
+        const rowsMes = rowsForMonthAndPostos(ym, selection);
+        const temValidade = rowsMes.some(r => Object.prototype.hasOwnProperty.call(r, 'certificado_validade'));
+        const hoje = window.MedicosRegras.hojeISO();
+        const certVencidos = temValidade ? doctors.filter(d => window.MedicosRegras.certStatus(d, hoje) === 'vencido').length : 0;
+        const certSemData = temValidade ? doctors.filter(d => window.MedicosRegras.certStatus(d, hoje) === 'sem_data').length : 0;
 
         const pediatras = doctors.filter(d => ESP_PEDIATRA_MATCH.test(d.especialidade || '')).length;
         const clinico = doctors.filter(d => ESP_CLINICO_MATCH.test(d.especialidade || '')).length;
 
-        return { ym, doctors, total, comRQE, comPJ, agendaRestrita, comCert, pediatras, clinico };
+        return { ym, doctors, total, comRQE, comPJ, agendaRestrita, comCert, pediatras, clinico, temValidade, certVencidos, certSemData };
       }
 
       function paretoEspecialidades(ym, selection) {
@@ -1388,7 +1328,9 @@ function uniqueDoctors(rows) {
         box.insertAdjacentHTML('beforeend', kpiCard(
           `Com certificado digital`,
           topAgg.comCert,
-          `${pctOf(topAgg.comCert, total)} do total (${fmtInt.format(total)}) • clique para listar`,
+          `${pctOf(topAgg.comCert, total)} do total (${fmtInt.format(total)})` +
+            (topAgg.temValidade ? ` • ${fmtInt.format(topAgg.certVencidos)} vencidos • ${fmtInt.format(topAgg.certSemData)} sem data` : '') +
+            ` • clique para listar`,
           openDrill(`Médicos com certificado digital — ${mFmt(ym)}`, d => d.cert)
         ));
 
@@ -1607,6 +1549,17 @@ function uniqueDoctors(rows) {
             ? `<span class="badge badge-success">Aberta</span>`
             : `<span class="badge badge-warning">Restrita</span>`;
 
+        // Certificado com validade: Válido até / Vencido / Sim (sem data). JSON antigo → Sim/Não.
+        const hojeISO = window.MedicosRegras.hojeISO();
+        const badgeCert = (d) => {
+          if (!d.cert) return `<span class="badge badge-danger">Não</span>`;
+          if (!d.cert_validade) return `<span class="badge badge-success">Sim</span>`;
+          const dt = d.cert_validade.split('-').reverse().join('/');
+          return d.cert_validade >= hojeISO
+            ? `<span class="badge badge-success">Válido</span><div class="mini muted">até ${dt}</div>`
+            : `<span class="badge badge-warning">Vencido</span><div class="mini muted">${dt}</div>`;
+        };
+
         const render = () => {
           const q = (input.value || '').trim().toLowerCase();
           const filtered = !q ? docs : docs.filter(d =>
@@ -1626,7 +1579,7 @@ function uniqueDoctors(rows) {
                 <td class="text-center">${badgeSimNao(d.rqe)}</td>
                 <td class="text-center">${badgeSimNao(d.pj)}</td>
                 <td class="text-center">${badgeAgenda(d.agendaAberta)}</td>
-                <td class="text-center">${badgeSimNao(d.cert)}</td>
+                <td class="text-center">${badgeCert(d)}</td>
                 <td>${d.posto || '-'}</td>
               </tr>
             `);
