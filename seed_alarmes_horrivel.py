@@ -69,11 +69,12 @@ def main() -> int:
             "posto": posto,
             "servico": "wpp_campanha",
             "status_gatilho": "horrivel",
+            # Desde 2026-09-22 a mensagem do wpp_campanha é montada pelo
+            # diagnóstico (wpp_diagnostico.py) — este texto é só fallback.
             "mensagem": (
                 "Há pelo menos uma campanha ativa de WhatsApp deste posto sem "
-                "enviar NADA há 5 dias ou mais. Isso normalmente significa robô "
-                "travado ou campanha esquecida — cobranças e avisos deixam de "
-                "chegar aos clientes. Confira o painel e acione o suporte."),
+                "enviar NADA há 5 dias ou mais. A mensagem diz qual campanha, "
+                "se o robô rodou e se havia clientes nas condições."),
             "via_whatsapp": 1,
             "via_email": 1,
             "hora_disparo": "08:30",

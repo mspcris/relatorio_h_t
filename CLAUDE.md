@@ -1490,6 +1490,86 @@ sinal existia, ninguém era avisado. Agora o alarme notifica E cobra ciência.
 - `disparar_alarmes` roda a cada minuto pelo cron e dispara 1×/dia no minuto
   exato de `hora_disparo` — o reenvio diário até resolver é isso.
 
+## Alarme "WhatsApp campanha parada" — mensagem hialina + batimento do robô (2026-09-22)
+
+Caso que motivou: o gestor do posto D (Junior) recebeu às 08:30 *"Horrível —
+campanha parada — pode ser robô travado, acione o suporte"*, abriu o painel às
+08:48 com tudo verde e não entendeu nada. Fatos: a campanha **Seja Bem Vindo!**
+não tinha NENHUM cliente novo em D desde quinta (o robô rodou e achou 0), as
+outras 3 campanhas estavam em dia, e o alerta disparou antes da rodada das
+08:00 sequer chegar às campanhas do Couto (chega ~09:00). Nada quebrado; a
+mensagem é que era vaga. Pedido do Cristiano: *"a mensagem tem de ser
+extremamente hialina"* e *"o robô deveria ser mais inteligente"*.
+
+| Peça | Papel |
+|---|---|
+| `wpp_cobranca_db.py` | tabelas `robo_rodadas` / `robo_rodada_posto` (batimento), `registrar_rodada_*`, retenção 90 d |
+| `send_whatsapp_cobranca.py` | grava o batimento: 1 linha por rodada + 1 por campanha×posto com `candidatos`, `enviados`, `sem_telefone`, `bloq_*`, `erro_api`, `resultado` |
+| `wpp_diagnostico.py` | **somente leitura**: classifica POR QUE a campanha não enviou e monta o texto (zap) e o HTML (e-mail) |
+| `disparar_alarmes.py` | mensagem por nome, "o que o robô encontrou", condições, o que fazer; **espera a rodada** (`alarme_espera`) |
+| `alarmes_db.py` | `gerente_posto.nome` (vem do CRM via `sync_gerentes`), `alarme_espera`, `listar_notificacoes()` |
+| `alarmes_routes.py` | `GET /alarmes/api/notificacoes?dias=7` — o que foi enviado e por quê |
+| `export_indicadores_painel.py` | `_robo_hoje_wpp()` → `postos[p].robo` no JSON do painel (última passada, clientes nas condições…) |
+| `auth_routes.py` | `/api/indicadores/robo/lista` devolve `batimento` para o modal |
+| `monitorarrobos.html` | barra WPP escreve os números **mesmo quando 0** + "robô passou às HH:MM · N nas condições"; envelope na barra; aba **Mensagem** no modal (todos os robôs) |
+| `central_problemas.html` | coluna "Por quê" + texto enviado; hora UTC→local |
+
+**Por que batimento e não log.** `sync_wpp.log` roda todo dia com 3 dias de
+retenção; "5 dias sem enviar" não se responde pelo log. O cron agora grava o que
+ENCONTROU em cada passada — é a única forma de dizer "rodou 47 vezes e não achou
+ninguém" em vez de "pode estar travado". Toda gravação de batimento está em
+try/except: falhar aí **nunca** interrompe a rodada. Em dry-run a rodada é
+gravada com `dry_run=1` e o diagnóstico ignora.
+
+**Contadores são MÁXIMOS por dia/período, não somas.** O mesmo cliente
+reaparece nas 48 rodadas do dia até ser atendido; somar diria 1.900 onde há 40.
+Exceção: `erro_api_total` e `enviados_total` são somas (cada rodada tenta de novo
+de verdade).
+
+**Classificações** (`wpp_diagnostico.CLASSES`): `robo_parado` (sem rodada
+real há >45 min / aberta há >3 h), `posto_inacessivel` (só `sem_conexao`/
+`erro_query`), `falha_envio` (erro_api e 0 enviadas), `nao_processada` (robô
+passou nas outras campanhas do posto e não nesta), `sem_telefone` (candidatos
+mas nenhum elegível), `bloqueado_regras` (todos no intervalo de 7 d),
+`sem_clientes` (candidatos = 0 → **robô ok, ninguém nas condições**),
+`fora_da_agenda`, `sem_dados` (tabela vazia → COUNT ao vivo no posto decide),
+`verificar`. Gravidade crítico/atenção/normal vai no assunto do e-mail e na cor
+do envelope. **Sinal novo = frase leiga nova em `_resumo_e_acao` junto** (regra
+"todo selo diz por quê" do medico_custo).
+
+**A régua continua sendo dias corridos** (≥ 5 = Horrível), igual ao painel e ao
+`status_wpp_campanha` — mudar um sem o outro faz o alerta discordar da tela. O
+que muda é o texto: lista os dias em que a campanha PODIA enviar e não enviou e
+avisa que ela não roda sábado/domingo.
+
+**Espera pela rodada.** No minuto de `hora_disparo`, se a rodada de hoje está em
+andamento e ainda não passou por essa campanha×posto, o alarme entra em
+`alarme_espera` e o cron reavalia a cada minuto: dispara quando a rodada passar
+(com o resultado dela) ou desiste se o status melhorar; teto
+`ALARME_ESPERA_RODADA_MIN` (150 min) dispara assim mesmo, dizendo que a rodada
+não chegou. Reavaliação usa `consultar_sql=False`; o COUNT ao vivo só roda na
+hora de disparar (medido: 0,7–0,8 s por campanha no posto D).
+
+**Mensagem: `texto_whatsapp()`/`html_email()` são a MESMA estrutura** (`_blocos`):
+nome do gestor → qual campanha, há quantos dias, último envio, dias perdidos →
+o que o robô encontrou → quem recebe (condições em português de balcão,
+`condicoes_campanha`) → o que fazer → as outras campanhas do posto em dia →
+painel. Cópias para diretor/auditor recebem cabeçalho `[DIRETORIA]`/`[AUDITORIA]`
+com "cópia do aviso enviado a Fulano". O texto enviado ao gerente fica em
+`disparo.detalhes.texto_enviado` — é ELE que a aba Mensagem e a central mostram
+(o que está na tela é o que saiu no zap, sem segunda versão).
+
+**Armadilhas medidas:**
+- `CURRENT_TIMESTAMP` do SQLite é UTC: o disparo das 08:30 está gravado como
+  11:30. `fmtDtHM`/`fmtDt` marcam `Z` antes de converter.
+- `enviado_em`/`rodada_em` têm sufixo `-03:00`; `date()` do SQLite converte para
+  UTC e joga 22h no dia seguinte — usar `substr(x,1,10)` para "hoje".
+- `gerente_posto.nome` só enche na próxima rodada do `sync_gerentes` (23:00);
+  até lá a saudação é "Gestor(a) do posto D". Após deploy, rodar à mão.
+- O campo `mensagem` do alarme wpp_campanha **não é mais usado** no texto (o
+  diagnóstico substitui); para os outros serviços continua como "O que isso
+  significa".
+
 ## camim-auth — worker único agora tem THREADS (2026-08-10)
 
 `ExecStart` ganhou `--workers 1 --worker-class gthread --threads 8`. Motivo:

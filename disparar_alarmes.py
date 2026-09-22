@@ -8,6 +8,14 @@ Executado pelo cron a cada minuto (verifica se algum alarme está agendado para 
 Cron (cada minuto):
   * * * * * /opt/relatorio_h_t/.venv/bin/python /opt/relatorio_h_t/disparar_alarmes.py \
     >> /opt/relatorio_h_t/logs/alarmes.log 2>&1
+
+Mensagem (reescrita em 2026-09-22, caso do posto D): chama o gestor pelo nome,
+diz QUAL campanha/serviço, há QUANTOS dias, desde QUANDO, e — para o serviço
+wpp_campanha — o que o robô ENCONTROU (rodou? achou clientes? por que não
+enviou?), as CONDIÇÕES de disparo para conferir no contas a receber e O QUE
+FAZER. Diagnóstico em wpp_diagnostico.py, lido do batimento que o próprio
+cron grava (robo_rodadas). Se a rodada de hoje ainda não chegou ao posto, o
+alarme ESPERA (alarme_espera) até ela passar, em vez de acusar em falso.
 """
 
 import os
@@ -27,6 +35,16 @@ from dotenv import load_dotenv
 load_dotenv('/opt/relatorio_h_t/.env')
 
 import alarmes_db as adb
+
+try:
+    import wpp_diagnostico as wd
+except Exception as _e:  # sem o módulo o alarme continua saindo, só genérico
+    wd = None
+    logging.getLogger(__name__).error('wpp_diagnostico indisponível: %s', _e)
+
+# Quanto tempo o alarme wpp_campanha espera a rodada do robô chegar ao posto
+# antes de disparar assim mesmo (a rodada das 08:00 leva ~1h até o Couto).
+ESPERA_RODADA_MAX_MIN = int(os.getenv('ALARME_ESPERA_RODADA_MIN', '150'))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -70,7 +88,7 @@ def _ultimo_para_dias(ultimo_str):
         return 999
 
 
-def status_push(posto):
+def ultimo_push(posto):
     push_db = os.getenv('PUSH_LOG_DB', '/opt/push_clientes/push_log.db')
     try:
         conn = sqlite3.connect(f'file:{push_db}?mode=ro', uri=True)
@@ -81,14 +99,14 @@ def status_push(posto):
                       tables[0] if tables else None)
         if not tabela:
             conn.close()
-            return 'horrivel'
+            return None
         cols = [r[1] for r in conn.execute(f'PRAGMA table_info({tabela})').fetchall()]
         col_data  = next((c for c in cols if any(k in c.lower() for k in ('data', 'hora', 'created', 'time', 'sent'))), None)
         col_posto = next((c for c in cols if 'posto' in c.lower()), None)
         col_modo  = next((c for c in cols if 'modo' in c.lower()), None)
         if not col_data or not col_posto:
             conn.close()
-            return 'horrivel'
+            return None
         if col_modo:
             row = conn.execute(
                 f"SELECT MAX({col_data}) FROM {tabela} WHERE {col_modo}='producao' AND {col_posto}=?",
@@ -99,56 +117,91 @@ def status_push(posto):
                 f"SELECT MAX({col_data}) FROM {tabela} WHERE {col_posto}=?", (posto,)
             ).fetchone()
         conn.close()
-        return _dias_para_status(_ultimo_para_dias(row[0] if row else None))
+        return row[0] if row else None
     except Exception as e:
-        log.warning('status_push(%s): %s', posto, e)
+        log.warning('ultimo_push(%s): %s', posto, e)
+        raise
+
+
+def status_push(posto):
+    try:
+        return _dias_para_status(_ultimo_para_dias(ultimo_push(posto)))
+    except Exception:
         return 'horrivel'
 
 
-def status_email(posto):
+def ultimo_email(posto):
     kpi_db = os.getenv('KPI_DB_PATH', '/opt/relatorio_h_t/camim_kpi.db')
+    conn = sqlite3.connect(f'file:{kpi_db}?mode=ro', uri=True)
     try:
-        conn = sqlite3.connect(f'file:{kpi_db}?mode=ro', uri=True)
         row = conn.execute(
             "SELECT MAX(datahora) FROM ind_email WHERE posto=? AND titulo_categoria='Boleto'",
             (posto,)
         ).fetchone()
+    finally:
         conn.close()
-        return _dias_para_status(_ultimo_para_dias(row[0] if row else None))
+    return row[0] if row else None
+
+
+def status_email(posto):
+    try:
+        return _dias_para_status(_ultimo_para_dias(ultimo_email(posto)))
     except Exception as e:
         log.warning('status_email(%s): %s', posto, e)
         return 'horrivel'
 
 
-def status_tef(posto):
+def ultimo_tef(posto):
     kpi_db = os.getenv('KPI_DB_PATH', '/opt/relatorio_h_t/camim_kpi.db')
+    conn = sqlite3.connect(f'file:{kpi_db}?mode=ro', uri=True)
     try:
-        conn = sqlite3.connect(f'file:{kpi_db}?mode=ro', uri=True)
         row = conn.execute(
             "SELECT MAX(datahora) FROM ind_tef WHERE posto=?", (posto,)
         ).fetchone()
+    finally:
         conn.close()
-        return _dias_para_status(_ultimo_para_dias(row[0] if row else None))
+    return row[0] if row else None
+
+
+def status_tef(posto):
+    try:
+        return _dias_para_status(_ultimo_para_dias(ultimo_tef(posto)))
     except Exception as e:
         log.warning('status_tef(%s): %s', posto, e)
         return 'horrivel'
 
 
-def status_wpp(posto):
+def ultimo_wpp(posto):
     wpp_db = os.getenv('WAPP_CTRL_DB', '/opt/camim-auth/whatsapp_cobranca.db')
+    conn = sqlite3.connect(f'file:{wpp_db}?mode=ro', uri=True)
     try:
-        conn = sqlite3.connect(f'file:{wpp_db}?mode=ro', uri=True)
         row = conn.execute("""
             SELECT MAX(e.enviado_em)
             FROM envios e
             JOIN campanhas c ON c.id = e.campanha_id
             WHERE c.ativa=1 AND e.posto=? AND e.status='accepted'
         """, (posto,)).fetchone()
+    finally:
         conn.close()
-        return _dias_para_status(_ultimo_para_dias(row[0] if row else None))
+    return row[0] if row else None
+
+
+def status_wpp(posto):
+    try:
+        return _dias_para_status(_ultimo_para_dias(ultimo_wpp(posto)))
     except Exception as e:
         log.warning('status_wpp(%s): %s', posto, e)
         return 'horrivel'
+
+
+def ultimo_registro(servico, posto):
+    """Última atividade registrada do serviço no posto (string ISO) ou None.
+    Só para a mensagem dizer 'desde quando'; erro aqui vira None."""
+    fn = {'push': ultimo_push, 'email': ultimo_email, 'tef': ultimo_tef, 'wpp': ultimo_wpp}
+    try:
+        return fn[servico](posto) if servico in fn else None
+    except Exception:
+        return None
 
 
 def status_wpp_campanha(posto):
@@ -255,72 +308,136 @@ def enviar_email(para, assunto, corpo_html):
         return False, str(e)[:200]
 
 
-def _corpo_email(alarme, status_atual):
-    sname         = adb.STATUS_LABELS.get(status_atual, status_atual)
-    sname_gatilho = adb.STATUS_LABELS.get(alarme['status_gatilho'], alarme['status_gatilho'])
-    servico_nome  = adb.SERVICOS.get(alarme['servico'], alarme['servico'])
-    posto_nome    = adb.POSTOS_NOMES.get(alarme['posto'], alarme['posto'])
-    return f"""<!doctype html>
+def _quando(ultimo_str):
+    """'quinta 17/09 às 08:59' / 'hoje às 08:46' / 'nunca' a partir da string ISO."""
+    if not ultimo_str:
+        return 'nunca'
+    try:
+        dt = datetime.fromisoformat(str(ultimo_str)).replace(tzinfo=None)
+    except Exception:
+        return str(ultimo_str)
+    hoje = date.today()
+    nomes = ['segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo']
+    if dt.date() == hoje:
+        return f'hoje às {dt:%H:%M}'
+    if dt.date() == hoje - timedelta(days=1):
+        return f'ontem ({nomes[dt.weekday()]} {dt:%d/%m}) às {dt:%H:%M}'
+    return f'{nomes[dt.weekday()]} {dt:%d/%m/%Y} às {dt:%H:%M}'
+
+
+def _saudacao(gerente, posto):
+    nome = ((gerente or {}).get('nome') or '').strip()
+    return nome.split()[0].capitalize() if nome else f'Gestor(a) do posto {posto}'
+
+
+# "O que fazer" por serviço quando não há diagnóstico automático. Frases de
+# balcão: quem lê é o gestor do posto, não o TI.
+ACOES_GENERICAS = {
+    'push':  'Acione o TI para verificar se o programa de push de cobrança do posto está rodando '
+             'no servidor. Enquanto isso, os clientes não recebem a notificação de cobrança no app.',
+    'email': 'Acione o TI para verificar o robô de boleto por e-mail do posto (servidor/serviço de '
+             'e-mail). Enquanto isso, os clientes não recebem o boleto por e-mail.',
+    'tef':   'Acione o TI e o financeiro: a cobrança automática no cartão (TEF recorrente) pode ter '
+             'parado. Confira no contas a receber se as recorrências do posto estão sendo lançadas.',
+    'wpp':   'Acione o TI para verificar o robô de WhatsApp. Confira também no painel de campanhas '
+             'se as campanhas do posto estão ativas.',
+}
+
+_DIAS_LONGO = ['segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira',
+               'sexta-feira', 'sábado', 'domingo']
+
+
+def _mensagens_genericas(alarme, status_atual, gerente):
+    """Texto (WhatsApp) e HTML (e-mail) para push/email/tef/wpp — e fallback
+    do wpp_campanha quando o diagnóstico não está disponível."""
+    import html as _h
+    posto = alarme['posto']
+    posto_nome = adb.POSTOS_NOMES.get(posto, posto)
+    servico_nome = adb.SERVICOS.get(alarme['servico'], alarme['servico'])
+    sname = adb.STATUS_LABELS.get(status_atual, status_atual)
+    ultimo = ultimo_registro(alarme['servico'], posto)
+    dias = _ultimo_para_dias(ultimo)
+    agora = datetime.now()
+    quem = _saudacao(gerente, posto)
+    if ultimo and dias < 999:
+        fato = (f'{quem}, o serviço *{servico_nome}* do posto {posto} não registra atividade há '
+                f'*{dias} dia{"s" if dias != 1 else ""}*. A última foi {_quando(ultimo)}. '
+                f'No painel isso aparece como *{sname}*.')
+    else:
+        fato = (f'{quem}, o serviço *{servico_nome}* do posto {posto} não tem NENHUMA atividade '
+                f'registrada. No painel isso aparece como *{sname}*.')
+    explica = (alarme.get('mensagem') or '').strip()
+    acao = ACOES_GENERICAS.get(alarme['servico'], 'Acione o TI para verificar o serviço.')
+    cab = f'⚠️ ALERTA CAMIM — Posto {posto} ({posto_nome})'
+    data = f'{_DIAS_LONGO[agora.weekday()]}, {agora:%d/%m/%Y} às {agora:%H:%M}'
+
+    def texto(papel='gerente'):
+        out = [cab, data]
+        if papel != 'gerente':
+            rot = {'diretor': 'DIRETORIA', 'auditor': 'AUDITORIA', 'extra': 'CÓPIA'}.get(papel, papel.upper())
+            ger = ((gerente or {}).get('nome') or '').strip() or f'gestor(a) do posto {posto}'
+            out.append(f'[{rot}] Cópia do aviso enviado a {ger}.')
+        out += ['', fato, '']
+        if explica:
+            out += ['*O que isso significa:*', explica, '']
+        out += ['👉 *O que fazer:*', acao, '',
+                f'🔎 Painel: {APP_URL}/monitorarrobos.html?posto={posto}']
+        return '\n'.join(out)
+
+    def html(papel='gerente'):
+        import re
+        def f(t):
+            return re.sub(r'\*([^*]+)\*', r'<b>\1</b>', _h.escape(t))
+        copia = ''
+        if papel != 'gerente':
+            ger = _h.escape(((gerente or {}).get('nome') or '').strip() or f'gestor(a) do posto {posto}')
+            copia = f'<p style="color:#666;font-size:13px;margin:0 0 14px">Cópia do aviso enviado a <b>{ger}</b>.</p>'
+        bloco_explica = (f'<h3 style="font-size:15px;margin:18px 0 6px">O que isso significa</h3>'
+                         f'<p style="margin:0 0 8px;line-height:1.45">{f(explica)}</p>') if explica else ''
+        return f"""<!doctype html>
 <html lang="pt-br"><body style="margin:0;padding:0;background:#f4f4f4;font-family:sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px">
-<tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0"
-       style="background:#fff;border-radius:10px;overflow:hidden;
-              box-shadow:0 2px 12px rgba(0,0,0,.10)">
-  <tr>
-    <td style="background:#c62828;padding:20px 32px">
-      <h2 style="margin:0;color:#fff;font-size:20px">
-        &#9888; Alerta CAMIM &mdash; {alarme['nome']}
-      </h2>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:24px 32px">
-      <table width="100%" style="border-collapse:collapse;margin-bottom:20px">
-        <tr>
-          <td style="color:#666;padding:6px 0;width:130px">Posto</td>
-          <td><strong>{alarme['posto']} &mdash; {posto_nome}</strong></td>
-        </tr>
-        <tr>
-          <td style="color:#666;padding:6px 0">Servi&ccedil;o</td>
-          <td><strong>{servico_nome}</strong></td>
-        </tr>
-        <tr>
-          <td style="color:#666;padding:6px 0">Status atual</td>
-          <td><strong style="color:#c62828">{sname}</strong></td>
-        </tr>
-        <tr>
-          <td style="color:#666;padding:6px 0">Gatilho</td>
-          <td>{sname_gatilho} ou pior</td>
-        </tr>
-      </table>
-      <div style="background:#fff8e1;border-left:4px solid #f9a825;
-                  border-radius:0 6px 6px 0;padding:14px 16px;margin-bottom:20px">
-        <strong style="display:block;margin-bottom:6px">Mensagem</strong>
-        {alarme['mensagem']}
-      </div>
-      <p style="margin-bottom:20px">
-        <a href="{APP_URL}/monitorarrobos.html"
-           style="background:#1565c0;color:#fff;padding:11px 22px;border-radius:6px;
-                  text-decoration:none;font-weight:600;display:inline-block">
-          Acessar Painel de Monitoramento
-        </a>
-      </p>
-      <p style="color:#999;font-size:12px;margin:0">
-        Disparado em {datetime.now().strftime('%d/%m/%Y %H:%M')}
-      </p>
-    </td>
-  </tr>
-  <tr>
-    <td style="background:#f8f8f8;padding:12px 32px;border-top:1px solid #eee">
-      <p style="margin:0;color:#aaa;font-size:11px">
-        CAMIM &mdash; Sistema de Alertas Operacionais
-      </p>
-    </td>
-  </tr>
-</table>
-</td></tr></table>
-</body></html>"""
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px"><tr><td align="center">
+<table width="620" cellpadding="0" cellspacing="0"
+       style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.10)">
+  <tr><td style="background:#c62828;padding:18px 32px">
+    <h2 style="margin:0;color:#fff;font-size:19px">&#9888; Posto {posto} &mdash; {_h.escape(posto_nome)}</h2>
+    <div style="color:#fff;font-size:12px;opacity:.9;margin-top:4px">{_h.escape(alarme['nome'])} &middot; {_h.escape(data)}</div>
+  </td></tr>
+  <tr><td style="padding:22px 32px;font-size:14px;color:#222">
+    {copia}
+    <p style="margin:0 0 8px;line-height:1.45">{f(fato)}</p>
+    {bloco_explica}
+    <h3 style="font-size:15px;margin:18px 0 6px">O que fazer</h3>
+    <p style="margin:0 0 8px;line-height:1.45">{f(acao)}</p>
+    <p style="margin:22px 0 0">
+      <a href="{APP_URL}/monitorarrobos.html?posto={posto}"
+         style="background:#1565c0;color:#fff;padding:11px 22px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block">
+        Abrir o painel Monitorar Rob&ocirc;s</a></p>
+  </td></tr>
+  <tr><td style="background:#f8f8f8;padding:12px 32px;border-top:1px solid #eee">
+    <p style="margin:0;color:#aaa;font-size:11px">CAMIM &mdash; Sistema de Alertas Operacionais</p>
+  </td></tr>
+</table></td></tr></table></body></html>"""
+
+    resumo = (f'{servico_nome}: {dias} dias sem atividade' if dias < 999
+              else f'{servico_nome}: sem atividade registrada')
+    return {'texto': texto, 'html': html, 'resumo': resumo, 'diagnostico': None}
+
+
+def _mensagens_wpp_campanha(alarme, gerente, dp):
+    """Mensagens do wpp_campanha a partir do diagnóstico (wpp_diagnostico)."""
+    posto = alarme['posto']
+    posto_nome = adb.POSTOS_NOMES.get(posto, posto)
+    nome_ger = (gerente or {}).get('nome')
+
+    def texto(papel='gerente'):
+        return wd.texto_whatsapp(dp, nome_ger, posto_nome, APP_URL, papel=papel)
+
+    def html(papel='gerente'):
+        return wd.html_email(dp, nome_ger, posto_nome, APP_URL, alarme['nome'], papel=papel)
+
+    return {'texto': texto, 'html': html, 'resumo': wd.resumo_curto(dp),
+            'diagnostico': wd.compactar(dp)}
 
 
 # ── Lógica de disparo ─────────────────────────────────────────────────────────
@@ -333,46 +450,83 @@ def deve_disparar_agora(alarme):
     return hora_atual == (alarme.get('hora_disparo') or '08:00') and dia_atual in dias_conf
 
 
-def _enviar_para(tipo, canal, dest, texto_wpp, assunto_email, corpo_email_html, detalhes):
-    """Tenta enviar WPP e/ou email para um destinatário e registra no detalhes."""
-    if canal in ('wpp', 'ambos') and dest.get('telefone'):
-        ok, msg = enviar_wpp(dest['telefone'], texto_wpp)
-        detalhes.append({'tipo': 'wpp', 'para': tipo, 'dest': dest.get('telefone'), 'ok': ok, 'msg': msg})
-        log.info('WPP %s %s: ok=%s msg=%s', tipo, dest.get('telefone'), ok, msg)
-    if canal in ('email', 'ambos') and dest.get('email'):
-        ok, msg = enviar_email(dest['email'], assunto_email, corpo_email_html)
-        detalhes.append({'tipo': 'email', 'para': tipo, 'dest': dest.get('email'), 'ok': ok, 'msg': msg})
-        log.info('Email %s %s: ok=%s msg=%s', tipo, dest.get('email'), ok, msg)
-
-
-def disparar(alarme):
+def disparar(alarme, origem='hora'):
+    """origem='hora': chamado no minuto de hora_disparo. origem='espera':
+    reavaliação de um alarme que ficou aguardando a rodada do robô."""
     posto        = alarme['posto']
     status_atual = get_status(alarme['servico'], posto)
+    espera       = adb.get_espera(alarme['id'])
 
     if not adb.status_igual_ou_pior(status_atual, alarme['status_gatilho']):
-        log.info('Alarme %d: status=%s gatilho=%s — não dispara',
-                 alarme['id'], status_atual, alarme['status_gatilho'])
+        if espera:
+            adb.limpar_espera(alarme['id'])
+            log.info('Alarme %d: a rodada do robô resolveu (status=%s) — espera encerrada sem disparo',
+                     alarme['id'], status_atual)
+        else:
+            log.info('Alarme %d: status=%s gatilho=%s — não dispara',
+                     alarme['id'], status_atual, alarme['status_gatilho'])
         return
 
     if adb.esta_silenciado(alarme['id']):
+        if espera:
+            adb.limpar_espera(alarme['id'])
         log.info('Alarme %d: silenciado — pulando', alarme['id'])
         return
 
+    gerente = adb.get_gerente(posto)
+
+    # ─ Diagnóstico + espera pela rodada (só wpp_campanha)
+    dp = None
+    if alarme['servico'] == 'wpp_campanha' and wd is not None:
+        try:
+            dp_leve = wd.diagnostico_posto(posto, consultar_sql=False)
+        except Exception as e:
+            log.error('Alarme %d: diagnóstico falhou (%s) — mensagem genérica', alarme['id'], e)
+            dp_leve = None
+        if dp_leve and dp_leve.get('aguardar_rodada'):
+            agora = datetime.now()
+            if not espera:
+                ate = agora + timedelta(minutes=ESPERA_RODADA_MAX_MIN)
+                adb.registrar_espera(alarme['id'], ate,
+                                     'rodada do robô em andamento ainda não chegou ao posto')
+                log.info('Alarme %d: rodada em andamento ainda não chegou ao posto %s — '
+                         'aguardando até %s', alarme['id'], posto, ate.strftime('%H:%M'))
+                return
+            try:
+                ate = datetime.fromisoformat(str(espera['ate']))
+            except Exception:
+                ate = agora
+            if agora < ate:
+                log.debug('Alarme %d: ainda aguardando a rodada (até %s)', alarme['id'], espera['ate'])
+                return
+            log.warning('Alarme %d: rodada não chegou ao posto %s em %d min — disparando assim mesmo',
+                        alarme['id'], posto, ESPERA_RODADA_MAX_MIN)
+        if dp_leve is not None:
+            try:
+                dp = wd.diagnostico_posto(posto, consultar_sql=True)
+            except Exception as e:
+                log.error('Alarme %d: diagnóstico completo falhou (%s) — usando o leve', alarme['id'], e)
+                dp = dp_leve
+    if espera:
+        adb.limpar_espera(alarme['id'])
+
+    if dp is not None and dp.get('paradas'):
+        msgs = _mensagens_wpp_campanha(alarme, gerente, dp)
+    else:
+        msgs = _mensagens_genericas(alarme, status_atual, gerente)
+
     numero_ciclo = adb.get_numero_ciclo(alarme['id'])
     sname        = adb.STATUS_LABELS.get(status_atual, status_atual)
-    servico_nome = adb.SERVICOS.get(alarme['servico'], alarme['servico'])
-    assunto      = f"[ALERTA CAMIM] {alarme['nome']} — Posto {posto} — {sname}"
-    texto_wpp_base = (
-        f"⚠️ ALERTA CAMIM\n"
-        f"*{alarme['nome']}*\n"
-        f"Posto: {posto} — {adb.POSTOS_NOMES.get(posto, posto)}\n"
-        f"Serviço: {servico_nome}\n"
-        f"Status: *{sname}*\n\n"
-        f"{alarme['mensagem']}\n\n"
-        f"Acesse: {APP_URL}/monitorarrobos.html"
-    )
-    corpo_email_html = _corpo_email(alarme, status_atual)
-    detalhes = {'status_atual': status_atual, 'numero_ciclo': numero_ciclo, 'envios': []}
+    if dp is not None and dp.get('paradas'):
+        grav = {'critico': 'DEFEITO', 'atencao': 'ATENÇÃO', 'normal': 'robô ok, sem clientes'}[dp['gravidade']]
+        assunto = f"[ALERTA CAMIM] Posto {posto} — WhatsApp {sname} — {grav}"
+    else:
+        assunto = f"[ALERTA CAMIM] {alarme['nome']} — Posto {posto} — {sname}"
+
+    texto_gerente = msgs['texto']('gerente')
+    detalhes = {'status_atual': status_atual, 'numero_ciclo': numero_ciclo, 'origem': origem,
+                'resumo': msgs['resumo'], 'diagnostico': msgs['diagnostico'],
+                'texto_enviado': texto_gerente, 'envios': []}
     wpp_ger_ok   = False
     email_ger_ok = False
 
@@ -384,7 +538,7 @@ def disparar(alarme):
     def _ciencia_wpp(dest_tipo, nome, email_d, tel):
         tok = adb.criar_ciencia(disparo_id, alarme['id'], dest_tipo, nome,
                                 email_d, tel, 'wpp')
-        return (f"\n\n✅ *Confirme que está ciente deste problema:*\n"
+        return (f"\n\n✅ *Confirme que está ciente deste aviso:*\n"
                 f"{APP_URL}/ciencia/{tok}")
 
     def _ciencia_email(dest_tipo, nome, email_d, tel):
@@ -393,46 +547,36 @@ def disparar(alarme):
         return (f'<p style="margin:18px 0"><a href="{APP_URL}/ciencia/{tok}" '
                 f'style="background:#28a745;color:#fff;padding:10px 18px;'
                 f'border-radius:6px;text-decoration:none;font-weight:bold">'
-                f'✅ Confirmar ciência do problema</a></p>')
+                f'✅ Confirmar ciência do aviso</a></p>')
+
+    def _enviar(papel, nome, email_d, tel, mandar_wpp, mandar_email, rotulo):
+        """Envia a versão do texto para o papel e registra no detalhes."""
+        okw = oke = False
+        if mandar_wpp and tel:
+            okw, msg = enviar_wpp(tel, msgs['texto'](papel) + _ciencia_wpp(papel, nome, email_d, tel))
+            detalhes['envios'].append({'tipo': 'wpp', 'para': rotulo, 'ok': okw, 'msg': msg})
+            log.info('WPP %s %s: ok=%s msg=%s', rotulo, tel, okw, msg)
+        if mandar_email and email_d:
+            pref = '' if papel == 'gerente' else f"[{ {'diretor': 'DIRETORIA', 'auditor': 'AUDITORIA'}.get(papel, 'CÓPIA') }] "
+            oke, msg = enviar_email(email_d, pref + assunto,
+                                    msgs['html'](papel) + _ciencia_email(papel, nome, email_d, tel))
+            detalhes['envios'].append({'tipo': 'email', 'para': rotulo, 'ok': oke, 'msg': msg})
+            log.info('Email %s %s: ok=%s msg=%s', rotulo, email_d, oke, msg)
+        return okw, oke
 
     # ─ Gerente do posto (banco, não removível)
-    gerente = adb.get_gerente(posto)
     if gerente:
-        canal = 'ambos'
-        if alarme['via_whatsapp'] and not alarme['via_email']:
-            canal = 'wpp'
-        elif alarme['via_email'] and not alarme['via_whatsapp']:
-            canal = 'email'
-        nome_ger = f"Gerente posto {posto}"
-        if alarme['via_whatsapp'] and gerente.get('telefone'):
-            ok, msg = enviar_wpp(gerente['telefone'], texto_wpp_base +
-                                 _ciencia_wpp('gerente', nome_ger,
-                                              gerente.get('email'), gerente.get('telefone')))
-            if ok:
-                wpp_ger_ok = True
-            detalhes['envios'].append({'tipo': 'wpp', 'para': 'gerente', 'ok': ok, 'msg': msg})
-        if alarme['via_email'] and gerente.get('email'):
-            ok, msg = enviar_email(gerente['email'], assunto, corpo_email_html +
-                                   _ciencia_email('gerente', nome_ger,
-                                                  gerente.get('email'), gerente.get('telefone')))
-            if ok:
-                email_ger_ok = True
-            detalhes['envios'].append({'tipo': 'email', 'para': 'gerente', 'ok': ok, 'msg': msg})
+        nome_ger = (gerente.get('nome') or '').strip() or f"Gerente posto {posto}"
+        wpp_ger_ok, email_ger_ok = _enviar(
+            'gerente', nome_ger, gerente.get('email'), gerente.get('telefone'),
+            bool(alarme['via_whatsapp']), bool(alarme['via_email']), 'gerente')
 
     # ─ Gerentes extras
     for extra in (alarme.get('extras') or []):
         nome_ex = extra.get('nome') or f"extra:{extra['id']}"
-        if extra.get('via_whatsapp') and extra.get('telefone') and alarme['via_whatsapp']:
-            ok, msg = enviar_wpp(extra['telefone'],
-                                 f"[EXTRA] {texto_wpp_base}" +
-                                 _ciencia_wpp('extra', nome_ex,
-                                              extra.get('email'), extra.get('telefone')))
-            detalhes['envios'].append({'tipo': 'wpp', 'para': f'extra:{extra["id"]}', 'ok': ok})
-        if extra.get('via_email') and extra.get('email') and alarme['via_email']:
-            ok, msg = enviar_email(extra['email'], assunto, corpo_email_html +
-                                   _ciencia_email('extra', nome_ex,
-                                                  extra.get('email'), extra.get('telefone')))
-            detalhes['envios'].append({'tipo': 'email', 'para': f'extra:{extra["id"]}', 'ok': ok})
+        _enviar('extra', nome_ex, extra.get('email'), extra.get('telefone'),
+                bool(extra.get('via_whatsapp') and alarme['via_whatsapp']),
+                bool(extra.get('via_email') and alarme['via_email']), f'extra:{extra["id"]}')
 
     # ─ Auditores (ciclo 1 = prefs deles; ciclo 2+ = ambos os canais)
     for aid in (alarme.get('auditores') or []):
@@ -440,23 +584,11 @@ def disparar(alarme):
         if not aud:
             continue
         if numero_ciclo == 1:
-            send_wpp   = bool(aud.get('recebe_1_wpp'))
-            send_email = bool(aud.get('recebe_1_email'))
+            send_wpp, send_email = bool(aud.get('recebe_1_wpp')), bool(aud.get('recebe_1_email'))
         else:
-            send_wpp   = True
-            send_email = True
-        nome_aud = aud.get('nome') or f"auditor:{aid}"
-        if send_wpp and aud.get('telefone'):
-            ok, msg = enviar_wpp(aud['telefone'],
-                                 f"[AUDITORIA] {texto_wpp_base}" +
-                                 _ciencia_wpp('auditor', nome_aud,
-                                              aud.get('email'), aud.get('telefone')))
-            detalhes['envios'].append({'tipo': 'wpp', 'para': f'auditor:{aid}', 'ok': ok})
-        if send_email and aud.get('email'):
-            ok, msg = enviar_email(aud['email'], f"[AUDITORIA] {assunto}", corpo_email_html +
-                                   _ciencia_email('auditor', nome_aud,
-                                                  aud.get('email'), aud.get('telefone')))
-            detalhes['envios'].append({'tipo': 'email', 'para': f'auditor:{aid}', 'ok': ok})
+            send_wpp = send_email = True
+        _enviar('auditor', aud.get('nome') or f"auditor:{aid}", aud.get('email'), aud.get('telefone'),
+                send_wpp, send_email, f'auditor:{aid}')
 
     # ─ Diretores (mesma lógica de ciclos)
     for did in (alarme.get('diretores') or []):
@@ -464,45 +596,40 @@ def disparar(alarme):
         if not dire:
             continue
         if numero_ciclo == 1:
-            send_wpp   = bool(dire.get('recebe_1_wpp'))
-            send_email = bool(dire.get('recebe_1_email'))
+            send_wpp, send_email = bool(dire.get('recebe_1_wpp')), bool(dire.get('recebe_1_email'))
         else:
-            send_wpp   = True
-            send_email = True
-        nome_dir = dire.get('nome') or f"diretor:{did}"
-        if send_wpp and dire.get('telefone'):
-            ok, msg = enviar_wpp(dire['telefone'],
-                                 f"[DIRETORIA] {texto_wpp_base}" +
-                                 _ciencia_wpp('diretor', nome_dir,
-                                              dire.get('email'), dire.get('telefone')))
-            detalhes['envios'].append({'tipo': 'wpp', 'para': f'diretor:{did}', 'ok': ok})
-        if send_email and dire.get('email'):
-            ok, msg = enviar_email(dire['email'], f"[DIRETORIA] {assunto}", corpo_email_html +
-                                   _ciencia_email('diretor', nome_dir,
-                                                  dire.get('email'), dire.get('telefone')))
-            detalhes['envios'].append({'tipo': 'email', 'para': f'diretor:{did}', 'ok': ok})
+            send_wpp = send_email = True
+        _enviar('diretor', dire.get('nome') or f"diretor:{did}", dire.get('email'), dire.get('telefone'),
+                send_wpp, send_email, f'diretor:{did}')
 
     adb.atualizar_disparo(disparo_id, wpp_ger_ok, email_ger_ok, detalhes)
-    adb.registrar_auditoria(None, 'DISPARO', 'alarme', alarme['id'], detalhes)
-    log.info('Alarme %d "%s" disparado: status=%s ciclo=%d envios=%d',
-             alarme['id'], alarme['nome'], status_atual, numero_ciclo, len(detalhes['envios']))
+    adb.registrar_auditoria(None, 'DISPARO', 'alarme', alarme['id'],
+                            {k: v for k, v in detalhes.items() if k not in ('texto_enviado', 'diagnostico')})
+    log.info('Alarme %d "%s" disparado (%s): status=%s ciclo=%d envios=%d — %s',
+             alarme['id'], alarme['nome'], origem, status_atual, numero_ciclo,
+             len(detalhes['envios']), msgs['resumo'])
 
 
 def main():
     adb.init_db()
     alarmes = adb.listar_alarmes(ativo=True)
     log.info('%d alarme(s) ativo(s) para verificar', len(alarmes))
+    em_espera = {e['alarme_id'] for e in adb.listar_esperas()}
     for a in alarmes:
         if deve_disparar_agora(a):
-            a_full = adb.get_alarme(a['id'])
-            if a_full:
-                try:
-                    disparar(a_full)
-                except Exception as exc:
-                    log.error('Erro ao disparar alarme %d: %s', a['id'], exc)
+            origem = 'hora'
+        elif a['id'] in em_espera:
+            origem = 'espera'   # aguardando a rodada do robô chegar ao posto
         else:
             log.debug('Alarme %d: não é hora (%s / dias %s)',
                       a['id'], a.get('hora_disparo'), a.get('dias_semana'))
+            continue
+        a_full = adb.get_alarme(a['id'])
+        if a_full:
+            try:
+                disparar(a_full, origem)
+            except Exception as exc:
+                log.error('Erro ao disparar alarme %d: %s', a['id'], exc)
 
 
 if __name__ == '__main__':

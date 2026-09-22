@@ -184,7 +184,24 @@ def init_db():
                 criado_em     DATETIME DEFAULT CURRENT_TIMESTAMP,
                 ip            TEXT
             );
+
+            -- Alarme que ESPEROU a rodada do robô chegar ao posto antes de
+            -- disparar (2026-09-22). O alarme das 08:30 acusava "parada" uma
+            -- campanha que a rodada das 08:00 só alcança ~09:00. Enquanto a
+            -- linha existe, disparar_alarmes reavalia a cada minuto e dispara
+            -- (ou desiste) quando a rodada passar ou `ate` vencer.
+            CREATE TABLE IF NOT EXISTS alarme_espera (
+                alarme_id  INTEGER PRIMARY KEY REFERENCES alarme(id) ON DELETE CASCADE,
+                criado_em  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ate        DATETIME NOT NULL,
+                motivo     TEXT
+            );
         """)
+        # Migração leve: nome do gestor (vem do CRM via sync_gerentes) para a
+        # mensagem chamar a pessoa pelo nome em vez de "Gerente posto D".
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(gerente_posto)").fetchall()}
+        if 'nome' not in cols:
+            conn.execute("ALTER TABLE gerente_posto ADD COLUMN nome TEXT")
         conn.commit()
     finally:
         conn.close()
@@ -192,16 +209,17 @@ def init_db():
 
 # ── Gerente Posto ─────────────────────────────────────────────────────────────
 
-def upsert_gerente(posto, email, telefone):
+def upsert_gerente(posto, email, telefone, nome=None):
     with get_conn() as conn:
         conn.execute("""
-            INSERT INTO gerente_posto (posto, email, telefone, atualizado_em)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            INSERT INTO gerente_posto (posto, email, telefone, nome, atualizado_em)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(posto) DO UPDATE SET
                 email = excluded.email,
                 telefone = excluded.telefone,
+                nome = COALESCE(excluded.nome, gerente_posto.nome),
                 atualizado_em = CURRENT_TIMESTAMP
-        """, (posto.upper(), email, telefone))
+        """, (posto.upper(), email, telefone, (nome or '').strip() or None))
 
 
 def listar_gerentes():
@@ -606,6 +624,70 @@ def listar_disparos(alarme_id=None, limit=100):
             ORDER BY d.disparado_em DESC LIMIT ?
         """, params + [limit]).fetchall()
         return [dict(r) for r in rows]
+
+
+# ── Espera pela rodada do robô (2026-09-22) ──────────────────────────────────
+
+def registrar_espera(alarme_id, ate, motivo=None):
+    with get_conn() as conn:
+        conn.execute("""
+            INSERT INTO alarme_espera (alarme_id, ate, motivo)
+            VALUES (?, ?, ?)
+            ON CONFLICT(alarme_id) DO UPDATE SET ate=excluded.ate, motivo=excluded.motivo
+        """, (alarme_id, ate.isoformat(timespec='seconds') if hasattr(ate, 'isoformat') else str(ate),
+              motivo))
+
+
+def get_espera(alarme_id):
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM alarme_espera WHERE alarme_id=?", (alarme_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def listar_esperas():
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM alarme_espera ORDER BY criado_em").fetchall()]
+
+
+def limpar_espera(alarme_id):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM alarme_espera WHERE alarme_id=?", (alarme_id,))
+
+
+# ── Notificações recentes (ícone de envelope no Monitorar Robôs) ─────────────
+
+def listar_notificacoes(dias=7, postos=None, limite=200):
+    """Disparos dos últimos `dias` com alarme, envios, ciência e o diagnóstico
+    guardado em detalhes (por que a notificação saiu). `postos` restringe."""
+    with get_conn() as conn:
+        cond = ["datetime(d.disparado_em) >= datetime('now', ?)"]
+        params = [f'-{int(dias)} days']
+        if postos:
+            cond.append(f"a.posto IN ({','.join('?' * len(postos))})")
+            params += [str(p).upper() for p in postos]
+        rows = conn.execute(f"""
+            SELECT d.id, d.disparado_em, d.numero_ciclo, d.status_registrado, d.detalhes,
+                   a.id AS alarme_id, a.nome AS alarme_nome, a.posto, a.servico
+            FROM disparo d JOIN alarme a ON a.id = d.alarme_id
+            WHERE {' AND '.join(cond)}
+            ORDER BY d.disparado_em DESC LIMIT ?
+        """, params + [int(limite)]).fetchall()
+        out = []
+        for r in rows:
+            item = dict(r)
+            try:
+                det = json.loads(item.pop('detalhes') or '{}')
+            except Exception:
+                det = {}
+            item['envios'] = det.get('envios') or []
+            item['diagnostico'] = det.get('diagnostico')
+            item['texto_enviado'] = det.get('texto_enviado')
+            item['resumo'] = det.get('resumo')
+            item['ciencias'] = [dict(c) for c in conn.execute("""
+                SELECT dest_tipo, dest_nome, dest_email, dest_telefone, canal, ciente_em
+                FROM ciencia WHERE disparo_id=? ORDER BY id""", (r['id'],)).fetchall()]
+            out.append(item)
+    return out
 
 
 # ── Auditoria ─────────────────────────────────────────────────────────────────

@@ -507,8 +507,15 @@ def montar_params_template(template_name: str, fatura: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
-                   rodada_em: str, telefones_rodada: set[str]) -> int:
-    """Retorna quantidade de mensagens enviadas (ou simuladas)."""
+                   rodada_em: str, telefones_rodada: set[str],
+                   rodada_id: int | None = None) -> int:
+    """Retorna quantidade de mensagens enviadas (ou simuladas).
+
+    rodada_id: id em robo_rodadas (batimento do robô, 2026-09-22). Quando
+    presente, cada posto processado grava uma linha em robo_rodada_posto com
+    quantos clientes a query devolveu e por que cada um não recebeu. É o
+    que o alarme lê para distinguir "robô parado" de "ninguém nas
+    condições". Gravar o batimento NUNCA interrompe a rodada (try/except)."""
 
     janela = JanelaEnvio(
         campanha.get("hora_inicio", "08:00"),
@@ -565,6 +572,23 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
     # registrado quando a mensagem chega no WhatsApp do cliente.
     lote_buffer: list[tuple] = []
 
+    # Contadores do posto corrente (batimento). Zerados a cada posto; o
+    # closure _processar_lote incrementa erro_api/outros por referência.
+    _cont: dict = {k: 0 for k in db.ROBO_CONTADORES}
+
+    def _batimento(posto_: str, resultado: str = "ok", erro: str | None = None,
+                   t0: float | None = None) -> None:
+        if rodada_id is None:
+            return
+        try:
+            db.registrar_rodada_posto(
+                rodada_id, campanha["id"], posto_, rodada_em, _cont, resultado, erro,
+                int((time.monotonic() - t0) * 1000) if t0 else None,
+            )
+        except Exception as e:  # batimento nunca derruba a rodada
+            log.warning("  batimento não gravado (camp %s / posto %s): %s",
+                        campanha.get("id"), posto_, e)
+
     def _processar_lote():
         """Executa as 2 fases do lote atual:
         1) api-chat batch (1 request com até LOTE_SIZE itens) — registra
@@ -613,6 +637,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                         campanha["id"], posto, f_item, rodada_em, tel,
                         "janela_fechou_entre_fases",
                     )
+                _cont["outros"] += len(lote_buffer)
                 lote_buffer.clear()
                 return
 
@@ -642,6 +667,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                 status_final = "accepted_chat" if chat_ok else chat_status
 
             if "erro" in status_final:
+                _cont["erro_api"] += 1
                 db.registrar_nao_enviado(
                     campanha["id"], posto, f_item, rodada_em, tel,
                     f"erro_api:{status_final}",
@@ -662,9 +688,16 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
         lote_buffer.clear()
 
     for posto in postos:
+        _t0 = time.monotonic()
+        for _k in _cont:
+            _cont[_k] = 0
+        _env_antes = enviados_campanha
+        _resultado = "ok"
+
         sql_conn = get_conn_posto(posto)
         if not sql_conn:
             log.warning(f"  [{campanha['nome']}] Posto {posto}: sem conexão.")
+            _batimento(posto, "sem_conexao", "sem conexão com o banco do posto", _t0)
             continue
 
         cursor = sql_conn.cursor()
@@ -674,17 +707,21 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
             log.error(f"  [{campanha['nome']}] Posto {posto}: erro na query: {e}")
             cursor.close()
             sql_conn.close()
+            _batimento(posto, "erro_query", str(e), _t0)
             continue
 
         log.info(f"  [{campanha['nome']}] Posto {posto}: {len(faturas)} faturas.")
+        _cont["candidatos"] = len(faturas)
 
         for fatura in faturas:
             if limit_restante and enviados_campanha >= limit_restante:
                 log.info(f"  Limite atingido.")
+                _resultado = "limite"
                 break
 
             if not dry_run and not janela.ok():
                 log.warning(f"  [{campanha['nome']}] Janela encerrada durante loop.")
+                _resultado = "janela_fechou"
                 break
 
             fatura["_valor_fmt"] = fmt_valor(fatura.get("valor"))
@@ -704,6 +741,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                     f"    {fatura.get('matricula')} | {nome_real[:40]} | "
                     "→ skip:nome_de_teste"
                 )
+                _cont["nome_teste"] += 1
                 if not dry_run:
                     db.registrar_nao_enviado(
                         campanha["id"], posto, fatura,
@@ -715,6 +753,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
             telefone = limpar_telefone(raw_tel)
 
             if not telefone:
+                _cont["sem_telefone"] += 1
                 if not dry_run:
                     db.registrar_nao_enviado(campanha["id"], posto, fatura,
                                              rodada_em, None, "sem_telefone_valido")
@@ -730,8 +769,10 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                 # NÃO toca telefones_rodada de propósito: precisa ser transparente
                 # pro dedup das outras campanhas (João recebe cobrança E indique).
                 if telefone in telefones_camp:
+                    _cont["bloq_rodada"] += 1
                     continue
                 if db.ja_enviado_na_campanha(campanha["id"], telefone):
+                    _cont["ja_enviado"] += 1
                     telefones_camp.add(telefone)
                     if not dry_run:
                         db.registrar_nao_enviado(
@@ -746,6 +787,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
             else:
                 # Controle global na rodada (cross-campanha).
                 if telefone in telefones_rodada:
+                    _cont["bloq_rodada"] += 1
                     log.info(
                         f"    {telefone} | {(fatura.get('nome') or '')[:25]} | "
                         f"{fatura.get('diasdebito',0)}d | {fatura.get('ref','')} | "
@@ -757,6 +799,7 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
                 if ultimo:
                     dias_desde = (hoje - datetime.fromisoformat(ultimo).date()).days
                     if dias_desde < intervalo:
+                        _cont["bloq_intervalo"] += 1
                         telefones_rodada.add(telefone)
                         log.info(
                             f"    {telefone} | {(fatura.get('nome') or '')[:25]} | "
@@ -814,6 +857,14 @@ def rodar_campanha(campanha: dict, dry_run: bool, limit_restante: int,
 
         cursor.close()
         sql_conn.close()
+
+        # Batimento do posto: enviados = tentados − erro_api − abortados
+        # (janela fechou entre fases). Em dry-run "enviados" é o simulado e a
+        # rodada está marcada dry_run=1 — o diagnóstico ignora essas linhas.
+        _cont["enviados"] = max(
+            0, (enviados_campanha - _env_antes) - _cont["erro_api"] - _cont["outros"]
+        )
+        _batimento(posto, _resultado, None, _t0)
 
     return enviados_campanha
 
@@ -880,6 +931,15 @@ def main():
 
     log.info(f"Rodada {rodada_em} | campanhas={len(campanhas)} | dry_run={args.dry_run}")
 
+    # Batimento do robô (2026-09-22): registra que a rodada existiu, mesmo
+    # que nenhuma campanha esteja na janela. Falha aqui não pode parar nada.
+    rodada_id = None
+    try:
+        db.limpar_rodadas_antigas()
+        rodada_id = db.registrar_rodada_inicio(rodada_em, len(campanhas), args.dry_run)
+    except Exception as e:
+        log.warning("batimento da rodada não gravado: %s", e)
+
     total_enviado = 0
     telefones_rodada: set[str] = set()
     for campanha in campanhas:
@@ -928,7 +988,8 @@ def main():
 
         limit_restante = max(0, args.limit - total_enviado) if args.limit else 0
         enviados = rodar_campanha(
-            campanha, args.dry_run, limit_restante, rodada_em, telefones_rodada
+            campanha, args.dry_run, limit_restante, rodada_em, telefones_rodada,
+            rodada_id=rodada_id,
         )
         total_enviado += enviados
         log.info(f"  [{campanha['nome']}] enviados nesta campanha: {enviados}")
@@ -938,6 +999,11 @@ def main():
             break
 
     log.info(f"Total enviado na rodada: {total_enviado}")
+    if rodada_id is not None:
+        try:
+            db.registrar_rodada_fim(rodada_id, total_enviado)
+        except Exception as e:
+            log.warning("batimento da rodada (fim) não gravado: %s", e)
 
 
 if __name__ == "__main__":

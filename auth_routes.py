@@ -2214,6 +2214,17 @@ def _lista_wpp(posto: str, campanha_id: int) -> list:
     return sorted(saida, key=lambda r: r["hora"])
 
 
+def _robo_wpp_hoje(posto: str, campanha_id: int):
+    """Batimento de hoje da campanha×posto (última passada do robô, clientes
+    nas condições…) para o modal dizer POR QUE a lista está vazia."""
+    from export_indicadores_painel import WPP_DB, _connect_ro, _robo_hoje_wpp
+    conn = _connect_ro(WPP_DB)
+    try:
+        return _robo_hoje_wpp(conn).get((campanha_id, posto))
+    finally:
+        conn.close()
+
+
 @auth_bp.get("/api/indicadores/robo/lista")
 def indicadores_robo_lista():
     """?robo=push|tef|email|wpp:<id>&posto=Y — a lista de hoje de um robô.
@@ -2241,8 +2252,15 @@ def indicadores_robo_lista():
     except Exception as exc:
         logging.getLogger(__name__).exception("lista do robô %s/%s", robo, posto)
         return jsonify({"erro": f"{type(exc).__name__}: {str(exc)[:200]}"}), 500
+    batimento = None
+    if robo.startswith("wpp:"):
+        try:
+            batimento = _robo_wpp_hoje(posto, int(robo[4:]))
+        except Exception as exc:  # batimento é complemento: falha não derruba a lista
+            logging.getLogger(__name__).warning("batimento do robô %s/%s: %s", robo, posto, exc)
     return jsonify({
         "robo": robo, "posto": posto, "linhas": linhas, "cortado": len(linhas) >= _LISTA_MAX,
+        "batimento": batimento,
         "certo": sum(1 for l in linhas if l["ok"] is True),
         "falha": sum(1 for l in linhas if l["ok"] is False),
         "pulado": sum(1 for l in linhas if l["ok"] is None),

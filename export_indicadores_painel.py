@@ -418,6 +418,36 @@ def _hoje_wpp(conn: sqlite3.Connection) -> dict:
     return saida
 
 
+def _robo_hoje_wpp(conn: sqlite3.Connection) -> dict:
+    """Batimento do robô HOJE por (campanha, posto) — robo_rodada_posto, que o
+    cron grava desde 2026-09-22. Devolve a ÚLTIMA passada (contadores dela:
+    quantos clientes estavam nas condições, quantos sem telefone, bloqueados,
+    recusados pela API) + quantas passadas e o máximo do dia. É o que faz a
+    barra dizer "robô passou às 10:33 · 0 nas condições" em vez de nada.
+    Tabela ausente (cron antigo) → {}: a barra só não mostra o batimento."""
+    saida: dict = {}
+    try:
+        rows = conn.execute("""
+            SELECT p.campanha_id, p.posto, p.processado_em, p.resultado, p.candidatos,
+                   p.enviados, p.sem_telefone, p.nome_teste, p.bloq_intervalo,
+                   p.bloq_rodada, p.ja_enviado, p.erro_api
+            FROM robo_rodada_posto p JOIN robo_rodadas r ON r.id = p.rodada_id
+            WHERE r.dry_run = 0 AND substr(p.rodada_em, 1, 10) = date('now','localtime')
+            ORDER BY p.processado_em""").fetchall()
+    except sqlite3.OperationalError:
+        return saida
+    for cid, posto, pe, res, cand, env, stel, teste, bi, br, je, ea in rows:
+        k = (cid, (posto or "").strip().upper())
+        c = saida.setdefault(k, {"passadas": 0, "max_candidatos": 0, "enviados_hoje": 0})
+        c["passadas"] += 1
+        c["max_candidatos"] = max(c["max_candidatos"], cand or 0)
+        c["enviados_hoje"] += env or 0
+        c.update(ultima=(pe or "")[11:16], resultado=res or "ok", candidatos=cand or 0,
+                 enviados=env or 0, sem_telefone=stel or 0, nome_teste=teste or 0,
+                 bloqueados=(bi or 0) + (br or 0) + (je or 0), erro_api=ea or 0)
+    return saida
+
+
 def _coletar_wpp() -> list:
     """Pra cada campanha ativa, coleta:
     - postos: {posto: {ultimo_envio}}  — granular pra detalhe
@@ -438,6 +468,7 @@ def _coletar_wpp() -> list:
     ).fetchall()
 
     hoje = _hoje_wpp(conn)
+    robo = _robo_hoje_wpp(conn)
     result = []
     for c in campanhas:
         try:
@@ -464,6 +495,7 @@ def _coletar_wpp() -> list:
             postos_dados[posto] = {
                 "ultimo_envio": row["ultimo"] if row and row["ultimo"] else None,
                 "hoje": hoje.get((c["id"], str(posto).strip().upper())),
+                "robo": robo.get((c["id"], str(posto).strip().upper())),
             }
         result.append({
             "id": c["id"], "nome": c["nome"],

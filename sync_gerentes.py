@@ -97,7 +97,7 @@ def main():
         return 1
 
     for letra, g in sorted(gestores.items()):
-        adb.upsert_gerente(letra, g['email'], g['telefone'])
+        adb.upsert_gerente(letra, g['email'], g['telefone'], nome=g['nome'])
         log.info('Posto %s: %s <%s> %s', letra, g['nome'], g['email'], g['telefone'])
 
     log.info('Sync gerentes (fonte CRM) concluído: %d postos', len(gestores))

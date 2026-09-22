@@ -272,6 +272,47 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_cc_situacao          ON cache_clientes(situacao_efetiva);
         CREATE INDEX IF NOT EXISTS idx_cc_tel               ON cache_clientes(telefone_efetivo);
         CREATE INDEX IF NOT EXISTS idx_cc_pagador_atrasado  ON cache_clientes(pagador_atrasado);
+
+        -- BATIMENTO DO ROBÔ (2026-09-22). Uma linha por rodada do cron e uma
+        -- por campanha×posto processado nela, com o que o robô ENCONTROU:
+        -- quantos clientes estavam nas condições da campanha e por que cada
+        -- um não recebeu. É o que permite ao alarme dizer "o robô rodou 47
+        -- vezes e não achou ninguém" em vez de "pode estar travado" — o log
+        -- roda a cada dia (3 dias de retenção) e não responde por 5 dias.
+        -- SÓ o cron escreve aqui; leitura em wpp_diagnostico.py.
+        CREATE TABLE IF NOT EXISTS robo_rodadas (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            rodada_em      TEXT    NOT NULL,   -- ISO local (mesmo valor gravado em nao_enviados.rodada_em)
+            terminada_em   TEXT,
+            campanhas      INTEGER NOT NULL DEFAULT 0,
+            total_enviado  INTEGER,
+            dry_run        INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_robo_rodadas_em ON robo_rodadas(rodada_em);
+
+        CREATE TABLE IF NOT EXISTS robo_rodada_posto (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            rodada_id      INTEGER NOT NULL REFERENCES robo_rodadas(id),
+            campanha_id    INTEGER NOT NULL,
+            posto          TEXT    NOT NULL,
+            rodada_em      TEXT    NOT NULL,
+            processado_em  TEXT    NOT NULL,
+            -- resultado: ok | sem_conexao | erro_query | limite | janela_fechou
+            resultado      TEXT    NOT NULL DEFAULT 'ok',
+            candidatos     INTEGER NOT NULL DEFAULT 0,  -- linhas devolvidas pela query da campanha
+            enviados       INTEGER NOT NULL DEFAULT 0,
+            sem_telefone   INTEGER NOT NULL DEFAULT 0,
+            nome_teste     INTEGER NOT NULL DEFAULT 0,
+            bloq_intervalo INTEGER NOT NULL DEFAULT 0,  -- recebeu outra msg há < intervalo_dias
+            bloq_rodada    INTEGER NOT NULL DEFAULT 0,  -- mesmo telefone já atendido nesta rodada
+            ja_enviado     INTEGER NOT NULL DEFAULT 0,  -- campanha de envio único, já recebeu
+            erro_api       INTEGER NOT NULL DEFAULT 0,
+            outros         INTEGER NOT NULL DEFAULT 0,
+            erro           TEXT,
+            duracao_ms     INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_robo_rp_camp_posto ON robo_rodada_posto(campanha_id, posto, rodada_em);
+        CREATE INDEX IF NOT EXISTS idx_robo_rp_rodada     ON robo_rodada_posto(rodada_id);
         """)
         # Migração leve para bases já existentes.
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(campanhas)").fetchall()}
@@ -947,6 +988,68 @@ def ja_enviado_na_campanha(campanha_id: int, telefone: str) -> bool:
             (campanha_id, telefone)
         ).fetchone()
     return row is not None
+
+
+# ---------------------------------------------------------------------------
+# BATIMENTO DO ROBÔ (robo_rodadas / robo_rodada_posto) — 2026-09-22
+# ---------------------------------------------------------------------------
+# Escrito SÓ por send_whatsapp_cobranca.py. Toda chamada lá é embrulhada em
+# try/except: falha ao gravar o batimento NUNCA pode interromper a rodada.
+# Retenção de 90 dias (o alarme olha 5; a auditoria, algumas semanas).
+
+ROBO_RETENCAO_DIAS = 90
+
+# Contadores gravados por campanha×posto. A ordem aqui é a ordem das colunas
+# no INSERT — quem acrescentar um motivo novo acrescenta nos dois lugares.
+ROBO_CONTADORES = ("candidatos", "enviados", "sem_telefone", "nome_teste",
+                   "bloq_intervalo", "bloq_rodada", "ja_enviado", "erro_api",
+                   "outros")
+
+
+def registrar_rodada_inicio(rodada_em: str, n_campanhas: int, dry_run: bool) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO robo_rodadas (rodada_em, campanhas, dry_run) VALUES (?,?,?)",
+            (rodada_em, int(n_campanhas), int(bool(dry_run))),
+        )
+        return cur.lastrowid
+
+
+def registrar_rodada_fim(rodada_id: int, total_enviado: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE robo_rodadas SET terminada_em=?, total_enviado=? WHERE id=?",
+            (_now_iso(), int(total_enviado), rodada_id),
+        )
+
+
+def registrar_rodada_posto(rodada_id: int, campanha_id: int, posto: str,
+                           rodada_em: str, contagens: dict, resultado: str = "ok",
+                           erro: str | None = None, duracao_ms: int | None = None) -> None:
+    vals = [int(contagens.get(k) or 0) for k in ROBO_CONTADORES]
+    cols = ", ".join(ROBO_CONTADORES)
+    marks = ",".join("?" * len(ROBO_CONTADORES))
+    with get_conn() as conn:
+        conn.execute(
+            f"""INSERT INTO robo_rodada_posto
+                (rodada_id, campanha_id, posto, rodada_em, processado_em,
+                 resultado, erro, duracao_ms, {cols})
+                VALUES (?,?,?,?,?,?,?,?,{marks})""",
+            (rodada_id, int(campanha_id), str(posto), rodada_em, _now_iso(),
+             resultado, (erro or None) and str(erro)[:300], duracao_ms, *vals),
+        )
+
+
+def limpar_rodadas_antigas(dias: int = ROBO_RETENCAO_DIAS) -> int:
+    """Apaga batimentos com mais de `dias`. Devolve linhas removidas."""
+    from datetime import date, timedelta
+    corte = (date.today() - timedelta(days=int(dias))).isoformat()
+    with get_conn() as conn:
+        n = conn.execute(
+            "DELETE FROM robo_rodada_posto WHERE rodada_em < ?", (corte,)
+        ).rowcount
+        conn.execute("DELETE FROM robo_rodadas WHERE rodada_em < ?", (corte,))
+    return n or 0
 
 
 # ---------------------------------------------------------------------------

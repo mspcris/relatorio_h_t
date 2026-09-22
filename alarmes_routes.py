@@ -443,6 +443,32 @@ def api_central():
                     'servicos': db.SERVICOS, 'status_labels': db.STATUS_LABELS})
 
 
+@alarmes_bp.get('/api/notificacoes')
+def api_notificacoes():
+    """Notificações enviadas nos últimos N dias, com o DIAGNÓSTICO que
+    motivou cada uma (2026-09-22). Alimenta o envelope do Monitorar Robôs:
+    o gestor toca e vê o que foi dito e por quê, sem abrir outra tela."""
+    email, is_admin, postos, err, code = _require_auth()
+    if err:
+        return err, code
+    db.init_db()
+    try:
+        dias = max(1, min(60, int(request.args.get('dias', 7))))
+    except (TypeError, ValueError):
+        dias = 7
+    if not is_admin and not postos:
+        return jsonify({'ok': True, 'itens': [], 'dias': dias})
+    try:
+        from wpp_diagnostico import CLASSES as _classes
+        classes = {k: {'gravidade': v[0], 'rotulo': v[1]} for k, v in _classes.items()}
+    except Exception:
+        classes = {}
+    return jsonify({'ok': True, 'dias': dias,
+                    'itens': db.listar_notificacoes(dias=dias, postos=None if is_admin else postos),
+                    'servicos': db.SERVICOS, 'status_labels': db.STATUS_LABELS,
+                    'classes': classes})
+
+
 # ── Ciência pública por token (link enviado no zap/e-mail) ───────────────────
 # Blueprint SEPARADO e SEM auth: o gestor clica do WhatsApp sem ter conta no
 # KPI. O token (uuid4 hex) é a credencial — identifica destinatário+disparo.

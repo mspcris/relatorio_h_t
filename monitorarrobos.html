@@ -840,6 +840,20 @@
   .btn-alarm-bell:hover { opacity: 1; transform: scale(1.15); }
   .btn-alarm-bell.silenciado { color: #9e9e9e; }
   .btn-alarm-bell.silenciado:hover { color: #616161; }
+  /* Envelope: houve notificação ao gestor sobre esta barra nos últimos 7 dias.
+     A cor é a gravidade do diagnóstico da última (2026-09-22). */
+  .btn-alarm-bell.notif { color: #1565c0; }
+  .btn-alarm-bell.notif.critico { color: #c62828; }
+  .btn-alarm-bell.notif.atencao { color: #ef6c00; }
+  .btn-alarm-bell.notif.normal  { color: #2e7d32; }
+  .notif-item { border: 1px solid #e3e7ee; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; background: #fafbfc; font-size: .86rem; }
+  .notif-item .notif-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-bottom: 6px; }
+  .notif-item .grav { border-radius: 1rem; padding: 1px 9px; font-weight: 600; font-size: .75rem; }
+  .notif-item .grav.critico { background: #fdecea; color: #b71c1c; }
+  .notif-item .grav.atencao { background: #fff3e0; color: #e65100; }
+  .notif-item .grav.normal  { background: #e8f5e9; color: #1b5e20; }
+  .notif-item pre { white-space: pre-wrap; font-family: inherit; font-size: .84rem; background: #fff; border: 1px solid #eee; border-radius: 6px; padding: 10px 12px; margin: 6px 0 0; }
+  .robo-batimento { background: #f5f7fa; border: 1px solid #e3e7ee; border-radius: 8px; padding: 8px 12px; font-size: .84rem; margin-bottom: 8px; }
 </style>
 </div>
 
@@ -899,6 +913,41 @@
   /* ── Estado alarmes ─────────────────────────────────────────── */
   let _alarmResumo = {};  // { posto: { servico: [{id, nome, silenciado}] } }
 
+  /* ── Notificações enviadas ao gestor (últimos 7 dias) ───────── */
+  // Cada item traz o DIAGNÓSTICO que motivou o envio e o texto enviado.
+  // Alimenta o envelope na barra e a aba "Mensagem" do modal (2026-09-22).
+  let _notifs = [];
+  let _notifMeta = {};
+  async function loadNotifs() {
+    try {
+      const r = await fetch('/alarmes/api/notificacoes?dias=7', { credentials: 'same-origin' });
+      if (r.ok) { const d = await r.json(); _notifs = d.itens || []; _notifMeta = d; }
+    } catch (_) { /* complemento — a página vive sem isso */ }
+  }
+  // Notificações que falam desta barra: mesmo serviço, posto entre os da barra
+  // e, no WPP, a campanha citada no diagnóstico (o alarme wpp_campanha cobre o
+  // posto inteiro; o diagnóstico diz QUAL campanha estava parada).
+  function notifsPara(servico, postos, campId) {
+    const set = new Set(postos || []);
+    return _notifs.filter(n => {
+      if (!set.has(n.posto)) return false;
+      if (servico === 'wpp') {
+        if (n.servico !== 'wpp' && n.servico !== 'wpp_campanha') return false;
+        const camps = (n.diagnostico && n.diagnostico.campanhas) || [];
+        return !camps.length || (campId !== null && camps.includes(campId));
+      }
+      return n.servico === servico;
+    });
+  }
+  // CURRENT_TIMESTAMP do SQLite é UTC sem sufixo — marcar como Z antes de converter
+  function fmtDtHM(s) {
+    if (!s) return '—';
+    let t = String(s).replace(' ', 'T');
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(t)) t += 'Z';
+    const d = new Date(t);
+    return isNaN(d) ? String(s) : d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR').slice(0, 5);
+  }
+
   async function loadAlarmResumo() {
     try {
       const r = await fetch('/alarmes/api/resumo', { credentials: 'same-origin' });
@@ -934,7 +983,7 @@
       const data = await r.json();
       if (!data.ok) throw new Error(data.error || 'Erro');
       $('#modalSilenciar').modal('hide');
-      await loadAlarmResumo();
+      await Promise.all([loadAlarmResumo(), loadNotifs()]);
       await loadAll();
     } catch(e) { errEl.textContent = e.message; }
   });
@@ -960,6 +1009,22 @@
       </button>`;
     }
 
+    // Envelope: notificação enviada ao gestor sobre esta barra nos últimos 7
+    // dias. Toque abre o modal já na aba "Mensagem".
+    let notifBtn = '';
+    if (abrir) {
+      const postosBar = (abrir.postos && abrir.postos.length) ? abrir.postos : (posto ? [posto] : []);
+      const campId = abrir.robo.startsWith('wpp:') ? parseInt(abrir.robo.slice(4), 10) : null;
+      const notifs = abrir.robo === 'email_outros' ? [] : notifsPara(servico, postosBar, campId);
+      if (notifs.length) {
+        const grav = (notifs[0].diagnostico && notifs[0].diagnostico.gravidade) || 'critico';
+        notifBtn = `<button class="btn-alarm-bell notif ${grav}"
+          data-msg-robo="${abrir.robo}" data-msg-postos="${postosBar.join(',')}" data-msg-nome="${nome.replace(/"/g, '&quot;')}"
+          title="${notifs.length} notificação(ões) enviada(s) ao gestor nos últimos 7 dias — toque para ler a mensagem e o porquê">
+          <i class="fas fa-envelope"></i></button>`;
+      }
+    }
+
     return `
       <div class="ind-bar"
            style="--ind-color:${s.color}; --ind-bg:${s.bg}; --ind-fill:${fillPct}%"
@@ -972,7 +1037,7 @@
             <span class="ind-label-text">${nome}</span>
           </span>
           <span class="ind-right">
-            ${bellBtn}
+            ${notifBtn}${bellBtn}
             ${textoDir}
           </span>
           <span class="ind-badge-wrap">
@@ -1280,15 +1345,29 @@
       // Números de hoje somados nos postos selecionados (a taxa é refeita
       // sobre a soma, não é média de taxas)
       let env = 0, fal = 0, pul = 0;
+      // Batimento do robô hoje nos postos selecionados: passou? achou quem?
+      // "0 enviados" sozinho não diz nada; "0 nas condições" diz tudo.
+      let cand = 0, semTel = 0, ultRobo = '', nRobo = 0;
       for (const p of postosCamp) {
-        const h = postosSet.has(p) && camp.postos[p].hoje;
-        if (!h) continue;
-        env += h.enviados || 0; fal += h.falharam || 0; pul += h.pulados || 0;
+        if (!postosSet.has(p)) continue;
+        const h = camp.postos[p].hoje;
+        if (h) { env += h.enviados || 0; fal += h.falharam || 0; pul += h.pulados || 0; }
+        const rb = camp.postos[p].robo;
+        if (rb) {
+          nRobo++; cand += rb.candidatos || 0; semTel += rb.sem_telefone || 0;
+          if ((rb.ultima || '') > ultRobo) ultRobo = rb.ultima;
+        }
       }
-      const numeros = (env || fal) ? {
-        taxa: Math.round(1000 * env / (env + fal)) / 10, rotulo_taxa: 'enviados',
+      const obs = [];
+      if (pul) obs.push(`${fmtN(pul)} pulados`);
+      if (nRobo) obs.push(`robô passou às ${ultRobo} · <b>${fmtN(cand)}</b> nas condições` +
+                          (semTel ? ` · ${fmtN(semTel)} sem telefone` : ''));
+      // Escreve os números sempre que o robô passou hoje, mesmo que sejam 0 —
+      // era isso que faltava na barra do Seja Bem Vindo (2026-09-22).
+      const numeros = (env || fal || nRobo) ? {
+        taxa: (env + fal) ? Math.round(1000 * env / (env + fal)) / 10 : null, rotulo_taxa: 'enviados',
         partes: [{ n: env, rotulo: 'enviados', tom: 'ok' }, { n: fal, rotulo: 'falharam', tom: 'falha' }],
-        obs: pul ? [`${fmtN(pul)} pulados`] : [],
+        obs,
       } : null;
       const texto = (detalhe.length
         ? `${ultStr} <span class="text-muted ml-2" style="font-size:.78rem">(${detalhe.join(' · ')})</span>`
@@ -1310,8 +1389,8 @@
   const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let _robo = null;   // { robo, nome, postos, posto, dados, filtro }
 
-  async function abrirRobo(robo, nome, postos) {
-    _robo = { robo, nome, postos, posto: postos[0], dados: null, filtro: null };
+  async function abrirRobo(robo, nome, postos, aba) {
+    _robo = { robo, nome, postos, posto: postos[0], dados: null, filtro: null, abaInicial: aba || null };
     document.getElementById('robo-titulo').textContent = `${nome} — hoje`;
     document.getElementById('robo-codigos').hidden = !robo.startsWith('email');
     $('#modalRobo').modal('show');
@@ -1333,19 +1412,76 @@
       const d = await r.json();
       if (!r.ok || d.erro) throw new Error(d.erro || `HTTP ${r.status}`);
       _robo.dados = d;
-      _robo.filtro = d.falha ? 'falha' : 'todos';
+      const manterMsg = _robo.filtro === 'mensagem' || _robo.abaInicial === 'mensagem';
+      _robo.abaInicial = null;
+      _robo.filtro = manterMsg ? 'mensagem' : (d.falha ? 'falha' : 'todos');
       desenharRobo();
     } catch (e) {
       lista.innerHTML = `<div class="ind-err">Não consegui ler a lista: ${esc(e.message)}</div>`;
     }
   }
 
+  // Batimento do robô hoje (WPP): quantas vezes passou, quando, quem achou.
+  function htmlBatimento(b) {
+    if (!b) return '';
+    const pl = (n, um, muitos) => `<b>${fmtN(n)}</b> ${n === 1 ? um : muitos}`;
+    const partes = [
+      `${pl(b.passadas, 'passada', 'passadas')} do robô hoje por esta campanha neste posto (última às <b>${esc(b.ultima)}</b>)`,
+      `${pl(b.candidatos, 'cliente', 'clientes')} nas condições na última passada`,
+    ];
+    if (b.sem_telefone) partes.push(`${pl(b.sem_telefone, 'sem telefone', 'sem telefone')} de WhatsApp`);
+    if (b.bloqueados) partes.push(`${fmtN(b.bloqueados)} já receberam outra mensagem há menos de 7 dias`);
+    if (b.erro_api) partes.push(`<b style="color:#c62828">${fmtN(b.erro_api)}</b> recusadas pela API`);
+    if (b.resultado && b.resultado !== 'ok') partes.push(`<b style="color:#c62828">${esc(b.resultado)}</b>`);
+    return `<div class="robo-batimento"><i class="fas fa-robot mr-1"></i>${partes.join(' · ')}</div>`;
+  }
+
+  // Aba "Mensagem": as notificações enviadas ao gestor sobre este robô/posto,
+  // com o porquê e o texto exatamente como saiu no zap.
+  function htmlNotifs(notifs) {
+    if (!notifs.length) {
+      return '<div class="text-muted">Nenhuma notificação foi enviada ao gestor sobre este robô neste posto nos últimos 7 dias.</div>';
+    }
+    const st = _notifMeta.status_labels || {};
+    const gravTxt = { critico: 'Defeito — acionar o TI', atencao: 'Atenção — cadastro/dados', normal: 'Robô ok — sem clientes nas condições' };
+    return notifs.map((n, i) => {
+      const dg = n.diagnostico || {};
+      const grav = dg.gravidade || 'critico';
+      const dest = (n.ciencias || []).map(c => {
+        const quem = esc(c.dest_nome || c.dest_email || c.dest_telefone || c.dest_tipo);
+        return c.ciente_em
+          ? `<span class="badge badge-success" title="confirmou ciência">✓ ${quem} · ${esc(c.canal)} · ciente ${fmtDtHM(c.ciente_em)}</span>`
+          : `<span class="badge badge-light" title="ainda não confirmou ciência">${quem} · ${esc(c.canal)} · sem ciência</span>`;
+      }).join(' ');
+      const porque = n.resumo || (dg.paradas || []).map(p => p.resumo).join(' ');
+      return `<div class="notif-item">
+        <div class="notif-head"><b>${fmtDtHM(n.disparado_em)}</b><span>${esc(n.alarme_nome)}</span>
+          <span class="grav ${grav}">${esc(gravTxt[grav] || grav)}</span>
+          <span class="text-muted">status no disparo: ${esc(st[n.status_registrado] || n.status_registrado || '')}</span></div>
+        ${porque ? `<div><b>Por que foi enviada:</b> ${esc(porque)}</div>` : ''}
+        <div class="mt-1"><b>Enviada para:</b> ${dest || '<span class="text-muted">—</span>'}</div>
+        ${n.texto_enviado ? `<details class="mt-1"${i === 0 ? ' open' : ''}><summary style="cursor:pointer">Mensagem enviada</summary><pre>${esc(n.texto_enviado)}</pre></details>` : ''}
+      </div>`;
+    }).join('');
+  }
+
   function desenharRobo() {
     const d = _robo.dados;
+    const servico = _robo.robo.startsWith('wpp:') ? 'wpp' : _robo.robo.replace('_outros', '');
+    const campId = _robo.robo.startsWith('wpp:') ? parseInt(_robo.robo.slice(4), 10) : null;
+    const notifs = _robo.robo === 'email_outros' ? [] : notifsPara(servico, [_robo.posto], campId);
     const filtros = [['todos', 'Todos', d.linhas.length], ['certo', 'Deram certo', d.certo], ['falha', 'Falharam', d.falha]];
     if (d.pulado) filtros.push(['pulado', 'Pulados', d.pulado]);
+    filtros.push(['mensagem', '<i class="fas fa-envelope mr-1"></i>Mensagem', notifs.length]);
     document.getElementById('robo-filtros').innerHTML = filtros.map(([k, rot, n]) =>
       `<button class="btn btn-sm ${k === _robo.filtro ? 'btn-primary' : 'btn-outline-primary'}" data-filtro="${k}">${rot} <b>${fmtN(n)}</b></button>`).join('');
+
+    if (_robo.filtro === 'mensagem') {
+      document.getElementById('robo-motivos').innerHTML = '';
+      document.getElementById('robo-lista').innerHTML = htmlNotifs(notifs);
+      return;
+    }
+    const batimento = htmlBatimento(d.batimento);
 
     // Os motivos de falha agrupados: de relance, por que não saiu
     const motivos = {};
@@ -1369,6 +1505,8 @@
         </tr>`).join('')}</tbody>
       </table>${d.cortado ? '<div class="text-muted mt-1">Lista cortada em 5.000 linhas.</div>' : ''}`
       : '<div class="text-muted">Nada nesta aba hoje.</div>';
+    // O batimento vai ACIMA da lista: lista vazia + "0 nas condições" é resposta, não mistério.
+    document.getElementById('robo-lista').innerHTML = batimento + document.getElementById('robo-lista').innerHTML;
   }
 
   document.getElementById('robo-filtros').addEventListener('click', e => {
@@ -1444,6 +1582,8 @@
   }
 
   document.getElementById('painelIndicadores').addEventListener('click', e => {
+    const mb = e.target.closest('[data-msg-robo]');   // envelope → modal na aba Mensagem
+    if (mb) { abrirRobo(mb.dataset.msgRobo, mb.dataset.msgNome, mb.dataset.msgPostos.split(','), 'mensagem'); return; }
     if (e.target.closest('button, a')) return;          // o sino de alarme continua sendo o sino
     const bar = e.target.closest('.ind-bar[data-robo]');
     if (!bar || !bar.dataset.postos) return;
@@ -1469,7 +1609,7 @@
 
     buildPostoTabs();
     wireGrupoButtons();
-    await loadAlarmResumo();
+    await Promise.all([loadAlarmResumo(), loadNotifs()]);
     await loadAll();
     if (q.get('robo') && postoQ && POSTOS_USER.includes(postoQ)) {
       abrirRobo(q.get('robo'), q.get('nome') || q.get('robo'), [postoQ]);
@@ -1486,7 +1626,7 @@
     const info  = document.getElementById('autoRefreshInfo');
     setInterval(() => {
       proxima--;
-      if (proxima <= 0) { proxima = 300; loadAll(); }
+      if (proxima <= 0) { proxima = 300; loadNotifs().then(loadAll); }
       info.textContent = `Atualiza em ${proxima}s`;
     }, 1000);
   }

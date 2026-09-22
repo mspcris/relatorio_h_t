@@ -363,7 +363,10 @@ def api_indicadores():
             ultimo = d.get("ultimo_envio")
             dias = _dias_desde(ultimo)
             # números de hoje (enviados × falharam) — contados no export
-            postos_dados[posto] = {"dias": dias, "ultimo_envio": ultimo, "hoje": d.get("hoje")}
+            # "robo" = batimento de hoje (export_indicadores_painel._robo_hoje_wpp):
+            # última passada, clientes nas condições, sem telefone… (2026-09-22)
+            postos_dados[posto] = {"dias": dias, "ultimo_envio": ultimo, "hoje": d.get("hoje"),
+                                   "robo": d.get("robo")}
             if ultimo and dias <= 7:
                 postos_com_envio.append(posto)
             else:

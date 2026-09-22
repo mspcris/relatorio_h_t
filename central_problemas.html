@@ -108,7 +108,7 @@
           <table class="table table-hover table-sm tbl-central mb-0">
             <thead class="thead-light"><tr>
               <th>Quando</th><th>Alerta</th><th>Posto</th><th>Serviço</th>
-              <th>Status no disparo</th><th>Notificados</th><th>Ciência</th>
+              <th>Status no disparo</th><th>Por quê</th><th>Notificados</th><th>Ciência</th>
             </tr></thead>
             <tbody id="tbody"></tbody>
           </table>
@@ -124,7 +124,10 @@ if (window.innerWidth < 768) document.body.classList.add('sidebar-collapse');
 let DADOS = null;
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
-function fmtDt(s){ if(!s) return '—'; const d=new Date(String(s).replace(' ','T'));
+// CURRENT_TIMESTAMP do SQLite é UTC sem sufixo: marcar Z, senão 08:30 vira 11:30
+function fmtDt(s){ if(!s) return '—'; let t=String(s).replace(' ','T');
+  if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(t)) t+='Z';
+  const d=new Date(t);
   return isNaN(d) ? s : d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR').slice(0,5); }
 
 async function carregar() {
@@ -172,12 +175,20 @@ function render() {
     }).join(' ') || '<span class="text-muted">—</span>';
     const st = (DADOS.status_labels || {})[i.status_registrado] || i.status_registrado || '?';
     const sv = (DADOS.servicos || {})[i.servico] || i.servico || '?';
+    // Por quê (2026-09-22): resumo do diagnóstico + o texto exatamente como saiu
+    const det = i.detalhes || {};
+    const grav = (det.diagnostico || {}).gravidade;
+    const gravTxt = {critico:'Defeito', atencao:'Atenção', normal:'Robô ok'}[grav];
+    const porque = (det.resumo ? esc(det.resumo) : '<span class="text-muted">—</span>') +
+      (gravTxt ? ' <span class="ci-pill ' + (grav==='critico'?'ci-falha':grav==='normal'?'ci-ok':'ci-pendente') + '">' + gravTxt + '</span>' : '') +
+      (det.texto_enviado ? '<details style="margin-top:4px"><summary style="cursor:pointer;font-size:.8rem">mensagem enviada</summary><pre style="white-space:pre-wrap;font-family:inherit;font-size:.8rem;background:#f8f9fb;border:1px solid #eee;border-radius:6px;padding:8px;margin:4px 0 0;max-width:520px">' + esc(det.texto_enviado) + '</pre></details>' : '');
     return '<tr>' +
       '<td>' + fmtDt(i.disparado_em) + '<br><span class="text-muted" style="font-size:.72rem">ciclo ' + (i.numero_ciclo||1) + '</span></td>' +
       '<td><b>' + esc(i.alarme_nome) + '</b></td>' +
       '<td>' + esc(i.posto) + '</td>' +
       '<td>' + esc(sv) + '</td>' +
       '<td>' + esc(st) + '</td>' +
+      '<td style="max-width:540px">' + porque + '</td>' +
       '<td>' + notifTxt + '</td>' +
       '<td>' + cien + '</td>' +
       '</tr>';
