@@ -327,6 +327,62 @@ Agora:
   conta no modal, com linha de conferência. Percentual sobre base própria na
   frente do card não entra.
 
+**Clicar num número abre os registros (2026-09-22).** *"Ao clicar no quadro,
+quero que abra um modal com os dados para confirmar, para eu ir no ERP e
+validar."* `GET /api/cancelados_robo/relatorio/linhas?grupo=&ini&fim&posto`
+devolve os lançamentos por trás de qualquer degrau da conta, com
+`idLancamento` + `idLancamentoServico`, paciente, matrícula, médico, horário,
+quando foi marcado, quando foi confirmado e a situação. Tem botão de CSV.
+- A query **reusa `_SQL_BASE`** — a MESMA construção de `#b`/`#c` do relatório.
+  Lista que saísse de query própria um dia deixaria de bater com o card e
+  ninguém saberia qual dos dois está certo. Por isso `SQL_RELATORIO` virou
+  `_SQL_BASE + _SQL_REL_AGG`.
+- O WHERE vem de `_GRUPOS`, dicionário fechado no servidor; a chave do request
+  é validada contra ele. Teto de 1.500 linhas por posto (o card 1 sozinho deu
+  520 em G/ago-26) e a tela **diz** quando cortou ou quando um posto não
+  respondeu — senão o gestor conta os nomes, dá menos que o card e para de
+  acreditar no número.
+
+**Card 1 conta também quem NÃO foi cancelado (2026-09-22).** Era só
+`canc_falta_medico`; o Cristiano viu as "outras 28 que ficaram na agenda" na
+frase e disse *"elas DEVEM SER CONTADAS SIM"*. São `cat = 'medico_faltou'`:
+consulta em horário de falta registrada do médico, **não cancelada** e sem
+atendimento — ficaram na agenda, ninguém avisou, o paciente pode ter ido ao
+posto à toa. O card agora é **pacientes prejudicados** = canceladas por falta
+médica + as que ficaram na agenda. Continuam **fora da conta de faltas do
+paciente** (card 5) — a culpa não é dele. Consulta com médico substituto que
+atendeu não entra (é `compareceu`).
+
+**"No ato × depois" não respondia a pergunta certa (2026-09-22).** O Cristiano:
+*"no ato de quê? Todas são antes. Se marquei com um mês antes, só confirmo com
+5 a 2 dias da consulta."* São dois eixos diferentes do mesmo campo:
+- **QUEM gravou** — o sistema no minuto da marcação (`conf_no_ato`, ≤1 min do
+  lançamento) × alguém depois (app ou F5). O ERP não grava a origem.
+- **QUANDO gravou**, contando da CONSULTA para trás — é o que importa, porque
+  a janela do robô é de **5 a 2 dias antes**. Colunas novas: `conf_cedo` (>5
+  dias), `conf_j` (5 a 2 — a janela certa), `conf_tarde` (1 dia ou no próprio
+  dia), `conf_pos` (depois do dia da consulta). Os quatro + `sem_conf` somam as
+  ativas, igual a `conf_no_ato + conf_depois + sem_conf`.
+O filtro da aba passou a ter as cinco opções (todas · janela · fora da janela ·
+sistema na marcação · depois).
+
+**"Marcada com até 5 dias" = de 0 a 5 dias** — inclui a véspera e o próprio dia.
+**Não** é "mais de 2 e até 5" (ele perguntou). O card 3 abre a antecedência da
+marcação em `marc_cedo` (>5), `marc_j` (5 a 2), `marc_tarde` (1 ou 0) e
+`marc_neg` (<0, lançamento posterior à consulta — existem: 23 em G/ago-26).
+`marc_j + marc_tarde = dentro5_total`.
+
+**Dry-run de 2026-09-22 (G, ago/2026, somente leitura):** 3.905 marcações; as
+cinco identidades fecham (total = canceladas 1.620 + compareceram 1.504 +
+faltas 558 + médico faltou 223 + pendentes 0; ativas 2.285 = conf_cedo 218 +
+conf_j 1.325 + conf_tarde 351 + conf_pos 0 + sem_conf 391 = conf_no_ato 855 +
+conf_depois 1.039 + sem_conf 391; total = marc_cedo 2.789 + marc_j 639 +
+marc_tarde 454 + marc_neg 23). Os 45 grupos da lista rodam em ~1,5 s cada.
+
+**Grupos Altamiro/Couto** entraram nas duas abas (`GRUPOS_POSTO` +
+`chipsHTML`), mesma lista de letras das outras páginas: Altamiro A B G I N R X
+Y · Couto C D J M P.
+
 **Pendências conhecidas (2026-07-21):**
 - `/cancelados_robo` ([cancelados_robo_routes.py](cancelados_robo_routes.py)) ainda
   usa `vw_Cad_LancamentoProntuarioComDesistencia` (~1,8s/posto no balcão). Cabe o

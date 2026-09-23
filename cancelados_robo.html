@@ -54,6 +54,14 @@
 
     .barra { background:#fff; border-radius:.5rem; padding:.9rem 1rem; margin-bottom:1rem;
              box-shadow:0 1px 3px rgba(0,0,0,.08); }
+    .flbl { font-size:.8rem; font-weight:700; color:#5a6672; margin-right:.4rem; }
+    .gbts { display:inline-flex; margin-right:.55rem; vertical-align:middle; }
+    .gbtn { border:1px solid #ccd3da; background:#fff; color:#4a5560; font-size:.8rem;
+            font-weight:700; padding:.22rem .7rem; cursor:pointer; }
+    .gbtn + .gbtn { border-left:0; }
+    .gbts .gbtn:first-child { border-radius:.25rem 0 0 .25rem; }
+    .gbts .gbtn:last-child  { border-radius:0 .25rem .25rem 0; }
+    .gbtn.on { background:#37424c; border-color:#37424c; color:#fff; }
     .chip {
       display:inline-block; padding:.25rem .7rem; margin:.15rem .2rem .15rem 0;
       border:1px solid #ccd3da; border-radius:1rem; background:#fff; cursor:pointer;
@@ -167,6 +175,19 @@
                   padding:.45rem .65rem; border-radius:.25rem; margin:.5rem 0; }
     .casc .pctres { font-size:.88rem; color:#37424c; margin:.4rem 0 .2rem; }
     .casc .regra { font-size:.8rem; color:#7a838d; border-top:1px dashed #e3e7eb; padding-top:.5rem; margin-top:.7rem; }
+    /* botão "conferir" e a lista de registros dentro do modal */
+    .vreg { border:1px solid #bcd3ea; background:#f0f6fc; color:#1565c0; border-radius:1rem;
+            font-size:.74rem; font-weight:700; padding:.05rem .5rem; margin-left:.35rem; cursor:pointer; }
+    .vreg:hover { background:#e2eefb; }
+    .drillbar { margin:.8rem 0 .2rem; display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; }
+    .drillbar .dica { font-size:.8rem; color:#7a838d; }
+    .drill { border:1px solid #e3e7eb; border-radius:.35rem; margin:.6rem 0; }
+    .drill .dh { background:#f4f6f8; padding:.45rem .6rem; font-size:.88rem; border-bottom:1px solid #e3e7eb; }
+    .drill .dok   { font-size:.82rem; color:#1e7e34; padding:.35rem .6rem; }
+    .drill .dwarn { font-size:.82rem; color:#8a6100; background:#fff8e6; padding:.35rem .6rem; }
+    .drill table.rel td .sub { font-size:.72rem; color:#8a949e; }
+    .drill .ids { font-variant-numeric:tabular-nums; font-size:.8rem; color:#5a6672; }
+    .mdl .cx { max-width:1100px; }
     .rel-card.c-vermelho { border-left-color:#d9534f; } .rel-card.c-verde { border-left-color:#28a745; }
     .rel-card.c-azul { border-left-color:#1565c0; } .rel-card.c-laranja { border-left-color:#f0ad4e; }
     .rel-card.c-roxo { border-left-color:#6f42c1; } .rel-card.c-cinza { border-left-color:#78909c; }
@@ -288,11 +309,13 @@
               <select id="fMed" class="form-control form-control-sm"><option value="">Todos</option></select>
             </div>
             <div class="col-auto mb-2 so-rel" hidden>
-              <label class="mb-1" style="font-size:.8rem;font-weight:700;color:#5a6672" title="Como o ERP não grava se a confirmação veio do app ou do F5, o filtro separa o que o dado permite: confirmação no ato da marcação × confirmação feita depois.">CONFIRMAÇÃO CONSIDERADA</label>
+              <label class="mb-1" style="font-size:.8rem;font-weight:700;color:#5a6672" title="Escolhe QUAIS confirmações contam nos cards 4 e 6. A janela do robô é de 5 a 2 dias antes da consulta.">QUAL CONFIRMAÇÃO CONTA</label>
               <select id="fConf" class="form-control form-control-sm" onchange="renderRelatorio()">
-                <option value="todas">Todas (no ato + depois)</option>
-                <option value="depois">Só confirmadas depois (app ou F5)</option>
-                <option value="ato">Só confirmadas no ato da marcação</option>
+                <option value="todas">Todas as confirmações</option>
+                <option value="janela">Só na janela certa — 5 a 2 dias antes da consulta</option>
+                <option value="fora">Só fora da janela (cedo demais ou em cima da hora)</option>
+                <option value="ato">Só as que o sistema gravou na marcação</option>
+                <option value="depois">Só as confirmadas depois da marcação</option>
               </select>
             </div>
             <div class="col-auto mb-2">
@@ -348,8 +371,10 @@
               <li><b>Base</b>: consultas (com hora prevista) cuja <b>data da consulta</b> está no período, nas mesmas tabelas e filtros do dashboard de Pré-Agendamento (agenda exibida no F3, sem estornos). Teto de 92 dias por consulta.</li>
               <li><b>Cancelamentos por falta médica</b>: consulta cujo horário cai dentro de uma falta do médico registrada no ERP (Cad_MedicoFalta, dia inteiro ou parte do dia) e que foi cancelada, por quem for (recepção, cliente pelo app, robô). É o total de pacientes prejudicados, remarcados ou não. Ao lado, quantas consultas no mesmo caso <b>não</b> foram canceladas (ficam como "médico faltou" e fora da conta de faltas).</li>
               <li><b>Atendimentos realizados</b>: status Atendido (StatusAtendimento = 1). "Compareceram" soma também quem está aguardando.</li>
-              <li><b>Marcou já confirmado</b>: a data de confirmação foi gravada até 1 minuto depois do lançamento. É o que o ERP faz quando a marcação já cai dentro da janela de 5 dias (ou o atendente confirma na hora). No dashboard esses são os "isentos". Segundo o DBA (22/09/2026), nem todo processo de marcação preenche o campo: medido em ago-set/2026, das marcações com até 5 dias de antecedência nasceram confirmadas 76% em Campo Grande, 77% em Bangu e 88% em Anchieta. O card 3 mostra essa exceção para o período filtrado.</li>
-              <li><b>Confirmou depois (app ou F5)</b>: data de confirmação gravada depois disso, seja pelo cliente no app ou pela central no F5.</li>
+              <li><b>"Marcada com até 5 dias"</b> = o lançamento foi feito de <b>0 a 5 dias</b> antes da consulta — inclui quem marcou na véspera e no próprio dia. <b>Não</b> é "mais de 2 e até 5". No card 3 esse grupo aparece aberto em: mais de 5 dias · de 5 a 2 dias · 1 dia ou no mesmo dia.</li>
+              <li><b>Janela de confirmação</b> = de <b>5 a 2 dias antes da consulta</b>. É o período em que o robô pede confirmação e depois do qual ele cancela. O card 4 mostra quando cada confirmação foi gravada: cedo demais (mais de 5 dias antes) · na janela (5 a 2) · em cima da hora (1 dia antes ou no próprio dia) · depois do dia da consulta.</li>
+              <li><b>"O sistema gravou na marcação"</b> (antes escrito "no ato"): a data de confirmação foi gravada até 1 minuto depois do lançamento. É o que o ERP faz quando a marcação já cai dentro da janela de 5 dias (ou o atendente confirma na hora). No dashboard esses são os "isentos". Segundo o DBA (22/09/2026), nem todo processo de marcação preenche o campo: medido em ago-set/2026, das marcações com até 5 dias de antecedência nasceram confirmadas 76% em Campo Grande, 77% em Bangu e 88% em Anchieta. O card 3 mostra essa exceção para o período filtrado.</li>
+              <li><b>Confirmou depois</b>: data de confirmação gravada depois disso (mais de 1 minuto após a marcação), seja pelo cliente no app ou pela central no F5. Note que <b>quem gravou</b> e <b>quando gravou</b> são recortes diferentes do mesmo campo: uma confirmação feita pelo sistema na marcação pode cair dentro ou fora da janela, dependendo de com quanta antecedência a consulta foi marcada.</li>
               <li><b>Faltas</b>: mesma régua do dashboard — não compareceu e já passou 1 hora da hora prevista. Antes disso a consulta está "pendente". Médico faltou fica fora.</li>
               <li><b>Canceladas por falta de confirmação</b>: cancelamento automático do robô de pré-agendamento (a mesma assinatura da aba Lista).</li>
               <li><b>Reaproveitadas</b>: a vaga (agenda + dia + número) de um cancelado pelo robô recebeu <b>outra marcação ativa, feita com menos de 2 dias de antecedência e depois do cancelamento</b> (encaixe). Ao lado, quantas dessas foram atendidas.</li>
@@ -386,6 +411,37 @@ let MULTI_DIA = false;
 // Postos onde o usuário PODE marcar "tratado" (ACL). Ver todos é de todos;
 // tratar é da recepção do posto.
 let ACL = new Set(window.USER_POSTOS || []);
+
+/* Agrupamento de postos usado em TODO o projeto (ctrlq_desbloqueio, kpi_vendas,
+   indicadores…). Mesma lista de letras — se mudar a rede, muda em todas. */
+const GRUPOS_POSTO = {
+  altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+  couto:    ['C', 'D', 'J', 'M', 'P'],
+};
+
+/* Botões Todos/Altamiro/Couto + chips, compartilhados pelas duas abas.
+   `postos` = os que existem no período; `sel` = Set dos ligados. */
+function chipsHTML(postos, sel, fnToggle, fnGrupo) {
+  const ativo = (() => {
+    if (postos.every(p => sel.has(p))) return 'todos';
+    const cur = [...sel].sort().join(',');
+    for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) {
+      const inter = lista.filter(p => postos.includes(p)).sort().join(',');
+      if (inter && cur === inter) return nome;
+    }
+    return '';
+  })();
+  const btn = (k, rot, dica) =>
+    `<button type="button" class="gbtn ${ativo === k ? 'on' : ''}" title="${dica}"
+             onclick="${fnGrupo}('${k}')">${rot}</button>`;
+  return '<span class="flbl">POSTO</span>' +
+    `<span class="gbts">${btn('todos', 'Todos', 'Todos os postos com consulta no período')}` +
+    `${btn('altamiro', 'Altamiro', 'A B G I N R X Y')}${btn('couto', 'Couto', 'C D J M P')}</span>` +
+    postos.map(p => `<span class="chip ${sel.has(p) ? 'on' : ''}" onclick="${fnToggle}('${p}')">${p}</span>`).join('');
+}
+function postosDoGrupo(grupo, postos) {
+  return grupo === 'todos' ? postos.slice() : GRUPOS_POSTO[grupo].filter(p => postos.includes(p));
+}
 
 function hojeISO(off = 0) {
   const d = new Date();
@@ -467,9 +523,7 @@ function montarFiltros() {
   // desmarcado e sumir do total em silêncio.
   POSTOS_SEL = new Set(postos.filter(p => !POSTOS_OFF.has(p)));
   $('#chipsPosto').innerHTML = postos.length
-    ? '<span style="font-size:.8rem;font-weight:700;color:#5a6672;margin-right:.4rem">POSTO</span>' +
-      postos.map(p => `<span class="chip ${POSTOS_SEL.has(p) ? 'on' : ''}" onclick="togglePosto('${p}')">${p}</span>`).join('')
-    : '';
+    ? chipsHTML(postos, POSTOS_SEL, 'togglePosto', 'grupoPosto') : '';
 
   const enche = (sel, campo) => {
     const el = $(sel), atual = el.value;
@@ -482,6 +536,12 @@ function montarFiltros() {
 }
 function togglePosto(p) {
   POSTOS_OFF.has(p) ? POSTOS_OFF.delete(p) : POSTOS_OFF.add(p);
+  montarFiltros(); render();
+}
+function grupoPosto(grupo) {
+  const postos = [...new Set(DADOS.map(x => x.posto))].sort();
+  const on = new Set(postosDoGrupo(grupo, postos));
+  POSTOS_OFF = new Set(postos.filter(p => !on.has(p)));
   montarFiltros(); render();
 }
 
@@ -642,6 +702,12 @@ function relPostosSel() {
   return (REL.postos_com_dados || []).filter(p => !REL_POSTOS_OFF.has(p));
 }
 function relToggle(p) { REL_POSTOS_OFF.has(p) ? REL_POSTOS_OFF.delete(p) : REL_POSTOS_OFF.add(p); renderRelatorio(); }
+function relGrupo(grupo) {
+  const postos = REL.postos_com_dados || [];
+  const on = new Set(postosDoGrupo(grupo, postos));
+  REL_POSTOS_OFF = new Set(postos.filter(p => !on.has(p)));
+  renderRelatorio();
+}
 
 function relSoma(linhas) {
   const t = {};
@@ -683,19 +749,27 @@ function relCardHTML(c, i) {
      soma  {st, itens:[{n,txt}], total}    reparte um grupo e confere a soma
      res   {n, txt}                        o número do card
      nota  {txt}                           observação em português             */
+/* Botão "conferir": abre a lista dos lançamentos que formam AQUELE número,
+   com idLancamento/idLancamentoServico para abrir no ERP. Toda linha da
+   cascata que tem grupo (g) ganha o botão — o gestor confere qualquer degrau
+   da conta, não só o número final. */
+const verBtn = (p, rot) => p.g
+  ? ` <button type="button" class="vreg" onclick="relLinhas('${p.g}', ${JSON.stringify(rot || p.txt || '').replace(/"/g, '&quot;')}, ${p.n || 0})">conferir</button>`
+  : '';
+
 function cascHTML(passos, total) {
   return '<div class="casc">' + passos.map(p => {
     if (p.t === 'base') return `<div class="lin base"><span class="num">${fmtN(p.n)}</span><span>${p.txt}</span></div>`;
-    if (p.t === 'tira') return `<div class="op"><span class="num">− ${fmtN(p.n)}</span><span>${p.txt}</span></div>` +
+    if (p.t === 'tira') return `<div class="op"><span class="num">− ${fmtN(p.n)}</span><span>${p.txt}${verBtn(p)}</span></div>` +
       `<div class="lin"><span class="num">${fmtN(p.resta)}</span><span>${p.restaTxt}</span></div>`;
-    if (p.t === 'foco') return `<div class="lin foco"><span class="num">${fmtN(p.n)}</span><span>${p.txt}</span></div>`;
-    if (p.t === 'res')  return `<div class="lin res"><span class="num">${fmtN(p.n)}</span><span>${p.txt}</span></div>` +
+    if (p.t === 'foco') return `<div class="lin foco"><span class="num">${fmtN(p.n)}</span><span>${p.txt}${verBtn(p)}</span></div>`;
+    if (p.t === 'res')  return `<div class="lin res"><span class="num">${fmtN(p.n)}</span><span>${p.txt}${verBtn(p)}</span></div>` +
       `<div class="pctres">É o número do card: <b>${fmtN(p.n)}</b> de <b>${fmtN(total)}</b> marcações do período
         (${pct(p.n, total)}) — ${fmtN(emCada100(p.n, total))} em cada 100.</div>`;
     if (p.t === 'soma') {
       const soma = p.itens.reduce((a, x) => a + (x.n || 0), 0);
       return `<div class="soma"><div class="st">${p.st}</div>` +
-        p.itens.map(x => `<div class="lin"><span class="num">${fmtN(x.n)}</span><span>${x.txt}</span></div>`).join('') +
+        p.itens.map(x => `<div class="lin"><span class="num">${fmtN(x.n)}</span><span>${x.txt}${verBtn(x)}</span></div>`).join('') +
         `<div class="eq">${p.itens.map(x => fmtN(x.n)).join(' + ')} = <b>${fmtN(soma)}</b>` +
         (soma === p.total ? ' <span class="ok">✔ fecha</span>' : ` (esperado ${fmtN(p.total)})`) + `</div></div>`;
     }
@@ -709,9 +783,94 @@ function abrirCardRel(i) {
   if (!c) return;
   $('#relModalTit').innerHTML = c.q;
   $('#relModalBody').innerHTML = cascHTML(c.passos, c.total) +
+    (c.g ? `<div class="drillbar"><button type="button" class="btn btn-sm btn-primary"
+              onclick="relLinhas('${c.g}', ${JSON.stringify(c.q).replace(/"/g, '&quot;')}, ${c.n})">
+              <i class="fas fa-list-ul"></i> Ver os ${fmtN(c.n)} registros para conferir no ERP</button>
+            <span class="dica">ou clique em "conferir" em qualquer degrau da conta acima</span></div>` : '') +
+    '<div id="relDrill"></div>' +
     `<div class="casc"><div class="regra"><b>Regra usada:</b> ${c.def}</div></div>`;
   $('#relModal').hidden = false;
   document.body.style.overflow = 'hidden';
+}
+
+/* ── Lista de registros de um grupo (para validar no ERP) ────────────────── */
+let REL_LINHAS = null;      // último resultado, para o CSV
+
+async function relLinhas(grupo, rotulo, n) {
+  const alvo = $('#relDrill');
+  if (!alvo) return;
+  const postos = relPostosSel();
+  alvo.innerHTML = `<div class="drill"><div class="text-muted"><i class="fas fa-spinner fa-spin"></i>
+    Consultando ${postos.length === 1 ? 'o posto ' + esc(postos[0]) : 'os ' + postos.length + ' postos'}…
+    (a consulta é ao vivo, pode levar alguns segundos)</div></div>`;
+  alvo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  try {
+    const q = '?ini=' + encodeURIComponent(REL.ini) + '&fim=' + encodeURIComponent(REL.fim) +
+              '&grupo=' + encodeURIComponent(grupo) +
+              (postos.length ? '&posto=' + encodeURIComponent(postos.join(',')) : '');
+    const r = await fetch('/api/cancelados_robo/relatorio/linhas' + q, { credentials: 'same-origin' });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || ('HTTP ' + r.status)); }
+    REL_LINHAS = await r.json();
+    REL_LINHAS.rotulo = rotulo; REL_LINHAS.esperado = n;
+    renderLinhas();
+  } catch (e) {
+    alvo.innerHTML = `<div class="drill"><div class="text-danger">${esc(e.message)}</div></div>`;
+  }
+}
+
+const SIT = { compareceu: 'compareceu', falta: 'faltou', cancelada: 'cancelada',
+              medico_faltou: 'médico faltou', pendente: 'pendente' };
+
+function renderLinhas() {
+  const L = REL_LINHAS.linhas || [];
+  const d  = x => (x || '').slice(0, 10).split('-').reverse().join('/');
+  const dh = x => x ? d(x) + ' ' + x.slice(11, 16) : '—';
+  const errs = Object.keys(REL_LINHAS.postos_erro || {});
+  const cortou = (REL_LINHAS.postos_cortados || []).length;
+  // A lista pode não ter o mesmo tamanho do número do card: teto por posto ou
+  // posto fora do ar. Dizer isso é obrigatório — senão o gestor conta os nomes,
+  // dá menos e passa a desconfiar do número.
+  const bate = L.length === REL_LINHAS.esperado;
+  $('#relDrill').innerHTML = `<div class="drill">
+    <div class="dh"><b>${esc(REL_LINHAS.rotulo)}</b> — ${fmtN(L.length)} registro(s)
+      <button type="button" class="vreg" onclick="baixarLinhasCSV()"><i class="fas fa-download"></i> CSV</button>
+      <button type="button" class="vreg" onclick="$('#relDrill').innerHTML=''">fechar</button></div>
+    ${bate ? `<div class="dok">A lista tem exatamente os ${fmtN(REL_LINHAS.esperado)} do número acima.</div>`
+           : `<div class="dwarn">A lista mostra ${fmtN(L.length)} de ${fmtN(REL_LINHAS.esperado)}.
+              ${cortou ? 'Cortada no teto de ' + fmtN(REL_LINHAS.teto) + ' por posto (' + (REL_LINHAS.postos_cortados).join(', ') + ').' : ''}
+              ${errs.length ? 'Postos que não responderam: ' + errs.map(esc).join(', ') + '.' : ''}</div>`}
+    ${L.length ? `<div style="overflow:auto;max-height:46vh"><table class="rel">
+      <thead><tr><th>Consulta</th><th>Posto</th><th>Paciente</th><th>Médico / especialidade</th>
+        <th>Marcado em</th><th>Confirmado em</th><th>Canal</th><th>Situação</th><th>Cancelamento</th><th>IDs no ERP</th></tr></thead>
+      <tbody>${L.map(x => `<tr>
+        <td>${d(x.data_consulta)} ${esc(x.hora_consulta || '')}<div class="sub">vaga ${esc(String(x.vaga ?? ''))}</div></td>
+        <td><span class="posto-badge">${esc(x.posto)}</span></td>
+        <td style="text-align:left">${esc(x.paciente || '')}<div class="sub">mat. ${esc(x.matricula || '—')}</div></td>
+        <td style="text-align:left">${esc(x.medico || '')}<div class="sub">${esc(x.especialidade || '')}</div></td>
+        <td>${dh(x.marcado_em)}<div class="sub">${fmtN(x.antecedencia)} dia(s) antes</div></td>
+        <td>${dh(x.confirmado_em)}<div class="sub">${x.confirmado_em
+              ? (x.conf_dias > 5 ? x.conf_dias + 'd antes (cedo)' : x.conf_dias >= 2 ? x.conf_dias + 'd antes (janela)'
+                 : x.conf_dias >= 0 ? (x.conf_dias === 0 ? 'no dia' : '1d antes') + ' (tarde)' : 'depois da consulta')
+                + (x.conf_no_ato ? ' · na marcação' : ' · depois')
+              : '—'}</div></td>
+        <td>${esc(x.canal || '')}<div class="sub">${x.push ? 'recebeu push' : ''}</div></td>
+        <td>${esc(SIT[x.situacao] || x.situacao || '')}${x.mf ? '<div class="sub">médico com falta</div>' : ''}</td>
+        <td style="text-align:left">${dh(x.cancelado_em)}<div class="sub">${esc((x.motivo || '').slice(0, 60))}</div></td>
+        <td class="ids">lanç. ${x.id_lancamento}<div class="sub">serv. ${x.id_lancamento_servico}</div></td>
+      </tr>`).join('')}</tbody></table></div>` : '<div class="text-muted">Nenhum registro.</div>'}
+  </div>`;
+}
+
+function baixarLinhasCSV() {
+  const L = (REL_LINHAS && REL_LINHAS.linhas) || [];
+  if (!L.length) return;
+  const cols = Object.keys(L[0]);
+  const esc2 = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const csv = '\uFEFF' + cols.join(';') + '\n' + L.map(r => cols.map(c => esc2(r[c])).join(';')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'cancelados_robo_' + REL_LINHAS.grupo + '_' + REL_LINHAS.ini + '_' + REL_LINHAS.fim + '.csv';
+  a.click(); URL.revokeObjectURL(a.href);
 }
 function fecharCardRel() { $('#relModal').hidden = true; document.body.style.overflow = ''; }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharCardRel(); });
@@ -750,17 +909,33 @@ function renderRelatorio() {
   if (!REL) return;
   const postos = REL.postos_com_dados || [];
   $('#chipsPosto').innerHTML = postos.length
-    ? '<span style="font-size:.8rem;font-weight:700;color:#5a6672;margin-right:.4rem">POSTO</span>' +
-      postos.map(p => `<span class="chip ${REL_POSTOS_OFF.has(p) ? '' : 'on'}" onclick="relToggle('${p}')">${p}</span>`).join('')
+    ? chipsHTML(postos, new Set(postos.filter(p => !REL_POSTOS_OFF.has(p))), 'relToggle', 'relGrupo')
     : '<span class="text-muted" style="font-size:.85rem">Nenhum posto com consulta no período.</span>';
   const sel = new Set(relPostosSel());
   const linhas = (REL.por_posto || []).filter(x => sel.has(x.posto));
   const t = relSoma(linhas);
-  const modo = $('#fConf').value;   // todas | depois | ato
-  const conf      = modo === 'ato' ? t.conf_no_ato : modo === 'depois' ? t.conf_depois : (t.conf_no_ato + t.conf_depois);
-  const confFalta = modo === 'ato' ? t.conf_no_ato_falta : modo === 'depois' ? t.conf_depois_falta : (t.conf_no_ato_falta + t.conf_depois_falta);
-  const confComp  = modo === 'ato' ? t.conf_no_ato_compareceu : modo === 'depois' ? t.conf_depois_compareceu : (t.conf_no_ato_compareceu + t.conf_depois_compareceu);
-  const rotConf   = modo === 'ato' ? 'confirmadas no ato da marcação' : modo === 'depois' ? 'confirmadas depois da marcação (app ou F5)' : 'confirmadas (no ato ou depois)';
+  // Filtro "qual confirmação conta". Duas leituras diferentes do mesmo campo:
+  //   QUEM gravou  — o sistema no momento da marcação (ato) × alguém depois
+  //   QUANDO gravou — em relação à CONSULTA: na janela do robô (5 a 2 dias
+  //                   antes), cedo demais (>5 dias) ou em cima da hora (<2).
+  // A janela é a pergunta do Cristiano (22/09): é o único período em que a
+  // confirmação deveria acontecer. Os dois recortes somam o mesmo universo.
+  const modo = $('#fConf').value;   // todas | janela | fora | ato | depois
+  const confVal = sfx =>
+      modo === 'ato'    ? t['conf_no_ato' + sfx]
+    : modo === 'depois' ? t['conf_depois' + sfx]
+    : modo === 'janela' ? t['conf_j' + sfx]
+    : modo === 'fora'   ? (t['conf_cedo' + sfx] + t['conf_tarde' + sfx] + t['conf_pos' + sfx])
+    :                     (t['conf_no_ato' + sfx] + t['conf_depois' + sfx]);
+  const conf      = confVal('');
+  const confFalta = confVal('_falta');
+  const confComp  = confVal('_compareceu');
+  const rotConf   =
+      modo === 'ato'    ? 'confirmadas pelo sistema no momento da marcação'
+    : modo === 'depois' ? 'confirmadas depois da marcação (app ou central no F5)'
+    : modo === 'janela' ? 'confirmadas na janela certa (5 a 2 dias antes da consulta)'
+    : modo === 'fora'   ? 'confirmadas fora da janela'
+    :                     'confirmadas';
   const validos = t.compareceram + t.faltas;   // base de % de falta, como no dashboard
   const naoCanc = t.total - t.canceladas;
   const recep = t.canc_falta_medico - t.canc_falta_medico_robo - t.canc_falta_medico_app;
@@ -775,6 +950,12 @@ function renderRelatorio() {
   const semConfAconteceu = t.sem_conf_falta + t.sem_conf_compareceu;
   const outrosCanc   = t.canceladas - t.canc_robo - t.canc_app - t.canc_sem_pag;
   const dentro5Conf  = t.dentro5_total - t.dentro5_sem_conf_ato;
+  const prejudMedico = t.canc_falta_medico + t.medico_faltou;
+  // Chaves de grupo (lista de registros) que dependem do filtro de confirmação.
+  const gConf      = modo === 'ato' ? 'conf_ato' : modo === 'depois' ? 'conf_depois'
+                   : modo === 'janela' ? 'conf_janela' : modo === 'fora' ? 'conf_fora' : 'conf_todas';
+  const gConfFalta = gConf + '_falta';
+  const gConfComp  = gConf + '_compareceu';
   const pctFaltaConf = pct(confFalta, confAconteceu);
   const pctFaltaSem  = pct(t.sem_conf_falta, semConfAconteceu);
 
@@ -783,88 +964,102 @@ function renderRelatorio() {
   // divergirem entre si.
   const ateValidos = () => ([
     { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
-    { t: 'tira', n: t.canceladas, txt: 'foram canceladas antes de acontecer',
+    { t: 'tira', n: t.canceladas, g: 'canceladas', txt: 'foram canceladas antes de acontecer',
       resta: naoCanc, restaTxt: 'continuaram de pé' },
-    { t: 'tira', n: t.medico_faltou, txt: 'o médico faltou (a culpa não é do paciente, saem da conta)',
+    { t: 'tira', n: t.medico_faltou, g: 'mf_na_agenda', txt: 'o médico faltou (a culpa não é do paciente, saem da conta — contam no card 1)',
       resta: naoCanc - t.medico_faltou, restaTxt: 'sobraram' },
-    { t: 'tira', n: t.pendentes, txt: 'ainda não têm resultado (é consulta futura, ou passou menos de 1 hora da hora marcada)',
+    { t: 'tira', n: t.pendentes, g: 'pendentes', txt: 'ainda não têm resultado (é consulta futura, ou passou menos de 1 hora da hora marcada)',
       resta: validos, restaTxt: 'consultas já com resultado: ou a pessoa veio, ou faltou' },
   ]);
 
   REL_CARDS = [
-    { cls: 'c-vermelho', total: T, n: t.canc_falta_medico,
-      q: '1 · O médico faltou e a consulta foi desmarcada',
-      frase: `Pacientes que perderam a consulta sem ter culpa nenhuma. Outras ${plural(t.medico_faltou, 'consulta ficou', 'consultas ficaram')} no horário da falta sem ninguém desmarcar.`,
-      def: 'Consulta cujo horário cai dentro de uma falta do médico registrada no ERP (Cad_MedicoFalta) e que foi cancelada, por quem for.',
+    { cls: 'c-vermelho', total: T, n: prejudMedico, g: 'prejud_medico',
+      q: '1 · Pacientes prejudicados pela falta do médico',
+      frase: `${plural(t.canc_falta_medico, 'teve', 'tiveram')} a consulta cancelada — foram avisadas. ${plural(t.medico_faltou, 'ficou', 'ficaram')} na agenda sem ninguém cancelar: essas podem ter ido ao posto à toa.`,
+      def: 'Consulta cujo horário cai dentro de uma falta do médico registrada no ERP (Cad_MedicoFalta). Conta as canceladas (por quem for) E as que ficaram na agenda sem cancelamento. Consulta em que outro médico atendeu não entra — conta como atendimento.',
       passos: [
         { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
-        { t: 'foco', n: t.canceladas, txt: 'foram canceladas, por qualquer motivo' },
-        { t: 'res',  n: t.canc_falta_medico, txt: 'dessas canceladas, o médico tinha falta registrada naquele horário' },
-        { t: 'soma', st: 'Quem apertou o botão de cancelar', total: t.canc_falta_medico, itens: [
+        { t: 'soma', st: 'Caíram em horário de falta do médico', total: prejudMedico, itens: [
+          { n: t.canc_falta_medico, g: 'mf_cancelada', txt: 'foram canceladas — o paciente foi avisado (remarcado ou não)' },
+          { n: t.medico_faltou, g: 'mf_na_agenda', txt: 'ficaram na agenda, ninguém cancelou — o paciente pode ter ido ao posto à toa' } ] },
+        { t: 'res',  n: prejudMedico, txt: 'pacientes prejudicados pela falta do médico', g: 'prejud_medico' },
+        { t: 'soma', st: 'Das canceladas, quem apertou o botão', total: t.canc_falta_medico, itens: [
           { n: recep, txt: 'canceladas pela recepção do posto' },
           { n: t.canc_falta_medico_app, txt: 'canceladas pelo próprio cliente, no app' },
           { n: t.canc_falta_medico_robo, txt: 'canceladas pelo robô do pré-agendamento' } ] },
-        { t: 'nota', txt: `Fora dessas, ${plural(t.medico_faltou, 'consulta caiu', 'consultas caíram')} no horário de uma falta do médico e <b>ninguém cancelou no sistema</b>. Essas pessoas podem ter ido ao posto à toa. Elas não entram na conta de faltas do paciente.` },
+        { t: 'nota', txt: `Essas ${fmtN(t.medico_faltou)} <b>não contam como falta do paciente</b> — a culpa não é dele, por isso ficam fora do card 5. Mas contam aqui, que é a conta de quem foi prejudicado. Se outro médico assumiu e o paciente foi atendido, a consulta não entra neste card: conta como atendimento.` },
       ] },
 
-    { cls: 'c-verde', total: T, n: t.atendidos,
+    { cls: 'c-verde', total: T, n: t.atendidos, g: 'atendidos',
       q: '2 · O paciente veio e foi atendido',
       frase: `Consulta que aconteceu do começo ao fim. Somando quem chegou e ficou aguardando, ${plural(t.compareceram, 'pessoa apareceu', 'pessoas apareceram')} no posto.`,
       def: 'Status "Atendido" no ERP (StatusAtendimento = 1). "Compareceram" soma também quem está aguardando atendimento.',
       passos: [
         ...ateValidos(),
         { t: 'soma', st: 'Dessas, o que aconteceu', total: validos, itens: [
-          { n: t.compareceram, txt: 'apareceram no posto' },
-          { n: t.faltas, txt: 'não apareceram' } ] },
-        { t: 'res', n: t.atendidos, txt: 'foram efetivamente atendidas (o resto chegou e ficou aguardando)' },
+          { n: t.compareceram, g: 'compareceram', txt: 'apareceram no posto' },
+          { n: t.faltas, g: 'faltas', txt: 'não apareceram' } ] },
+        { t: 'res', n: t.atendidos, g: 'atendidos', txt: 'foram efetivamente atendidas (o resto chegou e ficou aguardando)' },
         { t: 'nota', txt: `${plural(t.compareceram, 'pessoa apareceu', 'pessoas apareceram')}: ${B(t.atendidos)} saíram com o atendimento registrado e ${plural(aguardando, 'ainda estava aguardando', 'ainda estavam aguardando')} quando o dado foi lido.` },
       ] },
 
-    { cls: 'c-azul', total: T, n: t.conf_no_ato_total,
-      q: '3 · Já nasceram confirmadas na hora da marcação',
-      frase: `Quem marca para daqui a 5 dias ou menos sai confirmado sem fazer nada — é o sistema que grava. Mas ${plural(t.dentro5_sem_conf_ato, 'marcação nesse prazo não saiu', 'marcações nesse prazo não saíram')} confirmadas.`,
-      def: 'Data de confirmação gravada até 1 minuto após o lançamento. O ERP faz isso ao marcar dentro da janela de 5 dias.',
+    { cls: 'c-azul', total: T, n: t.conf_no_ato_total, g: 'conf_no_ato_total',
+      q: '3 · O sistema já gravou confirmada no minuto da marcação',
+      frase: `Quem marca para daqui a <b>5 dias ou menos</b> (5, 4, 3, 2, 1 dia ou o próprio dia) sai confirmado sem fazer nada — é o ERP que grava. Mas ${plural(t.dentro5_sem_conf_ato, 'marcação nesse prazo não saiu', 'marcações nesse prazo não saíram')} confirmadas.`,
+      def: 'Data de confirmação gravada até 1 minuto depois do lançamento — por isso "no minuto da marcação". O ERP faz isso quando a consulta é marcada para daqui a 5 dias ou menos.',
       passos: [
         { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
-        { t: 'res',  n: t.conf_no_ato_total, txt: 'já saíram confirmadas no mesmo minuto da marcação (o paciente não confirmou nada — foi o sistema)' },
-        { t: 'nota', txt: 'O ERP confirma sozinho quando a consulta é marcada para daqui a <b>5 dias ou menos</b>: não daria tempo de o robô pedir confirmação na janela de 5 a 2 dias. Aí é como se a pessoa já estivesse confirmada.' },
-        { t: 'foco', n: t.dentro5_total, txt: 'do total, foram marcadas com 5 dias ou menos de antecedência' },
-        { t: 'soma', st: 'Dessas marcadas em cima da hora, quantas o sistema confirmou', total: t.dentro5_total, itens: [
-          { n: dentro5Conf, txt: 'saíram confirmadas, como deveriam' },
-          { n: t.dentro5_sem_conf_ato, txt: 'NÃO saíram confirmadas — é a falha do ERP' } ] },
-        { t: 'nota', txt: `Segundo o DBA (22/09/2026), nem toda tela de marcação do ERP foi reprogramada para gravar a confirmação. Aqui isso deu <b>${pct(t.dentro5_sem_conf_ato, t.dentro5_total)}</b> das marcações em cima da hora.` },
+        { t: 'res',  n: t.conf_no_ato_total, g: 'conf_no_ato_total', txt: 'já saíram confirmadas no mesmo minuto em que foram marcadas (o paciente não confirmou nada — foi o sistema)' },
+        { t: 'nota', txt: 'O ERP confirma sozinho quando a consulta é marcada para daqui a <b>5 dias ou menos</b>: não daria tempo de o robô pedir confirmação na janela de 5 a 2 dias antes. Aí é como se a pessoa já estivesse confirmada.' },
+        { t: 'soma', st: 'Com quantos dias de antecedência cada consulta foi MARCADA', total: T, itens: [
+          { n: t.marc_cedo, g: 'marc_cedo', txt: 'mais de 5 dias antes (6 dias ou mais) — aqui o robô tem tempo de pedir confirmação' },
+          { n: t.marc_j, g: 'marc_j', txt: 'de 5 a 2 dias antes — já dentro da janela do robô' },
+          { n: t.marc_tarde, g: 'marc_tarde', txt: '1 dia antes ou no próprio dia da consulta — depois da janela' },
+          { n: t.marc_neg, g: 'marc_neg', txt: 'lançadas depois do dia da consulta (registro atrasado)' } ] },
+        { t: 'nota', txt: `<b>"Marcada com até 5 dias" quer dizer de 0 a 5 dias</b> — inclui quem marcou na véspera e no próprio dia. Não é "mais de 2 e até 5". Aqui são ${fmtN(t.marc_j)} de 5 a 2 dias + ${fmtN(t.marc_tarde)} de 1 dia ou no mesmo dia = <b>${fmtN(t.dentro5_total)}</b>.` },
+        { t: 'soma', st: 'Dessas marcadas com 5 dias ou menos, quantas o sistema confirmou sozinho', total: t.dentro5_total, itens: [
+          { n: dentro5Conf, g: 'dentro5_com_conf_ato', txt: 'saíram confirmadas, como deveriam' },
+          { n: t.dentro5_sem_conf_ato, g: 'dentro5_sem_conf_ato', txt: 'NÃO saíram confirmadas — é a falha do ERP' } ] },
+        { t: 'nota', txt: `Abrindo essa falha por prazo: das marcadas de 5 a 2 dias antes, ${B(t.marc_j_sem_conf_ato)} não saíram confirmadas; das marcadas com 1 dia ou no mesmo dia, ${B(t.marc_tarde_sem_conf_ato)}. Segundo o DBA (22/09/2026), nem toda tela de marcação do ERP foi reprogramada para gravar a confirmação.` },
       ] },
 
-    { cls: 'c-azul', total: T, n: conf,
-      q: '4 · Tinham confirmação antes da consulta',
-      frase: `Confirmação gravada no ERP, no ato da marcação ou depois (pelo app ou pela central). ${plural(t.sem_conf, 'consulta de pé não teve', 'consultas de pé não tiveram')} confirmação nenhuma.`,
-      def: 'O ERP não grava se a confirmação veio do app ou do F5. O filtro "Confirmação considerada" separa no ato × depois, que é o que o dado permite.',
+    { cls: 'c-azul', total: T, n: conf, g: gConf,
+      q: '4 · Confirmaram — e em que momento confirmaram',
+      frase: `A janela certa é de <b>5 a 2 dias antes</b> da consulta: ${plural(t.conf_j, 'confirmou', 'confirmaram')} nela. ${plural(t.conf_cedo, 'confirmou', 'confirmaram')} cedo demais (mais de 5 dias antes) e ${plural(t.conf_tarde, 'confirmou', 'confirmaram')} em cima da hora (1 dia antes ou no próprio dia).`,
+      def: 'Data de confirmação gravada no ERP. "Quando" é contado da CONSULTA para trás. O ERP não grava se a confirmação veio do app ou do F5 — por isso o outro recorte é quem gravou: o sistema no minuto da marcação × alguém depois.',
       passos: [
         { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
-        { t: 'tira', n: t.canceladas, txt: 'foram canceladas (não faz sentido falar de confirmação nelas)',
+        { t: 'tira', n: t.canceladas, g: 'canceladas', txt: 'foram canceladas (não faz sentido falar de confirmação nelas)',
           resta: naoCanc, restaTxt: 'continuaram de pé' },
-        { t: 'soma', st: 'Dessas que continuaram de pé', total: naoCanc, itens: [
-          { n: t.conf_no_ato, txt: 'já nasceram confirmadas (foi o sistema)' },
-          { n: t.conf_depois, txt: 'foram confirmadas depois — pelo app ou pela central no F5' },
-          { n: t.sem_conf, txt: 'nunca tiveram confirmação' } ] },
-        { t: 'res', n: conf, txt: `estão ${rotConf} (o filtro "Confirmação considerada" escolhe quais entram aqui)` },
-        { t: 'nota', txt: `Das confirmadas depois, ${plural(t.conf_depois_marc_app, 'tinha sido marcada', 'tinham sido marcadas')} pelo app. ${plural(t.push, 'consulta de pé recebeu', 'consultas de pé receberam')} o push pedindo confirmação.` },
+        { t: 'soma', st: 'QUANDO a confirmação foi gravada, contando da consulta para trás', total: naoCanc, itens: [
+          { n: t.conf_cedo, g: 'conf_cedo', txt: 'mais de 5 dias antes da consulta — cedo demais, fora da janela' },
+          { n: t.conf_j, g: 'conf_janela', txt: 'de 5 a 2 dias antes — a JANELA CERTA, é o que o robô pede' },
+          { n: t.conf_tarde, g: 'conf_tarde', txt: '1 dia antes ou no próprio dia — depois da janela, o robô já pode ter cancelado' },
+          { n: t.conf_pos, g: 'conf_pos', txt: 'depois do dia da consulta (registro estranho, vale conferir)' },
+          { n: t.sem_conf, g: 'sem_conf', txt: 'nunca tiveram confirmação' } ] },
+        { t: 'soma', st: 'QUEM gravou a confirmação (mesmo universo, outro recorte)', total: naoCanc, itens: [
+          { n: t.conf_no_ato, g: 'conf_ato', txt: 'o sistema, no minuto em que a consulta foi marcada (card 3) — o paciente não fez nada' },
+          { n: t.conf_depois, g: 'conf_depois', txt: 'alguém depois: o cliente no app ou a central no F5' },
+          { n: t.sem_conf, g: 'sem_conf', txt: 'ninguém — não houve confirmação' } ] },
+        { t: 'res', n: conf, g: gConf, txt: `estão ${rotConf} — é o que o filtro "Qual confirmação conta" está pedindo` },
+        { t: 'nota', txt: `Das ${fmtN(t.conf_j)} que confirmaram na janela certa, ${B(t.conf_j_ato)} foram gravadas pelo próprio sistema na marcação (o paciente marcou já dentro da janela, então nasceu confirmada dentro do prazo). Das confirmadas depois da marcação, ${plural(t.conf_depois_marc_app, 'tinha sido marcada', 'tinham sido marcadas')} pelo app. ${plural(t.push, 'consulta de pé recebeu', 'consultas de pé receberam')} o push pedindo confirmação.` },
+        { t: 'nota', txt: 'O ERP grava a data da confirmação, mas <b>não grava se ela veio do app ou do F5</b>, e a auditoria não registra a alteração. Por isso não dá para separar app × central aqui — separar exige cruzar com o Égide.' },
       ] },
 
-    { cls: 'c-vermelho', total: T, n: t.faltas,
+    { cls: 'c-vermelho', total: T, n: t.faltas, g: 'faltas',
       q: '5 · O paciente não veio e não avisou',
       frase: `A hora marcada passou há mais de 1 hora e ninguém apareceu nem cancelou. É a falta pura.`,
       def: 'Mesma régua do dashboard de Pré-Agendamento: não compareceu e já passou 1 hora da hora prevista. Antes disso a consulta ainda é "pendente".',
       passos: [
         ...ateValidos(),
         { t: 'soma', st: 'Dessas que já têm resultado', total: validos, itens: [
-          { n: t.compareceram, txt: 'apareceram' },
-          { n: t.faltas, txt: 'faltaram' } ] },
-        { t: 'res', n: t.faltas, txt: 'faltas' },
+          { n: t.compareceram, g: 'compareceram', txt: 'apareceram' },
+          { n: t.faltas, g: 'faltas', txt: 'faltaram' } ] },
+        { t: 'res', n: t.faltas, g: 'faltas', txt: 'faltas' },
         { t: 'nota', txt: `Olhando só as consultas que já têm resultado, a falta é de <b>${pct(t.faltas, validos)}</b>. Olhando o total de marcações do período, é de <b>${pct(t.faltas, T)}</b>. Os dois números estão certos — mudam só o grupo sobre o qual a conta é feita.` },
       ] },
 
-    { cls: 'c-laranja', total: T, n: confFalta,
+    { cls: 'c-laranja', total: T, n: confFalta, g: gConfFalta,
       q: '6 · Confirmaram e faltaram mesmo assim',
       frase: `Disseram que viriam e não vieram. Quem confirmou faltou ${pctFaltaConf} das vezes; quem não confirmou, ${pctFaltaSem}.`,
       def: 'Confirmação (conforme o filtro escolhido) e falta na consulta. Pendentes e médico faltou ficam fora.',
@@ -872,43 +1067,43 @@ function renderRelatorio() {
         ...ateValidos(),
         { t: 'foco', n: confAconteceu, txt: `dessas, estão ${rotConf}` },
         { t: 'soma', st: 'O que aconteceu com quem confirmou', total: confAconteceu, itens: [
-          { n: confFalta, txt: 'faltaram mesmo tendo confirmado' },
-          { n: confComp, txt: 'apareceram' } ] },
-        { t: 'res', n: confFalta, txt: 'confirmaram e faltaram' },
+          { n: confFalta, g: gConfFalta, txt: 'faltaram mesmo tendo confirmado' },
+          { n: confComp, g: gConfComp, txt: 'apareceram' } ] },
+        { t: 'res', n: confFalta, g: gConfFalta, txt: 'confirmaram e faltaram' },
         { t: 'soma', st: 'Para comparar: quem NÃO confirmou nada', total: semConfAconteceu, itens: [
-          { n: t.sem_conf_falta, txt: 'faltaram' },
-          { n: t.sem_conf_compareceu, txt: 'apareceram' } ] },
+          { n: t.sem_conf_falta, g: 'sem_conf_falta', txt: 'faltaram' },
+          { n: t.sem_conf_compareceu, g: 'sem_conf_compareceu', txt: 'apareceram' } ] },
         { t: 'nota', txt: `Confirmar reduz a falta, mas não resolve: <b>${pctFaltaConf}</b> de quem confirmou faltou, contra <b>${pctFaltaSem}</b> de quem não confirmou.` },
       ] },
 
-    { cls: 'c-laranja', total: T, n: t.conf_no_ato_falta,
+    { cls: 'c-laranja', total: T, n: t.conf_no_ato_falta, g: 'conf_ato_falta',
       q: '7 · O sistema confirmou por ela e ela faltou',
       frase: `Confirmação que o paciente não fez: o ERP gravou sozinho na marcação. Dessas, ${plural(t.conf_no_ato_falta, 'terminou em falta', 'terminaram em falta')}.`,
       def: 'Lançamento que já nasceu com a data de confirmação preenchida (até 1 min após a marcação) e o paciente faltou.',
       passos: [
         { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
-        { t: 'foco', n: t.conf_no_ato_total, txt: 'nasceram confirmadas pelo sistema (card 3)' },
+        { t: 'foco', n: t.conf_no_ato_total, g: 'conf_no_ato_total', txt: 'nasceram confirmadas pelo sistema (card 3)' },
         { t: 'foco', n: atoAconteceu, txt: 'dessas, já aconteceram (fora canceladas, pendentes e médico faltou)' },
         { t: 'soma', st: 'O que aconteceu com elas', total: atoAconteceu, itens: [
-          { n: t.conf_no_ato_falta, txt: 'faltaram' },
-          { n: t.conf_no_ato_compareceu, txt: 'apareceram' } ] },
-        { t: 'res', n: t.conf_no_ato_falta, txt: 'nasceram confirmadas e faltaram' },
-        { t: 'nota', txt: `É o custo de tratar essa marcação como confirmada: a pessoa nunca disse que viria. Olhando só pela antecedência, das marcadas com até 5 dias, ${plural(t.dentro5_falta, 'faltou', 'faltaram')}.` },
+          { n: t.conf_no_ato_falta, g: 'conf_ato_falta', txt: 'faltaram' },
+          { n: t.conf_no_ato_compareceu, g: 'conf_ato_compareceu', txt: 'apareceram' } ] },
+        { t: 'res', n: t.conf_no_ato_falta, g: 'conf_ato_falta', txt: 'nasceram confirmadas e faltaram' },
+        { t: 'nota', txt: `É o custo de tratar essa marcação como confirmada: a pessoa nunca disse que viria. Olhando pela antecedência da marcação, das marcadas de 0 a 5 dias antes da consulta (inclui a véspera e o mesmo dia), ${plural(t.dentro5_falta, 'faltou', 'faltaram')}.` },
       ] },
 
-    { cls: 'c-roxo', total: T, n: t.canc_robo,
+    { cls: 'c-roxo', total: T, n: t.canc_robo, g: 'canc_robo',
       q: '8 · O robô desmarcou por falta de confirmação',
       frase: `Ninguém confirmou entre 5 e 2 dias antes e o robô cancelou. É a mesma lista da aba ao lado.`,
       def: 'Cancelamento automático do robô de pré-agendamento (assinatura no motivo da desistência).',
       passos: [
         { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
-        { t: 'foco', n: t.canceladas, txt: 'foram canceladas, por qualquer motivo' },
+        { t: 'foco', n: t.canceladas, g: 'canceladas', txt: 'foram canceladas, por qualquer motivo' },
         { t: 'soma', st: 'Quem cancelou cada uma', total: t.canceladas, itens: [
-          { n: t.canc_robo, txt: 'canceladas pelo robô, porque o cliente não confirmou' },
-          { n: t.canc_app, txt: 'canceladas pelo próprio cliente, no site ou app' },
-          { n: t.canc_sem_pag, txt: 'canceladas pelo sistema, por falta de pagamento' },
-          { n: outrosCanc, txt: 'canceladas pela recepção ou por outros motivos' } ] },
-        { t: 'res', n: t.canc_robo, txt: 'canceladas pelo robô do pré-agendamento' },
+          { n: t.canc_robo, g: 'canc_robo', txt: 'canceladas pelo robô, porque o cliente não confirmou' },
+          { n: t.canc_app, g: 'canc_app', txt: 'canceladas pelo próprio cliente, no site ou app' },
+          { n: t.canc_sem_pag, g: 'canc_sem_pag', txt: 'canceladas pelo sistema, por falta de pagamento' },
+          { n: outrosCanc, g: 'canc_outros', txt: 'canceladas pela recepção ou por outros motivos' } ] },
+        { t: 'res', n: t.canc_robo, g: 'canc_robo', txt: 'canceladas pelo robô do pré-agendamento' },
       ] },
 
     { cls: 'c-cinza', total: T, n: t.reaprov2d,
@@ -917,8 +1112,8 @@ function renderRelatorio() {
       def: 'Vaga (agenda + dia + número) do cancelado pelo robô que recebeu outra marcação ativa feita com menos de 2 dias de antecedência, depois do cancelamento.',
       passos: [
         { t: 'base', n: T, txt: 'consultas marcadas com data no período (o total de tudo)' },
-        { t: 'foco', n: t.canceladas, txt: 'foram canceladas, por qualquer motivo' },
-        { t: 'foco', n: t.canc_robo, txt: 'dessas, o robô cancelou por falta de confirmação (card 8)' },
+        { t: 'foco', n: t.canceladas, g: 'canceladas', txt: 'foram canceladas, por qualquer motivo' },
+        { t: 'foco', n: t.canc_robo, g: 'canc_robo', txt: 'dessas, o robô cancelou por falta de confirmação (card 8)' },
         { t: 'soma', st: 'O que aconteceu com cada vaga liberada', total: t.canc_robo, itens: [
           { n: t.reaprov2d, txt: 'outro paciente foi encaixado em cima da hora (menos de 2 dias antes)' },
           { n: reocup, txt: 'foram reocupadas, mas com 2 dias ou mais de antecedência' },
@@ -936,7 +1131,7 @@ function renderRelatorio() {
 
   // por posto
   const cols = [['posto', 'Posto'], ['total', 'Marcações'], ['canceladas', 'Canceladas'], ['canc_falta_medico', '1 Falta méd.'], ['atendidos', '2 Atendidos'],
-                ['conf_no_ato_total', '3 Marc. já conf.'], ['_conf', '4 Confirm.'], ['faltas', '5 Faltas'], ['_confFalta', '6 Conf.+faltou'],
+                ['conf_no_ato_total', '3 Sist. confirmou'], ['_conf', '4 Confirm.'], ['conf_j', '4 Na janela'], ['faltas', '5 Faltas'], ['_confFalta', '6 Conf.+faltou'],
                 ['conf_no_ato_falta', '7 Já conf.+faltou'], ['canc_robo', '8 Robô'], ['reaprov2d', '9 Reaprov.'], ['reaprov2d_atendido', 'Reaprov. atend.'], ['pendentes', 'Pendentes']];
   const val = (x, k) => k === '_conf' ? (modo === 'ato' ? x.conf_no_ato : modo === 'depois' ? x.conf_depois : x.conf_no_ato + x.conf_depois)
                     : k === '_confFalta' ? (modo === 'ato' ? x.conf_no_ato_falta : modo === 'depois' ? x.conf_depois_falta : x.conf_no_ato_falta + x.conf_depois_falta)

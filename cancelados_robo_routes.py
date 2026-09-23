@@ -304,10 +304,10 @@ def api_listar():
 _CACHE_REL_TTL = 300
 _cache_rel: dict = {}
 
-SQL_RELATORIO = """
+_SQL_BASE = """
 SET NOCOUNT ON;
 SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
-SELECT l.idLancamento, l.idEspecialidade, l.DataConsulta, l.consulta,
+SELECT ls.idLancamentoServico, l.idLancamento, l.idEspecialidade, l.DataConsulta, l.consulta,
        DATEADD(minute, DATEPART(hour, l.HoraPrevistaConsulta) * 60 + DATEPART(minute, l.HoraPrevistaConsulta),
                CAST(CAST(l.DataConsulta AS date) AS datetime))                        AS dt_consulta,
        DATEDIFF(day, l.[Data], l.DataConsulta)                                          AS dif_dias,
@@ -321,6 +321,10 @@ SELECT l.idLancamento, l.idEspecialidade, l.DataConsulta, l.consulta,
             WHEN DATEDIFF(minute, l.[Data], l.DataConfirmacaoAgendamentoConsulta) <= 1 THEN 1 ELSE 0 END AS conf_no_ato,
        CASE WHEN l.DataConfirmacaoAgendamentoConsulta IS NULL THEN 0
             WHEN DATEDIFF(minute, l.[Data], l.DataConfirmacaoAgendamentoConsulta) <= 1 THEN 0 ELSE 1 END AS conf_depois,
+       -- Dias entre a confirmação e a consulta. É ISSO que diz se a pessoa
+       -- confirmou na janela do robô (5 a 2 dias antes), cedo demais ou em
+       -- cima da hora. NULL quando não houve confirmação.
+       DATEDIFF(day, l.DataConfirmacaoAgendamentoConsulta, l.DataConsulta)              AS conf_dias,
        CASE WHEN l.DataHoraNotificacaoPreAgendamento IS NOT NULL THEN 1 ELSE 0 END      AS push,
        CASE WHEN l.MarcadoViaWeb = 1 THEN 1 ELSE 0 END                                  AS via_app,
        CASE WHEN mf.idFalta IS NOT NULL THEN 1 ELSE 0 END                               AS mf,
@@ -359,7 +363,10 @@ SELECT b.*,
             ELSE 'pendente' END AS cat
 INTO #c
 FROM #b b;
+"""
 
+# Agregação por dia — o relatório de gestão.
+_SQL_REL_AGG = """
 -- reaproveitamento: outra marcação ATIVA na mesma vaga, feita depois do
 -- cancelamento; "<2 dias de antecedência" é a régua do Petterson
 SELECT c.idLancamento,
@@ -401,6 +408,32 @@ SELECT CONVERT(varchar(10), c.DataConsulta, 120)                                
        SUM(CASE WHEN c.desist = 0 AND c.conf_no_ato = 0 AND c.conf_depois = 0 THEN 1 ELSE 0 END) AS sem_conf,
        SUM(CASE WHEN c.cat = 'falta' AND c.conf_no_ato = 0 AND c.conf_depois = 0 THEN 1 ELSE 0 END) AS sem_conf_falta,
        SUM(CASE WHEN c.cat = 'compareceu' AND c.conf_no_ato = 0 AND c.conf_depois = 0 THEN 1 ELSE 0 END) AS sem_conf_compareceu,
+       -- Quando a confirmação foi gravada, contando da consulta para trás.
+       -- Buckets exclusivos: juntos somam conf_no_ato + conf_depois.
+       SUM(CASE WHEN c.desist = 0 AND c.conf_dias BETWEEN 2 AND 5 THEN 1 ELSE 0 END)           AS conf_j,
+       SUM(CASE WHEN c.cat = 'falta'      AND c.conf_dias BETWEEN 2 AND 5 THEN 1 ELSE 0 END)   AS conf_j_falta,
+       SUM(CASE WHEN c.cat = 'compareceu' AND c.conf_dias BETWEEN 2 AND 5 THEN 1 ELSE 0 END)   AS conf_j_compareceu,
+       SUM(CASE WHEN c.desist = 0 AND c.conf_dias > 5 THEN 1 ELSE 0 END)                       AS conf_cedo,
+       SUM(CASE WHEN c.cat = 'falta'      AND c.conf_dias > 5 THEN 1 ELSE 0 END)               AS conf_cedo_falta,
+       SUM(CASE WHEN c.cat = 'compareceu' AND c.conf_dias > 5 THEN 1 ELSE 0 END)               AS conf_cedo_compareceu,
+       SUM(CASE WHEN c.desist = 0 AND c.conf_dias BETWEEN 0 AND 1 THEN 1 ELSE 0 END)           AS conf_tarde,
+       SUM(CASE WHEN c.cat = 'falta'      AND c.conf_dias BETWEEN 0 AND 1 THEN 1 ELSE 0 END)   AS conf_tarde_falta,
+       SUM(CASE WHEN c.cat = 'compareceu' AND c.conf_dias BETWEEN 0 AND 1 THEN 1 ELSE 0 END)   AS conf_tarde_compareceu,
+       SUM(CASE WHEN c.desist = 0 AND c.conf_dias < 0 THEN 1 ELSE 0 END)                       AS conf_pos,
+       SUM(CASE WHEN c.cat = 'falta'      AND c.conf_dias < 0 THEN 1 ELSE 0 END)               AS conf_pos_falta,
+       SUM(CASE WHEN c.cat = 'compareceu' AND c.conf_dias < 0 THEN 1 ELSE 0 END)               AS conf_pos_compareceu,
+       SUM(CASE WHEN c.desist = 0 AND c.conf_dias BETWEEN 2 AND 5 AND c.conf_no_ato = 1 THEN 1 ELSE 0 END) AS conf_j_ato,
+       -- Antecedência da MARCAÇÃO (não confundir com a da confirmação acima):
+       -- quantos dias antes da consulta o lançamento foi feito. Buckets
+       -- exclusivos, somam o total. A fronteira é dita em dias inteiros:
+       --   cedo  > 5   |  janela 5..2  |  em cima da hora 1..0  |  negativo
+       SUM(CASE WHEN c.dif_dias > 5 THEN 1 ELSE 0 END)                                          AS marc_cedo,
+       SUM(CASE WHEN c.dif_dias > 5 AND c.conf_no_ato = 1 THEN 1 ELSE 0 END)                    AS marc_cedo_conf_ato,
+       SUM(CASE WHEN c.dif_dias BETWEEN 2 AND 5 THEN 1 ELSE 0 END)                              AS marc_j,
+       SUM(CASE WHEN c.dif_dias BETWEEN 2 AND 5 AND c.conf_no_ato = 0 THEN 1 ELSE 0 END)        AS marc_j_sem_conf_ato,
+       SUM(CASE WHEN c.dif_dias BETWEEN 0 AND 1 THEN 1 ELSE 0 END)                              AS marc_tarde,
+       SUM(CASE WHEN c.dif_dias BETWEEN 0 AND 1 AND c.conf_no_ato = 0 THEN 1 ELSE 0 END)        AS marc_tarde_sem_conf_ato,
+       SUM(CASE WHEN c.dif_dias < 0 THEN 1 ELSE 0 END)                                          AS marc_neg,
        SUM(CASE WHEN c.desist = 0 AND c.dif_dias <= 5 THEN 1 ELSE 0 END)                       AS dentro5,
        SUM(CASE WHEN c.cat = 'falta' AND c.dif_dias <= 5 THEN 1 ELSE 0 END)                    AS dentro5_falta,
        SUM(CASE WHEN c.dif_dias BETWEEN 0 AND 5 THEN 1 ELSE 0 END)                             AS dentro5_total,
@@ -414,6 +447,118 @@ LEFT JOIN #r r ON r.idLancamento = c.idLancamento
 GROUP BY CONVERT(varchar(10), c.DataConsulta, 120)
 ORDER BY 1;
 """
+
+SQL_RELATORIO = _SQL_BASE + _SQL_REL_AGG
+
+# ---------------------------------------------------------------------------
+# LISTA DE REGISTROS POR GRUPO (2026-09-22, pedido do Cristiano)
+# ---------------------------------------------------------------------------
+# "Ao clicar no quadro, quero que abra um modal com os dados para confirmar,
+# para eu ir no ERP e validar." Cada número dos cards vira uma lista de
+# lançamentos com idLancamento/idLancamentoServico, paciente, médico e horário.
+#
+# Reusa _SQL_BASE — a MESMA construção de #b/#c do relatório. Se a lista
+# saísse de uma query própria, um dia os nomes deixariam de bater com o
+# número do card e ninguém saberia qual dos dois está certo.
+#
+# O WHERE vem de _GRUPOS (dicionário fechado no servidor). Nada de fragmento
+# vindo do request: a chave é validada contra o dicionário antes de entrar.
+# Teto por posto. Medido em G/ago-2026: o card 1 sozinho tem 520 linhas num
+# posto num mês — 500 cortava logo no primeiro uso. 1.500 cobre um posto-mês
+# com folga e segura o JSON da rede inteira em alguns MB.
+_LINHAS_TOP = 1500
+
+_GRUPOS = {
+    # médico faltou
+    "prejud_medico":  "c.mf = 1 AND (c.desist = 1 OR c.cat = 'medico_faltou')",
+    "mf_cancelada":   "c.desist = 1 AND c.mf = 1",
+    "mf_na_agenda":   "c.cat = 'medico_faltou'",
+    # o que aconteceu
+    "canceladas":     "c.desist = 1",
+    "compareceram":   "c.cat = 'compareceu'",
+    "atendidos":      "c.desist = 0 AND c.StatusAtendimento = 1",
+    "faltas":         "c.cat = 'falta'",
+    "pendentes":      "c.cat = 'pendente'",
+    # confirmação
+    "conf_no_ato_total":    "c.conf_no_ato = 1",
+    "dentro5_total":        "c.dif_dias BETWEEN 0 AND 5",
+    "dentro5_com_conf_ato": "c.dif_dias BETWEEN 0 AND 5 AND c.conf_no_ato = 1",
+    "dentro5_sem_conf_ato": "c.dif_dias BETWEEN 0 AND 5 AND c.conf_no_ato = 0",
+    "conf_ato":       "c.desist = 0 AND c.conf_no_ato = 1",
+    "conf_depois":    "c.desist = 0 AND c.conf_depois = 1",
+    "conf_todas":     "c.desist = 0 AND (c.conf_no_ato = 1 OR c.conf_depois = 1)",
+    "sem_conf":       "c.desist = 0 AND c.conf_no_ato = 0 AND c.conf_depois = 0",
+    # confirmou × faltou
+    "conf_ato_falta":       "c.cat = 'falta' AND c.conf_no_ato = 1",
+    "conf_ato_compareceu":  "c.cat = 'compareceu' AND c.conf_no_ato = 1",
+    "conf_depois_falta":      "c.cat = 'falta' AND c.conf_depois = 1",
+    "conf_depois_compareceu": "c.cat = 'compareceu' AND c.conf_depois = 1",
+    "conf_todas_falta":       "c.cat = 'falta' AND (c.conf_no_ato = 1 OR c.conf_depois = 1)",
+    "conf_todas_compareceu":  "c.cat = 'compareceu' AND (c.conf_no_ato = 1 OR c.conf_depois = 1)",
+    "sem_conf_falta":       "c.cat = 'falta' AND c.conf_no_ato = 0 AND c.conf_depois = 0",
+    "sem_conf_compareceu":  "c.cat = 'compareceu' AND c.conf_no_ato = 0 AND c.conf_depois = 0",
+    "dentro5_falta":  "c.cat = 'falta' AND c.dif_dias <= 5",
+    # quando a confirmação foi gravada (janela do robô = 5 a 2 dias antes)
+    "conf_janela":             "c.desist = 0 AND c.conf_dias BETWEEN 2 AND 5",
+    "conf_janela_falta":       "c.cat = 'falta' AND c.conf_dias BETWEEN 2 AND 5",
+    "conf_janela_compareceu":  "c.cat = 'compareceu' AND c.conf_dias BETWEEN 2 AND 5",
+    "conf_cedo":               "c.desist = 0 AND c.conf_dias > 5",
+    "conf_tarde":              "c.desist = 0 AND c.conf_dias BETWEEN 0 AND 1",
+    "conf_pos":                "c.desist = 0 AND c.conf_dias < 0",
+    "conf_fora":               "c.desist = 0 AND c.conf_dias IS NOT NULL AND c.conf_dias NOT BETWEEN 2 AND 5",
+    "conf_fora_falta":         "c.cat = 'falta' AND c.conf_dias IS NOT NULL AND c.conf_dias NOT BETWEEN 2 AND 5",
+    "conf_fora_compareceu":    "c.cat = 'compareceu' AND c.conf_dias IS NOT NULL AND c.conf_dias NOT BETWEEN 2 AND 5",
+    # antecedência da MARCAÇÃO
+    "marc_cedo":               "c.dif_dias > 5",
+    "marc_j":                  "c.dif_dias BETWEEN 2 AND 5",
+    "marc_j_sem_conf_ato":     "c.dif_dias BETWEEN 2 AND 5 AND c.conf_no_ato = 0",
+    "marc_tarde":              "c.dif_dias BETWEEN 0 AND 1",
+    "marc_tarde_sem_conf_ato": "c.dif_dias BETWEEN 0 AND 1 AND c.conf_no_ato = 0",
+    "marc_neg":                "c.dif_dias < 0",
+    # cancelamentos
+    "canc_robo":      "c.canc_robo = 1",
+    "canc_app":       "c.canc_app = 1",
+    "canc_sem_pag":   "c.canc_sem_pag = 1",
+    "canc_outros":    "c.desist = 1 AND c.canc_robo = 0 AND c.canc_app = 0 AND c.canc_sem_pag = 0",
+    "push":           "c.desist = 0 AND c.push = 1",
+}
+
+_SQL_LINHAS = """
+SELECT TOP %d
+       c.idLancamento, c.idLancamentoServico,
+       ISNULL(cli.Matricula, '')                                 AS matricula,
+       ISNULL(d.Nome, cli.Nome)                                  AS paciente,
+       m.Nome                                                    AS medico,
+       CASE WHEN sc.ExibenoProntuario = 1 THEN sc.Classe ELSE es.Especialidade END AS especialidade,
+       CONVERT(varchar(10), c.DataConsulta, 120)                 AS data_consulta,
+       CONVERT(varchar(5),  c.dt_consulta, 108)                  AS hora_consulta,
+       c.consulta                                                AS vaga,
+       CONVERT(varchar(16), l.[Data], 120)                       AS marcado_em,
+       c.dif_dias                                                AS antecedencia,
+       CONVERT(varchar(16), l.DataConfirmacaoAgendamentoConsulta, 120) AS confirmado_em,
+       c.conf_no_ato, c.conf_depois, c.conf_dias, c.push, c.mf,
+       CASE WHEN l.MarcadoViaWeb = 1 THEN 'app'
+            WHEN l.MarcadoViaAgendaUnificada = 1 THEN 'central' ELSE 'balcao' END  AS canal,
+       c.cat                                                     AS situacao,
+       CONVERT(varchar(16), c.DataDesistencia, 120)              AS cancelado_em,
+       LEFT(CAST(ls.MotivoDesistencia AS varchar(max)), 120)     AS motivo
+FROM #c c
+JOIN cad_lancamento          l   WITH (NOLOCK) ON l.idLancamento = c.idLancamento
+JOIN Cad_LancamentoServico   ls  WITH (NOLOCK) ON ls.idLancamentoServico = c.idLancamentoServico
+JOIN Cad_Especialidade       es                ON es.idEspecialidade = c.idEspecialidade
+JOIN Cad_Medico              m                 ON m.idMedico = l.idMedico
+JOIN Cad_Servico             ss                ON ss.idServico = ls.idServico
+JOIN Cad_ServicoClasse       sc                ON sc.idClasse = ss.idClasse
+JOIN Cad_Cliente             cli               ON cli.idCliente = l.idCliente
+LEFT JOIN Cad_ClienteDependente d              ON d.idDependente = l.idDependente
+WHERE %s
+ORDER BY c.DataConsulta, c.dt_consulta, c.idLancamentoServico;
+"""
+
+_COLS_LINHAS = ("id_lancamento", "id_lancamento_servico", "matricula", "paciente", "medico",
+                "especialidade", "data_consulta", "hora_consulta", "vaga", "marcado_em",
+                "antecedencia", "confirmado_em", "conf_no_ato", "conf_depois", "conf_dias", "push", "mf",
+                "canal", "situacao", "cancelado_em", "motivo")
 
 # Lista das vagas reaproveitadas (para o Petterson conferir uma a uma).
 SQL_REAPROVEITADAS = """
@@ -467,6 +612,12 @@ _COLS_REL = (
     "conf_no_ato_total", "conf_no_ato", "conf_no_ato_falta", "conf_no_ato_compareceu",
     "conf_depois", "conf_depois_falta", "conf_depois_compareceu", "conf_depois_marc_app",
     "sem_conf", "sem_conf_falta", "sem_conf_compareceu",
+    "conf_j", "conf_j_falta", "conf_j_compareceu",
+    "conf_cedo", "conf_cedo_falta", "conf_cedo_compareceu",
+    "conf_tarde", "conf_tarde_falta", "conf_tarde_compareceu",
+    "conf_pos", "conf_pos_falta", "conf_pos_compareceu", "conf_j_ato",
+    "marc_cedo", "marc_cedo_conf_ato", "marc_j", "marc_j_sem_conf_ato",
+    "marc_tarde", "marc_tarde_sem_conf_ato", "marc_neg",
     "dentro5", "dentro5_falta", "dentro5_total", "dentro5_sem_conf_ato", "push",
     "reaprov2d", "reaprov_qq", "reaprov2d_atendido",
 )
@@ -507,6 +658,31 @@ def _relatorio_posto(posto: str, ini: date, fim: date) -> list:
             del _cache_rel[k]
         _cache_rel[ck] = (agora, out)
     return out
+
+
+def _linhas_posto(posto: str, ini: date, fim: date, grupo: str) -> list:
+    """Lançamentos individuais de um grupo do relatório, para conferir no ERP.
+    Mesma construção de #b/#c do relatório — ver comentário em _SQL_LINHAS."""
+    d_ini = _fmt_data_sql(ini)
+    d_fim = _fmt_data_sql(fim + timedelta(days=1))
+    sql = _SQL_BASE + (_SQL_LINHAS % (_LINHAS_TOP, _GRUPOS[grupo]))
+    con = _conn_for_posto(posto)
+    try:
+        con.timeout = 120
+        cur = con.cursor()
+        cur.execute(sql, ROBO_LIKE, d_ini, d_fim)
+        while cur.description is None and cur.nextset():
+            pass
+        out = []
+        for r in cur.fetchall():
+            item = {"posto": posto}
+            for i, k in enumerate(_COLS_LINHAS):
+                v = r[i]
+                item[k] = v.strip() if isinstance(v, str) else v
+            out.append(item)
+        return out
+    finally:
+        con.close()
 
 
 def _reaproveitadas_posto(posto: str, ini: date, fim: date) -> list:
@@ -606,6 +782,34 @@ def api_relatorio():
         "por_dia": por_dia,
         "gerado_em": datetime.now().strftime("%d/%m/%Y %H:%M"),
     })
+
+
+@cancelados_robo_bp.get("/api/cancelados_robo/relatorio/linhas")
+def api_relatorio_linhas():
+    """Os lançamentos que estão por trás de um número do relatório, para o
+    gestor conferir no ERP. ?grupo= (chave de _GRUPOS) &ini&fim&posto."""
+    email, _postos_acl, _ = _check_admin()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    grupo = (request.args.get("grupo") or "").strip()
+    if grupo not in _GRUPOS:
+        return jsonify({"error": "grupo desconhecido"}), 400
+    d_ini, d_fim, alvo, erro = _periodo_e_postos()
+    if erro:
+        return erro
+
+    linhas, erros = _paralelo(lambda p, i, f: _linhas_posto(p, i, f, grupo), alvo, d_ini, d_fim)
+    # Posto que bateu no teto teve a lista cortada — a tela precisa dizer isso,
+    # senão o gestor conta os nomes, dá menos que o card e desconfia do número.
+    por_posto = {}
+    for x in linhas:
+        por_posto[x["posto"]] = por_posto.get(x["posto"], 0) + 1
+    cortados = sorted(p for p, n in por_posto.items() if n >= _LINHAS_TOP)
+    linhas.sort(key=lambda x: (x["data_consulta"] or "", x["hora_consulta"] or "", x["posto"]))
+    return jsonify({"ini": d_ini.strftime("%Y-%m-%d"), "fim": d_fim.strftime("%Y-%m-%d"),
+                    "grupo": grupo, "postos": alvo, "postos_erro": erros,
+                    "total": len(linhas), "teto": _LINHAS_TOP, "postos_cortados": cortados,
+                    "linhas": linhas})
 
 
 @cancelados_robo_bp.get("/api/cancelados_robo/relatorio/reaproveitadas")
