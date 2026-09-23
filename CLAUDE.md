@@ -383,6 +383,38 @@ marc_tarde 454 + marc_neg 23). Os 45 grupos da lista rodam em ~1,5 s cada.
 `chipsHTML`), mesma lista de letras das outras páginas: Altamiro A B G I N R X
 Y · Couto C D J M P.
 
+**ORDEM DE CHEGADA NÃO ENTRA — e a régua é uma só (2026-09-23).** Cristiano:
+*"IMPORTA UMA ÚNICA REGRA E ELA ESTÁ EM CAD_LANCAMENTO. Tem horário previsto,
+é para estar neste relatório; não tem, não deveria. Simples assim."* O filtro
+`HoraPrevistaConsulta IS NOT NULL` já existia; o que faltava era **dizer na
+tela**. Agora `#b` lê tudo, marca `oc_sem_hora` e `#c` corta — um 2º result
+set devolve quantas ficaram de fora por dia, e o painel âncora escreve
+"N consultas de ordem de chegada ficaram de fora".
+- Medido em 01-23/09/2026, rede: **8.959** sem hora prevista (ficam fora) e
+  **ZERO** delas em agenda de internet/telefone — o corte não leva junto
+  nenhum agendamento real.
+- **Não deduzir modalidade de `cad_especialidade`.** Cheguei a implementar OC
+  pelo cadastro (`<Dia>OrdemChegada` sem `Internet`/`Telefone`) e ele recusou,
+  com razão: o cadastro é do DIA e a agenda **mista** tem os dois tipos na
+  mesma agenda — medido em C, 1.023 linhas mistas, 667 marcadas com
+  antecedência pelo app (agendamento real) e 356 no balcão no mesmo dia.
+  Cortar pelo cadastro jogaria agendamento fora. O código dessa tentativa foi
+  removido; se voltar o assunto, a régua continua sendo a hora prevista.
+- Existem `<Dia>Quantidadeweb` / `<Dia>QuantidadeEgide` em `Cad_Especialidade`
+  (vagas reservadas para internet por dia). Não são usados aqui.
+
+**A lista tem que ter EXATAMENTE o número do card.** Os JOINs que só trazem
+rótulo (`Cad_Medico`, `Cad_Cliente`, `Cad_Especialidade`, `Cad_Servico`,
+`Cad_ServicoClasse`) são **LEFT JOIN** de propósito: como INNER, lançamento sem
+médico ou sem cliente no cadastro sumia e a lista devolvia 1.394 onde o card
+dizia 1.395 (medido em C e J, 09/2026). Validado depois do conserto: **32
+grupos × 4 postos (A, C, J, G), 0 divergências**.
+
+**Grid da lista** (pedido dele): cabeçalho clicável ordena, botões "agrupar
+por" Posto (padrão) · Médico · Especialidade · Situação · Nada. O padrão é
+posto separado porque a leitura dele é posto a posto, e o cabeçalho de cada
+grupo mostra a contagem — dá para conferir contra a tabela "Por posto".
+
 **Pendências conhecidas (2026-07-21):**
 - `/cancelados_robo` ([cancelados_robo_routes.py](cancelados_robo_routes.py)) ainda
   usa `vw_Cad_LancamentoProntuarioComDesistencia` (~1,8s/posto no balcão). Cabe o

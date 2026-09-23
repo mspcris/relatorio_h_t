@@ -328,7 +328,16 @@ SELECT ls.idLancamentoServico, l.idLancamento, l.idEspecialidade, l.DataConsulta
        CASE WHEN l.DataHoraNotificacaoPreAgendamento IS NOT NULL THEN 1 ELSE 0 END      AS push,
        CASE WHEN l.MarcadoViaWeb = 1 THEN 1 ELSE 0 END                                  AS via_app,
        CASE WHEN mf.idFalta IS NOT NULL THEN 1 ELSE 0 END                               AS mf,
-       ls.StatusAtendimento, ls.StatusAguardar, l.Falta, ls.DataMaterial, sc.AtendidoComDataMaterial
+       ls.StatusAtendimento, ls.StatusAguardar, l.Falta, ls.DataMaterial, sc.AtendidoComDataMaterial,
+       -- ORDEM DE CHEGADA fica FORA: esta página é só de AGENDA.
+       -- Regra do Cristiano (22/09/2026), e é a única: "tem horário previsto,
+       -- é para estar neste relatório; não tem, não deveria". Nada de deduzir
+       -- modalidade do cadastro da especialidade — o cadastro é do DIA e a
+       -- agenda mista tem os dois tipos na mesma agenda.
+       -- Medido em 01-23/09/2026 na rede: 8.959 linhas sem hora prevista, e
+       -- ZERO delas em agenda de internet/telefone — o corte não leva junto
+       -- nenhum agendamento de verdade.
+       CASE WHEN l.HoraPrevistaConsulta IS NULL THEN 1 ELSE 0 END                       AS oc_sem_hora
 INTO #b
 FROM cad_lancamento          l  WITH (NOLOCK)
 JOIN Cad_LancamentoServico   ls WITH (NOLOCK) ON ls.idLancamento    = l.idLancamento
@@ -342,7 +351,6 @@ OUTER APPLY (SELECT TOP 1 mf.idFalta
                            CAST(CAST(l.DataConsulta AS date) AS datetime)) BETWEEN mf.DataHora AND mf.DatahoraFim) mf
 WHERE l.consulta             IS NOT NULL
   AND l.desativado           = 0
-  AND l.HoraPrevistaConsulta IS NOT NULL
   AND l.DataConsulta         >= ?
   AND l.DataConsulta         <  ?
   AND l.Codigo               > 0
@@ -362,7 +370,8 @@ SELECT b.*,
             WHEN DATEADD(hour, 1, b.dt_consulta) < GETDATE() THEN 'falta'
             ELSE 'pendente' END AS cat
 INTO #c
-FROM #b b;
+FROM #b b
+WHERE b.oc_sem_hora = 0;   -- só agenda; a ordem de chegada fica fora (contada abaixo)
 """
 
 # Agregação por dia — o relatório de gestão.
@@ -445,6 +454,15 @@ SELECT CONVERT(varchar(10), c.DataConsulta, 120)                                
 FROM #c c
 LEFT JOIN #r r ON r.idLancamento = c.idLancamento
 GROUP BY CONVERT(varchar(10), c.DataConsulta, 120)
+ORDER BY 1;
+
+-- 2o result set: o que ficou FORA por ser ordem de chegada, por dia. Sai de #b
+-- (que tem tudo), então a página pode dizer quanto não está sendo contado em
+-- vez de simplesmente não mostrar — mesma regra dos postos que falham.
+SELECT CONVERT(varchar(10), b.DataConsulta, 120) AS dia,
+       SUM(b.oc_sem_hora) AS oc_fora
+FROM #b b
+GROUP BY CONVERT(varchar(10), b.DataConsulta, 120)
 ORDER BY 1;
 """
 
@@ -545,12 +563,17 @@ SELECT TOP %d
 FROM #c c
 JOIN cad_lancamento          l   WITH (NOLOCK) ON l.idLancamento = c.idLancamento
 JOIN Cad_LancamentoServico   ls  WITH (NOLOCK) ON ls.idLancamentoServico = c.idLancamentoServico
-JOIN Cad_Especialidade       es                ON es.idEspecialidade = c.idEspecialidade
-JOIN Cad_Medico              m                 ON m.idMedico = l.idMedico
-JOIN Cad_Servico             ss                ON ss.idServico = ls.idServico
-JOIN Cad_ServicoClasse       sc                ON sc.idClasse = ss.idClasse
-JOIN Cad_Cliente             cli               ON cli.idCliente = l.idCliente
-LEFT JOIN Cad_ClienteDependente d              ON d.idDependente = l.idDependente
+-- TUDO daqui para baixo é LEFT JOIN de propósito: essas tabelas só trazem
+-- RÓTULO (nome do paciente, do médico, da especialidade). Com INNER JOIN, um
+-- lançamento sem médico ou sem cliente no cadastro sumia da lista e ela
+-- devolvia 1.394 onde o card dizia 1.395 (medido em C e J, 09/2026) — que é
+-- exatamente o que faz o gestor parar de acreditar no número.
+LEFT JOIN Cad_Especialidade       es           ON es.idEspecialidade = c.idEspecialidade
+LEFT JOIN Cad_Medico              m            ON m.idMedico = l.idMedico
+LEFT JOIN Cad_Servico             ss           ON ss.idServico = ls.idServico
+LEFT JOIN Cad_ServicoClasse       sc           ON sc.idClasse = ss.idClasse
+LEFT JOIN Cad_Cliente             cli          ON cli.idCliente = l.idCliente
+LEFT JOIN Cad_ClienteDependente   d            ON d.idDependente = l.idDependente
 WHERE %s
 ORDER BY c.DataConsulta, c.dt_consulta, c.idLancamentoServico;
 """
@@ -622,6 +645,9 @@ _COLS_REL = (
     "reaprov2d", "reaprov_qq", "reaprov2d_atendido",
 )
 
+# Vêm do 2o result set (linhas que NÃO entram na conta), não do SELECT principal.
+_COLS_FORA = ("oc_fora",)
+
 
 def _relatorio_posto(posto: str, ini: date, fim: date) -> list:
     """Linhas por dia de consulta para o posto. Cache de 5 min por (posto,
@@ -643,12 +669,25 @@ def _relatorio_posto(posto: str, ini: date, fim: date) -> list:
         # geram result set, mas pyodbc pode precisar pular sets vazios.
         while cur.description is None and cur.nextset():
             pass
-        out = []
+        por_dia = {}
         for r in cur.fetchall():
-            item = {"posto": posto, "dia": r[0]}
+            item = {"posto": posto, "dia": r[0], **{k: 0 for k in _COLS_FORA}}
             for i, k in enumerate(_COLS_REL, start=1):
                 item[k] = int(r[i] or 0)
-            out.append(item)
+            por_dia[r[0]] = item
+        # 2o result set: ordem de chegada que ficou de fora. Dia que só tem
+        # livre demanda não aparece no primeiro SELECT — por isso entra aqui
+        # com o resto zerado, senão o "ficaram de fora" mentiria para menos.
+        if cur.nextset():
+            for r in cur.fetchall():
+                item = por_dia.get(r[0])
+                if item is None:
+                    item = {"posto": posto, "dia": r[0],
+                            **{k: 0 for k in _COLS_REL}, **{k: 0 for k in _COLS_FORA}}
+                    por_dia[r[0]] = item
+                for i, k in enumerate(_COLS_FORA, start=1):
+                    item[k] = int(r[i] or 0)
+        out = [por_dia[k] for k in sorted(por_dia)]
     finally:
         con.close()
 
@@ -762,14 +801,15 @@ def api_relatorio():
 
     por_dia, erros = _paralelo(_relatorio_posto, alvo, d_ini, d_fim)
 
+    campos = _COLS_REL + _COLS_FORA
     por_posto = {}
     for ln in por_dia:
-        acc = por_posto.setdefault(ln["posto"], {"posto": ln["posto"], **{k: 0 for k in _COLS_REL}})
-        for k in _COLS_REL:
-            acc[k] += ln[k]
-    totais = {k: 0 for k in _COLS_REL}
+        acc = por_posto.setdefault(ln["posto"], {"posto": ln["posto"], **{k: 0 for k in campos}})
+        for k in campos:
+            acc[k] += ln.get(k, 0)
+    totais = {k: 0 for k in campos}
     for acc in por_posto.values():
-        for k in _COLS_REL:
+        for k in campos:
             totais[k] += acc[k]
     por_dia.sort(key=lambda x: (x["dia"], x["posto"]))
 

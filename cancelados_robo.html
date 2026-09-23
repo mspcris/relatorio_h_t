@@ -142,6 +142,8 @@
     .confere { font-size:.83rem; color:#5a6672; margin-top:.6rem; background:#f4f6f8;
                border-radius:.3rem; padding:.45rem .65rem; font-variant-numeric:tabular-nums; }
     .confere .ok { color:#1e7e34; font-weight:700; }
+    .rel-ancora .fora { font-size:.85rem; color:#6b4d05; background:#fff8e6; border-left:3px solid #f0ad4e;
+                        border-radius:.25rem; padding:.45rem .65rem; margin-top:.5rem; }
 
     /* ── Modal da conta (overlay próprio: não depende de Bootstrap JS) ── */
     .mdl { position:fixed; inset:0; background:rgba(20,25,30,.55); z-index:1200;
@@ -187,6 +189,14 @@
     .drill .dwarn { font-size:.82rem; color:#8a6100; background:#fff8e6; padding:.35rem .6rem; }
     .drill table.rel td .sub { font-size:.72rem; color:#8a949e; }
     .drill .ids { font-variant-numeric:tabular-nums; font-size:.8rem; color:#5a6672; }
+    .drill .dh .agr { margin-left:.6rem; font-size:.8rem; color:#5a6672; }
+    .drill .dh .agr .gbtn { font-size:.74rem; padding:.1rem .5rem; }
+    .drill .dh .dica2 { font-size:.78rem; color:#8a949e; margin-left:.6rem; }
+    table.rel.grid th.ord { cursor:pointer; user-select:none; position:sticky; top:0; z-index:2; }
+    table.rel.grid th.ord:hover { background:#e7ecf1; }
+    table.rel.grid tr.gh td { background:#eef2f6; font-weight:700; text-align:left;
+                              position:sticky; top:1.85rem; z-index:1; border-bottom:1px solid #d9e0e6; }
+    table.rel.grid tr.gh .qt { font-weight:400; color:#5a6672; font-size:.8rem; margin-left:.4rem; }
     .mdl .cx { max-width:1100px; }
     .rel-card.c-vermelho { border-left-color:#d9534f; } .rel-card.c-verde { border-left-color:#28a745; }
     .rel-card.c-azul { border-left-color:#1565c0; } .rel-card.c-laranja { border-left-color:#f0ad4e; }
@@ -821,8 +831,41 @@ async function relLinhas(grupo, rotulo, n) {
 const SIT = { compareceu: 'compareceu', falta: 'faltou', cancelada: 'cancelada',
               medico_faltou: 'médico faltou', pendente: 'pendente' };
 
+/* Grid da lista: agrupar e ordenar (pedido do Cristiano, 22/09).
+   Padrão = agrupado por POSTO, porque a leitura dele é posto a posto; o número
+   do grupo aparece no cabeçalho para conferir contra a tabela "Por posto". */
+let REL_GRUPO = 'posto';
+let REL_ORD   = { campo: 'consulta', dir: 1 };
+
+const COLS_LINHAS = [
+  { k: 'consulta',      rot: 'Consulta',              ord: x => (x.data_consulta || '') + (x.hora_consulta || '') },
+  { k: 'posto',         rot: 'Posto',                 ord: x => x.posto || '' },
+  { k: 'paciente',      rot: 'Paciente',              ord: x => (x.paciente || '').toUpperCase() },
+  { k: 'medico',        rot: 'Médico / especialidade', ord: x => (x.medico || '').toUpperCase() },
+  { k: 'especialidade', rot: 'Especialidade',         ord: x => (x.especialidade || '').toUpperCase(), oculta: true },
+  { k: 'marcado_em',    rot: 'Marcado em',            ord: x => x.marcado_em || '' },
+  { k: 'confirmado_em', rot: 'Confirmado em',         ord: x => x.confirmado_em || '' },
+  { k: 'canal',         rot: 'Canal',                 ord: x => x.canal || '' },
+  { k: 'situacao',      rot: 'Situação',              ord: x => SIT[x.situacao] || '' },
+  { k: 'cancelado_em',  rot: 'Cancelamento',          ord: x => x.cancelado_em || '' },
+  { k: 'ids',           rot: 'IDs no ERP',            ord: x => x.id_lancamento || 0 },
+];
+const GRUPOS_LINHAS = [
+  { k: 'posto',         rot: 'Posto',         lbl: x => 'Posto ' + x.posto },
+  { k: 'medico',        rot: 'Médico',        lbl: x => (x.medico || '(sem médico)') + ' — ' + (x.especialidade || '') },
+  { k: 'especialidade', rot: 'Especialidade', lbl: x => x.especialidade || '(sem especialidade)' },
+  { k: 'situacao',      rot: 'Situação',      lbl: x => SIT[x.situacao] || x.situacao || '' },
+  { k: '',              rot: 'Nada',          lbl: () => '' },
+];
+
+function relOrdenar(campo) {
+  REL_ORD = { campo, dir: REL_ORD.campo === campo ? -REL_ORD.dir : 1 };
+  renderLinhas();
+}
+function relAgrupar(g) { REL_GRUPO = g; renderLinhas(); }
+
 function renderLinhas() {
-  const L = REL_LINHAS.linhas || [];
+  const L = (REL_LINHAS.linhas || []).slice();
   const d  = x => (x || '').slice(0, 10).split('-').reverse().join('/');
   const dh = x => x ? d(x) + ' ' + x.slice(11, 16) : '—';
   const errs = Object.keys(REL_LINHAS.postos_erro || {});
@@ -831,33 +874,58 @@ function renderLinhas() {
   // posto fora do ar. Dizer isso é obrigatório — senão o gestor conta os nomes,
   // dá menos e passa a desconfiar do número.
   const bate = L.length === REL_LINHAS.esperado;
+
+  const col = COLS_LINHAS.find(c => c.k === REL_ORD.campo) || COLS_LINHAS[0];
+  const grp = GRUPOS_LINHAS.find(g => g.k === REL_GRUPO) || GRUPOS_LINHAS[0];
+  const cmp = (a, b) => { const x = col.ord(a), y = col.ord(b); return (x > y ? 1 : x < y ? -1 : 0) * REL_ORD.dir; };
+
+  // monta os grupos preservando a ordem de ordenação dentro de cada um
+  const grupos = new Map();
+  if (grp.k) { for (const x of L) { const g = grp.lbl(x); (grupos.get(g) || grupos.set(g, []).get(g)).push(x); } }
+  else grupos.set('', L);
+  const chaves = [...grupos.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  for (const k of chaves) grupos.get(k).sort(cmp);
+
+  const linhaHTML = x => `<tr>
+    <td>${d(x.data_consulta)} ${esc(x.hora_consulta || '')}<div class="sub">vaga ${esc(String(x.vaga ?? ''))}</div></td>
+    <td><span class="posto-badge">${esc(x.posto)}</span></td>
+    <td style="text-align:left">${esc(x.paciente || '')}<div class="sub">mat. ${esc(x.matricula || '—')}</div></td>
+    <td style="text-align:left">${esc(x.medico || '')}<div class="sub">${esc(x.especialidade || '')}</div></td>
+    <td>${dh(x.marcado_em)}<div class="sub">${fmtN(x.antecedencia)} dia(s) antes</div></td>
+    <td>${dh(x.confirmado_em)}<div class="sub">${x.confirmado_em
+          ? (x.conf_dias > 5 ? x.conf_dias + 'd antes (cedo)' : x.conf_dias >= 2 ? x.conf_dias + 'd antes (janela)'
+             : x.conf_dias >= 0 ? (x.conf_dias === 0 ? 'no dia' : '1d antes') + ' (tarde)' : 'depois da consulta')
+            + (x.conf_no_ato ? ' · na marcação' : ' · depois') : '—'}</div></td>
+    <td>${esc(x.canal || '')}<div class="sub">${x.push ? 'recebeu push' : ''}</div></td>
+    <td>${esc(SIT[x.situacao] || x.situacao || '')}${x.mf ? '<div class="sub">médico com falta</div>' : ''}</td>
+    <td style="text-align:left">${dh(x.cancelado_em)}<div class="sub">${esc((x.motivo || '').slice(0, 60))}</div></td>
+    <td class="ids">lanç. ${x.id_lancamento}<div class="sub">serv. ${x.id_lancamento_servico}</div></td>
+  </tr>`;
+
+  const seta = c => c.k === REL_ORD.campo ? (REL_ORD.dir > 0 ? ' ▲' : ' ▼') : '';
+  const cabecalho = COLS_LINHAS.filter(c => !c.oculta)
+    .map(c => `<th class="ord" onclick="relOrdenar('${c.k}')" title="Ordenar por ${c.rot}">${c.rot}${seta(c)}</th>`).join('');
+  const corpo = chaves.map(k => {
+    const itens = grupos.get(k);
+    const cab = grp.k
+      ? `<tr class="gh"><td colspan="10">${esc(k)} <span class="qt">${fmtN(itens.length)} registro(s)</span></td></tr>` : '';
+    return cab + itens.map(linhaHTML).join('');
+  }).join('');
+
   $('#relDrill').innerHTML = `<div class="drill">
     <div class="dh"><b>${esc(REL_LINHAS.rotulo)}</b> — ${fmtN(L.length)} registro(s)
       <button type="button" class="vreg" onclick="baixarLinhasCSV()"><i class="fas fa-download"></i> CSV</button>
-      <button type="button" class="vreg" onclick="$('#relDrill').innerHTML=''">fechar</button></div>
+      <button type="button" class="vreg" onclick="$('#relDrill').innerHTML=''">fechar</button>
+      <span class="agr">agrupar por ${GRUPOS_LINHAS.map(g =>
+        `<button type="button" class="gbtn ${g.k === REL_GRUPO ? 'on' : ''}" onclick="relAgrupar('${g.k}')">${g.rot}</button>`).join('')}</span>
+      <span class="dica2">clique no cabeçalho da coluna para ordenar</span></div>
     ${bate ? `<div class="dok">A lista tem exatamente os ${fmtN(REL_LINHAS.esperado)} do número acima.</div>`
            : `<div class="dwarn">A lista mostra ${fmtN(L.length)} de ${fmtN(REL_LINHAS.esperado)}.
               ${cortou ? 'Cortada no teto de ' + fmtN(REL_LINHAS.teto) + ' por posto (' + (REL_LINHAS.postos_cortados).join(', ') + ').' : ''}
               ${errs.length ? 'Postos que não responderam: ' + errs.map(esc).join(', ') + '.' : ''}</div>`}
-    ${L.length ? `<div style="overflow:auto;max-height:46vh"><table class="rel">
-      <thead><tr><th>Consulta</th><th>Posto</th><th>Paciente</th><th>Médico / especialidade</th>
-        <th>Marcado em</th><th>Confirmado em</th><th>Canal</th><th>Situação</th><th>Cancelamento</th><th>IDs no ERP</th></tr></thead>
-      <tbody>${L.map(x => `<tr>
-        <td>${d(x.data_consulta)} ${esc(x.hora_consulta || '')}<div class="sub">vaga ${esc(String(x.vaga ?? ''))}</div></td>
-        <td><span class="posto-badge">${esc(x.posto)}</span></td>
-        <td style="text-align:left">${esc(x.paciente || '')}<div class="sub">mat. ${esc(x.matricula || '—')}</div></td>
-        <td style="text-align:left">${esc(x.medico || '')}<div class="sub">${esc(x.especialidade || '')}</div></td>
-        <td>${dh(x.marcado_em)}<div class="sub">${fmtN(x.antecedencia)} dia(s) antes</div></td>
-        <td>${dh(x.confirmado_em)}<div class="sub">${x.confirmado_em
-              ? (x.conf_dias > 5 ? x.conf_dias + 'd antes (cedo)' : x.conf_dias >= 2 ? x.conf_dias + 'd antes (janela)'
-                 : x.conf_dias >= 0 ? (x.conf_dias === 0 ? 'no dia' : '1d antes') + ' (tarde)' : 'depois da consulta')
-                + (x.conf_no_ato ? ' · na marcação' : ' · depois')
-              : '—'}</div></td>
-        <td>${esc(x.canal || '')}<div class="sub">${x.push ? 'recebeu push' : ''}</div></td>
-        <td>${esc(SIT[x.situacao] || x.situacao || '')}${x.mf ? '<div class="sub">médico com falta</div>' : ''}</td>
-        <td style="text-align:left">${dh(x.cancelado_em)}<div class="sub">${esc((x.motivo || '').slice(0, 60))}</div></td>
-        <td class="ids">lanç. ${x.id_lancamento}<div class="sub">serv. ${x.id_lancamento_servico}</div></td>
-      </tr>`).join('')}</tbody></table></div>` : '<div class="text-muted">Nenhum registro.</div>'}
+    ${L.length ? `<div style="overflow:auto;max-height:46vh"><table class="rel grid">
+      <thead><tr>${cabecalho}</tr></thead><tbody>${corpo}</tbody></table></div>`
+              : '<div class="text-muted">Nenhum registro.</div>'}
   </div>`;
 }
 
@@ -901,7 +969,12 @@ function ancoraHTML(t) {
     <div class="leg">${partes.map(x =>
       `<span><i style="background:${x.cor}"></i><b>${fmtN(x.n)}</b> ${x.txt} (${pct(x.n, T)})</span>`).join('')}</div>
     <div class="confere">Conferindo: ${partes.map(x => fmtN(x.n)).join(' + ')} = <b>${fmtN(soma)}</b>` +
-    (soma === T ? ' <span class="ok">✔ fecha com o total</span>' : ` (total ${fmtN(T)})`) + `</div>
+    (soma === T ? ' <span class="ok">✔ fecha com o total</span>' : ` (total ${fmtN(T)})`) + `</div>` +
+    // Esta página é só de AGENDA. Livre demanda não entra — mas o gestor
+    // precisa ver quanto ficou de fora, senão o total parece pequeno demais.
+    (t.oc_fora ? `<div class="fora"><b>${fmtN(t.oc_fora)} consultas de ordem de chegada ficaram de fora</b>
+      e não entram em nenhum card. Esta página é só de <b>agenda</b>: quem é livre demanda não tem
+      horário previsto de consulta no sistema, e é exatamente assim que são separadas.</div>` : '') + `
   </div>`;
 }
 
