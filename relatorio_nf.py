@@ -102,6 +102,9 @@ EMAIL_PASSWORD = os.getenv('ALARM_EMAIL_PASSWORD', '')
 EMAIL_FROM     = os.getenv('ALARM_EMAIL_FROM', '') or EMAIL_USER
 
 ENVIO_LIGADO = (os.getenv('RELATORIO_NF_ENVIO', '1').strip() not in ('0', 'false', 'off', 'nao', 'não'))
+# Envio individual da meta a cada gestor de posto (Evolution, custo zero). Só
+# dispara no envio AGENDADO — o link de "atualizar" NUNCA re-blasta os gestores.
+GESTORES_LIGADO = (os.getenv('RELATORIO_NF_GESTORES', '1').strip() not in ('0', 'false', 'off', 'nao', 'não'))
 
 # Validade do link (dias). Link velho continua abrindo até expirar — quem toca
 # recebe o dado de HOJE, não o de quando o link foi gerado.
@@ -138,6 +141,23 @@ ORIGEM_TO_OBJ = {
     'Clinica': 'clinica', 'OperadoraCamim': 'camim',
     'OperadoraSDM': 'sdm', 'Laboratorio': 'laboratorio',
 }
+
+# Agrupamento de postos por grupo empresarial — MESMO mapa do GRUPOS_POSTO de
+# kpi_notas_rps.html (Altamiro: número Meta 2455; Couto: 3529). Mudar nos dois.
+GRUPOS_POSTO = {
+    'altamiro': ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'],
+    'couto':    ['C', 'D', 'J', 'M', 'P'],
+}
+GRUPO_LABEL = {'altamiro': 'Altamiro', 'couto': 'Couto', 'outros': 'Outros'}
+GRUPO_ORDEM = ['altamiro', 'couto', 'outros']
+
+
+def grupo_de(posto: str) -> str:
+    p = (posto or '').upper()
+    for g, ls in GRUPOS_POSTO.items():
+        if p in ls:
+            return g
+    return 'outros'
 
 
 # ── Destinatários ────────────────────────────────────────────────────────────
@@ -228,8 +248,7 @@ def carregar_dados(ym: str | None = None) -> dict:
     """Lê os JSONs de todos os postos do mês e agrega no modo Clínicas."""
     ym = ym or ym_atual()
     linhas = []
-    rps_qtd = 0.0
-    rps_total = 0.0
+    rps_por_posto: dict[str, dict] = {}
     gerados = []
     postos = []
     for path in sorted(glob.glob(os.path.join(JSON_DIR, f'*_notas_rps_{ym}.json'))):
@@ -253,7 +272,8 @@ def carregar_dados(ym: str | None = None) -> dict:
                 continue
             emp = str(row.get('Empresa') or row.get('empresa') or '')
             cur = por_emp.setdefault(emp, {
-                'posto': posto, 'empresa': emp, 'origem': str(row.get('origem') or ''),
+                'posto': posto, 'grupo': grupo_de(posto),
+                'empresa': emp, 'origem': str(row.get('origem') or ''),
                 'qtd': 0.0, 'emitidas': 0.0, 'canc_qtd': 0.0, 'canc_val': 0.0,
                 'cont_qtd': 0.0, 'cont_val': 0.0, 'objetivo': None,
             })
@@ -274,30 +294,77 @@ def carregar_dados(ym: str | None = None) -> dict:
             linhas.append(cur)
         for row in d.get('rps_pendentes') or []:
             if str(row.get('origem') or '') == 'Clinica':
-                rps_qtd   += _num(row.get('qtd'))
-                rps_total += _num(row.get('total'))
+                rp = rps_por_posto.setdefault(posto, {'qtd': 0.0, 'total': 0.0})
+                rp['qtd']   += _num(row.get('qtd'))
+                rp['total'] += _num(row.get('total'))
 
-    linhas.sort(key=lambda r: (-r['emitidas'], r['posto']))
-    tot_cont = sum(r['cont_val'] for r in linhas)
-    tot_meta = sum(r['objetivo'] or 0 for r in linhas if r['objetivo'])
-    tot_emit = sum(r['emitidas'] for r in linhas)
-    contagem = {k: 0 for k in FAIXAS}
+    return _montar(linhas, ym, postos, gerados, rps_por_posto)
+
+
+def _contagem(linhas: list[dict]) -> dict:
+    c = {k: 0 for k in FAIXAS}
     for r in linhas:
-        contagem[r['faixa']] += 1
+        c[r['faixa']] += 1
+    return c
+
+
+def _subtotal(linhas: list[dict], rps_por_posto: dict, postos: list[str]) -> dict:
+    cont = sum(r['cont_val'] for r in linhas)
+    meta = sum(r['objetivo'] or 0 for r in linhas if r['objetivo'])
+    emit = sum(r['emitidas'] for r in linhas)
+    rps_qtd   = sum(rps_por_posto.get(p, {}).get('qtd', 0.0) for p in postos)
+    rps_total = sum(rps_por_posto.get(p, {}).get('total', 0.0) for p in postos)
+    return {'emitidas': emit, 'cont_val': cont, 'meta': meta,
+            'pct': (cont / meta * 100.0) if meta else None,
+            'rps_qtd': rps_qtd, 'rps_total': rps_total}
+
+
+def _agrupar(linhas: list[dict], rps_por_posto: dict) -> list[dict]:
+    """Quebra as linhas em blocos por grupo empresarial (Altamiro, Couto…),
+    cada um com suas linhas ordenadas, subtotal e contagem por faixa."""
+    grupos = []
+    for key in GRUPO_ORDEM:
+        ls = [r for r in linhas if r.get('grupo') == key]
+        if not ls:
+            continue
+        ls.sort(key=lambda r: (-r['emitidas'], r['posto']))
+        postos_g = sorted({r['posto'] for r in ls})
+        grupos.append({
+            'key': key, 'label': GRUPO_LABEL.get(key, key),
+            'linhas': ls, 'postos': postos_g,
+            'subtotal': _subtotal(ls, rps_por_posto, postos_g),
+            'contagem': _contagem(ls),
+        })
+    return grupos
+
+
+def _montar(linhas: list[dict], ym: str, postos: list[str], gerados: list,
+            rps_por_posto: dict) -> dict:
+    linhas.sort(key=lambda r: (-r['emitidas'], r['posto']))
     ano, mes = ym.split('-')
+    tot = _subtotal(linhas, rps_por_posto, postos)
     return {
         'ym': ym,
         'mes_nome': f'{MESES[int(mes)]}/{ano}',
         'linhas': linhas,
+        'grupos': _agrupar(linhas, rps_por_posto),
         'postos': postos,
+        'rps_por_posto': rps_por_posto,
         'gerado_em': min(gerados) if gerados else None,   # coleta mais ANTIGA (igual à página)
-        'totais': {
-            'emitidas': tot_emit, 'cont_val': tot_cont, 'meta': tot_meta,
-            'pct': (tot_cont / tot_meta * 100.0) if tot_meta else None,
-            'rps_qtd': rps_qtd, 'rps_total': rps_total,
-        },
-        'contagem': contagem,
+        'totais': tot,
+        'contagem': _contagem(linhas),
     }
+
+
+def dados_de_postos(dados: dict, postos: list[str]) -> dict:
+    """Recorta um `dados` já carregado para um subconjunto de postos, recompondo
+    totais/grupos/contagem. Usado na mensagem individual de cada gestor."""
+    alvo = {p.upper() for p in postos}
+    linhas = [dict(r) for r in dados['linhas'] if r['posto'].upper() in alvo]
+    gerados = [dados['gerado_em']] if dados.get('gerado_em') else []
+    postos_presentes = [p for p in dados['postos'] if p.upper() in alvo]
+    return _montar(linhas, dados['ym'], postos_presentes, gerados,
+                   dados.get('rps_por_posto') or {})
 
 
 # ── Formatação ───────────────────────────────────────────────────────────────
@@ -389,12 +456,22 @@ def render_png(dados: dict) -> bytes:
     f_pct  = _font(True, 27)
     f_rod  = _font(False, 23)
     f_leg  = _font(True, 23)
+    f_grp  = _font(True, 30)
+
+    grupos = [g for g in (dados.get('grupos') or []) if g['linhas']]
+    seccionar = len(grupos) > 1        # 2+ grupos → blocos Altamiro/Couto; 1 → tabela lisa
+    GRP_HDR_H = 62
+    GRP_SUB_H = 96
 
     top_h = 200            # título + subtítulo + chips
     hdr_h = 56
     tot_h = 96
     foot_h = 170
-    H = PAD + top_h + hdr_h + ROW_H * max(1, len(linhas)) + tot_h + foot_h + PAD
+    if seccionar:
+        corpo_h = sum(GRP_HDR_H + ROW_H * len(g['linhas']) + GRP_SUB_H for g in grupos)
+    else:
+        corpo_h = ROW_H * max(1, len(linhas))
+    H = PAD + top_h + hdr_h + corpo_h + tot_h + foot_h + PAD
 
     img = Image.new('RGB', (W, H), _hex('#eef1f5'))
     dr = ImageDraw.Draw(img)
@@ -441,42 +518,68 @@ def render_png(dados: dict) -> bytes:
     dr.text((X_PCT + (PCT_W - dr.textlength('% META', font=f_hdr)) / 2, hy), '% META', font=f_hdr, fill=_hex('#6b7280'))
     y += hdr_h
 
-    if not linhas:
-        dr.text((X_EMP, y + 24), 'Nenhuma nota encontrada para o mês.', font=f_emp, fill=_hex('#6b7280'))
-        y += ROW_H
-
-    for i, r in enumerate(linhas):
+    def draw_row(r, yy, zebra):
         cor = _hex(cor_meta(r['pct']))
-        if i % 2:
-            dr.rectangle([PAD, y, W - PAD, y + ROW_H], fill=_hex('#fafafa'))
-        dr.rectangle([PAD, y + 8, PAD + 10, y + ROW_H - 8], fill=cor)      # faixa lateral
-        dr.text((X_POSTO, y + 20), r['posto'], font=f_post, fill=_hex('#111827'))
-        dr.text((X_EMP, y + 14), _cortar(dr, nome_curto(r['empresa']), f_emp, EMP_W), font=f_emp, fill=_hex('#111827'))
+        if zebra:
+            dr.rectangle([PAD, yy, W - PAD, yy + ROW_H], fill=_hex('#fafafa'))
+        dr.rectangle([PAD, yy + 8, PAD + 10, yy + ROW_H - 8], fill=cor)      # faixa lateral
+        dr.text((X_POSTO, yy + 20), r['posto'], font=f_post, fill=_hex('#111827'))
+        dr.text((X_EMP, yy + 14), _cortar(dr, nome_curto(r['empresa']), f_emp, EMP_W), font=f_emp, fill=_hex('#111827'))
         sub = f"{fmt_int(r['cont_qtd'])} NF · emit. {fmt_brl(r['emitidas'])}"
         if r['canc_qtd']:
             sub += f" · {fmt_int(r['canc_qtd'])} canc."
-        dr.text((X_EMP, y + 49), _cortar(dr, sub, f_meta, EMP_W), font=f_meta, fill=_hex('#9ca3af'))
+        dr.text((X_EMP, yy + 49), _cortar(dr, sub, f_meta, EMP_W), font=f_meta, fill=_hex('#9ca3af'))
         v = fmt_brl(r['cont_val'])
-        dr.text((X_VAL_R - dr.textlength(v, font=f_val), y + 27), v, font=f_val, fill=_hex('#111827'))
+        dr.text((X_VAL_R - dr.textlength(v, font=f_val), yy + 27), v, font=f_val, fill=_hex('#111827'))
         m = fmt_brl(r['objetivo']) if r['objetivo'] else '—'
-        dr.text((X_META_R - dr.textlength(m, font=f_meta), y + 30), m, font=f_meta, fill=_hex('#6b7280'))
-        _selo(dr, X_PCT, y + 20, PCT_W, ROW_H - 40, fmt_pct(r['pct']), f_pct, cor)
-        y += ROW_H
+        dr.text((X_META_R - dr.textlength(m, font=f_meta), yy + 30), m, font=f_meta, fill=_hex('#6b7280'))
+        _selo(dr, X_PCT, yy + 20, PCT_W, ROW_H - 40, fmt_pct(r['pct']), f_pct, cor)
 
-    # totais
-    dr.rectangle([PAD, y, W - PAD, y + 2], fill=_hex('#e5e7eb'))
-    y += 14
-    cor_t = _hex(cor_meta(tot['pct']))
-    dr.text((X_POSTO, y + 24), 'TOTAL', font=f_hdr, fill=_hex('#374151'))
-    dr.text((X_EMP, y + 14), f"{len(linhas)} empresas · {len(dados['postos'])} postos", font=f_emp, fill=_hex('#374151'))
-    dr.text((X_EMP, y + 49), _cortar(dr, f"RPS pendentes: {fmt_int(tot['rps_qtd'])} · {fmt_brl(tot['rps_total'])}", f_meta, EMP_W + 40),
-            font=f_meta, fill=_hex('#9ca3af'))
-    # no total o valor passa de R$ 1 mi e não cabe ao lado da meta: meta vai embaixo
-    v = fmt_brl(tot['cont_val'])
-    dr.text((X_META_R - dr.textlength(v, font=f_val), y + 12), v, font=f_val, fill=_hex('#111827'))
-    m = f"meta {fmt_brl(tot['meta'])}" if tot['meta'] else 'sem meta'
-    dr.text((X_META_R - dr.textlength(m, font=f_meta), y + 50), m, font=f_meta, fill=_hex('#6b7280'))
-    _selo(dr, X_PCT, y + 20, PCT_W, ROW_H - 40, fmt_pct(tot['pct']), f_pct, cor_t)
+    def draw_total(yy, rotulo, info1, info2, sub, sep=True):
+        if sep:
+            dr.rectangle([PAD, yy, W - PAD, yy + 2], fill=_hex('#e5e7eb'))
+        yy += 14
+        cor_t = _hex(cor_meta(sub['pct']))
+        if rotulo:
+            dr.text((X_POSTO, yy + 24), rotulo, font=f_hdr, fill=_hex('#374151'))
+        dr.text((X_EMP, yy + 14), _cortar(dr, info1, f_emp, EMP_W + 40), font=f_emp, fill=_hex('#374151'))
+        if info2:
+            dr.text((X_EMP, yy + 49), _cortar(dr, info2, f_meta, EMP_W + 40), font=f_meta, fill=_hex('#9ca3af'))
+        v = fmt_brl(sub['cont_val'])
+        dr.text((X_META_R - dr.textlength(v, font=f_val), yy + 12), v, font=f_val, fill=_hex('#111827'))
+        m = f"meta {fmt_brl(sub['meta'])}" if sub['meta'] else 'sem meta'
+        dr.text((X_META_R - dr.textlength(m, font=f_meta), yy + 50), m, font=f_meta, fill=_hex('#6b7280'))
+        _selo(dr, X_PCT, yy + 20, PCT_W, ROW_H - 40, fmt_pct(sub['pct']), f_pct, cor_t)
+
+    if not linhas:
+        dr.text((X_EMP, y + 24), 'Nenhuma nota encontrada para o mês.', font=f_emp, fill=_hex('#6b7280'))
+        y += ROW_H
+    elif seccionar:
+        for g in grupos:
+            cor_g = _hex(cor_meta(g['subtotal']['pct']))
+            dr.rectangle([PAD, y, W - PAD, y + GRP_HDR_H], fill=_hex('#eef2ff'))
+            dr.rectangle([PAD, y, PAD + 10, y + GRP_HDR_H], fill=cor_g)
+            dr.text((X_POSTO, y + 8), f"GRUPO {g['label'].upper()}", font=f_grp, fill=_hex('#1e3a8a'))
+            postos_txt = f"{len(g['postos'])} postos: {', '.join(g['postos'])}"
+            dr.text((X_POSTO, y + 40), _cortar(dr, postos_txt, f_meta, W - PAD - X_POSTO - 40), font=f_meta, fill=_hex('#6b7280'))
+            y += GRP_HDR_H
+            for i, r in enumerate(g['linhas']):
+                draw_row(r, y, i % 2)
+                y += ROW_H
+            s = g['subtotal']
+            draw_total(y, '',
+                       f"Subtotal — {len(g['linhas'])} empresas, {len(g['postos'])} postos",
+                       f"RPS pendentes: {fmt_int(s['rps_qtd'])} · {fmt_brl(s['rps_total'])}", s)
+            y += GRP_SUB_H
+    else:
+        for i, r in enumerate(linhas):
+            draw_row(r, y, i % 2)
+            y += ROW_H
+
+    # total geral
+    draw_total(y, 'TOTAL',
+               f"{len(linhas)} empresas · {len(dados['postos'])} postos",
+               f"RPS pendentes: {fmt_int(tot['rps_qtd'])} · {fmt_brl(tot['rps_total'])}", tot)
     y += tot_h
 
     # rodapé
@@ -498,18 +601,28 @@ def render_png(dados: dict) -> bytes:
 
 # ── Texto das mensagens ──────────────────────────────────────────────────────
 
-def texto_resumo(dados: dict) -> str:
-    c = dados['contagem']
-    t = dados['totais']
+def _linha_contagem(c: dict) -> str:
     partes = [f"🟢 {c['verde']} meta batida (100–150%)", f"🟡 {c['amarelo']} entre 50 e 100%", f"🔴 {c['vermelho']} até 50%"]
     if c.get('estouro'):
         partes.append(f"🚨 {c['estouro']} acima de 150%")
-    if c['sem_meta']:
+    if c.get('sem_meta'):
         partes.append(f"⚪ {c['sem_meta']} sem meta")
-    return (f"📊 *NF emitidas × meta — {dados['mes_nome']}* (Clínicas)\n"
-            f"Dados coletados {_quando(dados)}\n"
-            f"{' · '.join(partes)}\n"
-            f"Contabilizado: {fmt_brl(t['cont_val'])} de {fmt_brl(t['meta'])} ({fmt_pct(t['pct'])})")
+    return ' · '.join(partes)
+
+
+def texto_resumo(dados: dict) -> str:
+    t = dados['totais']
+    linhas = [f"📊 *NF emitidas × meta — {dados['mes_nome']}* (Clínicas)",
+              f"Dados coletados {_quando(dados)}",
+              _linha_contagem(dados['contagem'])]
+    grupos = [g for g in (dados.get('grupos') or []) if g['linhas']]
+    if len(grupos) > 1:
+        for g in grupos:
+            s = g['subtotal']
+            linhas.append(f"— *{g['label']}* ({', '.join(g['postos'])}): "
+                          f"{fmt_brl(s['cont_val'])} de {fmt_brl(s['meta'])} ({fmt_pct(s['pct'])})")
+    linhas.append(f"Contabilizado: {fmt_brl(t['cont_val'])} de {fmt_brl(t['meta'])} ({fmt_pct(t['pct'])})")
+    return '\n'.join(linhas)
 
 
 def caption_zap(dados: dict, link: str) -> str:
@@ -518,7 +631,34 @@ def caption_zap(dados: dict, link: str) -> str:
             f"📈 Painel completo: {PAGINA_URL}")
 
 
+def _nome_posto(posto: str) -> str:
+    try:
+        import alarmes_db as adb
+        return adb.POSTOS_NOMES.get(posto.upper(), posto)
+    except Exception:
+        return posto
+
+
+def caption_gestor(dp: dict, posto: str, nome_ger: str) -> str:
+    """Mensagem individual da meta para o gestor do posto — sem link de
+    atualizar (só o gestor recebe a foto do próprio posto)."""
+    t = dp['totais']
+    saud = f"Olá, {nome_ger.split()[0]}!" if nome_ger else "Olá!"
+    return (f"{saud}\n"
+            f"📊 *NF emitidas × meta — {dp['mes_nome']}*\n"
+            f"Posto {posto} · {_nome_posto(posto)} · dados de {_quando(dp)}\n"
+            f"{_linha_contagem(dp['contagem'])}\n"
+            f"Contabilizado: {fmt_brl(t['cont_val'])} de {fmt_brl(t['meta'])} ({fmt_pct(t['pct'])})\n\n"
+            f"📈 Painel completo: {PAGINA_URL}")
+
+
 def html_email(dados: dict, link: str, nome: str) -> str:
+    # link vazio (mensagem do gestor) → sem o botão "atualizar", que reenviaria
+    # ao Cristiano/Vinicius; o gestor não pode acionar isso.
+    botao_atualizar = (
+        f'<a href="{link}" style="background:#2563eb;color:#fff;text-decoration:none;'
+        f'padding:12px 18px;border-radius:8px;font-weight:700;display:inline-block">'
+        f'🔄 Atualizar e receber de novo</a>&nbsp; ' if link else '')
     t = dados['totais']
     trs = []
     for r in dados['linhas']:
@@ -534,8 +674,7 @@ def html_email(dados: dict, link: str, nome: str) -> str:
 <div style="max-width:640px;margin:0 auto;background:#fff;border-radius:12px;padding:20px">
   <h2 style="margin:0 0 4px">📊 NF emitidas × meta — {dados['mes_nome']}</h2>
   <p style="margin:0 0 14px;color:#6b7280">Clínicas · dados coletados {_quando(dados)} · olá, {nome}</p>
-  <p><a href="{link}" style="background:#2563eb;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;display:inline-block">🔄 Atualizar e receber de novo</a>
-     &nbsp; <a href="{PAGINA_URL}" style="color:#2563eb">Abrir o painel</a></p>
+  <p>{botao_atualizar}<a href="{PAGINA_URL}" style="color:#2563eb">Abrir o painel</a></p>
   <img src="cid:relatorio_nf" alt="Relatório NF x meta" style="width:100%;max-width:600px;border-radius:8px;border:1px solid #e5e7eb">
   <h3 style="margin:20px 0 6px;font-size:16px">Mesma tabela em texto</h3>
   <table style="border-collapse:collapse;width:100%;font-size:14px">
@@ -764,8 +903,60 @@ def _registrar_ultimo(dest_id: str, origem: str):
 
 # ── Orquestração ─────────────────────────────────────────────────────────────
 
+def enviar_gestores(dados: dict, run: bool) -> list[dict]:
+    """Manda a cada gestor de posto (gerente_posto do alarmes.db, vindo do CRM)
+    a foto individual da meta do SEU posto — Evolution, custo zero. Posto sem
+    gestor ou sem telefone é PULADO com log, nunca trava. Sem --run, dry-run."""
+    resultados: list[dict] = []
+    if not GESTORES_LIGADO:
+        log.info('RELATORIO_NF_GESTORES=0 — envio individual aos gestores DESLIGADO')
+        return resultados
+    try:
+        import alarmes_db as adb
+        gmap = {(g.get('posto') or '').upper(): g for g in adb.listar_gerentes()}
+    except Exception as e:
+        log.error('gestores: não consegui ler gerente_posto (%s) — nenhum gestor notificado', e)
+        return resultados
+
+    envio_ok = run and ENVIO_LIGADO
+    for posto in sorted({r['posto'] for r in dados['linhas']}):
+        ger = gmap.get(posto.upper())
+        nome_ger = ((ger or {}).get('nome') or '').strip()
+        tel = (ger or {}).get('telefone') or ''
+        email = (ger or {}).get('email') or ''
+        item = {'posto': posto, 'gestor': nome_ger or None, 'zap': None, 'email': None}
+        if not ger:
+            item['zap'] = 'pulado: posto sem gestor cadastrado (gerente_posto/CRM)'
+            log.info('gestor %s: %s', posto, item['zap'])
+            resultados.append(item)
+            continue
+        dp = dados_de_postos(dados, [posto])
+        if envio_ok:
+            png = render_png(dp)
+            nome_png = f"nf_x_meta_{dp['ym']}_{posto}.png"
+            if _limpar_telefone(tel):
+                ok, msg = enviar_zap_imagem(tel, png, caption_gestor(dp, posto, nome_ger), nome_png)
+                item['zap'] = f"{'ok' if ok else 'ERRO'}: {msg}"
+            else:
+                item['zap'] = 'pulado: gestor sem telefone cadastrado'
+            if email:
+                assunto = f"NF emitidas × meta — Posto {posto} — {dp['mes_nome']}"
+                ok, msg = enviar_email(email, assunto,
+                                       html_email(dp, '', nome_ger or f'gestor {posto}'), png, nome_png)
+                item['email'] = f"{'ok' if ok else 'ERRO'}: {msg}"
+            else:
+                item['email'] = 'pulado: gestor sem e-mail cadastrado'
+        else:
+            item['zap'] = f"DRY-RUN → {tel or 'sem telefone'} ({nome_ger or '?'})"
+            item['email'] = f"DRY-RUN → {email or 'sem e-mail'}"
+        log.info('gestor %s (%s): zap=%s | email=%s', posto, nome_ger, item['zap'], item['email'])
+        resultados.append(item)
+    return resultados
+
+
 def executar_envio(dest_ids: list[str], atualizar: bool, run: bool, origem: str = 'manual',
-                   ym: str | None = None, salvar_png: str | None = None) -> dict:
+                   ym: str | None = None, salvar_png: str | None = None,
+                   incluir_gestores: bool = False) -> dict:
     dests = destinatarios()
     alvo = [dests[d] for d in dest_ids if d in dests]
     res = {'origem': origem, 'run': run, 'etl': None, 'envios': [], 'png': None}
@@ -817,6 +1008,8 @@ def executar_envio(dest_ids: list[str], atualizar: bool, run: bool, origem: str 
             item['email'] = f"DRY-RUN → {d['email'] or 'sem e-mail'}"
         log.info('envio %s: zap=%s | email=%s', d['id'], item['zap'], item['email'])
         res['envios'].append(item)
+    if incluir_gestores:
+        res['gestores'] = enviar_gestores(dados, run)
     res['resumo'] = texto_resumo(dados)
     return res
 
@@ -854,6 +1047,8 @@ def main(argv=None) -> int:
     ap.add_argument('--para', default='all', help='ids separados por vírgula, ou all')
     ap.add_argument('--atualizar', action='store_true', help='roda o export_notas_rps.sh antes')
     ap.add_argument('--spool', action='store_true', help='processa a fila de pedidos (cron 1×/min)')
+    ap.add_argument('--sem-gestores', dest='sem_gestores', action='store_true',
+                    help='NÃO manda a meta individual a cada gestor de posto (padrão: manda)')
     ap.add_argument('--run', action='store_true', help='ENVIA de verdade (sem isso é dry-run)')
     ap.add_argument('--ym', help='mês AAAA-MM (padrão: atual)')
     ap.add_argument('--png', help='com --enviar: também salva o PNG neste caminho')
@@ -881,7 +1076,7 @@ def main(argv=None) -> int:
     if a.enviar:
         ids = list(destinatarios()) if a.para == 'all' else [x.strip() for x in a.para.split(',') if x.strip()]
         res = executar_envio(ids, atualizar=a.atualizar, run=a.run, origem='cron' if a.run else 'dry-run',
-                             ym=a.ym, salvar_png=a.png)
+                             ym=a.ym, salvar_png=a.png, incluir_gestores=not a.sem_gestores)
         print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
         return 1 if res.get('erro') else 0
 

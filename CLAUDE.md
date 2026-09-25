@@ -629,6 +629,27 @@ enviados. O venv de `/opt/relatorio_h_t` precisou de `pip install itsdangerous`
 `python relatorio_nf.py --preview /tmp/nf.png` gera só a imagem (útil para
 conferir layout); `--enviar --para cristiano` sem `--run` mostra o que faria.
 
+### Agrupamento Altamiro/Couto + meta individual por gestor (2026-09-25)
+
+Pedido do Cristiano: o relatório vir com os **agrupamentos separados**
+(Altamiro, Couto) e, **além** de Cristiano/Vinicius, mandar a **cada gestor de
+posto** a meta individual do posto dele.
+
+- **Agrupamento:** `GRUPOS_POSTO` em `relatorio_nf.py` é cópia do mapa de
+  `kpi_notas_rps.html` — Altamiro `A,B,G,I,N,R,X,Y`, Couto `C,D,J,M,P`. **Mudar
+  nos dois.** A imagem/e-mail/zap ganham uma seção por grupo com subtotal, e o
+  TOTAL geral continua no fim. Posto fora dos dois cai em "Outros".
+- **Gestor:** `enviar_gestores()` lê `gerente_posto` do `alarmes.db` (vem do CRM
+  via `sync_gerentes`) e manda a foto só do posto dele pela **Evolution (custo
+  zero)**, **sem link de atualizar** (o gestor não pode re-disparar o envio ao
+  Cristiano). Posto sem gestor/telefone é **pulado com log**, nunca trava.
+- **A trava contra rajada:** gestores só entram no envio AGENDADO. `--enviar`
+  inclui gestores por padrão (por isso o cron de 25/28/30/31 já dispara sem
+  editar o crontab); **`processar_spool()` NÃO passa `incluir_gestores`**, então
+  quando o Cristiano toca no link, reenvia só pra ele/Vinicius. `--sem-gestores`
+  e `RELATORIO_NF_GESTORES=0` desligam a parte de gestores; sem `--run` é
+  dry-run que lista o plano.
+
 ---
 
 ## Painel Financeiro · Impostos (`/painel_financeiro`) — 2026-09-03
