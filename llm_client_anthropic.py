@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-import anthropic
+import openrouter
 
 
 @dataclass
@@ -16,10 +16,16 @@ class LLMClientAnthropic:
 
     def __init__(self, config: Optional[AnthropicConfig] = None):
         self.config = config or AnthropicConfig()
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise RuntimeError("ANTHROPIC_API_KEY ausente.")
-        self.client = anthropic.Anthropic(api_key=api_key)
+        # Desde 2026-09-29 o Claude também sai pela OpenRouter (API compatível com OpenAI).
+        self._openrouter = openrouter.ativo()
+        if self._openrouter:
+            self.client = openrouter.cliente()
+        else:
+            import anthropic
+            api_key = os.getenv("ANTHROPIC_API_KEY")
+            if not api_key:
+                raise RuntimeError("ANTHROPIC_API_KEY ausente.")
+            self.client = anthropic.Anthropic(api_key=api_key)
         self.last_finish_reason: Optional[str] = None
         self.last_usage: dict = {}
         self.last_model: Optional[str] = None
@@ -31,6 +37,27 @@ class LLMClientAnthropic:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> str:
+        if self._openrouter:
+            resp = self.client.chat.completions.create(
+                model=openrouter.modelo(self.config.model),
+                max_tokens=max_tokens or self.config.max_tokens,
+                temperature=temperature or self.config.temperature,
+                messages=[
+                    {"role": "system", "content": system_prompt or "Você é um assistente analítico da CAMIM."},
+                    {"role": "user", "content": prompt},
+                ],
+                extra_body=openrouter.EXTRA_BODY,
+            )
+            self.last_finish_reason = getattr(resp.choices[0], "finish_reason", None)
+            u = getattr(resp, "usage", None)
+            self.last_usage = {
+                "prompt_tokens":     getattr(u, "prompt_tokens", None),
+                "completion_tokens": getattr(u, "completion_tokens", None),
+                "total_tokens":      getattr(u, "total_tokens", None),
+            } if u is not None else {}
+            self.last_model = getattr(resp, "model", None) or self.config.model
+            return (resp.choices[0].message.content or "").strip()
+
         msg = self.client.messages.create(
             model=self.config.model,
             max_tokens=max_tokens or self.config.max_tokens,

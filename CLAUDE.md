@@ -1805,7 +1805,7 @@ esta é a do relatorio_h_t (centro de custo). Chamada nova de IA usa
 Sem a chave, os clientes caem no provedor antigo. Roteamento: **mais barato**
 (`provider.sort=price`) por decisão do Cristiano. Quais chamadas mandam dado sensível
 e como travar provedor por chamada: **[docs/divida_tecnica_ia.md](docs/divida_tecnica_ia.md)**.
-Anthropic (`llm_client_anthropic.py`) continua direto.
+Anthropic (`llm_client_anthropic.py`) também sai pela OpenRouter (`anthropic/claude-sonnet-4`) desde 29/09; as chaves GROQ/OPENAI/ANTHROPIC saíram do .env (fica só `OPENAI_ADMIN_KEY`, que lê a fatura, não chama modelo).
 
 ---
 

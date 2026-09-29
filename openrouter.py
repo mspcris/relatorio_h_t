@@ -16,6 +16,7 @@ OpenAI passa pela OpenRouter, com UMA CHAVE POR PROJETO (esta é a do relatorio_
 from __future__ import annotations
 
 import os
+import re
 
 BASE_URL = "https://openrouter.ai/api/v1"
 EXTRA_BODY = {"provider": {"sort": "price"}}
@@ -39,5 +40,12 @@ def cliente():
 
 
 def modelo(nome: str) -> str:
+    """"gpt-4.1" → "openai/gpt-4.1"; "claude-sonnet-4-20250514" → "anthropic/claude-sonnet-4"."""
     nome = (nome or "").strip()
-    return nome if "/" in nome else f"openai/{nome}"
+    if "/" in nome:
+        return nome
+    if nome.startswith("claude-"):
+        nome = re.sub(r"-\d{8}$", "", nome)          # tira a data de versão da Anthropic
+        nome = re.sub(r"-(\d)-(\d)$", r"-\1.\2", nome)  # claude-sonnet-4-5 → claude-sonnet-4.5
+        return f"anthropic/{nome}"
+    return f"openai/{nome}"

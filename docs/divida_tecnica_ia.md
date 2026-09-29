@@ -54,8 +54,8 @@ ou paciente — conferido em 29/09). `agenda_dia.html` e `indicadores_vg.html` m
   parado, apagar.
 - `analyze_groq_bac.py`: backup, ainda chama a Groq direto. Apagar.
 - `openai_client.py`: ninguém importa. Apagar.
-- `llm_client_anthropic.py`: **continua direto na Anthropic** (fora do pedido de
-  29/09, que era Groq + OpenAI). É a opção "anthropic" do chat.
+- `llm_client_anthropic.py`: também passou pela OpenRouter em 29/09
+  (`anthropic/claude-sonnet-4`). É a opção "anthropic" do chat.
 
 ## Centro de custo — ainda falta
 
@@ -66,8 +66,10 @@ com uma *provisioning key*, `GET /api/v1/keys` lista todas as chaves e o uso de 
 uma — é isso que dá o custo por projeto no centro IA do Custos de TI. OpenAI e Groq
 vão zerar a partir de 29/09 (menos o que ainda sair por Anthropic).
 
-## Queda para o provedor antigo
+## Chaves antigas
 
-Sem `OPENROUTER_API_KEY` no ambiente, cada cliente volta sozinho para Groq/OpenAI
-direto (`openrouter.ativo()`). As chaves `GROQ_API_KEY`/`OPENAI_API_KEY` continuam no
-`.env` por isso — revogar só depois de algumas semanas estável.
+Por ordem do Cristiano ("somente OpenRouter"), `GROQ_API_KEY`, `OPENAI_API_KEY` e
+`ANTHROPIC_API_KEY` saíram dos `.env` da VM em 29/09 (backup `.env.bak.openrouter.*`).
+O código ainda tem o caminho antigo para quando `OPENROUTER_API_KEY` falta (rodar
+local); em produção, sem a chave da OpenRouter a IA para — não volta para outro provedor.
+`OPENAI_ADMIN_KEY` fica: ela só lê a fatura da OpenAI no Custos com IA.
