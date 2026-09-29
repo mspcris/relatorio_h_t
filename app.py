@@ -107,6 +107,13 @@ except Exception as _e:
     logging.getLogger(__name__).error("cancelados_robo_bp não carregado: %s", _e)
 
 try:
+    from notas_fila_routes import notas_fila_bp
+    app.register_blueprint(notas_fila_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("notas_fila_bp não carregado: %s", _e)
+
+try:
     from kpi_receita_despesa_api import receita_despesa_bp
     app.register_blueprint(receita_despesa_bp)
 except Exception as _e:

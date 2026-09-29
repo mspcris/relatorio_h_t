@@ -50,6 +50,22 @@
     }
 
     /* ── Selo % da meta (tabela Notas emitidas) ── */
+    .fila-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:10px; }
+    .fila-tile { border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; background:#fff; }
+    .fila-top { display:flex; align-items:center; gap:8px; }
+    .fila-posto { font-weight:700; font-size:1rem; color:#111827; }
+    .fila-num { font-size:2rem; font-weight:700; line-height:1.1; color:#111827; font-variant-numeric:tabular-nums; }
+    .fila-sub { color:#6b7280; font-size:.8rem; }
+    .fila-delta { font-size:.8rem; font-weight:600; color:#374151; margin-left:6px; }
+    .fila-linhas { margin-top:6px; font-size:.82rem; color:#374151; line-height:1.45; }
+    .fila-linhas b { color:#111827; }
+    .fila-chip { margin-left:auto; display:inline-flex; align-items:center; gap:4px; font-size:.75rem; font-weight:600;
+                 padding:2px 8px; border-radius:12px; border:1px solid transparent; white-space:nowrap; }
+    .fila-chip.ok   { background:#dcfce7; color:#166534; border-color:#86efac; }
+    .fila-chip.warn { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
+    .fila-chip.bad  { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+    .fila-chip.idle { background:#f3f4f6; color:#374151; border-color:#e5e7eb; }
+    .fila-rodape { margin-top:8px; font-size:.82rem; color:#6b7280; }
     .meta-badge { display:inline-block; min-width:52px; text-align:center; padding:2px 8px; border-radius:12px;
       font-weight:600; font-size:.9rem; color:#fff; }
     .meta-vermelho { background:#dc2626; } .meta-amarelo { background:#d97706; }
@@ -569,6 +585,127 @@
       return `<span class="meta-badge ${cor ? '' : 'meta-sem'}"${st} title="R$ ${fmt2.format(num(valor))} contabilizados ÷ objetivo">${txt}</span>`;
     }
 
+    // ====== Fila de emissão ao vivo (/api/notas_rps/fila) ======
+    // "Existe uma fila e poucas são emitidas por minuto — preciso saber que está andando."
+    // A API lê os postos do ACL; aqui só filtra pelos postos selecionados nas abas.
+    let FILA = null, FILA_ANTERIOR = {}, filaTimer = null, filaCarregando = false;
+    const FILA_MS = 60000;
+
+    const filaInt = n => fmtInt.format(Number(n) || 0);
+    const filaMoeda = v => 'R$ ' + fmt2.format(Number(v) || 0);
+    const filaEsc = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function filaData(iso){ return iso ? new Date(iso) : null; }
+    function filaHM(d){ return d ? d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—'; }
+    function filaDur(min){
+      min = Math.max(0, Math.round(min));
+      if (min < 60) return `${min} min`;
+      const h = Math.floor(min/60), m = min%60;
+      return m ? `${h}h${String(m).padStart(2,'0')}` : `${h}h`;
+    }
+    function filaQuando(d, agora){
+      if (!d) return '—';
+      const mesmoDia = d.toDateString() === agora.toDateString();
+      return mesmoDia ? filaHM(d) : `${d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} ${filaHM(d)}`;
+    }
+
+    // Estado de cada posto. Sempre com texto — a cor sozinha não diz nada.
+    function filaEstado(p){
+      if (!p.fila) return {cls:'idle', txt:'✓ Fila vazia'};
+      if (p.proc_15 > 0) return {cls:'ok', txt:'▶ Andando'};
+      if (p.proc_60 > 0) return {cls:'warn', txt:'⏸ Lenta — nada em 15 min'};
+      return {cls:'bad', txt:'■ Parada — nada em 1 h'};
+    }
+
+    function filaTile(p){
+      const agora = filaData(p.agora) || new Date();
+      const ultima = filaData(p.ultima);
+      const est = filaEstado(p);
+      const ant = FILA_ANTERIOR[p.posto];
+      let delta = '';
+      if (ant != null && ant !== p.fila){
+        const d = p.fila - ant;
+        delta = `<span class="fila-delta" title="Diferença desde a leitura anterior">${d < 0 ? '▼' : '▲'} ${filaInt(Math.abs(d))}</span>`;
+      }
+      const linhas = [];
+      const ritmo15 = p.proc_15 / 15, ritmo60 = p.proc_60 / 60;
+      linhas.push(`Ritmo: <b>${ritmo15 >= 1 ? ritmo15.toFixed(1).replace('.',',') : filaInt(p.proc_15) + ' em 15 min'}</b>${ritmo15 >= 1 ? ' por minuto' : ''} · ${filaInt(p.proc_60)} na última hora`);
+      if (ultima){
+        const min = (agora - ultima) / 60000;
+        linhas.push(`Última processada: <b>${filaQuando(ultima, agora)}</b> (${min < 1 ? 'agora há pouco' : 'há ' + filaDur(min)})`);
+      }
+      if (p.fila && ritmo60 > 0){
+        const falta = p.fila / ritmo60;
+        const fim = new Date(agora.getTime() + falta*60000);
+        linhas.push(`Previsão para esvaziar: <b>~${filaQuando(fim, agora)}</b> (≈ ${filaDur(falta)} no ritmo da última hora)`);
+      } else if (p.fila){
+        linhas.push(`Previsão: <b>sem ritmo para calcular</b> — nada processado na última hora`);
+      }
+      const antigas = p.empresas.map(e => filaData(e.mais_antiga)).filter(Boolean).sort((a,b)=>a-b);
+      if (antigas.length) linhas.push(`Na fila desde: <b>${filaQuando(antigas[0], agora)}</b>`);
+      if (p.empresas.length){
+        const emp = p.empresas.map(e => `${filaEsc(e.rotulo)} <b>${filaInt(e.qtd)}</b>${e.cancelar ? ` (${filaInt(e.cancelar)} cancelamento${e.cancelar>1?'s':''})` : ''}`).join(' · ');
+        linhas.push(emp);
+      }
+      return `<div class="fila-tile">
+        <div class="fila-top"><span class="fila-posto">Posto ${filaEsc(p.posto)}</span><span class="fila-chip ${est.cls}">${est.txt}</span></div>
+        <div><span class="fila-num">${filaInt(p.fila)}</span>${delta}</div>
+        <div class="fila-sub">na fila${p.valor ? ' · ' + filaMoeda(p.valor) : ''}</div>
+        <div class="fila-linhas">${linhas.join('<br>')}</div>
+      </div>`;
+    }
+
+    function filaRender(){
+      const body = el('#filaBody');
+      if (!body) return;
+      if (!FILA){ body.innerHTML = '<span class="muted mini">Lendo a fila nos postos…</span>'; return; }
+      const sel = new Set(selectedPostosList());
+      const lista = FILA.postos.filter(p => sel.has(p.posto));
+      const ativos = lista.filter(p => p.fila > 0)
+                          .sort((a,b) => b.fila - a.fila || a.posto.localeCompare(b.posto));
+      // fila vazia não ganha bloco; quem processou algo na última hora diz quantas
+      const quietos = lista.filter(p => !p.fila)
+                           .map(p => p.proc_60 ? `${p.posto} (${filaInt(p.proc_60)} na última hora)` : p.posto);
+      const erros = Object.entries(FILA.erros || {}).filter(([p]) => sel.has(p));
+      let html = ativos.length ? `<div class="fila-grid">${ativos.map(filaTile).join('')}</div>`
+                               : '<div class="muted">Nenhuma nota na fila nos postos selecionados.</div>';
+      const rod = [];
+      if (quietos.length) rod.push(`Fila vazia: ${quietos.join(', ')}`);
+      if (erros.length) rod.push(`<span class="text-danger">Sem leitura agora (não é fila zero): ${erros.map(([p,m]) => `${p}`).join(', ')}</span>`);
+      if (rod.length) html += `<div class="fila-rodape">${rod.join(' · ')}</div>`;
+      body.innerHTML = html;
+    }
+
+    async function filaCarregar(){
+      if (filaCarregando) return;
+      filaCarregando = true;
+      const btn = el('#filaBtn'); if (btn) btn.disabled = true;
+      try {
+        const r = await fetch('/api/notas_rps/fila', {credentials:'same-origin', cache:'no-store'});
+        const j = await r.json().catch(() => null);
+        if (!r.ok || !j || !j.ok){
+          el('#filaInfo').textContent = 'não foi possível ler a fila' + (j && j.erro ? ` (${j.erro})` : '');
+          return;
+        }
+        if (FILA) FILA.postos.forEach(p => { FILA_ANTERIOR[p.posto] = p.fila; });
+        FILA = j;
+        el('#filaInfo').textContent = `atualizado às ${new Date().toLocaleTimeString('pt-BR')}`;
+        filaRender();
+      } catch(e){
+        el('#filaInfo').textContent = 'não foi possível ler a fila';
+      } finally {
+        filaCarregando = false;
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function wireFila(){
+      el('#filaBtn')?.addEventListener('click', filaCarregar);
+      filaRender();
+      filaCarregar();
+      filaTimer = setInterval(() => { if (!document.hidden) filaCarregar(); }, FILA_MS);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) filaCarregar(); });
+    }
+
     async function wireRelatorioNf(){
       const btn = el('#btnEnviarRelatorio');
       if(!btn) return;
@@ -640,6 +777,7 @@
       const fmtData = s => s ? s.split('-').reverse().join('/') : '';
       el('#hdrSel').textContent = `${fmtData(dataIni)} a ${fmtData(dataFim)} • Postos: ${postoLabel} • ${modoTxt}`;
 
+      filaRender();
       const agg = aggAllSelected(ym);
 
       // KPIs topo
@@ -743,6 +881,7 @@
       buildPostoTabs('#postoTabs');
       wireGrupoButtons();
       wireRelatorioNf();
+      wireFila();
 
       // Botão Filtrar
       el('#btnFiltrar')?.addEventListener('click', async ()=>{
@@ -1234,6 +1373,20 @@
 
       <!-- ─── ABA: RESUMO ─── -->
       <div class="tab-pane active" id="tab-resumo">
+
+        <div class="card" id="filaCard">
+          <div class="card-header d-flex align-items-center flex-wrap" style="gap:8px;">
+            <h3 class="card-title mb-0">Fila de emissão — agora</h3>
+            <span class="mini muted ml-auto" id="filaInfo">carregando…</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="filaBtn" title="Ler a fila de novo agora">↻</button>
+          </div>
+          <div class="card-body" id="filaBody"></div>
+          <div class="card-footer mini muted py-2">
+            Ao vivo nos postos (atualiza sozinho a cada 1 min). <b>Na fila</b> = RPS marcados para emitir ou cancelar
+            (vw_Fin_Nota4pendente). <b>Ritmo</b> = notas que o robô processou nos últimos 15 min; a <b>previsão</b> usa o ritmo
+            da última hora. Posto em vermelho "sem leitura" não respondeu agora — não quer dizer fila vazia.
+          </div>
+        </div>
 
         <div class="card">
           <div class="card-header"><h3 class="card-title mb-0">Resumo do mês</h3></div>

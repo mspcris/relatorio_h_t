@@ -652,6 +652,28 @@ posto** a meta individual do posto dele.
 
 ---
 
+### Fila de emissão ao vivo (2026-09-28)
+
+Pedido: *"existe uma fila e poucas são emitidas por minuto — preciso saber que está
+andando"*. Bloco **Fila de emissão — agora** no topo da aba Resumo do
+`kpi_notas_rps.html`, alimentado por `GET /api/notas_rps/fila`
+(`notas_fila_routes.py`, ao vivo nos postos do ACL, cache 30 s, ~2,5 s os 13).
+A tela relê a cada 1 min e mostra: na fila (+ variação desde a leitura anterior),
+ritmo dos últimos 15 min, última processada, previsão para esvaziar (ritmo da
+última hora), desde quando há nota na fila e o selo Andando / Lenta / Parada.
+
+- **A fila** = `vw_Fin_Nota4pendente` com `Desativado = 0` (= `Fin_Nota` com
+  `EmitirOuCancelar = 1`).
+- **`Fin_Nota.DataErroEmissao` é a hora em que o robô PROCESSOU a nota**, apesar do
+  nome. Medido em G/N, 28/09: das 272 processadas em 2 h, 214 tinham retorno com
+  número de NF e status 1 (RPS 319910 → NF 31922, 18:15:01). Não tratar como erro.
+- **`DataEmissao` não serve para ritmo** — na maioria vem só com a data (00:00).
+- **`idNotaFiscalRetorno` não é preenchido em todo posto** (A e C: 0 de 4 e 0 de 5
+  na última hora, emitindo normalmente). Por isso a tela NÃO mostra "sem retorno".
+- Posto que não responde aparece como "sem leitura", nunca como fila vazia.
+
+---
+
 ## Painel Financeiro · Impostos (`/painel_financeiro`) — 2026-09-03
 
 Pedido do Cristiano: "ver o imposto A, INSS por exemplo, os últimos 36 meses
