@@ -85,17 +85,22 @@ def clean_text(s: str) -> str:
 # CHAMADA UNIVERSAL AO MODELO
 # ================================================================
 async def llm_call(prompt: str, modelo: str) -> str:
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise RuntimeError("GROQ_API_KEY ausente")
-
-    client = Groq(api_key=api_key)
+    import openrouter
+    extra = {}
+    if openrouter.ativo():  # desde 2026-09-29 pela OpenRouter
+        client, modelo, extra = openrouter.cliente(), openrouter.modelo(modelo), {"extra_body": openrouter.EXTRA_BODY}
+    else:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise RuntimeError("GROQ_API_KEY ausente")
+        client = Groq(api_key=api_key)
 
     resp = client.chat.completions.create(
         model=modelo,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=4096,
         temperature=0.1,
+        **extra,
     )
     return (resp.choices[0].message.content or "").strip()
 

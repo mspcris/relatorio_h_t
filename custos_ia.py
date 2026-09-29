@@ -335,13 +335,18 @@ def extract_groq_from_image(image_bytes: bytes, mime: str = "image/png",
     import base64
     from openai import OpenAI
 
-    key = (openai_key or os.environ.get("OPENAI_API_KEY") or "").strip()
-    if not key:
-        raise RuntimeError("OPENAI_API_KEY ausente para a leitura por visão.")
-    model = model or os.environ.get("CUSTOS_IA_VISION_MODEL", "gpt-4.1")
+    import openrouter
+    model = model or os.environ.get("CUSTOS_IA_VISION_MODEL") or "gpt-4.1"
     data_uri = f"data:{mime};base64,{base64.b64encode(image_bytes).decode('ascii')}"
 
-    client = OpenAI(api_key=key)
+    if openrouter.ativo() and not openai_key:
+        client = openrouter.cliente()
+        model = openrouter.modelo(model)
+    else:
+        key = (openai_key or os.environ.get("OPENAI_API_KEY") or "").strip()
+        if not key:
+            raise RuntimeError("OPENAI_API_KEY ausente para a leitura por visão.")
+        client = OpenAI(api_key=key)
     resp = client.chat.completions.create(
         model=model, temperature=0,
         response_format={"type": "json_object"},

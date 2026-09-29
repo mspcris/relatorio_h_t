@@ -140,8 +140,8 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
-    if not os.environ.get("OPENAI_API_KEY"):
-        print("[err] OPENAI_API_KEY ausente; nada a fazer", file=sys.stderr)
+    if not (os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")):
+        print("[err] OPENROUTER_API_KEY/OPENAI_API_KEY ausentes; nada a fazer", file=sys.stderr)
         return 1
 
     # Modelo configurável; default gpt-5-mini (sobrescreve OPENAI_MODEL global

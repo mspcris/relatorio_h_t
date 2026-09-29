@@ -1796,6 +1796,19 @@ desativar o outro no CRM. Falha de conexão preserva o espelho anterior.
 
 ---
 
+## IA sai pela OpenRouter (2026-09-29)
+
+Toda chamada de IA do projeto (o que era GPT-OSS-120B na Groq e GPT na OpenAI) passa
+por **`openrouter.py`** com a chave `OPENROUTER_API_KEY` — **uma chave por projeto**,
+esta é a do relatorio_h_t (centro de custo). Chamada nova de IA usa
+`openrouter.cliente()` + `openrouter.modelo()`; nunca `Groq(...)`/`OpenAI(...)` direto.
+Sem a chave, os clientes caem no provedor antigo. Roteamento: **mais barato**
+(`provider.sort=price`) por decisão do Cristiano. Quais chamadas mandam dado sensível
+e como travar provedor por chamada: **[docs/divida_tecnica_ia.md](docs/divida_tecnica_ia.md)**.
+Anthropic (`llm_client_anthropic.py`) continua direto.
+
+---
+
 ## Regras de desenvolvimento
 
 - Cada KPI é independente — nunca compartilha cálculos entre páginas

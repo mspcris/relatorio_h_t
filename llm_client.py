@@ -17,7 +17,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, Literal
 
-from groq import Groq
+import openrouter
 
 
 @dataclass
@@ -49,10 +49,16 @@ class LLMClient:
 
     def __init__(self, config: Optional[LLMConfig] = None):
         self.config = config or LLMConfig()
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            raise RuntimeError("GROQ_API_KEY ausente no ambiente.")
-        self._client = Groq(api_key=api_key)
+        # Desde 2026-09-29 sai pela OpenRouter (openrouter.py); Groq direto só sem a chave.
+        self._openrouter = openrouter.ativo()
+        if self._openrouter:
+            self._client = openrouter.cliente()
+        else:
+            api_key = os.getenv("GROQ_API_KEY")
+            if not api_key:
+                raise RuntimeError("GROQ_API_KEY ausente no ambiente.")
+            from groq import Groq
+            self._client = Groq(api_key=api_key)
         self.last_finish_reason: Optional[str] = None
         self.last_usage: dict = {}
         self.last_model: Optional[str] = None
@@ -100,8 +106,12 @@ class LLMClient:
             messages=messages,
             temperature=temp,
             max_tokens=mtok,
-            tool_choice="none",
         )
+        if self._openrouter:
+            kwargs["model"] = openrouter.modelo(self.config.model)
+            kwargs["extra_body"] = openrouter.EXTRA_BODY
+        else:
+            kwargs["tool_choice"] = "none"
 
         if response_format == "json_object":
             kwargs["response_format"] = {"type": "json_object"}

@@ -91,10 +91,20 @@ def _strip_html(html: str) -> str:
 
 
 def _client() -> OpenAI:
+    import openrouter
+    if openrouter.ativo():
+        return openrouter.cliente()
     key = os.getenv("OPENAI_API_KEY")
     if not key:
         raise RuntimeError("OPENAI_API_KEY não está definida no ambiente.")
     return OpenAI(api_key=key)
+
+
+def _modelo(nome: str) -> str:
+    """Nome no formato da OpenRouter quando ela está ativa ("gpt-4o-mini" → "openai/gpt-4o-mini").
+    O embeddings.json continua gravando o nome curto: é ele que o /api/search repassa."""
+    import openrouter
+    return openrouter.modelo(nome) if openrouter.ativo() else nome
 
 
 def _load_pages() -> list[dict[str, Any]]:
@@ -116,7 +126,7 @@ def _summarize_internal(client: OpenAI, page: dict[str, Any]) -> dict[str, Any]:
         f"Conteúdo visível:\n{text}\n"
     )
     resp = client.chat.completions.create(
-        model=SUMMARY_MODEL,
+        model=_modelo(SUMMARY_MODEL),
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
@@ -197,7 +207,7 @@ def cmd_embed() -> None:
         for s in summaries
     ]
     print(f"Gerando embeddings de {len(texts)} páginas com {EMBED_MODEL}...")
-    resp = client.embeddings.create(model=EMBED_MODEL, input=texts)
+    resp = client.embeddings.create(model=_modelo(EMBED_MODEL), input=texts)
     out = []
     for s, item in zip(summaries, resp.data):
         out.append({

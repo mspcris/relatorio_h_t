@@ -4,6 +4,8 @@ from typing import Optional
 
 from openai import OpenAI
 
+import openrouter
+
 
 @dataclass
 class LLMConfig:
@@ -18,12 +20,15 @@ class LLMClientOpenAI:
 
         self.config = config or LLMConfig()
 
-        api_key = os.getenv("OPENAI_API_KEY")
-
-        if not api_key:
-            raise RuntimeError("OPENAI_API_KEY ausente.")
-
-        self.client = OpenAI(api_key=api_key)
+        # Desde 2026-09-29 sai pela OpenRouter (openrouter.py); OpenAI direto só sem a chave.
+        self._openrouter = openrouter.ativo()
+        if self._openrouter:
+            self.client = openrouter.cliente()
+        else:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise RuntimeError("OPENAI_API_KEY ausente.")
+            self.client = OpenAI(api_key=api_key)
         self.last_finish_reason: Optional[str] = None
         self.last_usage: dict = {}
         self.last_model: Optional[str] = None
@@ -48,11 +53,16 @@ class LLMClientOpenAI:
 
         # Modelos de raciocínio (gpt-5*, o1*, o3*) usam max_completion_tokens
         # e ignoram temperature. API rejeita os params antigos.
-        m = self.config.model.lower()
+        m = self.config.model.lower().split("/")[-1]
         is_reasoning = m.startswith(("gpt-5", "o1", "o3", "o4"))
 
         kwargs = {"model": self.config.model, "messages": messages}
-        if is_reasoning:
+        if self._openrouter:
+            kwargs["model"] = openrouter.modelo(self.config.model)
+            kwargs["extra_body"] = openrouter.EXTRA_BODY
+        if is_reasoning and self._openrouter:
+            kwargs["max_tokens"] = mtok  # a OpenRouter traduz para o parâmetro do modelo
+        elif is_reasoning:
             kwargs["max_completion_tokens"] = mtok
         else:
             kwargs["max_tokens"]  = mtok
@@ -71,4 +81,4 @@ class LLMClientOpenAI:
         else:
             self.last_usage = {}
         self.last_model = getattr(resp, "model", None) or self.config.model
-        return resp.choices[0].message.content.strip()
+        return (resp.choices[0].message.content or "").strip()

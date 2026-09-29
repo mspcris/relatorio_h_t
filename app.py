@@ -3260,9 +3260,12 @@ def _cosine(a, b):
 
 @lru_cache(maxsize=512)
 def _embed_query(q: str, model: str) -> tuple:
-    from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    resp = client.embeddings.create(model=model, input=q)
+    import openrouter
+    if openrouter.ativo():  # mesmo modelo pela OpenRouter: vetor idêntico, índice continua valendo
+        resp = openrouter.cliente().embeddings.create(model=openrouter.modelo(model), input=q)
+    else:
+        from openai import OpenAI
+        resp = OpenAI(api_key=os.getenv("OPENAI_API_KEY")).embeddings.create(model=model, input=q)
     return tuple(resp.data[0].embedding)
 
 
