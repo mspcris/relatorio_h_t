@@ -182,6 +182,35 @@ def ler_envios_meta() -> pd.DataFrame:
     return df
 
 
+# Retentativa em QUEDA DE CONEXÃO (2026-09-29, mesma regra do export_governanca).
+# Sentry: o posto N deu "Login timeout" isolado em 25/09 18:17 e 29/09 10:17/10:31
+# — o link oscila um minuto e volta; sem retentar, a rodada perdia os pagamentos
+# daquele posto e abria aviso. Erro de SQL NÃO é retentado.
+RETRY_TENTATIVAS = 3
+RETRY_ESPERA_S = (3, 10)
+_SINAIS_CONEXAO = ("08S01", "HYT00", "HYT01", "Communication link failure",
+                   "Connection is closed", "TCP Provider", "Login timeout",
+                   "10060", "10054", "connection_invalidated")
+
+
+def _com_retry(fn, engine, posto):
+    import time as _time
+    for k in range(1, RETRY_TENTATIVAS + 1):
+        try:
+            return fn()
+        except Exception as e:
+            if not any(s in str(e) for s in _SINAIS_CONEXAO) or k == RETRY_TENTATIVAS:
+                raise
+            espera = RETRY_ESPERA_S[min(k, len(RETRY_ESPERA_S)) - 1]
+            print(f"  [{posto}] conexão caiu (tentativa {k}/{RETRY_TENTATIVAS}): "
+                  f"{str(e).splitlines()[-1][:110]} — nova tentativa em {espera}s")
+            try:
+                engine.dispose()
+            except Exception:
+                pass
+            _time.sleep(espera)
+
+
 # =============================================================================
 # 2) Consulta de pagamentos no SQL Server (por posto)
 # =============================================================================
@@ -604,7 +633,7 @@ def main():
             continue
         try:
             eng = make_engine(conns[posto])
-            pag = buscar_pagamentos(posto, eng, list(ids))
+            pag = _com_retry(lambda: buscar_pagamentos(posto, eng, list(ids)), eng, posto)
             pagamentos_por_posto[posto] = pag
             print(f"  [{posto}] {len(ids)} idreceitas → {len(pag)} pagas")
             meta.ok(posto, envios=int(len(ids)), pagos=int(len(pag)))
