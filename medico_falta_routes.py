@@ -916,6 +916,124 @@ def api_agendamentos():
         return jsonify({"error": str(e)[:300]}), 500
 
 
+MAX_DIAS_PERIODO = 60
+_DIAS_COL = ("Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado", "Domingo")
+
+
+@medico_falta_bp.get("/api/medico_falta/dias_periodo")
+def api_dias_periodo():
+    """Quais dias do intervalo vão receber falta — só leitura.
+
+    Regra do Cristiano (chamado #31809, 2026-09-30): fechar por período é só
+    um loop do cadastro individual. Entra o dia em que o médico TEM agenda
+    naquela especialidade (bit do dia da semana em cad_especialidade, ativa,
+    dentro de DataInicioExibicao/DataFimExibicao) e ainda NÃO tem falta ativa.
+    Quinzenal não importa: "tá aberta, fecha; já está fechada, deixa".
+    Feriado já vem como falta por médico+especialidade, então cai no "deixa".
+    Teto de 60 dias.
+    """
+    email, postos, login_campinho = _check_admin()
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    if not login_campinho:
+        return jsonify({"error": ERR_SEM_VINCULO, "sem_vinculo": True}), 403
+    posto = request.args.get("posto", "")
+    erro = _require_posto_in_acl(posto, postos)
+    if erro:
+        return jsonify({"error": erro}), 400
+    try:
+        idmedico = int(request.args.get("idmedico") or 0)
+        ini = datetime.strptime(request.args.get("ini", ""), "%Y-%m-%d").date()
+        fim = datetime.strptime(request.args.get("fim", ""), "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "idmedico/ini/fim inválidos (datas YYYY-MM-DD)"}), 400
+    especialidade = (request.args.get("especialidade") or "").strip()
+    if not idmedico or not especialidade:
+        return jsonify({"error": "idmedico e especialidade obrigatórios"}), 400
+    if fim < ini:
+        return jsonify({"error": "data final antes da inicial"}), 400
+    if (fim - ini).days + 1 > MAX_DIAS_PERIODO:
+        return jsonify({"error": f"intervalo maior que {MAX_DIAS_PERIODO} dias",
+                        "max_dias": MAX_DIAS_PERIODO}), 400
+    hora_ini = (request.args.get("hora_ini") or "00:00").strip()
+    hora_fim = (request.args.get("hora_fim") or "23:59").strip()
+    if not (re.match(r"^\d{2}:\d{2}$", hora_ini) and re.match(r"^\d{2}:\d{2}$", hora_fim)):
+        return jsonify({"error": "hora no formato HH:MM"}), 400
+    integral = (hora_ini == "00:00" and hora_fim == "23:59")
+
+    try:
+        with _conn_for_posto(posto) as con:
+            cur = con.cursor()
+            cur.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
+            cur.execute(
+                f"""SELECT {", ".join(_DIAS_COL)}, DataInicioExibicao, DataFimExibicao
+                      FROM cad_especialidade WITH (NOLOCK)
+                     WHERE idmedico = ?
+                       AND ISNULL(Desativado, 0) = 0
+                       AND LTRIM(RTRIM(Especialidade)) = ?""",
+                idmedico, especialidade,
+            )
+            agendas = cur.fetchall()
+
+            # Falta ativa já existente. Falta real às vezes vem sem DataFalta
+            # (só DataHora), por isso as duas colunas.
+            cur.execute(
+                """SELECT ISNULL(DataFalta, CAST(DataHora AS DATE)), idFalta, Motivo
+                     FROM Cad_MedicoFalta WITH (NOLOCK)
+                    WHERE idMedico = ? AND Desativado = 0
+                      AND LTRIM(RTRIM(ISNULL(Especialidade,''))) = ?
+                      AND ISNULL(DataFalta, CAST(DataHora AS DATE)) BETWEEN ? AND ?""",
+                idmedico, especialidade, ini, fim,
+            )
+            faltas = {}
+            for r in cur.fetchall():
+                d = r[0].date() if isinstance(r[0], datetime) else r[0]
+                faltas.setdefault(d, {"id_falta": int(r[1]), "motivo": (r[2] or "").strip()})
+
+            # Pacientes por dia — mesma view e filtros do /insert.
+            sql = """SELECT CAST(DataConsulta AS DATE), COUNT(*)
+                       FROM vw_Cad_LancamentoProntuarioComDesistencia WITH (NOLOCK)
+                      WHERE idMedico = ?
+                        AND DataConsulta >= ? AND DataConsulta < ?
+                        AND Desistencia = 0
+                        AND LTRIM(RTRIM(Especialidade)) = ?"""
+            params = [idmedico, ini.strftime("%d/%m/%Y"),
+                      (fim + timedelta(days=1)).strftime("%d/%m/%Y"), especialidade]
+            if not integral:
+                sql += " AND HoraPrevistaConsulta >= ? AND HoraPrevistaConsulta <= ?"
+                params += [hora_ini, hora_fim]
+            cur.execute(sql + " GROUP BY CAST(DataConsulta AS DATE)", params)
+            pacientes = {}
+            for r in cur.fetchall():
+                d = r[0].date() if isinstance(r[0], datetime) else r[0]
+                pacientes[d] = int(r[1])
+
+        def _dt(v):
+            return v.date() if isinstance(v, datetime) else v
+
+        dias = []
+        d = ini
+        while d <= fim:
+            tem_agenda = any(
+                a[d.weekday()]
+                and (a[7] is None or _dt(a[7]) <= d)
+                and (a[8] is None or _dt(a[8]) >= d)
+                for a in agendas)
+            falta = faltas.get(d)
+            situacao = ("ja_fechada" if falta else "fechar" if tem_agenda else "sem_agenda")
+            dias.append({"data": d.isoformat(), "dia_semana": d.weekday(),
+                         "situacao": situacao, "pacientes": pacientes.get(d, 0),
+                         "falta": falta})
+            d += timedelta(days=1)
+        fechar = [x for x in dias if x["situacao"] == "fechar"]
+        return jsonify({"dias": dias, "fechar": len(fechar),
+                        "pacientes": sum(x["pacientes"] for x in fechar),
+                        "max_dias": MAX_DIAS_PERIODO})
+    except Exception as e:
+        logger.exception("dias_periodo falhou no posto %s", posto)
+        return jsonify({"error": str(e)[:300]}), 500
+
+
 @medico_falta_bp.post("/api/medico_falta/insert")
 def api_insert():
     """INSERT em Cad_MedicoFalta + auditoria. Retorna idFalta + lista de pacientes afetados.

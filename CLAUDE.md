@@ -1664,6 +1664,28 @@ cobrança morreu no meio da rodada por DIAS sem ninguém perceber).
 
 ---
 
+## Falta do médico por PERÍODO (`/medico_falta`) — chamado #31809, 2026-09-30
+
+Campo **Até** ao lado da data: fecha vários dias de uma vez. É o cadastro
+individual em LOOP (decisão do Cristiano: "nada mais que cadastrar um monte de
+faltas individuais"): o navegador chama o mesmo `/api/medico_falta/insert` e o
+mesmo `/enviar_wpp` dia a dia, um depois do outro (`salvarPeriodo()` →
+`enviarWppFalta()`, que devolve Promise e só resolve quando o envio acabou,
+inclusive pelo polling de status quando o nginx corta em 60 s).
+
+Quais dias: `GET /api/medico_falta/dias_periodo` (só leitura). Entra o dia em
+que existe agenda do médico na especialidade (bit `Segunda`…`Domingo` de
+`cad_especialidade`, ativa, dentro de `DataInicioExibicao`/`DataFimExibicao`)
+e **não** existe falta ativa (`DataFalta` ou, sem ela, `DataHora`).
+- Quinzenal não importa: "tá aberta, fecha; já está fechada, deixa".
+- Feriado já é falta por médico+especialidade → cai no "deixa".
+- Parcial vale o mesmo horário em todos os dias.
+- **Teto 60 dias**: data final maior pisca e é corrigida para o limite; o
+  servidor recusa acima disso também.
+- Prévia lista os dias (fechar / já fechada), pacientes e custo estimado do
+  WhatsApp (R$ 0,35 × pacientes); confirmação antes de gravar.
+- Validado (A, cardiologia 1729, out/26): só as quartas, 14/10 já fechada.
+
 ## Outros Monitores (`/outros_monitores.html`) — 2026-08-10
 
 Página para monitores de serviços específicos. Primeiro: **Leads criados**.
