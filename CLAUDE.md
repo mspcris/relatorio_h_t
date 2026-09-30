@@ -1112,7 +1112,18 @@ As 9 faturas de agosto ficaram 3 semanas paradas na fila. Agora
 ou a conta reconhecida) e, achando, **lança sozinho** copiando centro, conta,
 forma de pagamento e situação de lá — com o valor lido do PDF, OCR incluído,
 sem faixa de tolerância ("sempre lança", escolha dele sabendo do risco).
-- Sem precedente → fila ("primeira vez desta conta"). É aí que ele audita.
+- Sem precedente mas com **conta cadastrada** reconhecida pelo assunto → lança
+  com centro e forma do cadastro da conta, situação "pago" (pedido dele: "por
+  que estas não foram aceitas?" logo depois de cadastrar as contas).
+- Sem precedente e sem conta → fila ("primeira vez desta conta"). É aí que ele
+  audita — ou cadastra a conta, e daí em diante entra sozinha.
+- **Contabo é DETALHADA pelo robô** (`contabo_linhas` + `executar_detalhamento`):
+  lê as linhas "<ip> - <nome> $base … $base" + "Location: … $taxa" do PDF,
+  casa com a conta da VPS pelo IP (obs da conta ou external_id
+  `contabo::<fatura>::<ip>` anterior; aceita IP com dígito a mais do OCR, depois
+  o nome), grava 1 despesa por VPS e guarda a nota como `anexado`. Só se a soma
+  das linhas bater AO CENTAVO com o subtotal; senão fila. VPS nova ganha conta
+  "VPS nova <ip>" (dar nome depois). Ago/26: 18 VPS, US$ 286,57, 1 nova.
 - Mesma chave já lançada no mês, ou conta repetida → fila (antiduplicidade).
 - Precedente `anexado` (nota agregada da Contabo) → anexa sozinho SE as contas
   do fornecedor já estão lançadas no mês; senão fila.
@@ -1125,7 +1136,8 @@ sem faixa de tolerância ("sempre lança", escolha dele sabendo do risco).
 - O modal da fila também pré-preenche a partir do precedente.
 - **Actual** (CNPJ 05.854.306/0001-29) fatura TecnoSpeed PlugSign (conta 19) e
   PayGo Gate2All/TEF = sistema + pinpads (conta 20), boleto pago por Anchieta,
-  centro Software e Licenças.
+  centro Software e Licenças. Contas criadas em 30/09 também: Google Firestore
+  Camim (21) e Égide (22), Hostinger anual (23) — Infraestrutura, forma Junior.
 
 Junto com o valor vai o **trecho** do PDF de onde ele saiu — mesma regra do
 `explicacao()` do medico_custo: número na tela diz de onde veio. Foi o trecho

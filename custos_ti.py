@@ -794,12 +794,17 @@ def precedente_fatura(sess, *, assunto: Optional[str], competencia: Optional[str
 
 def decidir_fatura(sess, *, assunto: Optional[str], anexo_nome: Optional[str],
                    competencia: Optional[str], valor, moeda: Optional[str],
-                   message_id: Optional[str] = None) -> dict:
-    """O que fazer com uma fatura em PDF: 'lancar', 'anexar' ou 'fila'.
+                   message_id: Optional[str] = None,
+                   texto: Optional[str] = None) -> dict:
+    """O que fazer com uma fatura em PDF: 'lancar', 'detalhar', 'anexar' ou 'fila'.
 
     Mesma função para o robô (e-mail novo) e para a fila (item pendente), para
-    as duas pontas decidirem igual. Devolve `{acao, motivo, dados}`; `dados` é
-    o que vai para salvar_lancamento (lancar) ou o rateio (anexar).
+    as duas pontas decidirem igual. Ordem de quem manda no centro/forma:
+      1. a mesma fatura lançada nos 3 meses anteriores (copia como lá);
+      2. a conta cadastrada que o assunto reconhece (centro e forma da conta);
+      3. nada disso → fila, que é onde o Cristiano audita a primeira vez.
+    A nota da Contabo (uma fatura para todas as VPS) é DETALHADA: uma despesa
+    por VPS, lida das linhas do próprio PDF (`contabo_linhas`).
     """
     if valor is None:
         return {"acao": "fila", "motivo": "PDF anexo, mas não consegui ler o valor",
@@ -808,11 +813,6 @@ def decidir_fatura(sess, *, assunto: Optional[str], anexo_nome: Optional[str],
     conta = rec["conta"]
     prec = precedente_fatura(sess, assunto=assunto, competencia=competencia,
                              conta_id=(conta.id if conta else None))
-    if prec is None:
-        return {"acao": "fila", "dados": None,
-                "motivo": ("primeira vez desta conta (nada igual nos "
-                           f"{JANELA_PRECEDENTE} meses anteriores) — confira e lance; "
-                           "nas próximas o robô lança sozinho")}
 
     # Mesma fatura já lançada NESTE mês (reenvio, encaminhada duas vezes):
     # a chave do assunto pega mesmo quando não há conta nem fornecedor.
@@ -823,55 +823,180 @@ def decidir_fatura(sess, *, assunto: Optional[str], anexo_nome: Optional[str],
         return {"acao": "fila", "dados": None,
                 "motivo": f"já existe #{ja[0].id} com esta fatura em {competencia} — confira se não é a mesma"}
 
-    if prec["tipo"] == "anexado":
-        it = prec["item"]
-        det = detalhamento_fornecedor(sess, competencia=competencia,
-                                      fornecedor=it.rateio_fornecedor)
-        if not det:
+    # ── nota agregada (Contabo): detalhar por VPS ou só guardar ──────────────
+    agregada = (prec and prec["tipo"] == "anexado") or (
+        conta is None and rec["como"] == "fornecedor_ambiguo")
+    if agregada:
+        forn = prec["item"].rateio_fornecedor if prec and prec["tipo"] == "anexado" else rec["fornecedor"]
+        det = detalhamento_fornecedor(sess, competencia=competencia, fornecedor=forn)
+        if det:
+            return {"acao": "anexar", "dados": {"fornecedor": forn},
+                    "motivo": (f"guardada: cobre {det['lancamentos']} despesas de "
+                               f"{det['fornecedor']} já lançadas em {competencia} "
+                               f"(R$ {det['total_brl']:.2f})")[:200]}
+        if _norm(forn).startswith("contabo") and texto:
+            lido = contabo_linhas(sess, texto)
+            soma = round(sum(l["total"] for l in lido["linhas"]), 2)
+            if lido["linhas"] and abs(soma - float(valor)) < 0.01:
+                novas = sum(1 for l in lido["linhas"] if l["conta"] is None)
+                return {"acao": "detalhar",
+                        "dados": {"fornecedor": forn, "competencia": competencia, **lido},
+                        "motivo": (f"detalhada pelo robô: {len(lido['linhas'])} VPS, "
+                                   f"US$ {soma:.2f}"
+                                   + (f" · {novas} VPS nova(s) cadastrada(s) — dê nome" if novas else ""))[:200]}
             return {"acao": "fila", "dados": None,
-                    "motivo": (f"em {it.rateio_competencia} esta nota foi guardada como o total "
-                               f"das contas de {it.rateio_fornecedor}, mas em {competencia} "
-                               "elas ainda não estão lançadas")[:200]}
-        return {"acao": "anexar", "dados": {"fornecedor": it.rateio_fornecedor},
-                "motivo": (f"guardada sozinha como em {it.rateio_competencia}: cobre "
-                           f"{det['lancamentos']} despesas de {det['fornecedor']} "
-                           f"(R$ {det['total_brl']:.2f})")[:200]}
+                    "motivo": (f"não consegui detalhar a fatura da {forn} por VPS "
+                               f"(linhas somam US$ {soma:.2f}, fatura {float(valor):.2f})")[:200]}
+        return {"acao": "fila", "dados": None,
+                "motivo": (f"fatura única de {forn} para várias contas e elas não estão "
+                           f"lançadas em {competencia}")[:200]}
 
-    ant = prec["lancamento"]
-    conta_id = ant.conta_id or (conta.id if conta else None)
-    fornecedor = ant.fornecedor or rec["fornecedor"]
-    if conta_id:
+    if prec is not None:
+        ant = prec["lancamento"]
+        base = {"centro_id": ant.centro_id, "conta_id": ant.conta_id or (conta.id if conta else None),
+                "forma_pagamento_id": ant.forma_pagamento_id, "status": ant.status,
+                "fornecedor": ant.fornecedor or rec["fornecedor"],
+                "_de": f"#{ant.id} ({ant.competencia})"}
+        moeda = moeda or ant.moeda
+    elif conta is not None:
+        # Conta cadastrada, primeira fatura dela: o cadastro já diz centro e
+        # forma. "pago" porque estas contas chegam como nota do que foi cobrado.
+        base = {"centro_id": conta.centro_id, "conta_id": conta.id,
+                "forma_pagamento_id": conta.forma_pagamento_id, "status": "pago",
+                "fornecedor": conta.fornecedor, "_de": f"cadastro da conta {conta.nome}"}
+        moeda = moeda or conta.moeda
+    else:
+        return {"acao": "fila", "dados": None,
+                "motivo": ("primeira vez desta conta e ela não está cadastrada — "
+                           "cadastre a conta ou lance; nas próximas o robô lança sozinho")}
+
+    if base["conta_id"]:
         # Com a conta definida, a repetição se mede pela conta. Fornecedor com
         # várias contas (Actual: PlugSign e PayGo) não pode acusar uma de ser a
         # outra só por ser do mesmo fornecedor.
-        sem = lancamentos_semelhantes(sess, competencia=competencia, conta_id=conta_id,
-                                      message_id=message_id)
+        sem = lancamentos_semelhantes(sess, competencia=competencia,
+                                      conta_id=base["conta_id"], message_id=message_id)
     else:
-        det = detalhamento_fornecedor(sess, competencia=competencia, fornecedor=fornecedor)
+        det = detalhamento_fornecedor(sess, competencia=competencia,
+                                      fornecedor=base["fornecedor"])
         if det:
             return {"acao": "fila", "dados": None,
                     "motivo": (f"as contas de {det['fornecedor']} já estão lançadas uma a "
                                f"uma em {competencia} — esta fatura parece ser o total delas")[:200]}
-        sem = lancamentos_semelhantes(sess, competencia=competencia, fornecedor=fornecedor,
-                                      message_id=message_id)
+        sem = lancamentos_semelhantes(sess, competencia=competencia,
+                                      fornecedor=base["fornecedor"], message_id=message_id)
     if sem:
         return {"acao": "fila", "dados": None,
                 "motivo": (f"já existe despesa desta conta em {competencia} "
                            f"({sem[0]['motivo']}) — confira se não é a mesma")[:200]}
 
-    return {"acao": "lancar",
-            "motivo": f"lançado sozinho como #{ant.id} ({ant.competencia})",
-            "dados": {
-                "origem": "email", "status": ant.status,
-                "centro_id": ant.centro_id, "conta_id": conta_id,
-                "forma_pagamento_id": ant.forma_pagamento_id,
-                "fornecedor": fornecedor, "valor": valor,
-                "moeda": (moeda or ant.moeda or "BRL").upper(),
-                "competencia": competencia,
-                "descricao": (assunto or "conta por e-mail")[:240],
-                "external_id": message_id,
-                "_precedente_id": ant.id, "_precedente_comp": ant.competencia,
-            }}
+    de = base.pop("_de")
+    return {"acao": "lancar", "motivo": f"lançado sozinho como {de}"[:200],
+            "dados": {**base, "origem": "email", "valor": valor,
+                      "moeda": (moeda or "BRL").upper(), "competencia": competencia,
+                      "descricao": (assunto or "conta por e-mail")[:240],
+                      "external_id": message_id, "_de": de}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Contabo — uma fatura, uma despesa por VPS
+# ─────────────────────────────────────────────────────────────────────────────
+# A fatura mensal da Contabo cobre todas as VPS; cada VPS é uma conta própria
+# (centro Infraestrutura) e até jul/2026 o detalhe foi lançado à mão, com
+# external_id "contabo::<fatura>::<ip>". O PDF traz, por VPS, a linha
+# "<ip> - <nome> $base <período> $base" e às vezes "Location: ... $taxa".
+# Casa a linha com a conta pelo IP (obs da conta / external_id anterior); o
+# OCR às vezes gruda um dígito no IP (leu 338.105.232.174 por 38.105.232.174),
+# por isso também vale IP contido e, por último, o nome. A soma das linhas tem
+# que bater ao centavo com o subtotal — senão não detalha e vai para a fila.
+_RE_VPS = re.compile(r"^(\d{1,3}(?:\.\d{1,3}){3})(?:\s*-\s*(.+?))?\s+\$(\d+\.\d{2})\s+"
+                     r"\d{2}\.\d{2}\.\d{4}\s*-\s*\d{2}\.\d{2}\.\d{4}\s+\$(\d+\.\d{2})\s*$")
+_RE_LOC = re.compile(r"^Location:.*\s\$(\d+\.\d{2})\s*$")
+
+
+def _ip_da_conta(sess, c: Conta) -> Optional[str]:
+    m = re.search(r"\bIP\s+(\d{1,3}(?:\.\d{1,3}){3})", c.obs or "")
+    if m:
+        return m.group(1)
+    l = (sess.query(Lancamento).filter(Lancamento.conta_id == c.id,
+                                       Lancamento.external_id.like("contabo::%"))
+         .order_by(Lancamento.id.desc()).first())
+    return l.external_id.rsplit("::", 1)[-1] if l else None
+
+
+def contabo_linhas(sess, texto: str) -> dict:
+    fatura = re.search(r"Invoice:\s*(\d{6,})", texto or "")
+    data = re.search(r"Date:\s*(\d{2})\.(\d{2})\.(\d{4})", texto or "")
+    linhas, atual = [], None
+    for crua in (texto or "").splitlines():
+        crua = crua.strip()
+        m = _RE_VPS.match(crua)
+        if m:
+            atual = {"ip": m.group(1), "rotulo": (m.group(2) or "").strip(),
+                     "base": float(m.group(4)), "local": 0.0}
+            linhas.append(atual)
+            continue
+        m = _RE_LOC.match(crua)
+        if m and atual is not None:
+            atual["local"] += float(m.group(1))
+            atual = None           # uma taxa de localização por VPS
+    contas = [c for c in listar_contas(sess, incluir_inativas=False)
+              if _norm(c.fornecedor).startswith("contabo")]
+    ips = {c.id: _ip_da_conta(sess, c) for c in contas}
+    usadas: set[int] = set()
+
+    def _acha(l):
+        for teste in (lambda ip: ip == l["ip"],
+                      lambda ip: l["ip"].endswith(ip) or ip.endswith(l["ip"])):
+            for c in contas:
+                if c.id not in usadas and ips.get(c.id) and teste(ips[c.id]):
+                    return c
+        rot = _norm(l["rotulo"])
+        for c in contas:
+            if c.id not in usadas and rot and _norm(re.sub(r"\(vmi\d+\)", "", c.nome)) == rot:
+                return c
+        return None
+
+    for l in linhas:
+        l["total"] = round(l["base"] + l["local"], 2)
+        c = _acha(l)
+        l["conta"] = c
+        if c is not None:
+            usadas.add(c.id)
+            l["ip"] = ips.get(c.id) or l["ip"]      # o IP do cadastro, não o do OCR
+    return {"fatura": fatura.group(1) if fatura else None,
+            "data": (f"{data.group(3)}-{data.group(2)}-{data.group(1)}" if data else None),
+            "linhas": linhas}
+
+
+def executar_detalhamento(sess, dec: dict, *, email: str) -> list[int]:
+    """Grava uma despesa por VPS; VPS sem conta ganha conta nova."""
+    d = dec["dados"]
+    ids = []
+    for l in d["linhas"]:
+        c = l["conta"]
+        if c is None:
+            ref = next((x["conta"] for x in d["linhas"] if x["conta"] is not None), None)
+            nova = salvar_conta(sess, {
+                "nome": f"VPS nova {l['ip']}" + (f" - {l['rotulo']}" if l["rotulo"] else ""),
+                "centro_id": ref.centro_id if ref else 3, "fornecedor": "Contabo",
+                "forma_pagamento_id": ref.forma_pagamento_id if ref else None,
+                "recorrencia": "mensal", "moeda": "USD", "valor_previsto": l["total"],
+                "obs": (f"IP {l['ip']} · criada pelo robô a partir da fatura Contabo "
+                        f"{d['fatura']} — dê um nome a esta VPS."),
+                "url_painel": "https://my.contabo.com/vps"})
+            c = sess.get(Conta, nova["id"])
+        partes = f"base US$ {l['base']:.2f}" + (f" + localização US$ {l['local']:.2f}" if l["local"] else "")
+        lanc = salvar_lancamento(sess, {
+            "origem": "email", "status": "pago", "centro_id": c.centro_id, "conta_id": c.id,
+            "forma_pagamento_id": c.forma_pagamento_id, "fornecedor": "Contabo GmbH",
+            "descricao": f"Contabo — {c.nome}", "valor": l["total"], "moeda": "USD",
+            "competencia": d["competencia"], "data_pagamento": d["data"],
+            "external_id": f"contabo::{d['fatura']}::{l['ip']}",
+            "obs": (f"Fatura {d['fatura']} · {partes} · cobrado automaticamente no cartão. "
+                    "Detalhado pelo robô a partir do PDF.")}, email=email)
+        ids.append(lanc["id"])
+    return ids
 
 
 def detalhamento_fornecedor(sess, *, competencia: Optional[str],

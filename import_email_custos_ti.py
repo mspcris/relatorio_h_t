@@ -311,7 +311,8 @@ def _parse_email(sess, msg) -> dict:
         if pdf_raw and leitura.get("valor") is not None:
             decisao = custos_ti.decidir_fatura(
                 sess, assunto=assunto, anexo_nome=pdf_nome, competencia=competencia,
-                valor=leitura.get("valor"), moeda=leitura.get("moeda"), message_id=mid)
+                valor=leitura.get("valor"), moeda=leitura.get("moeda"), message_id=mid,
+                texto=leitura.get("texto"))
             motivo = decisao["motivo"]
         elif pdf_raw:
             motivo = (f"PDF anexo, mas não consegui ler o valor "
@@ -458,9 +459,11 @@ def run(dry: bool) -> None:
             print(f"      conta cadastrada: {dados['_conta_nome'] or '(não reconheci)'}")
             if dec and dec["acao"] == "lancar":
                 d = dec["dados"]
-                print(f"      copia #{d['_precedente_id']} ({d['_precedente_comp']}): centro "
+                print(f"      copia {d['_de']}: centro "
                       f"{d['centro_id']} · conta {d['conta_id']} · forma "
                       f"{d['forma_pagamento_id']} · {d['status']}")
+            if dec and dec["acao"] == "detalhar":
+                _mostra_detalhe(dec)
             for s in dados["_semelhantes"]:
                 print(f"      JÁ EXISTE #{s['id']} {s['competencia']} "
                       f"{s['moeda']} {s['valor']:,.2f} · {s['descricao'][:40]} "
@@ -473,7 +476,7 @@ def run(dry: bool) -> None:
                 if dados["_trecho_valor"]:
                     print(f"      prova: {dados['_trecho_valor'][:100]}")
             lancados += acao == "lancar"; auditoria += acao == "fila"
-            anexados += acao == "anexar"
+            anexados += acao in ("anexar", "detalhar")
             continue
         try:
             if dec and dec["acao"] == "lancar":
@@ -485,6 +488,12 @@ def run(dry: bool) -> None:
                 # clipe na despesa e deixa conferir depois.
                 sess.add(_item(db, dados, status="lancado", lancamento_id=lanc["id"]))
                 lancados += 1
+            elif dec and dec["acao"] == "detalhar":
+                custos_ti.executar_detalhamento(sess, dec, email="import_email")
+                sess.add(_item(db, dados, status="anexado",
+                               rateio_fornecedor=dec["dados"]["fornecedor"],
+                               rateio_competencia=dados["competencia"]))
+                anexados += 1
             elif dec and dec["acao"] == "anexar":
                 sess.add(_item(db, dados, status="anexado",
                                rateio_fornecedor=dec["dados"]["fornecedor"],
@@ -533,12 +542,19 @@ def _dados_lancamento(dec: dict, remetente: str, como: str | None,
     corrigir seja fácil — é a contrapartida de não conferir antes."""
     d = {k: v for k, v in dec["dados"].items() if not k.startswith("_")}
     d["obs"] = (f"Lançado pelo robô sem auditoria (e-mail de {remetente}). "
-                f"Centro, conta, forma e situação copiados de "
-                f"#{dec['dados']['_precedente_id']} ({dec['dados']['_precedente_comp']}). "
+                f"Centro, conta, forma e situação copiados de {dec['dados']['_de']}. "
                 f"Valor lido do PDF por {como or '?'}"
                 + (f": “{trecho[:160]}”" if trecho else "")
                 + ". Se algo estiver errado, edite esta despesa.")
     return d
+
+
+def _mostra_detalhe(dec: dict) -> None:
+    d = dec["dados"]
+    print(f"      fatura {d['fatura']} de {d['data']}:")
+    for l in d["linhas"]:
+        print(f"        {l['ip']:16} US$ {l['total']:7.2f} → "
+              f"{l['conta'].nome if l['conta'] else 'CONTA NOVA (' + (l['rotulo'] or 'sem nome') + ')'}")
 
 
 def reprocessar_fila(dry: bool) -> None:
@@ -551,19 +567,21 @@ def reprocessar_fila(dry: bool) -> None:
              .filter(db.EmailAuditoria.status == "pendente")
              .order_by(db.EmailAuditoria.id).all())
     print(f"pendentes na fila: {len(itens)}" + ("   [DRY-RUN: não grava]" if dry else ""))
-    cont = {"lancar": 0, "anexar": 0, "fila": 0}
+    cont: dict[str, int] = {}
     for it in itens:
         comp = _competencia_do_assunto(it.assunto, it.recebido_em)
         dec = custos_ti.decidir_fatura(
             sess, assunto=it.assunto, anexo_nome=it.anexo_nome, competencia=comp,
             valor=(float(it.valor_sugerido) if it.valor_sugerido is not None else None),
-            moeda=it.moeda_sugerida, message_id=it.message_id)
-        cont[dec["acao"]] += 1
+            moeda=it.moeda_sugerida, message_id=it.message_id, texto=it.texto_extraido)
+        cont[dec["acao"]] = cont.get(dec["acao"], 0) + 1
         print(f"  #{it.id} {(it.assunto or '')[:44]:44} {comp} → {dec['acao'].upper()}: {dec['motivo']}")
         if dec["acao"] == "lancar":
             d = dec["dados"]
             print(f"      {d['moeda']} {d['valor']:,.2f} · centro {d['centro_id']} · conta "
                   f"{d['conta_id']} · forma {d['forma_pagamento_id']} · {d['status']}")
+        if dec["acao"] == "detalhar":
+            _mostra_detalhe(dec)
         if dry:
             continue
         try:
@@ -573,7 +591,9 @@ def reprocessar_fila(dry: bool) -> None:
                                             it.trecho_valor),
                     email="import_email")
                 it.status, it.lancamento_id = "lancado", lanc["id"]
-            elif dec["acao"] == "anexar":
+            elif dec["acao"] in ("anexar", "detalhar"):
+                if dec["acao"] == "detalhar":
+                    custos_ti.executar_detalhamento(sess, dec, email="import_email")
                 it.status = "anexado"
                 it.rateio_fornecedor = dec["dados"]["fornecedor"]
                 it.rateio_competencia = comp
@@ -583,8 +603,8 @@ def reprocessar_fila(dry: bool) -> None:
             sess.rollback()
             print(f"      ERRO: {str(e)[:160]}")
     sess.close()
-    print(f"\nlançados: {cont['lancar']} · anexados: {cont['anexar']} · "
-          f"continuam na fila: {cont['fila']}")
+    print(f"\nlançados: {cont.get('lancar', 0)} · detalhadas: {cont.get('detalhar', 0)} · "
+          f"anexados: {cont.get('anexar', 0)} · continuam na fila: {cont.get('fila', 0)}")
 
 
 def _ja_visto(sess, db, mid: str) -> bool:
