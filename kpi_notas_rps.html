@@ -599,6 +599,7 @@
     function filaDur(min){
       min = Math.max(0, Math.round(min));
       if (min < 60) return `${min} min`;
+      if (min >= 48*60) return `${Math.floor(min/1440)} dias`;
       const h = Math.floor(min/60), m = min%60;
       return m ? `${h}h${String(m).padStart(2,'0')}` : `${h}h`;
     }
@@ -609,16 +610,19 @@
     }
 
     // Estado de cada posto. Sempre com texto — a cor sozinha não diz nada.
+    // Ritmo = NOTA CONFIRMADA (retorno da prefeitura ou chave nacional), não
+    // tentativa do robô — ver notas_fila_routes.py (caso Y, 30/09).
     function filaEstado(p){
       if (!p.fila) return {cls:'idle', txt:'✓ Fila vazia'};
-      if (p.proc_15 > 0) return {cls:'ok', txt:'▶ Andando'};
-      if (p.proc_60 > 0) return {cls:'warn', txt:'⏸ Lenta — nada em 15 min'};
-      return {cls:'bad', txt:'■ Parada — nada em 1 h'};
+      if (p.emit_15 > 0) return {cls:'ok', txt:'▶ Andando'};
+      if (p.emit_60 > 0) return {cls:'warn', txt:'⏸ Lenta — nenhuma nota em 15 min'};
+      if (p.tent_60 > 0) return {cls:'bad', txt:'■ Tentando sem emitir'};
+      return {cls:'bad', txt:'■ Parada — nenhuma nota em 1 h'};
     }
 
     function filaTile(p){
       const agora = filaData(p.agora) || new Date();
-      const ultima = filaData(p.ultima);
+      const ultima = filaData(p.ultima_emitida);
       const est = filaEstado(p);
       const ant = FILA_ANTERIOR[p.posto];
       let delta = '';
@@ -627,18 +631,24 @@
         delta = `<span class="fila-delta" title="Diferença desde a leitura anterior">${d < 0 ? '▼' : '▲'} ${filaInt(Math.abs(d))}</span>`;
       }
       const linhas = [];
-      const ritmo15 = p.proc_15 / 15, ritmo60 = p.proc_60 / 60;
-      linhas.push(`Ritmo: <b>${ritmo15 >= 1 ? ritmo15.toFixed(1).replace('.',',') : filaInt(p.proc_15) + ' em 15 min'}</b>${ritmo15 >= 1 ? ' por minuto' : ''} · ${filaInt(p.proc_60)} na última hora`);
+      const ritmo15 = p.emit_15 / 15, ritmo60 = p.emit_60 / 60;
+      linhas.push(`Notas emitidas: <b>${ritmo15 >= 1 ? ritmo15.toFixed(1).replace('.',',') + ' por minuto' : filaInt(p.emit_15) + ' em 15 min'}</b> · ${filaInt(p.emit_60)} na última hora`);
+      if (p.tent_60 > p.emit_60){
+        linhas.push(`<span title="O robô pegou a nota mas não voltou NF (retorno da prefeitura ou chave nacional)">Tentativas do robô sem nota: <b>${filaInt(p.tent_60 - p.emit_60)}</b> na última hora</span>`);
+      }
       if (ultima){
         const min = (agora - ultima) / 60000;
-        linhas.push(`Última processada: <b>${filaQuando(ultima, agora)}</b> (${min < 1 ? 'agora há pouco' : 'há ' + filaDur(min)})`);
+        const velha = min > 24*60;
+        linhas.push(`Última nota emitida: <b${velha ? ' style="color:#991b1b"' : ''}>${filaQuando(ultima, agora)}</b> (${min < 1 ? 'agora há pouco' : 'há ' + filaDur(min)})`);
+      } else {
+        linhas.push('Última nota emitida: <b>nenhuma encontrada</b>');
       }
       if (p.fila && ritmo60 > 0){
         const falta = p.fila / ritmo60;
         const fim = new Date(agora.getTime() + falta*60000);
         linhas.push(`Previsão para esvaziar: <b>~${filaQuando(fim, agora)}</b> (≈ ${filaDur(falta)} no ritmo da última hora)`);
       } else if (p.fila){
-        linhas.push(`Previsão: <b>sem ritmo para calcular</b> — nada processado na última hora`);
+        linhas.push(`Previsão: <b>sem ritmo para calcular</b> — nenhuma nota emitida na última hora`);
       }
       const antigas = p.empresas.map(e => filaData(e.mais_antiga)).filter(Boolean).sort((a,b)=>a-b);
       if (antigas.length) linhas.push(`Na fila desde: <b>${filaQuando(antigas[0], agora)}</b>`);
@@ -664,7 +674,7 @@
                           .sort((a,b) => b.fila - a.fila || a.posto.localeCompare(b.posto));
       // fila vazia não ganha bloco; quem processou algo na última hora diz quantas
       const quietos = lista.filter(p => !p.fila)
-                           .map(p => p.proc_60 ? `${p.posto} (${filaInt(p.proc_60)} na última hora)` : p.posto);
+                           .map(p => p.emit_60 ? `${p.posto} (${filaInt(p.emit_60)} nota${p.emit_60>1?'s':''} na última hora)` : p.posto);
       const erros = Object.entries(FILA.erros || {}).filter(([p]) => sel.has(p));
       let html = ativos.length ? `<div class="fila-grid">${ativos.map(filaTile).join('')}</div>`
                                : '<div class="muted">Nenhuma nota na fila nos postos selecionados.</div>';

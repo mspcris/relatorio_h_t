@@ -664,9 +664,15 @@ ritmo dos últimos 15 min, última processada, previsão para esvaziar (ritmo da
 
 - **A fila** = `vw_Fin_Nota4pendente` com `Desativado = 0` (= `Fin_Nota` com
   `EmitirOuCancelar = 1`).
-- **`Fin_Nota.DataErroEmissao` é a hora em que o robô PROCESSOU a nota**, apesar do
-  nome. Medido em G/N, 28/09: das 272 processadas em 2 h, 214 tinham retorno com
-  número de NF e status 1 (RPS 319910 → NF 31922, 18:15:01). Não tratar como erro.
+- **`Fin_Nota.DataErroEmissao` é TENTATIVA do robô, não emissão** (corrigido
+  30/09). A primeira versão contava isso como ritmo e mostrou Y "Andando" com a
+  última NF de 22/09 (o robô tentava 4 notas/h sem sucesso); em A, lote de notas
+  de agosto posto na fila às 18h21 foi "processado" a 0,2 s cada, sem nota.
+  **Nota emitida = retorno da prefeitura (`Fin_NotaFiscalRetorno.v06`) OU NFS-e
+  nacional com `xChaveNFSe`** — é o que conta ritmo, previsão e selo; tentativa
+  sem nota aparece à parte e vira o selo "Tentando sem emitir".
+- **`idNotaFiscalRetorno` não serve**: RPS se repete entre anos e o ERP liga
+  nota de 2026 a retorno de 2025.
 - **`DataEmissao` não serve para ritmo** — na maioria vem só com a data (00:00).
 - **`idNotaFiscalRetorno` não é preenchido em todo posto** (A e C: 0 de 4 e 0 de 5
   na última hora, emitindo normalmente). Por isso a tela NÃO mostra "sem retorno".

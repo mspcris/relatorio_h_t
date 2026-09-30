@@ -6,14 +6,16 @@ A fila é o que a vw_Fin_Nota4pendente mostra: Fin_Nota com EmitirOuCancelar = 1
 O robô pega uma por vez, e o ritmo sai do próprio banco, sem guardar histórico:
 
 - Fin_Nota.DataOrdemEmissao — quando a nota ENTROU na fila.
-- Fin_Nota.DataErroEmissao  — apesar do nome, é a hora em que o robô PROCESSOU a
-  nota (com ou sem sucesso). Medido em G e N, 28/09 18h: das 272 processadas em 2 h,
-  214 tinham retorno da prefeitura com número de NF e status 1 (normal). Ex.: RPS
-  319910 → NF 31922, emitida 18:15:01, DataErroEmissao 18:15:32.
-- Fin_Nota.idNotaFiscalRetorno — preenchido quando a prefeitura devolveu a NF, mas
-  NÃO em todo posto: em A e C, 100% das processadas na última hora vieram sem ele e
-  os postos emitem normalmente. Por isso `com_retorno_60` vai no JSON e a tela NÃO
-  mostra "sem retorno" — o aviso acusaria erro onde não há.
+- Fin_Nota.DataErroEmissao  — hora em que o robô TENTOU a nota (com ou sem
+  sucesso). NÃO é "emitida": em Y (30/09) o robô tentou 4 notas na última hora
+  e a última NF confirmada era de 22/09; em A, um lote de notas de agosto posto
+  na fila às 18h21 foi "processado" em 0,2 s cada, sem nota nenhuma. Contar isso
+  como ritmo fez a tela dizer "Andando" num posto parado há 8 dias.
+- NOTA CONFIRMADA = retorno da prefeitura (Fin_NotaFiscalRetorno, pela data de
+  emissão v06) OU NFS-e nacional com chave (Fin_Nota.xChaveNFSe) sem retorno.
+  É isso que conta ritmo, previsão e o selo Andando/Lenta/Parada.
+- idNotaFiscalRetorno NÃO serve: o RPS se repete entre anos e o ERP liga a nota
+  a retorno de 2025 (RPS 40065 de Y → retorno de 07/06/2025).
 - DataEmissao NÃO serve para ritmo: na maioria das notas vem só com a data (00:00).
 
 Só SELECT com NOLOCK. Posto que não responde vai em `erros` — nunca vira fila zero.
@@ -54,15 +56,31 @@ SELECT v.CFemiteNota AS cf,
 
 SQL_RITMO = """
 SET NOCOUNT ON;
+DECLARE @agora datetime = GETDATE();
+DECLARE @teto  datetime = DATEADD(minute, 5, @agora);
 SELECT
-  SUM(CASE WHEN DataErroEmissao >= DATEADD(minute, -15, GETDATE()) THEN 1 ELSE 0 END) AS proc_15,
-  COUNT(*) AS proc_60,
-  SUM(CASE WHEN idNotaFiscalRetorno IS NOT NULL THEN 1 ELSE 0 END) AS com_retorno_60,
-  (SELECT MAX(DataErroEmissao) FROM Fin_Nota WITH (NOLOCK)) AS ultima,
+  (SELECT COUNT(*) FROM Fin_Nota WITH (NOLOCK) WHERE DataErroEmissao >= DATEADD(minute, -15, @agora)) AS tent_15,
+  (SELECT COUNT(*) FROM Fin_Nota WITH (NOLOCK) WHERE DataErroEmissao >= DATEADD(minute, -60, @agora)) AS tent_60,
+  (SELECT COUNT(*) FROM Fin_NotaFiscalRetorno WITH (NOLOCK)
+    WHERE v06_Data_Emissao_Nota_Fiscal >= DATEADD(minute, -15, @agora) AND v06_Data_Emissao_Nota_Fiscal <= @teto) AS ret_15,
+  (SELECT COUNT(*) FROM Fin_NotaFiscalRetorno WITH (NOLOCK)
+    WHERE v06_Data_Emissao_Nota_Fiscal >= DATEADD(minute, -60, @agora) AND v06_Data_Emissao_Nota_Fiscal <= @teto) AS ret_60,
+  (SELECT COUNT(*) FROM Fin_Nota n WITH (NOLOCK)
+    WHERE ISNULL(n.xChaveNFSe, '') <> '' AND n.DataErroEmissao >= DATEADD(minute, -15, @agora)
+      AND NOT EXISTS (SELECT 1 FROM Fin_NotaFiscalRetorno r WITH (NOLOCK)
+                       WHERE r.V09_Numero_RPS = n.RPS
+                         AND r.v06_Data_Emissao_Nota_Fiscal >= DATEADD(day, -1, n.DataErroEmissao))) AS nac_15,
+  (SELECT COUNT(*) FROM Fin_Nota n WITH (NOLOCK)
+    WHERE ISNULL(n.xChaveNFSe, '') <> '' AND n.DataErroEmissao >= DATEADD(minute, -60, @agora)
+      AND NOT EXISTS (SELECT 1 FROM Fin_NotaFiscalRetorno r WITH (NOLOCK)
+                       WHERE r.V09_Numero_RPS = n.RPS
+                         AND r.v06_Data_Emissao_Nota_Fiscal >= DATEADD(day, -1, n.DataErroEmissao))) AS nac_60,
+  (SELECT MAX(DataErroEmissao) FROM Fin_Nota WITH (NOLOCK)) AS ultima_tentativa,
+  (SELECT MAX(v06_Data_Emissao_Nota_Fiscal) FROM Fin_NotaFiscalRetorno WITH (NOLOCK)
+    WHERE v06_Data_Emissao_Nota_Fiscal <= @teto) AS ultima_ret,
+  (SELECT MAX(DataErroEmissao) FROM Fin_Nota WITH (NOLOCK) WHERE ISNULL(xChaveNFSe, '') <> '') AS ultima_nac,
   (SELECT TOP 1 RazaoSocial FROM Sis_Empresa WITH (NOLOCK) WHERE idEmpresa = 1) AS razao,
-  GETDATE() AS agora
-  FROM Fin_Nota WITH (NOLOCK)
- WHERE DataErroEmissao >= DATEADD(minute, -60, GETDATE())
+  @agora AS agora
 """
 
 
@@ -77,7 +95,9 @@ def _ler_posto(p: str) -> dict:
         cur = con.cursor()
         cur.execute(SQL_RITMO)
         r = cur.fetchone()
-        proc_15, proc_60, com_ret, ultima, razao, agora = r
+        (tent_15, tent_60, ret_15, ret_60, nac_15, nac_60,
+         ult_tent, ult_ret, ult_nac, razao, agora) = r
+        ult_emit = max([d for d in (ult_ret, ult_nac) if d], default=None)
         cur.execute(SQL_FILA)
         empresas = []
         for cf, qtd, valor, cancelar, antiga in cur.fetchall():
@@ -93,10 +113,12 @@ def _ler_posto(p: str) -> dict:
             "fila": sum(e["qtd"] for e in empresas),
             "valor": round(sum(e["valor"] for e in empresas), 2),
             "empresas": empresas,
-            "proc_15": int(proc_15 or 0),
-            "proc_60": int(proc_60 or 0),
-            "com_retorno_60": int(com_ret or 0),
-            "ultima": _iso(ultima),
+            "tent_15": int(tent_15 or 0),
+            "tent_60": int(tent_60 or 0),
+            "emit_15": int(ret_15 or 0) + int(nac_15 or 0),
+            "emit_60": int(ret_60 or 0) + int(nac_60 or 0),
+            "ultima_tentativa": _iso(ult_tent),
+            "ultima_emitida": _iso(ult_emit),
             "agora": _iso(agora),
             "ms": int((time.time() - t0) * 1000),
         }
