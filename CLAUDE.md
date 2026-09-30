@@ -1105,6 +1105,28 @@ como `2926`, e o número que o robô escolheu (US$ 25,46) veio de uma tabela de
 pagamentos, não do total. Valor errado entrando calado no painel é pior que
 valor faltando.
 
+**EXCEÇÃO — fatura recorrente entra sozinha (2026-09-30, decisão do Cristiano).**
+As 9 faturas de agosto ficaram 3 semanas paradas na fila. Agora
+`custos_ti.decidir_fatura()` procura a MESMA fatura nos **3 meses anteriores**
+(`precedente_fatura`: chave = assunto sem "Fatura"/mês/ano, via `chave_fatura`,
+ou a conta reconhecida) e, achando, **lança sozinho** copiando centro, conta,
+forma de pagamento e situação de lá — com o valor lido do PDF, OCR incluído,
+sem faixa de tolerância ("sempre lança", escolha dele sabendo do risco).
+- Sem precedente → fila ("primeira vez desta conta"). É aí que ele audita.
+- Mesma chave já lançada no mês, ou conta repetida → fila (antiduplicidade).
+- Precedente `anexado` (nota agregada da Contabo) → anexa sozinho SE as contas
+  do fornecedor já estão lançadas no mês; senão fila.
+- Com conta definida, a repetição se mede pela conta e não pelo fornecedor —
+  a Actual tem duas contas (PlugSign e PayGo) e uma não pode acusar a outra.
+- O lançamento automático diz na `obs` de qual # copiou e o trecho do PDF; o
+  item fica na aba "Lançadas" da auditoria com o PDF (clipe na despesa).
+  **Corrigir é editar a despesa** — o mês seguinte copia a versão corrigida.
+- `import_email_custos_ti.py --fila [--run]` aplica a regra aos pendentes.
+- O modal da fila também pré-preenche a partir do precedente.
+- **Actual** (CNPJ 05.854.306/0001-29) fatura TecnoSpeed PlugSign (conta 19) e
+  PayGo Gate2All/TEF = sistema + pinpads (conta 20), boleto pago por Anchieta,
+  centro Software e Licenças.
+
 Junto com o valor vai o **trecho** do PDF de onde ele saiu — mesma regra do
 `explicacao()` do medico_custo: número na tela diz de onde veio. Foi o trecho
 que denunciou o MongoDB. A tela ainda avisa quando (a) a leitura foi por OCR e

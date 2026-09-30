@@ -292,7 +292,9 @@ def _parse_email(sess, msg) -> dict:
     competencia = (venc.strftime("%Y-%m") if venc
                    else _competencia_do_assunto(assunto, _data_hora(msg.get("Date"))))
 
+    mid = (msg.get("Message-ID") or "").strip("<> ").strip() or None
     motivo = None
+    decisao = None
     if valor is not None and centro is None:
         motivo = "não consegui definir o centro de custo"
     elif valor is None:
@@ -302,11 +304,18 @@ def _parse_email(sess, msg) -> dict:
         # outra tabela. Um valor desses entra no painel e ninguém revisa. Então
         # PDF sempre para na fila, com a sugestão preenchida e o documento do
         # lado, e só vira lançamento quando uma pessoa confirma na tela.
-        if pdf_raw:
-            motivo = ("conta em PDF — confira o valor sugerido"
-                      if leitura.get("valor")
-                      else f"PDF anexo, mas não consegui ler o valor "
-                           f"({leitura.get('como') or 'sem texto'})")
+        # EXCEÇÃO (2026-09-30, decisão do Cristiano): fatura que já foi lançada
+        # nos 3 meses anteriores entra sozinha, copiando centro, conta, forma e
+        # situação de lá (custos_ti.decidir_fatura). Só a primeira vez de cada
+        # conta — ou a que parece repetida — ainda para na fila.
+        if pdf_raw and leitura.get("valor") is not None:
+            decisao = custos_ti.decidir_fatura(
+                sess, assunto=assunto, anexo_nome=pdf_nome, competencia=competencia,
+                valor=leitura.get("valor"), moeda=leitura.get("moeda"), message_id=mid)
+            motivo = decisao["motivo"]
+        elif pdf_raw:
+            motivo = (f"PDF anexo, mas não consegui ler o valor "
+                      f"({leitura.get('como') or 'sem texto'})")
         else:
             motivo = "não consegui ler o valor da conta"
 
@@ -322,7 +331,7 @@ def _parse_email(sess, msg) -> dict:
     # duas vezes. Vai para a fila, onde existe o botão de anexar a nota sem
     # criar despesa.
     semelhantes = []
-    if motivo is None and conta is None:
+    if decisao is None and motivo is None and conta is None:
         det = custos_ti.detalhamento_fornecedor(
             sess, competencia=competencia, fornecedor=fornecedor)
         if det:
@@ -330,7 +339,7 @@ def _parse_email(sess, msg) -> dict:
                       f"uma em {competencia} ({det['lancamentos']} despesas, "
                       f"R$ {det['total_brl']:.2f}) — esta fatura parece ser o "
                       f"total delas")[:200]
-    if motivo is None:
+    if decisao is None and motivo is None:
         semelhantes = custos_ti.lancamentos_semelhantes(
             sess, competencia=competencia,
             conta_id=(conta.id if conta else None),
@@ -350,10 +359,11 @@ def _parse_email(sess, msg) -> dict:
         "valor": valor,
         "moeda": moeda,
         "competencia": competencia,
-        "external_id": (msg.get("Message-ID") or "").strip("<> ").strip() or None,
+        "external_id": mid,
         "obs": f"De: {remetente}",
         # contexto cru — usado tanto no lançamento quanto na Auditoria
         "_reconhecido": reconhecido,
+        "_decisao": decisao,
         "_motivo": motivo,
         "_conta_nome": (conta.nome if conta else None),
         "_semelhantes": semelhantes,
@@ -423,7 +433,7 @@ def run(dry: bool) -> None:
     print(f"não-lidos dos remetentes de conta: {len(ids)}")
 
     sess = db.TiSession()
-    lancados = auditoria = ignorados = duplicados = 0
+    lancados = auditoria = ignorados = duplicados = anexados = 0
     for i in ids:
         typ, d = M.fetch(i, "(RFC822)")
         if not d or not d[0]:
@@ -440,11 +450,17 @@ def run(dry: bool) -> None:
             M.store(i, "+FLAGS", "\\Seen")
             continue
 
-        destino = "LANÇAMENTO" if dados["_reconhecido"] else f"AUDITORIA ({dados['_motivo']})"
+        dec = dados["_decisao"]
+        acao = dec["acao"] if dec else ("lancar" if dados["_reconhecido"] else "fila")
         if dry:
-            print(f"  {'+' if dados['_reconhecido'] else '?'} {de} · "
-                  f"{dados['_assunto'][:34]:34} → {destino}")
+            print(f"  {'+' if acao != 'fila' else '?'} {de} · "
+                  f"{dados['_assunto'][:34]:34} → {acao.upper()} ({dados['_motivo'] or 'valor no corpo'})")
             print(f"      conta cadastrada: {dados['_conta_nome'] or '(não reconheci)'}")
+            if dec and dec["acao"] == "lancar":
+                d = dec["dados"]
+                print(f"      copia #{d['_precedente_id']} ({d['_precedente_comp']}): centro "
+                      f"{d['centro_id']} · conta {d['conta_id']} · forma "
+                      f"{d['forma_pagamento_id']} · {d['status']}")
             for s in dados["_semelhantes"]:
                 print(f"      JÁ EXISTE #{s['id']} {s['competencia']} "
                       f"{s['moeda']} {s['valor']:,.2f} · {s['descricao'][:40]} "
@@ -456,25 +472,29 @@ def run(dry: bool) -> None:
                       f"sugere {sug}")
                 if dados["_trecho_valor"]:
                     print(f"      prova: {dados['_trecho_valor'][:100]}")
-            lancados += dados["_reconhecido"]; auditoria += not dados["_reconhecido"]
+            lancados += acao == "lancar"; auditoria += acao == "fila"
+            anexados += acao == "anexar"
             continue
         try:
-            if dados["_reconhecido"]:
+            if dec and dec["acao"] == "lancar":
+                lanc = custos_ti.salvar_lancamento(
+                    sess, _dados_lancamento(dec, dados["_remetente"], dados["_pdf_como"],
+                                            dados["_trecho_valor"]),
+                    email="import_email")
+                # O item fica na aba "Lançadas" com o PDF: é ele que põe o
+                # clipe na despesa e deixa conferir depois.
+                sess.add(_item(db, dados, status="lancado", lancamento_id=lanc["id"]))
+                lancados += 1
+            elif dec and dec["acao"] == "anexar":
+                sess.add(_item(db, dados, status="anexado",
+                               rateio_fornecedor=dec["dados"]["fornecedor"],
+                               rateio_competencia=dados["competencia"]))
+                anexados += 1
+            elif dados["_reconhecido"]:
                 custos_ti.salvar_lancamento(sess, dados, email="import_email")
                 lancados += 1
             else:
-                sess.add(db.EmailAuditoria(
-                    message_id=mid, remetente=dados["_remetente"],
-                    assunto=dados["_assunto"], recebido_em=dados["_recebido_em"],
-                    corpo=dados["_corpo"], anexos=dados["_anexos"], motivo=dados["_motivo"],
-                    # o documento vai inteiro para o banco: é o que a pessoa
-                    # abre na tela para conferir o número antes de confirmar
-                    anexo_nome=dados["_pdf_nome"], anexo_tipo=dados["_pdf_tipo"],
-                    anexo_bytes=dados["_pdf_bytes"] or None,
-                    texto_extraido=dados["_pdf_texto"], extraido_como=dados["_pdf_como"],
-                    valor_sugerido=dados["_valor_sugerido"],
-                    moeda_sugerida=dados["_moeda_sugerida"],
-                    trecho_valor=dados["_trecho_valor"]))
+                sess.add(_item(db, dados))
                 auditoria += 1
             sess.commit()
             M.store(i, "+FLAGS", "\\Seen")   # só marca lido depois de gravar
@@ -486,8 +506,85 @@ def run(dry: bool) -> None:
             else:
                 print(f"  ERRO ao gravar de {de}: {str(e)[:120]}")
     sess.close(); M.logout()
-    print(f"\nlançados: {lancados} · para auditoria (piscando): {auditoria} · "
+    print(f"\nlançados: {lancados} · anexados (nota agregada): {anexados} · "
+          f"para auditoria (piscando): {auditoria} · "
           f"duplicados: {duplicados} · ignorados (outro remetente): {ignorados}")
+
+
+def _item(db, dados: dict, **extra):
+    """O e-mail como item da fila — com o PDF e o que o robô leu dele."""
+    return db.EmailAuditoria(
+        message_id=dados["external_id"], remetente=dados["_remetente"],
+        assunto=dados["_assunto"], recebido_em=dados["_recebido_em"],
+        corpo=dados["_corpo"], anexos=dados["_anexos"], motivo=(dados["_motivo"] or "")[:200],
+        # o documento vai inteiro para o banco: é o que a pessoa
+        # abre na tela para conferir o número antes de confirmar
+        anexo_nome=dados["_pdf_nome"], anexo_tipo=dados["_pdf_tipo"],
+        anexo_bytes=dados["_pdf_bytes"] or None,
+        texto_extraido=dados["_pdf_texto"], extraido_como=dados["_pdf_como"],
+        valor_sugerido=dados["_valor_sugerido"],
+        moeda_sugerida=dados["_moeda_sugerida"],
+        trecho_valor=dados["_trecho_valor"], **extra)
+
+
+def _dados_lancamento(dec: dict, remetente: str, como: str | None,
+                      trecho: str | None) -> dict:
+    """Lançamento sem auditoria: a obs diz de onde veio cada coisa, para que
+    corrigir seja fácil — é a contrapartida de não conferir antes."""
+    d = {k: v for k, v in dec["dados"].items() if not k.startswith("_")}
+    d["obs"] = (f"Lançado pelo robô sem auditoria (e-mail de {remetente}). "
+                f"Centro, conta, forma e situação copiados de "
+                f"#{dec['dados']['_precedente_id']} ({dec['dados']['_precedente_comp']}). "
+                f"Valor lido do PDF por {como or '?'}"
+                + (f": “{trecho[:160]}”" if trecho else "")
+                + ". Se algo estiver errado, edite esta despesa.")
+    return d
+
+
+def reprocessar_fila(dry: bool) -> None:
+    """Passa a regra dos 3 meses nos itens PENDENTES da fila (os que chegaram
+    antes dela existir). O que não tem precedente continua esperando."""
+    import custos_ti_db as db
+    import custos_ti
+    sess = db.TiSession()
+    itens = (sess.query(db.EmailAuditoria)
+             .filter(db.EmailAuditoria.status == "pendente")
+             .order_by(db.EmailAuditoria.id).all())
+    print(f"pendentes na fila: {len(itens)}" + ("   [DRY-RUN: não grava]" if dry else ""))
+    cont = {"lancar": 0, "anexar": 0, "fila": 0}
+    for it in itens:
+        comp = _competencia_do_assunto(it.assunto, it.recebido_em)
+        dec = custos_ti.decidir_fatura(
+            sess, assunto=it.assunto, anexo_nome=it.anexo_nome, competencia=comp,
+            valor=(float(it.valor_sugerido) if it.valor_sugerido is not None else None),
+            moeda=it.moeda_sugerida, message_id=it.message_id)
+        cont[dec["acao"]] += 1
+        print(f"  #{it.id} {(it.assunto or '')[:44]:44} {comp} → {dec['acao'].upper()}: {dec['motivo']}")
+        if dec["acao"] == "lancar":
+            d = dec["dados"]
+            print(f"      {d['moeda']} {d['valor']:,.2f} · centro {d['centro_id']} · conta "
+                  f"{d['conta_id']} · forma {d['forma_pagamento_id']} · {d['status']}")
+        if dry:
+            continue
+        try:
+            if dec["acao"] == "lancar":
+                lanc = custos_ti.salvar_lancamento(
+                    sess, _dados_lancamento(dec, it.remetente, it.extraido_como,
+                                            it.trecho_valor),
+                    email="import_email")
+                it.status, it.lancamento_id = "lancado", lanc["id"]
+            elif dec["acao"] == "anexar":
+                it.status = "anexado"
+                it.rateio_fornecedor = dec["dados"]["fornecedor"]
+                it.rateio_competencia = comp
+            it.motivo = dec["motivo"][:200]
+            sess.commit()
+        except Exception as e:  # noqa: BLE001
+            sess.rollback()
+            print(f"      ERRO: {str(e)[:160]}")
+    sess.close()
+    print(f"\nlançados: {cont['lancar']} · anexados: {cont['anexar']} · "
+          f"continuam na fila: {cont['fila']}")
 
 
 def _ja_visto(sess, db, mid: str) -> bool:
@@ -511,9 +608,12 @@ def main() -> None:
     ap.add_argument("--probe", action="store_true", help="só leitura, listar recentes (padrão)")
     ap.add_argument("--dry-run", action="store_true", help="lê os não-lidos e MOSTRA o que lançaria, sem gravar")
     ap.add_argument("--run", action="store_true", help="lê os não-lidos e GRAVA no custos_ti")
+    ap.add_argument("--fila", action="store_true", help="aplica a regra dos 3 meses aos pendentes da fila (com --run grava; sem, só mostra)")
     ap.add_argument("-n", type=int, default=10, help="quantos e-mails recentes listar no probe")
     args = ap.parse_args()
-    if args.run:
+    if args.fila:
+        reprocessar_fila(dry=not args.run)
+    elif args.run:
         run(dry=False)
     elif args.dry_run:
         run(dry=True)

@@ -717,6 +717,163 @@ def sugerir_conta(sess, texto: str) -> Optional[Conta]:
     return reconhecer_conta(sess, texto)["conta"]
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Aprender com o que já foi lançado — fatura recorrente entra sozinha
+# ─────────────────────────────────────────────────────────────────────────────
+# Decisão do Cristiano (2026-09-30), depois de auditar à mão as 10 faturas de
+# julho e ver as 9 de agosto paradas 3 semanas na fila: "olhe os três últimos
+# meses e veja como estão lançadas lá"; se não existir anterior, vai para a
+# auditoria. O valor lido do PDF (inclusive por OCR) é aceito sem conferência —
+# escolha dele, sabendo do risco (o OCR do MongoDB comeu centavos em julho).
+# O que protege é poder CORRIGIR: todo lançamento automático diz na obs de onde
+# copiou centro/forma e de que trecho do PDF saiu o valor.
+JANELA_PRECEDENTE = 3          # meses anteriores em que se procura a fatura irmã
+
+_MESES_NOME = ("janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho",
+               "agosto", "setembro", "outubro", "novembro", "dezembro")
+
+
+def chave_fatura(texto: Optional[str]) -> str:
+    """"Fatura TecnoSpeed PlugSign - Agosto 2026" -> "tecnospeed plugsign".
+
+    Tira o que muda de um mês para o outro (mês, ano, "Fatura", "Fwd:") e fica
+    com o que identifica a conta. É a mesma chave para o assunto do e-mail e
+    para a descrição do lançamento, que nasce do assunto.
+    """
+    t = _norm(texto)
+    t = re.sub(r"\b\d{1,2}\s*/\s*20\d{2}\b", " ", t)
+    t = re.sub(r"\b(fatura|fwd?|enc|res?|" + "|".join(_MESES_NOME) + r")\b", " ", t)
+    t = re.sub(r"\b20\d{2}\b", " ", t)
+    t = re.sub(r"[^a-z0-9.]+", " ", t)
+    return re.sub(r"\s+", " ", t).strip(" .")
+
+
+def _meses_antes(competencia: str, n: int) -> list[str]:
+    ano, mes = map(int, competencia.split("-"))
+    out = []
+    for _ in range(n):
+        mes -= 1
+        if mes == 0:
+            ano, mes = ano - 1, 12
+        out.append(f"{ano}-{mes:02d}")
+    return out
+
+
+def precedente_fatura(sess, *, assunto: Optional[str], competencia: Optional[str],
+                      conta_id: Optional[int] = None) -> Optional[dict]:
+    """Como ESTA fatura foi tratada nos últimos 3 meses — o mais recente ganha.
+
+    Casa por chave do assunto/descrição e, havendo conta reconhecida, pela
+    conta. Devolve `{tipo: 'lancamento', lancamento}` ou `{tipo: 'anexado',
+    item}` (a nota agregada da Contabo, guardada sem virar despesa), ou None
+    quando é a primeira vez que a conta aparece.
+    """
+    chave = chave_fatura(assunto)
+    if not competencia or len(chave) < 3:
+        return None
+    janela = _meses_antes(competencia, JANELA_PRECEDENTE)
+    achados = []
+    for l in sess.query(Lancamento).filter(Lancamento.competencia.in_(janela)).all():
+        if chave_fatura(l.descricao) == chave or (conta_id and l.conta_id == int(conta_id)):
+            achados.append((l.competencia, 1, l.id, {"tipo": "lancamento", "lancamento": l}))
+    for it in (sess.query(db.EmailAuditoria)
+               .filter(db.EmailAuditoria.status.in_(("lancado", "anexado"))).all()):
+        if chave_fatura(it.assunto) != chave:
+            continue
+        if it.status == "anexado" and it.rateio_competencia in janela:
+            achados.append((it.rateio_competencia, 0, it.id, {"tipo": "anexado", "item": it}))
+        elif it.status == "lancado" and it.lancamento_id:
+            l = sess.get(Lancamento, it.lancamento_id)
+            if l is not None and l.competencia in janela:
+                achados.append((l.competencia, 1, l.id, {"tipo": "lancamento", "lancamento": l}))
+    if not achados:
+        return None
+    achados.sort(key=lambda a: a[:3], reverse=True)
+    return achados[0][3]
+
+
+def decidir_fatura(sess, *, assunto: Optional[str], anexo_nome: Optional[str],
+                   competencia: Optional[str], valor, moeda: Optional[str],
+                   message_id: Optional[str] = None) -> dict:
+    """O que fazer com uma fatura em PDF: 'lancar', 'anexar' ou 'fila'.
+
+    Mesma função para o robô (e-mail novo) e para a fila (item pendente), para
+    as duas pontas decidirem igual. Devolve `{acao, motivo, dados}`; `dados` é
+    o que vai para salvar_lancamento (lancar) ou o rateio (anexar).
+    """
+    if valor is None:
+        return {"acao": "fila", "motivo": "PDF anexo, mas não consegui ler o valor",
+                "dados": None}
+    rec = reconhecer_conta(sess, " · ".join(filter(None, [assunto, anexo_nome])))
+    conta = rec["conta"]
+    prec = precedente_fatura(sess, assunto=assunto, competencia=competencia,
+                             conta_id=(conta.id if conta else None))
+    if prec is None:
+        return {"acao": "fila", "dados": None,
+                "motivo": ("primeira vez desta conta (nada igual nos "
+                           f"{JANELA_PRECEDENTE} meses anteriores) — confira e lance; "
+                           "nas próximas o robô lança sozinho")}
+
+    # Mesma fatura já lançada NESTE mês (reenvio, encaminhada duas vezes):
+    # a chave do assunto pega mesmo quando não há conta nem fornecedor.
+    chave = chave_fatura(assunto)
+    ja = [l for l in sess.query(Lancamento).filter(Lancamento.competencia == competencia).all()
+          if chave_fatura(l.descricao) == chave]
+    if ja:
+        return {"acao": "fila", "dados": None,
+                "motivo": f"já existe #{ja[0].id} com esta fatura em {competencia} — confira se não é a mesma"}
+
+    if prec["tipo"] == "anexado":
+        it = prec["item"]
+        det = detalhamento_fornecedor(sess, competencia=competencia,
+                                      fornecedor=it.rateio_fornecedor)
+        if not det:
+            return {"acao": "fila", "dados": None,
+                    "motivo": (f"em {it.rateio_competencia} esta nota foi guardada como o total "
+                               f"das contas de {it.rateio_fornecedor}, mas em {competencia} "
+                               "elas ainda não estão lançadas")[:200]}
+        return {"acao": "anexar", "dados": {"fornecedor": it.rateio_fornecedor},
+                "motivo": (f"guardada sozinha como em {it.rateio_competencia}: cobre "
+                           f"{det['lancamentos']} despesas de {det['fornecedor']} "
+                           f"(R$ {det['total_brl']:.2f})")[:200]}
+
+    ant = prec["lancamento"]
+    conta_id = ant.conta_id or (conta.id if conta else None)
+    fornecedor = ant.fornecedor or rec["fornecedor"]
+    if conta_id:
+        # Com a conta definida, a repetição se mede pela conta. Fornecedor com
+        # várias contas (Actual: PlugSign e PayGo) não pode acusar uma de ser a
+        # outra só por ser do mesmo fornecedor.
+        sem = lancamentos_semelhantes(sess, competencia=competencia, conta_id=conta_id,
+                                      message_id=message_id)
+    else:
+        det = detalhamento_fornecedor(sess, competencia=competencia, fornecedor=fornecedor)
+        if det:
+            return {"acao": "fila", "dados": None,
+                    "motivo": (f"as contas de {det['fornecedor']} já estão lançadas uma a "
+                               f"uma em {competencia} — esta fatura parece ser o total delas")[:200]}
+        sem = lancamentos_semelhantes(sess, competencia=competencia, fornecedor=fornecedor,
+                                      message_id=message_id)
+    if sem:
+        return {"acao": "fila", "dados": None,
+                "motivo": (f"já existe despesa desta conta em {competencia} "
+                           f"({sem[0]['motivo']}) — confira se não é a mesma")[:200]}
+
+    return {"acao": "lancar",
+            "motivo": f"lançado sozinho como #{ant.id} ({ant.competencia})",
+            "dados": {
+                "origem": "email", "status": ant.status,
+                "centro_id": ant.centro_id, "conta_id": conta_id,
+                "forma_pagamento_id": ant.forma_pagamento_id,
+                "fornecedor": fornecedor, "valor": valor,
+                "moeda": (moeda or ant.moeda or "BRL").upper(),
+                "competencia": competencia,
+                "descricao": (assunto or "conta por e-mail")[:240],
+                "external_id": message_id,
+                "_precedente_id": ant.id, "_precedente_comp": ant.competencia,
+            }}
+
+
 def detalhamento_fornecedor(sess, *, competencia: Optional[str],
                             fornecedor: Optional[str],
                             ignorar_id: Optional[int] = None) -> Optional[dict]:

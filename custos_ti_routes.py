@@ -476,7 +476,14 @@ def _conferir(sess, item, *, competencia=None, conta_id=None, fornecedor=None) -
         detalhamento = custos_ti.detalhamento_fornecedor(
             sess, competencia=competencia,
             fornecedor=(fornecedor or rec["fornecedor"]))
+    # Como esta mesma fatura foi lançada nos 3 meses anteriores — a tela
+    # preenche centro, conta, forma e situação a partir daí.
+    prec = custos_ti.precedente_fatura(sess, assunto=item.assunto,
+                                       competencia=competencia,
+                                       conta_id=(conta.id if conta else None))
     return {
+        "precedente": (prec["lancamento"].to_dict()
+                       if prec and prec["tipo"] == "lancamento" else None),
         "detalhamento": detalhamento,
         "conta": conta.to_dict() if conta else None,
         "sugerida": not conta_id and rec["conta"] is not None,

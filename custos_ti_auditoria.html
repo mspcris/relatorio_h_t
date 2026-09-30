@@ -372,7 +372,16 @@ async function conferir(primeira) {
 
   if (primeira) {
     const dica = document.getElementById('lcContaDica');
-    if (CONFERE.conta) {
+    const pr = CONFERE.precedente;
+    if (pr) {
+      // Mesma fatura já lançada num dos 3 meses anteriores: repete como lá.
+      document.getElementById('lcCentro').value = pr.centro_id;
+      pintaContas(pr.centro_id, pr.conta_id || (CONFERE.conta && CONFERE.conta.id));
+      if (pr.forma_pagamento_id) document.getElementById('lcForma').value = pr.forma_pagamento_id;
+      document.getElementById('lcStatus').value = pr.status;
+      if (pr.fornecedor) document.getElementById('lcFornecedor').value = pr.fornecedor;
+      dica.textContent = `(copiado de #${pr.id}, ${pr.competencia} — confira)`;
+    } else if (CONFERE.conta) {
       // A conta sabe o centro dela — palpite melhor que o do corpo do e-mail.
       document.getElementById('lcCentro').value = CONFERE.conta.centro_id;
       pintaContas(CONFERE.conta.centro_id, CONFERE.conta.id);
