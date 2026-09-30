@@ -114,6 +114,41 @@ class CrmLocal(Base):
     )
 
 
+class LembreteRemarcado(Base):
+    """Lembrete de consulta enviado a quem foi REMARCADO pelo ERP.
+
+    Remarcado = lançamento criado pela procedure WEB_API_TransferirAgenda (a
+    única que reagenda no ERP). Uma linha por (posto, idlancamento): é a trava
+    de "não envia de novo para quem já recebeu". A linha nasce ANTES do envio
+    (status='enviando'), então dois cliques ou duas telas não duplicam.
+
+    status: enviando → enviado | erro. 'erro' = a Meta NÃO aceitou (nada foi
+    cobrado) e volta a ser elegível no próximo envio. 'enviando' preso (processo
+    morreu no meio) conta como enviado — na dúvida, não cobra duas vezes.
+    """
+    __tablename__ = "lembrete_remarcado"
+
+    id             = Column(BigInteger, primary_key=True, autoincrement=True)
+    posto          = Column(String(1), nullable=False)
+    idlancamento   = Column(BigInteger, nullable=False)
+    paciente       = Column(Text)
+    telefone       = Column(Text)
+    medico         = Column(Text)
+    especialidade  = Column(Text)
+    data_consulta  = Column(Date)
+    hora           = Column(String(5))
+    transferido_em = Column(DateTime)                    # cad_lancamento.Data (hora local do ERP)
+    status         = Column(String(12), nullable=False)
+    wamid          = Column(Text)
+    erro           = Column(Text)
+    enviado_por    = Column(Text)
+    enviado_em     = Column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("idx_lembrete_remarcado_posto_lanc", "posto", "idlancamento", unique=True),
+    )
+
+
 class AgendaDiaMeta(Base):
     __tablename__ = "agenda_dia_meta"
 
@@ -455,3 +490,73 @@ def _crm_to_dict(reg: CrmLocal) -> dict:
         "id_cliente_historico": reg.id_cliente_historico,
         "protocolo": reg.protocolo,
     }
+
+
+# ── Lembrete aos remarcados ──────────────────────────────────────────────────
+
+def ensure_lembrete_table():
+    """Cria lembrete_remarcado se não existir (idempotente)."""
+    Base.metadata.create_all(engine, tables=[LembreteRemarcado.__table__])
+
+
+def lembrete_claim(posto: str, dados: dict, por: str) -> bool:
+    """Reserva o envio de UM lançamento. True = pode enviar agora.
+
+    INSERT com ON CONFLICT: se já existe linha 'enviando'/'enviado', não
+    reserva (não envia de novo). Só uma linha 'erro' (Meta recusou, nada
+    cobrado) é reaproveitada. Atômico no Postgres — vale entre os 2 workers.
+    """
+    with engine.begin() as con:
+        row = con.execute(text("""
+            INSERT INTO lembrete_remarcado
+                (posto, idlancamento, paciente, telefone, medico, especialidade,
+                 data_consulta, hora, transferido_em, status, enviado_por, enviado_em)
+            VALUES (:posto, :idl, :paciente, :telefone, :medico, :esp,
+                    :data, :hora, :transf, 'enviando', :por, now())
+            ON CONFLICT (posto, idlancamento) DO UPDATE
+               SET status = 'enviando', erro = NULL, wamid = NULL,
+                   telefone = EXCLUDED.telefone, enviado_por = EXCLUDED.enviado_por,
+                   enviado_em = now()
+             WHERE lembrete_remarcado.status = 'erro'
+            RETURNING id
+        """), {"posto": posto, "idl": dados["idlancamento"], "paciente": dados.get("paciente"),
+               "telefone": dados.get("telefone"), "medico": dados.get("medico"),
+               "esp": dados.get("especialidade"), "data": dados.get("data_consulta"),
+               "hora": dados.get("hora"), "transf": dados.get("transferido_em"), "por": por}).first()
+    return row is not None
+
+
+def lembrete_finish(posto: str, idlancamento: int, status: str,
+                    wamid: str | None = None, erro: str | None = None) -> None:
+    with engine.begin() as con:
+        con.execute(text("""
+            UPDATE lembrete_remarcado SET status = :st, wamid = :w, erro = :e
+             WHERE posto = :p AND idlancamento = :idl
+        """), {"st": status, "w": wamid, "e": (erro or None) and erro[:500],
+               "p": posto, "idl": idlancamento})
+
+
+def lembrete_status_por_lanc(posto: str) -> dict:
+    """{idlancamento: status} de tudo que já passou pelo envio neste posto."""
+    with engine.connect() as con:
+        return {int(r[0]): r[1] for r in con.execute(text(
+            "SELECT idlancamento, status FROM lembrete_remarcado WHERE posto = :p"), {"p": posto})}
+
+
+def lembrete_list(posto: str, dias: int = 30) -> list[dict]:
+    """Envios dos últimos `dias` do posto (mais recentes primeiro)."""
+    with engine.connect() as con:
+        rows = con.execute(text("""
+            SELECT idlancamento, paciente, telefone, medico, especialidade, data_consulta,
+                   hora, status, wamid, erro, enviado_por, enviado_em
+              FROM lembrete_remarcado
+             WHERE posto = :p AND enviado_em >= now() - make_interval(days => :d)
+             ORDER BY enviado_em DESC, data_consulta, hora
+        """), {"p": posto, "d": int(dias)}).mappings().all()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["data_consulta"] = d["data_consulta"].isoformat() if d["data_consulta"] else None
+        d["enviado_em"] = d["enviado_em"].isoformat() if d["enviado_em"] else None
+        out.append(d)
+    return out

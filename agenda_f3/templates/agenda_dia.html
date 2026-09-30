@@ -284,6 +284,12 @@
         <label>&nbsp;</label>
         <button id="btnCarregar" class="btn btn-sm btn-primary d-block"><i class="fas fa-search mr-1"></i>Consultar</button>
       </div>
+      <div>
+        <label>&nbsp;</label>
+        <button id="btnRemarcados" class="btn btn-sm btn-outline-success d-block"
+                title="Avisa pelo WhatsApp quem foi remarcado no ERP (Transferir agenda)">
+          <i class="fab fa-whatsapp mr-1"></i>Lembrete aos remarcados</button>
+      </div>
     </div>
   </div><!-- /topbar -->
 
@@ -361,6 +367,25 @@
 
 <div class="loading-overlay" id="loadingOverlay">
   <div class="spinner-border text-primary" role="status" style="width:48px;height:48px"><span class="sr-only">Carregando...</span></div>
+</div>
+
+<!-- Modal: lembrete aos remarcados (lembrete_remarcados.py) -->
+<div class="modal fade" id="remarcadosModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title"><i class="fab fa-whatsapp mr-2 text-success"></i>Lembrete de consulta aos remarcados — <span id="remPosto"></span></h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Fechar"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body" id="remBody"><div class="text-muted">Carregando…</div></div>
+      <div class="modal-footer py-2">
+        <small class="text-muted mr-auto" id="remRodape"></small>
+        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Fechar</button>
+        <button type="button" class="btn btn-success btn-sm" id="btnRemEnviar" disabled>
+          <i class="fab fa-whatsapp mr-1"></i>Enviar</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Modal: criar CRM (local-first → Campinho em background) -->
@@ -1278,6 +1303,101 @@ window.USER_POSTOS = {{ USER_POSTOS|safe }};
       options: baseOpts
     });
   }
+
+  // ── Lembrete aos remarcados ──────────────────────────────────────────────
+  // Um botão, todos os remarcados pendentes do posto. Quem já recebeu não
+  // recebe de novo (trava no servidor, por idLancamento). Remarcado = criado
+  // pela WEB_API_TransferirAgenda no ERP.
+  let REM = null, remTimer = null;
+  const fmtDataRem = iso => iso ? iso.slice(0, 10).split('-').reverse().join('/') : '';
+  const fmtBRL = v => v.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+
+  function remMetaBadge(e) {
+    if (e.status === 'enviando') return '<span class="badge badge-secondary">enviando…</span>';
+    if (e.status === 'erro') return `<span class="badge badge-danger" title="${escAttr(e.erro || '')}">não enviada — Meta recusou (tenta de novo no próximo envio)</span>`;
+    const m = e.meta;
+    if (!m) return REM && !REM.status_meta_lido
+      ? '<span class="badge badge-light border">enviada · sem leitura do status</span>'
+      : '<span class="badge badge-light border">enviada · aguardando retorno da Meta</span>';
+    if (m.status === 'failed') return `<span class="badge badge-danger">✖ ${escHtml(m.motivo || 'Não entregue')}</span>`;
+    const cor = m.status === 'read' ? 'success' : (m.status === 'delivered' ? 'info' : 'light border');
+    const ic = m.status === 'sent' ? '✔' : '✔✔';
+    return `<span class="badge badge-${cor}">${ic} ${escHtml(m.rotulo)}</span>`;
+  }
+
+  function remRender() {
+    const d = REM;
+    const comTel = d.pendentes.filter(p => p.tem_telefone);
+    const semTel = d.pendentes.filter(p => !p.tem_telefone);
+    const custo = comTel.length * d.preco_msg;
+    let h = '';
+    if (!d.envio_ligado) h += '<div class="alert alert-warning py-2">Envio desligado no servidor (LEMBRETE_REMARCADO_ENVIO=0).</div>';
+    if (d.rodando) h += '<div class="alert alert-info py-2"><i class="fas fa-spinner fa-spin mr-1"></i>Enviando… a lista atualiza sozinha.</div>';
+    h += `<div class="alert alert-${comTel.length ? 'success' : 'secondary'} py-2 mb-2">
+      <strong>${comTel.length} remarcado(s) ainda sem lembrete</strong>${comTel.length ? ` · custo estimado ${fmtBRL(custo)} (${fmtBRL(d.preco_msg)} por mensagem, modelo de marketing)` : ''}
+      ${semTel.length ? `<br><small>${semTel.length} sem telefone de WhatsApp no cadastro — não recebem.</small>` : ''}
+      <br><small class="text-muted">Remarcado = transferido no ERP (Transferir agenda) com consulta que ainda não aconteceu. Quem já recebeu não recebe de novo.</small></div>`;
+    if (d.pendentes.length) {
+      h += '<h6 class="mt-2">Vão receber</h6><div class="table-responsive"><table class="table table-sm table-striped mb-3"><thead><tr><th>Consulta</th><th>Paciente</th><th>Profissional</th><th>Especialidade</th><th>WhatsApp</th></tr></thead><tbody>';
+      d.pendentes.forEach(p => {
+        h += `<tr class="${p.tem_telefone ? '' : 'text-muted'}"><td>${fmtDataRem(p.data_consulta)} ${escHtml(p.hora)}</td><td>${escHtml(p.paciente)}</td>
+          <td>${escHtml(p.medico)}</td><td>${escHtml(p.especialidade)}</td>
+          <td>${p.tem_telefone ? escHtml(p.telefone_raw) : '<span class="badge badge-warning">sem telefone</span>'}</td></tr>`;
+      });
+      h += '</tbody></table></div>';
+    }
+    h += `<h6 class="mt-2">Já enviados (últimos 30 dias) — ${d.enviados.length}</h6>`;
+    if (!d.enviados.length) h += '<div class="text-muted small">Nenhum ainda.</div>';
+    else {
+      h += '<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Consulta</th><th>Paciente</th><th>Profissional</th><th>Situação da mensagem</th><th>Enviado</th></tr></thead><tbody>';
+      d.enviados.forEach(e => {
+        h += `<tr><td>${fmtDataRem(e.data_consulta)} ${escHtml(e.hora || '')}</td><td>${escHtml(e.paciente)}</td>
+          <td>${escHtml(e.medico)}</td><td>${remMetaBadge(e)}</td>
+          <td><small>${e.enviado_em ? new Date(e.enviado_em).toLocaleString('pt-BR') : ''} · ${escHtml(e.enviado_por || '')}</small></td></tr>`;
+      });
+      h += '</tbody></table></div>';
+    }
+    $('#remBody').html(h);
+    $('#remRodape').text(`Modelo ${d.template} · local na mensagem: ${d.local}`);
+    $('#btnRemEnviar').prop('disabled', !d.envio_ligado || d.rodando || !comTel.length)
+      .html(`<i class="fab fa-whatsapp mr-1"></i>Enviar lembrete para todos (${comTel.length})`);
+    const pendenteMeta = d.enviados.some(e => e.status === 'enviando' || (e.status === 'enviado' && !e.meta));
+    clearTimeout(remTimer);
+    if (d.rodando || pendenteMeta) remTimer = setTimeout(remCarregar, d.rodando ? 4000 : 15000);
+  }
+
+  function remCarregar() {
+    const posto = $('#selPosto').val();
+    $('#remPosto').text(posto);
+    return $.getJSON(`/api/remarcados?posto=${encodeURIComponent(posto)}`)
+      .done(d => { REM = d; remRender(); })
+      .fail(x => {
+        const msg = (x.responseJSON && x.responseJSON.error) || `falha ${x.status}`;
+        $('#remBody').html(`<div class="alert alert-danger">${escHtml(msg)}</div>`);
+        $('#btnRemEnviar').prop('disabled', true);
+      });
+  }
+
+  $('#btnRemarcados').on('click', () => {
+    REM = null;
+    $('#remBody').html('<div class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Lendo os remarcados no ERP…</div>');
+    $('#btnRemEnviar').prop('disabled', true);
+    $('#remarcadosModal').modal('show');
+    remCarregar();
+  });
+  $('#remarcadosModal').on('hidden.bs.modal', () => clearTimeout(remTimer));
+  $('#btnRemEnviar').on('click', () => {
+    if (!REM) return;
+    const n = REM.pendentes.filter(p => p.tem_telefone).length;
+    if (!n) return;
+    if (!confirm(`Enviar o lembrete de consulta para ${n} paciente(s) remarcado(s) do posto ${REM.posto}?\n\n`
+      + `Custo estimado: ${fmtBRL(n * REM.preco_msg)}. Quem já recebeu não recebe de novo.`)) return;
+    $('#btnRemEnviar').prop('disabled', true);
+    $.ajax({url: '/api/remarcados/enviar', method: 'POST', contentType: 'application/json',
+            data: JSON.stringify({posto: REM.posto})})
+      .done(() => remCarregar())
+      .fail(x => { alert((x.responseJSON && x.responseJSON.error) || `falha ${x.status}`); remCarregar(); });
+  });
 
   $(init);
 })();

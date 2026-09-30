@@ -1686,6 +1686,45 @@ e **não** existe falta ativa (`DataFalta` ou, sem ela, `DataHora`).
   WhatsApp (R$ 0,35 × pacientes); confirmação antes de gravar.
 - Validado (A, cardiologia 1729, out/26): só as quartas, 14/10 já fechada.
 
+## Agenda do Dia — lembrete aos REMARCADOS (camila2, 2026-09-30)
+
+Chamado da Agatha (Campinho, call center, 24/09). Remanejar agenda **continua
+no ERP** (decisão do Cristiano: "melhor que reinventar a roda"); a Agenda do Dia
+só avisa. Botão **"Lembrete aos remarcados"** → modal com os pendentes do posto
+→ **um botão envia para todos**. Quem já recebeu **nunca** recebe de novo.
+
+| Peça | Papel |
+|---|---|
+| `agenda_f3/lembrete_remarcados.py` | lista (ERP ao vivo), envio Meta, status via webhook do chat |
+| `agenda_f3/f3_db.py` | tabela `lembrete_remarcado` (Postgres f3), único por posto+idlancamento |
+| `agenda_f3/app.py` | `GET /api/remarcados?posto=`, `POST /api/remarcados/enviar` |
+
+- **Remarcado = lançamento com Observacao `WEB_API_TransferirAgenda%`** — a
+  ÚNICA procedure que reagenda no ERP (Cristiano). Ela cria lançamento NOVO,
+  move `fin_receita` e anota o antigo ("reagendada para"); não estorna o antigo.
+  Medido 60 d: A 244, D 147, R 119, C 105, M 61, Y 60, J 59, P 12; **B G I N X
+  não usam** (sem rastro = sem lembrete). Só consulta que ainda não aconteceu.
+- Modelo Meta **`transferencia_de_agenda`**, aprovado como **MARKETING** (a
+  Meta recusou utilidade): ~R$ 0,34/msg e não entrega a quem bloqueou
+  marketing. Postos Couto saem pelo 3529-6666.
+- Trava: `lembrete_claim()` faz `INSERT … ON CONFLICT` ANTES de enviar
+  ('enviando'); só linha 'erro' (Meta não aceitou, nada cobrado) volta a ser
+  pendente. 'enviando' preso conta como enviado.
+- **Status de entrega**: a whatsapp-api só tem `/templates` e `/templates/send`
+  — sem rota de status. O webhook da Meta cai no **chat**, tabela `Webhook`
+  (índice por `wamid`, body JSON com `statuses`). SÓ LEITURA. Códigos
+  mapeados em `MOTIVOS` (131050 bloqueou marketing, 131049 limite de marketing,
+  130472 experimento da Meta, 131026 sem WhatsApp). Amostra de 400 envios:
+  3,75 % falharam.
+- **Não cria campanha** no `whatsapp_cobranca.db` de propósito (o cron de
+  cobrança itera campanhas — incidente 2026-05-06). Por isso não aparece no
+  painel do WPP; o histórico é o próprio modal.
+- Credenciais `WAPP_*`/`CHAT_MYSQL_*` lidas de `/opt/relatorio_h_t/.env`
+  (www-data está no grupo deploy). Kill-switch `LEMBRETE_REMARCADO_ENVIO=0`.
+- Ideia descartada no caminho: remanejar pelo KPI chamando a procedure — a
+  `WEB_API_TransferirAgenda` não tem transação nem valida a vaga, e 17 % dos
+  originais em C ficaram ativos sem falta (paciente em dobro na agenda).
+
 ## Outros Monitores (`/outros_monitores.html`) — 2026-08-10
 
 Página para monitores de serviços específicos. Primeiro: **Leads criados**.

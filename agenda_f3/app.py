@@ -752,6 +752,85 @@ def api_crm_detalhe():
     return jsonify({'ok': False, 'error': 'CRM não encontrado para este agendamento'}), 404
 
 
+# ── Lembrete aos remarcados (ver lembrete_remarcados.py) ─────────────────────
+
+import lembrete_remarcados as lembrete
+
+
+def _remarcados_do_posto(posto: str):
+    """(pendentes, ja_enviados_por_lanc, local) — lê o ERP ao vivo."""
+    import f3_db
+    con = _mssql_conn_for_posto(posto)
+    try:
+        itens = lembrete.remarcados(con, posto)
+        local = lembrete.local_do_posto(con, posto)
+    finally:
+        con.close()
+    feitos = f3_db.lembrete_status_por_lanc(posto)
+    # 'erro' = Meta não aceitou, nada cobrado → volta a ser pendente.
+    pend = [i for i in itens if feitos.get(i['idlancamento']) in (None, 'erro')]
+    return pend, feitos, local
+
+
+@app.get('/api/remarcados')
+@login_required
+def api_remarcados():
+    import f3_db
+    posto = (request.args.get('posto') or '').strip().upper()
+    if posto not in POSTOS_TODOS:
+        return jsonify({'ok': False, 'error': 'posto inválido'}), 400
+    try:
+        pend, _, local = _remarcados_do_posto(posto)
+    except Exception as e:  # noqa: BLE001
+        app.logger.warning('remarcados %s: %s', posto, e)
+        return jsonify({'ok': False, 'error': f'Não consegui ler o ERP do posto {posto}: {e}'}), 502
+    enviados = f3_db.lembrete_list(posto, dias=30)
+    st = lembrete.status_meta([e['wamid'] for e in enviados if e.get('wamid')])
+    for e in enviados:
+        e['meta'] = st.get(e.get('wamid'))
+    pend_out = [{
+        'idlancamento': i['idlancamento'], 'paciente': i['paciente'],
+        'data_consulta': i['data_consulta'].isoformat(), 'hora': i['hora'],
+        'medico': i['medico'], 'especialidade': i['especialidade'],
+        'tem_telefone': bool(i['telefone']), 'telefone_raw': i['telefone_raw'],
+    } for i in pend]
+    return jsonify({
+        'ok': True, 'posto': posto, 'local': local,
+        'envio_ligado': lembrete.envio_ligado(), 'rodando': lembrete.rodando(posto),
+        'template': lembrete.TEMPLATE, 'preco_msg': lembrete.PRECO_MSG_BRL,
+        'pendentes': pend_out, 'enviados': enviados,
+        'status_meta_lido': bool(st) or not any(e.get('wamid') for e in enviados),
+    })
+
+
+@app.post('/api/remarcados/enviar')
+@login_required
+def api_remarcados_enviar():
+    posto = ((request.get_json(silent=True) or {}).get('posto') or '').strip().upper()
+    if posto not in POSTOS_TODOS:
+        return jsonify({'ok': False, 'error': 'posto inválido'}), 400
+    if not lembrete.envio_ligado():
+        return jsonify({'ok': False, 'error': 'Envio desligado (LEMBRETE_REMARCADO_ENVIO=0).'}), 403
+    try:
+        pend, _, local = _remarcados_do_posto(posto)
+    except Exception as e:  # noqa: BLE001
+        return jsonify({'ok': False, 'error': f'Não consegui ler o ERP do posto {posto}: {e}'}), 502
+    itens = [i for i in pend if i['telefone']]
+    if not itens:
+        return jsonify({'ok': True, 'iniciados': 0, 'msg': 'Nenhum remarcado pendente com telefone.'})
+    por = session.get('email') or session.get('login_campinho') or '?'
+    if not lembrete.iniciar_envio(posto, itens, local, por):
+        return jsonify({'ok': False, 'error': 'Já existe um envio em andamento para este posto.'}), 409
+    return jsonify({'ok': True, 'iniciados': len(itens)})
+
+
+try:
+    from f3_db import ensure_lembrete_table
+    ensure_lembrete_table()
+except Exception as _e:
+    app.logger.warning('lembrete_remarcado: falha ao garantir tabela no boot: %s', _e)
+
+
 # Tabela crm_local + worker de retry (idempotentes; toleram Postgres fora no boot)
 try:
     from f3_db import ensure_crm_table
