@@ -1405,7 +1405,7 @@ def resumo(sess, de: Optional[str] = None, ate: Optional[str] = None) -> dict:
             for fid, b in _ordena(por_forma)
         ],
         "top_contas": [{"nome": k, "total_brl": b["brl"], "total_usd": b["usd"]}
-                       for k, b in _ordena(por_conta)[:15]],
+                       for k, b in _ordena(por_conta)],   # todas (pedido de 30/09)
         "por_status": {k: v for k, v in por_status.items()},
         "por_origem": por_origem,
         # Previstos ficam FORA do total de propósito — são estimativa ou conta a
