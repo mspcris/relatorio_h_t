@@ -862,6 +862,8 @@
           ]
         });
       } catch(e) { /* contexto não disponível ainda */ }
+
+      atualizarRegistros();
     }
 
     // =========================
@@ -933,6 +935,7 @@
       el('#btnReload').addEventListener('click', async ()=>{
         const ym = ymSel;
         CACHE[ym] = {};
+        Object.keys(CACHE_IND).filter(k => k.endsWith('_' + ym)).forEach(k => delete CACHE_IND[k]);
         await loadMonth(ym);
         render();
       });
@@ -959,11 +962,14 @@
 
     // cache separado para notas individuais  { "POSTO_ym": [rows...] }
     const CACHE_IND = {};
+    const CACHE_IND_GERADO = {};   // mesma chave -> gerado_em do JSON
 
+    // Nomes como estão em cad_endereco (Codigo -> Descricao), conferidos em
+    // 2026-10-01. Não deduzir pela letra: G, X e Y são os três de Campo Grande.
     const POSTO_NOMES = {
       A:'Anchieta', B:'Bangu', C:'Campinho', D:'Del Castilho',
-      G:'Guadalupe', I:'Nova Iguaçu', J:'Jacarepaguá', M:'Madureira',
-      N:'Nilópolis', P:'Rio das Pedras', R:'Realengo', X:'Xerém', Y:'Campo Grande'
+      G:'Campo Grande', I:'Nova Iguaçu', J:'Jacarepaguá', M:'Madureira',
+      N:'Nilópolis', P:'Rio das Pedras', R:'Realengo', X:'X Campo Grande', Y:'Y Campo Grande'
     };
 
     const ORIGEM_LABEL = {
@@ -985,6 +991,7 @@
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const d = await r.json();
         CACHE_IND[key] = Array.isArray(d.notas) ? d.notas : [];
+        CACHE_IND_GERADO[key] = d.gerado_em || null;
       } catch {
         CACHE_IND[key] = [];
       }
@@ -1051,8 +1058,11 @@
     function setRegLoading(on) {
       const tbody = el('#tblRegBody');
       if (!tbody) return;
-      if (on) tbody.innerHTML = `<tr><td colspan="6" class="reg-empty">Carregando...</td></tr>`;
+      if (on) tbody.innerHTML = `<tr><td colspan="8" class="reg-empty">Carregando...</td></tr>`;
     }
+
+    const regTxt = v => (v == null ? '' : String(v)).trim();
+    const regEsc = v => regTxt(v).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
     function getRegRows() {
       if (!regPosto || !regOrigem) return [];
@@ -1080,6 +1090,10 @@
         if (regSortCol === 'nf') {
           const diff = num(a.NotaFiscal) - num(b.NotaFiscal);
           return regSortDir === 'asc' ? diff : -diff;
+        }
+        if (regSortCol === 'cliente') {
+          const cmp = (a.Cliente || '').localeCompare(b.Cliente || '', 'pt-BR');
+          return regSortDir === 'asc' ? cmp : -cmp;
         }
         return 0;
       });
@@ -1134,12 +1148,15 @@
       const info  = el('#regInfo');
       if (!tbody) return;
 
+      const btnPdf = el('#btnRegPdf');
+      if (btnPdf) btnPdf.disabled = true;   // só habilita quando há nota na seleção
+
       if (!regPosto) {
-        tbody.innerHTML = `<tr><td colspan="6" class="reg-empty">Selecione uma clínica acima.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="reg-empty">Selecione uma clínica acima.</td></tr>`;
         tfoot.innerHTML = ''; el('#regPagination').innerHTML = ''; if (info) info.textContent = ''; return;
       }
       if (!regOrigem) {
-        tbody.innerHTML = `<tr><td colspan="6" class="reg-empty">Selecione a empresa acima.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="reg-empty">Selecione a empresa acima.</td></tr>`;
         tfoot.innerHTML = ''; el('#regPagination').innerHTML = ''; if (info) info.textContent = ''; return;
       }
 
@@ -1156,7 +1173,7 @@
       });
 
       if (total === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="reg-empty">Nenhuma nota encontrada para o período.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="reg-empty">Nenhuma nota encontrada para o período.</td></tr>`;
         tfoot.innerHTML = ''; el('#regPagination').innerHTML = '';
         if (info) info.textContent = '';
         return;
@@ -1176,7 +1193,10 @@
         const data    = r.data_emissao ? r.data_emissao.split('-').reverse().join('/') : '—';
         const nf      = r.NotaFiscal || '—';
         const cliente = r.Cliente || '—';
-        const cpfcnpj = (r.cpf && r.cpf.trim()) ? r.cpf.trim() : (r.cnpj && r.cnpj.trim()) ? r.cnpj.trim() : '—';
+        // r.cnpj é o CNPJ de quem EMITIU a nota, não do cliente: não serve de reserva aqui
+        const cpfcnpj = (r.cpf && r.cpf.trim()) || '—';
+        const matric  = regTxt(r.matricula);
+        const servCod = regTxt(r.servico_codigo), servDesc = regTxt(r.servico_descricao);
         const valor   = num(r.valor);
         const canc    = (r.Cancelada || '').toString().toLowerCase() === 'sim';
         const rowClass = canc ? 'table-warning' : '';
@@ -1184,8 +1204,10 @@
         return `<tr class="${rowClass}">
           <td class="small-td">${data}</td>
           <td class="small-td text-right">${nf}</td>
+          <td class="small-td text-right">${matric ? regEsc(matric) : '—'}</td>
           <td>${cliente}</td>
           <td class="small-td">${cpfcnpj}</td>
+          <td>${servCod ? `<b>${regEsc(servCod)}</b> ` : ''}<span class="text-muted mini">${regEsc(servDesc) || (servCod ? '' : '—')}</span></td>
           <td class="text-right small-td">R$ ${fmt2.format(valor)}</td>
           <td class="text-center small-td">${cancBadge}</td>
         </tr>`;
@@ -1195,17 +1217,250 @@
       const nomeEmp   = ORIGEM_LABEL[regOrigem] || regOrigem;
       const fmtD = s => s ? s.split('-').reverse().join('/') : '';
       tfoot.innerHTML = `<tr class="bg-light">
-        <td colspan="4"><strong>TOTAL — ${fmtInt.format(total)} notas${totCanc > 0 ? ` (${totCanc} canceladas)` : ''}</strong></td>
+        <td colspan="6"><strong>TOTAL — ${fmtInt.format(total)} notas${totCanc > 0 ? ` (${totCanc} canceladas)` : ''}</strong></td>
         <td class="text-right"><strong>R$ ${fmt2.format(totVal)}</strong></td>
         <td></td>
       </tr>`;
-      if (info) info.textContent = `${nomePosto} (${regPosto}) · ${nomeEmp} · ${fmtD(dataIni)} a ${fmtD(dataFim)}`;
+      const per = regPeriodoEfetivo();
+      if (info) info.textContent = `${nomePosto} (${regPosto}) · ${nomeEmp} · ${fmtD(per.ini)} a ${fmtD(per.fim)}` +
+        (per.cortado ? ` — o filtro vai até ${fmtD(dataFim)}, mas esta aba mostra um mês por vez` : '');
+      if (btnPdf) btnPdf.disabled = false;
 
       renderPagination(total, regPage, REG_PAGE_SIZE);
     }
 
+    // A aba lê um mês por vez (o do início do filtro). O período mostrado e
+    // impresso é o que as notas realmente cobrem, não o que foi digitado.
+    function regPeriodoEfetivo() {
+      const mIni = `${ymSel}-01`, mFim = lastDayStr(ymSel);
+      return {
+        ini: dataIni > mIni ? dataIni : mIni,
+        fim: dataFim < mFim ? dataFim : mFim,
+        cortado: dataFim > mFim
+      };
+    }
+
+    async function atualizarRegistros() {
+      if (!el('#tab-registros')?.classList.contains('active')) return;
+      if (!regPosto && POSTOS.length) regPosto = POSTOS[0];
+      setRegLoading(true);
+      await loadIndividualNotes(regPosto, ymSel);
+      setRegLoading(false);
+      renderRegistros();
+    }
+
+    // ============================================================
+    // EXPORTAR PDF — notas emitidas, para a contabilidade
+    // Sai a seleção da aba: posto, empresa, período e ordenação — TODAS as
+    // notas do filtro, não só a página da grid. Texto vetorial (jsPDF +
+    // autoTable): dá para pesquisar e copiar, e 2.600 notas cabem em ~200 KB.
+    // ============================================================
+    const PDF_LIBS = [
+      'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+      'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'
+    ];
+    let pdfLibsPromise = null;
+    function carregarPdfLibs() {
+      if (pdfLibsPromise) return pdfLibsPromise;
+      const carregar = src => new Promise((ok, erro) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = ok;
+        s.onerror = () => erro(new Error('biblioteca de PDF não carregou'));
+        document.head.appendChild(s);
+      });
+      pdfLibsPromise = PDF_LIBS.reduce((p, src) => p.then(() => carregar(src)), Promise.resolve())
+        .catch(e => { pdfLibsPromise = null; throw e; });
+      return pdfLibsPromise;
+    }
+
+    // Monta o documento. Só caracteres Latin-1 nos textos fixos (fonte padrão do PDF).
+    function montarPdfNotas(jsPDF, d) {
+      const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape', compress: true });
+      const W = doc.internal.pageSize.getWidth();
+      const H = doc.internal.pageSize.getHeight();
+      const M = 12;
+      const dBR = s => s ? s.split('-').reverse().join('/') : '';
+      const rs  = v => 'R$ ' + fmt2.format(v);
+      const cancelada = r => (r.Cancelada || '').toString().toLowerCase() === 'sim';
+      const cinza = [209, 213, 219], tinta = [17, 24, 39];
+
+      let vTot = 0, qCanc = 0, vCanc = 0;
+      const porServico = new Map();   // código -> { qtd, valor, descrições } — só as não canceladas
+      d.rows.forEach(r => {
+        const v = num(r.valor);
+        vTot += v;
+        if (cancelada(r)) { qCanc++; vCanc += v; return; }
+        const cod = regTxt(r.servico_codigo);
+        const g = porServico.get(cod) || { qtd: 0, valor: 0, descr: new Map() };
+        g.qtd++; g.valor += v;
+        const ds = regTxt(r.servico_descricao);
+        if (ds) g.descr.set(ds, (g.descr.get(ds) || 0) + 1);
+        porServico.set(cod, g);
+      });
+      const qCont = d.rows.length - qCanc, vCont = vTot - vCanc;
+      const resumo = [
+        ['Emitidas', d.rows.length, vTot],
+        ['Canceladas', qCanc, vCanc],
+        ['Contabilizadas (emitidas - canceladas)', qCont, vCont]
+      ];
+      const selecao = `${d.postoNome} (${d.posto}) - ${d.empresa} - ${dBR(d.ini)} a ${dBR(d.fim)}`;
+
+      // Cabeçalho (1ª página)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(...tinta);
+      doc.text('Notas fiscais emitidas', M, 15);
+      doc.setFontSize(10);
+      let y = 22;
+      const linha = (rot, txt) => {
+        doc.setFont('helvetica', 'bold');   doc.text(rot, M, y);
+        doc.setFont('helvetica', 'normal'); doc.text(txt, M + 22, y);
+        y += 5;
+      };
+      linha('Posto:', `${d.postoNome} (${d.posto})`);
+      linha('Empresa:', d.empresa);
+      if (d.emitentes.length) linha('Emitente:', d.emitentes.join(' / '));
+      linha('Período:', `${dBR(d.ini)} a ${dBR(d.fim)} (data de emissão)`);
+      doc.setFontSize(8); doc.setTextColor(107, 114, 128);
+      doc.text([
+        d.coletado ? `Dados coletados do sistema CAMIM em ${d.coletado}.` : '',
+        `Relatório gerado em ${d.geradoEm}${d.usuario ? ' por ' + d.usuario : ''}.`,
+        `Ordenado por ${d.ordem}.`,
+        d.temServico ? '' : 'Serviço e matrícula ainda não carregados para este mês.'
+      ].filter(Boolean).join(' '), M, y + 1);
+      y += 5;
+
+      // Resumo (esquerda) e o que são as notas, por código de serviço (direita)
+      const quadro = {
+        startY: y,
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 1.5, textColor: tinta, lineColor: cinza },
+        headStyles: { fillColor: [243, 244, 246], textColor: [55, 65, 81], fontStyle: 'bold' },
+        footStyles: { fillColor: [243, 244, 246], textColor: tinta, fontStyle: 'bold', lineColor: cinza, lineWidth: 0.1 }
+      };
+      const dir = { content: '', styles: { halign: 'right' } };
+      doc.autoTable({
+        ...quadro,
+        margin: { left: M },
+        tableWidth: 116,
+        columnStyles: { 1: { halign: 'right', cellWidth: 16 }, 2: { halign: 'right', cellWidth: 32 } },
+        head: [['Resumo', { ...dir, content: 'Qtd' }, { ...dir, content: 'Valor' }]],
+        body: resumo.map(([rot, q, v]) => [rot, fmtInt.format(q), rs(v)]),
+        didParseCell: h => { if (h.section === 'body' && h.row.index === 2) h.cell.styles.fontStyle = 'bold'; }
+      });
+      let yFim = doc.lastAutoTable.finalY;
+      if (d.temServico) {
+        const maisComum = m => [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+        const servicos = [...porServico.entries()].sort((a, b) => b[1].valor - a[1].valor);
+        doc.autoTable({
+          ...quadro,
+          margin: { left: M + 121, right: M },
+          columnStyles: { 0: { cellWidth: 20 }, 2: { halign: 'right', cellWidth: 18 }, 3: { halign: 'right', cellWidth: 32 } },
+          head: [['Código', 'Serviço (sem as canceladas)', { ...dir, content: 'Qtd' }, { ...dir, content: 'Valor' }]],
+          body: servicos.map(([cod, g]) => [cod || '(sem código)', maisComum(g.descr) || '-', fmtInt.format(g.qtd), rs(g.valor)]),
+          foot: [['', 'Total = contabilizadas', { ...dir, content: fmtInt.format(qCont) }, { ...dir, content: rs(vCont) }]]
+        });
+        yFim = Math.max(yFim, doc.lastAutoTable.finalY);
+      }
+
+      doc.autoTable({
+        startY: yFim + 5,
+        margin: { top: 12, left: M, right: M, bottom: 14 },
+        theme: 'striped',
+        styles: { fontSize: 8, cellPadding: 0.9, textColor: tinta, overflow: 'linebreak' },
+        headStyles: { fillColor: [55, 65, 81], textColor: 255, fontStyle: 'bold' },
+        footStyles: { fillColor: [243, 244, 246], textColor: tinta, fontStyle: 'bold' },
+        columnStyles: {
+          0: { cellWidth: 18 },
+          1: { cellWidth: 14, halign: 'right' },
+          2: { cellWidth: 21, halign: 'right' },
+          4: { cellWidth: 27 },
+          5: { cellWidth: 16 },
+          6: { cellWidth: 60 },
+          7: { cellWidth: 24, halign: 'right' },
+          8: { cellWidth: 18 }
+        },
+        head: [['Data', { ...dir, content: 'NF' }, { ...dir, content: 'Matrícula' }, 'Cliente', 'CPF / CNPJ',
+                'Cód. serv.', 'Serviço', { ...dir, content: 'Valor' }, 'Situação']],
+        body: d.rows.map(r => [
+          dBR(r.data_emissao) || '-',
+          String(r.NotaFiscal ?? '-'),
+          regTxt(r.matricula) || '-',
+          r.Cliente || '-',
+          regTxt(r.cpf) || '-',
+          regTxt(r.servico_codigo) || '-',
+          regTxt(r.servico_descricao) || '-',
+          rs(num(r.valor)),
+          cancelada(r) ? 'Cancelada' : ''
+        ]),
+        foot: resumo.map(([rot, q, v]) => [
+          { content: `${rot}: ${fmtInt.format(q)} ${q === 1 ? 'nota' : 'notas'}`, colSpan: 7, styles: { halign: 'right' } },
+          { ...dir, content: rs(v) },
+          ''
+        ]),
+        showFoot: 'lastPage',
+        didParseCell: h => {
+          if (h.section === 'body' && h.row.raw[8]) {
+            h.cell.styles.fillColor = [254, 243, 199];
+            if (h.column.index === 8) { h.cell.styles.textColor = [153, 27, 27]; h.cell.styles.fontStyle = 'bold'; }
+          }
+        }
+      });
+
+      // Rodapé de todas as páginas: a seleção + "Página X de Y"
+      const paginas = doc.getNumberOfPages();
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(107, 114, 128);
+      for (let i = 1; i <= paginas; i++) {
+        doc.setPage(i);
+        doc.text(`Notas fiscais emitidas - ${selecao}`, M, H - 7);
+        doc.text(`Página ${i} de ${paginas}`, W - M, H - 7, { align: 'right' });
+      }
+      return doc;
+    }
+
+    async function exportarRegistrosPdf() {
+      const btn = el('#btnRegPdf'), st = el('#regPdfStatus');
+      const rows = sortRegRows(getRegRows());
+      if (!rows.length) return;
+      const aviso = (txt, erro) => { st.textContent = txt; st.className = 'mini ml-2 ' + (erro ? 'text-danger' : 'text-muted'); };
+      btn.disabled = true;
+      aviso('Gerando PDF…');
+      try {
+        await carregarPdfLibs();
+        const per = regPeriodoEfetivo();
+        const dh  = d => d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+        const coleta = CACHE_IND_GERADO[`${regPosto}_${ymSel}`];
+        const ordemCol = { data: 'data de emissão', nf: 'número da NF', cliente: 'cliente', valor: 'valor' };
+        const doc = montarPdfNotas(window.jspdf.jsPDF, {
+          rows,
+          posto: regPosto,
+          postoNome: POSTO_NOMES[regPosto] || regPosto,
+          empresa: ORIGEM_LABEL[regOrigem] || regOrigem,
+          emitentes: [...new Set(rows.map(r => {
+            const c = regTxt(r.cnpj), nome = regTxt(r.Empresa);
+            const cnpj = /^\d{14}$/.test(c) ? c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : c;
+            return nome + (cnpj ? ` - CNPJ ${cnpj}` : '');
+          }).filter(Boolean))],
+          temServico: rows.some(r => 'servico_codigo' in r),
+          ini: per.ini,
+          fim: per.fim,
+          coletado: coleta && !isNaN(new Date(coleta)) ? dh(new Date(coleta)) : '',
+          geradoEm: dh(new Date()),
+          usuario: window.USER_NOME || '',
+          ordem: `${ordemCol[regSortCol] || regSortCol} (${regSortDir === 'asc' ? 'crescente' : 'decrescente'})`
+        });
+        doc.save(`notas_emitidas_${regPosto}_${regOrigem}_${per.ini}_a_${per.fim}.pdf`);
+        aviso(`PDF gerado: ${fmtInt.format(rows.length)} notas em ${doc.getNumberOfPages()} páginas.`);
+      } catch (e) {
+        aviso('Não foi possível gerar o PDF: ' + (e && e.message || e), true);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     // Clique nos cabeçalhos da tabela para ordenar
     document.addEventListener('DOMContentLoaded', () => {
+      el('#btnRegPdf')?.addEventListener('click', exportarRegistrosPdf);
+
       el('#tblRegistros')?.querySelectorAll('thead th[data-col]').forEach(th => {
         th.onclick = () => {
           const col = th.dataset.col;
@@ -1228,13 +1483,7 @@
           document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
           btn.classList.add('active');
           el(`#tab-${tab}`)?.classList.add('active');
-          if (tab === 'registros') {
-            if (!regPosto && POSTOS.length) regPosto = POSTOS[0];
-            setRegLoading(true);
-            await loadIndividualNotes(regPosto, ymSel);
-            setRegLoading(false);
-            renderRegistros();
-          }
+          if (tab === 'registros') await atualizarRegistros();
         };
       });
     });
@@ -1465,7 +1714,14 @@
       <div class="tab-pane" id="tab-registros">
 
         <div class="card">
-          <div class="card-header"><h3 class="card-title mb-0">Ver Registros — Notas por Dia</h3></div>
+          <div class="card-header d-flex align-items-center flex-wrap" style="gap:8px;">
+            <h3 class="card-title mb-0">Ver Registros — Notas por Dia</h3>
+            <span id="regPdfStatus" class="mini ml-2 text-muted"></span>
+            <button type="button" id="btnRegPdf" class="btn btn-sm btn-outline-danger ml-auto" disabled
+                    title="Gera o PDF com todas as notas da seleção (posto, empresa, período e ordenação)">
+              <i class="fas fa-file-pdf mr-1"></i> Exportar PDF
+            </button>
+          </div>
           <div class="card-body">
 
             <!-- 1) Seletor de posto (único) -->
@@ -1486,8 +1742,10 @@
                   <tr>
                     <th data-col="data" style="cursor:pointer">Data</th>
                     <th data-col="nf" class="text-right" style="cursor:pointer">NF #</th>
+                    <th class="text-right" title="Matrícula do cliente no sistema CAMIM">Matrícula</th>
                     <th data-col="cliente" style="cursor:pointer">Cliente</th>
                     <th>CPF / CNPJ</th>
+                    <th title="Código do serviço da nota e o que ele significa (Fin_Nota)">Serviço</th>
                     <th data-col="valor" class="text-right" style="cursor:pointer">Valor (R$)</th>
                     <th class="text-center">Status</th>
                   </tr>

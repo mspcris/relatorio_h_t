@@ -652,6 +652,53 @@ posto** a meta individual do posto dele.
 
 ---
 
+### Exportar PDF das notas emitidas, para a contabilidade (2026-10-01)
+
+Botão **Exportar PDF** na aba *Ver Registros* do `kpi_notas_rps.html`. Sai a
+seleção da aba — posto, empresa, período e ordenação — com **todas** as notas
+do filtro (não só as 200 da página da grid). jsPDF + autoTable carregados só no
+clique; texto vetorial (2.603 notas de Anchieta = 76 páginas, ~450 KB, < 1 s).
+O PDF traz resumo (emitidas / canceladas / contabilizadas) e um quadro **por
+código de serviço, sem as canceladas, cujo total é o das contabilizadas**.
+
+- **"O que é a nota" = `Fin_Nota.ServicoCodigo` + `ServicoDescricao`**
+  (04.22.01 plano de medicina de grupo · 04.03.14 serviços prestados por
+  ambulatórios · 04.03.03 clínica médica). Preenchido em ~100 %. **NBS e
+  `CodigoTributacaoNacional` estão vazios em 55 %** das notas (A, set/26) — por
+  isso não são a coluna. Descrição do NBS, se um dia precisar: `Fin_NotaNBS`.
+- **Matrícula vem de `Cad_Cliente` (via `Fin_Nota.idReceita` → `Fin_Receita.idCliente`),
+  NUNCA de `Fin_Nota.Matricula`**: esta estoura em 32 bits quando a matrícula é
+  o CPF (particular) e vira outro número — CPF 26489031787 aparece como
+  719228011, e há negativas. Medido na rede em set/26: 1.134 notas estouradas,
+  16.875 iguais, zero divergência por outro motivo. `Fin_Nota.Matricula` só é
+  reserva quando a nota não tem receita ligada.
+- As três views de nota não expõem essas colunas. O `notas_individuais.sql`
+  mantém as views como conjunto de linhas e pendura os extras por LEFT JOIN num
+  derived table com **uma linha por número + CNPJ do prestador** (o mesmo
+  número tem mais de um retorno: 2.645 retornos para 2.603 notas em A). Dry-run
+  antiga × nova, 13 postos × ago/set/out-26: 33.944 notas, 0 divergência.
+- **Coluna de texto com NULL vira NaN no pandas da VM** e NaN no JSON derruba a
+  aba inteira ("nenhuma nota"). Os extras saem com `ISNULL(..., '')` e o JSON
+  individual é serializado com `allow_nan=False` antes de abrir o arquivo.
+- `cnpj` do JSON é o CNPJ de quem **emitiu**, não do cliente. A grid usava como
+  reserva quando o cliente não tinha CPF — corrigido; no PDF ele vai no cabeçalho.
+- O cron só regrava o mês atual e o anterior. Mês mais antigo fica sem
+  matrícula/serviço (a tela mostra "—" e o PDF avisa) até rodar
+  `export_notas_rps.py --meses 2026-07,2026-08`.
+- A aba lê **um mês por vez** (o do início do filtro); período e nome do
+  arquivo usam o intervalo efetivo, e a tela avisa quando o filtro passa do mês.
+- **A página tinha `POSTO_NOMES` escrito à mão desde mar/26 com G = "Guadalupe",
+  X = "Xerém" e Y = "Campo Grande"** — o Cristiano viu "X — Xerém" na tela em
+  01/10. Corrigido para os nomes de `cad_endereco` (G Campo Grande, X Campo
+  Grande, Y Campo Grande), aqui e no `ia_context_builder.py`. **Falta
+  `qualidade_agenda.html`**: o `POSTO_VIZINHOS` foi montado em cima dessa
+  geografia errada (X vizinho de Nova Iguaçu, G vizinho de Anchieta) e quem
+  define vizinhança é ele.
+- Próximo passo já mapeado (ele pediu "o lançamento que originou" para depois):
+  `Fin_Nota.ServicoComentario` tem o texto ("Matrícula 450195A - Mensalidade
+  referente a Setembro de 2026 - Serviço prestado a …") e `Fin_Receita.idLancamento`
+  o id.
+
 ### Fila de emissão ao vivo (2026-09-28)
 
 Pedido: *"existe uma fila e poucas são emitidas por minuto — preciso saber que está

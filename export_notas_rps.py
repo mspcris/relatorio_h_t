@@ -234,8 +234,11 @@ def write_outputs(posto: str, ym: str, ini: date, fim: date,
         "gerado_em": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
     }
     out_ind = json_ind_path(posto, ym)
+    # Serializa ANTES de abrir o arquivo e recusa NaN: JSON com NaN o browser
+    # não lê, e a aba Ver Registros mostraria "nenhuma nota" em vez de erro.
+    txt_ind = json.dumps(payload_ind, ensure_ascii=False, indent=2, allow_nan=False)
     with open(out_ind, "w", encoding="utf-8") as f:
-        json.dump(payload_ind, f, ensure_ascii=False, indent=2)
+        f.write(txt_ind)
     _set_mtime(out_ind)
 
     print(f"[{posto}] OK {ym} notas={len(df_notas)} notas_dia={len(df_notas_dia)} rps={len(df_rps)} ind={len(df_ind)} -> {os.path.relpath(out_json, BASE_DIR)}")
@@ -339,13 +342,18 @@ def run_incremental_all_postos(postos=None, force_months=None):
 def parse_args():
     p = argparse.ArgumentParser(description="Export Notas Emitidas + RPS Pendentes (JSON) incremental desde 2026-01; força mês atual e anterior.")
     p.add_argument("--postos", default="", help="Opcional: subset de postos. Ex: ANX. Se vazio, usa lista padrão.")
+    p.add_argument("--meses", default="", help="Meses a regravar além do atual e do anterior (que já são sempre regravados). Ex: 2026-07,2026-08")
     return p.parse_args()
 
 
 def main():
     args = parse_args()
     postos = [c for c in (args.postos or "") if c.isalpha()]
-    run_incremental_all_postos(postos=postos if postos else None, force_months=None)
+    meses = {m.strip() for m in (args.meses or "").split(",") if m.strip()}
+    invalidos = sorted(m for m in meses if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", m))
+    if invalidos:
+        raise SystemExit(f"--meses inválido (use AAAA-MM): {', '.join(invalidos)}")
+    run_incremental_all_postos(postos=postos if postos else None, force_months=meses or None)
 
 if __name__ == "__main__":
     main()

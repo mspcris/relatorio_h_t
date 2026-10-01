@@ -618,9 +618,9 @@ def _build_vendas(
 
 _POSTO_NOMES = {
     "A": "Anchieta", "B": "Bangu", "C": "Campinho", "D": "Del Castilho",
-    "G": "Guadalupe", "I": "Nova Iguaçu", "J": "Jacarepaguá",
+    "G": "Campo Grande", "I": "Nova Iguaçu", "J": "Jacarepaguá",
     "M": "Madureira", "N": "Nilópolis", "P": "Rio das Pedras",
-    "R": "Realengo", "X": "Xerém", "Y": "Campo Grande (Y)",
+    "R": "Realengo", "X": "X Campo Grande", "Y": "Y Campo Grande",
 }
 
 _POSTO_ZONA = {
@@ -880,7 +880,7 @@ def _build_qualidade_agenda(
     lines.append("- Baixada Fluminense: Nilópolis (N), Nova Iguaçu (I) — apenas 2 postos")
     lines.append("- Cidade do Rio de Janeiro: A, R, B, Y, G, X, C, D, J, M, P")
     lines.append("- Corredor Japeri (linha de trem): Nilópolis (N), Nova Iguaçu (I), Anchieta (A)")
-    lines.append("- Corredor Santa Cruz (linha de trem): Realengo (R), Bangu (B), Campo Grande Y (Y), Guadalupe (G), Xerém (X)")
+    lines.append("- Corredor Santa Cruz (linha de trem): Realengo (R), Bangu (B), Campo Grande (G), X Campo Grande (X), Y Campo Grande (Y)")
 
     return "\n".join(lines)
 
