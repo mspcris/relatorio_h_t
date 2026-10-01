@@ -765,6 +765,29 @@ redireciona para a página dele); o resto do site devolve 403 — página, JSON 
 - **A lacuna continua aberta para os usuários internos sem `all_pages`** (JSON e
   API por URL). Não foi fechada: exigiria mapear qual pasta cada página lê.
 
+**Estado em produção (2026-10-01, commits `3b7e742`, `d9e5069`, `f08e80e`).**
+O Cristiano aprovou ("ficou muito bom").
+- Usuário do Vinícius criado direto no SQLite de produção
+  (`/var/lib/camim-auth/camim_auth.db`, **id 53**): `all_pages=False`, sem admin,
+  sem posto, só a página `contabilidade_notas`, login local (sem IDCamim). A
+  senha provisória foi entregue ao Cristiano, que troca pelo `/admin` — não fica
+  escrita em lugar nenhum do repositório.
+- Testado em produção logado como ele: `/` cai em `/contabilidade_notas`; a
+  página e as 3 rotas da API respondem 200; 13 outros caminhos (JSON de outros
+  KPIs, outras páginas, `/admin`, outras APIs, e as duas tentativas com `..`)
+  respondem 403.
+- Card em `public.servicos` inserido à mão (id 265, cor `#c2185b`; `#00695c` já
+  era do Pré-agendamento). Não rodei o `seed_servicos.py` inteiro para não
+  reinserir linha que alguém tenha removido.
+- Primeira carga: 130 arquivos (13 postos × jan-out/26), 117 MB, 0 erro. Cresce
+  ~12 MB por mês. O cron das :20 já rodou sozinho sem erro.
+- O resumo da busca da home (`search_index/summaries.json`) foi escrito à mão,
+  sem chamada de IA, com o `html_hash` certo; mudou o HTML, o próximo
+  `summarize` refaz.
+- Para rodar script com o ambiente do camim-auth na VM: `/etc/camim-auth.env`
+  não é legível pelo `www-data` num `sudo -u`; o `AUTH_DB_PATH` padrão do
+  `auth_db.py` já é o banco de produção.
+
 ### Fila de emissão ao vivo (2026-09-28)
 
 Pedido: *"existe uma fila e poucas são emitidas por minuto — preciso saber que está
