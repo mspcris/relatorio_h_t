@@ -53,7 +53,7 @@ app = Flask(__name__, template_folder="/opt/camim-auth/templates")
 from ia_router_openai import ia_bp
 app.register_blueprint(ia_bp)
 
-from auth_routes import auth_bp, init_auth, decode_user
+from auth_routes import auth_bp, init_auth, decode_user, escopo_fechado
 app.register_blueprint(auth_bp)
 init_auth(SESS_NAME, SECRET, TTL_SECONDS)
 
@@ -202,6 +202,14 @@ except Exception as _e:
     import logging
     logging.getLogger(__name__).error("controle_pjs_bp não carregado: %s", _e)
 
+try:
+    # Contabilidade - Notas: notas emitidas por EMPRESA (clínicas e operadoras).
+    from contabilidade_notas_routes import contabilidade_notas_bp
+    app.register_blueprint(contabilidade_notas_bp)
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).error("contabilidade_notas_bp não carregado: %s", _e)
+
 PAGE_ACCESS_DB = os.getenv("PAGE_ACCESS_DB", "/opt/camim-auth/page_access.db")
 
 # Mapeamento page_key → template para controle de acesso por página
@@ -279,6 +287,9 @@ _TEMPLATE_TO_PAGINA = {
     "painel_financeiro.html":           "painel_financeiro",
     "painel_financeiro":                "painel_financeiro",
     "/painel_financeiro":               "painel_financeiro",
+    "contabilidade_notas.html":         "contabilidade_notas",
+    "contabilidade_notas":              "contabilidade_notas",
+    "/contabilidade_notas":             "contabilidade_notas",
     "indicadores_vg.html":              "indicadores_vg",
     "indicadores_vg":                   "indicadores_vg",
     "/indicadores_vg":                  "indicadores_vg",
@@ -1689,6 +1700,16 @@ def h_painel_financeiro():
     public.servicos; faixa só admin (API)."""
     return render_protected_page("painel_financeiro.html")
 
+@app.get('/contabilidade_notas')
+@app.get('/contabilidade_notas.html')
+def h_contabilidade_notas():
+    """Contabilidade - Notas: notas emitidas por EMPRESA. Catálogo
+    public.servicos. Quem é de escopo fechado (contabilidade externa) recebe a
+    página sem o menu do KPI — o resto do site devolve 403 para ele."""
+    email, _ = decode_user()
+    return render_protected_page("contabilidade_notas.html",
+                                 ESCOPO_FECHADO=bool(escopo_fechado(email)))
+
 
 @app.get('/higienizacao.html')
 def h_higienizacao():
@@ -1746,13 +1767,19 @@ def r_rateio():
     return render_protected_page("kpi_receita_despesa_rateio.html")
 
 
+def _home_escopo_fechado():
+    """Usuário de escopo fechado não tem home: vai direto para a página dele."""
+    email, _ = decode_user()
+    caminhos = escopo_fechado(email)
+    return redirect(caminhos[0]) if caminhos else None
+
 @app.get('/')
 def home():
-    return render_protected_page("index.html")
+    return _home_escopo_fechado() or render_protected_page("index.html")
 
 @app.get('/index.html')
 def home_html():
-    return render_protected_page("index.html")
+    return _home_escopo_fechado() or render_protected_page("index.html")
 
 @app.get('/alimentacao')
 def r1(): return render_protected_page("alimentacao.html")

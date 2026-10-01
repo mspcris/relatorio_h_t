@@ -699,6 +699,72 @@ código de serviço, sem as canceladas, cujo total é o das contabilizadas**.
   referente a Setembro de 2026 - Serviço prestado a …") e `Fin_Receita.idLancamento`
   o id.
 
+### Contabilidade - Notas (`/contabilidade_notas`) — por EMPRESA, não por posto (2026-10-01)
+
+Pedido do Cristiano para o escritório de contabilidade (Astem, usuário
+`viniciusfiscal@astemassessoria.com.br`): *"aqui não tem separação por posto,
+tem por empresa. Ele não quer saber quantas notas da operadora foram emitidas
+em A, quer saber quantas notas foram emitidas pela operadora."* Seleção **só
+por mês e ano**; emitidas, canceladas, emitidas − canceladas; notas linha a
+linha; PDF em paisagem com o máximo de dados; e o **nome CAMIM do serviço**.
+
+| Peça | Papel |
+|---|---|
+| `sql_contab_notas/notas.sql` | uma linha por nota: mesmas 3 views do KPI Notas x RPS + extras por LEFT JOIN |
+| `export_contab_notas.py` / `.sh` | coleta por posto × mês em `json_contab_notas/<P>_<ym>.json`; cron `20 * * * *`; `--meses`, `--dry-run` |
+| `contabilidade_notas_routes.py` | `/api/contabilidade_notas/meses`, `/resumo?ym=`, `/notas?ym=&cnpj=` — junta os 13 postos por CNPJ emitente |
+| `contabilidade_notas.html` | números do mês, tabela por empresa com barra, emissão por dia, por código de serviço, notas, PDF e CSV |
+
+- **Empresa = CNPJ que emitiu.** 15 em set/26: 13 clínicas (uma por posto, CNPJ
+  próprio) + CAMIM Operadora e SD-M Operadora, que emitem em 10-13 postos.
+  Set/26: 17.079 emitidas, 101 canceladas, R$ 3.798.499,21 líquido.
+- **Mesmo conjunto de linhas do KPI Notas x RPS** (as três views), para o número
+  bater entre as telas. Dry-run 13 postos × ago/set-26: 0 divergência contra o
+  `notas_individuais.sql`, matrícula idêntica.
+- A mesma nota em dois postos conta uma vez (CNPJ + chave da NFS-e + situação);
+  a API devolve `repetidas` (0 em ago e set/26).
+- **A mesma chave pode vir duas vezes do ERP, uma emitida e outra cancelada**
+  (4 notas da SD-M em Jacarepaguá, ago/26: dois `Fin_Nota` para a mesma NFS-e).
+  Ficam **as duas linhas**, como no KPI Notas x RPS: o líquido fecha (2 emitidas
+  − 1 cancelada) e escolher uma seria decidir sozinho se a nota vale. A API conta
+  em `duplas_emitida_cancelada` e a tela avisa.
+- **Nome CAMIM do serviço** = serviços do lançamento que gerou a nota
+  (`Fin_Receita.idLancamento` → `Cad_LancamentoServico` → `Cad_Servico.Servico`),
+  **só os da classe da nota** (`Fin_Nota.idClasse`: a nota sai por classe, um
+  lançamento com exame e consulta vira duas notas) e todos quando o filtro por
+  classe não acha nenhum. Nota sem lançamento (mensalidade, taxa, acordo) mostra
+  o tipo de receita (`Fin_ContaTipo.Tipo`). A coluna se chama "Nome CAMIM do
+  serviço" de propósito, ao lado de "Serviço na nota" (código da prefeitura).
+- Campos que o ERP **não** preenche no retorno da NFS-e nacional: alíquota, ISS
+  (`v61`), deduções, retenções, competência. ISS vem de `Fin_Nota.ValorISS`.
+- **`json_contab_notas/` NÃO vai para `/var/www`** (o `sync_www.sh` só copia
+  pastas listadas): nota com nome e CPF não fica em arquivo estático. O dado só
+  sai pela API, que confere a página (`contabilidade_notas` ou `all_pages`) —
+  **não tem ACL de posto**, de propósito.
+- Posto sem arquivo no mês → `postos_sem_dado` e aviso amarelo na tela e no PDF.
+- Abre no **último mês fechado** (é o que a contabilidade fecha).
+- PDF por empresa respeita busca, filtro de situação e ordenação da tela;
+  2.603 notas = 161 páginas (cada nota ocupa 2-3 linhas: é o custo de "o máximo
+  de dados"). O CSV tem todos os campos, um por coluna.
+
+**Usuário de ESCOPO FECHADO (gente de fora).** O gate normal é por página HTML:
+quem está logado ainda alcança pela URL os `/json_*` estáticos e as APIs que só
+pedem sessão — o `/auth` do nginx só conferia o cookie. Para funcionário passa;
+para escritório de contabilidade não. `auth_routes.ESCOPO_FECHADO` resolve:
+usuário **sem `all_pages`, sem admin, cujas páginas estão TODAS nessa lista** só
+passa no `auth_request` para os caminhos da lista (mais `/`, que o Flask
+redireciona para a página dele); o resto do site devolve 403 — página, JSON ou API.
+- Liberar a ele uma página de fora da lista **desliga a trava** (vira usuário
+  comum). É de propósito, mas quem editar esse usuário no `/admin` precisa saber.
+- A checagem recusa `..`, `//`, `%` e `\` no caminho: o nginx roteia pelo
+  caminho normalizado e manda o caminho cru no `X-Original-URI`.
+- Qualquer exceção dentro da trava cai no comportamento antigo (204): `/auth`
+  atende o site inteiro.
+- Página nova para gente de fora: acrescentar em `ESCOPO_FECHADO` os caminhos
+  exatos e o prefixo da API.
+- **A lacuna continua aberta para os usuários internos sem `all_pages`** (JSON e
+  API por URL). Não foi fechada: exigiria mapear qual pasta cada página lê.
+
 ### Fila de emissão ao vivo (2026-09-28)
 
 Pedido: *"existe uma fila e poucas são emitidas por minuto — preciso saber que está

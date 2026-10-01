@@ -148,6 +148,64 @@ PAGINAS_PROTEGIDAS = {"controle_pjs"}
 # 'cancelados_robo' aberto em 2026-08-31 (pedido do Petterson/CG via Cristiano).
 PAGINAS_SEM_GATE = {"cancelados_robo"}
 
+# ── Usuário de ESCOPO FECHADO (gente de FORA da empresa) ──────────────────────
+# O gate normal é por página HTML: quem está logado ainda alcança, pela URL,
+# os JSON estáticos (/json_*) e as APIs que só pedem sessão. Para funcionário
+# isso é aceitável; para o escritório de contabilidade não é.
+# Regra: usuário SEM all_pages, SEM admin, cujas páginas liberadas estão TODAS
+# nesta lista, só passa no auth_request do nginx para os caminhos da lista
+# (mais "/" , que o Flask redireciona para a página dele). Qualquer outra URL
+# devolve 403 — página, JSON ou API.
+# Liberar a ele uma página de fora da lista desliga a trava (vira usuário
+# comum): é de propósito, para a regra não esconder página que o admin deu.
+# Caminho terminado em "/" é prefixo; os demais são exatos (e aceitam .html).
+ESCOPO_FECHADO = {
+    "contabilidade_notas": ("/contabilidade_notas", "/api/contabilidade_notas/"),
+}
+_ESCOPO_TTL = 30.0
+_escopo_cache: dict[str, tuple[float, tuple | None]] = {}
+
+
+def escopo_fechado(email: str | None) -> tuple | None:
+    """None = usuário comum. Tupla = os únicos caminhos que ele alcança."""
+    if not email:
+        return None
+    import time
+    agora = time.time()
+    c = _escopo_cache.get(email)
+    if c and agora - c[0] < _ESCOPO_TTL:
+        return c[1]
+    db = SessionLocal()
+    try:
+        u = get_user_by_email(db, email)
+        caminhos = None
+        if u and not bool(u.is_admin) and not bool(getattr(u, "all_pages", False)):
+            paginas = set(u.lista_paginas())
+            if paginas and paginas <= set(ESCOPO_FECHADO):
+                caminhos = tuple(c for p in sorted(paginas) for c in ESCOPO_FECHADO[p])
+    finally:
+        db.close()
+    _escopo_cache[email] = (agora, caminhos)
+    return caminhos
+
+
+def uri_no_escopo(uri: str, caminhos: tuple) -> bool:
+    path = (uri or "").split("?", 1)[0]
+    # O nginx roteia pelo caminho NORMALIZADO e manda para cá o caminho CRU:
+    # "/api/contabilidade_notas/../../json_x/a.json" passaria no prefixo e
+    # serviria outro arquivo. Nenhum caminho legítimo dele tem estes trechos.
+    if ".." in path or "//" in path or "%" in path or "\\" in path:
+        return False
+    if path in ("/", "/index.html"):
+        return True
+    for c in caminhos:
+        if c.endswith("/"):
+            if path.startswith(c):
+                return True
+        elif path in (c, c + ".html"):
+            return True
+    return False
+
 
 def obter_paginas_disponiveis() -> list[dict]:
     """Lê o catálogo de serviços do RDS Postgres (public.servicos).
@@ -527,10 +585,20 @@ def auth_check():
     c = request.cookies.get(_SESS_NAME)
     if c and _signer is not None:
         try:
-            _signer.unsign(c, max_age=_TTL_SECONDS + 3600)
-            return ("", 204)
+            raw = _signer.unsign(c, max_age=_TTL_SECONDS + 3600).decode()
         except BadSignature:
-            pass
+            raw = None
+        if raw is not None:
+            # Trava do usuário de escopo fechado (ver ESCOPO_FECHADO). Qualquer
+            # erro aqui cai no comportamento de sempre: esta rota atende o site
+            # inteiro e não pode derrubar todo mundo por causa de um usuário.
+            try:
+                caminhos = escopo_fechado(raw.split(":", 1)[0])
+                if caminhos is not None and not uri_no_escopo(request.headers.get("X-Original-URI", ""), caminhos):
+                    return ("", 403)
+            except Exception as exc:
+                print(f"[auth] escopo_fechado falhou, seguindo sem a trava: {exc}")
+            return ("", 204)
     if _manus_key_ok():
         return ("", 204)
     return ("", 401)
