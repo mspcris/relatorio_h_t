@@ -1844,15 +1844,55 @@ quem foi avisado. **F3 em branco é lido como "não recebeu".**
 - O texto da anotação sai de `_texto_anotacao()` — envio e reparo usam a mesma
   função porque a trava contra repetição compara a frase letra a letra.
 
-**Achados do mesmo dia, NÃO corrigidos (decisão pendente do Cristiano):**
-- **Mensagem de falta repetida ao mesmo paciente:** 634 de 5.344 aceitas desde
-  maio (≈ R$ 220), 17 % desde agosto. 534 saem na mesma passada: a
-  `vw_Cad_LancamentoProntuarioComDesistencia` devolve o mesmo
-  `idLancamentoServico` duas vezes e o laço envia para as duas. 100 saem minutos
-  depois (reenvio).
-- **CRM não é criado para particular:** `str(matricula_raw or "")` transforma
-  matrícula 0 em vazio e a API responde 400 *"matricula deve ser enviada sem a
-  letra do posto"*. Falta saber se o `sp_CRM_Insert` aceita matrícula 0.
+### Um aviso por paciente — a mensagem saía repetida (2026-10-05)
+
+O Cristiano perguntou se era *"porque cadastraram faltas duas vezes"*. Era.
+810 de 5.344 mensagens de falta (R$ 283,50) foram a segunda para o mesmo
+paciente, mesmo médico, mesmo dia; 17 % dos envios desde agosto. Três caminhos:
+
+| Quantas | O que acontecia | Caso medido |
+|---|---|---|
+| 634 | A view devolve a lista **em dobro** e o envio mandava para as duas | 175473A: 14 pacientes, 28 mensagens |
+| 176 | Outra falta do mesmo médico no mesmo dia (desativada e cadastrada de novo): o segundo envio repetia para todos. 154 com a mesma especialidade e horário | 175570A → 175571A |
+| (dentro das acima) | Clique duplo em "Cadastrar falta": dois POST com 0,7 s passavam juntos pela trava | 70505G/70506G: 4 pacientes, 16 mensagens |
+
+- **`vw_Cad_LancamentoProntuarioComDesistencia` NÃO é uma linha por
+  lançamento.** O `LEFT JOIN Cad_MedicoFalta MF` (médico + dia + especialidade,
+  `Desativado = 0`) multiplica a lista inteira quando há duas faltas ativas; o
+  de `Fin_Receita` repete quem tem duas receitas em aberto. **Quem lê essa view
+  para agir por linha tem que tirar repetido por `idLancamentoServico`** —
+  `COUNT(*)` nela também conta em dobro.
+- **A falta cadastrada pelo ERP vem sem `DataFalta`** (só `DataHora`). A trava
+  do `/insert` comparava `DataFalta = ?` e não a via: a recepção cadastrava no
+  ERP, depois no KPI para sair o WhatsApp, e ficavam duas ativas. Agora é
+  `ISNULL(DataFalta, CAST(DataHora AS DATE))`, igual ao cadastro por período, e
+  a recusa diz quem cadastrou, que foi no ERP e o que fazer (apagar a existente
+  e cadastrar por aqui).
+- **O envio é em duas fases:** resolve todas as linhas e monta o plano
+  (`_planejar_envio`), depois envia. Um aviso por paciente (nome + telefone —
+  dependentes dividem o número e cada um recebe o seu). Paciente com duas
+  linhas no dia recebe **uma** mensagem (ela não cita horário) e **as duas
+  linhas** levam a anotação no F3. Um CRM por paciente.
+- **Quem já foi avisado do mesmo médico no mesmo dia por outra falta não recebe
+  de novo** (`_avisados_medico_dia`, lido de `envios` por posto + médico +
+  `data_falta`). A tela lista esses pacientes pelo nome. Se a leitura falhar, o
+  paciente é avisado — na dúvida, avisa.
+- **Clique duplo:** o botão trava durante o cadastro e o servidor serializa o
+  cadastro da mesma falta (`_lock_do_cadastro`, trava de processo — só o
+  camim-auth serve a rota e ele roda com 1 worker). **Se um dia subir
+  `--workers`, essa trava deixa de valer** e precisa virar `sp_getapplock`.
+- **`"simular": true` no POST `/enviar_wpp`** devolve quem receberia e quem
+  seria pulado, e para ali: não envia, não grava, não anota. É o dry-run do
+  envio; usar antes de mexer nesse laço.
+- `/wpp_status` devolve `andamento` (quantos pacientes ESTE envio avisa). A tela
+  contava linhas do F3 e passaria a dizer "faltaram pacientes" para envio
+  completo. É memória do processo: some no restart e a tela volta à conta antiga.
+- **CRM de particular:** `str(matricula_raw or "")` transformava matrícula 0 em
+  vazio e a API recusava. Particular é matrícula 0 — um `idCliente` só, e cada
+  particular é um dependente dele (Cristiano, 05/10). `_matricula_crm()` manda "0".
+- Faltas duplicadas que já existem continuam ativas (ex.: 175462 do ERP e
+  175473 do KPI, médico 1317, 05/10): o F3 mostra cada paciente duas vezes até
+  alguém apagar uma. Não apaguei nenhuma.
 
 ## Falta do médico por PERÍODO (`/medico_falta`) — chamado #31809, 2026-09-30
 

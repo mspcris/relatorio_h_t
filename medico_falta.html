@@ -1107,18 +1107,26 @@
           fetch(url, {credentials: "same-origin"}).then(r => r.json()).then(s => {
             if (s.error) throw new Error(s.error);
             const parou = (s.total === anterior) ? estaveis + 1 : 0;
-            const terminou = s.total >= esperado || parou >= 2;
+            // `andamento` é o servidor dizendo quantos pacientes ESTE envio
+            // avisa. O `esperado` daqui conta linhas do F3 e passa do real
+            // quando o paciente tem duas linhas ou já tinha sido avisado —
+            // sem isso a tela dizia "faltaram pacientes" para envio completo.
+            // Sem andamento (serviço reiniciou no meio) vale a conta antiga.
+            const and_ = s.andamento;
+            const terminou = and_ ? (and_.terminou || parou >= 12)
+                                  : (s.total >= esperado || parou >= 2);
             if (!terminou) {
               area.innerHTML = `<div class="alert alert-warning">
                 <i class="fas fa-spinner fa-spin mr-1"></i>
-                <strong>Envio em andamento no servidor — ${s.total} de ${esperado}.</strong><br>
+                <strong>Envio em andamento no servidor — ${and_ ? and_.feitos : s.total} de ${and_ ? and_.a_avisar : esperado}.</strong><br>
                 ${motivo} As mensagens continuam saindo; <u>não clique em enviar de novo</u>.</div>`;
               setTimeout(() => mostrarStatusReal(motivo, s.total, parou), 5000);
               return;
             }
-            const completo = s.total >= esperado;
+            const completo = and_ ? (and_.terminou && !and_.interrompido) : (s.total >= esperado);
+            const faltaram = and_ ? Math.max(and_.a_avisar - and_.feitos, 1) : (esperado - s.total);
             let html = `<div class="alert alert-${completo ? "success" : "warning"}">
-              <strong>${s.enviados} mensagem(ns) enviada(s)${completo ? "" : ` — de ${esperado} pacientes`}.</strong>
+              <strong>${s.enviados} mensagem(ns) enviada(s)${completo ? "" : " — o envio parou antes do fim"}.</strong>
               ${s.falhados ? s.falhados + " falha(s) · " : ""}${s.sem_telefone ? s.sem_telefone + " sem telefone." : ""}<br>
               <small>${motivo} O relatório detalhado (prontuário/CRM) não voltou, mas o envio está registrado em
               <a href="https://camila1.ia.camim.com.br/wpp" target="_blank">camila1.ia.camim.com.br/wpp</a>.
@@ -1126,7 +1134,7 @@
                 "Faltaram pacientes: confira a lista abaixo antes de qualquer reenvio."}</small></div>`;
             if (!completo) {
               html += `<button type="button" class="btn btn-warning mb-2" onclick="this.disabled=true;window.__wppFalta[${idFalta}](true)">
-                <i class="fas fa-paper-plane mr-1"></i>Enviar aos ${esperado - s.total} que faltaram
+                <i class="fas fa-paper-plane mr-1"></i>Enviar aos ${faltaram} que faltaram
               </button>
               <div class="small text-muted mb-2">Quem já recebeu é pulado automaticamente — não haverá mensagem repetida.</div>`;
             }
@@ -1189,6 +1197,19 @@
           // F3 em branco é lida como "não recebeu" (chamado MUU-GWB-HNM3) —
           // então quem ficou sem a anotação aparece aqui pelo nome, dizendo que
           // RECEBEU, e não num contador pequeno dentro da caixa verde.
+          // Falta desativada e cadastrada de novo: quem já foi avisado deste
+          // médico neste dia não recebe a mesma mensagem outra vez. Dito pelo
+          // nome, para ninguém achar que o paciente ficou sem aviso.
+          const jaAvisados = w.detalhes_ja_avisados || [];
+          if (jaAvisados.length) {
+            html += `
+            <div class="alert alert-info">
+              <strong>${jaAvisados.length === 1 ? "1 paciente não recebeu de novo" : jaAvisados.length + " pacientes não receberam de novo"}:</strong>
+              já ${jaAvisados.length === 1 ? "tinha sido avisado" : "tinham sido avisados"} da falta deste médico neste dia
+              por um cadastro anterior. A mensagem é a mesma, então não foi repetida.
+              <ul class="mb-0 mt-2">${jaAvisados.map(x => `<li>${escTxt(x.paciente)}</li>`).join("")}</ul>
+            </div>`;
+          }
           const semF3 = (w.detalhes_enviados || []).filter(x => !x.observacao_ok);
           if (semF3.length) {
             html += `
@@ -1295,6 +1316,11 @@
     };
     if (emPeriodo()) { salvarPeriodo(payload); return; }
     setLoading(true);
+    // Clique duplo criava duas faltas no mesmo segundo e o WhatsApp saía em
+    // dobro. O botão trava enquanto o cadastro está indo; só volta se a falta
+    // NÃO foi criada (depois de criada, outra falta é "Cadastrar outra falta").
+    const btnSalvar = $("#btnSalvarFalta");
+    btnSalvar.disabled = true;
     fetch("/api/medico_falta/insert", {
       method: "POST",
       credentials: "same-origin",
@@ -1302,6 +1328,7 @@
       body: JSON.stringify(payload),
     }).then(r => r.json()).then(d => {
       setLoading(false);
+      if (d.error || d.duplicada) btnSalvar.disabled = false;
       if (d.duplicada && d.id_falta_existente) {
         $("#msgFalta").innerHTML =
           '<div class="d-block mt-2"><span class="text-danger"><strong>' +
@@ -1335,7 +1362,7 @@
       }
       wppArea.innerHTML = `<div class="alert alert-info"><i class="fas fa-spinner fa-spin mr-1"></i>Disparando ${d.agendamentos.length} mensagens (api-chat + Meta API)…</div>`;
       enviarWppFalta(d.id_falta, d.agendamentos.length, wppArea);
-    }).catch(e => { setLoading(false); $("#msgFalta").textContent = "Falha: " + e; });
+    }).catch(e => { setLoading(false); btnSalvar.disabled = false; $("#msgFalta").textContent = "Falha: " + e; });
   });
 })();
 </script>

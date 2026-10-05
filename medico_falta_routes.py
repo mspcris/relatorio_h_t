@@ -21,6 +21,7 @@ import os
 import re
 import uuid
 import logging
+import threading
 from datetime import date, datetime, timedelta, timezone
 
 import pyodbc
@@ -712,6 +713,135 @@ def _envios_da_falta(id_falta: int, posto: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Um aviso por paciente (2026-10-05)
+#
+# De maio a outubro/2026, 810 de 5.344 mensagens de falta foram a SEGUNDA para
+# o mesmo paciente, mesmo médico, mesmo dia (R$ 283,50). A origem que se repete
+# é a falta cadastrada duas vezes — em geral uma no ERP e outra aqui:
+#   - a view devolve a lista em dobro e o envio mandava para as duas (634);
+#   - a falta era desativada e cadastrada de novo, e o segundo envio repetia
+#     para todo mundo (154);
+#   - a trava do /insert não via a falta do ERP, que vem sem DataFalta.
+# ---------------------------------------------------------------------------
+
+# Andamento do envio em curso, por (posto, idFalta). O /wpp_status devolve
+# junto para a tela saber quantos pacientes ESTE envio avisa: a contagem que
+# ela tem é a de linhas do F3, e depois de tirar repetidos o número é menor.
+# Um processo só (gunicorn --workers 1), então o dicionário serve; se o
+# serviço reiniciar ele some e a tela volta a se guiar pela contagem dela.
+_ENVIO_ANDAMENTO: dict[tuple[str, int], dict] = {}
+
+# Clique duplo em "Cadastrar falta": dois POST com 0,7 s de diferença passavam
+# juntos pela conferência de falta existente e nasciam duas faltas (70505G e
+# 70506G em 02/10/2026 — 4 pacientes, 16 mensagens). O cadastro da mesma falta
+# entra um de cada vez; o segundo espera o primeiro gravar e então é recusado
+# pela conferência. Trava de processo basta: só o camim-auth serve esta rota.
+_CADASTRO_LOCKS: dict[tuple, threading.Lock] = {}
+_CADASTRO_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_do_cadastro(posto: str, idmedico: int, data_falta: date, especialidade: str) -> threading.Lock:
+    chave = (posto, int(idmedico), data_falta, (especialidade or "").strip().lower())
+    with _CADASTRO_LOCKS_GUARD:
+        return _CADASTRO_LOCKS.setdefault(chave, threading.Lock())
+
+
+def _matricula_crm(matricula_raw) -> str:
+    """Matrícula só com dígitos, como o POST /crm exige.
+
+    Paciente particular tem matrícula 0 (o idCliente é um só e cada particular
+    é um dependente dele). `matricula_raw or ""` transformava o 0 em vazio e a
+    API recusava o CRM com "matricula deve ser enviada sem a letra do posto".
+    """
+    return re.sub(r"\D", "", "" if matricula_raw is None else str(matricula_raw))
+
+
+def _linhas_unicas(agendamentos: list) -> list:
+    """Uma entrada por idLancamentoServico (a linha do F3), na ordem da view.
+
+    A vw_Cad_LancamentoProntuarioComDesistencia não é uma linha por lançamento:
+    o LEFT JOIN em Cad_MedicoFalta devolve a lista INTEIRA em dobro quando há
+    duas faltas ativas do médico no dia, e o de Fin_Receita repete a linha de
+    quem tem duas receitas em aberto.
+    """
+    vistos, out = set(), []
+    for ag in agendamentos:
+        if ag[0] in vistos:
+            continue
+        vistos.add(ag[0])
+        out.append(ag)
+    return out
+
+
+def _avisados_medico_dia(posto: str, medico: str, data_falta: str, exceto_ref: str) -> set:
+    """(nome, telefone) de quem já recebeu o aviso deste médico neste dia por
+    OUTRA falta. Quem desativa a falta e cadastra de novo não quer avisar os
+    mesmos pacientes pela segunda vez — eles já sabem que o médico não vem.
+
+    Falha de leitura devolve vazio: na dúvida o paciente é avisado.
+    """
+    if not (medico and data_falta):
+        return set()
+    import sqlite3
+    db_path = os.getenv("WAPP_CTRL_DB", "/opt/camim-auth/whatsapp_cobranca.db")
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            rows = conn.execute(
+                "SELECT nome, telefone FROM envios "
+                "WHERE posto = ? AND medico = ? AND data_falta = ? "
+                "  AND ref LIKE 'falta %' AND ref <> ? AND status LIKE 'accepted%'",
+                (posto, medico, data_falta, exceto_ref),
+            ).fetchall()
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("leitura de avisados do médico %s em %s falhou", medico, data_falta)
+        return set()
+    return {((n or "").strip().lower(), t or "") for n, t in rows}
+
+
+def _planejar_envio(linhas: list[dict], ja_recebeu: set, ja_avisados_dia: set) -> dict:
+    """Quem recebe mensagem neste envio: UM aviso por paciente.
+
+    Paciente = nome + telefone (dependentes da mesma família dividem o número
+    e cada um precisa do próprio aviso). Quem tem duas linhas no F3 para o
+    médico no dia recebe uma mensagem só — ela não cita horário — e as duas
+    linhas levam a anotação (`linhas`).
+
+    `ja_recebeu`: recebeu por ESTA falta (reenvio aos que faltaram).
+    `ja_avisados_dia`: recebeu por outra falta do mesmo médico no mesmo dia.
+    """
+    plano = {"enviar": [], "pulados": [], "pulados_outra_falta": [],
+             "sem_telefone": [], "falhados": []}
+    por_chave, resolvidos = {}, set()
+    for l in linhas:
+        if l.get("erro"):
+            plano["falhados"].append({"paciente": l.get("nome"), "erro": l["erro"]})
+            continue
+        nome = (l.get("nome") or "").strip()
+        tel = l.get("telefone") or ""
+        chave = (nome.lower(), tel)
+        if chave in por_chave:
+            por_chave[chave]["linhas"].append(l["id_ls"])
+            continue
+        if chave in resolvidos:
+            continue
+        if chave in ja_recebeu:
+            plano["pulados"].append({"paciente": nome, "telefone": tel or None})
+        elif not tel:
+            plano["sem_telefone"].append({"paciente": nome})
+        elif chave in ja_avisados_dia:
+            plano["pulados_outra_falta"].append({"paciente": nome, "telefone": tel})
+        else:
+            por_chave[chave] = {**l, "nome": nome, "linhas": [l["id_ls"]]}
+            plano["enviar"].append(por_chave[chave])
+            continue
+        resolvidos.add(chave)
+    return plano
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -733,7 +863,8 @@ def api_wpp_status():
         id_falta = 0
     if not id_falta:
         return jsonify({"error": "id_falta obrigatório"}), 400
-    return jsonify(_envios_da_falta(id_falta, posto))
+    return jsonify({**_envios_da_falta(id_falta, posto),
+                    "andamento": _ENVIO_ANDAMENTO.get((posto, id_falta))})
 
 
 @medico_falta_bp.get("/api/medico_falta/conversas")
@@ -985,7 +1116,7 @@ def api_agendamentos():
             sql += " ORDER BY HoraPrevistaConsulta"
             cur.execute(sql, params)
             out = []
-            for r in cur.fetchall():
+            for r in _linhas_unicas(cur.fetchall()):
                 out.append({
                     "id_lancamento_servico": int(r[0]),
                     "matricula": str(r[1]).strip() if r[1] is not None else "",
@@ -1077,7 +1208,7 @@ def api_dias_periodo():
                 faltas.setdefault(d, {"id_falta": int(r[1]), "motivo": (r[2] or "").strip()})
 
             # Pacientes por dia — mesma view e filtros do /insert.
-            sql = """SELECT CAST(DataConsulta AS DATE), COUNT(*)
+            sql = """SELECT CAST(DataConsulta AS DATE), COUNT(DISTINCT idLancamentoServico)
                        FROM vw_Cad_LancamentoProntuarioComDesistencia WITH (NOLOCK)
                       WHERE idMedico = ?
                         AND DataConsulta >= ? AND DataConsulta < ?
@@ -1192,6 +1323,8 @@ def api_insert():
     dh_ini = datetime.combine(data_falta, h_ini)
     dh_fim = datetime.combine(data_falta, h_fim)
 
+    trava = _lock_do_cadastro(posto, idmedico, data_falta, especialidade)
+    trava.acquire()
     try:
         with _conn_for_posto(posto) as con:
             id_usuario_op = _resolver_idusuario_no_posto(con, login_campinho)
@@ -1202,22 +1335,32 @@ def api_insert():
             # Anti-duplicidade: não permite 2 faltas ativas para o mesmo
             # médico+especialidade+dia. Médico com 5 especialidades pode estar
             # faltando em só uma — outras especialidades seguem atendendo.
+            # A falta cadastrada pelo ERP vem SEM DataFalta (só DataHora): com
+            # `DataFalta = ?` ela passava batida, nascia a segunda falta e a
+            # view do F3 devolvia cada paciente duas vezes — mensagem em dobro.
             cur.execute(
-                """SELECT TOP 1 idFalta FROM Cad_MedicoFalta
-                    WHERE idMedico = ?
-                      AND DataFalta = ?
-                      AND LTRIM(RTRIM(ISNULL(Especialidade,''))) = ?
-                      AND Desativado = 0""",
+                """SELECT TOP 1 mf.idFalta, u.Usuario, mf.DataFalta
+                     FROM Cad_MedicoFalta mf
+                     LEFT JOIN sis_usuario u ON u.idUsuario = mf.idUsuario
+                    WHERE mf.idMedico = ?
+                      AND ISNULL(mf.DataFalta, CAST(mf.DataHora AS DATE)) = ?
+                      AND LTRIM(RTRIM(ISNULL(mf.Especialidade,''))) = ?
+                      AND mf.Desativado = 0
+                    ORDER BY mf.idFalta""",
                 idmedico, data_falta, especialidade,
             )
             existente = cur.fetchone()
             if existente:
+                quem = f", cadastrada por {existente[1].strip()}" if existente[1] else ""
+                onde = " no ERP" if existente[2] is None else ""
                 return jsonify({
                     "error": (
-                        f"Já existe falta cadastrada (idFalta={int(existente[0])}) "
+                        f"Já existe falta ativa (idFalta={int(existente[0])}{quem}{onde}) "
                         f"para esse médico em {data_falta.strftime('%d/%m/%Y')} "
                         f"na especialidade {especialidade}. "
-                        f"Edite ou desative a existente antes de criar outra."
+                        f"Duas faltas no mesmo dia fazem cada paciente aparecer em dobro no F3 "
+                        f"e receber a mensagem duas vezes. Para avisar os pacientes pelo "
+                        f"WhatsApp, apague a existente e cadastre de novo por aqui."
                     ),
                     "duplicada": True,
                     "id_falta_existente": int(existente[0]),
@@ -1232,7 +1375,7 @@ def api_insert():
             # Falta integral = ignora filtro de hora (pacientes sem HoraPrevistaConsulta
             # contam). Detalhes no comentário do endpoint /api/medico_falta/agendamentos.
             integral_count = (hora_ini == "00:00" and hora_fim == "23:59")
-            sql_count = """SELECT COUNT(*)
+            sql_count = """SELECT COUNT(DISTINCT idLancamentoServico)
                      FROM vw_Cad_LancamentoProntuarioComDesistencia WITH (NOLOCK)
                      WHERE idMedico = ?
                        AND DataConsulta >= ? AND DataConsulta <  ?
@@ -1306,7 +1449,7 @@ def api_insert():
                     "telefone_raw": str(r[3]).strip() if r[3] is not None else "",
                     "especialidade": (r[4] or "").strip(),
                 }
-                for r in cur.fetchall()
+                for r in _linhas_unicas(cur.fetchall())
             ]
 
             _audit(con, id_falta, ID_TABELA_CAD_MEDICO_FALTA, ID_COMANDO_INCLUSAO,
@@ -1326,6 +1469,8 @@ def api_insert():
     except Exception as e:
         logger.exception("INSERT Cad_MedicoFalta falhou no posto %s", posto)
         return jsonify({"error": str(e)[:400]}), 500
+    finally:
+        trava.release()
 
 
 @medico_falta_bp.post("/api/medico_falta/desativar")
@@ -1418,8 +1563,12 @@ def api_enviar_wpp():
     # Como o envio longo devolve 504 pro browser mesmo tendo funcionado, um
     # segundo POST pra mesma falta é quase sempre o operador achando que
     # falhou — e não um reenvio querido. Só passa com "forcar": true explícito.
+    # "simular": true devolve quem receberia e quem seria pulado, e para ali:
+    # não envia, não grava em envios, não anota, não cria CRM. É o dry-run
+    # deste envio (cada mensagem custa e não tem volta).
+    simular = bool(data.get("simular"))
     ja_enviado = _envios_da_falta(id_falta, posto)
-    if ja_enviado["total"] and not data.get("forcar"):
+    if ja_enviado["total"] and not data.get("forcar") and not simular:
         return jsonify({
             **ja_enviado,
             "ja_enviado": True,
@@ -1558,16 +1707,12 @@ def api_enviar_wpp():
             phone_number_id_camp = _pn_id_resolver(numero_saida_str)
         except Exception:
             phone_number_id_camp = None
+        ref_falta = f"falta {id_falta}{posto}"
+        linhas_f3 = _linhas_unicas(agendamentos)
         with _conn_for_posto(posto) as con:
             cur = con.cursor()
-            enviados, falhados, sem_telefone, pulados = [], [], [], []
-            # Só quem REALMENTE recebeu é pulado no reenvio. Quem ficou como
-            # falha ou sem telefone tem que ser tentado de novo.
-            ja_recebeu = {
-                ((p.get("paciente") or "").strip().lower(), p.get("telefone") or "")
-                for p in ja_enviado["pacientes"] if p["classe"] == "enviado"
-            }
-            for ag in agendamentos:
+            enviados, linhas_resolvidas = [], []
+            for ag in linhas_f3:
                 id_lancamento_servico, idcli, iddep, paciente_view, hora, tel_view, especialidade = ag
 
                 # --- (a) resolve titular SEMPRE pra ter matricula + idEndereco ---
@@ -1579,11 +1724,12 @@ def api_enviar_wpp():
                 )
                 tit_row = cur.fetchone()
                 if not tit_row:
-                    falhados.append({"paciente": paciente_view, "erro": "titular não encontrado em cad_cliente"})
+                    linhas_resolvidas.append({"id_ls": int(id_lancamento_servico), "nome": paciente_view,
+                                              "telefone": None,
+                                              "erro": "titular não encontrado em cad_cliente"})
                     continue
                 tit_nome, tit_nome_social, tit_tel_wpp, tit_tel_cel, matricula_raw, id_endereco_cliente = tit_row
                 titular_resolvido = (tit_nome_social or tit_nome or "").strip()
-                matricula_base = re.sub(r"\D", "", str(matricula_raw or ""))
 
                 # Override paciente info se for dependente
                 if iddep and int(iddep) > 0:
@@ -1603,31 +1749,57 @@ def api_enviar_wpp():
                     nome_paciente = titular_resolvido or (paciente_view or "").strip()
                     tel_wpp, tel_cel = tit_tel_wpp, tit_tel_cel
 
-                tel_limpo = _limpar_telefone(tel_wpp) or _limpar_telefone(tel_cel)
+                linhas_resolvidas.append({
+                    "id_ls": int(id_lancamento_servico), "nome": nome_paciente,
+                    "telefone": _limpar_telefone(tel_wpp) or _limpar_telefone(tel_cel),
+                    "idcli": idcli, "iddep": iddep, "titular": titular_resolvido,
+                    "matricula": _matricula_crm(matricula_raw),
+                    "id_endereco_cliente": id_endereco_cliente,
+                })
 
-                # Reenvio (forcar=true) só cobre quem ficou pra trás quando o
-                # worker morreu no meio do loop. Quem já recebeu é pulado —
-                # senão o reenvio parcial vira mensagem repetida cobrada.
-                # A chave é nome+telefone, não só telefone: dependentes da
-                # mesma família compartilham o número e cada um precisa do
-                # próprio aviso.
-                if (nome_paciente.strip().lower(), tel_limpo or "") in ja_recebeu:
-                    pulados.append({"paciente": nome_paciente, "telefone": tel_limpo})
-                    continue
+            # Reenvio (forcar=true) só cobre quem ficou pra trás quando o
+            # worker morreu no meio do loop. Só quem REALMENTE recebeu é
+            # pulado; quem ficou como falha ou sem telefone é tentado de novo.
+            ja_recebeu = {
+                ((p.get("paciente") or "").strip().lower(), p.get("telefone") or "")
+                for p in ja_enviado["pacientes"] if p["classe"] == "enviado"
+            }
+            plano = _planejar_envio(
+                linhas_resolvidas, ja_recebeu,
+                _avisados_medico_dia(posto, nome_medico_raw, data_str, ref_falta),
+            )
+            falhados, sem_telefone, pulados = plano["falhados"], plano["sem_telefone"], plano["pulados"]
+            pulados_outra_falta = plano["pulados_outra_falta"]
+            if simular:
+                return jsonify({
+                    "ok": True, "simulado": True, "id_falta": id_falta,
+                    "linhas_view": len(agendamentos), "total": len(linhas_f3),
+                    "a_enviar": [{"paciente": p["nome"], "telefone": p["telefone"],
+                                  "linhas": p["linhas"]} for p in plano["enviar"]],
+                    "pulados": pulados, "ja_avisados_outra_falta": pulados_outra_falta,
+                    "sem_telefone": sem_telefone, "falhados": falhados,
+                })
+            for s in sem_telefone:
+                _registrar_envio_log(
+                    campanha_id, posto, "", s["paciente"], wpp_template,
+                    "erro:sem_telefone", None,
+                    ref_extra=ref_falta,
+                    medico=nome_medico_raw or None,
+                    especialidade=especialidade_falta or None,
+                    data_falta=data_str or None,
+                    hora_falta=hora_falta_str,
+                    motivo_falta=motivo_label if motivo_label != "—" else None,
+                )
 
-                if not tel_limpo:
-                    sem_telefone.append({"paciente": nome_paciente})
-                    _registrar_envio_log(
-                        campanha_id, posto, "", nome_paciente, wpp_template,
-                        "erro:sem_telefone", None,
-                        ref_extra=f"falta {id_falta}{posto}",
-                        medico=nome_medico_raw or None,
-                        especialidade=especialidade_falta or None,
-                        data_falta=data_str or None,
-                        hora_falta=hora_falta_str,
-                        motivo_falta=motivo_label if motivo_label != "—" else None,
-                    )
-                    continue
+            andamento = _ENVIO_ANDAMENTO[(posto, id_falta)] = {
+                "a_avisar": len(plano["enviar"]), "feitos": 0, "terminou": False,
+            }
+            for p in plano["enviar"]:
+                andamento["feitos"] += 1
+                id_lancamento_servico, idcli, iddep = p["id_ls"], p["idcli"], p["iddep"]
+                nome_paciente, tel_limpo = p["nome"], p["telefone"]
+                titular_resolvido, matricula_base = p["titular"], p["matricula"]
+                id_endereco_cliente = p["id_endereco_cliente"]
 
                 # Parâmetros do template (template recriado em 2026-05-01 com nomes minúsculos):
                 #   {{paciente}} {{medico}} {{data_consulta}} {{local}}
@@ -1726,15 +1898,17 @@ def api_enviar_wpp():
                 ticket_str = (f"#{ticket_number}" if ticket_number
                               else (str(ticket_id) if ticket_id else "?"))
                 texto_obs = _texto_anotacao(numero_saida_str, ticket_str)
-                obs_res = _anotar_prontuario(
-                    con, id_endereco_posto, int(id_lancamento_servico),
-                    texto_obs, id_usuario_op,
-                )
-                paciente_info["observacao_ok"] = bool(obs_res.get("ok"))
-                if not obs_res.get("ok"):
-                    paciente_info["observacao_erro"] = obs_res.get("error", "")[:300]
-                    logger.warning("append observacao falhou (idLs=%s): %s",
-                                   id_lancamento_servico, obs_res.get("error"))
+                # A mensagem é uma por paciente; a anotação vai em TODAS as
+                # linhas dele no F3 — a recepção confere linha por linha.
+                paciente_info["observacao_ok"] = True
+                for id_ls in p["linhas"]:
+                    obs_res = _anotar_prontuario(con, id_endereco_posto, id_ls,
+                                                 texto_obs, id_usuario_op)
+                    if not obs_res.get("ok"):
+                        paciente_info["observacao_ok"] = False
+                        paciente_info["observacao_erro"] = obs_res.get("error", "")[:300]
+                        logger.warning("append observacao falhou (idLs=%s): %s",
+                                       id_ls, obs_res.get("error"))
 
                 # --- (d) cria CRM (motivo ORIENTAÇÃO AO CLIENTE / tipo OUTROS) ---
                 # historico no estilo do sp_CRM_Insert (vê manual_crm_api.html)
@@ -1785,17 +1959,20 @@ def api_enviar_wpp():
                                    idcli, id_lancamento_servico, crm_res.get("error"))
 
                 enviados.append(paciente_info)
+            andamento["terminou"] = True
 
         return jsonify({
             "ok": True,
             "id_falta": id_falta,
             "campanha_id": campanha_id,
-            "total": len(agendamentos),
+            "total": len(linhas_f3),
             "enviados": len(enviados),
             "falhados": len(falhados),
             "sem_telefone": len(sem_telefone),
             "pulados": len(pulados),
             "detalhes_pulados": pulados,
+            "ja_avisados_outra_falta": len(pulados_outra_falta),
+            "detalhes_ja_avisados": pulados_outra_falta,
             "observacoes_ok": sum(1 for e in enviados if e.get("observacao_ok")),
             "crms_ok":        sum(1 for e in enviados if e.get("crm_ok")),
             "numero_saida":   numero_saida_str,
@@ -1805,4 +1982,8 @@ def api_enviar_wpp():
         })
     except Exception as e:
         logger.exception("enviar_wpp falhou (id_falta=%s)", id_falta)
+        # Parou no meio: o /wpp_status precisa dizer que ninguém mais vai
+        # receber, senão a tela fica esperando um envio que já morreu.
+        if (posto, id_falta) in _ENVIO_ANDAMENTO:
+            _ENVIO_ANDAMENTO[(posto, id_falta)].update(terminou=True, interrompido=True)
         return jsonify({"error": str(e)[:400]}), 500
