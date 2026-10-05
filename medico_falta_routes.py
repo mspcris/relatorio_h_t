@@ -30,7 +30,7 @@ from flask import Blueprint, jsonify, request
 # Reusa helpers do módulo medico_novo (sem duplicar lógica de auth/conexão/audit)
 from medico_novo_routes import (
     _check_admin, _conn_for_posto, _require_posto_in_acl,
-    _resolver_idusuario_no_posto, _audit, ERR_SEM_VINCULO,
+    _resolver_idusuario_no_posto, _audit, ERR_SEM_VINCULO, ID_COMANDO_EDICAO,
 )
 
 logger = logging.getLogger(__name__)
@@ -178,6 +178,92 @@ def _camila3_append_observacao(id_endereco: int, id_lancamento_servico: int,
         return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
     except Exception as e:
         return {"ok": False, "error": str(e)[:200]}
+
+
+def _texto_anotacao(numero_saida: str, ticket_str: str) -> str:
+    """Frase que vai para o F3. Uma só, usada no envio e no reanotar_falta_wpp:
+    a trava contra anotação repetida compara este texto letra a letra."""
+    return f"Foi enviada mensagem pelo whatsapp: {numero_saida} no ticket-chat: {ticket_str}"
+
+
+def _append_observacao_direto(con: pyodbc.Connection, id_lancamento_servico: int,
+                               texto: str, id_usuario: int) -> dict:
+    """O mesmo append do POST /f3/.../observacao, pela conexão do posto que o
+    envio já tem aberta. É a segunda rota da anotação — ver _anotar_prontuario.
+
+    Não repete a anotação: se o texto já está no campo (a API deu timeout na
+    RESPOSTA mas tinha gravado), não mexe e devolve ok.
+    """
+    texto = (texto or "").strip()
+    cur = con.cursor()
+    try:
+        # Lançamento aberto por alguém no ERP não pode segurar o laço: os
+        # pacientes seguintes ainda estão esperando a mensagem deles.
+        cur.execute("SET LOCK_TIMEOUT 8000")
+        cur.execute(
+            """UPDATE Cad_LancamentoServico
+                  SET MotivoDesistencia = ISNULL(CAST(MotivoDesistencia AS VARCHAR(MAX)), '') + ?
+                WHERE idLancamentoServico = ?
+                  AND CHARINDEX(?, ISNULL(CAST(MotivoDesistencia AS VARCHAR(MAX)), '')) = 0""",
+            f" - {texto} - ", int(id_lancamento_servico), f"{texto} -",
+        )
+        if cur.rowcount == 0:
+            cur.execute("SELECT 1 FROM Cad_LancamentoServico WHERE idLancamentoServico = ?",
+                        int(id_lancamento_servico))
+            if cur.fetchone():
+                return {"ok": True, "ja_anotado": True}
+            return {"ok": False,
+                    "error": f"idLancamentoServico {id_lancamento_servico} não encontrado no posto"}
+        # idTabela não é igual entre os postos (47 em J e R, 48 em A, os dois
+        # em C/D/M/P) — resolver pelo nome, como a API faz.
+        cur.execute("SELECT MIN(idTabela) FROM Sis_HistoricoTabela WHERE Tabela = ?",
+                    "Cad_LancamentoServico")
+        row = cur.fetchone()
+        if not row or row[0] is None:
+            con.rollback()
+            return {"ok": False,
+                    "error": "Sis_HistoricoTabela sem Cad_LancamentoServico — sem auditoria não grava"}
+        _audit(con, int(id_lancamento_servico), int(row[0]), ID_COMANDO_EDICAO,
+               int(id_usuario), f"Append MotivoDesistencia: - {texto} -")
+        con.commit()
+        return {"ok": True}
+    except Exception as e:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        return {"ok": False, "error": str(e)[:200]}
+    finally:
+        # A conexão continua em uso no laço — devolve a espera ao padrão.
+        try:
+            cur.execute("SET LOCK_TIMEOUT -1")
+        except Exception:
+            pass
+
+
+def _anotar_prontuario(con: pyodbc.Connection, id_endereco: int,
+                        id_lancamento_servico: int, texto: str, id_usuario: int) -> dict:
+    """Anota o envio no F3 (MotivoDesistencia): pela API e, se ela recusar,
+    direto no posto.
+
+    Por que duas rotas (chamado MUU-GWB-HNM3, 2026-10-05): a recepção lê essa
+    anotação como a prova de que o paciente foi avisado. A API tem um disjuntor
+    por worker que recusa o posto com 503 enquanto houver uma conexão dela
+    pendurada no link (até ~16 min) — de 30/09 a 05/10 isso derrubou 14 % das
+    anotações em A e 24 % em G, com a mensagem entregue e o F3 em branco. Já
+    este request acabou de ler os pacientes pela própria conexão com o posto:
+    se ela serviu para ler, serve para anotar.
+    """
+    res = _camila3_append_observacao(id_endereco, id_lancamento_servico, texto, id_usuario)
+    if res.get("ok"):
+        return {**res, "via": "api"}
+    erro_api = res.get("error", "")
+    direto = _append_observacao_direto(con, id_lancamento_servico, texto, id_usuario)
+    if direto.get("ok"):
+        logger.warning("append observacao pela API recusado (idLs=%s): %s — resolvido direto no posto",
+                       id_lancamento_servico, erro_api)
+        return {**direto, "via": "direto", "erro_api": erro_api}
+    return {"ok": False, "error": f"API: {erro_api} · direto no posto: {direto.get('error', '')}"}
 
 
 def _camila3_create_crm(payload: dict) -> dict:
@@ -1639,17 +1725,14 @@ def api_enviar_wpp():
                 # (cuid) só se o lookup MySQL falhar.
                 ticket_str = (f"#{ticket_number}" if ticket_number
                               else (str(ticket_id) if ticket_id else "?"))
-                texto_obs = (f"Foi enviada mensagem pelo whatsapp: {numero_saida_str} "
-                             f"no ticket-chat: {ticket_str}")
-                obs_res = _camila3_append_observacao(
-                    id_endereco=id_endereco_posto,
-                    id_lancamento_servico=int(id_lancamento_servico),
-                    texto=texto_obs,
-                    id_usuario=id_usuario_op,
+                texto_obs = _texto_anotacao(numero_saida_str, ticket_str)
+                obs_res = _anotar_prontuario(
+                    con, id_endereco_posto, int(id_lancamento_servico),
+                    texto_obs, id_usuario_op,
                 )
                 paciente_info["observacao_ok"] = bool(obs_res.get("ok"))
                 if not obs_res.get("ok"):
-                    paciente_info["observacao_erro"] = obs_res.get("error", "")[:200]
+                    paciente_info["observacao_erro"] = obs_res.get("error", "")[:300]
                     logger.warning("append observacao falhou (idLs=%s): %s",
                                    id_lancamento_servico, obs_res.get("error"))
 

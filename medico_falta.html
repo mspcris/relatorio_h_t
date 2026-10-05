@@ -1177,7 +1177,7 @@
               <strong>WhatsApp disparado pelo número ${numeroSaida}.</strong>
               ${w.enviados} enviados · ${w.falhados} falhas · ${w.sem_telefone} sem telefone${w.pulados ? ` · ${w.pulados} pulados (já haviam recebido)` : ""}.<br>
               <small>
-                Prontuário (MotivoDesistencia) anotado em <strong>${w.observacoes_ok||0}/${w.enviados||0}</strong> ·
+                Anotação no F3 (prontuário) gravada em <strong>${w.observacoes_ok||0}/${w.enviados||0}</strong> ·
                 CRM criado em <strong>${w.crms_ok||0}/${w.enviados||0}</strong> ·
                 campanha id=${w.campanha_id} no painel <a href="https://camila1.ia.camim.com.br/wpp" target="_blank">camila1.ia.camim.com.br/wpp</a><br>
                 As respostas do cliente ficam registradas nesta falta <strong>até 00h de hoje</strong>;
@@ -1185,6 +1185,25 @@
                 Para acompanhar, use o botão de conversas na lista de faltas.
               </small>
             </div>`;
+          // A recepção confere no F3 quem foi avisado. Mensagem entregue com o
+          // F3 em branco é lida como "não recebeu" (chamado MUU-GWB-HNM3) —
+          // então quem ficou sem a anotação aparece aqui pelo nome, dizendo que
+          // RECEBEU, e não num contador pequeno dentro da caixa verde.
+          const semF3 = (w.detalhes_enviados || []).filter(x => !x.observacao_ok);
+          if (semF3.length) {
+            html += `
+            <div class="alert alert-warning">
+              <strong>${semF3.length === 1 ? "1 paciente recebeu" : semF3.length + " pacientes receberam"} o WhatsApp,
+              mas a anotação não entrou no F3.</strong>
+              No F3 ${semF3.length === 1 ? "ele vai" : "eles vão"} aparecer sem a linha
+              “Foi enviada mensagem pelo whatsapp” — <u>a mensagem saiu mesmo assim, não reenvie</u>.
+              <ul class="mb-1 mt-2">${semF3.map(x => `<li><strong>${escTxt(x.paciente)}</strong>${
+                x.ticket_number ? ` — conversa no ticket #${x.ticket_number}` : ""}</li>`).join("")}</ul>
+              <small>Motivo: o banco do posto não aceitou a gravação naquele momento
+              (${escTxt(semF3[0].observacao_erro || "sem detalhe")}). Avise a TI informando a falta
+              ${idFalta}${escTxt(state.posto)} para a anotação ser refeita.</small>
+            </div>`;
+          }
           if (w.detalhes_enviados && w.detalhes_enviados.length) {
             html += '<details class="mb-2"><summary class="text-success"><strong>Enviados (' + w.detalhes_enviados.length + ')</strong></summary><ul class="list-group mt-2">';
             w.detalhes_enviados.forEach(x => {

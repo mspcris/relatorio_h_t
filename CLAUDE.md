@@ -1806,6 +1806,54 @@ cobrança morreu no meio da rodada por DIAS sem ninguém perceber).
 
 ---
 
+## Falta do médico — anotação no F3 tem DUAS rotas (chamado MUU-GWB-HNM3, 2026-10-05)
+
+Anchieta reclamou: *"tem clientes que não receberam a mensagem"*. Receberam —
+as 15 da falta 175574A foram entregues (12 lidas, 3 entregues, conferido no
+`Webhook` do chat). O que faltou em 6 delas foi a linha *"Foi enviada mensagem
+pelo whatsapp … no ticket-chat: #N"* no F3, que é por onde a recepção confere
+quem foi avisado. **F3 em branco é lido como "não recebeu".**
+
+- **Causa:** a anotação ia só pela API do prontuário (`api_fin_receita`,
+  `POST /f3/.../observacao`). Ela tem um disjuntor **por worker** (4 workers) que
+  recusa o posto com 503 *"conexão pendurada há Ns"* enquanto houver um connect
+  ODBC dela preso no link do posto (até ~16 min). Request que cai num worker
+  preso falha, o vizinho passa — daí o "9 de 15". Em 72 h: 583 episódios em
+  `anchieta.ddns.me` (A e N dividem o host), 82 em Nova Iguaçu, 30 em Bangu.
+  De 30/09 a 05/10 falharam 23 de 160 anotações em A (14 %) e 10 de 42 em G (24 %).
+- **Correção:** `_anotar_prontuario()` tenta a API e, se ela recusar por qualquer
+  motivo, `_append_observacao_direto()` grava pela conexão do posto que o envio
+  já tem aberta (mesmo UPDATE de append + `Sis_Historico` na mesma transação;
+  sem auditoria não grava). Os 13 postos dão UPDATE em `Cad_LancamentoServico`
+  ao usuário do KPI e a tabela não tem trigger (medido 05/10).
+- **Não duplica:** o UPDATE só entra se o texto ainda não está no campo
+  (`CHARINDEX`). Cobre a API que deu timeout na resposta mas tinha gravado.
+- **`idTabela` de `Cad_LancamentoServico` não é igual entre postos** (47 em J e
+  R, 48 em A/B/G/I/N/X/Y, os dois em C/D/M/P) — resolver pelo nome, nunca fixo.
+- `SET LOCK_TIMEOUT 8000` só durante o append e devolvido a −1 depois: a conexão
+  segue no laço e os pacientes seguintes ainda esperam a mensagem.
+- **A tela** lista pelo nome quem ficou sem a anotação e diz que RECEBEU. Era um
+  "9/15" em letra pequena dentro da caixa verde.
+- **`reanotar_falta_wpp.py`** fecha o que ficou para trás (`--desde`, `--falta
+  175574A`; sem `--run` é dry-run; `--run` exige `--login` para a auditoria).
+  Não envia nada. Casa envio ↔ linha do F3 pelo nome do paciente e o número do
+  ticket; o que não casar 1 para 1 sai como "sem par", nunca chutado. Rodar com
+  o venv do camim-auth: `cd /opt/camim-auth && venv/bin/python
+  /opt/relatorio_h_t/reanotar_falta_wpp.py …`. **Não importar `wpp_cobranca_db`
+  em script de leitura**: o import roda `init_db()`.
+- O texto da anotação sai de `_texto_anotacao()` — envio e reparo usam a mesma
+  função porque a trava contra repetição compara a frase letra a letra.
+
+**Achados do mesmo dia, NÃO corrigidos (decisão pendente do Cristiano):**
+- **Mensagem de falta repetida ao mesmo paciente:** 634 de 5.344 aceitas desde
+  maio (≈ R$ 220), 17 % desde agosto. 534 saem na mesma passada: a
+  `vw_Cad_LancamentoProntuarioComDesistencia` devolve o mesmo
+  `idLancamentoServico` duas vezes e o laço envia para as duas. 100 saem minutos
+  depois (reenvio).
+- **CRM não é criado para particular:** `str(matricula_raw or "")` transforma
+  matrícula 0 em vazio e a API responde 400 *"matricula deve ser enviada sem a
+  letra do posto"*. Falta saber se o `sp_CRM_Insert` aceita matrícula 0.
+
 ## Falta do médico por PERÍODO (`/medico_falta`) — chamado #31809, 2026-09-30
 
 Campo **Até** ao lado da data: fecha vários dias de uma vez. É o cadastro
