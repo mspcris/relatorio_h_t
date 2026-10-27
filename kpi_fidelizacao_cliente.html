@@ -381,6 +381,15 @@
                   </div>
                 </div>
 
+                <!-- CHURN DOS POSTOS (conta do gestor) -->
+                <div class="card">
+                    <div class="card-header" style="background:#00695c;color:#fff;">
+                        <h3 class="card-title mb-0"><i class="fas fa-calculator mr-2"></i>Churn dos postos — perda liquida de pagantes (conta usada pelos gestores)</h3>
+                    </div>
+                    <div class="card-body" id="churnGestorCards"><div class="text-muted text-center p-3">Carregando dados...</div></div>
+                    <div class="card-footer text-muted" style="font-size:0.85rem" id="churnGestorComo"></div>
+                </div>
+
                 <!-- CHURN OPERACIONAL -->
                 <div class="card">
                     <div class="card-header bg-dark">
@@ -838,13 +847,19 @@ EXEC PC_Fin_Fidelizacao @database = @ini
         }
 
         let growthData = null;
+        let pagantesData = null;   // consolidado_mensal_por_posto.json (mensalidade_qtd = KPI Metas)
+        let vendasData = null;     // json_vendas/vendas_mensal.json (regra unica de venda)
 
         async function loadData() {
             try {
-                const [fidResp, growthResp] = await Promise.all([
+                const [fidResp, growthResp, pagResp, vendResp] = await Promise.all([
                     fetch('/json_consolidado/fidelizacao_cliente.json'),
-                    fetch('/json_consolidado/growth_dashboard.json')
+                    fetch('/json_consolidado/growth_dashboard.json'),
+                    fetch('/json_consolidado/consolidado_mensal_por_posto.json').catch(() => null),
+                    fetch('/json_vendas/vendas_mensal.json').catch(() => null)
                 ]);
+                try { if (pagResp && pagResp.ok) pagantesData = await pagResp.json(); } catch (e) { pagantesData = null; }
+                try { if (vendResp && vendResp.ok) vendasData = await vendResp.json(); } catch (e) { vendasData = null; }
                 if (!fidResp.ok) throw new Error('Erro ao carregar dados de fidelização');
                 const json = await fidResp.json();
 
@@ -896,6 +911,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
 
         function render() {
             updateChartTitles();
+            renderChurnGestor();
             renderChurnOperacional();
             renderStats();
             renderSurvivorCurve();
@@ -984,6 +1000,106 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             }
             container.innerHTML = html;
             renderChurnOperacionalComo(exemplo, postos);
+        }
+
+        // ── Churn dos postos: a conta que os gestores fazem na planilha ──────
+        // Pedido do Cristiano (2026-10-27), conta do Vinicius (gestor de Realengo):
+        //   perdido do mes = vendas do mes - (pagantes do mes - pagantes do mes anterior)
+        //   churn %        = perdido do mes / pagantes do mes anterior
+        // pagantes = mensalidades PAGAS no mes = mensalidade_qtd do KPI Metas
+        // (consolidado_mensal_por_posto.json); vendas = regra unica do KPI Vendas
+        // (json_vendas/vendas_mensal.json, por_posto[P].qtd_vendas).
+        function renderChurnGestor() {
+            const box = el('churnGestorCards'), como = el('churnGestorComo');
+            if (!box) return;
+            if (!pagantesData || !vendasData) {
+                box.innerHTML = '<p class="text-muted mb-0">Nao foi possivel carregar mensalidades pagas e vendas (KPI Metas / KPI Vendas). Sem eles esta conta nao e feita.</p>';
+                if (como) como.innerHTML = '';
+                return;
+            }
+            const postos = getSelectedPostos();
+            const n = v => Number(v || 0).toLocaleString('pt-BR');
+            const hoje = new Date();
+            const currentYm = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+            const prevYm = ym => { const [y, m] = ym.split('-').map(Number); return m === 1 ? `${y-1}-12` : `${y}-${String(m-1).padStart(2,'0')}`; };
+            const pagantes = ym => {
+                const d = pagantesData[ym]; if (!d) return null;
+                let t = 0, tem = false;
+                for (const p of postos) { if (d[p] && d[p].mensalidade_qtd != null) { t += Number(d[p].mensalidade_qtd) || 0; tem = true; } }
+                return tem ? t : null;
+            };
+            const vendas = ym => {
+                const d = vendasData[ym]; if (!d || !d.por_posto) return null;
+                let t = 0, tem = false;
+                for (const p of postos) { const r = d.por_posto[p]; if (r) { t += Number(r.qtd_vendas) || 0; tem = true; } }
+                return tem ? t : null;
+            };
+            const meses = Object.keys(pagantesData).filter(k => /^\d{4}-\d{2}$/.test(k) && k <= currentYm).sort().slice(-12);
+            let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0" style="font-size:0.9rem;">';
+            html += '<thead style="background:#004d40;color:#fff;"><tr>'
+                 + '<th style="padding:10px 14px;">Mes</th>'
+                 + '<th style="padding:10px 14px;text-align:right;" title="Mensalidades pagas no mes anterior (KPI Metas)">Pagantes<br><small>mes anterior</small></th>'
+                 + '<th style="padding:10px 14px;text-align:right;" title="Planos vendidos no mes (KPI Vendas)">Vendas<br><small>no mes</small></th>'
+                 + '<th style="padding:10px 14px;text-align:right;" title="Mensalidades pagas no mes (KPI Metas)">Pagantes<br><small>no mes</small></th>'
+                 + '<th style="padding:10px 14px;text-align:right;" title="Pagantes do mes menos pagantes do mes anterior">Cresceu<br><small>pagantes &minus; anterior</small></th>'
+                 + '<th style="padding:10px 14px;text-align:right;" title="Vendas menos o que a base cresceu">Perdidos<br><small>vendas &minus; cresceu</small></th>'
+                 + '<th style="padding:10px 14px;text-align:center;" title="Perdidos dividido pelos pagantes do mes anterior">Churn %</th>'
+                 + '</tr></thead><tbody>';
+            let exemplo = null, linhas = 0;
+            for (const ym of meses) {
+                const pm = prevYm(ym);
+                const pa = pagantes(pm), pt = pagantes(ym), vd = vendas(ym);
+                if (pa == null || pt == null || vd == null || pa <= 0) continue;
+                const cresceu = pt - pa, perdidos = vd - cresceu, pct = perdidos / pa * 100;
+                const parcial = ym === currentYm;
+                const cls = pct <= 1 ? 'cell-high' : pct <= 3 ? 'cell-medium' : 'cell-low';
+                const sinal = v => (v > 0 ? '+' : '') + n(v);
+                const conta = `${n(vd)} vendas - (${n(pt)} - ${n(pa)}) = ${n(perdidos)} perdidos; ${n(perdidos)} / ${n(pa)} = ${pct.toFixed(2).replace('.', ',')}%`;
+                let mes = formatMonth(ym);
+                if (parcial) mes += ' <span class="badge badge-warning" style="font-size:0.7rem;vertical-align:middle;" title="Mes em curso: pagantes e vendas ainda vao entrar.">PARCIAL</span>';
+                html += `<tr style="${parcial ? 'background:#fffbe6;font-style:italic;' : ''}">`
+                     + `<td style="padding:8px 14px;">${mes}</td>`
+                     + `<td style="padding:8px 14px;text-align:right;">${n(pa)}</td>`
+                     + `<td style="padding:8px 14px;text-align:right;">${n(vd)}</td>`
+                     + `<td style="padding:8px 14px;text-align:right;">${n(pt)}</td>`
+                     + `<td style="padding:8px 14px;text-align:right;">${sinal(cresceu)}</td>`
+                     + `<td style="padding:8px 14px;text-align:right;font-weight:600;">${n(perdidos)}</td>`
+                     + `<td style="padding:8px 14px;text-align:center;" class="${cls}" title="${conta}">${pct.toFixed(2).replace('.', ',')}%</td>`
+                     + '</tr>';
+                linhas++;
+                if (!parcial) exemplo = { ym, pm, pa, pt, vd, cresceu, perdidos, pct };
+            }
+            html += '</tbody></table></div>';
+            box.innerHTML = linhas ? html : '<p class="text-muted mb-0">Sem meses com pagantes e vendas para os postos selecionados.</p>';
+
+            const escopo = (selPostos === 'ALL') ? 'na rede' : `nos postos ${postos.join(', ')}`;
+            const f = v => v.toFixed(2).replace('.', ',');
+            const ex = exemplo ? `
+                <strong>Exemplo com ${formatMonth(exemplo.ym)} (${escopo}):</strong>
+                <ul style="margin:6px 0 6px 18px;padding:0;">
+                    <li>Pagantes em ${formatMonth(exemplo.pm)}: <strong>${n(exemplo.pa)}</strong>. Pagantes em ${formatMonth(exemplo.ym)}: <strong>${n(exemplo.pt)}</strong>. A base ${exemplo.cresceu >= 0 ? 'cresceu' : 'encolheu'} <strong>${n(Math.abs(exemplo.cresceu))}</strong>.</li>
+                    <li>Foram vendidos <strong>${n(exemplo.vd)}</strong> planos em ${formatMonth(exemplo.ym)}. Se ninguem tivesse saido, a base cresceria ${n(exemplo.vd)}.</li>
+                    <li>Perdidos = ${n(exemplo.vd)} &minus; ${n(exemplo.cresceu)} = <strong>${n(exemplo.perdidos)}</strong>. Churn = ${n(exemplo.perdidos)} &divide; ${n(exemplo.pa)} = <strong>${f(exemplo.pct)}%</strong>.</li>
+                </ul>` : '';
+            if (como) como.innerHTML = `
+                <div style="background:#e0f2f1;border-radius:8px;padding:12px 16px;margin-bottom:6px;border-left:4px solid #00695c;line-height:1.55;">
+                    <strong>O que esta tabela calcula:</strong> quantos pagantes a base perdeu no mes, descontando o que entrou de venda. E a conta que os gestores dos postos fazem na planilha.
+                    <br><strong>Conta:</strong>
+                    <code style="background:#c8e6e2;padding:1px 5px;border-radius:3px;">perdidos = vendas do mes &minus; (pagantes do mes &minus; pagantes do mes anterior)</code>
+                    &nbsp;e&nbsp; <code style="background:#c8e6e2;padding:1px 5px;border-radius:3px;">churn % = perdidos &divide; pagantes do mes anterior</code>
+                    <br><br>
+                    <strong>Pagantes</strong> = mensalidades <strong>pagas</strong> no mes, o mesmo numero do KPI Metas (Mensalidades).
+                    <strong>Vendas</strong> = planos vendidos no mes pela regra unica do KPI Vendas (mensalidade e taxa pagas, cliente ativo).
+                    <br><br>${ex}
+                    <strong>&#9888; Como ler:</strong>
+                    <ul style="margin:6px 0 0 18px;padding:0;">
+                        <li>E <strong>perda liquida</strong>: quem parou de pagar menos quem voltou a pagar ou quitou mensalidade atrasada no mes. Nao e a quantidade de cancelamentos — essa esta na tabela abaixo, que conta o cadastro.</li>
+                        <li>Pagantes conta <strong>mensalidades pagas</strong>, nao pessoas: quem quita duas atrasadas no mesmo mes entra duas vezes. Por isso pode aparecer perdido negativo (entraram mais pagamentos que o normal).</li>
+                        <li>As vendas podem diferir em poucas unidades da planilha do posto: a regra unica conta a venda no mes em que mensalidade e taxa ficaram pagas, e venda de cliente desativado depois sai da conta.</li>
+                        <li>Cores: verde ate 1% &middot; amarelo ate 3% &middot; vermelho acima de 3%. Passe o mouse no % para ver a conta da linha.</li>
+                    </ul>
+                </div>
+                <strong>Fonte:</strong> consolidado_mensal_por_posto.json (mensalidade_qtd, KPI Metas) e json_vendas/vendas_mensal.json (qtd_vendas, KPI Vendas).`;
         }
 
         // "Como foi calculado" da tabela de churn — escrito na tela, com o exemplo
