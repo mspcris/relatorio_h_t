@@ -11,6 +11,7 @@ Rotas:
   GET  /api/agenda_dia    → JSON {ok, posto, data, pacientes, gerado_em, meta}
   GET  /api/agenda_dia/meta → status por posto (gerado_em, sucesso, n_registros)
   GET  /session/me        → {email, postos} (postos = todos os 13)
+  GET  /login             → tela de login própria (identidade CAMIM) com o botão do idCamim
   GET  /auth/login        → inicia OIDC
   GET  /auth/callback     → callback OIDC
   POST /auth/logout       → encerra sessão + redirect end_session do IDCAMIM
@@ -101,12 +102,33 @@ def login_required(f):
     def wrapper(*args, **kwargs):
         if 'sub' not in session:
             session['next'] = request.url
-            return redirect(url_for('auth_login'))
+            return redirect(url_for('login_page'))
         return f(*args, **kwargs)
     return wrapper
 
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
+
+@app.get('/login')
+def login_page():
+    """Tela de login própria, com a identidade visual padrão da CAMIM.
+
+    Antes, quem não estava logado era jogado direto no idCamim e não sabia em
+    qual sistema estava entrando (2026-10-27). Agora vê esta tela e só vai ao
+    idCamim ao clicar em "Entrar com idCamim" (/auth/login). O `next` guardado
+    pelo login_required continua na sessão e é honrado no callback.
+    """
+    if 'sub' in session:
+        return redirect(session.pop('next', '/'))
+    nxt = request.args.get('next', '')
+    if nxt.startswith('/') and not nxt.startswith('//'):
+        session['next'] = nxt
+    msg = {
+        '1':      'Erro na autenticação. Tente novamente.',
+        'acesso': 'Acesso negado.',
+    }.get(request.args.get('e', ''), '')
+    return render_template('login.html', msg=msg)
+
 
 @app.get('/auth/login')
 def auth_login():
@@ -850,7 +872,7 @@ TMPL_ERRO = '''<!doctype html><html lang="pt-br"><head><meta charset="UTF-8">
   <div class="card-body text-center p-5">
     <h4 class="text-danger mb-3">{{ titulo }}</h4>
     <p class="text-muted">{{ msg }}</p>
-    <a href="/auth/login" class="btn btn-primary mt-3">Tentar novamente</a>
+    <a href="/login" class="btn btn-primary mt-3">Tentar novamente</a>
   </div>
 </div></body></html>'''
 
@@ -862,7 +884,7 @@ TMPL_LOGOUT = '''<!doctype html><html lang="pt-br"><head><meta charset="UTF-8">
   <div class="card-body text-center p-5">
     <h4 class="mb-3">Você saiu</h4>
     <p class="text-muted">Sessão encerrada.</p>
-    <a href="/auth/login" class="btn btn-primary mt-3">Entrar novamente</a>
+    <a href="/login" class="btn btn-primary mt-3">Entrar novamente</a>
   </div>
 </div></body></html>'''
 
