@@ -351,7 +351,7 @@
 
                 <!-- RÉGUA DA PÁGINA: como esta página mede churn (pedido do Cristiano, 2026-10-27) -->
                 <div class="mb-2" style="background:#e0f2f1;border-left:4px solid #00695c;border-radius:6px;padding:10px 14px;font-size:0.88rem;color:#37474f;line-height:1.55;">
-                    <strong>Como medimos churn:</strong> nao olhamos cancelamentos. Nosso churn e baseado em <strong>mensalidades pagas</strong> no mes (o mesmo numero do KPI Metas) e nas vendas do mes, como os gestores fazem nos postos:
+                    <strong>Como medimos churn:</strong> não olhamos cancelamentos. Nosso churn é baseado em <strong>mensalidades pagas</strong> no mês (o mesmo número do KPI Metas) e nas vendas do mês, como os gestores fazem nos postos:
                     <code style="background:#c8e6e2;padding:1px 5px;border-radius:3px;">perdidos = vendas do mes &minus; (pagantes do mes &minus; pagantes do mes anterior)</code>
                     e <code style="background:#c8e6e2;padding:1px 5px;border-radius:3px;">churn % = perdidos &divide; pagantes do mes anterior</code>.
                 </div>
@@ -391,7 +391,7 @@
                 <!-- CHURN DOS POSTOS (conta do gestor) -->
                 <div class="card">
                     <div class="card-header" style="background:#00695c;color:#fff;">
-                        <h3 class="card-title mb-0"><i class="fas fa-calculator mr-2"></i>Churn dos postos — perda liquida de pagantes (conta usada pelos gestores)</h3>
+                        <h3 class="card-title mb-0"><i class="fas fa-calculator mr-2"></i>Churn dos postos — perda líquida de pagantes (conta usada pelos gestores)</h3>
                     </div>
                     <div class="card-body" id="churnGestorCards"><div class="text-muted text-center p-3">Carregando dados...</div></div>
                     <div class="card-body pt-0" id="churnGestorPostos"></div>
@@ -401,31 +401,17 @@
                 <!-- RESUMO POR COHORT -->
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="card-title mb-0">Analise por Cohort — Retencao de Novos Clientes <span id="statsMonthLabel" class="badge badge-info ml-2" style="font-size:0.8rem;"></span></h3>
+                        <h3 class="card-title mb-0">Análise por cohort — o que acontece com cada turma de clientes novos <span id="statsMonthLabel" class="badge badge-info ml-2" style="font-size:0.8rem;"></span></h3>
                     </div>
-                    <div class="card-body kpi" id="statsCards"></div>
-                    <div class="card-footer text-muted" style="font-size:0.85rem">
-                        <div style="background:#f0fff4;border-radius:8px;padding:12px 16px;margin-bottom:10px;border-left:4px solid #28a745;line-height:1.55;">
-                            <strong>O que e "cohort"?</strong> Cohort e <strong>turma</strong>. Pensa numa escola: a "turma de 2020" sao todos os alunos que entraram juntos em 2020. Voce acompanha essa turma especifica ao longo do tempo pra ver quantos continuam la depois de 1, 2, 3 anos.
-                            <br><br>
-                            Aqui e a mesma ideia, so que com clientes: um <strong>cohort</strong> e o grupo de clientes que aderiram <strong>no mesmo mes</strong>. Ex: o "cohort de jan/26" sao todos que viraram clientes em janeiro de 2026. Dai a gente pergunta:
-                            <ul style="margin:6px 0 6px 18px;padding:0;">
-                                <li>Depois de <strong>1 mes</strong>, quantos % desses clientes continuam pagando?</li>
-                                <li>Depois de <strong>3 meses</strong>? <strong>6 meses</strong>? <strong>12 meses</strong>?</li>
-                            </ul>
-                            Se entraram 100 clientes e apos 3 meses restam 70, a <strong>retencao</strong> e 70% (e o <strong>churn do cohort</strong> e 30% — os que sairam).
-                            <br><br>
-                            <strong>Mesma regua do Churn dos postos (acima): pagamento.</strong> Um cliente da turma conta como "ficou" no mes em que <u>pagou mensalidade</u>; se nao pagou, conta como "saiu" naquele mes — mesmo que nao tenha cancelado no cadastro.
-                            <ul style="margin:6px 0 6px 18px;padding:0;">
-                                <li><strong>Churn dos postos:</strong> olha a <u>base inteira de pagantes</u> num mes — antigos e novos juntos.</li>
-                                <li><strong>Cohort:</strong> isola <u>so quem entrou no mesmo mes</u> e acompanha essa turma — "dos que entraram em jan/26, 70% ainda estao pagando apos 3 meses".</li>
-                            </ul>
-                            O cohort revela <strong>em qual momento da jornada</strong> o cliente mais desiste (problema de onboarding? do 6&ordm; mes?) — coisa que a media geral esconde.
-                            <br><br>
-                            <strong>Retencao</strong> = <code style="background:#e8f5e9;padding:2px 6px;border-radius:3px;">% que ficou</code>
-                            &nbsp;|&nbsp; <strong>Churn do cohort</strong> = <code style="background:#fce4ec;padding:2px 6px;border-radius:3px;">100% &minus; Retencao = % que saiu</code>
+                    <div class="card-body pb-0">
+                        <div style="background:#f3e5f5;border-left:4px solid #8e24aa;border-radius:6px;padding:10px 14px;font-size:0.88rem;color:#37474f;line-height:1.55;">
+                            <strong>O que é:</strong> cohort é uma <strong>turma</strong> — os clientes que entraram no mesmo mês e pagaram a primeira mensalidade. A partir daqui, tudo acompanha só essa turma.
+                            <br><strong>O que traz:</strong> quantos da turma continuam pagando depois de 1, 3, 6 e 12 meses, e em qual mês eles mais saem. Serve para achar o momento da jornada em que o cliente novo desiste.
+                            <br><strong>Como ler:</strong> <em>retenção</em> = % da turma que pagou a mensalidade daquele mês; <em>churn do cohort</em> = 100% &minus; retenção. A mensalidade conta como paga mesmo que tenha sido quitada depois, com atraso. Cliente desativado sai da turma inteira.
+                            <br><strong>Por que não bate com o churn do topo:</strong> o topo olha a base inteira de pagantes, mês a mês, e desconta as vendas. Aqui não entram vendas nem clientes antigos — só as saídas de uma turma. Além disso, cada mês é contado pela mensalidade <em>daquele</em> mês, paga em qualquer data, e não pelo que foi pago no mês. É uma leitura de apoio, não o número de churn da página.
                         </div>
                     </div>
+                    <div class="card-body kpi" id="statsCards"></div>
                 </div>
 
                 <!-- CURVA DE SOBREVIVÊNCIA + CHURN INCREMENTAL -->
@@ -433,15 +419,15 @@
                     <div class="col-lg-7">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0" id="titleSurvivor">Curva de Sobrevivencia — Retencao do Cohort</h3>
+                                <h3 class="card-title mb-0" id="titleSurvivor">Curva de Sobrevivência — Retenção do Cohort</h3>
                             </div>
                             <div class="card-body" style="height:320px">
                                 <canvas id="chartSurvivor"></canvas>
                             </div>
                             <div class="card-footer rastro">
                                 <div style="background:#fff8e1;border-radius:8px;padding:10px 14px;margin-bottom:8px;border-left:4px solid #ffc107;">
-                                    <strong>Como ler este grafico?</strong> A linha verde mostra quantos % dos clientes novos ainda estao pagando depois de 1, 2, 3... ate 12 meses.
-                                    A linha vermelha e o contrario: quantos % ja sairam. Se a linha verde cai muito rapido no comeco, significa que muitos clientes desistem logo — pode ser problema no atendimento inicial.
+                                    <strong>Como ler este gráfico?</strong> A linha verde mostra quantos % dos clientes novos ainda estão pagando depois de 1, 2, 3... até 12 meses.
+                                    A linha vermelha é o contrário: quantos % já saíram. Se a linha verde cai muito rápido no começo, significa que muitos clientes desistem logo — pode ser problema no atendimento inicial.
                                     <br><strong>Conta:</strong> <code style="background:#fff3cd;padding:2px 6px;border-radius:3px;" title="Clientes que pagaram no mes X dividido pelo total que entrou, vezes 100">Clientes pagando no mes X &divide; Total que entrou &times; 100</code>
                                 </div>
                                 <b>Fonte:</b> fidelizacao_cliente.json &rarr; export_fidelizacao.py &rarr; Stored Procedure PC_Fin_Fidelizacao
@@ -455,16 +441,16 @@
                     <div class="col-lg-5">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0" id="titleChurnInc">Churn Incremental — % perdido a cada mes</h3>
+                                <h3 class="card-title mb-0" id="titleChurnInc">Churn Incremental — % perdido a cada mês</h3>
                             </div>
                             <div class="card-body" style="height:320px">
                                 <canvas id="chartChurnIncremental"></canvas>
                             </div>
                             <div class="card-footer rastro">
                                 <div style="background:#fce4ec;border-radius:8px;padding:10px 14px;margin-bottom:8px;border-left:4px solid #dc3545;">
-                                    <strong>Como ler este grafico?</strong> Cada barra mostra quantos clientes a mais sairam naquele periodo.
-                                    Exemplo: se a barra "0 a 1m" e 15%, quer dizer que 15 de cada 100 clientes novos sairam no primeiro mes. Se a barra "1 a 2m" e 7%, mais 7 sairam no segundo mes.
-                                    Barras altas = momento critico onde mais gente desiste.
+                                    <strong>Como ler este gráfico?</strong> Cada barra mostra quantos clientes a mais saíram naquele período.
+                                    Exemplo: se a barra "0 a 1m" é 15%, quer dizer que 15 de cada 100 clientes novos saíram no primeiro mês. Se a barra "1 a 2m" é 7%, mais 7 saíram no segundo mês.
+                                    Barras altas = momento crítico onde mais gente desiste.
                                     <br><strong>Conta:</strong> <code style="background:#fce4ec;padding:2px 6px;border-radius:3px;" title="Retencao do mes anterior menos retencao do mes atual">Retencao[mes anterior] &minus; Retencao[mes atual] = % que saiu naquele intervalo</code>
                                 </div>
                             </div>
@@ -477,14 +463,14 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0" id="title1m">Retencao em - referente adesao em -. 1 mes - Por posto.</h3>
+                                <h3 class="card-title mb-0" id="title1m">Retenção em - referente adesão em -. 1 mês - Por posto.</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart1m"></canvas>
                             </div>
                             <div class="card-footer rastro">
                                 <div style="background:#e3f2fd;border-radius:8px;padding:10px 14px;border-left:4px solid #17a2b8;">
-                                    <strong>O que mostra?</strong> Dos clientes novos que entraram no mes, quantos % pagaram a 1a mensalidade no mes seguinte, em cada posto.
+                                    <strong>O que mostra?</strong> Dos clientes novos que entraram no mês, quantos % pagaram a 1a mensalidade no mês seguinte, em cada posto.
                                     <br>Postos com barra baixa (abaixo de 70%) podem ter problema no atendimento das primeiras semanas.
                                     <br><strong>Conta:</strong> <code style="background:#e3f2fd;padding:2px 6px;border-radius:3px;" title="Clientes que pagaram no mes seguinte dividido pelo total que entrou naquele posto">Pagantes apos 1 mes &divide; Total admitidos &times; 100</code>
                                 </div>
@@ -494,7 +480,7 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0" id="title3m">Retencao em - referente adesao em -. 3 meses - Por posto.</h3>
+                                <h3 class="card-title mb-0" id="title3m">Retenção em - referente adesão em -. 3 meses - Por posto.</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart3m"></canvas>
@@ -502,7 +488,7 @@
                             <div class="card-footer rastro">
                                 <div style="background:#e3f2fd;border-radius:8px;padding:10px 14px;border-left:4px solid #17a2b8;">
                                     <strong>O que mostra?</strong> Quantos % dos clientes novos ainda pagavam 3 meses depois, por posto.
-                                    Este e o indicador mais importante: se o cliente fica 3 meses, a venda foi boa. Se sai antes, pode ter sido mal vendido.
+                                    Este é o indicador mais importante: se o cliente fica 3 meses, a venda foi boa. Se sai antes, pode ter sido mal vendido.
                                     <br><strong>Conta:</strong> <code style="background:#e3f2fd;padding:2px 6px;border-radius:3px;">Pagantes apos 3 meses &divide; Total admitidos &times; 100</code>
                                 </div>
                             </div>
@@ -511,15 +497,15 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0" id="title6m">Retencao em - referente adesao em -. 6 meses - Por posto.</h3>
+                                <h3 class="card-title mb-0" id="title6m">Retenção em - referente adesão em -. 6 meses - Por posto.</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart6m"></canvas>
                             </div>
                             <div class="card-footer rastro">
                                 <div style="background:#e3f2fd;border-radius:8px;padding:10px 14px;border-left:4px solid #17a2b8;">
-                                    <strong>O que mostra?</strong> Retencao apos 6 meses. Quem passa dos 6 meses tende a ficar por muito tempo.
-                                    Se a barra cai muito entre 3m e 6m, o atendimento continuo pode estar falhando.
+                                    <strong>O que mostra?</strong> Retenção após 6 meses. Quem passa dos 6 meses tende a ficar por muito tempo.
+                                    Se a barra cai muito entre 3m e 6m, o atendimento contínuo pode estar falhando.
                                     <br><strong>Conta:</strong> <code style="background:#e3f2fd;padding:2px 6px;border-radius:3px;">Pagantes apos 6 meses &divide; Total admitidos &times; 100</code>
                                 </div>
                             </div>
@@ -528,15 +514,15 @@
                     <div class="col-lg-6">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0" id="title12m">Retencao em - referente adesao em -. 12 meses - Por posto.</h3>
+                                <h3 class="card-title mb-0" id="title12m">Retenção em - referente adesão em -. 12 meses - Por posto.</h3>
                             </div>
                             <div class="card-body">
                                 <canvas id="chart12m"></canvas>
                             </div>
                             <div class="card-footer rastro">
                                 <div style="background:#e3f2fd;border-radius:8px;padding:10px 14px;border-left:4px solid #17a2b8;">
-                                    <strong>O que mostra?</strong> Retencao apos 1 ano inteiro. Este e o indicador de fidelidade real.
-                                    Postos acima de 60% = base solida de clientes fieis. Abaixo de 40% = muita gente saindo (churn estrutural).
+                                    <strong>O que mostra?</strong> Retenção após 1 ano inteiro. Este é o indicador de fidelidade real.
+                                    Postos acima de 60% = base sólida de clientes fiéis. Abaixo de 40% = muita gente saindo (churn estrutural).
                                     <br><strong>Conta:</strong> <code style="background:#e3f2fd;padding:2px 6px;border-radius:3px;">Pagantes apos 12 meses &divide; Total admitidos &times; 100</code>
                                 </div>
                             </div>
@@ -554,10 +540,10 @@
                     </div>
                     <div class="card-footer rastro">
                         <div style="background:#f3e5f5;border-radius:8px;padding:10px 14px;margin-bottom:8px;border-left:4px solid #9c27b0;">
-                            <strong>Como ler esta tabela?</strong> Cada linha e uma "turma" de clientes que entrou no mesmo mes.
+                            <strong>Como ler esta tabela?</strong> Cada linha é uma "turma" de clientes que entrou no mesmo mês.
                             As colunas mostram quantos dessa turma continuaram pagando depois de 1, 3, 6 e 12 meses.
-                            <br><strong>QTD</strong> = numero de clientes que ficaram | <strong>Ret%</strong> = % que ficou (verde = bom) | <strong>Churn%</strong> = % que saiu (vermelho = ruim)
-                            <br><strong>Conta do Churn%:</strong> <code style="background:#f3e5f5;padding:2px 6px;border-radius:3px;">100% &minus; Ret% = Churn%</code>. Exemplo: se Ret% = 70%, entao Churn% = 30%.
+                            <br><strong>QTD</strong> = número de clientes que ficaram | <strong>Ret%</strong> = % que ficou (verde = bom) | <strong>Churn%</strong> = % que saiu (vermelho = ruim)
+                            <br><strong>Conta do Churn%:</strong> <code style="background:#f3e5f5;padding:2px 6px;border-radius:3px;">100% &minus; Ret% = Churn%</code>. Exemplo: se Ret% = 70%, então Churn% = 30%.
                         </div>
                         <b>Fonte:</b> fidelizacao_cliente.json &rarr; export_fidelizacao.py &rarr; PC_Fin_Fidelizacao (Stored Procedure no SQL Server)
                         <button class="btn-rastro-sql" onclick="this.nextElementSibling.classList.toggle('show')">&#x25B6; ver SQL</button>
@@ -576,14 +562,14 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 <!-- CHURN OPERACIONAL -->
                 <div class="card">
                     <div class="card-header" style="background:#6c757d;color:#fff;">
-                        <h3 class="card-title mb-0"><i class="fas fa-file-signature mr-2"></i>Pedidos de cancelamento registrados no ERP — so referencia, nao e o nosso churn</h3>
+                        <h3 class="card-title mb-0"><i class="fas fa-file-signature mr-2"></i>Pedidos de cancelamento registrados no ERP — só referência, não é o nosso churn</h3>
                     </div>
                     <div class="card-body" id="churnOperacionalCards"></div>
                     <div class="card-footer text-muted" style="font-size:0.85rem">
                         <div id="churnOperacionalComo"></div>
                         <strong>Cores:</strong> <span style="background:#d4edda;padding:1px 6px;border-radius:3px;">verde</span> &le; 5% &nbsp;&middot;&nbsp; <span style="background:#fff3cd;padding:1px 6px;border-radius:3px;">amarelo</span> 5&ndash;10% &nbsp;&middot;&nbsp; <span style="background:#f8d7da;padding:1px 6px;border-radius:3px;">vermelho</span> &gt; 10%.
                         <br><strong>Fonte:</strong> growth_dashboard.json &rarr; export_growth.py &rarr; sql_growth/mrr.sql (base) e sql_growth/churn.sql (cancelamentos).
-                        <br><strong>Atualizacao:</strong> 1x por dia as 02:30 (cron da VM). So o mes corrente e recalculado; mes fechado fica com o valor da primeira rodada.
+                        <br><strong>Atualização:</strong> 1x por dia as 02:30 (cron da VM). Só o mês corrente é recalculado; mês fechado fica com o valor da primeira rodada.
                     </div>
                 </div>
             </section>
@@ -931,7 +917,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             const container = el('churnOperacionalCards');
             if (!container) return;
             if (!growthData || !growthData.dados) {
-                container.innerHTML = '<p class="text-muted">Dados de growth nao disponiveis</p>';
+                container.innerHTML = '<p class="text-muted">Dados de growth não disponíveis</p>';
                 return;
             }
             const gd = growthData.dados;
@@ -944,11 +930,11 @@ EXEC PC_Fin_Fidelizacao @database = @ini
 
             let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0" style="font-size:0.9rem;">';
             html += '<thead style="background:#343a40;color:#fff;"><tr>';
-            html += '<th style="padding:10px 14px;">Mes</th>';
-            html += '<th style="padding:10px 14px;text-align:right;" title="Mensalidades com data de referencia no mes ANTERIOR, de clientes que hoje estao Adimplentes ou Inadimplentes e sem cancelamento ANS (sql_growth/mrr.sql). NAO e a quantidade de mensalidades pagas.">Base ativa<br><small>(mensalidades de referencia do mes anterior)</small></th>';
-            html += '<th style="padding:10px 14px;text-align:right;" title="Clientes do Cad_Cliente com data de cancelamento (DataCancelamentoAuto ou cancelamento ANS sem reativacao) dentro do mes da linha (sql_growth/churn.sql).">Cancelamentos<br><small>(no mes, pelo cadastro)</small></th>';
-            html += '<th style="padding:10px 14px;text-align:center;" title="Cancelamentos registrados no mes dividido pela base do mes anterior, vezes 100. Nao e o churn da pagina: o churn e a perda de pagantes, no card acima.">% cancelado<br><small>(do cadastro)</small></th>';
-            html += '<th style="padding:10px 14px;text-align:center;">Tendencia</th>';
+            html += '<th style="padding:10px 14px;">Mês</th>';
+            html += '<th style="padding:10px 14px;text-align:right;" title="Mensalidades com data de referência no mês ANTERIOR, de clientes que hoje estão Adimplentes ou Inadimplentes e sem cancelamento ANS (sql_growth/mrr.sql). NÃO é a quantidade de mensalidades pagas.">Base ativa<br><small>(mensalidades de referência do mês anterior)</small></th>';
+            html += '<th style="padding:10px 14px;text-align:right;" title="Clientes do Cad_Cliente com data de cancelamento (DataCancelamentoAuto ou cancelamento ANS sem reativação) dentro do mês da linha (sql_growth/churn.sql).">Cancelamentos<br><small>(no mês, pelo cadastro)</small></th>';
+            html += '<th style="padding:10px 14px;text-align:center;" title="Cancelamentos registrados no mês dividido pela base do mês anterior, vezes 100. Não é o churn da página: o churn é a perda de pagantes, no card acima.">% cancelado<br><small>(do cadastro)</small></th>';
+            html += '<th style="padding:10px 14px;text-align:center;">Tendência</th>';
             html += '</tr></thead><tbody>';
 
             let prevChurn = null;
@@ -971,9 +957,9 @@ EXEC PC_Fin_Fidelizacao @database = @ini
 
                 let trend = '';
                 if (prevChurn != null && churnPct != null) {
-                    if (churnPct < prevChurn) trend = '<span style="color:#28a745;font-size:1.1rem;" title="% cancelado diminuiu em relacao ao mes anterior">&#9660;</span>';
-                    else if (churnPct > prevChurn) trend = '<span style="color:#dc3545;font-size:1.1rem;" title="% cancelado aumentou em relacao ao mes anterior">&#9650;</span>';
-                    else trend = '<span style="color:#6c757d;" title="Churn igual ao mes anterior">&rarr;</span>';
+                    if (churnPct < prevChurn) trend = '<span style="color:#28a745;font-size:1.1rem;" title="% cancelado diminuiu em relação ao mês anterior">&#9660;</span>';
+                    else if (churnPct > prevChurn) trend = '<span style="color:#dc3545;font-size:1.1rem;" title="% cancelado aumentou em relação ao mês anterior">&#9650;</span>';
+                    else trend = '<span style="color:#6c757d;" title="Churn igual ao mês anterior">&rarr;</span>';
                 }
 
                 const isSelected = ym === selMonth;
@@ -984,14 +970,14 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 const fmtMes = formatMonth(ym);
                 let mesLabel = isSelected ? `<span style="color:#dc3545;">${fmtMes} &#9668;</span>` : fmtMes;
                 if (isPartial) {
-                    mesLabel += ` <span class="badge badge-warning" style="font-size:0.7rem;vertical-align:middle;" title="Mes ainda nao fechou — cancelamentos contados so ate hoje. O % vai subir ate o fim do mes.">PARCIAL</span>`;
+                    mesLabel += ` <span class="badge badge-warning" style="font-size:0.7rem;vertical-align:middle;" title="Mês ainda não fechou — cancelamentos contados só até hoje. O % vai subir até o fim do mês.">PARCIAL</span>`;
                 }
 
                 html += `<tr style="${rowStyle}">`;
                 html += `<td style="padding:8px 14px;">${mesLabel}</td>`;
                 html += `<td style="padding:8px 14px;text-align:right;">${base > 0 ? base.toLocaleString('pt-BR') : '-'}</td>`;
                 html += `<td style="padding:8px 14px;text-align:right;">${cancelamentos.toLocaleString('pt-BR')}</td>`;
-                html += `<td style="padding:8px 14px;text-align:center;" class="${churnCls}" title="Formula: ${cancelamentos} cancelamentos / ${base > 0 ? base.toLocaleString('pt-BR') : '?'} contratos x 100 = ${churnStr}">${churnStr}</td>`;
+                html += `<td style="padding:8px 14px;text-align:center;" class="${churnCls}" title="Fórmula: ${cancelamentos} cancelamentos / ${base > 0 ? base.toLocaleString('pt-BR') : '?'} contratos x 100 = ${churnStr}">${churnStr}</td>`;
                 html += `<td style="padding:8px 14px;text-align:center;">${trend}</td>`;
                 html += `</tr>`;
 
@@ -1003,7 +989,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             // Se o mês selecionado não está nos últimos 6, avisar
             if (!recentMonths.includes(selMonth)) {
                 const fmtSel = formatMonth(selMonth);
-                html += `<div class="text-muted mt-2" style="font-size:0.85rem;"><i class="fas fa-info-circle mr-1"></i>O mes selecionado (<strong>${fmtSel}</strong>) nao aparece nos ultimos 6 meses disponiveis. Os dados acima sao dos meses mais recentes.</div>`;
+                html += `<div class="text-muted mt-2" style="font-size:0.85rem;"><i class="fas fa-info-circle mr-1"></i>O mês selecionado (<strong>${fmtSel}</strong>) não aparece nos últimos 6 meses disponíveis. Os dados acima são dos meses mais recentes.</div>`;
             }
             container.innerHTML = html;
             renderChurnOperacionalComo(exemplo, postos);
@@ -1020,7 +1006,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             const box = el('churnGestorCards'), como = el('churnGestorComo');
             if (!box) return;
             if (!pagantesData || !vendasData) {
-                box.innerHTML = '<p class="text-muted mb-0">Nao foi possivel carregar mensalidades pagas e vendas (KPI Metas / KPI Vendas). Sem eles esta conta nao e feita.</p>';
+                box.innerHTML = '<p class="text-muted mb-0">Não foi possível carregar mensalidades pagas e vendas (KPI Metas / KPI Vendas). Sem eles esta conta não é feita.</p>';
                 if (como) como.innerHTML = '';
                 return;
             }
@@ -1047,13 +1033,13 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             const meses = Object.keys(pagantesData).filter(k => /^\d{4}-\d{2}$/.test(k) && k <= currentYm).sort().slice(-12);
             let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0" style="font-size:0.9rem;">';
             html += '<thead style="background:#004d40;color:#fff;"><tr>'
-                 + '<th style="padding:10px 14px;">Mes</th>'
-                 + '<th style="padding:10px 14px;text-align:right;" title="Mensalidades pagas no mes anterior (KPI Metas)">Pagantes<br><small>mes anterior</small></th>'
-                 + '<th style="padding:10px 14px;text-align:right;" title="Planos vendidos no mes (KPI Vendas)">Vendas<br><small>no mes</small></th>'
-                 + '<th style="padding:10px 14px;text-align:right;" title="Mensalidades pagas no mes (KPI Metas)">Pagantes<br><small>no mes</small></th>'
-                 + '<th style="padding:10px 14px;text-align:right;" title="Pagantes do mes menos pagantes do mes anterior">Cresceu<br><small>pagantes &minus; anterior</small></th>'
+                 + '<th style="padding:10px 14px;">Mês</th>'
+                 + '<th style="padding:10px 14px;text-align:right;" title="Mensalidades pagas no mês anterior (KPI Metas)">Pagantes<br><small>mês anterior</small></th>'
+                 + '<th style="padding:10px 14px;text-align:right;" title="Planos vendidos no mês (KPI Vendas)">Vendas<br><small>no mês</small></th>'
+                 + '<th style="padding:10px 14px;text-align:right;" title="Mensalidades pagas no mês (KPI Metas)">Pagantes<br><small>no mês</small></th>'
+                 + '<th style="padding:10px 14px;text-align:right;" title="Pagantes do mês menos pagantes do mês anterior">Cresceu<br><small>pagantes &minus; anterior</small></th>'
                  + '<th style="padding:10px 14px;text-align:right;" title="Vendas menos o que a base cresceu">Perdidos<br><small>vendas &minus; cresceu</small></th>'
-                 + '<th style="padding:10px 14px;text-align:center;" title="Perdidos dividido pelos pagantes do mes anterior">Churn %</th>'
+                 + '<th style="padding:10px 14px;text-align:center;" title="Perdidos dividido pelos pagantes do mês anterior">Churn %</th>'
                  + '</tr></thead><tbody>';
             let exemplo = null, linhas = 0;
             for (const ym of meses) {
@@ -1066,7 +1052,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 const sinal = v => (v > 0 ? '+' : '') + n(v);
                 const conta = `${n(vd)} vendas - (${n(pt)} - ${n(pa)}) = ${n(perdidos)} perdidos; ${n(perdidos)} / ${n(pa)} = ${pct.toFixed(2).replace('.', ',')}%`;
                 let mes = formatMonth(ym);
-                if (parcial) mes += ' <span class="badge badge-warning" style="font-size:0.7rem;vertical-align:middle;" title="Mes em curso: pagantes e vendas ainda vao entrar.">PARCIAL</span>';
+                if (parcial) mes += ' <span class="badge badge-warning" style="font-size:0.7rem;vertical-align:middle;" title="Mês em curso: pagantes e vendas ainda vão entrar.">PARCIAL</span>';
                 const sel = ym === selMonth;
                 if (sel) mes = `<span style="color:#dc3545;font-weight:600;">${mes} &#9668;</span>`;
                 html += `<tr style="${parcial ? 'background:#fffbe6;font-style:italic;' : ''}${sel ? 'outline:2px solid #dc3545;' : ''}">`
@@ -1090,26 +1076,26 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 <strong>Exemplo com ${formatMonth(exemplo.ym)} (${escopo}):</strong>
                 <ul style="margin:6px 0 6px 18px;padding:0;">
                     <li>Pagantes em ${formatMonth(exemplo.pm)}: <strong>${n(exemplo.pa)}</strong>. Pagantes em ${formatMonth(exemplo.ym)}: <strong>${n(exemplo.pt)}</strong>. A base ${exemplo.cresceu >= 0 ? 'cresceu' : 'encolheu'} <strong>${n(Math.abs(exemplo.cresceu))}</strong>.</li>
-                    <li>Foram vendidos <strong>${n(exemplo.vd)}</strong> planos em ${formatMonth(exemplo.ym)}. Se ninguem tivesse saido, a base cresceria ${n(exemplo.vd)}.</li>
+                    <li>Foram vendidos <strong>${n(exemplo.vd)}</strong> planos em ${formatMonth(exemplo.ym)}. Se ninguém tivesse saído, a base cresceria ${n(exemplo.vd)}.</li>
                     <li>Perdidos = ${n(exemplo.vd)} &minus; ${n(exemplo.cresceu)} = <strong>${n(exemplo.perdidos)}</strong>. Churn = ${n(exemplo.perdidos)} &divide; ${n(exemplo.pa)} = <strong>${f(exemplo.pct)}%</strong>.</li>
                 </ul>` : '';
             renderChurnGestorPostos(exemplo ? (meses.includes(selMonth) && selMonth !== currentYm ? selMonth : exemplo.ym) : null, prevYm);
             if (como) como.innerHTML = `
                 <div style="background:#e0f2f1;border-radius:8px;padding:12px 16px;margin-bottom:6px;border-left:4px solid #00695c;line-height:1.55;">
-                    <strong>O que esta tabela calcula:</strong> quantos pagantes a base perdeu no mes, descontando o que entrou de venda. E a conta que os gestores dos postos fazem na planilha.
+                    <strong>O que esta tabela calcula:</strong> quantos pagantes a base perdeu no mês, descontando o que entrou de venda. É a conta que os gestores dos postos fazem na planilha.
                     <br><strong>Conta:</strong>
-                    <code style="background:#c8e6e2;padding:1px 5px;border-radius:3px;">perdidos = vendas do mes &minus; (pagantes do mes &minus; pagantes do mes anterior)</code>
-                    &nbsp;e&nbsp; <code style="background:#c8e6e2;padding:1px 5px;border-radius:3px;">churn % = perdidos &divide; pagantes do mes anterior</code>
+                    <code style="background:#c8e6e2;padding:1px 5px;border-radius:3px;">perdidos = vendas do mês &minus; (pagantes do mês &minus; pagantes do mês anterior)</code>
+                    &nbsp;e&nbsp; <code style="background:#c8e6e2;padding:1px 5px;border-radius:3px;">churn % = perdidos &divide; pagantes do mês anterior</code>
                     <br><br>
-                    <strong>Pagantes</strong> = mensalidades <strong>pagas</strong> no mes, o mesmo numero do KPI Metas (Mensalidades).
-                    <strong>Vendas</strong> = planos vendidos no mes pela regra unica do KPI Vendas (mensalidade e taxa pagas, cliente ativo).
+                    <strong>Pagantes</strong> = mensalidades <strong>pagas</strong> no mês, o mesmo número do KPI Metas (Mensalidades).
+                    <strong>Vendas</strong> = planos vendidos no mês pela regra única do KPI Vendas (mensalidade e taxa pagas, cliente ativo).
                     <br><br>${ex}
                     <strong>&#9888; Como ler:</strong>
                     <ul style="margin:6px 0 0 18px;padding:0;">
-                        <li>E <strong>perda liquida</strong>: quem parou de pagar menos quem voltou a pagar ou quitou mensalidade atrasada no mes. Nao e a quantidade de cancelamentos — essa fica no fim da pagina, so como referencia.</li>
-                        <li>Pagantes conta <strong>mensalidades pagas</strong>, nao pessoas: quem quita duas atrasadas no mesmo mes entra duas vezes. Por isso pode aparecer perdido negativo (entraram mais pagamentos que o normal).</li>
-                        <li>As vendas podem diferir em poucas unidades da planilha do posto: a regra unica conta a venda no mes em que mensalidade e taxa ficaram pagas, e venda de cliente desativado depois sai da conta.</li>
-                        <li>Cores: verde ate 1% &middot; amarelo ate 3% &middot; vermelho acima de 3%. Passe o mouse no % para ver a conta da linha.</li>
+                        <li>É <strong>perda líquida</strong>: quem parou de pagar menos quem voltou a pagar ou quitou mensalidade atrasada no mês. Não é a quantidade de cancelamentos — essa fica no fim da página, só como referência.</li>
+                        <li>Pagantes conta <strong>mensalidades pagas</strong>, não pessoas: quem quita duas atrasadas no mesmo mês entra duas vezes. Por isso pode aparecer perdido negativo (entraram mais pagamentos que o normal).</li>
+                        <li>As vendas podem diferir em poucas unidades da planilha do posto: a regra única conta a venda no mês em que mensalidade e taxa ficaram pagas, e venda de cliente desativado depois sai da conta.</li>
+                        <li>Cores: verde até 1% &middot; amarelo até 3% &middot; vermelho acima de 3%. Passe o mouse no % para ver a conta da linha.</li>
                     </ul>
                 </div>
                 <strong>Fonte:</strong> consolidado_mensal_por_posto.json (mensalidade_qtd, KPI Metas) e json_vendas/vendas_mensal.json (qtd_vendas, KPI Vendas).`;
@@ -1138,7 +1124,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             linhas.forEach(r => { tot.a += r.a; tot.v += r.v; tot.t += r.t; });
             const totPerd = tot.v - (tot.t - tot.a), totPct = totPerd / tot.a * 100;
             const cls = pct => pct <= 1 ? 'cell-high' : pct <= 3 ? 'cell-medium' : 'cell-low';
-            let html = `<h6 class="mb-2" style="font-weight:600;">Por posto em ${formatMonth(ym)} <small class="text-muted">— maior churn primeiro; escolha outro mes dos ultimos 12 no filtro do topo</small></h6>`;
+            let html = `<h6 class="mb-2" style="font-weight:600;">Por posto em ${formatMonth(ym)} <small class="text-muted">— maior churn primeiro; escolha outro mês dos últimos 12 no filtro do topo</small></h6>`;
             html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-0" style="font-size:0.88rem;">'
                  + '<thead style="background:#e0f2f1;"><tr><th>Posto</th><th class="text-right">Pagantes ' + formatMonth(pm) + '</th><th class="text-right">Vendas</th><th class="text-right">Pagantes ' + formatMonth(ym) + '</th><th class="text-right">Cresceu</th><th class="text-right">Perdidos</th><th class="text-center">Churn %</th></tr></thead><tbody>';
             for (const r of linhas) {
@@ -1163,25 +1149,25 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             if (ex) {
                 exHtml = `<strong>Exemplo com a linha de <code style="background:#e8eef7;padding:1px 5px;border-radius:3px;">${formatMonth(ex.ym)}</code> (${escopo}):</strong>
                     <ul style="margin:6px 0 6px 18px;padding:0;">
-                        <li>Base ativa = <strong>${n(ex.base)}</strong> mensalidades com referencia em <strong>${formatMonth(ex.pm)}</strong> (o mes anterior), de clientes que hoje estao adimplentes ou inadimplentes e sem cancelamento ANS.</li>
+                        <li>Base ativa = <strong>${n(ex.base)}</strong> mensalidades com referência em <strong>${formatMonth(ex.pm)}</strong> (o mês anterior), de clientes que hoje estão adimplentes ou inadimplentes e sem cancelamento ANS.</li>
                         <li>Cancelamentos = <strong>${n(ex.cancelamentos)}</strong> clientes com data de cancelamento dentro de <strong>${formatMonth(ex.ym)}</strong>, no cadastro (Cad_Cliente).</li>
                         <li>% cancelado = ${n(ex.cancelamentos)} &divide; ${n(ex.base)} &times; 100 = <strong>${ex.churnStr}</strong>.</li>
                     </ul>`;
             }
             box.innerHTML = `
             <div style="background:#f0f4ff;border-radius:8px;padding:12px 16px;margin-bottom:10px;border-left:4px solid #5b9bd5;line-height:1.55;">
-                <strong>O que esta tabela mostra:</strong> quantos clientes tiveram o plano <strong>cancelado no ERP</strong> em cada mes (pedido do cliente ou cancelamento ANS), em relacao a base de mensalidades do mes anterior. <strong>Nao e o nosso churn</strong> — o churn desta pagina e a perda de pagantes, no card do topo. Fica aqui so como referencia: cliente pode cancelar e continuar pagando atrasados, ou parar de pagar sem nunca cancelar.
-                <br><strong>Conta:</strong> <code style="background:#e8eef7;padding:1px 5px;border-radius:3px;">% cancelado = cancelamentos do mes &divide; base ativa do mes anterior &times; 100</code>
+                <strong>O que esta tabela mostra:</strong> quantos clientes tiveram o plano <strong>cancelado no ERP</strong> em cada mês (pedido do cliente ou cancelamento ANS), em relação a base de mensalidades do mês anterior. <strong>Não é o nosso churn</strong> — o churn desta página é a perda de pagantes, no card do topo. Fica aqui só como referência: cliente pode cancelar e continuar pagando atrasados, ou parar de pagar sem nunca cancelar.
+                <br><strong>Conta:</strong> <code style="background:#e8eef7;padding:1px 5px;border-radius:3px;">% cancelado = cancelamentos do mês &divide; base ativa do mês anterior &times; 100</code>
                 <br><br>
-                <strong>Base ativa</strong> = quantidade de linhas da <code>vw_fin_receita2</code> com <em>Data referencia</em> dentro do mes anterior, tipo Mensalidade, <code>CanceladoANS = 0</code> e situacao do cliente igual a <em>Adimplente</em> ou <em>Inadimplente</em>. Ficam de fora clientes <em>Atrasado</em> e <em>Particular</em> e mensalidades canceladas pela ANS.
-                <br><strong>Cancelamentos</strong> = clientes do <code>Cad_Cliente</code> cuja data de cancelamento (<code>DataCancelamentoAuto</code> ou cancelamento ANS sem reativacao posterior) cai dentro do mes da linha.
+                <strong>Base ativa</strong> = quantidade de linhas da <code>vw_fin_receita2</code> com <em>Data referencia</em> dentro do mês anterior, tipo Mensalidade, <code>CanceladoANS = 0</code> e situação do cliente igual a <em>Adimplente</em> ou <em>Inadimplente</em>. Ficam de fora clientes <em>Atrasado</em> e <em>Particular</em> e mensalidades canceladas pela ANS.
+                <br><strong>Cancelamentos</strong> = clientes do <code>Cad_Cliente</code> cuja data de cancelamento (<code>DataCancelamentoAuto</code> ou cancelamento ANS sem reativação posterior) cai dentro do mês da linha.
                 <br><br>${exHtml}
                 <strong>&#9888; Dois cuidados ao ler:</strong>
                 <ul style="margin:6px 0 6px 18px;padding:0;">
-                    <li>A situacao do cliente e o <code>CanceladoANS</code> sao o estado de <strong>hoje</strong>, nao o da epoca. Quem pagava naquele mes e depois atrasou ou cancelou sai da base retroativamente. O mesmo mes da numeros diferentes conforme o dia em que o ETL rodou, e cada mes fechado fica congelado com o valor da primeira rodada. Degraus entre meses vizinhos podem vir dai, nao de clientes a mais ou a menos.</li>
-                    <li>O ultimo mes, marcado <span class="badge badge-warning" style="font-size:0.7rem;vertical-align:middle;">PARCIAL</span>, ainda nao fechou: os cancelamentos sao contados so ate hoje e o % sobe ate o fim do mes.</li>
+                    <li>A situação do cliente e o <code>CanceladoANS</code> são o estado de <strong>hoje</strong>, não o da época. Quem pagava naquele mês e depois atrasou ou cancelou sai da base retroativamente. O mesmo mês da números diferentes conforme o dia em que o ETL rodou, e cada mês fechado fica congelado com o valor da primeira rodada. Degraus entre meses vizinhos podem vir daí, não de clientes a mais ou a menos.</li>
+                    <li>O último mês, marcado <span class="badge badge-warning" style="font-size:0.7rem;vertical-align:middle;">PARCIAL</span>, ainda não fechou: os cancelamentos são contados só até hoje e o % sobe até o fim do mês.</li>
                 </ul>
-                <strong>Por que os numeros nao batem com o card do topo:</strong> la se conta quem deixou de <strong>pagar</strong> (perda liquida, descontadas as vendas); aqui, quem teve o plano <strong>cancelado no ERP</strong>. Sao perguntas diferentes; nao some nem compare um com o outro.
+                <strong>Por que os números não batem com o card do topo:</strong> lá se conta quem deixou de <strong>pagar</strong> (perda líquida, descontadas as vendas); aqui, quem teve o plano <strong>cancelado no ERP</strong>. São perguntas diferentes; não some nem compare um com o outro.
             </div>`;
         }
 
@@ -1228,24 +1214,24 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 </div>`;
 
             const html =
-                cardHtml(totalAdm, 'Total Admissoes', '#17a2b8',
+                cardHtml(totalAdm, 'Total Admissões', '#17a2b8',
                     `Quantos clientes novos entraram em ${formatMonth(selMonth)}`) +
-                cardHtml(disp(ret1m, has1), 'Retencao 1m', '#28a745',
-                    `${total1m} de ${totalAdm} ainda pagando apos 1 mes = ${disp(ret1m, has1)}`) +
+                cardHtml(disp(ret1m, has1), 'Retenção 1m', '#28a745',
+                    `${total1m} de ${totalAdm} ainda pagando após 1 mês = ${disp(ret1m, has1)}`) +
                 cardHtml(dispChurn(ret1m, has1), 'Churn 1m', '#dc3545',
-                    `Saiu no 1o mes: 100% - ${disp(ret1m, has1)} = ${dispChurn(ret1m, has1)}`) +
-                cardHtml(disp(ret3m, has3), 'Retencao 3m', '#28a745',
-                    has3 ? `${total3m} de ${totalAdm} ainda pagando apos 3 meses = ${ret3m}%` : 'Dados ainda nao disponiveis (cohort muito recente)') +
+                    `Saiu no 1o mês: 100% - ${disp(ret1m, has1)} = ${dispChurn(ret1m, has1)}`) +
+                cardHtml(disp(ret3m, has3), 'Retenção 3m', '#28a745',
+                    has3 ? `${total3m} de ${totalAdm} ainda pagando após 3 meses = ${ret3m}%` : 'Dados ainda não disponíveis (cohort muito recente)') +
                 cardHtml(dispChurn(ret3m, has3), 'Churn 3m', '#dc3545',
-                    has3 ? `Saiu ate o 3o mes: 100% - ${ret3m}% = ${100-ret3m}%` : 'Dados ainda nao disponiveis (cohort muito recente)') +
-                cardHtml(disp(ret6m, has6), 'Retencao 6m', '#28a745',
-                    has6 ? `${total6m} de ${totalAdm} ainda pagando apos 6 meses = ${ret6m}%` : 'Dados ainda nao disponiveis (cohort muito recente)') +
+                    has3 ? `Saiu até o 3o mês: 100% - ${ret3m}% = ${100-ret3m}%` : 'Dados ainda não disponíveis (cohort muito recente)') +
+                cardHtml(disp(ret6m, has6), 'Retenção 6m', '#28a745',
+                    has6 ? `${total6m} de ${totalAdm} ainda pagando após 6 meses = ${ret6m}%` : 'Dados ainda não disponíveis (cohort muito recente)') +
                 cardHtml(dispChurn(ret6m, has6), 'Churn 6m', '#dc3545',
-                    has6 ? `Saiu ate o 6o mes: 100% - ${ret6m}% = ${100-ret6m}%` : 'Dados ainda nao disponiveis (cohort muito recente)') +
-                cardHtml(disp(ret12m, has12), 'Retencao 12m', '#28a745',
-                    has12 ? `${total12m} de ${totalAdm} ainda pagando apos 12 meses = ${ret12m}%` : 'Dados ainda nao disponiveis (cohort muito recente)') +
+                    has6 ? `Saiu até o 6o mês: 100% - ${ret6m}% = ${100-ret6m}%` : 'Dados ainda não disponíveis (cohort muito recente)') +
+                cardHtml(disp(ret12m, has12), 'Retenção 12m', '#28a745',
+                    has12 ? `${total12m} de ${totalAdm} ainda pagando após 12 meses = ${ret12m}%` : 'Dados ainda não disponíveis (cohort muito recente)') +
                 cardHtml(dispChurn(ret12m, has12), 'Churn 12m', '#dc3545',
-                    has12 ? `Saiu ate o 12o mes: 100% - ${ret12m}% = ${100-ret12m}%` : 'Dados ainda nao disponiveis (cohort muito recente)');
+                    has12 ? `Saiu até o 12o mês: 100% - ${ret12m}% = ${100-ret12m}%` : 'Dados ainda não disponíveis (cohort muito recente)');
 
             el('statsCards').innerHTML = html;
         }
@@ -1304,7 +1290,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                     const churnCls = churn <= 30 ? 'cell-high' : churn <= 60 ? 'cell-medium' : 'cell-low';
                     if (partial) {
                         const refYm = addMonthsYm(ym, nMeses);
-                        const tip = `Parcial: o mes de referencia (${refYm}) ainda nao fechou. Os % vao subir ate o fim do mes.`;
+                        const tip = `Parcial: o mês de referência (${refYm}) ainda não fechou. Os % vão subir até o fim do mês.`;
                         const tag = `<span class="badge badge-warning" style="font-size:0.6rem;margin-left:3px;vertical-align:middle;" title="${tip}">PARCIAL</span>`;
                         return `<td style="opacity:0.6;font-style:italic;" title="${tip}">${qtd}${tag}</td>` +
                                `<td class="${retCls}" style="opacity:0.6;font-style:italic;" title="${tip}">${pct}%</td>` +
@@ -1396,7 +1382,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
 
             // Atualizar título
             const titleEl = el('titleSurvivor');
-            if (titleEl) titleEl.textContent = `Curva de Sobrevivencia — Cohort de ${mesLabel}`;
+            if (titleEl) titleEl.textContent = `Curva de Sobrevivência — Cohort de ${mesLabel}`;
 
             // Dados do cohort selecionado
             const retData = months.map(m => {
@@ -1420,7 +1406,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             // Se não tem nenhum dado, mostrar mensagem
             if (retData.every(v => v == null)) {
                 const parent = ctx.parentElement;
-                parent.innerHTML = `<div class="d-flex align-items-center justify-content-center h-100 text-muted"><div class="text-center"><i class="fas fa-info-circle fa-2x mb-2"></i><br>Sem dados de retencao para o cohort de ${mesLabel}.</div></div>`;
+                parent.innerHTML = `<div class="d-flex align-items-center justify-content-center h-100 text-muted"><div class="text-center"><i class="fas fa-info-circle fa-2x mb-2"></i><br>Sem dados de retenção para o cohort de ${mesLabel}.</div></div>`;
                 parent.insertAdjacentHTML('beforeend', '<canvas id="chartSurvivor" style="display:none;"></canvas>');
                 return;
             }
@@ -1433,7 +1419,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                     labels: months.map(m => `${m}m`),
                     datasets: [
                         {
-                            label: 'Retencao %',
+                            label: 'Retenção %',
                             data: retData,
                             borderColor: 'rgba(40,167,69,1)',
                             backgroundColor: 'rgba(40,167,69,0.1)',
@@ -1467,7 +1453,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                                     if (idx == null) return '';
                                     const ret = retData[idx];
                                     if (ret == null) return '';
-                                    return `\nDe cada 100 que entraram, ${Math.round(ret)} ainda pagam apos ${idx+1} mes(es).`;
+                                    return `\nDe cada 100 que entraram, ${Math.round(ret)} ainda pagam após ${idx+1} mês(es).`;
                                 }
                             }
                         }
@@ -1548,7 +1534,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                                 afterBody: function(items) {
                                     const v = items[0]?.raw;
                                     if (v == null) return '';
-                                    return `\nDe cada 100 clientes que entraram, ${v} sairam neste intervalo.`;
+                                    return `\nDe cada 100 clientes que entraram, ${v} saíram neste intervalo.`;
                                 }
                             }
                         }
