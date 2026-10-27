@@ -511,6 +511,69 @@ def run_extraction_filtered(start_date: date, end_date: date, postos_str: str):
     logger.write(f"📄 Log salvo em: {LOG_FILE}\n")
     logger.close()
 
+# =========================
+# Extração por consulta própria (2026-10-27)
+# =========================
+# Substitui a PC_Fin_Fidelizacao (que fica no ERP e não é nossa) pela consulta
+# sql_fidelizacao/cohort.sql, com a mesma regra e sem o corte de 2 anos, contando
+# clientes distintos e só quem é da turma. Uma consulta por posto (~6 s em R).
+# Mês de referência FUTURO sai (são poucos que pagaram adiantado e davam
+# "retenção" de 1% no fim da curva). Posto que falha mantém as linhas antigas:
+# falha de posto não pode virar retenção zero.
+COHORT_ANOS = int(os.environ.get("FIDELIZACAO_ANOS", "5"))
+
+def run_extraction_cohort(postos_str: str, dry_run: bool = False):
+    meta = ETLMeta('export_fidelizacao', 'json_consolidado')
+    t0 = time.time()
+    logger.write("\n" + "=" * 70)
+    logger.write("🔄 EXPORT FIDELIZAÇÃO (cohort.sql)")
+    logger.write("=" * 70)
+    ensure_dir(JSON_DIR)
+    if not dry_run:
+        init_db()
+    postos_filtrados = [c.upper() for c in postos_str if c.isalpha()] or POSTOS
+    conns = build_conns_from_env(postos_filtrados)
+    if not conns:
+        logger.write("ERRO: .env sem DB_HOST_*/DB_BASE_* para os postos informados.")
+        sys.exit(1)
+    sql = open(os.path.join(BASE_DIR, "sql_fidelizacao", "cohort.sql"), encoding="utf-8").read()
+    hoje = date.today()
+    ini = date(hoje.year - COHORT_ANOS, 1, 1).strftime("%d/%m/%Y")
+    ym_hoje = hoje.year * 100 + hoje.month
+    logger.write(f"  Turmas desde {ini} · postos {', '.join(conns)}")
+    total = 0
+    for posto, odbc in conns.items():
+        t = time.time()
+        try:
+            eng = make_engine(odbc)
+            with eng.connect() as c:
+                df = pd.read_sql_query(text(sql), c, params={"ini": ini})
+            eng.dispose()
+            if df.empty:
+                raise RuntimeError("consulta voltou vazia")
+            ref = df["AnoReferencia"].astype(int) * 100 + df["MesReferencia"].astype(int)
+            df = df[ref <= ym_hoje].copy()
+            df["PercentualFidelizacao"] = (df["QuantidadeRecebida"] / df["QuantidadeAdmissao"] * 100).round(2)
+            if dry_run:
+                logger.write(f"  [{posto}] DRY-RUN {len(df)} linhas ({time.time()-t:.1f}s)")
+            else:
+                conn = sqlite3.connect(DB_PATH)
+                conn.execute("DELETE FROM fidelizacao WHERE posto = ?", (posto,))
+                conn.commit(); conn.close()
+                upsert_fidelizacao_batch(posto, df)
+                logger.write(f"  [{posto}] ✓ {len(df)} linhas ({time.time()-t:.1f}s)")
+            total += len(df)
+            meta.ok(posto)
+        except Exception as e:
+            logger.write(f"  [{posto}] ✗ ERRO (linhas antigas mantidas): {str(e)[:120]}")
+            meta.error(posto, str(e))
+    if not dry_run:
+        build_json_fidelizacao()
+        meta.save()
+    logger.write(f"  Total: {total} linhas · {time.time()-t0:.1f}s")
+    logger.write("✅ Finalizado export_fidelizacao.")
+    logger.close()
+
 def parse_args():
     p = argparse.ArgumentParser(
         description="Fidelização: extrai dados de PC_Fin_Fidelizacao por posto.",
@@ -521,6 +584,7 @@ def parse_args():
     p.add_argument("--dry-run", action="store_true", help="Executa sem gravar SQLite/JSON.")
     p.add_argument("--from", dest="from_ym", default=None, help="Início YYYY-MM. Default=2020-01.")
     p.add_argument("--to", dest="to_ym", default=None, help="Fim exclusivo YYYY-MM. Default=mês corrente.")
+    p.add_argument("--procedure", action="store_true", help="Usa a PC_Fin_Fidelizacao do ERP (antigo).")
     return p.parse_args()
 
 if __name__ == "__main__":
@@ -538,7 +602,13 @@ if __name__ == "__main__":
     start_date = ym_to_date(args.from_ym) if args.from_ym else EARLIEST_ALLOWED
     end_date = ym_to_date(args.to_ym) if args.to_ym else date.today()
 
-    if not args.dry_run:
-        run_extraction_filtered(start_date, end_date, args.postos)
+    # Desde 2026-10-27 a extração usa sql_fidelizacao/cohort.sql (ver
+    # run_extraction_cohort). A procedure do ERP continua em
+    # run_extraction_filtered só como referência: --procedure volta a ela.
+    if "--procedure" in sys.argv:
+        if not args.dry_run:
+            run_extraction_filtered(start_date, end_date, args.postos)
+        else:
+            print("[DRY-RUN] Nenhuma alteração realizada.")
     else:
-        print("[DRY-RUN] Nenhuma alteração realizada.")
+        run_extraction_cohort(args.postos, dry_run=args.dry_run)

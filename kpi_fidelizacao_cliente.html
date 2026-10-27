@@ -413,7 +413,9 @@
                             <div class="card-header">
                                 <div class="d-flex align-items-center flex-wrap" style="gap:8px;">
                                     <h3 class="card-title mb-0" id="titleSurvivor">Curva de Sobrevivência — Retenção do Cohort</h3>
-                                    <div class="btn-group btn-group-sm ml-auto" role="group" aria-label="Horizonte da curva">
+                                    <label class="mb-0 ml-auto small text-muted" for="survivorMes">Turma</label>
+                                    <input id="survivorMes" type="month" class="form-control form-control-sm" style="width:150px;" title="Mês de admissão da turma. Mudar aqui muda também o filtro do topo.">
+                                    <div class="btn-group btn-group-sm" role="group" aria-label="Horizonte da curva">
                                         <button type="button" class="btn btn-outline-success active" data-horizonte="12">12m</button>
                                         <button type="button" class="btn btn-outline-success" data-horizonte="24">24m</button>
                                         <button type="button" class="btn btn-outline-success" data-horizonte="36">36m</button>
@@ -1376,12 +1378,33 @@ EXEC PC_Fin_Fidelizacao @database = @ini
 
         // Horizonte da curva: 12 (padrão), 24 ou 36 meses — botões no cabeçalho.
         let survivorHorizonte = 12;
+        const _ymHoje = () => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`; };
+        const _ymSoma = (ym, n) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; };
+
+        // Muda a turma escolhida em um lugar só: o filtro do topo, o seletor da
+        // curva e a página inteira andam juntos.
+        function definirMes(ym) {
+            if (!/^\d{4}-\d{2}$/.test(ym)) return;
+            selMonth = ym;
+            const [a, m] = ym.split('-');
+            if (el('monthSelect')) el('monthSelect').value = `${m}/${a}`;
+            render();
+        }
+
         document.addEventListener('click', function (e) {
             const b = e.target.closest('[data-horizonte]');
             if (!b) return;
             survivorHorizonte = Number(b.dataset.horizonte) || 12;
             document.querySelectorAll('[data-horizonte]').forEach(x => x.classList.toggle('active', x === b));
-            renderSurvivorCurve();
+            // Para ver N meses inteiros a turma precisa ter pelo menos N meses
+            // fechados. Se a escolhida e mais nova, volta para a turma mais recente
+            // que ja tem idade (mes atual - N - 1).
+            const limite = _ymSoma(_ymHoje(), -(survivorHorizonte + 1));
+            if (!selMonth || selMonth > limite) definirMes(limite);
+            else renderSurvivorCurve();
+        });
+        document.addEventListener('change', function (e) {
+            if (e.target && e.target.id === 'survivorMes' && e.target.value) definirMes(e.target.value);
         });
 
         function renderSurvivorCurve() {
@@ -1394,8 +1417,14 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             const titleEl = el('titleSurvivor');
             if (titleEl) titleEl.textContent = `Curva de Sobrevivência — Cohort de ${mesLabel}`;
 
-            // Dados do cohort selecionado
+            if (el('survivorMes')) el('survivorMes').value = selMonth;
+            const ymAtual = _ymHoje();
+
+            // Dados do cohort selecionado. Mês de referência que ainda não
+            // fechou (o atual) fica fora: só tem quem já pagou, e a curva
+            // despencava no fim como se todo mundo tivesse saído.
             const retData = months.map(m => {
+                if (_ymSoma(selMonth, m) >= ymAtual) return null;
                 let totalAdm = 0, totalRet = 0;
                 for (const p of postos) {
                     if (!row[p]) continue;
@@ -1416,11 +1445,10 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 let ultimo = 0;
                 retData.forEach((v, i) => { if (v != null) ultimo = i + 1; });
                 const [ay, am] = selMonth.split('-').map(Number);
-                const d = new Date(ay, am - 1 - survivorHorizonte, 1);
-                const turmaMin = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                const d = new Date(ay, am - 1, 1); const lim = _ymSoma(_ymHoje(), -(survivorHorizonte + 1));
+                const turmaMin = lim;
                 if (ultimo < survivorHorizonte) {
-                    aviso.innerHTML = `<i class="fas fa-info-circle mr-1"></i>A turma de <strong>${mesLabel}</strong> tem ${ultimo} ${ultimo === 1 ? 'mês' : 'meses'} de histórico; o resto do eixo fica vazio. Para ver ${survivorHorizonte} meses completos, escolha no filtro do topo uma turma de <strong>${formatMonth(turmaMin)}</strong> ou anterior.`
-                        + (survivorHorizonte > 24 ? ' <br>Atenção: o banco só recalcula turmas dos últimos 2 anos; turma mais antiga que isso fica com o histórico da última vez em que foi calculada, então 36 meses raramente aparecem completos.' : '');
+                    aviso.innerHTML = `<i class="fas fa-info-circle mr-1"></i>A turma de <strong>${mesLabel}</strong> tem ${ultimo} ${ultimo === 1 ? 'mês fechado' : 'meses fechados'}; o resto do eixo fica vazio. Para ver ${survivorHorizonte} meses completos, escolha uma turma de <strong>${formatMonth(turmaMin)}</strong> ou anterior.`;
                 } else {
                     aviso.innerHTML = '';
                 }
