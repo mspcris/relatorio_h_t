@@ -7,508 +7,231 @@
 <link rel="shortcut icon" href="/images/Logo Camim-01_50px.png" type="image/x-icon">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
 <style>
+/* ══════════════════════════════════════════════════════
+   TELAS DE ACESSO DO KPI — identidade própria (2026-10-27)
+   Tema CLARO, painel verde à esquerda com motivo de
+   indicadores. De propósito NÃO usa o mosaico de fotos,
+   a grade, a linha de scan nem o card escuro translúcido:
+   esse visual é o do idCamim e confundia o usuário.
+   O mesmo bloco está em login.html, reset_senha.html e
+   nova_senha.html — mudou aqui, muda nos três.
+══════════════════════════════════════════════════════ */
+:root {
+  --verde: #009944;
+  --verde-escuro: #006633;
+  --verde-claro: #e6f4ec;
+  --tinta: #10261a;
+  --tinta-2: #4a5e52;
+  --tinta-3: #8a9a90;
+  --fundo: #f3f6f4;
+  --borda: #d9e2dc;
+  --branco: #ffffff;
+  --erro: #c62828;
+  --ok: #1b7f3b;
+}
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; overflow: hidden; font-family: "Segoe UI", system-ui, sans-serif; }
+html, body { min-height: 100%; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: var(--fundo); color: var(--tinta); }
 
-/* ══════════════════════════════════════════════════════
-   FUNDO — mosaico de fotos reais das clínicas
-══════════════════════════════════════════════════════ */
-.bg {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  z-index: 0;
-}
+.tela { min-height: 100vh; display: grid; grid-template-columns: minmax(320px, 44%) 1fr; }
 
-.bg-cell {
-  background-size: cover;
-  background-position: center;
-  animation: kenburns 20s ease-in-out infinite alternate;
-  filter: brightness(.55) saturate(1.1);
+/* ── painel verde (marca) ───────────────────────────── */
+.painel {
+  position: relative; overflow: hidden;
+  background: linear-gradient(165deg, var(--verde) 0%, var(--verde-escuro) 100%);
+  color: #fff; padding: 48px 48px 40px;
+  display: flex; flex-direction: column; justify-content: flex-start;
 }
+.painel .marca { position: relative; z-index: 2; display: flex; align-items: center; gap: 14px; }
+.painel .marca .logo { width: 56px; height: 56px; border-radius: 14px; background: #fff; display: flex; align-items: center; justify-content: center; padding: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+.painel .marca .logo img { width: 100%; height: 100%; object-fit: contain; }
+.painel .marca .nome { font-size: 1.35rem; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
+.painel .marca .nome small { display: block; font-size: .74rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; opacity: .78; margin-top: 3px; }
 
-/* Ken Burns com atrasos diferentes por célula */
-.bg-cell:nth-child(1)  { background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2021/06/15145129/home.jpg'); animation-delay: 0s; }
-.bg-cell:nth-child(2)  { background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/04/30163026/Campo-Grande-e1562878167161.jpg'); animation-delay: -3s; }
-.bg-cell:nth-child(3)  { background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2022/03/09151823/cg2fachada-scaled.jpg'); animation-delay: -6s; }
-.bg-cell:nth-child(4)  { background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/07/11123612/BANGU-1-as-Smart-Object-1-copy.jpg'); animation-delay: -9s; }
-.bg-cell:nth-child(5)  { background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2020/10/19144653/del_castilho.jpg'); animation-delay: -2s; }
-.bg-cell:nth-child(6)  { background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/04/30162346/jpa-e1562878253339.jpg'); animation-delay: -5s; }
-.bg-cell:nth-child(7)  { background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2020/10/19144328/Recepcao-Del-Castilho.jpg'); animation-delay: -8s; }
-.bg-cell:nth-child(8)  { background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2024/04/05115830/madureira.jpg'); animation-delay: -11s; }
-.bg-cell:nth-child(9)  { background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2022/03/09152145/cpnhofachada.jpg'); animation-delay: -4s; }
-.bg-cell:nth-child(10) { background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2020/02/21140942/nillopolis2102.jpg'); animation-delay: -7s; }
-.bg-cell:nth-child(11) { background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/07/11130213/REALENGO-1-as-Smart-Object-1-copy.jpg'); animation-delay: -1s; }
-.bg-cell:nth-child(12) { background-image: url('https://camim-site.s3.sa-east-1.amazonaws.com/wp-content/uploads/2019/04/30162920/NI-e1562878495907.jpg'); animation-delay: -10s; }
+.painel .chamada { position: relative; z-index: 2; margin: 44px 0 0; max-width: 420px; }
+.painel .chamada h1 { font-size: clamp(1.7rem, 2.6vw, 2.3rem); font-weight: 800; line-height: 1.18; margin-bottom: 12px; }
+.painel .chamada p { font-size: .98rem; line-height: 1.55; opacity: .86; }
 
-@keyframes kenburns {
-  0%   { transform: scale(1)    translate(0, 0); }
-  100% { transform: scale(1.12) translate(-2%, -2%); }
-}
+/* motivo de indicadores: barras + linha, em branco translúcido */
+.painel .grafico { position: absolute; left: 0; right: 0; bottom: 0; height: 46%; z-index: 1; pointer-events: none; }
+.painel .grafico svg { width: 100%; height: 100%; display: block; }
+.painel .grafico .barra { fill: rgba(255,255,255,.14); animation: cresce 1.4s cubic-bezier(.2,.8,.2,1) both; transform-origin: bottom; }
+.painel .grafico .barra:nth-child(2) { animation-delay: .08s; }
+.painel .grafico .barra:nth-child(3) { animation-delay: .16s; }
+.painel .grafico .barra:nth-child(4) { animation-delay: .24s; }
+.painel .grafico .barra:nth-child(5) { animation-delay: .32s; }
+.painel .grafico .barra:nth-child(6) { animation-delay: .40s; }
+.painel .grafico .barra:nth-child(7) { animation-delay: .48s; }
+.painel .grafico .barra:nth-child(8) { animation-delay: .56s; }
+.painel .grafico .linha { fill: none; stroke: rgba(255,255,255,.75); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1200; stroke-dashoffset: 1200; animation: traca 1.8s ease-out .5s forwards; }
+.painel .grafico .ponto { fill: #fff; opacity: 0; animation: aparece .4s ease 2.1s forwards; }
+@keyframes cresce { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes traca { to { stroke-dashoffset: 0; } }
+@keyframes aparece { to { opacity: 1; } }
 
-/* overlay escuro sobre o mosaico */
-.bg-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  background:
-    radial-gradient(ellipse 60% 80% at 50% 50%, rgba(0,20,10,.45) 0%, rgba(0,10,5,.82) 100%);
-}
+.painel .stats { position: relative; z-index: 2; display: flex; gap: 28px; flex-wrap: wrap; margin-top: auto; padding-top: 40px; }
+.painel .stat .num { font-size: 1.9rem; font-weight: 900; line-height: 1; }
+.painel .stat .lbl { font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; opacity: .78; margin-top: 5px; }
 
-/* linhas de grade verdes translúcidas */
-.bg-grid {
-  position: fixed;
-  inset: 0;
-  z-index: 2;
-  background-image:
-    linear-gradient(rgba(0,180,80,.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,180,80,.06) 1px, transparent 1px);
-  background-size: 48px 48px;
-  animation: gridpulse 6s ease-in-out infinite;
-}
-@keyframes gridpulse {
-  0%, 100% { opacity: .6; }
-  50%       { opacity: 1; }
-}
-
-/* linha de scan animada */
-.scanline {
-  position: fixed;
-  left: 0; right: 0;
-  height: 2px;
-  z-index: 3;
-  background: linear-gradient(90deg, transparent, rgba(0,220,100,.4), transparent);
-  animation: scan 8s linear infinite;
-}
-@keyframes scan {
-  0%   { top: -2px; opacity: 0; }
-  5%   { opacity: 1; }
-  95%  { opacity: 1; }
-  100% { top: 100%; opacity: 0; }
-}
-
-/* ══════════════════════════════════════════════════════
-   CONTEÚDO — centralizado
-══════════════════════════════════════════════════════ */
-.stage {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-
-/* topo — logo + slogan */
-.top-brand {
-  text-align: center;
-  margin-bottom: 32px;
-  animation: fadeDown .8s ease both;
-}
-@keyframes fadeDown {
-  from { opacity: 0; transform: translateY(-20px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.logo-wrap {
-  position: relative;
-  display: inline-block;
-  margin-bottom: 16px;
-}
-.logo-wrap img {
-  height: 80px;
-  width: auto;
-  filter: drop-shadow(0 0 24px rgba(0,220,100,.5));
-  animation: logopulse 3s ease-in-out infinite;
-}
-@keyframes logopulse {
-  0%, 100% { filter: drop-shadow(0 0 18px rgba(0,220,100,.4)); }
-  50%       { filter: drop-shadow(0 0 36px rgba(0,220,100,.75)); }
-}
-
-/* anéis de pulso ao redor do logo */
-.ring {
-  position: absolute;
-  top: 50%; left: 50%;
-  border-radius: 50%;
-  border: 1.5px solid rgba(0,200,80,.3);
-  transform: translate(-50%, -50%) scale(0);
-  animation: ringout 3s ease-out infinite;
-}
-.ring:nth-child(2) { animation-delay: 1s; }
-.ring:nth-child(3) { animation-delay: 2s; }
-@keyframes ringout {
-  0%   { transform: translate(-50%,-50%) scale(.6); opacity: .8; }
-  100% { transform: translate(-50%,-50%) scale(2.4); opacity: 0; }
-}
-.ring { width: 80px; height: 80px; }
-
-.brand-name {
-  font-size: 2.4rem;
-  font-weight: 900;
-  color: #fff;
-  letter-spacing: .06em;
-  text-shadow: 0 0 40px rgba(0,200,80,.4);
-}
-.brand-slogan {
-  font-size: .95rem;
-  color: rgba(255,255,255,.55);
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  margin-top: 4px;
-}
-
-/* ── CARD de login ─────────────────────────────────── */
+/* ── lado do formulário ─────────────────────────────── */
+.conteudo { display: flex; align-items: center; justify-content: center; padding: 40px 24px; }
 .card {
-  width: min(400px, 100%);
-  background: rgba(5, 20, 10, .72);
-  border: 1px solid rgba(0,200,80,.2);
-  border-radius: 20px;
-  padding: 36px 40px;
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  box-shadow:
-    0 0 0 1px rgba(0,200,80,.08),
-    0 8px 40px rgba(0,0,0,.6),
-    inset 0 1px 0 rgba(255,255,255,.06);
-  animation: fadeUp .9s ease .2s both;
+  width: min(420px, 100%); background: var(--branco);
+  border: 1px solid var(--borda); border-radius: 18px; padding: 36px 38px;
+  box-shadow: 0 10px 40px rgba(16,38,26,.08);
+  animation: sobe .6s ease both;
 }
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(24px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
+@keyframes sobe { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.card-title { font-size: 1.35rem; font-weight: 800; color: var(--tinta); margin-bottom: 4px; }
+.card-sub { font-size: .88rem; color: var(--tinta-2); margin-bottom: 26px; }
 
-.card-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #fff;
-  margin-bottom: 4px;
-}
-.card-sub {
-  font-size: .82rem;
-  color: rgba(255,255,255,.35);
-  margin-bottom: 28px;
-}
-
-/* campos */
 .field { margin-bottom: 16px; }
-.field label {
-  display: block;
-  font-size: .72rem;
-  font-weight: 700;
-  color: rgba(0,220,100,.7);
-  text-transform: uppercase;
-  letter-spacing: .1em;
-  margin-bottom: 7px;
+.field label, .card > form > label, label.rotulo {
+  display: block; font-size: .74rem; font-weight: 700; color: var(--tinta-2);
+  text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px;
 }
 .input-row {
-  display: flex;
-  align-items: center;
-  background: rgba(255,255,255,.05);
-  border: 1px solid rgba(255,255,255,.1);
-  border-radius: 10px;
-  overflow: hidden;
+  display: flex; align-items: center; background: #fbfcfb;
+  border: 1px solid var(--borda); border-radius: 10px; overflow: hidden;
   transition: border-color .2s, box-shadow .2s;
 }
-.input-row:focus-within {
-  border-color: rgba(0,200,80,.6);
-  box-shadow: 0 0 0 3px rgba(0,180,70,.15), inset 0 0 20px rgba(0,200,80,.04);
-}
-.input-row .icon {
-  width: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(0,200,80,.5);
-  font-size: .9rem;
-  flex-shrink: 0;
-}
-.input-row input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #fff;
-  font-size: .95rem;
-  padding: 12px 10px 12px 0;
-}
-.input-row input::placeholder { color: rgba(255,255,255,.18); }
-.toggle-pwd {
-  background: none; border: none; cursor: pointer;
-  padding: 0 13px; color: rgba(255,255,255,.25);
-  font-size: .85rem; transition: color .2s;
-}
-.toggle-pwd:hover { color: rgba(0,200,80,.7); }
+.input-row:focus-within { border-color: var(--verde); box-shadow: 0 0 0 3px rgba(0,153,68,.16); background: #fff; }
+.input-row .icon { width: 42px; display: flex; align-items: center; justify-content: center; color: var(--verde); font-size: .9rem; flex-shrink: 0; }
+.input-row input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: var(--tinta); font-size: .97rem; padding: 12px 10px 12px 0; }
+.input-row input::placeholder { color: #b3bfb8; }
+.toggle-pwd { background: none; border: none; cursor: pointer; padding: 0 13px; color: var(--tinta-3); font-size: .9rem; transition: color .2s; }
+.toggle-pwd:hover { color: var(--verde); }
 
-/* botão entrar */
-.btn-login {
-  width: 100%;
-  padding: 13px;
-  border: none;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #00cc55 0%, #006633 100%);
-  color: #fff;
-  font-size: .97rem;
-  font-weight: 800;
-  letter-spacing: .05em;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  transition: transform .15s, box-shadow .2s;
-  box-shadow: 0 4px 24px rgba(0,180,70,.4);
-  margin-top: 6px;
+.btn, .btn-login {
+  width: 100%; padding: 13px; border: none; border-radius: 10px;
+  background: var(--verde); color: #fff; font-size: .98rem; font-weight: 700;
+  letter-spacing: .03em; cursor: pointer; margin-top: 6px;
+  transition: background .2s, transform .15s, box-shadow .2s;
+  box-shadow: 0 4px 16px rgba(0,153,68,.28);
 }
-.btn-login:hover  { box-shadow: 0 6px 32px rgba(0,200,80,.55); transform: translateY(-1px); }
-.btn-login:active { transform: scale(.98); }
-.btn-login::after {
-  content: '';
-  position: absolute;
-  top: -50%; left: -75%;
-  width: 50%; height: 200%;
-  background: rgba(255,255,255,.18);
-  transform: skewX(-20deg);
-  animation: btnshine 4s ease-in-out infinite 1.5s;
-}
-@keyframes btnshine {
-  0%, 100% { left: -75%; opacity: 0; }
-  45%       { left: 130%; opacity: 1; }
-}
+.btn:hover, .btn-login:hover { background: var(--verde-escuro); transform: translateY(-1px); }
+.btn:active, .btn-login:active { transform: scale(.985); }
 
-/* links de rodapé do card */
-.forgot-wrap {
-  display: flex;
-  justify-content: center;
-  gap: 24px;
-  margin-top: 18px;
-  padding-top: 18px;
-  border-top: 1px solid rgba(255,255,255,.07);
-  flex-wrap: wrap;
-}
-.forgot-wrap a {
-  color: rgba(0,220,100,.75);
-  font-size: .85rem;
-  text-decoration: none;
-  font-weight: 600;
-  letter-spacing: .03em;
-  transition: color .2s, text-shadow .2s;
-}
-.forgot-wrap a:hover {
-  color: #00ee66;
-  text-shadow: 0 0 12px rgba(0,220,100,.5);
-}
-.forgot-wrap a i { margin-right: 5px; }
+.erro, #msg { min-height: 18px; font-size: .85rem; text-align: center; margin-top: 12px; color: var(--erro); }
+#msg.ok { color: var(--ok); }
+.back { display: block; text-align: center; margin-top: 20px; color: var(--tinta-2); font-size: .86rem; text-decoration: none; font-weight: 600; }
+.back:hover { color: var(--verde); }
 
-/* divisor "ou" */
-.divider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 22px 0 16px;
-  color: rgba(255,255,255,.25);
-  font-size: .75rem;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-}
-.divider::before, .divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: rgba(255,255,255,.1);
-}
-
-/* botão idcamim */
-.btn-idcamim {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid rgba(0,180,220,.35);
-  border-radius: 10px;
-  background: rgba(0,120,180,.12);
-  color: rgba(180,230,255,.9);
-  font-size: .92rem;
-  font-weight: 700;
-  letter-spacing: .04em;
-  cursor: pointer;
-  text-decoration: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  transition: background .2s, border-color .2s, box-shadow .2s, transform .15s;
-}
-.btn-idcamim:hover {
-  background: rgba(0,140,210,.22);
-  border-color: rgba(0,200,240,.6);
-  box-shadow: 0 4px 20px rgba(0,160,220,.3);
-  transform: translateY(-1px);
-}
-.btn-idcamim:active { transform: scale(.98); }
-.btn-idcamim img {
-  width: 18px;
-  height: 18px;
-  object-fit: contain;
-  filter: brightness(1.4);
-}
-
-/* mensagem de erro/sucesso */
-#msg {
-  min-height: 18px;
-  font-size: .83rem;
-  text-align: center;
-  margin-top: 12px;
-  color: #ff6b6b;
-}
-#msg.ok { color: #5ddd8b; }
-
-/* ── STATS na base ─────────────────────────────────── */
-.stats {
-  display: flex;
-  gap: 40px;
-  margin-top: 36px;
-  animation: fadeUp .9s ease .5s both;
-}
-.stat { text-align: center; }
-.stat .num {
-  font-size: 2rem;
-  font-weight: 900;
-  color: #fff;
-  line-height: 1;
-  text-shadow: 0 0 20px rgba(0,200,80,.4);
-}
-.stat .lbl {
-  font-size: .72rem;
-  color: rgba(255,255,255,.4);
-  text-transform: uppercase;
-  letter-spacing: .1em;
-  margin-top: 4px;
-}
-.stat-sep {
-  width: 1px;
-  background: rgba(255,255,255,.12);
-  align-self: stretch;
-}
-
-/* ── RESPONSIVO ─────────────────────────────────────── */
-@media (max-width: 480px) {
-  .bg { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(6, 1fr); }
-  .brand-name { font-size: 1.8rem; }
+/* ── responsivo ─────────────────────────────────────── */
+@media (max-width: 860px) {
+  .tela { grid-template-columns: 1fr; }
+  .painel { padding: 24px 22px; min-height: 0; }
+  .painel .chamada { margin: 18px 0 6px; }
+  .painel .chamada h1 { font-size: 1.35rem; }
+  .painel .chamada p, .painel .grafico, .painel .stats { display: none; }
+  .conteudo { padding: 24px 16px 40px; }
   .card { padding: 28px 22px; }
-  .stats { gap: 24px; }
-  .stat .num { font-size: 1.5rem; }
 }
+
+/* específico do login */
+.forgot-wrap { display: flex; justify-content: center; gap: 24px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--borda); flex-wrap: wrap; }
+.forgot-wrap a { color: var(--verde-escuro); font-size: .85rem; text-decoration: none; font-weight: 600; }
+.forgot-wrap a:hover { color: var(--verde); text-decoration: underline; }
+.forgot-wrap a i { margin-right: 5px; }
+.divider { display: flex; align-items: center; gap: 10px; margin: 20px 0 16px; color: var(--tinta-3); font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--borda); }
+/* botão do idCamim: continua azul, para o usuário saber que vai SAIR daqui */
+.btn-idcamim {
+  width: 100%; padding: 12px; border: 1px solid #1e6fb8; border-radius: 10px;
+  background: #fff; color: #1e6fb8; font-size: .94rem; font-weight: 700; letter-spacing: .02em;
+  cursor: pointer; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 9px;
+  transition: background .2s, box-shadow .2s, transform .15s;
+}
+.btn-idcamim:hover { background: #eef5fc; box-shadow: 0 4px 16px rgba(30,111,184,.2); transform: translateY(-1px); }
+.btn-idcamim:active { transform: scale(.985); }
 </style>
 </head>
 <body>
-
-<!-- Fundo mosaico -->
-<div class="bg">
-  <div class="bg-cell"></div>
-  <div class="bg-cell"></div>
-  <div class="bg-cell"></div>
-  <div class="bg-cell"></div>
-  <div class="bg-cell"></div>
-  <div class="bg-cell"></div>
-  <div class="bg-cell"></div>
-  <div class="bg-cell"></div>
-  <div class="bg-cell"></div>
-  <div class="bg-cell"></div>
-  <div class="bg-cell"></div>
-  <div class="bg-cell"></div>
-</div>
-<div class="bg-overlay"></div>
-<div class="bg-grid"></div>
-<div class="scanline"></div>
-
-<!-- Conteúdo -->
-<div class="stage">
-
-  <!-- Logo + marca -->
-  <div class="top-brand">
-    <div class="logo-wrap">
-      <div class="ring"></div>
-      <div class="ring"></div>
-      <div class="ring"></div>
-      <img src="/images/Logo Camim-01_200px.png" alt="CAMIM">
+<div class="tela">
+  <!-- Painel da marca: fundo próprio do KPI, diferente do idCamim -->
+  <aside class="painel">
+    <div class="marca">
+      <div class="logo"><img src="/images/Logo Camim-01_200px.png" alt="CAMIM"></div>
+      <div class="nome">CAMIM<small>Painel de Gestão</small></div>
     </div>
-    <div class="brand-name">CAMIM</div>
-    <div class="brand-slogan">Painel de Gestão · Acesso Restrito</div>
-  </div>
+    <div class="chamada">
+      <h1>Os indicadores da rede, num só lugar.</h1>
+      <p>Acompanhe atendimentos, vendas, notas fiscais, custos e campanhas dos 13 postos da CAMIM.</p>
+    </div>
+    <div class="grafico" aria-hidden="true">
+      <svg viewBox="0 0 600 300" preserveAspectRatio="none">
+        <rect class="barra" x="30"  y="190" width="48" height="110"/>
+        <rect class="barra" x="102" y="150" width="48" height="150"/>
+        <rect class="barra" x="174" y="205" width="48" height="95"/>
+        <rect class="barra" x="246" y="120" width="48" height="180"/>
+        <rect class="barra" x="318" y="140" width="48" height="160"/>
+        <rect class="barra" x="390" y="80"  width="48" height="220"/>
+        <rect class="barra" x="462" y="100" width="48" height="200"/>
+        <rect class="barra" x="534" y="40"  width="48" height="260"/>
+        <polyline class="linha" points="54,170 126,135 198,180 270,105 342,120 414,65 486,85 558,25"/>
+        <circle class="ponto" cx="558" cy="25" r="7"/>
+      </svg>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="num" data-target="13">0</div><div class="lbl">Postos</div></div>
+      <div class="stat"><div class="num" data-target="2">0</div><div class="lbl">Operadoras</div></div>
+      <div class="stat"><div class="num" data-target="14">0</div><div class="lbl">KPIs</div></div>
+    </div>
+  </aside>
 
-  <!-- Card login -->
-  <div class="card">
-    <div class="card-title">Bem-vindo de volta</div>
-    <div class="card-sub">Faça login para acessar seus indicadores</div>
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-title">Entrar no painel</div>
+      <div class="card-sub">Use sua conta institucional da CAMIM.</div>
 
-    <a href="/auth/idcamim" class="btn-idcamim">
-      <i class="fas fa-id-badge"></i>Entrar com IDCamim
-    </a>
+      <a href="/auth/idcamim" class="btn-idcamim">
+        <i class="fas fa-id-badge"></i>Entrar com IDCamim
+      </a>
 
-    <div class="divider">ou</div>
+      <div class="divider">ou com e-mail e senha</div>
 
-    <form method="POST" action="/session/login" novalidate>
+      <form method="POST" action="/session/login" novalidate>
 
-      <div class="field">
-        <label for="email">Email Institucional</label>
-        <div class="input-row">
-          <span class="icon"><i class="far fa-envelope"></i></span>
-          <input id="email" name="email" type="email"
-            placeholder="voce@camim.com.br"
-            autocomplete="username" inputmode="email" required>
+        <div class="field">
+          <label for="email">Email Institucional</label>
+          <div class="input-row">
+            <span class="icon"><i class="far fa-envelope"></i></span>
+            <input id="email" name="email" type="email"
+              placeholder="voce@camim.com.br"
+              autocomplete="username" inputmode="email" required>
+          </div>
         </div>
+
+        <div class="field">
+          <label for="senha">Senha</label>
+          <div class="input-row">
+            <span class="icon"><i class="fas fa-lock"></i></span>
+            <input id="senha" name="senha" type="password"
+              placeholder="••••••••"
+              autocomplete="current-password" required>
+            <button class="toggle-pwd" type="button" id="togglePwd" aria-label="Mostrar/ocultar senha">
+              <i class="far fa-eye" id="eyeIcon"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-login">
+          <i class="fas fa-sign-in-alt" style="margin-right:8px"></i>Entrar
+        </button>
+
+      </form>
+
+      <div class="forgot-wrap">
+        <a href="/auth/primeiro-login">
+          <i class="fas fa-user-plus"></i>Primeiro login?
+        </a>
+        <a href="/auth/reset">
+          <i class="fas fa-key"></i>Esqueci minha senha
+        </a>
       </div>
 
-      <div class="field">
-        <label for="senha">Senha</label>
-        <div class="input-row">
-          <span class="icon"><i class="fas fa-lock"></i></span>
-          <input id="senha" name="senha" type="password"
-            placeholder="••••••••"
-            autocomplete="current-password" required>
-          <button class="toggle-pwd" type="button" id="togglePwd" aria-label="Mostrar/ocultar senha">
-            <i class="far fa-eye" id="eyeIcon"></i>
-          </button>
-        </div>
-      </div>
-
-      <button type="submit" class="btn-login">
-        <i class="fas fa-sign-in-alt" style="margin-right:8px"></i>Entrar
-      </button>
-
-    </form>
-
-    <div class="forgot-wrap">
-      <a href="/auth/primeiro-login">
-        <i class="fas fa-user-plus"></i>Primeiro login?
-      </a>
-      <a href="/auth/reset">
-        <i class="fas fa-key"></i>Esqueci minha senha
-      </a>
+      <div id="msg" role="alert"></div>
     </div>
-
-    <div id="msg" role="alert"></div>
-  </div>
-
-  <!-- Stats -->
-  <div class="stats">
-    <div class="stat">
-      <div class="num" data-target="13">0</div>
-      <div class="lbl">Postos</div>
-    </div>
-    <div class="stat-sep"></div>
-    <div class="stat">
-      <div class="num" data-target="2">0</div>
-      <div class="lbl">Operadoras</div>
-    </div>
-    <div class="stat-sep"></div>
-    <div class="stat">
-      <div class="num" data-target="14">0</div>
-      <div class="lbl">KPIs</div>
-    </div>
-  </div>
-
+  </main>
 </div>
 
 <script>

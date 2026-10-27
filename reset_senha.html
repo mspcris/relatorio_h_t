@@ -7,87 +7,173 @@
 <link rel="shortcut icon" href="/images/Logo Camim-01_50px.png" type="image/x-icon">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
 <style>
+/* ══════════════════════════════════════════════════════
+   TELAS DE ACESSO DO KPI — identidade própria (2026-10-27)
+   Tema CLARO, painel verde à esquerda com motivo de
+   indicadores. De propósito NÃO usa o mosaico de fotos,
+   a grade, a linha de scan nem o card escuro translúcido:
+   esse visual é o do idCamim e confundia o usuário.
+   O mesmo bloco está em login.html, reset_senha.html e
+   nova_senha.html — mudou aqui, muda nos três.
+══════════════════════════════════════════════════════ */
+:root {
+  --verde: #009944;
+  --verde-escuro: #006633;
+  --verde-claro: #e6f4ec;
+  --tinta: #10261a;
+  --tinta-2: #4a5e52;
+  --tinta-3: #8a9a90;
+  --fundo: #f3f6f4;
+  --borda: #d9e2dc;
+  --branco: #ffffff;
+  --erro: #c62828;
+  --ok: #1b7f3b;
+}
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body {
-  height: 100%;
-  font-family: "Segoe UI", system-ui, sans-serif;
-  background: linear-gradient(160deg, #0a2010 0%, #0d1a0d 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+html, body { min-height: 100%; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: var(--fundo); color: var(--tinta); }
+
+.tela { min-height: 100vh; display: grid; grid-template-columns: minmax(320px, 44%) 1fr; }
+
+/* ── painel verde (marca) ───────────────────────────── */
+.painel {
+  position: relative; overflow: hidden;
+  background: linear-gradient(165deg, var(--verde) 0%, var(--verde-escuro) 100%);
+  color: #fff; padding: 48px 48px 40px;
+  display: flex; flex-direction: column; justify-content: flex-start;
 }
+.painel .marca { position: relative; z-index: 2; display: flex; align-items: center; gap: 14px; }
+.painel .marca .logo { width: 56px; height: 56px; border-radius: 14px; background: #fff; display: flex; align-items: center; justify-content: center; padding: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+.painel .marca .logo img { width: 100%; height: 100%; object-fit: contain; }
+.painel .marca .nome { font-size: 1.35rem; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
+.painel .marca .nome small { display: block; font-size: .74rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; opacity: .78; margin-top: 3px; }
+
+.painel .chamada { position: relative; z-index: 2; margin: 44px 0 0; max-width: 420px; }
+.painel .chamada h1 { font-size: clamp(1.7rem, 2.6vw, 2.3rem); font-weight: 800; line-height: 1.18; margin-bottom: 12px; }
+.painel .chamada p { font-size: .98rem; line-height: 1.55; opacity: .86; }
+
+/* motivo de indicadores: barras + linha, em branco translúcido */
+.painel .grafico { position: absolute; left: 0; right: 0; bottom: 0; height: 46%; z-index: 1; pointer-events: none; }
+.painel .grafico svg { width: 100%; height: 100%; display: block; }
+.painel .grafico .barra { fill: rgba(255,255,255,.14); animation: cresce 1.4s cubic-bezier(.2,.8,.2,1) both; transform-origin: bottom; }
+.painel .grafico .barra:nth-child(2) { animation-delay: .08s; }
+.painel .grafico .barra:nth-child(3) { animation-delay: .16s; }
+.painel .grafico .barra:nth-child(4) { animation-delay: .24s; }
+.painel .grafico .barra:nth-child(5) { animation-delay: .32s; }
+.painel .grafico .barra:nth-child(6) { animation-delay: .40s; }
+.painel .grafico .barra:nth-child(7) { animation-delay: .48s; }
+.painel .grafico .barra:nth-child(8) { animation-delay: .56s; }
+.painel .grafico .linha { fill: none; stroke: rgba(255,255,255,.75); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1200; stroke-dashoffset: 1200; animation: traca 1.8s ease-out .5s forwards; }
+.painel .grafico .ponto { fill: #fff; opacity: 0; animation: aparece .4s ease 2.1s forwards; }
+@keyframes cresce { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes traca { to { stroke-dashoffset: 0; } }
+@keyframes aparece { to { opacity: 1; } }
+
+.painel .stats { position: relative; z-index: 2; display: flex; gap: 28px; flex-wrap: wrap; margin-top: auto; padding-top: 40px; }
+.painel .stat .num { font-size: 1.9rem; font-weight: 900; line-height: 1; }
+.painel .stat .lbl { font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; opacity: .78; margin-top: 5px; }
+
+/* ── lado do formulário ─────────────────────────────── */
+.conteudo { display: flex; align-items: center; justify-content: center; padding: 40px 24px; }
 .card {
-  width: min(420px, 100%);
-  background: rgba(255,255,255,.05);
-  border: 1px solid rgba(255,255,255,.1);
-  border-radius: 16px;
-  padding: 40px 36px;
-  color: #fff;
+  width: min(420px, 100%); background: var(--branco);
+  border: 1px solid var(--borda); border-radius: 18px; padding: 36px 38px;
+  box-shadow: 0 10px 40px rgba(16,38,26,.08);
+  animation: sobe .6s ease both;
 }
-.logo-row { text-align: center; margin-bottom: 28px; }
-.logo-row img { height: 52px; }
-h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; text-align: center; }
-.sub { text-align: center; color: rgba(255,255,255,.45); font-size: .88rem; margin-bottom: 28px; }
-label { display: block; font-size: .78rem; font-weight: 600; color: rgba(255,255,255,.5); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 8px; }
+@keyframes sobe { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.card-title { font-size: 1.35rem; font-weight: 800; color: var(--tinta); margin-bottom: 4px; }
+.card-sub { font-size: .88rem; color: var(--tinta-2); margin-bottom: 26px; }
+
+.field { margin-bottom: 16px; }
+.field label, .card > form > label, label.rotulo {
+  display: block; font-size: .74rem; font-weight: 700; color: var(--tinta-2);
+  text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px;
+}
 .input-row {
-  display: flex;
-  align-items: center;
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 10px;
-  overflow: hidden;
-  transition: border-color .2s;
-  margin-bottom: 20px;
+  display: flex; align-items: center; background: #fbfcfb;
+  border: 1px solid var(--borda); border-radius: 10px; overflow: hidden;
+  transition: border-color .2s, box-shadow .2s;
 }
-.input-row:focus-within { border-color: #009944; box-shadow: 0 0 0 3px rgba(0,153,68,.18); }
-.input-row .icon { width: 44px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.3); }
-.input-row input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #fff;
-  font-size: .97rem;
-  padding: 13px 12px 13px 0;
+.input-row:focus-within { border-color: var(--verde); box-shadow: 0 0 0 3px rgba(0,153,68,.16); background: #fff; }
+.input-row .icon { width: 42px; display: flex; align-items: center; justify-content: center; color: var(--verde); font-size: .9rem; flex-shrink: 0; }
+.input-row input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: var(--tinta); font-size: .97rem; padding: 12px 10px 12px 0; }
+.input-row input::placeholder { color: #b3bfb8; }
+.toggle-pwd { background: none; border: none; cursor: pointer; padding: 0 13px; color: var(--tinta-3); font-size: .9rem; transition: color .2s; }
+.toggle-pwd:hover { color: var(--verde); }
+
+.btn, .btn-login {
+  width: 100%; padding: 13px; border: none; border-radius: 10px;
+  background: var(--verde); color: #fff; font-size: .98rem; font-weight: 700;
+  letter-spacing: .03em; cursor: pointer; margin-top: 6px;
+  transition: background .2s, transform .15s, box-shadow .2s;
+  box-shadow: 0 4px 16px rgba(0,153,68,.28);
 }
-.input-row input::placeholder { color: rgba(255,255,255,.2); }
-.btn {
-  width: 100%;
-  padding: 13px;
-  border: none;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #009944, #006633);
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 4px 20px rgba(0,153,68,.3);
-  transition: filter .2s;
+.btn:hover, .btn-login:hover { background: var(--verde-escuro); transform: translateY(-1px); }
+.btn:active, .btn-login:active { transform: scale(.985); }
+
+.erro, #msg { min-height: 18px; font-size: .85rem; text-align: center; margin-top: 12px; color: var(--erro); }
+#msg.ok { color: var(--ok); }
+.back { display: block; text-align: center; margin-top: 20px; color: var(--tinta-2); font-size: .86rem; text-decoration: none; font-weight: 600; }
+.back:hover { color: var(--verde); }
+
+/* ── responsivo ─────────────────────────────────────── */
+@media (max-width: 860px) {
+  .tela { grid-template-columns: 1fr; }
+  .painel { padding: 24px 22px; min-height: 0; }
+  .painel .chamada { margin: 18px 0 6px; }
+  .painel .chamada h1 { font-size: 1.35rem; }
+  .painel .chamada p, .painel .grafico, .painel .stats { display: none; }
+  .conteudo { padding: 24px 16px 40px; }
+  .card { padding: 28px 22px; }
 }
-.btn:hover { filter: brightness(1.1); }
-.back { display: block; text-align: center; margin-top: 20px; color: rgba(255,255,255,.35); font-size: .85rem; text-decoration: none; }
-.back:hover { color: #009944; }
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="logo-row">
-    <img src="/images/Logo Camim-01_200px.png" alt="CAMIM">
-  </div>
-  <h1>Recuperar senha</h1>
-  <p class="sub">Informe seu e-mail e enviaremos um link para criar uma nova senha.</p>
-
-  <form method="POST" action="/auth/reset">
-    <label for="email">E-mail</label>
-    <div class="input-row">
-      <span class="icon"><i class="far fa-envelope"></i></span>
-      <input id="email" name="email" type="email" placeholder="voce@camim.com.br" required autocomplete="email">
+<div class="tela">
+  <!-- Painel da marca: fundo próprio do KPI, diferente do idCamim -->
+  <aside class="painel">
+    <div class="marca">
+      <div class="logo"><img src="/images/Logo Camim-01_200px.png" alt="CAMIM"></div>
+      <div class="nome">CAMIM<small>Painel de Gestão</small></div>
     </div>
-    <button type="submit" class="btn">Enviar link de recuperação</button>
-  </form>
+    <div class="chamada">
+      <h1>Recuperar o acesso.</h1>
+      <p>Informe o e-mail institucional e enviaremos um link para criar uma nova senha. O link vale por 1 hora.</p>
+    </div>
+    <div class="grafico" aria-hidden="true">
+      <svg viewBox="0 0 600 300" preserveAspectRatio="none">
+        <rect class="barra" x="30"  y="190" width="48" height="110"/>
+        <rect class="barra" x="102" y="150" width="48" height="150"/>
+        <rect class="barra" x="174" y="205" width="48" height="95"/>
+        <rect class="barra" x="246" y="120" width="48" height="180"/>
+        <rect class="barra" x="318" y="140" width="48" height="160"/>
+        <rect class="barra" x="390" y="80"  width="48" height="220"/>
+        <rect class="barra" x="462" y="100" width="48" height="200"/>
+        <rect class="barra" x="534" y="40"  width="48" height="260"/>
+        <polyline class="linha" points="54,170 126,135 198,180 270,105 342,120 414,65 486,85 558,25"/>
+        <circle class="ponto" cx="558" cy="25" r="7"/>
+      </svg>
+    </div>
+    
+  </aside>
 
-  <a href="/login" class="back"><i class="fas fa-arrow-left" style="margin-right:6px"></i>Voltar ao login</a>
+  <main class="conteudo">
+    <div class="card">
+      <div class="card-title">Recuperar senha</div>
+      <div class="card-sub">Informe seu e-mail e enviaremos um link para criar uma nova senha.</div>
+
+      <form method="POST" action="/auth/reset">
+        <label class="rotulo" for="email">E-mail</label>
+        <div class="input-row">
+          <span class="icon"><i class="far fa-envelope"></i></span>
+          <input id="email" name="email" type="email" placeholder="voce@camim.com.br" required autocomplete="email">
+        </div>
+        <button type="submit" class="btn" style="margin-top:20px">Enviar link de recuperação</button>
+      </form>
+
+      <a href="/login" class="back"><i class="fas fa-arrow-left" style="margin-right:6px"></i>Voltar ao login</a>
+    </div>
+  </main>
 </div>
 </body>
 </html>
