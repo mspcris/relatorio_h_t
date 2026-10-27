@@ -411,14 +411,22 @@
                     <div class="col-lg-7">
                         <div class="card chart-card">
                             <div class="card-header">
-                                <h3 class="card-title mb-0" id="titleSurvivor">Curva de Sobrevivência — Retenção do Cohort</h3>
+                                <div class="d-flex align-items-center flex-wrap" style="gap:8px;">
+                                    <h3 class="card-title mb-0" id="titleSurvivor">Curva de Sobrevivência — Retenção do Cohort</h3>
+                                    <div class="btn-group btn-group-sm ml-auto" role="group" aria-label="Horizonte da curva">
+                                        <button type="button" class="btn btn-outline-success active" data-horizonte="12">12m</button>
+                                        <button type="button" class="btn btn-outline-success" data-horizonte="24">24m</button>
+                                        <button type="button" class="btn btn-outline-success" data-horizonte="36">36m</button>
+                                    </div>
+                                </div>
                             </div>
                             <div class="card-body" style="height:320px">
                                 <canvas id="chartSurvivor"></canvas>
                             </div>
+                            <div class="px-3 pt-2 text-muted" id="survivorAviso" style="font-size:0.82rem;"></div>
                             <div class="card-footer rastro">
                                 <div style="background:#fff8e1;border-radius:8px;padding:10px 14px;margin-bottom:8px;border-left:4px solid #ffc107;">
-                                    <strong>Como ler este gráfico?</strong> A linha verde mostra quantos % dos clientes novos ainda estão pagando depois de 1, 2, 3... até 12 meses.
+                                    <strong>Como ler este gráfico?</strong> A linha verde mostra quantos % dos clientes novos ainda estão pagando depois de 1, 2, 3... meses — até 12, 24 ou 36, conforme o botão no alto do gráfico.
                                     A linha vermelha é o contrário: quantos % já saíram. Se a linha verde cai muito rápido no começo, significa que muitos clientes desistem logo — pode ser problema no atendimento inicial.
                                     <br><strong>Conta:</strong> <code style="background:#fff3cd;padding:2px 6px;border-radius:3px;" title="Clientes que pagaram no mes X dividido pelo total que entrou, vezes 100">Clientes pagando no mes X &divide; Total que entrou &times; 100</code>
                                 </div>
@@ -1366,9 +1374,19 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             });
         }
 
+        // Horizonte da curva: 12 (padrão), 24 ou 36 meses — botões no cabeçalho.
+        let survivorHorizonte = 12;
+        document.addEventListener('click', function (e) {
+            const b = e.target.closest('[data-horizonte]');
+            if (!b) return;
+            survivorHorizonte = Number(b.dataset.horizonte) || 12;
+            document.querySelectorAll('[data-horizonte]').forEach(x => x.classList.toggle('active', x === b));
+            renderSurvivorCurve();
+        });
+
         function renderSurvivorCurve() {
             const postos = getSelectedPostos();
-            const months = [1,2,3,4,5,6,7,8,9,10,11,12];
+            const months = Array.from({ length: survivorHorizonte }, (_, i) => i + 1);
             const row = allData[selMonth] || {};
             const mesLabel = formatMonth(selMonth);
 
@@ -1390,6 +1408,23 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             });
 
             const churnData = retData.map(v => v != null ? Math.round((100 - v) * 10) / 10 : null);
+
+            // Quantos meses de histórico essa turma tem: a turma precisa ter idade
+            // para o horizonte escolhido. Diz na tela, em vez de deixar o gráfico vazio.
+            const aviso = el('survivorAviso');
+            if (aviso) {
+                let ultimo = 0;
+                retData.forEach((v, i) => { if (v != null) ultimo = i + 1; });
+                const [ay, am] = selMonth.split('-').map(Number);
+                const d = new Date(ay, am - 1 - survivorHorizonte, 1);
+                const turmaMin = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                if (ultimo < survivorHorizonte) {
+                    aviso.innerHTML = `<i class="fas fa-info-circle mr-1"></i>A turma de <strong>${mesLabel}</strong> tem ${ultimo} ${ultimo === 1 ? 'mês' : 'meses'} de histórico; o resto do eixo fica vazio. Para ver ${survivorHorizonte} meses completos, escolha no filtro do topo uma turma de <strong>${formatMonth(turmaMin)}</strong> ou anterior.`
+                        + (survivorHorizonte > 24 ? ' <br>Atenção: o banco só recalcula turmas dos últimos 2 anos; turma mais antiga que isso fica com o histórico da última vez em que foi calculada, então 36 meses raramente aparecem completos.' : '');
+                } else {
+                    aviso.innerHTML = '';
+                }
+            }
 
             const ctx = el('chartSurvivor');
             if (!ctx) return;
