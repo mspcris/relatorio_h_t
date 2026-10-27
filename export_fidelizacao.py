@@ -217,6 +217,26 @@ def init_db():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    # A tabela nasceu sem chave unica: o REPLACE INTO abaixo nunca substituia,
+    # so inseria. Em 2026-10-27 eram 855 mil linhas para 6.654 chaves, e o JSON
+    # pegava as admissoes da PRIMEIRA gravacao (ex.: turma de mai/26 gravada no
+    # dia 2 de maio com 1 admissao -> retencao de 19.000%). Aqui: apaga as
+    # repeticoes mantendo a gravacao mais recente e cria a chave unica, para o
+    # REPLACE passar a substituir. Idempotente.
+    tem_idx = c.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='index' AND name='ux_fidelizacao_chave'"
+    ).fetchone()
+    if not tem_idx:
+        c.execute('''
+            DELETE FROM fidelizacao WHERE id NOT IN (
+                SELECT MAX(id) FROM fidelizacao
+                GROUP BY posto, ano_admissao, mes_admissao, ano_referencia, mes_referencia
+            )
+        ''')
+        c.execute('''
+            CREATE UNIQUE INDEX ux_fidelizacao_chave ON fidelizacao
+            (posto, ano_admissao, mes_admissao, ano_referencia, mes_referencia)
+        ''')
     conn.commit()
     conn.close()
 
@@ -248,7 +268,8 @@ def upsert_fidelizacao_batch(posto: str, df: pd.DataFrame):
 def read_fidelizacao_from_db():
     """Lê todos os dados de fidelização do SQLite."""
     conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query('SELECT * FROM fidelizacao', conn)
+    # ORDER BY id: a gravacao mais recente vem por ultimo e e a que vale.
+    df = pd.read_sql_query('SELECT * FROM fidelizacao ORDER BY id', conn)
     conn.close()
     return df
 
@@ -283,6 +304,9 @@ def build_json_fidelizacao():
                 'admissoes': int(row['qtd_admissao']),
                 'retencao_por_mes': {}
             }
+        else:
+            # linhas vem em ORDER BY id: a admissao da gravacao mais recente vale
+            dados[ym_adm][posto]['admissoes'] = int(row['qtd_admissao'])
 
         meses_diferenca = (row['ano_referencia'] - row['ano_admissao']) * 12 + \
                          (row['mes_referencia'] - row['mes_admissao'])

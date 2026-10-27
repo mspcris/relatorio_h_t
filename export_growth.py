@@ -266,12 +266,22 @@ def main():
 
     meses_all = list(month_iter(start, end_exc))
 
-    # Filtrar: so roda meses sem cache + mes atual (pode mudar ao longo do mes)
+    # Filtrar: roda meses sem cache + os ultimos N meses (default 7).
+    # Por que N e nao so o mes atual (2026-10-27): o mrr.sql filtra a situacao
+    # do cliente e o CanceladoANS pelo estado de HOJE. Um mes fechado calculado
+    # numa rodada antiga e o vizinho calculado hoje usavam "idades" diferentes do
+    # mesmo filtro, e a serie mostrava degraus que nao existiam (Realengo:
+    # mar/26 4.929 -> abr/26 4.193). A tela mostra 6 meses + a base do mes
+    # anterior, por isso 7. `--recalcular-tudo` refaz desde 2024-01.
+    recalc_n = int(os.environ.get("GROWTH_RECALC_MESES", "7"))
+    if "--recalcular-tudo" in sys.argv:
+        recalc_n = 10_000
+    janela = set(month_bounds(d)[2] for d in meses_all[-recalc_n:])
     meses_to_run = []
     meses_skipped = []
     for dt in meses_all:
         _, _, ym = month_bounds(dt)
-        if ym in cached and ym != current_ym:
+        if ym in cached and ym not in janela:
             meses_skipped.append(ym)
         else:
             meses_to_run.append(dt)
