@@ -2158,6 +2158,25 @@ Anthropic (`llm_client_anthropic.py`) também sai pela OpenRouter (`anthropic/cl
 
 ---
 
+## KPI Fidelização — churn dos gestores + cohort próprio (2026-10-27)
+
+Detalhes em **[docs/2026-10-27_fidelizacao_churn_cohort.md](docs/2026-10-27_fidelizacao_churn_cohort.md)**. O essencial:
+
+- **Churn = perda líquida de pagantes**, a conta dos gestores:
+  `perdidos = vendas − (pagantes − pagantes do mês anterior)`;
+  `churn % = perdidos ÷ pagantes do mês anterior`. Pagantes = `mensalidade_qtd`
+  (KPI Metas); vendas = regra única (`json_vendas`). **Não olhamos
+  cancelamentos** — a tabela do ERP fica no fim como "% cancelado", nunca "churn".
+- **Cohort não usa mais a `PC_Fin_Fidelizacao`**: `sql_fidelizacao/cohort.sql`
+  conta clientes distintos só da turma, janela de 5 anos. A procedure passava
+  de 100 %. `--procedure` volta ao antigo só para comparar.
+- Curva de sobrevivência 12/24/36m: escolher 24/36 recua a turma e muda o filtro
+  do topo; mês corrente e futuro ficam fora da curva.
+- `export_growth.py` recalcula os últimos 7 meses a cada rodada
+  (`--recalcular-tudo` desde 2024-01).
+
+---
+
 ## Regras de desenvolvimento
 
 - Cada KPI é independente — nunca compartilha cálculos entre páginas
