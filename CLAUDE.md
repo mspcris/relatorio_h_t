@@ -104,6 +104,30 @@ Documentar aqui o comando exato após verificar.
 
 ---
 
+## REGRA — Tela de login própria em TODO sistema da CAMIM (2026-10-27)
+
+Pedido do Cristiano: *"o usuário não entende quando está aqui ou logando no
+idCamim"*. O idCamim copiou o visual antigo do KPI (mosaico de fotos com Ken
+Burns, grade, scanline, card escuro translúcido), então quem mudou foi o KPI e
+todos os outros sistemas.
+
+- **Todo sistema tem a SUA tela de login**, mesmo que só aceite idCamim. Nunca
+  mandar o não-logado direto ao authorize do idCamim.
+- **Identidade padrão** (a destas telas): tema claro, painel verde CAMIM à
+  esquerda (logo, frase sobre a missão do sistema, gráfico de barras em SVG, 3
+  pilares), card branco à direita. O botão "Entrar com idCamim" é **azul
+  contornado** quando há login local e verde quando é o único caminho — só ao
+  clicar nele o usuário vê a identidade do idCamim.
+- Aqui: `login.html`, `reset_senha.html`, `nova_senha.html` e
+  `agenda_f3/templates/login.html` (rota `GET /login` do agenda_f3; o
+  `login_required` manda para ela e o `next` continua na sessão). O bloco de CSS
+  é **o mesmo nos quatro** e nos outros projetos (crm, nossotrello, hesk, pj, ra,
+  compras, avisos_gerenciais, intranet, treinamento, loopsql, api_fin_receita,
+  central_de_atendimento, ia_cristiano, push_clientes, quadrodeavisos,
+  security_vm, zapd, sabezap_cris) — mudou num lugar, muda em todos.
+- O link "Primeiro login?" do `login.html` aponta para `/auth/primeiro-login`,
+  rota que não existe (404) — pendente desde antes.
+
 ## Autenticação
 
 - **DB:** SQLite em `/opt/relatorio_h_t/camim_auth.db` (env: `AUTH_DB_PATH`)
