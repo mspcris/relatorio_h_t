@@ -349,6 +349,13 @@
                   <span><strong>Visibilidade total:</strong> neste KPI você visualiza dados de todos os postos, independente do seu perfil de acesso.</span>
                 </div>
 
+                <!-- RÉGUA DA PÁGINA: como esta página mede churn (pedido do Cristiano, 2026-10-27) -->
+                <div class="mb-2" style="background:#e0f2f1;border-left:4px solid #00695c;border-radius:6px;padding:10px 14px;font-size:0.88rem;color:#37474f;line-height:1.55;">
+                    <strong>Como medimos churn:</strong> nao olhamos cancelamentos. Nosso churn e baseado em <strong>mensalidades pagas</strong> no mes (o mesmo numero do KPI Metas) e nas vendas do mes, como os gestores fazem nos postos:
+                    <code style="background:#c8e6e2;padding:1px 5px;border-radius:3px;">perdidos = vendas do mes &minus; (pagantes do mes &minus; pagantes do mes anterior)</code>
+                    e <code style="background:#c8e6e2;padding:1px 5px;border-radius:3px;">churn % = perdidos &divide; pagantes do mes anterior</code>.
+                </div>
+
                 <!-- FILTROS -->
                 <div class="card">
                   <div class="kpi-filter-panel">
@@ -387,21 +394,8 @@
                         <h3 class="card-title mb-0"><i class="fas fa-calculator mr-2"></i>Churn dos postos — perda liquida de pagantes (conta usada pelos gestores)</h3>
                     </div>
                     <div class="card-body" id="churnGestorCards"><div class="text-muted text-center p-3">Carregando dados...</div></div>
+                    <div class="card-body pt-0" id="churnGestorPostos"></div>
                     <div class="card-footer text-muted" style="font-size:0.85rem" id="churnGestorComo"></div>
-                </div>
-
-                <!-- CHURN OPERACIONAL -->
-                <div class="card">
-                    <div class="card-header bg-dark">
-                        <h3 class="card-title mb-0"><i class="fas fa-chart-line mr-2"></i>Churn Mensal — Cancelamentos dos ultimos 6 meses</h3>
-                    </div>
-                    <div class="card-body" id="churnOperacionalCards"></div>
-                    <div class="card-footer text-muted" style="font-size:0.85rem">
-                        <div id="churnOperacionalComo"></div>
-                        <strong>Cores:</strong> <span style="background:#d4edda;padding:1px 6px;border-radius:3px;">verde</span> &le; 5% &nbsp;&middot;&nbsp; <span style="background:#fff3cd;padding:1px 6px;border-radius:3px;">amarelo</span> 5&ndash;10% &nbsp;&middot;&nbsp; <span style="background:#f8d7da;padding:1px 6px;border-radius:3px;">vermelho</span> &gt; 10%.
-                        <br><strong>Fonte:</strong> growth_dashboard.json &rarr; export_growth.py &rarr; sql_growth/mrr.sql (base) e sql_growth/churn.sql (cancelamentos).
-                        <br><strong>Atualizacao:</strong> 1x por dia as 02:30 (cron da VM). So o mes corrente e recalculado; mes fechado fica com o valor da primeira rodada.
-                    </div>
                 </div>
 
                 <!-- RESUMO POR COHORT -->
@@ -421,10 +415,10 @@
                             </ul>
                             Se entraram 100 clientes e apos 3 meses restam 70, a <strong>retencao</strong> e 70% (e o <strong>churn do cohort</strong> e 30% — os que sairam).
                             <br><br>
-                            <strong>Qual a diferenca do Churn Mensal (tabela acima)?</strong>
+                            <strong>Mesma regua do Churn dos postos (acima): pagamento.</strong> Um cliente da turma conta como "ficou" no mes em que <u>pagou mensalidade</u>; se nao pagou, conta como "saiu" naquele mes — mesmo que nao tenha cancelado no cadastro.
                             <ul style="margin:6px 0 6px 18px;padding:0;">
-                                <li><strong>Churn mensal:</strong> olha a <u>base inteira</u> num mes — "saiu 6% este mes" (todo mundo junto, clientes antigos e novos).</li>
-                                <li><strong>Cohort:</strong> isola <u>so quem entrou no mesmo mes</u> e acompanha essa turma ao longo do tempo — "dos que entraram em jan/26, 70% ainda estao pagando apos 3 meses".</li>
+                                <li><strong>Churn dos postos:</strong> olha a <u>base inteira de pagantes</u> num mes — antigos e novos juntos.</li>
+                                <li><strong>Cohort:</strong> isola <u>so quem entrou no mesmo mes</u> e acompanha essa turma — "dos que entraram em jan/26, 70% ainda estao pagando apos 3 meses".</li>
                             </ul>
                             O cohort revela <strong>em qual momento da jornada</strong> o cliente mais desiste (problema de onboarding? do 6&ordm; mes?) — coisa que a media geral esconde.
                             <br><br>
@@ -577,6 +571,19 @@ EXEC PC_Fin_Fidelizacao @database = @ini
 
 -- Os dados sao armazenados em SQLite (fidelizacao.db)
 -- e exportados para json_consolidado/fidelizacao_cliente.json</pre>
+                    </div>
+                </div>
+                <!-- CHURN OPERACIONAL -->
+                <div class="card">
+                    <div class="card-header" style="background:#6c757d;color:#fff;">
+                        <h3 class="card-title mb-0"><i class="fas fa-file-signature mr-2"></i>Referencia — Cancelamentos registrados no cadastro (outra regua, nao e a dos postos)</h3>
+                    </div>
+                    <div class="card-body" id="churnOperacionalCards"></div>
+                    <div class="card-footer text-muted" style="font-size:0.85rem">
+                        <div id="churnOperacionalComo"></div>
+                        <strong>Cores:</strong> <span style="background:#d4edda;padding:1px 6px;border-radius:3px;">verde</span> &le; 5% &nbsp;&middot;&nbsp; <span style="background:#fff3cd;padding:1px 6px;border-radius:3px;">amarelo</span> 5&ndash;10% &nbsp;&middot;&nbsp; <span style="background:#f8d7da;padding:1px 6px;border-radius:3px;">vermelho</span> &gt; 10%.
+                        <br><strong>Fonte:</strong> growth_dashboard.json &rarr; export_growth.py &rarr; sql_growth/mrr.sql (base) e sql_growth/churn.sql (cancelamentos).
+                        <br><strong>Atualizacao:</strong> 1x por dia as 02:30 (cron da VM). So o mes corrente e recalculado; mes fechado fica com o valor da primeira rodada.
                     </div>
                 </div>
             </section>
@@ -1034,6 +1041,9 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 for (const p of postos) { const r = d.por_posto[p]; if (r) { t += Number(r.qtd_vendas) || 0; tem = true; } }
                 return tem ? t : null;
             };
+            // Sempre os ultimos 12 meses ate hoje. O filtro de mes da pagina abre 12
+            // meses para tras (o cohort precisa disso); aqui ele so destaca a linha e
+            // escolhe o mes da quebra por posto, quando cai dentro da janela.
             const meses = Object.keys(pagantesData).filter(k => /^\d{4}-\d{2}$/.test(k) && k <= currentYm).sort().slice(-12);
             let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0" style="font-size:0.9rem;">';
             html += '<thead style="background:#004d40;color:#fff;"><tr>'
@@ -1057,7 +1067,9 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 const conta = `${n(vd)} vendas - (${n(pt)} - ${n(pa)}) = ${n(perdidos)} perdidos; ${n(perdidos)} / ${n(pa)} = ${pct.toFixed(2).replace('.', ',')}%`;
                 let mes = formatMonth(ym);
                 if (parcial) mes += ' <span class="badge badge-warning" style="font-size:0.7rem;vertical-align:middle;" title="Mes em curso: pagantes e vendas ainda vao entrar.">PARCIAL</span>';
-                html += `<tr style="${parcial ? 'background:#fffbe6;font-style:italic;' : ''}">`
+                const sel = ym === selMonth;
+                if (sel) mes = `<span style="color:#dc3545;font-weight:600;">${mes} &#9668;</span>`;
+                html += `<tr style="${parcial ? 'background:#fffbe6;font-style:italic;' : ''}${sel ? 'outline:2px solid #dc3545;' : ''}">`
                      + `<td style="padding:8px 14px;">${mes}</td>`
                      + `<td style="padding:8px 14px;text-align:right;">${n(pa)}</td>`
                      + `<td style="padding:8px 14px;text-align:right;">${n(vd)}</td>`
@@ -1081,6 +1093,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                     <li>Foram vendidos <strong>${n(exemplo.vd)}</strong> planos em ${formatMonth(exemplo.ym)}. Se ninguem tivesse saido, a base cresceria ${n(exemplo.vd)}.</li>
                     <li>Perdidos = ${n(exemplo.vd)} &minus; ${n(exemplo.cresceu)} = <strong>${n(exemplo.perdidos)}</strong>. Churn = ${n(exemplo.perdidos)} &divide; ${n(exemplo.pa)} = <strong>${f(exemplo.pct)}%</strong>.</li>
                 </ul>` : '';
+            renderChurnGestorPostos(exemplo ? (meses.includes(selMonth) && selMonth !== currentYm ? selMonth : exemplo.ym) : null, prevYm);
             if (como) como.innerHTML = `
                 <div style="background:#e0f2f1;border-radius:8px;padding:12px 16px;margin-bottom:6px;border-left:4px solid #00695c;line-height:1.55;">
                     <strong>O que esta tabela calcula:</strong> quantos pagantes a base perdeu no mes, descontando o que entrou de venda. E a conta que os gestores dos postos fazem na planilha.
@@ -1093,13 +1106,48 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                     <br><br>${ex}
                     <strong>&#9888; Como ler:</strong>
                     <ul style="margin:6px 0 0 18px;padding:0;">
-                        <li>E <strong>perda liquida</strong>: quem parou de pagar menos quem voltou a pagar ou quitou mensalidade atrasada no mes. Nao e a quantidade de cancelamentos — essa esta na tabela abaixo, que conta o cadastro.</li>
+                        <li>E <strong>perda liquida</strong>: quem parou de pagar menos quem voltou a pagar ou quitou mensalidade atrasada no mes. Nao e a quantidade de cancelamentos — essa fica no fim da pagina, so como referencia.</li>
                         <li>Pagantes conta <strong>mensalidades pagas</strong>, nao pessoas: quem quita duas atrasadas no mesmo mes entra duas vezes. Por isso pode aparecer perdido negativo (entraram mais pagamentos que o normal).</li>
                         <li>As vendas podem diferir em poucas unidades da planilha do posto: a regra unica conta a venda no mes em que mensalidade e taxa ficaram pagas, e venda de cliente desativado depois sai da conta.</li>
                         <li>Cores: verde ate 1% &middot; amarelo ate 3% &middot; vermelho acima de 3%. Passe o mouse no % para ver a conta da linha.</li>
                     </ul>
                 </div>
                 <strong>Fonte:</strong> consolidado_mensal_por_posto.json (mensalidade_qtd, KPI Metas) e json_vendas/vendas_mensal.json (qtd_vendas, KPI Vendas).`;
+        }
+
+        // Quebra por posto do mes escolhido (ou do ultimo mes fechado), mesma conta.
+        function renderChurnGestorPostos(ym, prevYm) {
+            const box = el('churnGestorPostos');
+            if (!box) return;
+            if (!ym) { box.innerHTML = ''; return; }
+            const pm = prevYm(ym);
+            const n = v => Number(v || 0).toLocaleString('pt-BR');
+            const f = v => v.toFixed(2).replace('.', ',');
+            const nomes = (typeof POSTO_NOMES !== 'undefined') ? POSTO_NOMES : {};
+            const linhas = [];
+            for (const p of getSelectedPostos()) {
+                const a = pagantesData[pm]?.[p]?.mensalidade_qtd, t = pagantesData[ym]?.[p]?.mensalidade_qtd;
+                const v = vendasData[ym]?.por_posto?.[p]?.qtd_vendas;
+                if (a == null || t == null || v == null || !(a > 0)) continue;
+                const cresceu = t - a, perd = v - cresceu, pct = perd / a * 100;
+                linhas.push({ p, a, v, t, cresceu, perd, pct });
+            }
+            if (!linhas.length) { box.innerHTML = ''; return; }
+            linhas.sort((x, y) => y.pct - x.pct);
+            let tot = { a: 0, v: 0, t: 0 };
+            linhas.forEach(r => { tot.a += r.a; tot.v += r.v; tot.t += r.t; });
+            const totPerd = tot.v - (tot.t - tot.a), totPct = totPerd / tot.a * 100;
+            const cls = pct => pct <= 1 ? 'cell-high' : pct <= 3 ? 'cell-medium' : 'cell-low';
+            let html = `<h6 class="mb-2" style="font-weight:600;">Por posto em ${formatMonth(ym)} <small class="text-muted">— maior churn primeiro; escolha outro mes dos ultimos 12 no filtro do topo</small></h6>`;
+            html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-0" style="font-size:0.88rem;">'
+                 + '<thead style="background:#e0f2f1;"><tr><th>Posto</th><th class="text-right">Pagantes ' + formatMonth(pm) + '</th><th class="text-right">Vendas</th><th class="text-right">Pagantes ' + formatMonth(ym) + '</th><th class="text-right">Cresceu</th><th class="text-right">Perdidos</th><th class="text-center">Churn %</th></tr></thead><tbody>';
+            for (const r of linhas) {
+                const conta = `${n(r.v)} - (${n(r.t)} - ${n(r.a)}) = ${n(r.perd)}; ${n(r.perd)} / ${n(r.a)} = ${f(r.pct)}%`;
+                html += `<tr><td>${r.p}${nomes[r.p] ? ' — ' + nomes[r.p] : ''}</td><td class="text-right">${n(r.a)}</td><td class="text-right">${n(r.v)}</td><td class="text-right">${n(r.t)}</td><td class="text-right">${(r.cresceu > 0 ? '+' : '') + n(r.cresceu)}</td><td class="text-right" style="font-weight:600;">${n(r.perd)}</td><td class="text-center ${cls(r.pct)}" title="${conta}">${f(r.pct)}%</td></tr>`;
+            }
+            html += `<tr style="font-weight:700;background:#f4f6f9;"><td>Total</td><td class="text-right">${n(tot.a)}</td><td class="text-right">${n(tot.v)}</td><td class="text-right">${n(tot.t)}</td><td class="text-right">${(tot.t - tot.a > 0 ? '+' : '') + n(tot.t - tot.a)}</td><td class="text-right">${n(totPerd)}</td><td class="text-center ${cls(totPct)}">${f(totPct)}%</td></tr>`;
+            html += '</tbody></table></div>';
+            box.innerHTML = html;
         }
 
         // "Como foi calculado" da tabela de churn — escrito na tela, com o exemplo
