@@ -576,7 +576,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                 <!-- CHURN OPERACIONAL -->
                 <div class="card">
                     <div class="card-header" style="background:#6c757d;color:#fff;">
-                        <h3 class="card-title mb-0"><i class="fas fa-file-signature mr-2"></i>Referencia — Cancelamentos registrados no cadastro (outra regua, nao e a dos postos)</h3>
+                        <h3 class="card-title mb-0"><i class="fas fa-file-signature mr-2"></i>Pedidos de cancelamento registrados no ERP — so referencia, nao e o nosso churn</h3>
                     </div>
                     <div class="card-body" id="churnOperacionalCards"></div>
                     <div class="card-footer text-muted" style="font-size:0.85rem">
@@ -947,7 +947,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
             html += '<th style="padding:10px 14px;">Mes</th>';
             html += '<th style="padding:10px 14px;text-align:right;" title="Mensalidades com data de referencia no mes ANTERIOR, de clientes que hoje estao Adimplentes ou Inadimplentes e sem cancelamento ANS (sql_growth/mrr.sql). NAO e a quantidade de mensalidades pagas.">Base ativa<br><small>(mensalidades de referencia do mes anterior)</small></th>';
             html += '<th style="padding:10px 14px;text-align:right;" title="Clientes do Cad_Cliente com data de cancelamento (DataCancelamentoAuto ou cancelamento ANS sem reativacao) dentro do mes da linha (sql_growth/churn.sql).">Cancelamentos<br><small>(no mes, pelo cadastro)</small></th>';
-            html += '<th style="padding:10px 14px;text-align:center;" title="Cancelamentos do mes dividido pela base ativa do mes anterior, vezes 100">Churn %</th>';
+            html += '<th style="padding:10px 14px;text-align:center;" title="Cancelamentos registrados no mes dividido pela base do mes anterior, vezes 100. Nao e o churn da pagina: o churn e a perda de pagantes, no card acima.">% cancelado<br><small>(do cadastro)</small></th>';
             html += '<th style="padding:10px 14px;text-align:center;">Tendencia</th>';
             html += '</tr></thead><tbody>';
 
@@ -971,8 +971,8 @@ EXEC PC_Fin_Fidelizacao @database = @ini
 
                 let trend = '';
                 if (prevChurn != null && churnPct != null) {
-                    if (churnPct < prevChurn) trend = '<span style="color:#28a745;font-size:1.1rem;" title="Churn diminuiu em relacao ao mes anterior">&#9660;</span>';
-                    else if (churnPct > prevChurn) trend = '<span style="color:#dc3545;font-size:1.1rem;" title="Churn aumentou em relacao ao mes anterior">&#9650;</span>';
+                    if (churnPct < prevChurn) trend = '<span style="color:#28a745;font-size:1.1rem;" title="% cancelado diminuiu em relacao ao mes anterior">&#9660;</span>';
+                    else if (churnPct > prevChurn) trend = '<span style="color:#dc3545;font-size:1.1rem;" title="% cancelado aumentou em relacao ao mes anterior">&#9650;</span>';
                     else trend = '<span style="color:#6c757d;" title="Churn igual ao mes anterior">&rarr;</span>';
                 }
 
@@ -1165,13 +1165,13 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                     <ul style="margin:6px 0 6px 18px;padding:0;">
                         <li>Base ativa = <strong>${n(ex.base)}</strong> mensalidades com referencia em <strong>${formatMonth(ex.pm)}</strong> (o mes anterior), de clientes que hoje estao adimplentes ou inadimplentes e sem cancelamento ANS.</li>
                         <li>Cancelamentos = <strong>${n(ex.cancelamentos)}</strong> clientes com data de cancelamento dentro de <strong>${formatMonth(ex.ym)}</strong>, no cadastro (Cad_Cliente).</li>
-                        <li>Churn = ${n(ex.cancelamentos)} &divide; ${n(ex.base)} &times; 100 = <strong>${ex.churnStr}</strong>.</li>
+                        <li>% cancelado = ${n(ex.cancelamentos)} &divide; ${n(ex.base)} &times; 100 = <strong>${ex.churnStr}</strong>.</li>
                     </ul>`;
             }
             box.innerHTML = `
             <div style="background:#f0f4ff;border-radius:8px;padding:12px 16px;margin-bottom:10px;border-left:4px solid #5b9bd5;line-height:1.55;">
-                <strong>O que esta tabela calcula:</strong> cancelamentos registrados no cadastro em cada mes, divididos pela base de mensalidades do mes anterior.
-                <br><strong>Conta:</strong> <code style="background:#e8eef7;padding:1px 5px;border-radius:3px;">Churn % = cancelamentos do mes &divide; base ativa do mes anterior &times; 100</code>
+                <strong>O que esta tabela mostra:</strong> quantos clientes tiveram o plano <strong>cancelado no ERP</strong> em cada mes (pedido do cliente ou cancelamento ANS), em relacao a base de mensalidades do mes anterior. <strong>Nao e o nosso churn</strong> — o churn desta pagina e a perda de pagantes, no card do topo. Fica aqui so como referencia: cliente pode cancelar e continuar pagando atrasados, ou parar de pagar sem nunca cancelar.
+                <br><strong>Conta:</strong> <code style="background:#e8eef7;padding:1px 5px;border-radius:3px;">% cancelado = cancelamentos do mes &divide; base ativa do mes anterior &times; 100</code>
                 <br><br>
                 <strong>Base ativa</strong> = quantidade de linhas da <code>vw_fin_receita2</code> com <em>Data referencia</em> dentro do mes anterior, tipo Mensalidade, <code>CanceladoANS = 0</code> e situacao do cliente igual a <em>Adimplente</em> ou <em>Inadimplente</em>. Ficam de fora clientes <em>Atrasado</em> e <em>Particular</em> e mensalidades canceladas pela ANS.
                 <br><strong>Cancelamentos</strong> = clientes do <code>Cad_Cliente</code> cuja data de cancelamento (<code>DataCancelamentoAuto</code> ou cancelamento ANS sem reativacao posterior) cai dentro do mes da linha.
@@ -1181,9 +1181,7 @@ EXEC PC_Fin_Fidelizacao @database = @ini
                     <li>A situacao do cliente e o <code>CanceladoANS</code> sao o estado de <strong>hoje</strong>, nao o da epoca. Quem pagava naquele mes e depois atrasou ou cancelou sai da base retroativamente. O mesmo mes da numeros diferentes conforme o dia em que o ETL rodou, e cada mes fechado fica congelado com o valor da primeira rodada. Degraus entre meses vizinhos podem vir dai, nao de clientes a mais ou a menos.</li>
                     <li>O ultimo mes, marcado <span class="badge badge-warning" style="font-size:0.7rem;vertical-align:middle;">PARCIAL</span>, ainda nao fechou: os cancelamentos sao contados so ate hoje e o % sobe ate o fim do mes.</li>
                 </ul>
-                <strong>Por que o numero do gestor e outro.</strong> A conferencia feita nos postos (planilha do Vinicius, Realengo) usa <strong>mensalidades pagas no mes</strong> (a mesma quantidade do KPI Metas) e as vendas do mes:
-                <br><code style="background:#e8eef7;padding:1px 5px;border-radius:3px;">perdidos = pagantes do mes anterior + vendas do mes &minus; pagantes do mes</code> &nbsp;e&nbsp; <code style="background:#e8eef7;padding:1px 5px;border-radius:3px;">churn % = perdidos &divide; pagantes do mes anterior</code>.
-                <br>Isso mede a <strong>perda liquida</strong> de pagantes: quem parou de pagar menos quem voltou a pagar ou pagou atrasado. Esta tabela mede <strong>cancelamentos brutos</strong> no cadastro. Por isso o gestor chega a dezenas de perdidos (fracao de 1%) onde esta tabela mostra centenas de cancelamentos (5 a 7%). Os dois estao certos para a pergunta que cada um faz; nao some nem compare um com o outro.
+                <strong>Por que os numeros nao batem com o card do topo:</strong> la se conta quem deixou de <strong>pagar</strong> (perda liquida, descontadas as vendas); aqui, quem teve o plano <strong>cancelado no ERP</strong>. Sao perguntas diferentes; nao some nem compare um com o outro.
             </div>`;
         }
 
