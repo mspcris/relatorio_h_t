@@ -540,8 +540,15 @@
         rpsMap.set(key, cur);
         }
 
+      // Ordena por % da meta cumprida, do maior para o menor (pedido do
+      // Cristiano, 2026-10-27: "100% em cima, 0% em baixo"). A conta é a mesma
+      // do selo: contabilizadas ÷ objetivo. Empresa sem objetivo vai para o
+      // fim; empate desempata por valor emitido e depois por código.
+      const pctMeta = r => (r.objetivo && r.objetivo > 0)
+        ? (num(r.valor_notas_contabilizadas) / r.objetivo) : -1;
       const notasList = [...notasMap.values()].sort((a,b)=>{
-        // ordena por valor emitido desc; se empatar, por codigo
+        const dp = pctMeta(b) - pctMeta(a);
+        if(dp !== 0) return dp;
         const dv = (b.valor_notas_emitidas||0) - (a.valor_notas_emitidas||0);
         if(dv !== 0) return dv;
         return String(a.codigo).localeCompare(String(b.codigo));
