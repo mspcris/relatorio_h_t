@@ -347,8 +347,11 @@ function desenharResumo() {
     el('#tLiqVal').textContent = rs(t.liq_valor);
     el('#tLiqQtd').textContent = fmtInt.format(t.liq_qtd) + (t.liq_qtd === 1 ? ' nota' : ' notas');
 
-    // tabela por empresa com a barra na última coluna; a 1ª linha é o mês inteiro
-    const maior = Math.max(1, ...r.empresas.map(x => x.liq_valor));
+    // tabela por empresa com a barra na última coluna; a 1ª linha é o mês inteiro.
+    // A barra é a fatia da empresa no TOTAL do mês (600 mil de 3,8 milhões = 16 %),
+    // não a proporção contra a maior empresa — pedido do Cristiano em 30/10/2026.
+    const totalMes = r.total.liq_valor > 0 ? r.total.liq_valor : 1;
+    const pctTotal = v => Math.max(0, Math.min(100, v / totalMes * 100));
     const semXmlCel = x => x.sem_xml ? `<span class="cn-tag semxml">${fmtInt.format(x.sem_xml)}</span>`
         : x.xml_desc === x.emit_qtd ? '<span class="muted" title="Coleta anterior ao campo de XML">?</span>' : '<span class="muted">0</span>';
     const linhaTodas = `
@@ -368,7 +371,7 @@ function desenharResumo() {
             <td class="num">${fmtInt.format(x.emit_qtd)}</td><td class="num">${rs(x.emit_valor)}</td>
             <td class="num">${fmtInt.format(x.canc_qtd)}</td><td class="num">${rs(x.canc_valor)}</td>
             <td class="num">${fmtInt.format(x.liq_qtd)}</td>
-            <td class="num"><b>${rs(x.liq_valor)}</b><div class="cn-barra"><i style="width:${Math.max(0, x.liq_valor / maior * 100).toFixed(1)}%"></i></div></td>
+            <td class="num"><b>${rs(x.liq_valor)}</b> <span class="muted" title="Fatia desta empresa no total do mês">${pctTotal(x.liq_valor).toFixed(1)}%</span><div class="cn-barra" title="${pctTotal(x.liq_valor).toFixed(1)}% do total do mês"><i style="width:${pctTotal(x.liq_valor).toFixed(1)}%"></i></div></td>
             <td class="num">${semXmlCel(x)}</td>
         </tr>`).join('') : `<tr><td colspan="10" class="cn-vazio">Nenhuma nota emitida em ${mesLegivel(r.ym)}.</td></tr>`;
     el('#btnPdfResumo').disabled = !r.empresas.length;
