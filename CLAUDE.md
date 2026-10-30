@@ -812,6 +812,34 @@ O Cristiano aprovou ("ficou muito bom").
   não é legível pelo `www-data` num `sudo -u`; o `AUTH_DB_PATH` padrão do
   `auth_db.py` já é o banco de produção.
 
+### XML das notas — baixar um a um ou em ZIP (2026-10-30)
+
+Pedido do Cristiano: XML ao lado de cada nota, todos em ZIP, e na Contabilidade
+um resumo claro de **quais notas não têm XML**. Mais: na Contabilidade faltava a
+opção "Todas as empresas" depois de clicar numa — agora é a primeira linha da
+tabela Por empresa (clicar na empresa escolhida volta a todas).
+Design em [docs/superpowers/specs/2026-10-30-notas-xml-design.md](docs/superpowers/specs/2026-10-30-notas-xml-design.md).
+
+| Peça | Papel |
+|---|---|
+| `notas_xml.py` | lê `Fin_NotaFiscalRetorno.xmlCompleto` ao vivo; ZIP em thread com progresso, `LEIA-ME.txt`, 2 h em `NOTAS_XML_DIR` |
+| `contabilidade_notas_routes.py` | `?cnpj=todos`, `/xml`, `/xml/zip` (sob `/api/contabilidade_notas/` por causa do escopo fechado); resumo com `sem_xml`/`xml_desc` + `sem_xml_lista` |
+| `notas_xml_routes.py` | `/api/notas_xml/...` para a aba Ver Registros (ACL de posto) |
+| `sql_contab_notas/notas.sql`, `sql_notas_rps/notas_individuais.sql` | exportam `id_retorno` + `tem_xml` |
+
+- **Fonte é só `Fin_NotaFiscalRetorno`.** `Fin_NotaFiscalTodasEmitidas` (robô
+  da Nota Carioca, DBA 30/10) parou em 31/03/2025 — fora do período das telas.
+  Medido set/out-26, 13 postos: 100 % das notas das views têm retorno com XML.
+- XML **nunca** vai para arquivo estático; é lido no posto na hora e a rota só
+  aceita id que está no JSON do mês.
+- JSON anterior a 30/10 não tem o campo → tela mostra "sem informação" (não
+  "sem XML"). Mês antigo: `export_contab_notas.py --meses …` e
+  `export_notas_rps.py --meses …`.
+- ZIP de mês inteiro da rede ≈ 17 mil XMLs / 180 MB lidos — por isso é job de
+  fundo (`MAX_JOBS_ATIVOS = 2`), não request. Posto que não responde fica de
+  fora e o LEIA-ME diz; falha nunca vira "ZIP completo".
+- Testes: `.venv/bin/python -m unittest tests.test_notas_xml tests.test_contabilidade_notas_xml`.
+
 ### Fila de emissão ao vivo (2026-09-28)
 
 Pedido: *"existe uma fila e poucas são emitidas por minuto — preciso saber que está

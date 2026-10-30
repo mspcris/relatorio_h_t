@@ -13,7 +13,11 @@ SELECT
     -- NaN no JSON derruba a leitura da pagina inteira.
     ISNULL(x.matricula, '')         AS matricula,
     ISNULL(x.servico_codigo, '')    AS servico_codigo,
-    ISNULL(x.servico_descricao, '') AS servico_descricao
+    ISNULL(x.servico_descricao, '') AS servico_descricao,
+    -- XML da nota (Fin_NotaFiscalRetorno.xmlCompleto): id para baixar ao vivo e
+    -- se o retorno traz XML. 0 = a nota nao casou com retorno nacional nenhum.
+    ISNULL(x.id_retorno, 0)         AS id_retorno,
+    ISNULL(x.tem_xml, 0)            AS tem_xml
 FROM (
     SELECT
         CAST('Clinica' AS NVARCHAR(30))                             AS origem,
@@ -59,7 +63,7 @@ FROM (
     WHERE nf.Desativado = 0
 ) t
 LEFT JOIN (
-    SELECT nf, prestador, matricula, servico_codigo, servico_descricao
+    SELECT nf, prestador, matricula, servico_codigo, servico_descricao, id_retorno, tem_xml
     FROM (
         SELECT
             r.v02_Numero_Nota_Fiscal                                             AS nf,
@@ -73,6 +77,8 @@ LEFT JOIN (
             END                                                                  AS matricula,
             CAST(n.ServicoCodigo    AS NVARCHAR(50))  COLLATE DATABASE_DEFAULT   AS servico_codigo,
             CAST(n.ServicoDescricao AS NVARCHAR(250)) COLLATE DATABASE_DEFAULT   AS servico_descricao,
+            r.idNotaFiscalRetorno                                                AS id_retorno,
+            CASE WHEN DATALENGTH(r.xmlCompleto) > 50 THEN 1 ELSE 0 END           AS tem_xml,
             ROW_NUMBER() OVER (
                 PARTITION BY r.v02_Numero_Nota_Fiscal, r.v12_CPF_CNPJ_Prestador
                 ORDER BY r.idNotaFiscalRetorno DESC

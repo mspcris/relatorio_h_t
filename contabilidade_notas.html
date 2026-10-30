@@ -41,7 +41,8 @@
         .cn-aviso.info { background: #eef4fd; border: 1px solid #c6dbf8; color: #174a8c; }
 
         /* Números do mês */
-        .cn-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+        .cn-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+        @media (max-width: 991.98px) { .cn-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         @media (max-width: 767.98px) { .cn-tiles { grid-template-columns: 1fr; } }
         .cn-tile { background: #fff; border: 1px solid #e7eaef; border-radius: 12px; padding: 12px 16px; }
         .cn-tile .lbl { font-size: .78rem; color: var(--cn-tinta-2); }
@@ -49,6 +50,11 @@
         .cn-tile .sub { font-size: .9rem; color: var(--cn-tinta-2); }
         .cn-tile.heroi { border-color: #b7d3f6; background: #f6faff; }
         .cn-tile.heroi .val { font-size: 2.6rem; }
+        /* XML: verde quando nenhuma nota está sem; vermelho (e clicável) quando falta */
+        .cn-tile.xml-ok .val { color: #1a7f37; }
+        .cn-tile.xml-ruim { border-color: #f1b3ad; background: #fff6f5; cursor: pointer; }
+        .cn-tile.xml-ruim .val { color: var(--cn-critico); }
+        .cn-tile.xml-desc .val { color: var(--cn-tinta-3); }
         .cn-escopo { font-weight: 600; }
 
         /* Tabela por empresa, com a barra dentro da célula */
@@ -56,11 +62,15 @@
         #tblEmp td:first-child { min-width: 300px; }
         #tblEmp tbody tr { cursor: pointer; }
         #tblEmp tbody tr.sel { background: #eef4fd; box-shadow: inset 4px 0 0 var(--cn-serie); }
+        #tblEmp tbody tr.todas { font-weight: 700; background: #f8f9fb; border-bottom: 2px solid #dee2e6; }
+        #tblEmp tbody tr.todas.sel { background: #eef4fd; }
         .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .cn-barra { height: 8px; border-radius: 0 4px 4px 0; background: var(--cn-serie-fraca); margin-top: 4px; }
         .cn-barra > i { display: block; height: 100%; border-radius: 0 4px 4px 0; background: var(--cn-serie); }
         .cn-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 600; background: #eef0f3; color: #4a5260; white-space: nowrap; }
         .cn-tag.canc { background: #fde8e6; color: var(--cn-critico); }
+        .cn-tag.semxml { background: #fde8e6; color: var(--cn-critico); }
+        .cn-xml { font-weight: 600; white-space: nowrap; }
 
         /* Notas linha a linha */
         #tblNotas { font-size: .88rem; }
@@ -137,10 +147,11 @@
                 <div class="cn-tile"><div class="lbl">Notas emitidas</div><div class="val" id="tEmitQtd">—</div><div class="sub" id="tEmitVal"></div></div>
                 <div class="cn-tile"><div class="lbl">Notas canceladas</div><div class="val" id="tCancQtd">—</div><div class="sub" id="tCancVal"></div></div>
                 <div class="cn-tile heroi"><div class="lbl">Emitidas − canceladas</div><div class="val" id="tLiqVal">—</div><div class="sub" id="tLiqQtd"></div></div>
+                <div class="cn-tile" id="tileXml" title="Notas cujo XML não está no sistema CAMIM. Clique para ver quais."><div class="lbl">Notas sem XML</div><div class="val" id="tXmlQtd">—</div><div class="sub" id="tXmlSub"></div></div>
             </div>
 
             <div class="card">
-                <div class="card-header"><h3 class="card-title mb-0">Por empresa</h3><span class="mini muted ml-2">clique na empresa para ver as notas</span></div>
+                <div class="card-header"><h3 class="card-title mb-0">Por empresa</h3><span class="mini muted ml-2">clique numa empresa para ver só as notas dela; "Todas as empresas" volta ao mês inteiro</span></div>
                 <div class="card-body p-0"><div class="table-responsive">
                     <table class="table table-sm table-hover mb-0" id="tblEmp">
                         <thead class="thead-light"><tr>
@@ -148,9 +159,9 @@
                             <th class="num">Emitidas</th><th class="num">Valor emitido</th>
                             <th class="num">Canceladas</th><th class="num">Valor cancelado</th>
                             <th class="num">Emit. − canc.</th><th class="num" style="min-width:190px">Valor emit. − canc.</th>
+                            <th class="num" title="Notas cujo XML não está no sistema">Sem XML</th>
                         </tr></thead>
-                        <tbody id="empBody"><tr><td colspan="9" class="cn-vazio">Carregando…</td></tr></tbody>
-                        <tfoot id="empFoot" style="font-weight:700; border-top:2px solid #dee2e6;"></tfoot>
+                        <tbody id="empBody"><tr><td colspan="10" class="cn-vazio">Carregando…</td></tr></tbody>
                     </table>
                 </div></div>
             </div>
@@ -183,6 +194,7 @@
                             <option value="validas">Sem as canceladas</option>
                             <option value="canceladas">Só as canceladas</option>
                         </select>
+                        <button id="btnXml" class="btn btn-sm btn-outline-primary" disabled title="Baixa num ZIP o XML de todas as notas da lista (com o filtro da tela)"><i class="fas fa-file-archive mr-1"></i> XMLs em ZIP</button>
                         <button id="btnCsv" class="btn btn-sm btn-outline-secondary" disabled><i class="fas fa-file-csv mr-1"></i> Planilha (CSV)</button>
                         <button id="btnPdf" class="btn btn-sm btn-outline-danger" disabled><i class="fas fa-file-pdf mr-1"></i> Relatório em PDF</button>
                     </div>
@@ -196,8 +208,9 @@
                             <th title="Código e descrição do serviço como saíram na nota fiscal">Serviço na nota</th>
                             <th title="Nome que o sistema CAMIM dá ao serviço: os serviços do lançamento que gerou a nota ou, sem lançamento, o tipo de receita (mensalidade, taxa…)">Nome CAMIM do serviço</th>
                             <th data-col="valor" class="num">Valor</th><th>Situação</th>
+                            <th title="XML da nota fiscal, lido do sistema do posto na hora do clique">XML</th>
                         </tr></thead>
-                        <tbody id="notasBody"><tr><td colspan="10" class="cn-vazio">Clique numa empresa acima para ver as notas dela, linha por linha.</td></tr></tbody>
+                        <tbody id="notasBody"><tr><td colspan="11" class="cn-vazio">Carregando…</td></tr></tbody>
                         <tfoot id="notasFoot" style="font-weight:700; border-top:2px solid #dee2e6;"></tfoot>
                     </table>
                 </div></div>
@@ -238,7 +251,9 @@ const docFmt = d => {
 const nomeCamim = n => txt(n.serv_camim) || txt(n.tipo_receita);
 const PAG = 200;
 
-const estado = { ym: null, meses: [], resumo: null, cnpj: null, notas: [], ordemCol: 'emissao', ordemDir: 'asc', pagina: 1, usuario: '' };
+// cnpj = 'todos' é a visão do mês inteiro (todas as empresas); é como a página abre.
+const TODOS = 'todos';
+const estado = { ym: null, meses: [], resumo: null, cnpj: TODOS, notas: [], ordemCol: 'emissao', ordemDir: 'asc', pagina: 1, usuario: '' };
 let grafDia = null;
 
 async function api(url) {
@@ -284,16 +299,25 @@ async function carregarResumo() {
         estado.resumo = null;
         el('#stResumo').textContent = '';
         el('#avisos').innerHTML = `<div class="cn-aviso atencao">Não foi possível ler os dados de ${mesLegivel(estado.ym)}: ${esc(e.message)}</div>`;
-        el('#empBody').innerHTML = '<tr><td colspan="9" class="cn-vazio">Sem dados.</td></tr>';
-        el('#empFoot').innerHTML = '';
+        el('#empBody').innerHTML = '<tr><td colspan="10" class="cn-vazio">Sem dados.</td></tr>';
         return;
     }
-    if (estado.cnpj && !estado.resumo.empresas.some(e => e.cnpj === estado.cnpj)) estado.cnpj = null;
+    if (estado.cnpj !== TODOS && !estado.resumo.empresas.some(e => e.cnpj === estado.cnpj)) estado.cnpj = TODOS;
     desenharResumo();
-    if (estado.cnpj) await carregarNotas(); else limparNotas();
+    await carregarNotas();
 }
 
-function empresaSel() { return estado.resumo && estado.cnpj ? estado.resumo.empresas.find(e => e.cnpj === estado.cnpj) : null; }
+// A empresa escolhida, ou a pseudo-empresa "Todas as empresas" (os totais do mês).
+function empresaSel() {
+    const r = estado.resumo;
+    if (!r) return null;
+    if (estado.cnpj === TODOS) {
+        return { ...r.total, cnpj: TODOS, nome: 'Todas as empresas', tipo: r.empresas.length + ' empresas',
+                 postos: [...new Set(r.empresas.flatMap(e => e.postos))].sort() };
+    }
+    return r.empresas.find(e => e.cnpj === estado.cnpj) || null;
+}
+const todas = () => estado.cnpj === TODOS;
 
 function desenharResumo() {
     const r = estado.resumo;
@@ -313,8 +337,9 @@ function desenharResumo() {
 
     // números do escopo (todas ou a empresa escolhida)
     const e = empresaSel(), t = e || r.total;
-    el('#escopoNome').textContent = e ? e.nome + ' — CNPJ ' + cnpjFmt(e.cnpj) : 'todas as empresas';
-    el('#btnTodas').style.display = e ? '' : 'none';
+    el('#escopoNome').textContent = todas() ? 'todas as empresas' : e.nome + ' — CNPJ ' + cnpjFmt(e.cnpj);
+    el('#btnTodas').style.display = todas() ? 'none' : '';
+    desenharTileXml(t);
     el('#tEmitQtd').textContent = fmtInt.format(t.emit_qtd);
     el('#tEmitVal').textContent = rs(t.emit_valor);
     el('#tCancQtd').textContent = fmtInt.format(t.canc_qtd);
@@ -322,9 +347,20 @@ function desenharResumo() {
     el('#tLiqVal').textContent = rs(t.liq_valor);
     el('#tLiqQtd').textContent = fmtInt.format(t.liq_qtd) + (t.liq_qtd === 1 ? ' nota' : ' notas');
 
-    // tabela por empresa com a barra na última coluna
+    // tabela por empresa com a barra na última coluna; a 1ª linha é o mês inteiro
     const maior = Math.max(1, ...r.empresas.map(x => x.liq_valor));
-    el('#empBody').innerHTML = r.empresas.length ? r.empresas.map(x => `
+    const semXmlCel = x => x.sem_xml ? `<span class="cn-tag semxml">${fmtInt.format(x.sem_xml)}</span>`
+        : x.xml_desc === x.emit_qtd ? '<span class="muted" title="Coleta anterior ao campo de XML">?</span>' : '<span class="muted">0</span>';
+    const linhaTodas = `
+        <tr data-cnpj="${TODOS}" class="todas ${todas() ? 'sel' : ''}">
+            <td>Todas as empresas <span class="cn-tag">${r.empresas.length} empresas</span></td>
+            <td></td><td class="mini">${[...new Set(r.empresas.flatMap(x => x.postos))].length} postos</td>
+            <td class="num">${fmtInt.format(r.total.emit_qtd)}</td><td class="num">${rs(r.total.emit_valor)}</td>
+            <td class="num">${fmtInt.format(r.total.canc_qtd)}</td><td class="num">${rs(r.total.canc_valor)}</td>
+            <td class="num">${fmtInt.format(r.total.liq_qtd)}</td><td class="num">${rs(r.total.liq_valor)}</td>
+            <td class="num">${semXmlCel(r.total)}</td>
+        </tr>`;
+    el('#empBody').innerHTML = r.empresas.length ? linhaTodas + r.empresas.map(x => `
         <tr data-cnpj="${esc(x.cnpj)}" class="${x.cnpj === estado.cnpj ? 'sel' : ''}">
             <td><b>${esc(x.nome)}</b> <span class="cn-tag">${esc(x.tipo)}</span></td>
             <td class="text-nowrap">${esc(cnpjFmt(x.cnpj))}</td>
@@ -333,14 +369,50 @@ function desenharResumo() {
             <td class="num">${fmtInt.format(x.canc_qtd)}</td><td class="num">${rs(x.canc_valor)}</td>
             <td class="num">${fmtInt.format(x.liq_qtd)}</td>
             <td class="num"><b>${rs(x.liq_valor)}</b><div class="cn-barra"><i style="width:${Math.max(0, x.liq_valor / maior * 100).toFixed(1)}%"></i></div></td>
-        </tr>`).join('') : `<tr><td colspan="9" class="cn-vazio">Nenhuma nota emitida em ${mesLegivel(r.ym)}.</td></tr>`;
-    el('#empFoot').innerHTML = r.empresas.length ? `<tr class="bg-light"><td colspan="3">Total — ${r.empresas.length} empresas</td>
-        <td class="num">${fmtInt.format(r.total.emit_qtd)}</td><td class="num">${rs(r.total.emit_valor)}</td>
-        <td class="num">${fmtInt.format(r.total.canc_qtd)}</td><td class="num">${rs(r.total.canc_valor)}</td>
-        <td class="num">${fmtInt.format(r.total.liq_qtd)}</td><td class="num">${rs(r.total.liq_valor)}</td></tr>` : '';
+            <td class="num">${semXmlCel(x)}</td>
+        </tr>`).join('') : `<tr><td colspan="10" class="cn-vazio">Nenhuma nota emitida em ${mesLegivel(r.ym)}.</td></tr>`;
     el('#btnPdfResumo').disabled = !r.empresas.length;
     desenharDia();
 }
+
+// ── XML: o resumo "claro e fácil" ─────────────────────────────────────────
+// t.sem_xml = notas cujo XML não está no sistema; t.xml_desc = notas de coleta
+// anterior ao campo (não se sabe) — nunca contadas como "sem XML".
+function desenharTileXml(t) {
+    const tile = el('#tileXml'), q = el('#tXmlQtd'), sub = el('#tXmlSub');
+    const semXml = Number(t.sem_xml) || 0, desc = Number(t.xml_desc) || 0, ok = Number(t.xml_ok) || 0;
+    tile.classList.remove('xml-ok', 'xml-ruim', 'xml-desc');
+    if (desc && !semXml && !ok) {
+        tile.classList.add('xml-desc'); q.textContent = '?';
+        sub.textContent = 'coleta anterior ao campo de XML — o próximo ETL preenche';
+        return;
+    }
+    q.textContent = fmtInt.format(semXml);
+    if (semXml) {
+        tile.classList.add('xml-ruim');
+        sub.textContent = (semXml === 1 ? '1 nota sem XML' : fmtInt.format(semXml) + ' notas sem XML') + ' — clique para ver quais' +
+            (desc ? ` · ${fmtInt.format(desc)} sem informação` : '');
+    } else {
+        tile.classList.add('xml-ok');
+        sub.textContent = 'todas as ' + fmtInt.format(ok) + ' notas têm XML' + (desc ? ` · ${fmtInt.format(desc)} de coleta antiga, sem informação` : '');
+    }
+}
+function abrirSemXml() {
+    const r = estado.resumo; if (!r) return;
+    const e = empresaSel();
+    const lista = (r.sem_xml_lista || []).filter(n => todas() || n.cnpj === e.cnpj);
+    if (!lista.length) return;
+    el('#mdlTitulo').textContent = 'Notas sem XML — ' + (todas() ? 'todas as empresas' : e.nome) + ' — ' + mesLegivel(r.ym);
+    el('#mdlCorpo').innerHTML = `<div class="mini muted mb-2" style="grid-column:1/-1">O sistema CAMIM não guarda o XML destas notas. O motivo diz onde parou: sem retorno nacional da prefeitura, ou retorno gravado sem o XML.${r.sem_xml_cortada ? ' <b>A lista mostra as 1.000 primeiras.</b>' : ''}</div>
+        <div style="grid-column:1/-1" class="table-responsive"><table class="table table-sm mb-0"><thead class="thead-light"><tr><th>Emissão</th><th class="num">NF</th><th>Posto</th><th>Empresa</th><th>Tomador</th><th class="num">Valor</th><th>Situação</th><th>Motivo</th></tr></thead><tbody>` +
+        lista.map(n => `<tr><td class="text-nowrap">${dBR(n.data_emissao)}</td><td class="num">${esc(n.NotaFiscal)}</td><td>${esc(n.posto)}</td><td>${esc(n.Empresa)}</td><td>${esc(n.Cliente)}</td><td class="num">${rs(n.valor)}</td><td>${cancelada(n) ? '<span class="cn-tag canc">Cancelada</span>' : 'Emitida'}</td><td class="mini">${esc(n.motivo)}</td></tr>`).join('') +
+        '</tbody></table></div>';
+    el('#mdl').classList.add('aberto');
+}
+const xmlCell = n => n.xml === 'ok'
+    ? `<a class="cn-xml" href="/api/contabilidade_notas/xml?ym=${encodeURIComponent(estado.ym)}&posto=${encodeURIComponent(n.posto)}&id=${Number(n.id_retorno)}" title="Baixar o XML desta nota" onclick="event.stopPropagation()"><i class="fas fa-file-code"></i> XML</a>`
+    : n.xml === 'sem' ? '<span class="cn-tag semxml" title="O sistema não tem o XML desta nota">sem XML</span>'
+    : '<span class="muted" title="Coleta anterior ao campo de XML — o próximo ETL preenche">?</span>';
 
 // ── gráfico por dia: uma série, uma cor ───────────────────────────────────
 function desenharDia() {
@@ -353,12 +425,12 @@ function desenharDia() {
         const doDia = r.por_dia[chave] || {};
         const acc = { emit_qtd: 0, canc_qtd: 0, liq_qtd: 0, liq_valor: 0 };
         Object.entries(doDia).forEach(([cnpj, a]) => {
-            if (e && cnpj !== e.cnpj) return;
+            if (e && !todas() && cnpj !== e.cnpj) return;
             acc.emit_qtd += a.emit_qtd; acc.canc_qtd += a.canc_qtd; acc.liq_qtd += a.liq_qtd; acc.liq_valor += a.liq_valor;
         });
         dias.push(String(d)); valores.push(Math.round(acc.liq_valor * 100) / 100); detalhe.push(acc);
     }
-    el('#tituloDia').textContent = 'Valor emitido − cancelado por dia de emissão — ' + (e ? e.nome : 'todas as empresas');
+    el('#tituloDia').textContent = 'Valor emitido − cancelado por dia de emissão — ' + (e && !todas() ? e.nome : 'todas as empresas');
     const css = getComputedStyle(document.documentElement);
     const cor = css.getPropertyValue('--cn-serie').trim(), grade = css.getPropertyValue('--cn-grade').trim(), tinta = css.getPropertyValue('--cn-tinta-2').trim();
     if (grafDia) grafDia.destroy();
@@ -392,24 +464,24 @@ function desenharDia() {
 function limparNotas() {
     estado.notas = [];
     el('#tituloNotas').textContent = 'Notas emitidas — linha por linha';
-    el('#notasBody').innerHTML = '<tr><td colspan="10" class="cn-vazio">Clique numa empresa acima para ver as notas dela, linha por linha.</td></tr>';
+    el('#notasBody').innerHTML = '<tr><td colspan="11" class="cn-vazio">Sem notas.</td></tr>';
     el('#notasFoot').innerHTML = ''; el('#paginacao').innerHTML = ''; el('#stNotas').textContent = '';
-    el('#servBody').innerHTML = '<tr><td colspan="4" class="cn-vazio">Escolha uma empresa.</td></tr>';
-    el('#btnPdf').disabled = true; el('#btnCsv').disabled = true;
+    el('#servBody').innerHTML = '<tr><td colspan="4" class="cn-vazio">Sem notas.</td></tr>';
+    el('#btnPdf').disabled = true; el('#btnCsv').disabled = true; el('#btnXml').disabled = true;
 }
 
 async function carregarNotas() {
     const e = empresaSel();
     if (!e) { limparNotas(); return; }
     el('#tituloNotas').textContent = 'Notas emitidas — ' + e.nome;
-    el('#notasBody').innerHTML = '<tr><td colspan="10" class="cn-vazio">Carregando as notas…</td></tr>';
-    el('#btnPdf').disabled = true; el('#btnCsv').disabled = true;
+    el('#notasBody').innerHTML = `<tr><td colspan="11" class="cn-vazio">Carregando ${fmtInt.format(e.emit_qtd)} notas…</td></tr>`;
+    el('#btnPdf').disabled = true; el('#btnCsv').disabled = true; el('#btnXml').disabled = true;
     try {
         const d = await api('/api/contabilidade_notas/notas?ym=' + estado.ym + '&cnpj=' + encodeURIComponent(e.cnpj));
         estado.notas = d.notas || [];
     } catch (err) {
         estado.notas = [];
-        el('#notasBody').innerHTML = `<tr><td colspan="10" class="cn-vazio">Não foi possível ler as notas: ${esc(err.message)}</td></tr>`;
+        el('#notasBody').innerHTML = `<tr><td colspan="11" class="cn-vazio">Não foi possível ler as notas: ${esc(err.message)}</td></tr>`;
         return;
     }
     estado.pagina = 1;
@@ -487,9 +559,13 @@ function desenharNotas() {
             <td>${esc(nomeCamim(n)) || '—'}</td>
             <td class="num">${rs(n.valor)}</td>
             <td>${cancelada(n) ? '<span class="cn-tag canc">' + esc(situacaoTxt(n)) + '</span>' : ''}</td>
-        </tr>`).join('') : '<tr><td colspan="10" class="cn-vazio">Nenhuma nota com este filtro.</td></tr>';
+            <td>${xmlCell(n)}</td>
+        </tr>`).join('') : '<tr><td colspan="11" class="cn-vazio">Nenhuma nota com este filtro.</td></tr>';
+    const xmlOk = lista.filter(n => n.xml === 'ok').length, xmlSem = lista.filter(n => n.xml === 'sem').length, xmlDesc = lista.length - xmlOk - xmlSem;
+    const xmlTxt = !lista.length ? '' : xmlDesc === lista.length ? '<span class="muted">sem informação</span>'
+        : xmlSem ? `<span style="color:var(--cn-critico)"><b>${fmtInt.format(xmlSem)}</b> sem XML</span>` : '<span style="color:#1a7f37">todas com XML</span>';
     el('#notasFoot').innerHTML = lista.length ? `
-        <tr class="bg-light"><td colspan="8" class="text-right">Emitidas: ${fmtInt.format(t.emit_qtd)} notas</td><td class="num">${rs(t.emit_valor)}</td><td></td></tr>
+        <tr class="bg-light"><td colspan="8" class="text-right">Emitidas: ${fmtInt.format(t.emit_qtd)} notas</td><td class="num">${rs(t.emit_valor)}</td><td></td><td class="mini" rowspan="3" style="vertical-align:middle">${xmlTxt}${xmlDesc && xmlDesc !== lista.length ? `<br><span class="muted">${fmtInt.format(xmlDesc)} sem informação</span>` : ''}</td></tr>
         <tr class="bg-light"><td colspan="8" class="text-right">Canceladas: ${fmtInt.format(t.canc_qtd)} notas</td><td class="num">${rs(t.canc_valor)}</td><td></td></tr>
         <tr class="bg-light"><td colspan="8" class="text-right">Emitidas − canceladas: ${fmtInt.format(t.liq_qtd)} notas</td><td class="num">${rs(t.liq_valor)}</td><td></td></tr>` : '';
     const filtrado = lista.length !== estado.notas.length;
@@ -499,6 +575,7 @@ function desenharNotas() {
         <button class="btn btn-sm btn-outline-secondary" data-pg="${estado.pagina - 1}" ${estado.pagina === 1 ? 'disabled' : ''}>‹ anterior</button>
         <button class="btn btn-sm btn-outline-secondary" data-pg="${estado.pagina + 1}" ${estado.pagina === paginas ? 'disabled' : ''}>próxima ›</button>` : '';
     el('#btnPdf').disabled = !lista.length; el('#btnCsv').disabled = !lista.length;
+    el('#btnXml').disabled = !xmlOk;
     estado._lista = lista;
 }
 
@@ -530,7 +607,10 @@ const CAMPOS = [
 ];
 function abrirNota(n) {
     el('#mdlTitulo').textContent = 'Nota ' + txt(n.NotaFiscal) + ' — ' + dBR(n.data_emissao);
-    el('#mdlCorpo').innerHTML = CAMPOS.map(([rot, f]) => { const v = f(n); return v ? `<dt>${esc(rot)}</dt><dd>${esc(v)}</dd>` : ''; }).join('');
+    el('#mdlCorpo').innerHTML = CAMPOS.map(([rot, f]) => { const v = f(n); return v ? `<dt>${esc(rot)}</dt><dd>${esc(v)}</dd>` : ''; }).join('') +
+        `<dt>XML da nota</dt><dd>${n.xml === 'ok' ? xmlCell(n) + ' <span class="mini muted">— lido do sistema do posto ' + esc(n.posto) + ' na hora</span>'
+            : n.xml === 'sem' ? '<span class="cn-tag semxml">sem XML</span> <span class="mini muted">o sistema não guarda o XML desta nota</span>'
+            : '<span class="muted">sem informação — coleta anterior ao campo de XML</span>'}</dd>`;
     el('#mdl').classList.add('aberto');
 }
 
@@ -577,8 +657,8 @@ function montarPdfEmpresa(jsPDF, d) {
     doc.setFontSize(9.5);
     let y = 19;
     const linha = (rot, v) => { doc.setFont('helvetica', 'bold'); doc.text(rot, M, y); doc.setFont('helvetica', 'normal'); doc.text(v, M + 24, y); y += 4.6; };
-    linha('Empresa:', d.nome + ' (' + d.tipo + ')');
-    linha('CNPJ:', cnpjFmt(d.cnpj));
+    linha('Empresa:', d.nome + (d.tipo ? ' (' + d.tipo + ')' : ''));
+    if (d.cnpj) linha('CNPJ:', cnpjFmt(d.cnpj));
     linha('Emitidas em:', d.postos);
     if (d.filtro) linha('Filtro:', d.filtro);
     doc.setFontSize(7.5); doc.setTextColor(107, 114, 128);
@@ -644,7 +724,7 @@ function montarPdfEmpresa(jsPDF, d) {
             }
         }
     });
-    rodape(doc, 'Notas fiscais emitidas - ' + d.nome + ' - CNPJ ' + cnpjFmt(d.cnpj) + ' - ' + d.mes, M);
+    rodape(doc, 'Notas fiscais emitidas - ' + d.nome + (d.cnpj ? ' - CNPJ ' + cnpjFmt(d.cnpj) : '') + ' - ' + d.mes, M);
     return doc;
 }
 
@@ -662,14 +742,21 @@ function montarPdfResumo(jsPDF, d) {
         headStyles: { fillColor: [55, 65, 81], textColor: 255, fontStyle: 'bold' },
         footStyles: { fillColor: SUAVE, textColor: TINTA, fontStyle: 'bold', lineColor: CINZA, lineWidth: 0.1 },
         columnStyles: { 1: { cellWidth: 33 }, 2: { cellWidth: 19 }, 3: { halign: 'right', cellWidth: 18 }, 4: { halign: 'right', cellWidth: 30 },
-            5: { halign: 'right', cellWidth: 21 }, 6: { halign: 'right', cellWidth: 29 }, 7: { halign: 'right', cellWidth: 23 }, 8: { halign: 'right', cellWidth: 33 } },
+            5: { halign: 'right', cellWidth: 21 }, 6: { halign: 'right', cellWidth: 29 }, 7: { halign: 'right', cellWidth: 23 }, 8: { halign: 'right', cellWidth: 33 },
+            9: { halign: 'right', cellWidth: 18 } },
         head: [['Empresa', 'CNPJ', 'Tipo', { ...dir, content: 'Emitidas' }, { ...dir, content: 'Valor emitido' }, { ...dir, content: 'Canceladas' },
-                { ...dir, content: 'Valor cancelado' }, { ...dir, content: 'Emit. - canc.' }, { ...dir, content: 'Valor emit. - canc.' }]],
+                { ...dir, content: 'Valor cancelado' }, { ...dir, content: 'Emit. - canc.' }, { ...dir, content: 'Valor emit. - canc.' }, { ...dir, content: 'Sem XML' }]],
         body: r.empresas.map(e => [e.nome, cnpjFmt(e.cnpj), e.tipo, fmtInt.format(e.emit_qtd), rs(e.emit_valor), fmtInt.format(e.canc_qtd), rs(e.canc_valor),
-            fmtInt.format(e.liq_qtd), rs(e.liq_valor)]),
+            fmtInt.format(e.liq_qtd), rs(e.liq_valor), e.xml_desc === e.emit_qtd ? '?' : fmtInt.format(e.sem_xml || 0)]),
         foot: [[{ content: 'Total - ' + r.empresas.length + ' empresas', colSpan: 3 }, { ...dir, content: fmtInt.format(r.total.emit_qtd) }, { ...dir, content: rs(r.total.emit_valor) },
-            { ...dir, content: fmtInt.format(r.total.canc_qtd) }, { ...dir, content: rs(r.total.canc_valor) }, { ...dir, content: fmtInt.format(r.total.liq_qtd) }, { ...dir, content: rs(r.total.liq_valor) }]]
+            { ...dir, content: fmtInt.format(r.total.canc_qtd) }, { ...dir, content: rs(r.total.canc_valor) }, { ...dir, content: fmtInt.format(r.total.liq_qtd) }, { ...dir, content: rs(r.total.liq_valor) },
+            { ...dir, content: r.total.xml_desc === r.total.emit_qtd ? '?' : fmtInt.format(r.total.sem_xml || 0) }]],
+        didParseCell: h => { if (h.section === 'body' && h.column.index === 9 && (r.empresas[h.row.index].sem_xml || 0) > 0) { h.cell.styles.textColor = [153, 27, 27]; h.cell.styles.fontStyle = 'bold'; } }
     });
+    if (r.total.sem_xml) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(153, 27, 27);
+        doc.text('ATENCAO: ' + fmtInt.format(r.total.sem_xml) + ' nota(s) sem XML no sistema. A lista esta na tela, no quadro "Notas sem XML".', M, doc.lastAutoTable.finalY + 5);
+    }
     rodape(doc, 'Notas fiscais emitidas por empresa - ' + d.mes, M);
     return doc;
 }
@@ -710,10 +797,10 @@ function exportarPdfEmpresa() {
     const e = empresaSel(), lista = estado._lista || [];
     if (!e || !lista.length) return;
     exportar(el('#btnPdf'), el('#stNotas'), jsPDF => ({
-        doc: montarPdfEmpresa(jsPDF, { ...contexto(), notas: lista, nome: e.nome, cnpj: e.cnpj, tipo: e.tipo,
+        doc: montarPdfEmpresa(jsPDF, { ...contexto(), notas: lista, nome: e.nome, cnpj: todas() ? '' : e.cnpj, tipo: e.tipo,
             postos: e.postos.map(p => (POSTO_NOMES[p] || p) + ' (' + p + ')').join(', '), filtro: descricaoFiltro(),
             ordem: ORDEM_TXT[estado.ordemCol] + ' (' + (estado.ordemDir === 'asc' ? 'crescente' : 'decrescente') + ')' }),
-        arquivo: 'notas_' + estado.ym + '_' + e.cnpj + '_' + slug(e.nome) + '.pdf',
+        arquivo: 'notas_' + estado.ym + '_' + (todas() ? 'todas_as_empresas' : e.cnpj + '_' + slug(e.nome)) + '.pdf',
         n: fmtInt.format(lista.length) + ' notas'
     }));
 }
@@ -738,7 +825,8 @@ function exportarCsv() {
         ['Codigo servico (nota)', n => txt(n.serv_cod)], ['Descricao servico (nota)', n => txt(n.serv_desc)],
         ['Codigo tributacao nacional', n => txt(n.trib_nac)], ['NBS', n => txt(n.nbs)],
         ['Nome CAMIM do servico', nomeCamim], ['Classe CAMIM', n => txt(n.classe_camim)], ['Tipo de receita', n => txt(n.tipo_receita)],
-        ['Discriminacao na nota', n => txt(n.discriminacao)], ['Id receita', n => Number(n.id_receita) || ''], ['Id lancamento', n => Number(n.id_lancamento) || '']
+        ['Discriminacao na nota', n => txt(n.discriminacao)], ['Id receita', n => Number(n.id_receita) || ''], ['Id lancamento', n => Number(n.id_lancamento) || ''],
+        ['XML no sistema', n => n.xml === 'ok' ? 'sim' : n.xml === 'sem' ? 'NAO' : 'sem informacao']
     ];
     // Texto entre aspas e com ="..." nos identificadores: o Excel não corta zero à esquerda nem vira notação científica.
     const texto = new Set(['CNPJ emitente', 'Nota fiscal', 'RPS', 'Serie', 'Codigo verificacao', 'Chave NFS-e', 'CPF/CNPJ tomador', 'Matricula', 'NBS']);
@@ -746,21 +834,63 @@ function exportarCsv() {
     const linhas = [cols.map(c => '"' + c[0] + '"').join(';')].concat(lista.map(n => cols.map(c => cel(c[0], c[1](n))).join(';')));
     const blob = new Blob(['﻿' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'notas_' + estado.ym + '_' + e.cnpj + '_' + slug(e.nome) + '.csv';
+    a.href = URL.createObjectURL(blob); a.download = 'notas_' + estado.ym + '_' + (todas() ? 'todas_as_empresas' : e.cnpj + '_' + slug(e.nome)) + '.csv';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     el('#stNotas').textContent = 'Planilha gerada: ' + fmtInt.format(lista.length) + ' notas.';
 }
 
+// ── XML em ZIP: pedido em segundo plano, progresso, download ──────────────
+// Um mês da rede inteira são ~17 mil XMLs lidos dos 13 postos — não cabe num
+// request (o nginx corta em 60 s). O servidor gera, a tela acompanha e baixa.
+const dorme = ms => new Promise(ok => setTimeout(ok, ms));
+async function baixarXmlZip() {
+    const lista = estado._lista || [], comXml = lista.filter(n => n.xml === 'ok');
+    if (!comXml.length) return;
+    const btn = el('#btnXml'), st = el('#stNotas');
+    btn.disabled = true;
+    st.textContent = `Pedindo o ZIP de ${fmtInt.format(comXml.length)} XMLs…`;
+    try {
+        const r0 = await fetch('/api/contabilidade_notas/xml/zip', { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ym: estado.ym, itens: comXml.map(n => [n.posto, Number(n.id_retorno)]) }) });
+        const j0 = await r0.json().catch(() => ({}));
+        if (!r0.ok || !j0.ok) throw new Error(j0.error || ('HTTP ' + r0.status));
+        let s1 = j0;
+        while (!s1.pronto && s1.estado !== 'erro') {
+            await dorme(1500);
+            const r1 = await fetch('/api/contabilidade_notas/xml/zip/' + j0.job, { credentials: 'same-origin', cache: 'no-store' });
+            s1 = await r1.json().catch(() => ({}));
+            if (!r1.ok || !s1.ok) throw new Error(s1.error || ('HTTP ' + r1.status));
+            st.textContent = `Gerando o ZIP: ${fmtInt.format(s1.feitos)} de ${fmtInt.format(s1.total)} XMLs lidos dos postos…`;
+        }
+        if (s1.estado === 'erro') throw new Error(s1.erro || 'falha ao gerar');
+        window.location.href = '/api/contabilidade_notas/xml/zip/' + j0.job + '/arquivo';
+        const partes = [`ZIP pronto: ${fmtInt.format(s1.gravados)} XMLs (${(s1.tamanho / 1048576).toFixed(1)} MB), uma pasta por empresa.`];
+        const semNaLista = lista.length - comXml.length;
+        if (semNaLista) partes.push(`${fmtInt.format(semNaLista)} notas da lista não têm XML no sistema e ficaram de fora.`);
+        if (s1.faltando) partes.push(`${fmtInt.format(s1.faltando)} notas vieram sem XML do posto — estão no LEIA-ME.txt.`);
+        if (s1.erros && Object.keys(s1.erros).length) partes.push('Posto sem resposta: ' + Object.keys(s1.erros).map(p => POSTO_NOMES[p] || p).join(', ') + ' — gere de novo mais tarde para pegar essas notas (o LEIA-ME.txt lista).');
+        st.textContent = partes.join(' ');
+    } catch (e) {
+        st.textContent = 'Não foi possível gerar o ZIP: ' + (e && e.message || e);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
 // ── eventos ───────────────────────────────────────────────────────────────
 function escolherEmpresa(cnpj) {
-    estado.cnpj = cnpj; estado.pagina = 1;
+    estado.cnpj = cnpj || TODOS; estado.pagina = 1;
     el('#busca').value = ''; el('#selSit').value = 'todas';
     desenharResumo();
-    if (cnpj) carregarNotas().then(() => el('#cardNotas').scrollIntoView({ behavior: 'smooth', block: 'start' })); else limparNotas();
+    carregarNotas().then(() => { if (cnpj && cnpj !== TODOS) el('#cardNotas').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 }
-el('#empBody').addEventListener('click', ev => { const tr = ev.target.closest('tr[data-cnpj]'); if (tr) escolherEmpresa(tr.dataset.cnpj === estado.cnpj ? null : tr.dataset.cnpj); });
-el('#btnTodas').addEventListener('click', () => escolherEmpresa(null));
+// clicar na empresa já escolhida volta a "Todas as empresas"
+el('#empBody').addEventListener('click', ev => { const tr = ev.target.closest('tr[data-cnpj]'); if (tr) escolherEmpresa(tr.dataset.cnpj === estado.cnpj ? TODOS : tr.dataset.cnpj); });
+el('#btnTodas').addEventListener('click', () => escolherEmpresa(TODOS));
+el('#tileXml').addEventListener('click', abrirSemXml);
+el('#btnXml').addEventListener('click', baixarXmlZip);
 el('#selAno').addEventListener('change', () => { montarMeses(); carregarResumo(); });
 el('#selMes').addEventListener('change', () => { estado.ym = el('#selAno').value + '-' + el('#selMes').value; carregarResumo(); });
 el('#btnAtualizar').addEventListener('click', carregarResumo);
@@ -792,12 +922,12 @@ document.addEventListener('keydown', ev => { if (ev.key === 'Escape') el('#mdl')
         estado.meses = (await api('/api/contabilidade_notas/meses')).meses || [];
     } catch (e) {
         el('#avisos').innerHTML = `<div class="cn-aviso atencao">Não foi possível ler os dados: ${esc(e.message)}</div>`;
-        el('#empBody').innerHTML = '<tr><td colspan="9" class="cn-vazio">Sem dados.</td></tr>';
+        el('#empBody').innerHTML = '<tr><td colspan="10" class="cn-vazio">Sem dados.</td></tr>';
         return;
     }
     if (!estado.meses.length) {
         el('#avisos').innerHTML = '<div class="cn-aviso atencao">Ainda não há nenhum mês coletado.</div>';
-        el('#empBody').innerHTML = '<tr><td colspan="9" class="cn-vazio">Sem dados.</td></tr>';
+        el('#empBody').innerHTML = '<tr><td colspan="10" class="cn-vazio">Sem dados.</td></tr>';
         return;
     }
     // Abre no último mês FECHADO: é o que a contabilidade fecha. O mês corrente fica a um clique.

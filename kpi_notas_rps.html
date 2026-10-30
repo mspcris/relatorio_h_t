@@ -99,6 +99,7 @@
     #tblRegistros thead th.sorted-desc::after { content:' ▼'; font-size:.75em; }
     #regInfo { font-size:.85rem; color:#6b7280; margin-bottom:6px; }
     .reg-empty { text-align:center; color:#aaa; padding:30px; }
+    .reg-xml { font-weight:600; white-space:nowrap; }
 
     /* ── Banner de status de conexão ── */
   </style>
@@ -1065,7 +1066,7 @@
     function setRegLoading(on) {
       const tbody = el('#tblRegBody');
       if (!tbody) return;
-      if (on) tbody.innerHTML = `<tr><td colspan="8" class="reg-empty">Carregando...</td></tr>`;
+      if (on) tbody.innerHTML = `<tr><td colspan="9" class="reg-empty">Carregando...</td></tr>`;
     }
 
     const regTxt = v => (v == null ? '' : String(v)).trim();
@@ -1157,13 +1158,15 @@
 
       const btnPdf = el('#btnRegPdf');
       if (btnPdf) btnPdf.disabled = true;   // só habilita quando há nota na seleção
+      const btnXml0 = el('#btnRegXml');
+      if (btnXml0) btnXml0.disabled = true;
 
       if (!regPosto) {
-        tbody.innerHTML = `<tr><td colspan="8" class="reg-empty">Selecione uma clínica acima.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="reg-empty">Selecione uma clínica acima.</td></tr>`;
         tfoot.innerHTML = ''; el('#regPagination').innerHTML = ''; if (info) info.textContent = ''; return;
       }
       if (!regOrigem) {
-        tbody.innerHTML = `<tr><td colspan="8" class="reg-empty">Selecione a empresa acima.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="reg-empty">Selecione a empresa acima.</td></tr>`;
         tfoot.innerHTML = ''; el('#regPagination').innerHTML = ''; if (info) info.textContent = ''; return;
       }
 
@@ -1180,7 +1183,7 @@
       });
 
       if (total === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="reg-empty">Nenhuma nota encontrada para o período.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="reg-empty">Nenhuma nota encontrada para o período.</td></tr>`;
         tfoot.innerHTML = ''; el('#regPagination').innerHTML = '';
         if (info) info.textContent = '';
         return;
@@ -1208,6 +1211,11 @@
         const canc    = (r.Cancelada || '').toString().toLowerCase() === 'sim';
         const rowClass = canc ? 'table-warning' : '';
         const cancBadge = canc ? '<span class="badge badge-danger">Cancelada</span>' : '';
+        const xml = regXml(r);
+        const xmlCell = xml === 'ok'
+          ? `<a class="reg-xml" href="/api/notas_xml/${regPosto}/${ymSel}/${Number(r.id_retorno)}" title="Baixar o XML desta nota"><i class="fas fa-file-code"></i> XML</a>`
+          : xml === 'sem' ? '<span class="badge badge-danger" title="O sistema do posto não tem o XML desta nota">sem XML</span>'
+          : '<span class="text-muted" title="Coleta anterior ao campo de XML — o próximo ETL preenche">?</span>';
         return `<tr class="${rowClass}">
           <td class="small-td">${data}</td>
           <td class="small-td text-right">${nf}</td>
@@ -1217,17 +1225,27 @@
           <td>${servCod ? `<b>${regEsc(servCod)}</b> ` : ''}<span class="text-muted mini">${regEsc(servDesc) || (servCod ? '' : '—')}</span></td>
           <td class="text-right small-td">R$ ${fmt2.format(valor)}</td>
           <td class="text-center small-td">${cancBadge}</td>
+          <td class="text-center small-td">${xmlCell}</td>
         </tr>`;
       }).join('');
 
       const nomePosto = POSTO_NOMES[regPosto] || regPosto;
       const nomeEmp   = ORIGEM_LABEL[regOrigem] || regOrigem;
       const fmtD = s => s ? s.split('-').reverse().join('/') : '';
+      const xmlOk  = sorted.filter(r => regXml(r) === 'ok').length;
+      const xmlSem = sorted.filter(r => regXml(r) === 'sem').length;
+      const xmlDesc = total - xmlOk - xmlSem;
+      const xmlTxt = xmlDesc === total ? '<span class="text-muted">XML: coleta anterior ao campo — aguarde o ETL</span>'
+        : xmlSem ? `<span class="text-danger"><b>${fmtInt.format(xmlSem)}</b> sem XML</span>`
+        : '<span class="text-success">todas com XML</span>';
       tfoot.innerHTML = `<tr class="bg-light">
         <td colspan="6"><strong>TOTAL — ${fmtInt.format(total)} notas${totCanc > 0 ? ` (${totCanc} canceladas)` : ''}</strong></td>
         <td class="text-right"><strong>R$ ${fmt2.format(totVal)}</strong></td>
         <td></td>
+        <td class="text-center mini">${xmlTxt}${xmlDesc && xmlDesc !== total ? ` <span class="text-muted">(${fmtInt.format(xmlDesc)} sem informação)</span>` : ''}</td>
       </tr>`;
+      const btnXml = el('#btnRegXml');
+      if (btnXml) btnXml.disabled = xmlOk === 0;
       const per = regPeriodoEfetivo();
       if (info) info.textContent = `${nomePosto} (${regPosto}) · ${nomeEmp} · ${fmtD(per.ini)} a ${fmtD(per.fim)}` +
         (per.cortado ? ` — o filtro vai até ${fmtD(dataFim)}, mas esta aba mostra um mês por vez` : '');
@@ -1254,6 +1272,56 @@
       await loadIndividualNotes(regPosto, ymSel);
       setRegLoading(false);
       renderRegistros();
+    }
+
+    // ============================================================
+    // XML — lido ao vivo no posto (Fin_NotaFiscalRetorno.xmlCompleto).
+    // 'ok' tem XML · 'sem' o sistema não tem · 'desc' JSON anterior ao campo.
+    // ============================================================
+    function regXml(r) {
+      if (!('id_retorno' in r)) return 'desc';
+      return Number(r.id_retorno) > 0 && Number(r.tem_xml) === 1 ? 'ok' : 'sem';
+    }
+
+    const dorme = ms => new Promise(ok => setTimeout(ok, ms));
+
+    // ZIP em segundo plano: pede, acompanha o progresso e baixa quando pronto.
+    // Um mês de Anchieta são ~4 mil XMLs lidos pelo link do posto — não cabe
+    // num request só (o nginx corta em 60 s).
+    async function baixarXmlZip() {
+      const btn = el('#btnRegXml'), st = el('#regPdfStatus');
+      const rows = getRegRows().filter(r => regXml(r) === 'ok');
+      if (!rows.length) return;
+      const foraSem = getRegRows().length - rows.length;
+      const aviso = (txt, erro) => { st.textContent = txt; st.className = 'mini ml-2 ' + (erro ? 'text-danger' : 'text-muted'); };
+      btn.disabled = true;
+      aviso(`Pedindo o ZIP de ${fmtInt.format(rows.length)} XMLs…`);
+      try {
+        const r0 = await fetch('/api/notas_xml/zip', { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ posto: regPosto, ym: ymSel, ids: rows.map(r => Number(r.id_retorno)) }) });
+        const j0 = await r0.json().catch(() => ({}));
+        if (!r0.ok || !j0.ok) throw new Error(j0.error || `HTTP ${r0.status}`);
+        let st1 = j0;
+        while (!st1.pronto && st1.estado !== 'erro') {
+          await dorme(1500);
+          const r1 = await fetch(`/api/notas_xml/zip/${j0.job}`, { credentials: 'same-origin', cache: 'no-store' });
+          st1 = await r1.json().catch(() => ({}));
+          if (!r1.ok || !st1.ok) throw new Error(st1.error || `HTTP ${r1.status}`);
+          aviso(`Gerando o ZIP: ${fmtInt.format(st1.feitos)} de ${fmtInt.format(st1.total)} XMLs lidos…`);
+        }
+        if (st1.estado === 'erro') throw new Error(st1.erro || 'falha ao gerar');
+        window.location.href = `/api/notas_xml/zip/${j0.job}/arquivo`;
+        const partes = [`ZIP pronto: ${fmtInt.format(st1.gravados)} XMLs (${(st1.tamanho / 1048576).toFixed(1)} MB).`];
+        if (st1.faltando) partes.push(`${fmtInt.format(st1.faltando)} notas vieram sem XML do posto — estão listadas no LEIA-ME.txt.`);
+        if (foraSem) partes.push(`${fmtInt.format(foraSem)} notas da seleção não têm XML no sistema e ficaram de fora.`);
+        if (st1.erros && Object.keys(st1.erros).length) partes.push('Posto sem resposta: ' + Object.keys(st1.erros).join(', ') + ' (veja o LEIA-ME.txt).');
+        aviso(partes.join(' '), !!st1.faltando || !!(st1.erros && Object.keys(st1.erros).length));
+      } catch (e) {
+        aviso('Não foi possível gerar o ZIP: ' + (e && e.message || e), true);
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     // ============================================================
@@ -1467,6 +1535,7 @@
     // Clique nos cabeçalhos da tabela para ordenar
     document.addEventListener('DOMContentLoaded', () => {
       el('#btnRegPdf')?.addEventListener('click', exportarRegistrosPdf);
+      el('#btnRegXml')?.addEventListener('click', baixarXmlZip);
 
       el('#tblRegistros')?.querySelectorAll('thead th[data-col]').forEach(th => {
         th.onclick = () => {
@@ -1724,7 +1793,11 @@
           <div class="card-header d-flex align-items-center flex-wrap" style="gap:8px;">
             <h3 class="card-title mb-0">Ver Registros — Notas por Dia</h3>
             <span id="regPdfStatus" class="mini ml-2 text-muted"></span>
-            <button type="button" id="btnRegPdf" class="btn btn-sm btn-outline-danger ml-auto" disabled
+            <button type="button" id="btnRegXml" class="btn btn-sm btn-outline-primary ml-auto" disabled
+                    title="Baixa num ZIP o XML de todas as notas da seleção (posto, empresa e período)">
+              <i class="fas fa-file-archive mr-1"></i> XMLs em ZIP
+            </button>
+            <button type="button" id="btnRegPdf" class="btn btn-sm btn-outline-danger" disabled
                     title="Gera o PDF com todas as notas da seleção (posto, empresa, período e ordenação)">
               <i class="fas fa-file-pdf mr-1"></i> Exportar PDF
             </button>
@@ -1755,6 +1828,7 @@
                     <th title="Código do serviço da nota e o que ele significa (Fin_Nota)">Serviço</th>
                     <th data-col="valor" class="text-right" style="cursor:pointer">Valor (R$)</th>
                     <th class="text-center">Status</th>
+                    <th class="text-center" title="XML da nota fiscal, lido do sistema do posto na hora do clique">XML</th>
                   </tr>
                 </thead>
                 <tbody id="tblRegBody"></tbody>

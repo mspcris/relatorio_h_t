@@ -41,7 +41,12 @@ SELECT
     ISNULL(x.discriminacao, '')   AS discriminacao,
     ISNULL(x.valor_iss, 0)        AS valor_iss,
     ISNULL(x.id_receita, 0)       AS id_receita,
-    ISNULL(x.id_lancamento, 0)    AS id_lancamento
+    ISNULL(x.id_lancamento, 0)    AS id_lancamento,
+    -- XML da nota (Fin_NotaFiscalRetorno.xmlCompleto): o id para baixar ao vivo
+    -- e se o retorno realmente traz XML. 0 em id_retorno = a nota da view nao
+    -- casou com retorno nacional nenhum, logo nao ha XML no sistema.
+    ISNULL(x.id_retorno, 0)       AS id_retorno,
+    ISNULL(x.tem_xml, 0)          AS tem_xml
 FROM (
     SELECT
         CAST('Clinica' AS NVARCHAR(30))                             AS origem,
@@ -134,6 +139,8 @@ LEFT JOIN (
             n.idReceita                                                            AS id_receita,
             ISNULL(rc.idLancamento, 0)                                             AS id_lancamento,
             ISNULL(n.idClasse, 0)                                                  AS id_classe,
+            r.idNotaFiscalRetorno                                                  AS id_retorno,
+            CASE WHEN DATALENGTH(r.xmlCompleto) > 50 THEN 1 ELSE 0 END             AS tem_xml,
             ROW_NUMBER() OVER (
                 PARTITION BY r.v02_Numero_Nota_Fiscal, r.v12_CPF_CNPJ_Prestador
                 ORDER BY r.idNotaFiscalRetorno DESC
