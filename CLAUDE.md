@@ -767,6 +767,11 @@ linha; PDF em paisagem com o máximo de dados; e o **nome CAMIM do serviço**.
   **não tem ACL de posto**, de propósito.
 - Posto sem arquivo no mês → `postos_sem_dado` e aviso amarelo na tela e no PDF.
 - Abre no **último mês fechado** (é o que a contabilidade fecha).
+- **A barra da tabela Por empresa é a fatia no TOTAL do mês** (emitidas −
+  canceladas), com o % escrito ao lado do valor — 647 mil de 3,85 milhões =
+  16,8 %. Até 30/10/2026 dividia pelo maior valor entre as empresas e a
+  primeira linha enchia 100 % (Cristiano: "se 600k são 20 %, a barra tem de
+  estar em 20 %"). Barra nova nesta página segue a mesma base.
 - PDF por empresa respeita busca, filtro de situação e ordenação da tela;
   2.603 notas = 161 páginas (cada nota ocupa 2-3 linhas: é o custo de "o máximo
   de dados"). O CSV tem todos os campos, um por coluna.
