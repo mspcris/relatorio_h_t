@@ -714,6 +714,11 @@
               <button id="btnGrupoCouto"    class="btn btn-sm btn-outline-secondary ml-1" title="C D J M P">Couto</button>
             </div>
           </div>
+          <!-- Filtro de robô: quais barras mostrar (combina com o posto) -->
+          <div class="d-flex align-items-center flex-wrap" style="gap:12px">
+            <span class="font-weight-bold" style="font-size:.85rem">Robô</span>
+            <ul id="roboTabs" class="nav nav-pills scroll-tabs mb-0 flex-grow-1"></ul>
+          </div>
         </div>
       </div>
 
@@ -1056,6 +1061,37 @@
     return POSTOS_USER.filter(p => postosSel.has(p));
   }
 
+  // Robôs: cada barra traz { robo: {key, label, ordem} }; os chips são montados
+  // com os robôs que existem nos postos escolhidos. Vazio = todos.
+  let robosSel = new Set();
+  let _robosDisponiveis = [];   // [{key, label}] da última carga
+  let _todosCarregados  = [];   // barras da última carga, antes do filtro de robô
+
+  /* ── Robô tabs ──────────────────────────────────────────────── */
+  function buildRoboTabs() {
+    const ul = document.getElementById('roboTabs');
+    if (!ul) return;
+    const allActive = !robosSel.size;
+    const li = [`<li class="nav-item"><a href="#" class="nav-link ${allActive ? 'active' : ''}" data-robo-key="ALL">Todos</a></li>`];
+    for (const r of _robosDisponiveis) {
+      const ativo = !allActive && robosSel.has(r.key);
+      li.push(`<li class="nav-item"><a href="#" class="nav-link ${ativo ? 'active' : ''}" data-robo-key="${esc(r.key)}">${esc(r.label)}</a></li>`);
+    }
+    ul.innerHTML = li.join('');
+    ul.onclick = e => {
+      const link = e.target.closest('a[data-robo-key]');
+      if (!link) return;
+      e.preventDefault();
+      const key = link.dataset.roboKey;
+      if (key === 'ALL') robosSel = new Set();
+      else if (!robosSel.size) robosSel = new Set([key]);
+      else if (robosSel.has(key)) robosSel.delete(key);
+      else robosSel.add(key);
+      buildRoboTabs();
+      desenharPainel();
+    };
+  }
+
   /* ── Posto tabs ─────────────────────────────────────────────── */
   function buildPostoTabs() {
     const ul = document.getElementById('postoTabs');
@@ -1215,7 +1251,7 @@
       const texto = it.ultimo
         ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo)}${it.dias === 0 ? (it.numeros ? textoNumeros(it.numeros) : textoEnvioPush(it.envio)) : ''}`
         : fmtDias(it.dias);
-      return { html: barraHTML('PUSH', nome, sKey, texto, it.posto, { robo: 'push', postos: [it.posto] }), order: s.order };
+      return { html: barraHTML('PUSH', nome, sKey, texto, it.posto, { robo: 'push', postos: [it.posto] }), order: s.order, robo: { key: 'push', label: 'Push Cobrança', ordem: 1 } };
     });
   }
 
@@ -1261,7 +1297,7 @@
           ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo_envio)}${it.numeros ? textoNumeros(it.numeros) : ''}`
           : fmtDias(it.dias);
         const abrir = { robo: cat === 'Boleto' ? 'email' : 'email_outros', postos: [it.posto] };
-        itens.push({ html: barraHTML('EMAIL', cat, sKey, texto, it.posto, abrir), order: STATUS[sKey].order });
+        itens.push({ html: barraHTML('EMAIL', cat, sKey, texto, it.posto, abrir), order: STATUS[sKey].order, robo: { key: `email:${cat}`, label: cat, ordem: cat === 'Boleto' ? 2 : 3 } });
       } else {
         // vários postos: um item por posto dentro da categoria
         for (const it of lista) {
@@ -1271,7 +1307,7 @@
             : fmtDias(it.dias);
           const nome = `${cat} — Posto ${it.posto}`;
           const abrir = { robo: cat === 'Boleto' ? 'email' : 'email_outros', postos: [it.posto] };
-          itens.push({ html: barraHTML('EMAIL', nome, sKey, texto, it.posto, abrir), order: STATUS[sKey].order });
+          itens.push({ html: barraHTML('EMAIL', nome, sKey, texto, it.posto, abrir), order: STATUS[sKey].order, robo: { key: `email:${cat}`, label: cat, ordem: cat === 'Boleto' ? 2 : 3 } });
         }
       }
     }
@@ -1303,7 +1339,7 @@
       const texto = it.ultimo
         ? `${fmtDias(it.dias)} · ${fmtDateBR(it.ultimo)}${it.dias === 0 && it.numeros ? textoNumeros(it.numeros) : ''}`
         : fmtDias(it.dias);
-      return { html: barraHTML('TEF', nome, sKey, texto, it.posto, { robo: 'tef', postos: [it.posto] }), order: STATUS[sKey].order };
+      return { html: barraHTML('TEF', nome, sKey, texto, it.posto, { robo: 'tef', postos: [it.posto] }), order: STATUS[sKey].order, robo: { key: 'tef', label: 'TEF Recorrente', ordem: 4 } };
     });
   }
 
@@ -1377,6 +1413,7 @@
         html: barraHTML('WPP', camp.nome || 'WhatsApp Cobrança', sKey, texto, postosCamp[0] || '',
                         { robo: `wpp:${camp.id}`, postos: postosCamp.filter(p => postosSet.has(p)) }),
         order: STATUS[sKey].order,
+        robo: { key: `wpp:${camp.id}`, label: `WhatsApp · ${camp.nome || 'Cobrança'}`, ordem: 5 },
       });
     }
 
@@ -1572,9 +1609,25 @@
 
     // Ordenação final: pior (menor order) primeiro
     todos.sort((a, b) => a.order - b.order);
+    _todosCarregados = todos;
+
+    // Chips de robô: os que existem nos postos escolhidos, em ordem fixa
+    // (push, e-mails, TEF, campanhas WPP) e por nome dentro do grupo.
+    const vistos = new Map();
+    for (const it of todos) if (it.robo && !vistos.has(it.robo.key)) vistos.set(it.robo.key, it.robo);
+    _robosDisponiveis = [...vistos.values()].sort((a, b) => (a.ordem - b.ordem) || a.label.localeCompare(b.label, 'pt-BR'));
+    // Robô escolhido que não existe nestes postos sai da seleção, senão a tela ficaria vazia sem dizer por quê
+    for (const k of [...robosSel]) if (!vistos.has(k)) robosSel.delete(k);
+    buildRoboTabs();
+    desenharPainel();
+  }
+
+  function desenharPainel() {
+    const painel = document.getElementById('painelIndicadores');
+    const todos = _todosCarregados.filter(it => !it.robo || !robosSel.size || robosSel.has(it.robo.key));
 
     if (!todos.length) {
-      painel.innerHTML = '<p class="text-muted">Nenhum indicador disponível para os postos selecionados.</p>';
+      painel.innerHTML = '<p class="text-muted">Nenhum indicador disponível para os postos e robôs selecionados.</p>';
       return;
     }
 
