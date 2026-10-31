@@ -1409,11 +1409,14 @@
         ? `${ultStr} <span class="text-muted ml-2" style="font-size:.78rem">(${detalhe.join(' · ')})</span>`
         : ultStr) + textoNumeros(numeros);
 
+      const nomeCampWpp = (camp.nome || 'Cobrança').replace(/^\s*whatsapp\s*[-–·:]?\s*/i, '') || 'Cobrança';
       itens.push({
         html: barraHTML('WPP', camp.nome || 'WhatsApp Cobrança', sKey, texto, postosCamp[0] || '',
                         { robo: `wpp:${camp.id}`, postos: postosCamp.filter(p => postosSet.has(p)) }),
         order: STATUS[sKey].order,
-        robo: { key: `wpp:${camp.id}`, label: `WhatsApp · ${camp.nome || 'Cobrança'}`, ordem: 5 },
+        // Chave pelo NOME: a mesma campanha existe uma vez por grupo de postos
+        // (Altamiro/Couto) com ids diferentes — para quem filtra é um robô só.
+        robo: { key: `wpp:${nomeCampWpp}`, label: `WhatsApp · ${nomeCampWpp}`, ordem: 5 },
       });
     }
 
