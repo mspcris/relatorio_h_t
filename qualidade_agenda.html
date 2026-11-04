@@ -223,7 +223,8 @@
         .esp-posto-bar { display: flex; align-items: center; margin-bottom: 7px; gap: 8px; }
         .esp-posto-name { width: 86px; font-size: 0.78rem; font-weight: 600; flex-shrink: 0; color: #444; }
         .esp-bar-container { flex: 1; height: 24px; background: #e9ecef; border-radius: 5px; overflow: hidden; position: relative; }
-        .esp-bar-fill { height: 100%; border-radius: 5px; display: flex; align-items: center; padding-left: 8px; font-size: 0.73rem; color: white; font-weight: 700; min-width: 28px; transition: width 0.6s ease; }
+        .esp-bar-fill { height: 100%; border-radius: 5px; display: flex; align-items: center; padding-left: 8px; font-size: 0.73rem; color: white; font-weight: 700; min-width: 28px; transition: width 0.6s ease; white-space: nowrap; overflow: visible; }
+        .esp-bar-fill .lbl-data { font-weight: 500; opacity: 0.95; }
         .esp-bar-days { width: 96px; text-align: right; font-size: 0.82rem; font-weight: 700; flex-shrink: 0; line-height: 1.1; }
         .esp-bar-days small { display: block; font-size: 0.66rem; font-weight: 600; color: #6b7685; white-space: nowrap; }
         .esp-bar-ok      .esp-bar-fill { background: var(--ok); }
@@ -1931,7 +1932,7 @@ function espBarsHtml(postosEsp, postosVisiveis, prazo_camim) {
             barLabel = 'SEM VAGA';
         } else if (dias !== null) {
             barWidth = Math.min(100, Math.round((dias / maxDias) * 100)) + '%';
-            barLabel = dias + 'd';
+            barLabel = dias + 'd' + (d.DataProximaVaga ? ' · ' + fmtDate(d.DataProximaVaga) : '');
         }
 
         const pct_livres = d.ValorPercentualVagasLivres !== null ? d.ValorPercentualVagasLivres + '%' : '—';
