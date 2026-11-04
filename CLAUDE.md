@@ -2210,6 +2210,25 @@ Detalhes em **[docs/2026-10-27_fidelizacao_churn_cohort.md](docs/2026-10-27_fide
 
 ---
 
+## Higienização — fonte é o RDS, não mais o servidor do Caio (2026-11-04)
+
+O app de higienização (`gestao-backend`, higienizacao.propagacaodigital.com.br,
+servidor 217.216.85.81) **migrou o banco para o RDS da AWS em 03/06/2026**
+(commit `ef641dd` dele) e o Postgres local ficou abandonado. Nosso
+`scripts/etl_higienizacao_snapshot.py` continuou lendo o local por SSH e o
+dashboard ficou 5 meses zerado — com o log do ETL dizendo "Registros: 639"
+e sucesso toda hora. **Sucesso com número congelado é sintoma, não saúde.**
+- Agora lê o RDS direto (`psycopg2`, `PG_RDS_*` do `.env`, banco
+  `pd_gestao_higienizacao` — mesmo host/usuário do resto, só muda o dbname).
+  Nada de SSH, nada a liberar em firewall. Medido: 4.906 registros em 0,6 s.
+- `--out <arquivo>` roda contra o RDS gravando em outro caminho (não toca o
+  snapshot nem o `etl_meta`).
+- `created_at` no RDS é UTC; as queries já convertem com `AT TIME ZONE
+  'America/Sao_Paulo'`.
+- Se o Caio trocar de banco de novo, é aqui que muda (`HIGIENIZACAO_DB_NAME`).
+
+---
+
 ## Regras de desenvolvimento
 
 - Cada KPI é independente — nunca compartilha cálculos entre páginas

@@ -2,13 +2,20 @@
 # etl_higienizacao_snapshot.py
 # ETL: Higienização — gera JSON analítico com registros, duplicidades,
 #      cobertura, intervalos e métricas por posto/setor/funcionário.
-# Fonte: PostgreSQL em 217.216.85.81 (gestao_higienizacao) via SSH.
+# Fonte: PostgreSQL no RDS da AWS, banco pd_gestao_higienizacao — o mesmo
+#        host/usuário de PG_RDS_* (.env de /opt/relatorio_h_t), só muda o dbname.
+#        O app do Caio (gestao-backend, higienizacao.propagacaodigital.com.br)
+#        migrou para lá em 03/06/2026 (commit ef641dd dele). Até 04/11/2026 este
+#        ETL lia por SSH o Postgres local de 217.216.85.81, abandonado desde
+#        então: o snapshot ficou 5 meses congelado em 639 registros (02/06) com
+#        o log dizendo "sucesso" em toda execução.
 # Gera: json_consolidado/higienizacao_snapshot.json
 # Cron: 0 * * * * (a cada hora)
+# Uso:  --out <arquivo>  grava em outro caminho (teste sem tocar no snapshot)
 
+import argparse
 import json
 import os
-import subprocess
 import sys
 import time
 from datetime import datetime
@@ -16,6 +23,14 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from etl_meta import ETLMeta
+
+from dotenv import load_dotenv
+for _env_path in ("/opt/relatorio_h_t/.env",
+                  os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")):
+    if os.path.exists(_env_path):
+        load_dotenv(_env_path); break
+
+import psycopg2
 
 # =========================
 # Constantes
@@ -27,11 +42,13 @@ LOG_DIR    = os.path.join(BASE_DIR, "logs")
 LOG_FILE   = os.path.join(LOG_DIR, f"export_higienizacao_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
 OUT_PATH   = os.path.join(JSON_DIR, "higienizacao_snapshot.json")
 
-SSH_HOST   = os.getenv("HIGIENIZACAO_DB_SSH", "root@217.216.85.81")
-# Porta do sshd remoto. Mudou de 22 → 2222 em ~24/04/2026; o ETL ficou parado
-# porque continuava tentando a 22 (timeout). Configurável via env.
-SSH_PORT   = os.getenv("HIGIENIZACAO_DB_SSH_PORT", "2222")
-DB_NAME    = os.getenv("HIGIENIZACAO_DB_NAME", "gestao_higienizacao")
+DB_HOST    = os.environ.get("PG_RDS_HOST", "")
+DB_PORT    = int(os.environ.get("PG_RDS_PORT", "9432"))
+DB_USER    = os.environ.get("PG_RDS_USER", "")
+DB_PASS    = os.environ.get("PG_RDS_PASSWORD", "")
+DB_SSL     = os.environ.get("PG_RDS_SSLMODE", "require")
+# Banco do app de higienização no RDS (não é o relatorio_h_t de PG_RDS_DB).
+DB_NAME    = os.getenv("HIGIENIZACAO_DB_NAME", "pd_gestao_higienizacao")
 
 
 # =========================
@@ -77,31 +94,37 @@ logger = Logger(LOG_FILE)
 
 
 # =========================
-# SSH + SQL
+# Conexão + SQL
 # =========================
 
-def run_sql(sql: str) -> list[str]:
-    """Executa SQL no PostgreSQL remoto via SSH, retorna linhas de texto."""
-    sql_safe = sql.replace("\\", "\\\\").replace('"', '\\"')
-    remote_cmd = f'sudo -u postgres psql -d {DB_NAME} -AtF \'|\' -c "{sql_safe}"'
-    p = subprocess.run(
-        [
-            "ssh",
-            "-p", SSH_PORT,
-            "-o", "BatchMode=yes",
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null",
-            "-o", "ConnectTimeout=15",
-            SSH_HOST,
-            remote_cmd,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=120,
+def pg_conn():
+    if not (DB_HOST and DB_USER and DB_PASS):
+        raise RuntimeError("PG_RDS_HOST/PG_RDS_USER/PG_RDS_PASSWORD ausentes no .env")
+    return psycopg2.connect(
+        host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
+        user=DB_USER, password=DB_PASS, sslmode=DB_SSL,
+        connect_timeout=15,
+        options="-c statement_timeout=120000",
     )
-    if p.returncode != 0:
-        raise RuntimeError((p.stderr or p.stdout or "falha no ssh/psql").strip())
-    return [ln for ln in p.stdout.splitlines() if ln.strip()]
+
+
+def _celula(v) -> str:
+    # Mesmo formato que o `psql -At` devolvia: NULL vazio, boolean t/f.
+    if v is None:
+        return ""
+    if v is True:
+        return "t"
+    if v is False:
+        return "f"
+    return str(v)
+
+
+def run_sql(conn, sql: str) -> list[str]:
+    """Executa SQL no RDS e devolve linhas 'a|b|c', formato que os parsers leem."""
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        rows = cur.fetchall()
+    return ["|".join(_celula(v) for v in row) for row in rows]
 
 
 # =========================
@@ -278,38 +301,51 @@ def parse_locations(lines: list[str]) -> list[dict]:
 # =========================
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default=OUT_PATH, help="caminho do JSON de saída (teste)")
+    args = ap.parse_args()
+    out_path = args.out
+    teste = os.path.abspath(out_path) != os.path.abspath(OUT_PATH)
+
     meta = ETLMeta('etl_higienizacao_snapshot', 'json_consolidado')
 
-    os.makedirs(JSON_DIR, exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     t0 = time.time()
 
     logger.write("=" * 60)
     logger.write("ETL HIGIENIZAÇÃO — Snapshot Analítico")
     logger.write("=" * 60)
-    logger.write(f"  SSH: {SSH_HOST} (porta {SSH_PORT})")
+    logger.write(f"  RDS: {DB_USER}@{DB_HOST}:{DB_PORT} (sslmode={DB_SSL})")
     logger.write(f"  DB:  {DB_NAME}")
-    logger.write(f"  Out: {OUT_PATH}")
+    logger.write(f"  Out: {out_path}{'  (TESTE — snapshot oficial não é tocado)' if teste else ''}")
     logger.write("")
 
-    # 1) Registros
-    with Timer("registros") as t:
-        registros = parse_registros(run_sql(SQL_REGISTROS))
-    logger.write(f"  Registros:     {len(registros):>6d} | {t.fmt()}")
+    conn = pg_conn()
+    try:
+        # 1) Registros
+        with Timer("registros") as t:
+            registros = parse_registros(run_sql(conn, SQL_REGISTROS))
+        logger.write(f"  Registros:     {len(registros):>6d} | {t.fmt()}")
 
-    # 2) Ambientes (com último log e contagem)
-    with Timer("ambientes") as t:
-        ambientes = parse_ambientes(run_sql(SQL_AMBIENTES))
-    logger.write(f"  Ambientes:     {len(ambientes):>6d} | {t.fmt()}")
+        # 2) Ambientes (com último log e contagem)
+        with Timer("ambientes") as t:
+            ambientes = parse_ambientes(run_sql(conn, SQL_AMBIENTES))
+        logger.write(f"  Ambientes:     {len(ambientes):>6d} | {t.fmt()}")
 
-    # 3) Duplicidades (intervalo < 60min no mesmo ambiente)
-    with Timer("duplicidades") as t:
-        duplicidades = parse_duplicidades(run_sql(SQL_DUPLICIDADES))
-    logger.write(f"  Duplicidades:  {len(duplicidades):>6d} | {t.fmt()}")
+        # 3) Duplicidades (intervalo < 60min no mesmo ambiente)
+        with Timer("duplicidades") as t:
+            duplicidades = parse_duplicidades(run_sql(conn, SQL_DUPLICIDADES))
+        logger.write(f"  Duplicidades:  {len(duplicidades):>6d} | {t.fmt()}")
 
-    # 4) Locations
-    with Timer("locations") as t:
-        locations = parse_locations(run_sql(SQL_LOCATIONS))
-    logger.write(f"  Locations:     {len(locations):>6d} | {t.fmt()}")
+        # 4) Locations
+        with Timer("locations") as t:
+            locations = parse_locations(run_sql(conn, SQL_LOCATIONS))
+        logger.write(f"  Locations:     {len(locations):>6d} | {t.fmt()}")
+    finally:
+        conn.close()
+
+    if registros:
+        logger.write(f"  Último registro: {registros[0]['data_hora']} (fuso America/Sao_Paulo)")
 
     # Timestamp
     now_sp = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d %H:%M:%S %z")
@@ -326,18 +362,19 @@ def main():
 
     # Salvar
     with Timer("salvar") as t:
-        tmp = OUT_PATH + ".tmp"
+        tmp = out_path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False)
-        os.replace(tmp, OUT_PATH)
+        os.replace(tmp, out_path)
     logger.write(f"  Salvar JSON:   {t.fmt()}")
 
-    meta.ok('geral')
-    meta.save()
+    if not teste:
+        meta.ok('geral')
+        meta.save()
 
     elapsed = time.time() - t0
     logger.write("")
-    logger.write(f"  Snapshot salvo: {OUT_PATH}")
+    logger.write(f"  Snapshot salvo: {out_path}")
     logger.write(f"  Tempo total:    {elapsed:.1f}s")
     logger.write(f"  Log:            {LOG_FILE}")
     logger.close()
