@@ -120,6 +120,14 @@ WHERE Desativado = 0
 # mínimo do cad_cbos casado por radical — a escolha é feita em Python por
 # qualidade_agenda_regras.proxima_vaga(), não aqui.
 #
+# AGENDA RESTRITA (Cristiano, 2026-11-04): `PermitirAgendamentoquenuncaconsultou`
+# desligado = só quem já se consultou com o médico marca (o "R" da grade do ERP;
+# 2 agendas ativas na rede em 04/11, ex.: Vera Lucia/Pediatria/G). Cada dia sai
+# com dois pares: (vagas, capacidade) com TODAS as agendas — o padrão da tela —
+# e (vagas_sr, cap_sr) SEM as restritas, para o interruptor "Incluir agendas
+# restritas" da página. Os campos de próxima vaga da linha são do padrão; a
+# página recalcula a partir de `dias_livres` quando o interruptor é desligado.
+#
 # ARMADILHA: `text()` do SQLAlchemy lê qualquer `:nome` como bind param, até em
 # comentário. Nada de dois-pontos neste SQL. Datas literais, se um dia
 # precisar, em DD/MM/YYYY (DATEFORMAT dmy).
@@ -146,6 +154,7 @@ dias AS (
 ),
 ag AS (
     SELECT a.idEndereco, a.Especialidade, a.idMedico, a.idEspecialidade, d.offd, d.Data,
+           CASE WHEN ISNULL(a.PermitirAgendamentoquenuncaconsultou, 0) = 1 THEN 0 ELSE 1 END AS restrita,
            {_case_dia('')}                         AS atende,
            {_case_dia('QuantidadeMaxima')}         AS QM,
            {_case_dia('QuantidadeReservaMaximo')}  AS RMax,
@@ -160,7 +169,7 @@ ag AS (
            OR DATEDIFF(day, CAST(a.DataInicioExibicao AS DATE), d.Data) % 14 < 7)
 ),
 base AS (
-    SELECT ag.idEndereco, ag.Especialidade, ag.offd, ag.Data, ag.QM, ag.RDias,
+    SELECT ag.idEndereco, ag.Especialidade, ag.offd, ag.Data, ag.QM, ag.RDias, ag.restrita,
            CASE WHEN ag.RMax = 0 AND ag.RMin = 0 THEN 0 ELSE ag.RMax - ag.RMin + 1 END AS Reservadas,
            COALESCE(xe.QuantidadeAgendada, xm.QuantidadeAgendada, 0) AS QA
     FROM ag
@@ -191,7 +200,9 @@ SELECT idEndereco, Especialidade, offd, Data,
        SUM(cap - QA)   AS vagas,
        SUM(QM)         AS maxima,
        SUM(Reservadas) AS reservadas,
-       MAX(RDias)      AS reserva_dias
+       MAX(RDias)      AS reserva_dias,
+       SUM(CASE WHEN restrita = 0 THEN cap      ELSE 0 END) AS cap_sr,
+       SUM(CASE WHEN restrita = 0 THEN cap - QA ELSE 0 END) AS vagas_sr
 FROM dia
 GROUP BY idEndereco, Especialidade, offd, Data
 ORDER BY idEndereco, Especialidade, offd
@@ -567,13 +578,15 @@ def run():
                 rows = con.execute(text(SQL_CALENDARIO)).fetchall()
         logger.write(f"  OK: {len(rows)} linhas posto×especialidade×dia ({t.format()})")
 
-        # (idEndereco, ESPECIALIDADE) → {offset: [offset, vagas, capacidade, máximo, reservadas, dias de reserva]}
+        # (idEndereco, ESPECIALIDADE) → {offset: [offset, vagas, capacidade, máximo, reservadas,
+        #                                          dias de reserva, vagas SEM restritas, capacidade SEM restritas]}
         calendario = {}
-        for id_end_l, esp_l, off_l, _data_l, cap_l, vagas_l, max_l, res_l, resd_l in rows:
+        for id_end_l, esp_l, off_l, _data_l, cap_l, vagas_l, max_l, res_l, resd_l, cap_sr_l, vagas_sr_l in rows:
             k = (int(id_end_l), str(esp_l or "").strip().upper())
             off = int(off_l)
             calendario.setdefault(k, {})[off] = [off, int(vagas_l or 0), int(cap_l or 0),
-                                                 int(max_l or 0), int(res_l or 0), int(resd_l or 0)]
+                                                 int(max_l or 0), int(res_l or 0), int(resd_l or 0),
+                                                 int(vagas_sr_l or 0), int(cap_sr_l or 0)]
         logger.write(f"  {len(calendario)} pares posto×especialidade com agenda ativa no horizonte")
 
         def _safe_float(v):
@@ -608,7 +621,7 @@ def run():
             # >= mínimo do cad_cbos casado por radical.
             escolhido = proxima_vaga(lista_livres, minimo)
             if escolhido:
-                _off, _vagas, _cap, _max, _res, _resd = escolhido
+                _off, _vagas, _cap, _max, _res, _resd, _v_sr, _c_sr = escolhido
                 dias          = _off
                 data_str      = (hoje + timedelta(days=_off)).isoformat()
                 vagas_na_data = _vagas
@@ -647,10 +660,13 @@ def run():
                 "prazoconsultaans":  prazo_ans,
                 "prazoconsultacamim": prazo_cam,
                 "Status":            status,
-                # [[offset, vagas, capacidade], ...] ordenado por offset — TODO dia com
-                # >= 1 vaga, SEM o % mínimo aplicado: a tela aplica (diaPassa) com o %
-                # atual do cad_cbos.
-                "dias_livres":       [x[:3] for x in lista_livres],
+                # [[offset, vagas, capacidade, vagas_sem_restritas, cap_sem_restritas], ...]
+                # ordenado por offset — TODO dia com >= 1 vaga, SEM o % mínimo aplicado: a
+                # tela aplica (diaPassa) com o % atual do cad_cbos e escolhe o par conforme
+                # o interruptor "Incluir agendas restritas".
+                "dias_livres":       [[x[0], x[1], x[2], x[6], x[7]] for x in lista_livres],
+                # alguma agenda restrita (PermitirAgendamentoquenuncaconsultou = 0) no horizonte
+                "tem_restrita":      any(x[7] < x[2] for x in lista_dias),
             })
 
         logger.write(f"  Sem vaga no horizonte (>= 1 vaga e % mínimo): {sem_vaga} de {len(all_dados)} linhas")

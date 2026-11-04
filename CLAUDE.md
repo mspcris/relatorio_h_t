@@ -2307,6 +2307,23 @@ especialidade com a média dos postos, 20 % em todas as especialidades e tela
   ~60-100 s de consulta. Dia em `Cad_AgendaMedicoFalta` é cinza na grade do ERP e
   fica fora (G 23/12 e 25/12). Endoscopia/D tem 1 marcação em 09/12 depois do fim
   (12/11) — pela regra, SEM VAGA.
+- **Dois interruptores na barra de filtro (2026-11-04, pedido do Cristiano):**
+  - **"Incluir agendas restritas"** (ligado por padrão = o que o ERP mostra).
+    Restrita = `PermitirAgendamentoquenuncaconsultou` desligado: só quem já se
+    consultou com o médico marca (o "R" da grade do ERP; 2 agendas ativas na
+    rede, Vera Lucia/Pediatria/G). O ETL exporta por dia
+    `[offset, vagas, cap, vagas_sem_restritas, cap_sem_restritas]` e
+    `tem_restrita` na linha; desligado, `linhaConforme()` recalcula a linha
+    inteira (próxima vaga, status) a partir da lista, com a mesma régua. Selo
+    "R" ao lado do posto quando a linha tem agenda restrita.
+  - **"Só especialidades médicas"** (ligado por padrão): área de atuação
+    atendida por médico fica (Clínica da Dor, Medicina do Trabalho, Nutrologia,
+    Homeopatia); sai psicologia, fono, fisio, nutrição, enfermagem, acupuntura e
+    exame/procedimento (Holter, MAPA, eco, EEG, espirometria, endoscopia, USG,
+    tomografia, teste ergométrico). **A régua é `js/medicos_regras.js`**, a mesma
+    do KPI Prescrições e do CTRL-Q — mudou lá, muda aqui. Filtra em
+    `getFilteredData()`, então vale para todas as abas; a aba Configurar Prazos
+    continua listando o cad_cbos inteiro.
 - **"Alterar em todas as especialidades"**: `POST /api/qualidade_agenda/update_cbos_todos`
   (prazo_ans / prazo_camim / valor no cad_cbos de A com 1 linha de
   `Sis_Historico` por registro; `dias_minimos` na tabela nossa), modal com

@@ -40,6 +40,7 @@
             .catch(() => { window.USER_EMAIL = null; window.USER_POSTOS = []; });
     </script>
     <script src="/js/chat.js?v=20260328"></script>
+    <script src="/js/medicos_regras.js?v=20261104"></script> <!-- regra compartilhada de "quem é médico" (KPI Prescrições, CTRL-Q) — interruptor "Só especialidades médicas" -->
 
     <style>
         :root {
@@ -225,6 +226,7 @@
         .esp-bar-container { flex: 1; height: 24px; background: #e9ecef; border-radius: 5px; overflow: hidden; position: relative; }
         .esp-bar-fill { height: 100%; border-radius: 5px; display: flex; align-items: center; padding-left: 8px; font-size: 0.73rem; color: white; font-weight: 700; min-width: 28px; transition: width 0.6s ease; white-space: nowrap; overflow: visible; }
         .esp-bar-fill .lbl-data { font-weight: 500; opacity: 0.95; }
+        .tag-restrita { display:inline-block; margin-left:4px; padding:0 4px; border:1px solid #c62828; color:#c62828; border-radius:3px; font-size:0.62rem; font-weight:700; line-height:1.3; vertical-align:middle; }
         .esp-bar-days { width: 96px; text-align: right; font-size: 0.82rem; font-weight: 700; flex-shrink: 0; line-height: 1.1; }
         .esp-bar-days small { display: block; font-size: 0.66rem; font-weight: 600; color: #6b7685; white-space: nowrap; }
         .esp-bar-ok      .esp-bar-fill { background: var(--ok); }
@@ -648,6 +650,16 @@
                         <select id="filtroDataRef" class="form-control form-control-sm" style="width:180px" onchange="loadDataForDate(this.value)">
                             <option value="">Carregando...</option>
                         </select>
+                        <div class="custom-control custom-switch ml-2" id="swRestritasWrap"
+                             title="Agenda restrita: só quem já se consultou com o médico consegue marcar (o R da grade do ERP). Ligado = como o ERP mostra, com todas as agendas. Desligado = a tela inteira é recalculada sem as agendas restritas.">
+                            <input type="checkbox" class="custom-control-input" id="swRestritas" checked onchange="aplicarRestritas(true)">
+                            <label class="custom-control-label" for="swRestritas" style="font-size:.85rem;font-weight:600;white-space:nowrap">Incluir agendas restritas</label>
+                        </div>
+                        <div class="custom-control custom-switch ml-2" id="swMedicasWrap"
+                             title="Ligado: só especialidades atendidas por médico (áreas de atuação incluídas). Saem psicologia, fonoaudiologia, fisioterapia, nutrição, enfermagem, exames e procedimentos — a mesma regra do KPI Prescrições e do CTRL-Q (js/medicos_regras.js). Desligado: mostra tudo.">
+                            <input type="checkbox" class="custom-control-input" id="swMedicas" checked onchange="renderAll()">
+                            <label class="custom-control-label" for="swMedicas" style="font-size:.85rem;font-weight:600;white-space:nowrap">Só especialidades médicas <span id="swMedicasInfo" class="text-muted" style="font-weight:400"></span></label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1273,6 +1285,7 @@ const PODE_EDITAR_PRAZOS = {{ 'true' if QA_PODE_EDITAR_PRAZOS else 'false' }};
 // ESTADO GLOBAL
 // ─────────────────────────────────────────────────────────────────────────────
 let allData         = [];
+let allDataBruto    = [];   // linhas como vieram do JSON (com as agendas restritas); allData é a versão conforme o interruptor
 let cbosData        = {};
 let postosInfo      = {};
 let allEspecialidades = [];
@@ -1305,6 +1318,55 @@ function diaPassa(item, minimo) {
     const m = +minimo || 0;
     if (m <= 0) return true;
     return cap > 0 && Math.round(vagas / cap * 10000) / 100 >= m;
+}
+// ── Agendas restritas (Cristiano, 04/11/2026) ───────────────────────────────
+// Restrita = PermitirAgendamentoquenuncaconsultou desligado: só quem já se
+// consultou com o médico marca (o "R" da grade do ERP). O JSON traz, por dia,
+// [offset, vagas, capacidade, vagas_sem_restritas, cap_sem_restritas]; os campos
+// de próxima vaga da linha são COM restritas (o padrão). Interruptor desligado:
+// a linha é recalculada daqui, com a mesma régua do ETL (>= 1 vaga e % mínimo).
+function restritasLigado() { const sw = el('swRestritas'); return !sw || sw.checked; }
+function linhaConforme(d0, incluir) {
+    const d  = Object.assign({}, d0);
+    const dl = Array.isArray(d0.dias_livres) ? d0.dias_livres : null;
+    const cbos = cbosDe(d0.Especialidade, [d0]);
+    const pAns = cbos.prazoconsultaans || 0, pCam = cbos.prazoconsultacamim || 0;
+    if (!dl) { d.Status = calcStatusJs(d.DiasAteProximaVaga, pAns, pCam); return d; }
+    const tem5 = dl.length === 0 || (Array.isArray(dl[0]) && dl[0].length >= 5);
+    if (incluir || !tem5) {
+        d.dias_livres = dl.map(x => Array.isArray(x) ? x.slice(0, 3) : x);
+        d.Status = calcStatusJs(d.DiasAteProximaVaga, pAns, pCam);
+        return d;
+    }
+    d.dias_livres = dl.filter(x => x[3] > 0).map(x => [x[0], x[3], x[4]]);
+    const minimo = +cbos.ValorPMinimoVagaDisponivel || 0;
+    const item = d.dias_livres.find(x => diaPassa(x, minimo));
+    if (item) {
+        const [off, vagas, cap] = item;
+        d.DiasAteProximaVaga = off;
+        d.DataProximaVaga    = isoFromOffset(off);
+        d.QuantidadeVagasDisponivelNaData    = vagas;
+        d.CapacidadeConsiderada              = cap;
+        d.QuantidadeVagasTotalMedicosAtendem = cap;
+        d.ValorPercentualVagasLivres         = cap > 0 ? Math.round(vagas / cap * 10000) / 100 : null;
+    } else {
+        d.DiasAteProximaVaga = null; d.DataProximaVaga = null;
+        d.QuantidadeVagasDisponivelNaData = null; d.CapacidadeConsiderada = null;
+        d.QuantidadeVagasTotalMedicosAtendem = null; d.ValorPercentualVagasLivres = null;
+    }
+    d.Status = calcStatusJs(d.DiasAteProximaVaga, pAns, pCam);
+    return d;
+}
+function aplicarRestritas(render) {
+    const sw   = el('swRestritas');
+    const tem5 = allDataBruto.some(d => Array.isArray(d.dias_livres) && d.dias_livres.length && Array.isArray(d.dias_livres[0]) && d.dias_livres[0].length >= 5);
+    if (sw) {
+        sw.disabled = !tem5;
+        if (!tem5) { sw.checked = true; const w = el('swRestritasWrap'); if (w) w.title = 'O arquivo do dia ainda não separa agendas restritas (ETL anterior a 04/11/2026 à noite).'; }
+    }
+    const incluir = restritasLigado();
+    allData = allDataBruto.map(d => linhaConforme(d, incluir));
+    if (render) renderAll();
 }
 function getDiasMin(esp) {
     const v = qaConfig.dias[esp];
@@ -1340,9 +1402,29 @@ function getSelectedPostos() {
     return selectedPostos.filter(p => allowed.includes(p));
 }
 
+// "Só especialidades médicas" (Cristiano, 04/11/2026): área de atuação atendida
+// por médico fica (Clínica da Dor, Medicina do Trabalho, Nutrologia...); sai o
+// que não é médico — psicologia, fono, fisio, nutrição, enfermagem — e exame /
+// procedimento (Holter, MAPA, ecocardiograma, EEG, espirometria, endoscopia...).
+// A régua é a MESMA do KPI Prescrições e do CTRL-Q: window.MedicosRegras.
+function soMedicasLigado() { const sw = el('swMedicas'); return !!(sw && sw.checked); }
+function ehNaoMedica(esp) {
+    const R = window.MedicosRegras;
+    return !!(R && typeof R.isMedicinaAlternativa === 'function' && R.isMedicinaAlternativa(esp));
+}
 function getFilteredData() {
     const sp = getSelectedPostos();
-    return allData.filter(d => sp.includes(d.posto));
+    const sw = el('swMedicas');
+    if (sw && !window.MedicosRegras) {   // arquivo da regra não carregou: não dá para filtrar, avisa
+        sw.checked = false; sw.disabled = true;
+        const w = el('swMedicasWrap'); if (w) w.title = 'js/medicos_regras.js não carregou — sem a regra compartilhada não dá para separar médico de não médico.';
+    }
+    const base = allData.filter(d => sp.includes(d.posto));
+    if (!soMedicasLigado()) { const i = el('swMedicasInfo'); if (i) i.textContent = ''; return base; }
+    const out = base.filter(d => !ehNaoMedica(d.Especialidade));
+    const i = el('swMedicasInfo');
+    if (i) { const n = new Set(base.filter(d => ehNaoMedica(d.Especialidade)).map(d => d.Especialidade)).size; i.textContent = n ? `(${n} ocultas)` : ''; }
+    return out;
 }
 
 function statusBadgeHtml(status) {
@@ -1466,12 +1548,13 @@ async function loadJsonData(dataRef) {
     const r = await fetch(url, { cache: dataRef ? 'default' : 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const json = await r.json();
-    allData           = json.dados           || [];
+    allDataBruto      = json.dados           || [];
     dataReferencia    = (json.meta && json.meta.data_referencia) || null;
     await loadQaConfig();
     cbosData          = json.cbos            || {};
     postosInfo        = json.postos_info     || {};
     allEspecialidades = json.especialidades  || [];
+    aplicarRestritas(false);   // monta allData conforme o interruptor "Incluir agendas restritas"
     allPostos         = [...new Set(allData.map(d => d.posto))].filter(Boolean);
 
     // Freshness
@@ -1939,8 +2022,10 @@ function espBarsHtml(postosEsp, postosVisiveis, prazo_camim) {
         const vagas = d.QuantidadeVagasDisponivelNaData !== null ? d.QuantidadeVagasDisponivelNaData : '—';
         const dataFmt = d.DataProximaVaga ? fmtDate(d.DataProximaVaga) : '—';
 
-        barsHtml += `<div class="esp-posto-bar" title="${nomePosto}: ${dias !== null ? dias+'d' : 'sem vaga'} | Data: ${dataFmt} | Vagas: ${vagas} | Livres: ${pct_livres}">
-            <div class="esp-posto-name">${p} <span style="font-weight:400;color:#888;font-size:0.7rem;">${nomePosto.substring(0,8)}</span></div>
+        const tagR = (d.tem_restrita && restritasLigado())
+            ? '<span class="tag-restrita" title="inclui agenda restrita: só quem já se consultou com o médico marca (desligue o interruptor para ver sem ela)">R</span>' : '';
+        barsHtml += `<div class="esp-posto-bar" title="${nomePosto}: ${dias !== null ? dias+'d' : 'sem vaga'} | Data: ${dataFmt} | Vagas: ${vagas} | Livres: ${pct_livres}${d.tem_restrita ? ' | tem agenda restrita' : ''}">
+            <div class="esp-posto-name">${p} <span style="font-weight:400;color:#888;font-size:0.7rem;">${nomePosto.substring(0,8)}</span>${tagR}</div>
             <div class="esp-bar-container">
                 <div class="esp-bar-fill" style="width:${barWidth};background:${barClr};">${barLabel}</div>
             </div>
