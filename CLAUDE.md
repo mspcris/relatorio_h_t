@@ -2269,6 +2269,24 @@ especialidade com a média dos postos, 20 % em todas as especialidades e tela
   posto × especialidade, e a aba pega o **primeiro offset ≥ N** — trocar N não
   exige rodar o ETL. JSON sem `dias_livres` → a aba avisa e usa só a próxima
   vaga real quando ela já é ≥ N. Mapa, ranking crítico e simulador NÃO usam N.
+- **O % mínimo de vagas vale sobre a SOMA DO DIA e sai do cad_cbos CASADO POR
+  RADICAL (2026-11-04, Leonardo: "com 20 %, não deveria aparecer 1 vaga para
+  CG"; Cristiano: "4 dias E, no mínimo, 20 %").** Pediatria em G atendia 18 e
+  tinha 1 vaga (5,56 %) e a tela dizia 6d. Causa: o SQL (`SQL_VAGAS` e
+  `SQL_DIAS_LIVRES`) fazia `JOIN cad_cbos` por nome exato — a agenda diz
+  PEDIATRIA, o cad_cbos diz Pediatra — e achava só 13 das 59 especialidades;
+  nas outras 46 o mínimo virava 0. Agora o SQL devolve **todo dia com ≥ 1 vaga**
+  (soma do dia: vagas, capacidade, máximo, reservadas) e
+  `qualidade_agenda_regras.proxima_vaga()` escolhe o primeiro dia com % livre ≥
+  mínimo do `cbos_casado`. `dias_livres` vai para o JSON **sem** o mínimo
+  aplicado e a tela repete a conta (`diaPassa`) com o % atual — % alterado em
+  Configurar Prazos vale na hora. A tela também passou a buscar o cad_cbos pelo
+  `cbos_casado` (`cbosDe()`): antes `cbosData['PEDIATRIA']` dava "ANS: N/A" /
+  "SEM PRAZO". Medido em 04/11: 91 de 294 linhas mudam de próxima vaga, 3 viram
+  SEM VAGA; OK 217→182, CRÍTICO 51→75. **Não é regressão, é a régua certa.**
+  `cad_cbos` é replicado entre os postos (nomes iguais em todos) — o descasamento
+  é agenda × cbos, não posto × posto. Teste:
+  `python3 -m unittest tests.test_qualidade_agenda_regras`.
 - **"Alterar em todas as especialidades"**: `POST /api/qualidade_agenda/update_cbos_todos`
   (prazo_ans / prazo_camim / valor no cad_cbos de A com 1 linha de
   `Sis_Historico` por registro; `dias_minimos` na tabela nossa), modal com

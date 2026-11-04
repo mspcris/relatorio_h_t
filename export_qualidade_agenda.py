@@ -7,11 +7,13 @@
 # Cron recomendado: 0 5,12 * * *
 
 import os, sys, json, argparse, time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote_plus
 
 import pandas as pd
 from sqlalchemy import create_engine, text
+
+from qualidade_agenda_regras import proxima_vaga, pct_livre
 from dotenv import load_dotenv
 
 from etl_meta import ETLMeta
@@ -166,31 +168,33 @@ GROUP BY D.idEndereco, en.Descricao, D.Especialidade, pai.Data,
 ORDER BY D.idEndereco, D.Especialidade
 """
 
-# Dias com vaga livre, por posto × especialidade — alimenta "vaga a partir de
-# N dias" da aba Ranking por Especialidade (pedido do Cristiano, 2026-11-04).
-# Mesma régua de "próxima vaga" acima: dia com pelo menos 1 vaga livre E % livre
-# >= mínimo do cad_cbos. Exportar a lista (e não um segundo "próxima vaga") deixa
-# o N ser trocado na tela sem rodar o ETL. Sai como offsets em dias a partir de
-# hoje, só >= 0, deduplicados. Reusa a CTE `pai` da SQL_VAGAS.
+# Dias com vaga livre, por posto × especialidade × dia — SOMA DO DIA (todas as
+# agendas/médicos). É daqui que sai a "próxima vaga" de cada linha e a lista
+# `dias_livres` da aba Ranking por Especialidade (2026-11-04).
+#
+# O % MÍNIMO DO cad_cbos NÃO É APLICADO AQUI, de propósito (caso Leonardo,
+# 04/11/2026). A view nomeia a ÁREA (PEDIATRIA) e o cad_cbos o PROFISSIONAL
+# (Pediatra): o join por nome exato acha só 13 das 59 especialidades, as outras
+# 46 ficavam com mínimo 0 e um dia com 1 vaga em 18 (5,56 %) virava "próxima
+# vaga" com o cadastro pedindo 20 %. O mínimo certo é o do cad_cbos CASADO POR
+# RADICAL (casar_cbos), que só existe no Python — então o SQL devolve todo dia
+# com pelo menos 1 vaga e `qualidade_agenda_regras.proxima_vaga` escolhe o dia.
+# A tela exporta a lista inteira e repete a conta em JS, para um % alterado em
+# Configurar Prazos valer na hora.
 _PAI_CTE = SQL_VAGAS.split("dados AS (")[0]
 SQL_DIAS_LIVRES = _PAI_CTE + """livres AS (
     SELECT e.idEndereco, e.Especialidade, e.Data,
            SUM(e.CapacidadeConsiderada - e.QuantidadeAgendada) AS vagas,
            SUM(e.CapacidadeConsiderada)                        AS capacidade,
-           MAX(CASE WHEN e.CapacidadeConsiderada - e.QuantidadeAgendada > 0
-                     AND e.ValorPercentualVagasLivres >=
-                         CASE WHEN ISNULL(cbos.ValorPMinimoVagaDisponivel, 0) = 0
-                              THEN 0 ELSE cbos.ValorPMinimoVagaDisponivel END
-                    THEN 1 ELSE 0 END) AS dia_ok
+           SUM(e.QuantidadeMaxima)                             AS maxima,
+           SUM(e.QuantidadeVagasReservadas)                    AS reservadas,
+           MAX(e.QuantidadeReservaDias)                        AS reserva_dias
     FROM pai e
-    LEFT JOIN cad_cbos cbos
-           ON cbos.Especialidade = e.Especialidade
-          AND cbos.Desativado = 0
     GROUP BY e.idEndereco, e.Especialidade, e.Data
 )
-SELECT idEndereco, Especialidade, Data, vagas, capacidade
+SELECT idEndereco, Especialidade, Data, vagas, capacidade, maxima, reservadas, reserva_dias
 FROM livres
-WHERE dia_ok = 1
+WHERE vagas > 0
 ORDER BY idEndereco, Especialidade, Data
 """
 
@@ -573,7 +577,7 @@ def run():
         try:
             with Timer("dias_livres") as t2:
                 with eng.connect() as con:
-                    for id_end_l, esp_l, data_l, vagas_l, cap_l in con.execute(text(SQL_DIAS_LIVRES)).fetchall():
+                    for id_end_l, esp_l, data_l, vagas_l, cap_l, max_l, res_l, resd_l in con.execute(text(SQL_DIAS_LIVRES)).fetchall():
                         try:
                             dl = data_l.date() if isinstance(data_l, datetime) else (
                                 data_l if isinstance(data_l, date) else pd.to_datetime(data_l).date())
@@ -584,12 +588,14 @@ def run():
                         if off < 0 or off > 400:
                             continue
                         k = (int(id_end_l), str(esp_l or "").strip().upper())
-                        # [offset, vagas livres no dia, capacidade do dia]
-                        dias_livres_map.setdefault(k, {})[off] = [off, int(vagas_l or 0), int(cap_l or 0)]
+                        # [offset, vagas livres no dia, capacidade do dia, máximo, reservadas, dias de reserva]
+                        dias_livres_map.setdefault(k, {})[off] = [off, int(vagas_l or 0), int(cap_l or 0),
+                                                                  int(max_l or 0), int(res_l or 0), int(resd_l or 0)]
             logger.write(f"  OK: dias livres para {len(dias_livres_map)} posto×especialidade ({t2.format()})")
         except Exception as e:
-            logger.write(f"  AVISO dias_livres: {e} — aba de ranking cai no modo sem lista")
+            logger.write(f"  AVISO dias_livres: {e} — próxima vaga fica a do SQL (sem o % mínimo) e a aba de ranking sem lista")
             dias_livres_map = None
+        mudou_vs_sql = 0   # linhas cuja próxima vaga saiu diferente da escolhida pelo SQL
 
         def _safe_float(v):
             try:
@@ -634,6 +640,41 @@ def run():
                                        "ValorPMinimoVagaDisponivel": 0.0})
             prazo_ans  = cbos_info["prazoconsultaans"]
             prazo_cam  = cbos_info["prazoconsultacamim"]
+            minimo     = cbos_info["ValorPMinimoVagaDisponivel"]
+
+            # Próxima vaga = primeiro dia com >= 1 vaga E % livre (soma do dia)
+            # >= mínimo do cad_cbos casado por radical. O SQL_VAGAS escolhia a
+            # data com o mínimo do join exato (0 em 46 de 59 especialidades).
+            vagas_na_data = _safe_int(d.get("QuantidadeVagasDisponivelNaData"))
+            cap_na_data   = _safe_int(d.get("CapacidadeConsiderada"))
+            pct_na_data   = _safe_float(d.get("ValorPercentualVagasLivres"))
+            total_medicos = _safe_int(d.get("QuantidadeVagasTotalMedicosAtendem"))
+            reservadas    = _safe_int(d.get("QuantidadeVagasReservadas"))
+            reserva_dias  = _safe_int(d.get("QuantidadeReservaDias"))
+            total_c_res   = _safe_int(d.get("QuantidadeVagasTotalMedicosAtendemIncluindoReserva"))
+            lista_dias    = ([dias_livres_map[(id_end, esp)][o]
+                              for o in sorted(dias_livres_map.get((id_end, esp), {}))]
+                             if dias_livres_map is not None else None)
+            if lista_dias is not None:
+                escolhido = proxima_vaga(lista_dias, minimo)
+                novo_dias = escolhido[0] if escolhido else None
+                if novo_dias != dias:
+                    mudou_vs_sql += 1
+                dias = novo_dias
+                if escolhido:
+                    _off, _vagas, _cap, _max, _res, _resd = escolhido
+                    data_str      = (hoje + timedelta(days=_off)).isoformat()
+                    vagas_na_data = _vagas
+                    cap_na_data   = _cap
+                    pct_na_data   = pct_livre(_vagas, _cap)
+                    total_medicos = _cap
+                    reservadas    = _res
+                    reserva_dias  = _resd
+                    total_c_res   = _max
+                else:
+                    data_str = None
+                    vagas_na_data = cap_na_data = pct_na_data = None
+                    total_medicos = reservadas = reserva_dias = total_c_res = None
             status     = calc_status(dias, prazo_ans, prazo_cam)
 
             postos_vistos.add(letra)
@@ -645,24 +686,27 @@ def run():
                 "Especialidade":    esp,
                 "DataProximaVaga":  data_str,
                 "DiasAteProximaVaga": dias,
-                "QuantidadeVagasDisponivelNaData":                    _safe_int(d.get("QuantidadeVagasDisponivelNaData")),
-                "QuantidadeVagasTotalMedicosAtendem":                 _safe_int(d.get("QuantidadeVagasTotalMedicosAtendem")),
-                "ValorPMinimoVagaDisponivel":                         _safe_float(d.get("ValorPMinimoVagaDisponivel")),
-                "ValorPercentualVagasLivres":                         _safe_float(d.get("ValorPercentualVagasLivres")),
-                "QuantidadeVagasReservadas":                          _safe_int(d.get("QuantidadeVagasReservadas")),
-                "QuantidadeReservaDias":                              _safe_int(d.get("QuantidadeReservaDias")),
-                "CapacidadeConsiderada":                              _safe_int(d.get("CapacidadeConsiderada")),
-                "QuantidadeVagasTotalMedicosAtendemIncluindoReserva": _safe_int(d.get("QuantidadeVagasTotalMedicosAtendemIncluindoReserva")),
+                "QuantidadeVagasDisponivelNaData":                    vagas_na_data,
+                "QuantidadeVagasTotalMedicosAtendem":                 total_medicos,
+                # mínimo do cad_cbos CASADO (não o do join exato, que era None em 46 de 59)
+                "ValorPMinimoVagaDisponivel":                         _safe_float(minimo),
+                "ValorPercentualVagasLivres":                         pct_na_data,
+                "QuantidadeVagasReservadas":                          reservadas,
+                "QuantidadeReservaDias":                              reserva_dias,
+                "CapacidadeConsiderada":                              cap_na_data,
+                "QuantidadeVagasTotalMedicosAtendemIncluindoReserva": total_c_res,
                 "cbos_casado":       chave_cbos,
                 "prazoconsultaans":  prazo_ans,
                 "prazoconsultacamim": prazo_cam,
                 "Status":            status,
-                # offsets (dias a partir de hoje) com vaga livre; None = lista indisponível
-                # [[offset, vagas, capacidade], ...] ordenado por offset; None = lista indisponível
-                "dias_livres":       ([dias_livres_map[(id_end, esp)][o]
-                                       for o in sorted(dias_livres_map.get((id_end, esp), {}))]
-                                      if dias_livres_map is not None else None),
+                # [[offset, vagas, capacidade], ...] ordenado por offset — TODO dia com
+                # >= 1 vaga, SEM o % mínimo aplicado: a tela aplica (diaPassa) com o %
+                # atual do cad_cbos. None = lista indisponível.
+                "dias_livres":       ([x[:3] for x in lista_dias] if lista_dias is not None else None),
             })
+
+        if dias_livres_map is not None:
+            logger.write(f"  Próxima vaga pelo % mínimo do cad_cbos casado: {mudou_vs_sql} de {len(all_dados)} linhas diferentes da data do SQL")
 
         # Resumo por posto
         from collections import Counter

@@ -743,8 +743,9 @@
                                 A primeira barra de cada especialidade é a <strong>média de dias</strong> até a vaga nos postos
                                 selecionados (Todos, Altamiro, Couto ou os que você marcou). As barras abaixo são os postos.
                                 Média mais alta fica no topo. <strong>Só nesta aba</strong>, a vaga considerada é a <strong>primeira com
-                                disponibilidade a partir de N dias</strong> (N por especialidade em Configurar Prazos; padrão 4) —
-                                vaga antes disso não conta. Posto <strong>sem vaga</strong> a partir de N não entra na média (não há número) —
+                                disponibilidade a partir de N dias</strong> (N por especialidade em Configurar Prazos; padrão 4)
+                                <strong>e com pelo menos o % mínimo de vagas livres</strong> do cad_cbos (soma do dia: 1 vaga em 18
+                                é 5,6 % e não conta com mínimo de 20 %) — vaga antes disso não conta. Posto <strong>sem vaga</strong> a partir de N não entra na média (não há número) —
                                 aparece no selo vermelho e na própria barra; especialidade sem vaga em todos os postos fica no topo.
                             </p>
                             <div id="rankEspContainer">
@@ -1282,6 +1283,28 @@ let dataReferencia  = null;   // meta.data_referencia do JSON (base dos offsets 
 // "Vaga a partir de N dias" — SÓ a aba Ranking por Especialidade usa.
 // Vem de /api/qualidade_agenda/config (tabela nossa); sem linha vale o padrão.
 let qaConfig = { padrao: 4, dias: {} };
+// cad_cbos da especialidade da AGENDA. A agenda nomeia a área (PEDIATRIA) e o
+// cad_cbos o profissional (Pediatra); o ETL casa por radical e grava a chave em
+// `cbos_casado`. Procurar cbosData[esp] direto dava "ANS: N/A" e mínimo 0 para
+// Pediatria mesmo com o cadastro em 7 / 20 dias / 20 % (Leonardo, 04/11/2026).
+function cbosDe(esp, linhas) {
+    if (cbosData[esp]) return cbosData[esp];
+    let r = null;
+    if (linhas) r = Array.isArray(linhas) ? linhas[0] : Object.values(linhas)[0];
+    if (!r) r = allData.find(d => d.Especialidade === esp);
+    const k = r && r.cbos_casado;
+    return (k && cbosData[k]) || {};
+}
+// Mesma conta de qualidade_agenda_regras.dia_passa (Python): >= 1 vaga E % livre
+// (soma do dia) >= mínimo. Item = [offset, vagas, capacidade].
+function diaPassa(item, minimo) {
+    if (!Array.isArray(item)) return true;          // formato antigo (só offset): não dá para conferir
+    const vagas = +item[1] || 0, cap = +item[2] || 0;
+    if (vagas <= 0) return false;
+    const m = +minimo || 0;
+    if (m <= 0) return true;
+    return cap > 0 && Math.round(vagas / cap * 10000) / 100 >= m;
+}
 function getDiasMin(esp) {
     const v = qaConfig.dias[esp];
     return (v === undefined || v === null) ? qaConfig.padrao : v;
@@ -1676,7 +1699,7 @@ function renderHeatmap(data) {
     html += '</tr></thead><tbody>';
 
     esps.forEach(esp => {
-        const cbos = cbosData[esp] || {};
+        const cbos = cbosDe(esp, lookup[esp]);
         html += `<tr><td class="hm-esp" title="Prazo ANS: ${cbos.prazoconsultaans||'—'}d | Prazo CAMIM: ${cbos.prazoconsultacamim||'—'}d">${esp}</td>`;
         postosVisiveis.forEach(p => {
             const d = lookup[esp] ? lookup[esp][p] : null;
@@ -1852,7 +1875,7 @@ function renderByEspecialidade(data) {
 
     let html = '';
     esps.forEach(esp => {
-        const cbos = cbosData[esp] || {};
+        const cbos = cbosDe(esp, byEsp[esp]);
         const prazo_camim = cbos.prazoconsultacamim || 0;
         const prazo_ans   = cbos.prazoconsultaans   || 0;
         const min_vagas   = cbos.ValorPMinimoVagaDisponivel || 0;
@@ -1933,12 +1956,14 @@ function espBarsHtml(postosEsp, postosVisiveis, prazo_camim) {
 // ─────────────────────────────────────────────────────────────────────────────
 // RANKING POR ESPECIALIDADE — média dos postos selecionados, pior no topo
 // ─────────────────────────────────────────────────────────────────────────────
-// Primeira vaga a partir de N dias. Com `dias_livres` (ETL ≥ 04/11/2026) é exato;
-// sem a lista, só dá para aproveitar a próxima vaga real quando ela já é ≥ N.
+// Primeira vaga a partir de N dias E com % livre >= mínimo (diaPassa). Com
+// `dias_livres` (ETL ≥ 04/11/2026) é exato — a lista traz TODO dia com >= 1 vaga,
+// sem o mínimo aplicado, por isso a conta é feita aqui com o % atual do cad_cbos.
+// Sem a lista, só dá para aproveitar a próxima vaga real quando ela já é ≥ N.
 // dias_livres: [[offset, vagas, capacidade], ...] (ETL ≥ 04/11 à tarde) ou [offset, ...] (manhã).
-function vagaAPartir(d, n) {
+function vagaAPartir(d, n, minimo) {
     if (Array.isArray(d.dias_livres)) {
-        const item = d.dias_livres.find(x => (Array.isArray(x) ? x[0] : x) >= n);
+        const item = d.dias_livres.find(x => (Array.isArray(x) ? x[0] : x) >= n && diaPassa(x, minimo));
         if (item === undefined) return { dias: null, vagas: null, pct: null, lista: true };
         if (Array.isArray(item)) {
             const [off, vagas, cap] = item;
@@ -1971,14 +1996,15 @@ function renderRankingEspecialidade(data) {
 
     let semLista = 0;   // linhas de JSON anterior à exportação de dias_livres
     const itens = allEspecialidades.filter(e => byEsp[e]).map(esp => {
-        const cbos = cbosData[esp] || {};
+        const cbos = cbosDe(esp, byEsp[esp]);
         const prazo_camim = cbos.prazoconsultacamim || 0;
         const prazo_ans   = cbos.prazoconsultaans   || 0;
+        const minimo      = +cbos.ValorPMinimoVagaDisponivel || 0;   // % mínimo de vagas livres (cad_cbos)
         const nMin = getDiasMin(cbosData[esp] ? esp : (Object.values(byEsp[esp])[0]?.cbos_casado || esp));
         // Linhas reescritas com a vaga "a partir de N dias" — só esta aba enxerga isso.
         const postosEsp = {};
         Object.entries(byEsp[esp]).forEach(([p, d]) => {
-            const r = vagaAPartir(d, nMin);
+            const r = vagaAPartir(d, nMin, minimo);
             if (!r.lista) semLista++;
             const dias = r.dias;
             postosEsp[p] = Object.assign({}, d, {
@@ -1997,7 +2023,7 @@ function renderRankingEspecialidade(data) {
         const pior = comVaga.length ? Math.max(...comVaga.map(d => d.DiasAteProximaVaga)) : null;
         const statusMedia = linhas.length === 0 ? null
             : (media === null ? 'SEM_VAGA' : calcStatusJs(Math.round(media), prazo_ans, prazo_camim));
-        return { esp, prazo_ans, prazo_camim, postosEsp, nMin, nPostos: linhas.length,
+        return { esp, prazo_ans, prazo_camim, postosEsp, nMin, minimo, nPostos: linhas.length,
                  nComVaga: comVaga.length, nSemVaga: semVaga.length, media, pior, statusMedia };
     }).filter(it => it.nPostos > 0);
 
@@ -2042,6 +2068,7 @@ function renderRankingEspecialidade(data) {
                 <span class="esp-prazo-tag esp-prazo-ans" title="Prazo máximo ANS">ANS: ${it.prazo_ans > 0 ? it.prazo_ans+'d' : 'N/A'}</span>
                 <span class="esp-prazo-tag esp-prazo-camim" title="Prazo interno CAMIM">CAMIM: ${it.prazo_camim > 0 ? it.prazo_camim+'d' : 'N/A'}</span>
                 <span class="rankesp-tag" title="só conta vaga a partir deste número de dias (Configurar Prazos)">vaga a partir de ${it.nMin}d</span>
+                <span class="rankesp-tag" title="% mínimo de vagas livres no dia (cad_cbos); dia abaixo disso não conta como vaga">${it.minimo > 0 ? `≥ ${it.minimo}% livre` : 'sem % mínimo'}</span>
                 <span class="rankesp-tag" title="postos com vaga que entram na média">${it.nComVaga} de ${it.nPostos} postos na média</span>
                 ${semVagaTag}${piorTag}
             </div>
