@@ -22,6 +22,9 @@ if [ -f .venv/bin/activate ]; then
   source .venv/bin/activate
 fi
 
-# ETL snapshot da higienização
-/usr/bin/python3 /opt/relatorio_h_t/scripts/etl_higienizacao_snapshot.py >> logs/export_higienizacao.log 2>&1
+# ETL snapshot da higienização — precisa do venv (psycopg2 + python-dotenv p/ o RDS).
+# Até 04/11/2026 chamava /usr/bin/python3 (sistema), que não tem esses módulos.
+PY=/opt/relatorio_h_t/.venv/bin/python
+[ -x "$PY" ] || PY=python3
+"$PY" /opt/relatorio_h_t/scripts/etl_higienizacao_snapshot.py >> logs/export_higienizacao.log 2>&1
 
