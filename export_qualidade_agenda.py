@@ -70,132 +70,131 @@ FROM cad_cbos
 WHERE Desativado = 0
 """
 
-# ATENÇÃO — por que não lemos mais a view vw_rel_especialidadeProximaVaga
+# CALENDÁRIO DE VAGAS GERADO DO cad_agenda — por que não lemos a view (2026-11-04)
 #
-# A view do CAMIM calcula o percentual de vagas livres assim:
+# Até 04/11/2026 a fonte era uma cópia de vw_Rel_EspecialidadeProximaVagaPai
+# (cópia porque a original estoura em DECIMAL(5,2) quando há mais agendados que
+# capacidade — 10/09/2026, PSIQUIATRIA em Nova Iguaçu). A view nasce de
+# `cad_agendadata`, e essa tabela só ganha linha na PRIMEIRA MARCAÇÃO: medido
+# 4.352 linhas futuras, nenhuma com 0 agendados. Dia inteiro sem ninguém marcado
+# não existe para ela. Agenda lotada por semanas e vazia depois virava SEM VAGA
+# (Y/Pediatria: 14/14 até 15/12 e 22/12 com 0 de 14 — o ERP mostrava a vaga, o KPI
+# não; 7 linhas SEM VAGA em 04/11, todas com agenda ativa) e o dia vazio sumia da
+# lista `dias_livres` (G/Pediatria 22/12, 0 de 18).
 #
-#     CAST( (capacidade - agendados) * 100.0 / capacidade AS DECIMAL(5,2) )
+# A view ainda ignora DataInicioExibicao/DataFimExibicao (médico com agenda fixa +
+# plantão de 1 dia: capacidade e marcados em DOBRO) e junta cad_agendadata só por
+# médico (373 médico×dia com uma linha por idEspecialidade → multiplica quando o
+# médico tem duas agendas no posto; 111 têm).
 #
-# DECIMAL(5,2) só comporta até 999,99. Quando uma agenda tem MAIS agendados do
-# que a capacidade considerada, o percentual fica muito negativo e o SQL Server
-# aborta a consulta inteira com "22003 — estouro aritmético" (erro 8115).
-# Uma linha basta para derrubar o relatório dos 13 postos: em 10/09/2026 foi
-# PSIQUIATRIA em Nova Iguaçu, 17/09, capacidade 1 e 11 agendados → -1000,00,
-# um centésimo além do limite. O ETL morreu em 4 segundos por dois dias e a
-# página seguiu servindo o JSON de 09/09 como se fosse do dia.
+# REGRAS (Cristiano, 2026-11-04):
+# - "Dia sem nenhuma marcação tem todas as vagas livres e devem ser vistas."
+# - "DataFimExibicao é quando um médico vai encerrar seu atendimento conosco;
+#    vagas após a data fim não devem existir."
 #
-# Aqui a cadeia das três views é reproduzida com DECIMAL(12,2), que não estoura.
-# Validado em 11/09/2026 contra a réplica fiel da original (mesmo CAST 5,2,
-# excluindo só as linhas que estouram): 295 linhas dos dois lados, ZERO
-# divergência campo a campo.
+# Então o calendário é GERADO: hoje + HORIZONTE_DIAS × cad_agenda ativa, dia em
+# que a agenda atende (bit <Dia>), com <Dia>QuantidadeMaxima > 0, dentro de
+# [DataInicioExibicao, DataFimExibicao], sem falta em Cad_AgendaMedicoFalta, e
+# quinzenal só nas semanas pares contadas do início (conferido em 7 de 7 agendas
+# quinzenais com marcação). Marcados vêm de cad_agendadata por LEFT JOIN e valem
+# 0 quando não há linha. A tabela guarda DOIS contadores por dia: a linha POR
+# ESPECIALIDADE (idMedico NULL, idEspecialidade = cad_agenda.idEspecialidade —
+# a agenda em si; 2.266 linhas futuras) e a linha POR MÉDICO (idEspecialidade
+# NULL, 2.090 linhas — a SOMA de todas as agendas do médico no dia). A view junta
+# pela do médico, então médico com duas agendas (Clínica Geral 13 + Reumatologia
+# 19 = 32) levava 32 marcados em CADA uma. Aqui a linha por especialidade manda e
+# a do médico é só reserva quando aquela não existe (22 de 2.090; nesse caso um
+# médico com duas agendas fica com marcados a mais, nunca a menos).
+# Reserva de vaga (ReservaMinimo/Maximo/Dias) e
+# CapacidadeConsiderada são a MESMA conta da view: fora da janela de reserva a
+# capacidade é QuantidadeMaxima − reservadas; dentro dela é QuantidadeMaxima.
 #
-# Ao mexer aqui, conferir se a view original mudou — isto é cópia da regra do
-# CAMIM, não regra nossa. A correção definitiva é lá: trocar DECIMAL(5,2) por
-# DECIMAL(9,2) em vw_Rel_EspecialidadeProximaVagaPai.
+# Validado em 04/11/2026 (dry-run contra a view, 400 dias, posto A): 1.656 dias
+# batem; 112 diferem — agenda sem marcação (invisível para a view), agenda lotada
+# ou o dobro da view; nenhum caso em que o gerado conte MENOS do que a grade do
+# ERP. Y/Pediatria → 22/12 com 14 de 14; G/Pediatria 22/12 → 18 de 18 (iguais à
+# Agenda Semanal Unificada do ERP). 32.962 linhas posto×esp×dia em ~60 s.
 #
-# DESVIO CONSCIENTE DA VIEW — "próxima vaga" exige vaga livre (2026-09-13)
+# "Próxima vaga" continua exigindo pelo menos 1 vaga livre (desvio consciente da
+# view, 2026-09-13: dia lotado nunca é próxima vaga) E % livre da SOMA DO DIA >=
+# mínimo do cad_cbos casado por radical — a escolha é feita em Python por
+# qualidade_agenda_regras.proxima_vaga(), não aqui.
 #
-# A view escolhe o primeiro dia com % livre >= ValorPMinimoVagaDisponivel. O
-# mínimo está vazio (0) em todo cad_cbos, então `0% >= 0` passava e um dia
-# LOTADO virava "próxima vaga": a tela mostrava "11d · 0v" em verde/amarelo
-# (Ginecologia em G, 24/09 lotado; a vaga real era 16/10). Medido em
-# 13/09/2026: 20 especialidades com a data errada e 6 sem NENHUM dia livre na
-# agenda que apareciam como OK. Agora o dia precisa ter pelo menos 1 vaga livre
-# (CapacidadeConsiderada - QuantidadeAgendada > 0) além do mínimo. Vaga
-# reservada ainda não liberada não conta — ela não está em CapacidadeConsiderada.
-#
-# Especialidade com agenda mas sem dia livre continua na lista com
-# DataProximaVaga NULL (LEFT JOIN) e vira SEM_VAGA — sumir da tela seria
-# esconder justamente o pior caso.
-SQL_VAGAS = """
-WITH pai AS (
-    SELECT
-        idEndereco,
-        Especialidade,
-        Data,
-        QuantidadeMaxima,
-        QuantidadeAgendada,
-        QuantidadeReservaDias,
-        QuantidadeVagasReservadas,
-        CapacidadeConsiderada,
-        CASE
-            WHEN CapacidadeConsiderada = 0 THEN CAST(0 AS DECIMAL(12, 2))
-            ELSE CAST((CapacidadeConsiderada - QuantidadeAgendada) * 100.0
-                      / CapacidadeConsiderada AS DECIMAL(12, 2))
-        END AS ValorPercentualVagasLivres
-    FROM vw_Rel_EspecialidadeProximaVagaPai
-),
-dados AS (
-    SELECT
-        e.idEndereco,
-        e.Especialidade,
-        cbos.ValorPMinimoVagaDisponivel,
-        MIN(CASE
-                WHEN e.CapacidadeConsiderada - e.QuantidadeAgendada > 0
-                 AND e.ValorPercentualVagasLivres >=
-                     CASE WHEN ISNULL(cbos.ValorPMinimoVagaDisponivel, 0) = 0
-                          THEN 0 ELSE cbos.ValorPMinimoVagaDisponivel END
-                THEN e.Data
-            END) AS Data
-    FROM pai e
-    LEFT JOIN cad_cbos cbos
-           ON cbos.Especialidade = e.Especialidade
-          AND cbos.Desativado = 0
-    GROUP BY e.idEndereco, e.Especialidade, cbos.ValorPMinimoVagaDisponivel
-)
-SELECT
-    D.idEndereco,
-    en.Descricao AS Endereco,
-    D.Especialidade,
-    pai.Data AS DataProximaVaga,
-    SUM(pai.CapacidadeConsiderada - pai.QuantidadeAgendada) AS QuantidadeVagasDisponivelNaData,
-    SUM(pai.CapacidadeConsiderada) AS QuantidadeVagasTotalMedicosAtendem,
-    CAST(0 AS BIT) AS Desativado,
-    D.ValorPMinimoVagaDisponivel,
-    SUM(pai.ValorPercentualVagasLivres) AS ValorPercentualVagasLivres,
-    SUM(pai.QuantidadeVagasReservadas) AS QuantidadeVagasReservadas,
-    MAX(pai.QuantidadeReservaDias) AS QuantidadeReservaDias,
-    pai.CapacidadeConsiderada,
-    SUM(pai.QuantidadeMaxima) AS QuantidadeVagasTotalMedicosAtendemIncluindoReserva
-FROM dados D
-LEFT JOIN pai
-       ON pai.Especialidade = D.Especialidade
-      AND pai.idEndereco = D.idEndereco
-      AND pai.Data = D.Data
-JOIN cad_Endereco en ON en.idEndereco = D.idEndereco
-GROUP BY D.idEndereco, en.Descricao, D.Especialidade, pai.Data,
-         D.ValorPMinimoVagaDisponivel, pai.CapacidadeConsiderada
-ORDER BY D.idEndereco, D.Especialidade
-"""
+# ARMADILHA: `text()` do SQLAlchemy lê qualquer `:nome` como bind param, até em
+# comentário. Nada de dois-pontos neste SQL. Datas literais, se um dia
+# precisar, em DD/MM/YYYY (DATEFORMAT dmy).
 
-# Dias com vaga livre, por posto × especialidade × dia — SOMA DO DIA (todas as
-# agendas/médicos). É daqui que sai a "próxima vaga" de cada linha e a lista
-# `dias_livres` da aba Ranking por Especialidade (2026-11-04).
-#
-# O % MÍNIMO DO cad_cbos NÃO É APLICADO AQUI, de propósito (caso Leonardo,
-# 04/11/2026). A view nomeia a ÁREA (PEDIATRIA) e o cad_cbos o PROFISSIONAL
-# (Pediatra): o join por nome exato acha só 13 das 59 especialidades, as outras
-# 46 ficavam com mínimo 0 e um dia com 1 vaga em 18 (5,56 %) virava "próxima
-# vaga" com o cadastro pedindo 20 %. O mínimo certo é o do cad_cbos CASADO POR
-# RADICAL (casar_cbos), que só existe no Python — então o SQL devolve todo dia
-# com pelo menos 1 vaga e `qualidade_agenda_regras.proxima_vaga` escolhe o dia.
-# A tela exporta a lista inteira e repete a conta em JS, para um % alterado em
-# Configurar Prazos valer na hora.
-_PAI_CTE = SQL_VAGAS.split("dados AS (")[0]
-SQL_DIAS_LIVRES = _PAI_CTE + """livres AS (
-    SELECT e.idEndereco, e.Especialidade, e.Data,
-           SUM(e.CapacidadeConsiderada - e.QuantidadeAgendada) AS vagas,
-           SUM(e.CapacidadeConsiderada)                        AS capacidade,
-           SUM(e.QuantidadeMaxima)                             AS maxima,
-           SUM(e.QuantidadeVagasReservadas)                    AS reservadas,
-           MAX(e.QuantidadeReservaDias)                        AS reserva_dias
-    FROM pai e
-    GROUP BY e.idEndereco, e.Especialidade, e.Data
+HORIZONTE_DIAS = 400   # dias à frente; nada além disso interessa (o front corta em 400 também)
+
+_DIAS_SEMANA = ["Domingo", "Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado"]  # DATEPART(DW) 1..7
+
+
+def _case_dia(sufixo):
+    """CASE DATEPART(DW, d.Data) → coluna <Dia><sufixo> do cad_agenda (1 = Domingo, como a view)."""
+    return ("CASE DATEPART(DW, d.Data) "
+            + " ".join(f"WHEN {i + 1} THEN ISNULL(a.{n}{sufixo}, 0)" for i, n in enumerate(_DIAS_SEMANA))
+            + " END")
+
+
+SQL_CALENDARIO = f"""
+WITH n AS (
+    SELECT TOP ({HORIZONTE_DIAS + 1}) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS i
+    FROM sys.all_objects
+),
+dias AS (
+    SELECT i AS offd, DATEADD(day, i, CAST(GETDATE() AS DATE)) AS Data FROM n
+),
+ag AS (
+    SELECT a.idEndereco, a.Especialidade, a.idMedico, a.idEspecialidade, d.offd, d.Data,
+           {_case_dia('')}                         AS atende,
+           {_case_dia('QuantidadeMaxima')}         AS QM,
+           {_case_dia('QuantidadeReservaMaximo')}  AS RMax,
+           {_case_dia('QuantidadeReservaMinimo')}  AS RMin,
+           {_case_dia('QuantidadeReservaDias')}    AS RDias
+    FROM cad_agenda a
+    CROSS JOIN dias d
+    WHERE a.Desativado = 0
+      AND (a.DataInicioExibicao IS NULL OR d.Data >= CAST(a.DataInicioExibicao AS DATE))
+      AND (a.DataFimExibicao    IS NULL OR d.Data <= CAST(a.DataFimExibicao    AS DATE))
+      AND (ISNULL(a.AgendaQuinzenal, 0) = 0 OR a.DataInicioExibicao IS NULL
+           OR DATEDIFF(day, CAST(a.DataInicioExibicao AS DATE), d.Data) % 14 < 7)
+),
+base AS (
+    SELECT ag.idEndereco, ag.Especialidade, ag.offd, ag.Data, ag.QM, ag.RDias,
+           CASE WHEN ag.RMax = 0 AND ag.RMin = 0 THEN 0 ELSE ag.RMax - ag.RMin + 1 END AS Reservadas,
+           COALESCE(xe.QuantidadeAgendada, xm.QuantidadeAgendada, 0) AS QA
+    FROM ag
+    LEFT JOIN cad_agendadata xe              -- contador da AGENDA (especialidade)
+           ON xe.idEndereco     = ag.idEndereco
+          AND xe.Data           = ag.Data
+          AND xe.Desativado     = 0
+          AND xe.idMedico       IS NULL
+          AND xe.idEspecialidade = ag.idEspecialidade
+    LEFT JOIN cad_agendadata xm              -- contador do MÉDICO (soma das agendas dele), só reserva
+           ON xm.idEndereco     = ag.idEndereco
+          AND xm.Data           = ag.Data
+          AND xm.Desativado     = 0
+          AND xm.idMedico       = ag.idMedico
+          AND ISNULL(xm.idEspecialidade, 0) = 0
+    LEFT JOIN Cad_AgendaMedicoFalta f
+           ON f.idEndereco = ag.idEndereco
+          AND f.idMedico   = ag.idMedico
+          AND CAST(f.DataHora AS DATE) = ag.Data
+    WHERE ag.atende = 1 AND ag.QM > 0 AND f.idAgendaMedicoFalta IS NULL
+),
+dia AS (
+    SELECT *, CASE WHEN CAST(GETDATE() AS DATE) > DATEADD(day, -RDias, Data) THEN QM ELSE QM - Reservadas END AS cap
+    FROM base
 )
-SELECT idEndereco, Especialidade, Data, vagas, capacidade, maxima, reservadas, reserva_dias
-FROM livres
-WHERE vagas > 0
-ORDER BY idEndereco, Especialidade, Data
+SELECT idEndereco, Especialidade, offd, Data,
+       SUM(cap)        AS capacidade,
+       SUM(cap - QA)   AS vagas,
+       SUM(QM)         AS maxima,
+       SUM(Reservadas) AS reservadas,
+       MAX(RDias)      AS reserva_dias
+FROM dia
+GROUP BY idEndereco, Especialidade, offd, Data
+ORDER BY idEndereco, Especialidade, offd
 """
 
 # =========================
@@ -556,46 +555,26 @@ def run():
         meta.save()
         sys.exit(1)
 
-    # ── 3. vw_rel_especialidadeProximaVaga → todos os postos de uma vez ───────
-    logger.write(f"\n[ETAPA 3/4] Consultando vw_rel_especialidadeProximaVaga...")
+    # ── 3. Calendário de vagas gerado do cad_agenda — todos os postos de uma vez ──
+    logger.write(f"\n[ETAPA 3/4] Gerando calendário de vagas do cad_agenda ({HORIZONTE_DIAS} dias)...")
 
-    all_dados    = []
+    all_dados     = []
     postos_vistos = set()
 
     try:
-        with Timer("vagas") as t:
+        with Timer("calendario") as t:
             with eng.connect() as con:
-                result    = con.execute(text(SQL_VAGAS))
-                col_names = list(result.keys())
-                rows      = result.fetchall()
+                rows = con.execute(text(SQL_CALENDARIO)).fetchall()
+        logger.write(f"  OK: {len(rows)} linhas posto×especialidade×dia ({t.format()})")
 
-        logger.write(f"  OK: {len(rows)} linhas brutas ({t.format()})")
-
-        # Dias livres (offsets) por (idEndereco, especialidade). Falha aqui NÃO
-        # derruba o ETL: a página degrada para "ETL antigo" na aba de ranking.
-        dias_livres_map = {}
-        try:
-            with Timer("dias_livres") as t2:
-                with eng.connect() as con:
-                    for id_end_l, esp_l, data_l, vagas_l, cap_l, max_l, res_l, resd_l in con.execute(text(SQL_DIAS_LIVRES)).fetchall():
-                        try:
-                            dl = data_l.date() if isinstance(data_l, datetime) else (
-                                data_l if isinstance(data_l, date) else pd.to_datetime(data_l).date())
-                        except Exception:
-                            continue
-                        off = (dl - hoje).days
-                        # a view traz datas lixo (ano 6000+); nada além de 400 dias interessa
-                        if off < 0 or off > 400:
-                            continue
-                        k = (int(id_end_l), str(esp_l or "").strip().upper())
-                        # [offset, vagas livres no dia, capacidade do dia, máximo, reservadas, dias de reserva]
-                        dias_livres_map.setdefault(k, {})[off] = [off, int(vagas_l or 0), int(cap_l or 0),
-                                                                  int(max_l or 0), int(res_l or 0), int(resd_l or 0)]
-            logger.write(f"  OK: dias livres para {len(dias_livres_map)} posto×especialidade ({t2.format()})")
-        except Exception as e:
-            logger.write(f"  AVISO dias_livres: {e} — próxima vaga fica a do SQL (sem o % mínimo) e a aba de ranking sem lista")
-            dias_livres_map = None
-        mudou_vs_sql = 0   # linhas cuja próxima vaga saiu diferente da escolhida pelo SQL
+        # (idEndereco, ESPECIALIDADE) → {offset: [offset, vagas, capacidade, máximo, reservadas, dias de reserva]}
+        calendario = {}
+        for id_end_l, esp_l, off_l, _data_l, cap_l, vagas_l, max_l, res_l, resd_l in rows:
+            k = (int(id_end_l), str(esp_l or "").strip().upper())
+            off = int(off_l)
+            calendario.setdefault(k, {})[off] = [off, int(vagas_l or 0), int(cap_l or 0),
+                                                 int(max_l or 0), int(res_l or 0), int(resd_l or 0)]
+        logger.write(f"  {len(calendario)} pares posto×especialidade com agenda ativa no horizonte")
 
         def _safe_float(v):
             try:
@@ -608,32 +587,12 @@ def run():
             try:   return int(v)
             except Exception: return None
 
-        for row in rows:
-            d = dict(zip(col_names, row))
+        sem_vaga = 0
+        for (id_end, esp), dias_map in sorted(calendario.items()):
+            info  = endereco_map.get(id_end, {})
+            letra = info.get("letra", f"?{id_end}")
+            nome  = info.get("nome",  str(id_end))
 
-            id_end = _safe_int(d.get("idEndereco"))
-            info   = endereco_map.get(id_end, {})
-            letra  = info.get("letra", f"?{id_end}")
-            nome   = info.get("nome",  str(id_end))
-
-            # Normalizar data
-            data_prox = d.get("DataProximaVaga")
-            dias      = None
-            data_str  = None
-            if data_prox is not None:
-                try:
-                    if isinstance(data_prox, datetime):
-                        dp = data_prox.date()
-                    elif isinstance(data_prox, date):
-                        dp = data_prox
-                    else:
-                        dp = pd.to_datetime(data_prox).date()
-                    dias     = (dp - hoje).days
-                    data_str = dp.isoformat()
-                except Exception:
-                    pass
-
-            esp        = str(d.get("Especialidade") or "").strip().upper()
             chave_cbos = casar_cbos(esp, cbos_map)
             cbos_info  = cbos_map.get(chave_cbos or esp,
                                       {"prazoconsultaans": 0, "prazoconsultacamim": 0,
@@ -642,40 +601,29 @@ def run():
             prazo_cam  = cbos_info["prazoconsultacamim"]
             minimo     = cbos_info["ValorPMinimoVagaDisponivel"]
 
+            lista_dias   = [dias_map[o] for o in sorted(dias_map)]
+            lista_livres = [x for x in lista_dias if x[1] > 0]      # dias com >= 1 vaga, sem o % mínimo
+
             # Próxima vaga = primeiro dia com >= 1 vaga E % livre (soma do dia)
-            # >= mínimo do cad_cbos casado por radical. O SQL_VAGAS escolhia a
-            # data com o mínimo do join exato (0 em 46 de 59 especialidades).
-            vagas_na_data = _safe_int(d.get("QuantidadeVagasDisponivelNaData"))
-            cap_na_data   = _safe_int(d.get("CapacidadeConsiderada"))
-            pct_na_data   = _safe_float(d.get("ValorPercentualVagasLivres"))
-            total_medicos = _safe_int(d.get("QuantidadeVagasTotalMedicosAtendem"))
-            reservadas    = _safe_int(d.get("QuantidadeVagasReservadas"))
-            reserva_dias  = _safe_int(d.get("QuantidadeReservaDias"))
-            total_c_res   = _safe_int(d.get("QuantidadeVagasTotalMedicosAtendemIncluindoReserva"))
-            lista_dias    = ([dias_livres_map[(id_end, esp)][o]
-                              for o in sorted(dias_livres_map.get((id_end, esp), {}))]
-                             if dias_livres_map is not None else None)
-            if lista_dias is not None:
-                escolhido = proxima_vaga(lista_dias, minimo)
-                novo_dias = escolhido[0] if escolhido else None
-                if novo_dias != dias:
-                    mudou_vs_sql += 1
-                dias = novo_dias
-                if escolhido:
-                    _off, _vagas, _cap, _max, _res, _resd = escolhido
-                    data_str      = (hoje + timedelta(days=_off)).isoformat()
-                    vagas_na_data = _vagas
-                    cap_na_data   = _cap
-                    pct_na_data   = pct_livre(_vagas, _cap)
-                    total_medicos = _cap
-                    reservadas    = _res
-                    reserva_dias  = _resd
-                    total_c_res   = _max
-                else:
-                    data_str = None
-                    vagas_na_data = cap_na_data = pct_na_data = None
-                    total_medicos = reservadas = reserva_dias = total_c_res = None
-            status     = calc_status(dias, prazo_ans, prazo_cam)
+            # >= mínimo do cad_cbos casado por radical.
+            escolhido = proxima_vaga(lista_livres, minimo)
+            if escolhido:
+                _off, _vagas, _cap, _max, _res, _resd = escolhido
+                dias          = _off
+                data_str      = (hoje + timedelta(days=_off)).isoformat()
+                vagas_na_data = _vagas
+                cap_na_data   = _cap
+                pct_na_data   = pct_livre(_vagas, _cap)
+                total_medicos = _cap
+                reservadas    = _res
+                reserva_dias  = _resd
+                total_c_res   = _max
+            else:
+                sem_vaga += 1
+                dias = None; data_str = None
+                vagas_na_data = cap_na_data = pct_na_data = None
+                total_medicos = reservadas = reserva_dias = total_c_res = None
+            status = calc_status(dias, prazo_ans, prazo_cam)
 
             postos_vistos.add(letra)
 
@@ -701,12 +649,11 @@ def run():
                 "Status":            status,
                 # [[offset, vagas, capacidade], ...] ordenado por offset — TODO dia com
                 # >= 1 vaga, SEM o % mínimo aplicado: a tela aplica (diaPassa) com o %
-                # atual do cad_cbos. None = lista indisponível.
-                "dias_livres":       ([x[:3] for x in lista_dias] if lista_dias is not None else None),
+                # atual do cad_cbos.
+                "dias_livres":       [x[:3] for x in lista_livres],
             })
 
-        if dias_livres_map is not None:
-            logger.write(f"  Próxima vaga pelo % mínimo do cad_cbos casado: {mudou_vs_sql} de {len(all_dados)} linhas diferentes da data do SQL")
+        logger.write(f"  Sem vaga no horizonte (>= 1 vaga e % mínimo): {sem_vaga} de {len(all_dados)} linhas")
 
         # Resumo por posto
         from collections import Counter

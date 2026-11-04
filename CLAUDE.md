@@ -2287,18 +2287,26 @@ especialidade com a média dos postos, 20 % em todas as especialidades e tela
   `cad_cbos` é replicado entre os postos (nomes iguais em todos) — o descasamento
   é agenda × cbos, não posto × posto. Teste:
   `python3 -m unittest tests.test_qualidade_agenda_regras`.
-- **PENDENTE — a view não enxerga dia VAZIO (2026-11-04, Cristiano: "diz sem vaga em Y
-  na pediatria, mas no ERP tem vaga dia 22/12").** `vw_Rel_EspecialidadeProximaVagaPai`
-  nasce de `cad_agendadata`, que só ganha linha na primeira marcação (4.352 linhas
-  futuras, zero com 0 marcados). Agenda lotada por semanas e vazia depois vira SEM VAGA
-  (as 7 do JSON de 04/11, todas com agenda ativa) e o dia vazio some de `dias_livres`
-  (G/Pediatria 22/12, 0/18). A view também ignora `DataInicioExibicao`/`DataFimExibicao`
-  e junta `cad_agendadata` só por médico (dobra capacidade quando o médico tem duas
-  agendas). Protótipo de calendário gerado do `cad_agenda` validado em dry-run (ver
-  memória `project_qualidade_agenda_view_dia_vazio`); **não implementado** porque
-  `DataFimExibicao` tem dois sentidos (plantão de 1 dia × "+8 dias" do desbloqueio
-  CTRL-Q; 20 de 28 agendas com fim têm marcação depois dele) e a régua da grade do ERP
-  é do Cristiano.
+- **A fonte de dias é um CALENDÁRIO GERADO do `cad_agenda`, não mais a view
+  (2026-11-04, Cristiano: "diz sem vaga em Y na pediatria, mas no ERP tem vaga
+  dia 22/12").** `vw_Rel_EspecialidadeProximaVagaPai` nasce de `cad_agendadata`,
+  que só ganha linha na primeira marcação (4.352 linhas futuras, zero com 0
+  marcados): dia inteiro vazio não existia, agenda lotada por semanas e vazia
+  depois virava SEM VAGA. Regras dele: **dia sem marcação tem todas as vagas
+  livres** e **`DataFimExibicao` é o fim do atendimento do médico — vaga depois
+  dela não existe**. `SQL_CALENDARIO` em `export_qualidade_agenda.py`: hoje + 400
+  dias × agenda ativa (bit do dia, `<Dia>QuantidadeMaxima`, reserva como na view,
+  `Cad_AgendaMedicoFalta`, início/fim, quinzenal = semanas pares desde o início).
+  **`cad_agendadata` tem dois contadores por dia**: a linha por ESPECIALIDADE
+  (`idMedico` NULL, `idEspecialidade` = `cad_agenda.idEspecialidade`) e a linha
+  por MÉDICO (soma das agendas dele). A view usava a do médico e dava 32 marcados
+  a cada agenda de quem tem duas (13 + 19); aqui a da especialidade manda e a do
+  médico é reserva. Medido 04/11: 319 linhas (eram 288 — 31 pares com agenda e
+  zero marcação, exames em geral, passaram a existir), as 7 SEM VAGA ganharam
+  data, Y/Pediatria 48 d (22/12, 14/14) e G 22/12 18/18 iguais à grade do ERP;
+  ~60-100 s de consulta. Dia em `Cad_AgendaMedicoFalta` é cinza na grade do ERP e
+  fica fora (G 23/12 e 25/12). Endoscopia/D tem 1 marcação em 09/12 depois do fim
+  (12/11) — pela regra, SEM VAGA.
 - **"Alterar em todas as especialidades"**: `POST /api/qualidade_agenda/update_cbos_todos`
   (prazo_ans / prazo_camim / valor no cad_cbos de A com 1 linha de
   `Sis_Historico` por registro; `dias_minimos` na tabela nossa), modal com
