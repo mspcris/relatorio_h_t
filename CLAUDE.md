@@ -2229,6 +2229,46 @@ e sucesso toda hora. **Sucesso com número congelado é sintoma, não saúde.**
 
 ---
 
+## Qualidade da Agenda — prazos editáveis, aba "Ranking por Especialidade", mobile (2026-11-04)
+
+Pedido do Cristiano: alterar **todos os valores** de cada linha do `cad_cbos`
+(prazo ANS, prazo CAMIM, % mín. vagas), liberar a aba "Configurar Prazos" ao
+**leonardo@camim.com.br** ("especificamente ele"), aba nova de ranking por
+especialidade com a média dos postos, 20 % em todas as especialidades e tela
+**mobile first** (ele usa no celular).
+
+- **Permissão da aba = admin OU bit `qualidade_agenda_prazos`** (em
+  `PAGINAS_PROTEGIDAS`, fora do modal do /admin — o modal não apaga nem
+  concede). `all_pages` NÃO conta: a aba escreve no ERP. Leonardo (users.id 8)
+  recebeu o bit direto na `user_page_permissions` de produção. Outro nome =
+  outra linha na tabela, sem mexer em código. `app._qa_pode_editar_prazos()`.
+- **`POST /api/qualidade_agenda/update_cbos`** aceita `prazo_ans`,
+  `prazo_camim`, `valor` (qualquer subconjunto) para uma `especialidade`,
+  grava só no posto **A** (master do ETL) e **exige `login_campinho`**: o
+  `idUsuario` é resolvido na `sis_usuario` de A e vai em `Sis_Historico`
+  com **idTabela 67 = Cad_CBOS** (medido), comando 2, detalhe "de X para Y".
+  Sem vínculo, 403 — não existe escrita anônima.
+- A tela recalcula o status na hora (`calcStatusJs` = cópia do `calc_status`
+  do ETL) para mapa/ranking refletirem um prazo alterado; o JSON do dia só
+  muda no ETL das 05:00 (`export_qualidade_agenda.sh`).
+- **Ranking por Especialidade**: média de dias dos postos selecionados (o
+  filtro Todos/Altamiro/Couto/postos é o agrupamento), barra "EM MÉDIA X
+  DIAS" em cima, postos embaixo (mesmo `espBarsHtml` da aba Por
+  Especialidade), média mais alta no topo. **Posto SEM VAGA não entra na
+  média** (não há número para inventar) — vira selo vermelho "N sem vaga";
+  especialidade sem vaga em todos os postos selecionados vai para o topo.
+  Decisão minha, dita na tela.
+- **20 % em todas**: feito direto no banco de A em 04/11 (158 linhas, 146
+  estavam em 30 e 12 em NULL), 158 linhas de `Sis_Historico` no idUsuario
+  129 (CRISTIANO2.A). Script em scratch, não no repo.
+- **Mobile**: `@media (max-width: 768px)` no fim do CSS. Tabela com classe
+  `tbl-cards` vira card por linha — `aplicarRotulosMobile()` copia o texto
+  do `<th>` para `data-label` de cada `<td>` e o CSS imprime o rótulo na
+  frente. **Tabela nova nesta página: pôr `tbl-cards` e chamar
+  `aplicarRotulosMobile()` depois de montar o `tbody`.** Mapa de calor rola de
+  lado com a 1ª coluna fixa; filtro deixa de ser sticky no celular; abas
+  rolam na horizontal.
+
 ## Regras de desenvolvimento
 
 - Cada KPI é independente — nunca compartilha cálculos entre páginas

@@ -140,7 +140,11 @@ auth_bp = Blueprint("auth_bp", __name__)
 # linhas ao regravar `paginas` — sem isso, qualquer admin salvando o modal
 # (que só envia as chaves do catálogo) apagaria o bit sem perceber.
 # 'controle_pjs' é concedido/removido SÓ pelo dono, dentro da própria página.
-PAGINAS_PROTEGIDAS = {"controle_pjs"}
+# 'qualidade_agenda_prazos' libera a aba "Configurar Prazos" do /qualidade_agenda
+# a um usuário nomeado (pedido do Cristiano em 2026-11-04: leonardo@camim.com.br,
+# "especificamente ele"). Admin continua entrando sem o bit. Concede-se direto na
+# tabela user_page_permissions — vale mesmo com all_pages, que não conta aqui.
+PAGINAS_PROTEGIDAS = {"controle_pjs", "qualidade_agenda_prazos"}
 
 # Páginas SEM gate de acesso (todo usuário logado entra): a linha continua em
 # public.servicos porque é dela que sai o card de Mais Serviços, mas o checkbox

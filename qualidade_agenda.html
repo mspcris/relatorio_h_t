@@ -231,6 +231,19 @@
         .esp-bar-sem-vaga .esp-bar-fill { background: var(--neutro); }
         .esp-no-data { color: #adb5bd; font-size: 0.82rem; font-style: italic; }
 
+        /* ── Ranking por Especialidade ── */
+        .rankesp-escopo { font-size: 0.8rem; margin-bottom: 10px; }
+        .rankesp-pos { font-size: 0.78rem; font-weight: 700; color: #fff; background: #2c5f8a; border-radius: 10px; padding: 1px 8px; }
+        .rankesp-tag { font-size: 0.72rem; padding: 2px 9px; border-radius: 10px; font-weight: 600; background: #eef1f5; color: #4a5568; }
+        .rankesp-tag-sv { background: var(--critico-bg); color: #842029; }
+        .rankesp-media .esp-posto-name { color: #1a2940; letter-spacing: 0.04em; }
+        .rankesp-media-bar { height: 30px; }
+        .rankesp-media .esp-bar-fill { font-size: 0.8rem; letter-spacing: 0.03em; }
+        .rankesp-postos { border-top: 1px dashed #e3e8ef; margin-top: 8px; padding-top: 8px; }
+        .rankesp-card[data-status="CRITICO"], .rankesp-card[data-status="SEM_VAGA"] { border-left: 4px solid var(--critico); }
+        .rankesp-card[data-status="ALERTA"] { border-left: 4px solid var(--alerta); }
+        .rankesp-card[data-status="OK"] { border-left: 4px solid var(--ok); }
+
         /* ── Config tab ── */
         .cfg-table { font-size: 0.88rem; }
         .cfg-table th { background: #f0f4f8; font-weight: 600; }
@@ -256,6 +269,103 @@
             display: block; width: 4px; height: 20px;
             background: linear-gradient(180deg, #2c5f8a, #00b4d8);
             border-radius: 2px;
+        }
+
+        /* ── MOBILE FIRST (celular até 768px) ─────────────────────────────
+           O Cristiano usa esta tela no celular. Regras: nada sai da tela para
+           a direita; tabela larga vira card (uma linha = um card, rótulo do
+           cabeçalho na frente de cada valor); filtros compactos; abas rolam
+           na horizontal; mapa de calor rola de lado com a 1ª coluna fixa. */
+        @media (max-width: 768px) {
+            html { font-size: 15px; }
+            .content.p-3 { padding: 10px !important; }
+            .stack > * + * { margin-top: 10px; }
+            .navbar .font-weight-bold { font-size: 0.92rem !important; }
+            .card-body.p-3 { padding: 10px !important; }
+
+            /* Banner */
+            .qa-banner { padding: 14px 12px; border-radius: 10px; }
+            .qa-banner-title { font-size: 1.1rem; }
+            .qa-banner-sub { font-size: 0.76rem; margin-bottom: 10px; }
+            .qa-banner-grid, .qa-banner-grid-pct { gap: 7px; }
+            .qa-stat-card { padding: 10px 6px; border-radius: 8px; }
+            .qa-stat-card:hover { transform: none; }
+            .qa-stat-num { font-size: 1.7rem; }
+            .qa-stat-label { font-size: 0.64rem; letter-spacing: 0.02em; }
+            .qa-stat-sub { font-size: 0.62rem; }
+
+            /* Filtro: deixa de ser sticky (tomava meia tela) e fica compacto */
+            .posto-filter-card { position: static; padding: 10px; }
+            .posto-filter-card > .d-flex { gap: 8px !important; }
+            .posto-groups .btn { font-size: 0.78rem; padding: 4px 10px; }
+            .posto-tab { padding: 5px 0; width: 36px; text-align: center; font-size: 0.82rem; }
+            .posto-tabs-inline { gap: 5px; margin-top: 6px; }
+            .posto-filter-card .ml-auto { margin-left: 0 !important; width: 100%; }
+            .posto-filter-card .ml-auto select { width: 100% !important; }
+
+            /* Abas: uma linha com rolagem horizontal */
+            .qa-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+            .qa-tabs::-webkit-scrollbar { display: none; }
+            .qa-tabs .nav-item { flex: 0 0 auto; }
+            .qa-tabs .nav-link { white-space: nowrap; font-size: 0.8rem; padding: 7px 10px; }
+
+            /* Mapa de calor: rola de lado, especialidade fixa à esquerda */
+            .hm-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .hm-table { font-size: 0.76rem; }
+            .hm-esp { position: sticky; left: 0; z-index: 2; min-width: 120px; max-width: 150px; white-space: normal; font-size: 0.72rem; padding: 6px 8px; box-shadow: 2px 0 4px rgba(0,0,0,0.06); }
+            .hm-table th:first-child { position: sticky; left: 0; z-index: 3; }
+            .hm-cell { min-width: 64px; padding: 5px 4px; }
+            .hm-dias { font-size: 1.05rem; }
+            .hm-sticky-header { display: none !important; }
+
+            /* Por Especialidade / Ranking por Especialidade */
+            .esp-card { padding: 12px 10px; border-radius: 8px; }
+            .esp-card-title { font-size: 0.88rem; flex-wrap: wrap; gap: 6px; }
+            .esp-posto-name { width: 64px; font-size: 0.74rem; }
+            .esp-posto-name span { display: none; }
+            .esp-bar-container { height: 22px; }
+            .esp-bar-days { width: 40px; font-size: 0.78rem; }
+            .rankesp-media .esp-bar-fill { font-size: 0.72rem; }
+
+            /* Tabelas largas viram cards */
+            table.tbl-cards { display: block; }
+            table.tbl-cards thead { display: none; }
+            table.tbl-cards tbody { display: block; }
+            table.tbl-cards tbody tr {
+                display: block; border: 1px solid #e3e8ef; border-radius: 10px;
+                margin-bottom: 10px; padding: 8px 10px; background: #fff;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            }
+            table.tbl-cards tbody tr td {
+                display: flex; align-items: center; justify-content: space-between; gap: 10px;
+                padding: 5px 0 !important; border: 0; border-bottom: 1px dashed #eef1f5;
+                text-align: right !important; white-space: normal;
+            }
+            table.tbl-cards tbody tr td:last-child { border-bottom: 0; }
+            table.tbl-cards tbody tr td::before {
+                content: attr(data-label); font-size: 0.72rem; font-weight: 600; color: #6b7685;
+                text-transform: uppercase; letter-spacing: 0.03em; text-align: left; flex-shrink: 0;
+            }
+            table.tbl-cards tbody tr td[colspan] { display: block; text-align: center !important; }
+            table.tbl-cards tbody tr td[colspan]::before { content: none; }
+            table.tbl-cards tbody tr td.tbl-actions { justify-content: flex-end; }
+            table.tbl-cards tbody tr td.tbl-actions::before { content: none; }
+            table.tbl-cards tbody tr td.tbl-actions .btn { width: 100%; padding: 7px; font-size: 0.85rem; }
+            table.tbl-cards tbody tr td.cfg-esp { font-weight: 700; color: #1a2940; justify-content: flex-start; text-align: left !important; }
+            table.tbl-cards tbody tr td.cfg-esp::before { content: none; }
+            table.tbl-cards tbody tr td > .dias-bar { width: 55%; }
+            .table-responsive { overflow-x: visible; }
+
+            /* Simulador: banner e grids em coluna */
+            .sim-health-banner { padding: 14px 12px; }
+            .sim-health-banner > .d-flex { gap: 14px !important; }
+            .sim-score-ring { width: 110px; height: 110px; margin: 0 auto; }
+            .sim-alert-card { padding: 10px 12px; }
+
+            /* Modal de alteração: botões com dedo */
+            #modalEditCbos .modal-dialog { margin: 8px; max-width: none; }
+            #modalEditCbos .btn { padding: 8px 14px; font-size: 0.95rem; }
+            #modalEditCbos .form-control { font-size: 1rem; height: 40px; }
         }
 
         /* ── Tooltip (title fallback) ── */
@@ -554,6 +664,11 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link" id="tab-rankesp" data-toggle="tab" href="#pane-rankesp" role="tab">
+                                <i class="fas fa-sort-amount-down mr-1"></i>Ranking por Especialidade
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link" id="tab-esp"  data-toggle="tab" href="#pane-esp"  role="tab">
                                 <i class="fas fa-chart-bar mr-1"></i>Por Especialidade
                             </a>
@@ -563,7 +678,7 @@
                                 <i class="fas fa-calculator mr-1"></i>Simulador de Capacidade
                             </a>
                         </li>
-                        {% if USER_IS_ADMIN %}
+                        {% if QA_PODE_EDITAR_PRAZOS %}
                         <li class="nav-item">
                             <a class="nav-link" id="tab-cfg"  data-toggle="tab" href="#pane-cfg"  role="tab">
                                 <i class="fas fa-sliders-h mr-1"></i>Configurar Prazos
@@ -598,7 +713,7 @@
                                 Ordenado por dias até a próxima vaga (mais distante primeiro). A barra mostra o percentual de prazo CAMIM consumido.
                             </p>
                             <div class="table-responsive">
-                                <table class="table rank-table" id="rankTable">
+                                <table class="table rank-table tbl-cards" id="rankTable">
                                     <thead>
                                         <tr>
                                             <th style="width:90px;">Status</th>
@@ -616,6 +731,20 @@
                                         <tr><td colspan="9" class="text-center text-muted">Carregando...</td></tr>
                                     </tbody>
                                 </table>
+                            </div>
+                        </div>
+
+                        <!-- TAB: RANKING POR ESPECIALIDADE (média dos postos selecionados) -->
+                        <div class="tab-pane fade" id="pane-rankesp" role="tabpanel">
+                            <div class="section-header-accent">Ranking Crítico por Especialidade — média dos postos selecionados</div>
+                            <p class="text-muted" style="font-size:0.82rem; margin-bottom: 14px;">
+                                A primeira barra de cada especialidade é a <strong>média de dias</strong> até a próxima vaga nos postos
+                                selecionados (Todos, Altamiro, Couto ou os que você marcou). As barras abaixo são os postos.
+                                Média mais alta fica no topo. Posto <strong>sem vaga</strong> não entra na média (não há número) — aparece
+                                no selo vermelho e na própria barra; especialidade sem vaga em todos os postos fica no topo.
+                            </p>
+                            <div id="rankEspContainer">
+                                <div class="empty-state"><i class="fas fa-sync fa-spin"></i>Carregando...</div>
                             </div>
                         </div>
 
@@ -685,7 +814,7 @@
                             <!-- Análise de Gaps -->
                             <div class="sim-section-title"><i class="fas fa-search-minus mr-1"></i>Análise de Gap — Capacidade vs Demanda</div>
                             <div class="table-responsive mb-4">
-                                <table class="table sim-gap-table" id="simGapTable">
+                                <table class="table sim-gap-table tbl-cards" id="simGapTable">
                                     <thead>
                                         <tr>
                                             <th>Status</th>
@@ -732,23 +861,25 @@
 
                         </div>
 
-                        {% if USER_IS_ADMIN %}
-                        <!-- TAB 4: CONFIGURAR PRAZOS (ADMIN) -->
+                        {% if QA_PODE_EDITAR_PRAZOS %}
+                        <!-- TAB: CONFIGURAR PRAZOS (admin ou bit qualidade_agenda_prazos) -->
                         <div class="tab-pane fade" id="pane-cfg" role="tabpanel">
-                            <div class="section-header-accent">Configurar Thresholds de Prazos — <span style="color:#dc3545;font-size:0.85rem;">Apenas Administradores</span></div>
+                            <div class="section-header-accent">Configurar Prazos — <span style="color:#dc3545;font-size:0.85rem;">Acesso restrito</span></div>
                             <p class="text-muted" style="font-size:0.82rem; margin-bottom: 14px;">
-                                Dados de prazos configurados no banco <code>cad_cbos</code> do posto Anchieta (master).
-                                O campo <strong>% Mín. Vagas</strong> pode ser editado diretamente aqui.
+                                Prazos configurados no <code>cad_cbos</code> do posto Anchieta (master, o que o ETL lê).
+                                <strong>Prazo ANS</strong>, <strong>Prazo CAMIM</strong> e <strong>% Mín. Vagas</strong> podem ser alterados
+                                em qualquer linha; a alteração grava no ERP com auditoria no seu usuário. Mapa, ranking e gráficos
+                                desta tela recalculam na hora; o arquivo do dia é refeito pelo ETL às 05:00.
                             </p>
                             <div class="table-responsive">
-                                <table class="table cfg-table" id="cfgTable">
+                                <table class="table cfg-table tbl-cards" id="cfgTable">
                                     <thead>
                                         <tr>
                                             <th>Especialidade</th>
                                             <th>Prazo ANS (dias)</th>
                                             <th>Prazo CAMIM (dias)</th>
                                             <th>% Mín. Vagas</th>
-                                            <th></th>
+                                            <th class="tbl-actions"></th>
                                         </tr>
                                     </thead>
                                     <tbody id="cfgBody">
@@ -906,7 +1037,7 @@
                         <!-- Tabela completa de cruzamento -->
                         <div class="sim-section-title"><i class="fas fa-table mr-1"></i>Painel Consolidado por Posto</div>
                         <div class="table-responsive">
-                            <table class="table sim-gap-table" id="crossTable"
+                            <table class="table sim-gap-table tbl-cards" id="crossTable"
                                    data-iso-description="Consolidated table per posto: health score (agenda quality 0-100), critical specialty count, MRR count, churn 3m %, no-show %, sales count, target achievement %. Allows row-by-row comparison."
                             >
                                 <thead>
@@ -946,13 +1077,13 @@
     </div>
 </div>
 
-<!-- MODAL: Editar ValorPMinimoVagaDisponivel (admin) -->
-{% if USER_IS_ADMIN %}
+<!-- MODAL: Alterar prazos e % mínimo de vagas (admin ou bit qualidade_agenda_prazos) -->
+{% if QA_PODE_EDITAR_PRAZOS %}
 <div class="modal fade" id="modalEditCbos" tabindex="-1" role="dialog">
     <div class="modal-dialog modal-sm" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-edit mr-1"></i>Editar Threshold de Vagas</h5>
+                <h5 class="modal-title"><i class="fas fa-edit mr-1"></i>Alterar valores</h5>
                 <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <div class="modal-body">
@@ -960,11 +1091,23 @@
                     <label>Especialidade</label>
                     <input type="text" class="form-control form-control-sm" id="editEsp" readonly>
                 </div>
+                <div class="form-row">
+                    <div class="form-group col-6">
+                        <label>Prazo ANS (dias)</label>
+                        <input type="number" class="form-control form-control-sm" id="editPrazoAns"
+                               min="0" max="365" step="1" inputmode="numeric" placeholder="dias">
+                    </div>
+                    <div class="form-group col-6">
+                        <label>Prazo CAMIM (dias)</label>
+                        <input type="number" class="form-control form-control-sm" id="editPrazoCamim"
+                               min="0" max="365" step="1" inputmode="numeric" placeholder="dias">
+                    </div>
+                </div>
                 <div class="form-group">
                     <label>% Mínimo de Vagas Disponíveis</label>
                     <input type="number" class="form-control form-control-sm" id="editValor"
-                           min="0" max="100" step="0.1" placeholder="0 a 100">
-                    <small class="text-muted">Define o percentual mínimo esperado de vagas livres.</small>
+                           min="0" max="100" step="0.1" inputmode="decimal" placeholder="0 a 100">
+                    <small class="text-muted">Percentual mínimo de vagas livres para o dia contar como "próxima vaga". 0 = sem exigência.</small>
                 </div>
                 <div id="editMsg" class="mt-2" style="font-size:0.85rem;"></div>
             </div>
@@ -1055,6 +1198,8 @@ function abreviarEsp(nome) {
 // Injeção de USER_POSTOS do Flask (pode ser lista ou null)
 const USER_POSTOS_FROM_SERVER = {{ USER_POSTOS | safe }};
 const IS_ADMIN = {{ 'true' if USER_IS_ADMIN else 'false' }};
+// Aba "Configurar Prazos": admin OU bit explícito qualidade_agenda_prazos (Leonardo).
+const PODE_EDITAR_PRAZOS = {{ 'true' if QA_PODE_EDITAR_PRAZOS else 'false' }};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ESTADO GLOBAL
@@ -1346,6 +1491,7 @@ function renderAll() {
     renderSummary(data);
     renderHeatmap(data);
     renderRanking(data);
+    renderRankingEspecialidade(data);
     renderByEspecialidade(data);
     renderConfig();
     renderChartCritico(data);
@@ -1353,6 +1499,7 @@ function renderAll() {
     renderTop10(data);
     renderSimulador();
     if (crossLoaded) renderCrossRef();
+    aplicarRotulosMobile();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1648,50 +1795,138 @@ function renderByEspecialidade(data) {
                 <span class="esp-prazo-tag esp-prazo-min" title="% mínimo de vagas livre">Min.Vagas: ${min_vagas}%</span>
             </div>`;
 
-        // Build bars
-        const maxDias = prazo_camim > 0 ? prazo_camim * 1.5 : 60;
-        let barsHtml = '';
-        let hasAnyData = false;
-
-        postosVisiveis.forEach(p => {
-            const d = postosEsp[p];
-            if (!d) return;
-            hasAnyData = true;
-            const nomePosto = postosInfo[p] ? postosInfo[p].nome : (POSTO_NOMES[p]||p);
-            const dias = d.DiasAteProximaVaga;
-            const status = d.Status;
-            const barClr = status === 'SEM_VAGA' ? '#6c757d' : diasColor(dias);
-            let barWidth = '0%';
-            let barLabel = '';
-
-            if (status === 'SEM_VAGA') {
-                barWidth = '8%';
-                barLabel = 'SEM VAGA';
-            } else if (dias !== null) {
-                barWidth = Math.min(100, Math.round((dias / maxDias) * 100)) + '%';
-                barLabel = dias + 'd';
-            }
-
-            const pct_livres = d.ValorPercentualVagasLivres !== null ? d.ValorPercentualVagasLivres + '%' : '—';
-            const vagas = d.QuantidadeVagasDisponivelNaData !== null ? d.QuantidadeVagasDisponivelNaData : '—';
-            const dataFmt = d.DataProximaVaga ? fmtDate(d.DataProximaVaga) : '—';
-
-            barsHtml += `<div class="esp-posto-bar" title="${nomePosto}: ${dias !== null ? dias+'d' : 'sem vaga'} | Data: ${dataFmt} | Vagas: ${vagas} | Livres: ${pct_livres}">
-                <div class="esp-posto-name">${p} <span style="font-weight:400;color:#888;font-size:0.7rem;">${nomePosto.substring(0,8)}</span></div>
-                <div class="esp-bar-container">
-                    <div class="esp-bar-fill" style="width:${barWidth};background:${barClr};">${barLabel}</div>
-                </div>
-                <div class="esp-bar-days" style="color:${barClr}">${dias !== null ? dias+'d' : '—'}</div>
-            </div>`;
-        });
-
-        if (!hasAnyData) {
-            barsHtml = '<div class="esp-no-data">Nenhum dado disponível para os postos selecionados.</div>';
-        }
-
-        html += barsHtml + '</div>';
+        html += espBarsHtml(postosEsp, postosVisiveis, prazo_camim) + '</div>';
     });
 
+    container.innerHTML = html;
+}
+
+// Barras por posto de UMA especialidade (usadas em "Por Especialidade" e no
+// "Ranking por Especialidade"). Escala: 1,5× o prazo CAMIM, ou 60 dias sem prazo.
+function espBarsHtml(postosEsp, postosVisiveis, prazo_camim) {
+    const maxDias = prazo_camim > 0 ? prazo_camim * 1.5 : 60;
+    let barsHtml = '';
+    let hasAnyData = false;
+
+    postosVisiveis.forEach(p => {
+        const d = postosEsp[p];
+        if (!d) return;
+        hasAnyData = true;
+        const nomePosto = postosInfo[p] ? postosInfo[p].nome : (POSTO_NOMES[p]||p);
+        const dias = d.DiasAteProximaVaga;
+        const status = d.Status;
+        const barClr = status === 'SEM_VAGA' ? '#6c757d' : diasColor(dias);
+        let barWidth = '0%';
+        let barLabel = '';
+
+        if (status === 'SEM_VAGA') {
+            barWidth = '8%';
+            barLabel = 'SEM VAGA';
+        } else if (dias !== null) {
+            barWidth = Math.min(100, Math.round((dias / maxDias) * 100)) + '%';
+            barLabel = dias + 'd';
+        }
+
+        const pct_livres = d.ValorPercentualVagasLivres !== null ? d.ValorPercentualVagasLivres + '%' : '—';
+        const vagas = d.QuantidadeVagasDisponivelNaData !== null ? d.QuantidadeVagasDisponivelNaData : '—';
+        const dataFmt = d.DataProximaVaga ? fmtDate(d.DataProximaVaga) : '—';
+
+        barsHtml += `<div class="esp-posto-bar" title="${nomePosto}: ${dias !== null ? dias+'d' : 'sem vaga'} | Data: ${dataFmt} | Vagas: ${vagas} | Livres: ${pct_livres}">
+            <div class="esp-posto-name">${p} <span style="font-weight:400;color:#888;font-size:0.7rem;">${nomePosto.substring(0,8)}</span></div>
+            <div class="esp-bar-container">
+                <div class="esp-bar-fill" style="width:${barWidth};background:${barClr};">${barLabel}</div>
+            </div>
+            <div class="esp-bar-days" style="color:${barClr}">${dias !== null ? dias+'d' : '—'}</div>
+        </div>`;
+    });
+
+    if (!hasAnyData) {
+        barsHtml = '<div class="esp-no-data">Nenhum dado disponível para os postos selecionados.</div>';
+    }
+    return barsHtml;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RANKING POR ESPECIALIDADE — média dos postos selecionados, pior no topo
+// ─────────────────────────────────────────────────────────────────────────────
+function renderRankingEspecialidade(data) {
+    const container = el('rankEspContainer');
+    if (!container) return;
+    const postosVisiveis = getSelectedPostos();
+
+    const byEsp = {};
+    data.forEach(d => {
+        if (!byEsp[d.Especialidade]) byEsp[d.Especialidade] = {};
+        byEsp[d.Especialidade][d.posto] = d;
+    });
+
+    const itens = allEspecialidades.filter(e => byEsp[e]).map(esp => {
+        const cbos = cbosData[esp] || {};
+        const prazo_camim = cbos.prazoconsultacamim || 0;
+        const prazo_ans   = cbos.prazoconsultaans   || 0;
+        const postosEsp   = byEsp[esp];
+        const linhas = postosVisiveis.map(p => postosEsp[p]).filter(Boolean);
+        const comVaga = linhas.filter(d => d.Status !== 'SEM_VAGA' && d.DiasAteProximaVaga !== null);
+        const semVaga = linhas.filter(d => d.Status === 'SEM_VAGA');
+        const media = comVaga.length
+            ? comVaga.reduce((acc, d) => acc + d.DiasAteProximaVaga, 0) / comVaga.length : null;
+        const pior = comVaga.length ? Math.max(...comVaga.map(d => d.DiasAteProximaVaga)) : null;
+        const statusMedia = linhas.length === 0 ? null
+            : (media === null ? 'SEM_VAGA' : calcStatusJs(Math.round(media), prazo_ans, prazo_camim));
+        return { esp, prazo_ans, prazo_camim, postosEsp, nPostos: linhas.length,
+                 nComVaga: comVaga.length, nSemVaga: semVaga.length, media, pior, statusMedia };
+    }).filter(it => it.nPostos > 0);
+
+    if (!itens.length) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-database"></i>Nenhum dado para os postos selecionados.</div>';
+        return;
+    }
+
+    // Sem vaga em todos os postos = pior caso, sem número → vai para o topo.
+    // Depois, média mais alta primeiro; empate: mais postos sem vaga primeiro.
+    itens.sort((a, b) => {
+        const am = a.media === null ? Infinity : a.media;
+        const bm = b.media === null ? Infinity : b.media;
+        if (bm !== am) return bm - am;
+        return b.nSemVaga - a.nSemVaga;
+    });
+
+    const ctx = getSelectedPostos();
+    const escopo = ctx.length === getAllowedPostos().length ? 'todos os postos'
+        : `${ctx.length} posto${ctx.length > 1 ? 's' : ''} (${ctx.join(', ')})`;
+
+    let html = `<div class="rankesp-escopo text-muted">Média calculada sobre <strong>${escopo}</strong>. ${itens.length} especialidades.</div>`;
+    itens.forEach((it, idx) => {
+        const maxDias = it.prazo_camim > 0 ? it.prazo_camim * 1.5 : 60;
+        const clr = it.media === null ? '#6c757d' : diasColor(Math.round(it.media));
+        const mediaTxt = it.media === null ? 'SEM VAGA' : `EM MÉDIA ${it.media.toFixed(1).replace('.', ',')} DIAS`;
+        const width = it.media === null ? '100%' : Math.max(6, Math.min(100, Math.round((it.media / maxDias) * 100))) + '%';
+        const semVagaTag = it.nSemVaga
+            ? `<span class="rankesp-tag rankesp-tag-sv" title="postos sem vaga (fora da média)">${it.nSemVaga} sem vaga</span>` : '';
+        const piorTag = it.pior !== null && it.nComVaga > 1
+            ? `<span class="rankesp-tag" title="maior espera entre os postos">pior ${it.pior}d</span>` : '';
+        html += `<div class="esp-card rankesp-card" data-status="${it.statusMedia || ''}">
+            <div class="esp-card-title">
+                <span class="rankesp-pos">${idx + 1}º</span>
+                ${it.esp}
+                <span class="ml-auto">${statusBadgeHtml(it.statusMedia)}</span>
+            </div>
+            <div class="esp-prazo-badges">
+                <span class="esp-prazo-tag esp-prazo-ans" title="Prazo máximo ANS">ANS: ${it.prazo_ans > 0 ? it.prazo_ans+'d' : 'N/A'}</span>
+                <span class="esp-prazo-tag esp-prazo-camim" title="Prazo interno CAMIM">CAMIM: ${it.prazo_camim > 0 ? it.prazo_camim+'d' : 'N/A'}</span>
+                <span class="rankesp-tag" title="postos com vaga que entram na média">${it.nComVaga} de ${it.nPostos} postos na média</span>
+                ${semVagaTag}${piorTag}
+            </div>
+            <div class="esp-posto-bar rankesp-media" title="média de dias até a próxima vaga nos postos selecionados">
+                <div class="esp-posto-name">MÉDIA</div>
+                <div class="esp-bar-container rankesp-media-bar">
+                    <div class="esp-bar-fill" style="width:${width};background:${clr};">${mediaTxt}</div>
+                </div>
+                <div class="esp-bar-days" style="color:${clr}">${it.media === null ? '—' : Math.round(it.media)+'d'}</div>
+            </div>
+            <div class="rankesp-postos">${espBarsHtml(it.postosEsp, postosVisiveis, it.prazo_camim)}</div>
+        </div>`;
+    });
     container.innerHTML = html;
 }
 
@@ -1699,7 +1934,7 @@ function renderByEspecialidade(data) {
 // CONFIG (ADMIN ONLY)
 // ─────────────────────────────────────────────────────────────────────────────
 function renderConfig() {
-    if (!IS_ADMIN) return;
+    if (!PODE_EDITAR_PRAZOS) return;
     const tbody = el('cfgBody');
     if (!tbody) return;
 
@@ -1712,60 +1947,124 @@ function renderConfig() {
     let html = '';
     esps.forEach(esp => {
         const c = cbosData[esp];
+        const espJs = esp.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         html += `<tr>
-            <td>${esp}</td>
+            <td class="cfg-esp">${esp}</td>
             <td class="text-center">${c.prazoconsultaans > 0 ? c.prazoconsultaans : '<span class="text-muted">N/A</span>'}</td>
             <td class="text-center">${c.prazoconsultacamim > 0 ? c.prazoconsultacamim : '<span class="text-muted">N/A</span>'}</td>
             <td class="text-center">${c.ValorPMinimoVagaDisponivel}</td>
-            <td class="text-right">
-                <button class="btn btn-sm btn-outline-primary btn-edit-cbos"
-                    onclick="openEditCbos('${esp.replace(/'/g,"\\'")}', ${c.ValorPMinimoVagaDisponivel})">
-                    <i class="fas fa-edit mr-1"></i>Editar
+            <td class="text-right tbl-actions">
+                <button class="btn btn-sm btn-outline-primary btn-edit-cbos" onclick="openEditCbos('${espJs}')">
+                    <i class="fas fa-edit mr-1"></i>Alterar valor
                 </button>
             </td>
         </tr>`;
     });
     tbody.innerHTML = html;
+    aplicarRotulosMobile();
 }
 
-function openEditCbos(esp, val) {
+function openEditCbos(esp) {
+    const c = cbosData[esp] || {};
     el('editEsp').value = esp;
-    el('editValor').value = val;
+    el('editPrazoAns').value   = c.prazoconsultaans   ?? '';
+    el('editPrazoCamim').value = c.prazoconsultacamim ?? '';
+    el('editValor').value      = c.ValorPMinimoVagaDisponivel ?? '';
     el('editMsg').textContent = '';
     $('#modalEditCbos').modal('show');
 }
 
+// Mesma régua do calc_status() do export_qualidade_agenda.py — para a tela
+// refletir na hora um prazo alterado, sem esperar o ETL das 05:00.
+function calcStatusJs(dias, prazoAns, prazoCamim) {
+    if ((prazoAns || 0) <= 0 && (prazoCamim || 0) <= 0) return 'SEM_PRAZO';
+    if (dias === null || dias === undefined) return 'SEM_VAGA';
+    if (prazoAns > 0 && dias <= prazoAns) return 'OK';
+    if (prazoCamim > 0 && dias <= prazoCamim) return 'ALERTA';
+    return 'CRITICO';
+}
+
+function recalcularStatusLocal(esp) {
+    const c = cbosData[esp];
+    if (!c) return;
+    allData.forEach(d => {
+        if ((d.cbos_casado || d.Especialidade) !== esp) return;
+        d.prazoconsultaans   = c.prazoconsultaans;
+        d.prazoconsultacamim = c.prazoconsultacamim;
+        d.ValorPMinimoVagaDisponivel = c.ValorPMinimoVagaDisponivel;
+        d.Status = calcStatusJs(d.DiasAteProximaVaga, c.prazoconsultaans, c.prazoconsultacamim);
+    });
+}
+
 async function saveCbos() {
-    const esp   = el('editEsp').value.trim();
-    const valor = parseFloat(el('editValor').value);
-    if (!esp || isNaN(valor) || valor < 0 || valor > 100) {
-        el('editMsg').innerHTML = '<span class="text-danger">Valor deve ser entre 0 e 100.</span>';
-        return;
+    const esp = el('editEsp').value.trim();
+    const lerNum = (id) => { const v = el(id).value.trim(); return v === '' ? null : Number(v); };
+    const prazoAns   = lerNum('editPrazoAns');
+    const prazoCamim = lerNum('editPrazoCamim');
+    const valor      = lerNum('editValor');
+    const msg = el('editMsg');
+    if (!esp) return;
+    if ([prazoAns, prazoCamim, valor].every(v => v === null)) {
+        msg.innerHTML = '<span class="text-danger">Preencha pelo menos um campo.</span>'; return;
+    }
+    if ((prazoAns !== null && (isNaN(prazoAns) || prazoAns < 0 || prazoAns > 365)) ||
+        (prazoCamim !== null && (isNaN(prazoCamim) || prazoCamim < 0 || prazoCamim > 365))) {
+        msg.innerHTML = '<span class="text-danger">Prazos devem estar entre 0 e 365 dias.</span>'; return;
+    }
+    if (valor !== null && (isNaN(valor) || valor < 0 || valor > 100)) {
+        msg.innerHTML = '<span class="text-danger">% mínimo deve estar entre 0 e 100.</span>'; return;
     }
     el('btnSaveCbos').disabled = true;
-    el('editMsg').innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Salvando...</span>';
+    msg.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Salvando no ERP...</span>';
     try {
+        const body = { especialidade: esp };
+        if (prazoAns   !== null) body.prazo_ans   = prazoAns;
+        if (prazoCamim !== null) body.prazo_camim = prazoCamim;
+        if (valor      !== null) body.valor       = valor;
         const r = await fetch('/api/qualidade_agenda/update_cbos', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ especialidade: esp, valor: valor }),
+            body: JSON.stringify(body),
             credentials: 'same-origin',
         });
         const data = await r.json();
         if (data.ok) {
-            // Update local cbosData
-            if (cbosData[esp]) cbosData[esp].ValorPMinimoVagaDisponivel = valor;
+            if (!cbosData[esp]) cbosData[esp] = {};
+            const n = data.novos || {};
+            if ('prazo_ans'   in n) cbosData[esp].prazoconsultaans   = n.prazo_ans;
+            if ('prazo_camim' in n) cbosData[esp].prazoconsultacamim = n.prazo_camim;
+            if ('valor'       in n) cbosData[esp].ValorPMinimoVagaDisponivel = n.valor;
+            recalcularStatusLocal(esp);
             $('#modalEditCbos').modal('hide');
-            showToast(`Threshold de "${esp}" atualizado para ${valor}%`, 'success');
-            renderConfig();
+            const partes = [];
+            if ('prazo_ans'   in n) partes.push(`ANS ${n.prazo_ans}d`);
+            if ('prazo_camim' in n) partes.push(`CAMIM ${n.prazo_camim}d`);
+            if ('valor'       in n) partes.push(`mín. vagas ${n.valor}%`);
+            showToast(`"${esp}" gravado no ERP: ${partes.join(' · ')}`, 'success');
+            renderAll();
         } else {
-            el('editMsg').innerHTML = `<span class="text-danger">${data.error || 'Erro ao salvar.'}</span>`;
+            msg.innerHTML = `<span class="text-danger">${data.error || 'Erro ao salvar.'}</span>`;
         }
     } catch(e) {
-        el('editMsg').innerHTML = `<span class="text-danger">Erro de rede: ${e.message}</span>`;
+        msg.innerHTML = `<span class="text-danger">Erro de rede: ${e.message}</span>`;
     } finally {
         el('btnSaveCbos').disabled = false;
     }
+}
+
+// Tabelas largas viram cards no celular: cada <td> ganha o texto do <th>
+// correspondente em data-label e o CSS (.tbl-cards) desenha o rótulo na frente.
+function aplicarRotulosMobile() {
+    document.querySelectorAll('table.tbl-cards').forEach(tbl => {
+        const ths = Array.from(tbl.querySelectorAll('thead th')).map(th => th.textContent.trim());
+        tbl.querySelectorAll('tbody tr').forEach(tr => {
+            const tds = tr.children;
+            if (tds.length < 2) return;   // linha "Carregando…" / vazia (colspan)
+            for (let i = 0; i < tds.length; i++) {
+                if (!tds[i].hasAttribute('data-label')) tds[i].setAttribute('data-label', ths[i] || '');
+            }
+        });
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3082,6 +3381,7 @@ function renderCrossTable(metrics, postosVisiveis) {
     if (!postosVisiveis.length) { tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">Nenhum posto selecionado.</td></tr>'; return; }
 
     tbody.innerHTML = postosVisiveis.map(p => {
+    aplicarRotulosMobile();
         const m = metrics[p] || {};
         const h = m.health || { score: 0, criticos: 0 };
         const nome = postosInfo[p] ? postosInfo[p].nome : (POSTO_NOMES[p]||p);

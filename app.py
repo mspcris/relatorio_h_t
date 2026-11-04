@@ -1510,9 +1510,36 @@ def api_ctrlq_historico_acoes():
         db.close()
 
 
+QA_PAGE_KEY_PRAZOS = "qualidade_agenda_prazos"   # bit protegido (auth_routes.PAGINAS_PROTEGIDAS)
+
+
+def _qa_pode_editar_prazos(email: str) -> tuple[bool, str | None]:
+    """(pode, login_campinho) — quem entra na aba "Configurar Prazos" e grava no cad_cbos.
+
+    Admin OU usuário com o bit explícito `qualidade_agenda_prazos` (concedido na
+    tabela, fora do modal do /admin). all_pages NÃO conta: a aba escreve no ERP.
+    """
+    if not email:
+        return False, None
+    from auth_db import SessionLocal, get_user_by_email as _gue
+    db = SessionLocal()
+    try:
+        u = _gue(db, email)
+        if not u or not getattr(u, "ativo", True):
+            return False, None
+        login = (getattr(u, "login_campinho", None) or "").strip() or None
+        if u.is_admin or QA_PAGE_KEY_PRAZOS in (u.lista_paginas() or []):
+            return True, login
+        return False, login
+    finally:
+        db.close()
+
+
 @app.get('/qualidade_agenda')
 def r_qualidade_agenda():
-    resp = make_response(render_protected_page("qualidade_agenda.html"))
+    email, _ = decode_user()
+    pode, _login = _qa_pode_editar_prazos(email)
+    resp = make_response(render_protected_page("qualidade_agenda.html", QA_PODE_EDITAR_PRAZOS=pode))
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
     return resp
@@ -1523,7 +1550,9 @@ def r_higienizacao():
 
 @app.get('/qualidade_agenda.html')
 def h_qualidade_agenda():
-    resp = make_response(render_protected_page("qualidade_agenda.html"))
+    email, _ = decode_user()
+    pode, _login = _qa_pode_editar_prazos(email)
+    resp = make_response(render_protected_page("qualidade_agenda.html", QA_PODE_EDITAR_PRAZOS=pode))
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
     return resp
@@ -2680,45 +2709,102 @@ def api_qa_datas():
     return jsonify({"datas": datas})
 
 
+# Sis_HistoricoTabela: 67 = Cad_CBOS (medido em 2026-11-04 no posto A). Comando 2 = Edição.
+QA_ID_TABELA_CAD_CBOS = 67
+QA_ID_COMANDO_EDICAO  = 2
+
+# Campos do cad_cbos que a aba "Configurar Prazos" edita: chave do JSON → (coluna, rótulo, faixa)
+QA_CAMPOS_CBOS = {
+    "prazo_ans":   ("prazoconsultaans",           "Prazo ANS (dias)",   0, 365),
+    "prazo_camim": ("prazoconsultacamim",         "Prazo CAMIM (dias)", 0, 365),
+    "valor":       ("ValorPMinimoVagaDisponivel", "% mínimo de vagas",  0, 100),
+}
+
+
 @app.post("/api/qualidade_agenda/update_cbos")
 def api_update_cbos():
+    """Altera prazo ANS, prazo CAMIM e/ou % mínimo de vagas de UMA especialidade no
+    cad_cbos do posto A (master, o único que o ETL lê). Cada campo é opcional; pelo
+    menos um precisa vir. Grava Sis_Historico (idTabela 67) com o idUsuario do
+    login_campinho de quem clicou — sem vínculo, não grava (regra de auditoria)."""
     email, _ = decode_user()
     if not email:
         return ("", 401)
-    from auth_db import SessionLocal, get_user_by_email as _gue
-    db = SessionLocal()
-    try:
-        u = _gue(db, email)
-        if not u or not u.is_admin:
-            return jsonify({"ok": False, "error": "Apenas administradores podem alterar thresholds"}), 403
-    finally:
-        db.close()
+    pode, login = _qa_pode_editar_prazos(email)
+    if not pode:
+        return jsonify({"ok": False, "error": "Sem permissão para alterar os prazos."}), 403
+    if not login:
+        return jsonify({"ok": False, "error": (
+            "Seu usuário não tem Login Campinho vinculado; sem isso a alteração "
+            "ficaria sem auditoria no ERP. Peça ao admin para vincular.")}), 403
 
     data = request.get_json(force=True, silent=True) or {}
     especialidade = (data.get("especialidade") or "").strip()
-    valor = data.get("valor")
+    if not especialidade:
+        return jsonify({"ok": False, "error": "especialidade é obrigatória"}), 400
 
-    if not especialidade or valor is None:
-        return jsonify({"ok": False, "error": "especialidade e valor são obrigatórios"}), 400
+    novos = {}
+    for chave, (coluna, rotulo, lo, hi) in QA_CAMPOS_CBOS.items():
+        if chave not in data or data[chave] is None or data[chave] == "":
+            continue
+        try:
+            v = float(data[chave])
+        except (ValueError, TypeError):
+            return jsonify({"ok": False, "error": f"{rotulo}: valor inválido"}), 400
+        if not (lo <= v <= hi):
+            return jsonify({"ok": False, "error": f"{rotulo}: deve estar entre {lo} e {hi}"}), 400
+        if chave != "valor":
+            v = int(v)
+        novos[chave] = v
+    if not novos:
+        return jsonify({"ok": False, "error": "nenhum campo para alterar"}), 400
 
     try:
-        valor_f = float(valor)
-        if not (0 <= valor_f <= 100):
-            return jsonify({"ok": False, "error": "valor deve ser entre 0 e 100"}), 400
-    except (ValueError, TypeError):
-        return jsonify({"ok": False, "error": "valor inválido"}), 400
-
-    try:
-        conn_str = _build_conn_str_for_posto("A")
-        eng = _make_engine(conn_str)
+        eng = _make_engine(_build_conn_str_for_posto("A"))
         with eng.begin() as con:
-            result = con.execute(
-                text("UPDATE cad_cbos SET ValorPMinimoVagaDisponivel = :v WHERE Especialidade = :e AND Desativado = 0"),
-                {"v": valor_f, "e": especialidade}
-            )
-        return jsonify({"ok": True, "especialidade": especialidade, "valor": valor_f, "rows_affected": result.rowcount})
+            r = con.execute(text(
+                "SELECT TOP 1 idUsuario FROM sis_usuario WHERE Usuario = :u AND Desativado = 0"
+            ), {"u": login}).fetchone()
+            if not r:
+                return jsonify({"ok": False, "error": (
+                    f"Login Campinho `{login}` não existe na sis_usuario do posto A; "
+                    "a alteração ficaria sem auditoria.")}), 403
+            id_usuario = int(r[0])
+
+            atual = con.execute(text(
+                "SELECT idCBOS, ISNULL(prazoconsultaans,0), ISNULL(prazoconsultacamim,0), "
+                "ISNULL(ValorPMinimoVagaDisponivel,0) FROM cad_cbos "
+                "WHERE Especialidade = :e AND Desativado = 0"
+            ), {"e": especialidade}).fetchall()
+            if not atual:
+                return jsonify({"ok": False, "error": "Especialidade não encontrada no cad_cbos."}), 404
+
+            sets = ", ".join(f"{QA_CAMPOS_CBOS[k][0]} = :{k}" for k in novos)
+            con.execute(text(
+                f"UPDATE cad_cbos SET {sets} WHERE Especialidade = :e AND Desativado = 0"
+            ), {**novos, "e": especialidade})
+
+            antes_map = {"prazo_ans": 1, "prazo_camim": 2, "valor": 3}
+            for row in atual:
+                partes = []
+                for k, v in novos.items():
+                    rot = QA_CAMPOS_CBOS[k][1]
+                    antes = row[antes_map[k]]
+                    antes = float(antes) if k == "valor" else int(antes)
+                    partes.append(f"{rot} de {antes:g} para {v:g}")
+                detalhe = f"{especialidade}: " + "; ".join(partes) + " via KPI Qualidade da Agenda"
+                con.execute(text(
+                    "INSERT INTO Sis_Historico (id, idTabela, idComando, idUsuario, DataHora, Detalhe, Computador) "
+                    "VALUES (:id, :tab, :cmd, :usr, GETDATE(), :det, 'kpi.camim.com.br')"
+                ), {"id": int(row[0]), "tab": QA_ID_TABELA_CAD_CBOS, "cmd": QA_ID_COMANDO_EDICAO,
+                    "usr": id_usuario, "det": detalhe[:250]})
+        logging.getLogger(__name__).info(
+            "cad_cbos alterado por %s (idUsuario %s): %s %s", email, id_usuario, especialidade, novos)
+        return jsonify({"ok": True, "especialidade": especialidade, "novos": novos,
+                        "rows_affected": len(atual)})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        logging.getLogger(__name__).exception("update_cbos falhou")
+        return jsonify({"ok": False, "error": str(e)[:300]}), 500
 
 
 # ===============================
