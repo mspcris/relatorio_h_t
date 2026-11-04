@@ -174,17 +174,23 @@ ORDER BY D.idEndereco, D.Especialidade
 # hoje, só >= 0, deduplicados. Reusa a CTE `pai` da SQL_VAGAS.
 _PAI_CTE = SQL_VAGAS.split("dados AS (")[0]
 SQL_DIAS_LIVRES = _PAI_CTE + """livres AS (
-    SELECT DISTINCT e.idEndereco, e.Especialidade, e.Data
+    SELECT e.idEndereco, e.Especialidade, e.Data,
+           SUM(e.CapacidadeConsiderada - e.QuantidadeAgendada) AS vagas,
+           SUM(e.CapacidadeConsiderada)                        AS capacidade,
+           MAX(CASE WHEN e.CapacidadeConsiderada - e.QuantidadeAgendada > 0
+                     AND e.ValorPercentualVagasLivres >=
+                         CASE WHEN ISNULL(cbos.ValorPMinimoVagaDisponivel, 0) = 0
+                              THEN 0 ELSE cbos.ValorPMinimoVagaDisponivel END
+                    THEN 1 ELSE 0 END) AS dia_ok
     FROM pai e
     LEFT JOIN cad_cbos cbos
            ON cbos.Especialidade = e.Especialidade
           AND cbos.Desativado = 0
-    WHERE e.CapacidadeConsiderada - e.QuantidadeAgendada > 0
-      AND e.ValorPercentualVagasLivres >=
-          CASE WHEN ISNULL(cbos.ValorPMinimoVagaDisponivel, 0) = 0
-               THEN 0 ELSE cbos.ValorPMinimoVagaDisponivel END
+    GROUP BY e.idEndereco, e.Especialidade, e.Data
 )
-SELECT idEndereco, Especialidade, Data FROM livres
+SELECT idEndereco, Especialidade, Data, vagas, capacidade
+FROM livres
+WHERE dia_ok = 1
 ORDER BY idEndereco, Especialidade, Data
 """
 
@@ -567,7 +573,7 @@ def run():
         try:
             with Timer("dias_livres") as t2:
                 with eng.connect() as con:
-                    for id_end_l, esp_l, data_l in con.execute(text(SQL_DIAS_LIVRES)).fetchall():
+                    for id_end_l, esp_l, data_l, vagas_l, cap_l in con.execute(text(SQL_DIAS_LIVRES)).fetchall():
                         try:
                             dl = data_l.date() if isinstance(data_l, datetime) else (
                                 data_l if isinstance(data_l, date) else pd.to_datetime(data_l).date())
@@ -578,7 +584,8 @@ def run():
                         if off < 0 or off > 400:
                             continue
                         k = (int(id_end_l), str(esp_l or "").strip().upper())
-                        dias_livres_map.setdefault(k, set()).add(off)
+                        # [offset, vagas livres no dia, capacidade do dia]
+                        dias_livres_map.setdefault(k, {})[off] = [off, int(vagas_l or 0), int(cap_l or 0)]
             logger.write(f"  OK: dias livres para {len(dias_livres_map)} posto×especialidade ({t2.format()})")
         except Exception as e:
             logger.write(f"  AVISO dias_livres: {e} — aba de ranking cai no modo sem lista")
@@ -651,7 +658,9 @@ def run():
                 "prazoconsultacamim": prazo_cam,
                 "Status":            status,
                 # offsets (dias a partir de hoje) com vaga livre; None = lista indisponível
-                "dias_livres":       (sorted(dias_livres_map.get((id_end, esp), set()))
+                # [[offset, vagas, capacidade], ...] ordenado por offset; None = lista indisponível
+                "dias_livres":       ([dias_livres_map[(id_end, esp)][o]
+                                       for o in sorted(dias_livres_map.get((id_end, esp), {}))]
                                       if dias_livres_map is not None else None),
             })
 

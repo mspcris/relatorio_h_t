@@ -224,7 +224,8 @@
         .esp-posto-name { width: 86px; font-size: 0.78rem; font-weight: 600; flex-shrink: 0; color: #444; }
         .esp-bar-container { flex: 1; height: 24px; background: #e9ecef; border-radius: 5px; overflow: hidden; position: relative; }
         .esp-bar-fill { height: 100%; border-radius: 5px; display: flex; align-items: center; padding-left: 8px; font-size: 0.73rem; color: white; font-weight: 700; min-width: 28px; transition: width 0.6s ease; }
-        .esp-bar-days { width: 52px; text-align: right; font-size: 0.82rem; font-weight: 700; flex-shrink: 0; }
+        .esp-bar-days { width: 72px; text-align: right; font-size: 0.82rem; font-weight: 700; flex-shrink: 0; line-height: 1.1; }
+        .esp-bar-days small { display: block; font-size: 0.66rem; font-weight: 600; color: #6b7685; white-space: nowrap; }
         .esp-bar-ok      .esp-bar-fill { background: var(--ok); }
         .esp-bar-alerta  .esp-bar-fill { background: var(--alerta); }
         .esp-bar-critico .esp-bar-fill { background: var(--critico); }
@@ -324,7 +325,8 @@
             .esp-posto-name { width: 64px; font-size: 0.74rem; }
             .esp-posto-name span { display: none; }
             .esp-bar-container { height: 22px; }
-            .esp-bar-days { width: 40px; font-size: 0.78rem; }
+            .esp-bar-days { width: 58px; font-size: 0.78rem; }
+            .esp-bar-days small { font-size: 0.6rem; }
             .rankesp-media .esp-bar-fill { font-size: 0.72rem; }
 
             /* Tabelas largas viram cards */
@@ -1918,7 +1920,7 @@ function espBarsHtml(postosEsp, postosVisiveis, prazo_camim) {
             <div class="esp-bar-container">
                 <div class="esp-bar-fill" style="width:${barWidth};background:${barClr};">${barLabel}</div>
             </div>
-            <div class="esp-bar-days" style="color:${barClr}">${dias !== null ? dias+'d' : '—'}</div>
+            <div class="esp-bar-days" style="color:${barClr}">${dias !== null ? dias+'d' : '—'}${dias !== null && vagas !== '—' ? `<small>${vagas} vaga${vagas === 1 ? '' : 's'}</small>` : ''}</div>
         </div>`;
     });
 
@@ -1933,15 +1935,21 @@ function espBarsHtml(postosEsp, postosVisiveis, prazo_camim) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Primeira vaga a partir de N dias. Com `dias_livres` (ETL ≥ 04/11/2026) é exato;
 // sem a lista, só dá para aproveitar a próxima vaga real quando ela já é ≥ N.
+// dias_livres: [[offset, vagas, capacidade], ...] (ETL ≥ 04/11 à tarde) ou [offset, ...] (manhã).
 function vagaAPartir(d, n) {
     if (Array.isArray(d.dias_livres)) {
-        const off = d.dias_livres.find(x => x >= n);
-        return { dias: off === undefined ? null : off, lista: true };
+        const item = d.dias_livres.find(x => (Array.isArray(x) ? x[0] : x) >= n);
+        if (item === undefined) return { dias: null, vagas: null, pct: null, lista: true };
+        if (Array.isArray(item)) {
+            const [off, vagas, cap] = item;
+            return { dias: off, vagas, pct: cap > 0 ? Math.round(vagas / cap * 1000) / 10 : null, lista: true };
+        }
+        return { dias: item, vagas: null, pct: null, lista: true };
     }
     if (d.DiasAteProximaVaga !== null && d.DiasAteProximaVaga !== undefined && d.DiasAteProximaVaga >= n) {
-        return { dias: d.DiasAteProximaVaga, lista: false };
+        return { dias: d.DiasAteProximaVaga, vagas: d.QuantidadeVagasDisponivelNaData, pct: d.ValorPercentualVagasLivres, lista: false };
     }
-    return { dias: null, lista: false };
+    return { dias: null, vagas: null, pct: null, lista: false };
 }
 function isoFromOffset(off) {
     if (!dataReferencia || off === null) return null;
@@ -1977,8 +1985,8 @@ function renderRankingEspecialidade(data) {
                 DiasAteProximaVaga: dias,
                 DataProximaVaga: dias === null ? null : (dias === d.DiasAteProximaVaga ? d.DataProximaVaga : isoFromOffset(dias)),
                 Status: dias === null ? 'SEM_VAGA' : calcStatusJs(dias, prazo_ans, prazo_camim),
-                QuantidadeVagasDisponivelNaData: dias === d.DiasAteProximaVaga ? d.QuantidadeVagasDisponivelNaData : null,
-                ValorPercentualVagasLivres:      dias === d.DiasAteProximaVaga ? d.ValorPercentualVagasLivres : null,
+                QuantidadeVagasDisponivelNaData: dias === d.DiasAteProximaVaga ? d.QuantidadeVagasDisponivelNaData : r.vagas,
+                ValorPercentualVagasLivres:      dias === d.DiasAteProximaVaga ? d.ValorPercentualVagasLivres : r.pct,
             });
         });
         const linhas = postosVisiveis.map(p => postosEsp[p]).filter(Boolean);
