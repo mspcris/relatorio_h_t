@@ -2807,6 +2807,162 @@ def api_update_cbos():
         return jsonify({"ok": False, "error": str(e)[:300]}), 500
 
 
+# "Vaga a partir de N dias" — SÓ a aba Ranking por Especialidade usa (pedido do
+# Cristiano, 2026-11-04: "só mostraria vagas depois destes dias"). Fica em tabela
+# nossa (qa_especialidade_config no SQLite do auth), não no cad_cbos: não é regra
+# do ERP e nenhum outro consumidor deve enxergar. Padrão 4 para todas.
+QA_DIAS_MINIMOS_PADRAO = 4
+
+
+@app.get("/api/qualidade_agenda/config")
+def api_qa_config():
+    """Leitura para qualquer usuário logado — a aba de ranking precisa do N."""
+    email, _ = decode_user()
+    if not email:
+        return ("", 401)
+    from auth_db import SessionLocal, QaEspecialidadeConfig
+    db = SessionLocal()
+    try:
+        rows = db.query(QaEspecialidadeConfig).all()
+        return jsonify({
+            "ok": True,
+            "dias_minimos_padrao": QA_DIAS_MINIMOS_PADRAO,
+            "dias_minimos": {r.especialidade: int(r.dias_minimos_vaga) for r in rows},
+        })
+    finally:
+        db.close()
+
+
+def _qa_validar_dias_minimos(v):
+    try:
+        n = int(float(v))
+    except (ValueError, TypeError):
+        return None
+    return n if 0 <= n <= 365 else None
+
+
+def _qa_gravar_dias_minimos(db, especialidades, n, email):
+    from auth_db import QaEspecialidadeConfig
+    for esp in especialidades:
+        row = db.get(QaEspecialidadeConfig, esp)
+        if row is None:
+            row = QaEspecialidadeConfig(especialidade=esp)
+            db.add(row)
+        row.dias_minimos_vaga = n
+        row.atualizado_por = email
+
+
+@app.post("/api/qualidade_agenda/config")
+def api_qa_config_set():
+    """{especialidade, dias_minimos} — mesma permissão da aba Configurar Prazos."""
+    email, _ = decode_user()
+    if not email:
+        return ("", 401)
+    pode, _login = _qa_pode_editar_prazos(email)
+    if not pode:
+        return jsonify({"ok": False, "error": "Sem permissão para alterar a configuração."}), 403
+    data = request.get_json(force=True, silent=True) or {}
+    esp = (data.get("especialidade") or "").strip()
+    n = _qa_validar_dias_minimos(data.get("dias_minimos"))
+    if not esp or n is None:
+        return jsonify({"ok": False, "error": "especialidade e dias_minimos (0 a 365) são obrigatórios"}), 400
+    from auth_db import SessionLocal
+    db = SessionLocal()
+    try:
+        _qa_gravar_dias_minimos(db, [esp], n, email)
+        db.commit()
+        logging.getLogger(__name__).info("qa config: %s dias_minimos=%s por %s", esp, n, email)
+        return jsonify({"ok": True, "especialidade": esp, "dias_minimos": n})
+    finally:
+        db.close()
+
+
+@app.post("/api/qualidade_agenda/update_cbos_todos")
+def api_update_cbos_todos():
+    """Aplica o MESMO valor a TODAS as especialidades ativas: prazo_ans, prazo_camim,
+    valor (cad_cbos de A, com uma linha de Sis_Historico por registro) e/ou
+    dias_minimos (tabela nossa). Cada campo é opcional; pelo menos um."""
+    email, _ = decode_user()
+    if not email:
+        return ("", 401)
+    pode, login = _qa_pode_editar_prazos(email)
+    if not pode:
+        return jsonify({"ok": False, "error": "Sem permissão para alterar os prazos."}), 403
+
+    data = request.get_json(force=True, silent=True) or {}
+    novos = {}
+    for chave, (coluna, rotulo, lo, hi) in QA_CAMPOS_CBOS.items():
+        if chave not in data or data[chave] is None or data[chave] == "":
+            continue
+        try:
+            v = float(data[chave])
+        except (ValueError, TypeError):
+            return jsonify({"ok": False, "error": f"{rotulo}: valor inválido"}), 400
+        if not (lo <= v <= hi):
+            return jsonify({"ok": False, "error": f"{rotulo}: deve estar entre {lo} e {hi}"}), 400
+        novos[chave] = v if chave == "valor" else int(v)
+    dias_min = None
+    if data.get("dias_minimos") not in (None, ""):
+        dias_min = _qa_validar_dias_minimos(data.get("dias_minimos"))
+        if dias_min is None:
+            return jsonify({"ok": False, "error": "Vaga a partir de (dias): deve estar entre 0 e 365"}), 400
+    if not novos and dias_min is None:
+        return jsonify({"ok": False, "error": "nenhum campo para alterar"}), 400
+    if novos and not login:
+        return jsonify({"ok": False, "error": (
+            "Seu usuário não tem Login Campinho vinculado; sem isso a alteração no ERP "
+            "ficaria sem auditoria. Peça ao admin para vincular.")}), 403
+
+    try:
+        eng = _make_engine(_build_conn_str_for_posto("A"))
+        with eng.begin() as con:
+            id_usuario = None
+            if novos:
+                r = con.execute(text(
+                    "SELECT TOP 1 idUsuario FROM sis_usuario WHERE Usuario = :u AND Desativado = 0"
+                ), {"u": login}).fetchone()
+                if not r:
+                    return jsonify({"ok": False, "error": (
+                        f"Login Campinho `{login}` não existe na sis_usuario do posto A.")}), 403
+                id_usuario = int(r[0])
+            atual = con.execute(text(
+                "SELECT idCBOS, Especialidade, ISNULL(prazoconsultaans,0), ISNULL(prazoconsultacamim,0), "
+                "ISNULL(ValorPMinimoVagaDisponivel,0) FROM cad_cbos WHERE Desativado = 0"
+            )).fetchall()
+            especialidades = [str(row[1] or "").strip() for row in atual if row[1]]
+            if novos:
+                sets = ", ".join(f"{QA_CAMPOS_CBOS[k][0]} = :{k}" for k in novos)
+                con.execute(text(f"UPDATE cad_cbos SET {sets} WHERE Desativado = 0"), novos)
+                antes_map = {"prazo_ans": 2, "prazo_camim": 3, "valor": 4}
+                for row in atual:
+                    partes = []
+                    for k, v in novos.items():
+                        antes = row[antes_map[k]]
+                        antes = float(antes) if k == "valor" else int(antes)
+                        partes.append(f"{QA_CAMPOS_CBOS[k][1]} de {antes:g} para {v:g}")
+                    detalhe = f"{row[1]}: " + "; ".join(partes) + " via KPI Qualidade da Agenda (todas)"
+                    con.execute(text(
+                        "INSERT INTO Sis_Historico (id, idTabela, idComando, idUsuario, DataHora, Detalhe, Computador) "
+                        "VALUES (:id, :tab, :cmd, :usr, GETDATE(), :det, 'kpi.camim.com.br')"
+                    ), {"id": int(row[0]), "tab": QA_ID_TABELA_CAD_CBOS, "cmd": QA_ID_COMANDO_EDICAO,
+                        "usr": id_usuario, "det": detalhe[:250]})
+        if dias_min is not None:
+            from auth_db import SessionLocal
+            db = SessionLocal()
+            try:
+                _qa_gravar_dias_minimos(db, especialidades, dias_min, email)
+                db.commit()
+            finally:
+                db.close()
+        logging.getLogger(__name__).info(
+            "cad_cbos TODAS alterado por %s: %s dias_min=%s (%d esp.)", email, novos, dias_min, len(atual))
+        return jsonify({"ok": True, "novos": novos, "dias_minimos": dias_min,
+                        "rows_affected": len(atual), "especialidades": especialidades})
+    except Exception as e:
+        logging.getLogger(__name__).exception("update_cbos_todos falhou")
+        return jsonify({"ok": False, "error": str(e)[:300]}), 500
+
+
 # ===============================
 # API Metas
 # ===============================

@@ -332,6 +332,22 @@ _REGRAS_AUDITORIA_DEFAULT = [
 ]
 
 
+class QaEspecialidadeConfig(Base):
+    """Config NOSSA (não do ERP) do KPI Qualidade da Agenda, por especialidade.
+
+    `dias_minimos_vaga`: a aba "Ranking por Especialidade" só considera vaga a
+    partir deste número de dias (pedido do Cristiano, 2026-11-04). SÓ essa aba
+    usa; mapa, ranking crítico e simulador seguem a próxima vaga real. Sem linha
+    vale o padrão (QA_DIAS_MINIMOS_PADRAO em app.py = 4).
+    """
+    __tablename__ = "qa_especialidade_config"
+
+    especialidade     = Column(String(120), primary_key=True)
+    dias_minimos_vaga = Column(Integer, nullable=False, default=4)
+    atualizado_em     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    atualizado_por    = Column(String(200), nullable=True)
+
+
 def init_db():
     Base.metadata.create_all(engine)
     # Migration: add all_pages column to existing users (safe if already exists)

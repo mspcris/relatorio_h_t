@@ -2261,6 +2261,24 @@ especialidade com a média dos postos, 20 % em todas as especialidades e tela
 - **20 % em todas**: feito direto no banco de A em 04/11 (158 linhas, 146
   estavam em 30 e 12 em NULL), 158 linhas de `Sis_Historico` no idUsuario
   129 (CRISTIANO2.A). Script em scratch, não no repo.
+- **"Vaga a partir de N dias" — SÓ a aba Ranking por Especialidade** (2026-11-04,
+  segundo pedido): N por especialidade em `qa_especialidade_config` (SQLite do
+  auth, tabela NOSSA — não é regra do ERP), padrão `QA_DIAS_MINIMOS_PADRAO = 4`
+  sem linha. `GET/POST /api/qualidade_agenda/config`. O ETL passou a exportar
+  `dias_livres` (offsets em dias, ≤ 400, mesma régua da próxima vaga) por
+  posto × especialidade, e a aba pega o **primeiro offset ≥ N** — trocar N não
+  exige rodar o ETL. JSON sem `dias_livres` → a aba avisa e usa só a próxima
+  vaga real quando ela já é ≥ N. Mapa, ranking crítico e simulador NÃO usam N.
+- **"Alterar em todas as especialidades"**: `POST /api/qualidade_agenda/update_cbos_todos`
+  (prazo_ans / prazo_camim / valor no cad_cbos de A com 1 linha de
+  `Sis_Historico` por registro; `dias_minimos` na tabela nossa), modal com
+  checkbox de confirmação e contagem.
+- **Taxa de faltas de 90 % no parecer do Simulador** (visto por ele em 04/11):
+  o cruzamento pegava o mês MAIS RECENTE do consultas_mensal (novembro com 4
+  dias), onde 14.331 de 15.938 consultas eram "Não atendido" FUTURAS.
+  Agora `getLatestClosedMonth()` — último mês fechado — e o texto diz o mês.
+  Set/26 = 25 %, out/26 = 21 %. Mensalidades/vendas/growth continuam no mês
+  mais recente (não reclamado; vendas do mês corrente é parcial, cuidado).
 - **Mobile**: `@media (max-width: 768px)` no fim do CSS. Tabela com classe
   `tbl-cards` vira card por linha — `aplicarRotulosMobile()` copia o texto
   do `<th>` para `data-label` de cada `<td>` e o CSS imprime o rótulo na

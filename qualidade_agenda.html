@@ -738,10 +738,12 @@
                         <div class="tab-pane fade" id="pane-rankesp" role="tabpanel">
                             <div class="section-header-accent">Ranking Crítico por Especialidade — média dos postos selecionados</div>
                             <p class="text-muted" style="font-size:0.82rem; margin-bottom: 14px;">
-                                A primeira barra de cada especialidade é a <strong>média de dias</strong> até a próxima vaga nos postos
+                                A primeira barra de cada especialidade é a <strong>média de dias</strong> até a vaga nos postos
                                 selecionados (Todos, Altamiro, Couto ou os que você marcou). As barras abaixo são os postos.
-                                Média mais alta fica no topo. Posto <strong>sem vaga</strong> não entra na média (não há número) — aparece
-                                no selo vermelho e na própria barra; especialidade sem vaga em todos os postos fica no topo.
+                                Média mais alta fica no topo. <strong>Só nesta aba</strong>, a vaga considerada é a <strong>primeira com
+                                disponibilidade a partir de N dias</strong> (N por especialidade em Configurar Prazos; padrão 4) —
+                                vaga antes disso não conta. Posto <strong>sem vaga</strong> a partir de N não entra na média (não há número) —
+                                aparece no selo vermelho e na própria barra; especialidade sem vaga em todos os postos fica no topo.
                             </p>
                             <div id="rankEspContainer">
                                 <div class="empty-state"><i class="fas fa-sync fa-spin"></i>Carregando...</div>
@@ -870,7 +872,16 @@
                                 <strong>Prazo ANS</strong>, <strong>Prazo CAMIM</strong> e <strong>% Mín. Vagas</strong> podem ser alterados
                                 em qualquer linha; a alteração grava no ERP com auditoria no seu usuário. Mapa, ranking e gráficos
                                 desta tela recalculam na hora; o arquivo do dia é refeito pelo ETL às 05:00.
+                                <br><strong>Vaga a partir de (dias)</strong> vale <u>somente para a aba Ranking por Especialidade</u>:
+                                lá, a vaga considerada é a primeira com disponibilidade a partir desse número de dias (padrão 4).
+                                Não muda mapa, ranking crítico nem simulador, e não é gravado no ERP.
                             </p>
+                            <div class="mb-3 d-flex align-items-center" style="gap:10px;flex-wrap:wrap;">
+                                <button class="btn btn-sm btn-primary" onclick="openEditTodos()">
+                                    <i class="fas fa-layer-group mr-1"></i>Alterar em todas as especialidades
+                                </button>
+                                <span class="text-muted" style="font-size:0.78rem;">Aplica o mesmo valor a todas de uma vez (prazo ANS, prazo CAMIM, % mín. vagas, vaga a partir de).</span>
+                            </div>
                             <div class="table-responsive">
                                 <table class="table cfg-table tbl-cards" id="cfgTable">
                                     <thead>
@@ -879,11 +890,12 @@
                                             <th>Prazo ANS (dias)</th>
                                             <th>Prazo CAMIM (dias)</th>
                                             <th>% Mín. Vagas</th>
+                                            <th data-label="Vaga a partir de (dias)">Vaga a partir de (dias)<br><small class="text-muted font-weight-normal">só Ranking por Especialidade</small></th>
                                             <th class="tbl-actions"></th>
                                         </tr>
                                     </thead>
                                     <tbody id="cfgBody">
-                                        <tr><td colspan="5" class="text-center text-muted">Carregando...</td></tr>
+                                        <tr><td colspan="6" class="text-center text-muted">Carregando...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -1109,12 +1121,64 @@
                            min="0" max="100" step="0.1" inputmode="decimal" placeholder="0 a 100">
                     <small class="text-muted">Percentual mínimo de vagas livres para o dia contar como "próxima vaga". 0 = sem exigência.</small>
                 </div>
+                <div class="form-group" style="background:#f0f4f8;border-radius:8px;padding:8px 10px;">
+                    <label>Vaga a partir de (dias) <span class="badge badge-secondary">só Ranking por Especialidade</span></label>
+                    <input type="number" class="form-control form-control-sm" id="editDiasMin"
+                           min="0" max="365" step="1" inputmode="numeric" placeholder="dias">
+                    <small class="text-muted">Na aba Ranking por Especialidade, só conta vaga a partir deste número de dias. Não vai para o ERP.</small>
+                </div>
                 <div id="editMsg" class="mt-2" style="font-size:0.85rem;"></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-primary btn-sm" id="btnSaveCbos" onclick="saveCbos()">
                     <i class="fas fa-save mr-1"></i>Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- MODAL: Alterar em TODAS as especialidades -->
+<div class="modal fade" id="modalEditTodos" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-layer-group mr-1"></i>Alterar em todas as especialidades</h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted" style="font-size:0.85rem;">Preencha só o que quer mudar; o que ficar em branco não é alterado.
+                   Prazos e % mín. vagas gravam no ERP (posto A) com uma linha de auditoria por especialidade.</p>
+                <div class="form-row">
+                    <div class="form-group col-6">
+                        <label>Prazo ANS (dias)</label>
+                        <input type="number" class="form-control form-control-sm" id="todosPrazoAns" min="0" max="365" step="1" inputmode="numeric" placeholder="não alterar">
+                    </div>
+                    <div class="form-group col-6">
+                        <label>Prazo CAMIM (dias)</label>
+                        <input type="number" class="form-control form-control-sm" id="todosPrazoCamim" min="0" max="365" step="1" inputmode="numeric" placeholder="não alterar">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-6">
+                        <label>% Mín. Vagas</label>
+                        <input type="number" class="form-control form-control-sm" id="todosValor" min="0" max="100" step="0.1" inputmode="decimal" placeholder="não alterar">
+                    </div>
+                    <div class="form-group col-6">
+                        <label>Vaga a partir de (dias) <small class="text-muted">só Ranking por Esp.</small></label>
+                        <input type="number" class="form-control form-control-sm" id="todosDiasMin" min="0" max="365" step="1" inputmode="numeric" placeholder="não alterar">
+                    </div>
+                </div>
+                <div class="form-check">
+                    <input type="checkbox" class="form-check-input" id="todosConfirma">
+                    <label class="form-check-label" for="todosConfirma" id="todosConfirmaLabel" style="font-size:0.88rem;">Confirmo que quero aplicar em todas as especialidades.</label>
+                </div>
+                <div id="todosMsg" class="mt-2" style="font-size:0.85rem;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnSaveTodos" onclick="saveCbosTodos()">
+                    <i class="fas fa-save mr-1"></i>Aplicar em todas
                 </button>
             </div>
         </div>
@@ -1212,6 +1276,22 @@ let allPostos       = [];
 let selectedPostos  = [];   // [] = todos permitidos
 let chartCritico    = null;
 let chartDist       = null;
+let dataReferencia  = null;   // meta.data_referencia do JSON (base dos offsets de dias_livres)
+// "Vaga a partir de N dias" — SÓ a aba Ranking por Especialidade usa.
+// Vem de /api/qualidade_agenda/config (tabela nossa); sem linha vale o padrão.
+let qaConfig = { padrao: 4, dias: {} };
+function getDiasMin(esp) {
+    const v = qaConfig.dias[esp];
+    return (v === undefined || v === null) ? qaConfig.padrao : v;
+}
+async function loadQaConfig() {
+    try {
+        const r = await fetch('/api/qualidade_agenda/config', { credentials: 'same-origin', cache: 'no-store' });
+        if (!r.ok) return;
+        const j = await r.json();
+        if (j && j.ok) qaConfig = { padrao: j.dias_minimos_padrao ?? 4, dias: j.dias_minimos || {} };
+    } catch (e) { /* mantém o padrão */ }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -1361,6 +1441,8 @@ async function loadJsonData(dataRef) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const json = await r.json();
     allData           = json.dados           || [];
+    dataReferencia    = (json.meta && json.meta.data_referencia) || null;
+    await loadQaConfig();
     cbosData          = json.cbos            || {};
     postosInfo        = json.postos_info     || {};
     allEspecialidades = json.especialidades  || [];
@@ -1849,6 +1931,25 @@ function espBarsHtml(postosEsp, postosVisiveis, prazo_camim) {
 // ─────────────────────────────────────────────────────────────────────────────
 // RANKING POR ESPECIALIDADE — média dos postos selecionados, pior no topo
 // ─────────────────────────────────────────────────────────────────────────────
+// Primeira vaga a partir de N dias. Com `dias_livres` (ETL ≥ 04/11/2026) é exato;
+// sem a lista, só dá para aproveitar a próxima vaga real quando ela já é ≥ N.
+function vagaAPartir(d, n) {
+    if (Array.isArray(d.dias_livres)) {
+        const off = d.dias_livres.find(x => x >= n);
+        return { dias: off === undefined ? null : off, lista: true };
+    }
+    if (d.DiasAteProximaVaga !== null && d.DiasAteProximaVaga !== undefined && d.DiasAteProximaVaga >= n) {
+        return { dias: d.DiasAteProximaVaga, lista: false };
+    }
+    return { dias: null, lista: false };
+}
+function isoFromOffset(off) {
+    if (!dataReferencia || off === null) return null;
+    const dt = new Date(dataReferencia + 'T00:00:00');
+    dt.setDate(dt.getDate() + off);
+    return dt.toISOString().slice(0, 10);
+}
+
 function renderRankingEspecialidade(data) {
     const container = el('rankEspContainer');
     if (!container) return;
@@ -1860,11 +1961,26 @@ function renderRankingEspecialidade(data) {
         byEsp[d.Especialidade][d.posto] = d;
     });
 
+    let semLista = 0;   // linhas de JSON anterior à exportação de dias_livres
     const itens = allEspecialidades.filter(e => byEsp[e]).map(esp => {
         const cbos = cbosData[esp] || {};
         const prazo_camim = cbos.prazoconsultacamim || 0;
         const prazo_ans   = cbos.prazoconsultaans   || 0;
-        const postosEsp   = byEsp[esp];
+        const nMin = getDiasMin(cbosData[esp] ? esp : (Object.values(byEsp[esp])[0]?.cbos_casado || esp));
+        // Linhas reescritas com a vaga "a partir de N dias" — só esta aba enxerga isso.
+        const postosEsp = {};
+        Object.entries(byEsp[esp]).forEach(([p, d]) => {
+            const r = vagaAPartir(d, nMin);
+            if (!r.lista) semLista++;
+            const dias = r.dias;
+            postosEsp[p] = Object.assign({}, d, {
+                DiasAteProximaVaga: dias,
+                DataProximaVaga: dias === null ? null : (dias === d.DiasAteProximaVaga ? d.DataProximaVaga : isoFromOffset(dias)),
+                Status: dias === null ? 'SEM_VAGA' : calcStatusJs(dias, prazo_ans, prazo_camim),
+                QuantidadeVagasDisponivelNaData: dias === d.DiasAteProximaVaga ? d.QuantidadeVagasDisponivelNaData : null,
+                ValorPercentualVagasLivres:      dias === d.DiasAteProximaVaga ? d.ValorPercentualVagasLivres : null,
+            });
+        });
         const linhas = postosVisiveis.map(p => postosEsp[p]).filter(Boolean);
         const comVaga = linhas.filter(d => d.Status !== 'SEM_VAGA' && d.DiasAteProximaVaga !== null);
         const semVaga = linhas.filter(d => d.Status === 'SEM_VAGA');
@@ -1873,7 +1989,7 @@ function renderRankingEspecialidade(data) {
         const pior = comVaga.length ? Math.max(...comVaga.map(d => d.DiasAteProximaVaga)) : null;
         const statusMedia = linhas.length === 0 ? null
             : (media === null ? 'SEM_VAGA' : calcStatusJs(Math.round(media), prazo_ans, prazo_camim));
-        return { esp, prazo_ans, prazo_camim, postosEsp, nPostos: linhas.length,
+        return { esp, prazo_ans, prazo_camim, postosEsp, nMin, nPostos: linhas.length,
                  nComVaga: comVaga.length, nSemVaga: semVaga.length, media, pior, statusMedia };
     }).filter(it => it.nPostos > 0);
 
@@ -1895,14 +2011,17 @@ function renderRankingEspecialidade(data) {
     const escopo = ctx.length === getAllowedPostos().length ? 'todos os postos'
         : `${ctx.length} posto${ctx.length > 1 ? 's' : ''} (${ctx.join(', ')})`;
 
-    let html = `<div class="rankesp-escopo text-muted">Média calculada sobre <strong>${escopo}</strong>. ${itens.length} especialidades.</div>`;
+    let html = `<div class="rankesp-escopo text-muted">Média calculada sobre <strong>${escopo}</strong>, contando só vaga
+        <strong>a partir de N dias</strong> (N por especialidade; padrão ${qaConfig.padrao}). ${itens.length} especialidades.</div>`;
+    if (semLista) html += `<div class="alert alert-warning py-1 px-2" style="font-size:0.78rem;">O arquivo do dia ainda não traz a lista de dias
+        livres (${semLista} linhas): nessas, só a próxima vaga real foi comparada com N. O ETL das 05:00 (ou rodado à mão) completa.</div>`;
     itens.forEach((it, idx) => {
         const maxDias = it.prazo_camim > 0 ? it.prazo_camim * 1.5 : 60;
         const clr = it.media === null ? '#6c757d' : diasColor(Math.round(it.media));
         const mediaTxt = it.media === null ? 'SEM VAGA' : `EM MÉDIA ${it.media.toFixed(1).replace('.', ',')} DIAS`;
         const width = it.media === null ? '100%' : Math.max(6, Math.min(100, Math.round((it.media / maxDias) * 100))) + '%';
         const semVagaTag = it.nSemVaga
-            ? `<span class="rankesp-tag rankesp-tag-sv" title="postos sem vaga (fora da média)">${it.nSemVaga} sem vaga</span>` : '';
+            ? `<span class="rankesp-tag rankesp-tag-sv" title="postos sem vaga a partir de ${it.nMin} dias (fora da média)">${it.nSemVaga} sem vaga ≥${it.nMin}d</span>` : '';
         const piorTag = it.pior !== null && it.nComVaga > 1
             ? `<span class="rankesp-tag" title="maior espera entre os postos">pior ${it.pior}d</span>` : '';
         html += `<div class="esp-card rankesp-card" data-status="${it.statusMedia || ''}">
@@ -1914,6 +2033,7 @@ function renderRankingEspecialidade(data) {
             <div class="esp-prazo-badges">
                 <span class="esp-prazo-tag esp-prazo-ans" title="Prazo máximo ANS">ANS: ${it.prazo_ans > 0 ? it.prazo_ans+'d' : 'N/A'}</span>
                 <span class="esp-prazo-tag esp-prazo-camim" title="Prazo interno CAMIM">CAMIM: ${it.prazo_camim > 0 ? it.prazo_camim+'d' : 'N/A'}</span>
+                <span class="rankesp-tag" title="só conta vaga a partir deste número de dias (Configurar Prazos)">vaga a partir de ${it.nMin}d</span>
                 <span class="rankesp-tag" title="postos com vaga que entram na média">${it.nComVaga} de ${it.nPostos} postos na média</span>
                 ${semVagaTag}${piorTag}
             </div>
@@ -1940,7 +2060,7 @@ function renderConfig() {
 
     const esps = Object.keys(cbosData).sort();
     if (!esps.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhuma especialidade configurada.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhuma especialidade configurada.</td></tr>';
         return;
     }
 
@@ -1953,6 +2073,7 @@ function renderConfig() {
             <td class="text-center">${c.prazoconsultaans > 0 ? c.prazoconsultaans : '<span class="text-muted">N/A</span>'}</td>
             <td class="text-center">${c.prazoconsultacamim > 0 ? c.prazoconsultacamim : '<span class="text-muted">N/A</span>'}</td>
             <td class="text-center">${c.ValorPMinimoVagaDisponivel}</td>
+            <td class="text-center">${getDiasMin(esp)}${qaConfig.dias[esp] === undefined ? ' <span class="text-muted" style="font-size:0.7rem" title="valor padrão, ainda não gravado para esta especialidade">(padrão)</span>' : ''}</td>
             <td class="text-right tbl-actions">
                 <button class="btn btn-sm btn-outline-primary btn-edit-cbos" onclick="openEditCbos('${espJs}')">
                     <i class="fas fa-edit mr-1"></i>Alterar valor
@@ -1970,6 +2091,7 @@ function openEditCbos(esp) {
     el('editPrazoAns').value   = c.prazoconsultaans   ?? '';
     el('editPrazoCamim').value = c.prazoconsultacamim ?? '';
     el('editValor').value      = c.ValorPMinimoVagaDisponivel ?? '';
+    el('editDiasMin').value    = getDiasMin(esp);
     el('editMsg').textContent = '';
     $('#modalEditCbos').modal('show');
 }
@@ -2002,10 +2124,15 @@ async function saveCbos() {
     const prazoAns   = lerNum('editPrazoAns');
     const prazoCamim = lerNum('editPrazoCamim');
     const valor      = lerNum('editValor');
+    const diasMin    = lerNum('editDiasMin');
+    const diasMinMudou = diasMin !== null && diasMin !== getDiasMin(esp);
     const msg = el('editMsg');
     if (!esp) return;
-    if ([prazoAns, prazoCamim, valor].every(v => v === null)) {
+    if ([prazoAns, prazoCamim, valor].every(v => v === null) && !diasMinMudou) {
         msg.innerHTML = '<span class="text-danger">Preencha pelo menos um campo.</span>'; return;
+    }
+    if (diasMin !== null && (isNaN(diasMin) || diasMin < 0 || diasMin > 365)) {
+        msg.innerHTML = '<span class="text-danger">Vaga a partir de: entre 0 e 365 dias.</span>'; return;
     }
     if ((prazoAns !== null && (isNaN(prazoAns) || prazoAns < 0 || prazoAns > 365)) ||
         (prazoCamim !== null && (isNaN(prazoCamim) || prazoCamim < 0 || prazoCamim > 365))) {
@@ -2017,10 +2144,27 @@ async function saveCbos() {
     el('btnSaveCbos').disabled = true;
     msg.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Salvando no ERP...</span>';
     try {
+        const partes = [];
+        if (diasMinMudou) {
+            const rc = await fetch('/api/qualidade_agenda/config', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ especialidade: esp, dias_minimos: diasMin }), credentials: 'same-origin',
+            });
+            const dc = await rc.json();
+            if (!dc.ok) { msg.innerHTML = `<span class="text-danger">${dc.error || 'Erro ao gravar "vaga a partir de".'}</span>`; return; }
+            qaConfig.dias[esp] = dc.dias_minimos;
+            partes.push(`vaga a partir de ${dc.dias_minimos}d`);
+        }
         const body = { especialidade: esp };
         if (prazoAns   !== null) body.prazo_ans   = prazoAns;
         if (prazoCamim !== null) body.prazo_camim = prazoCamim;
         if (valor      !== null) body.valor       = valor;
+        if (Object.keys(body).length === 1) {   // só o "a partir de" mudou
+            $('#modalEditCbos').modal('hide');
+            showToast(`"${esp}": ${partes.join(' · ')}`, 'success');
+            renderAll();
+            return;
+        }
         const r = await fetch('/api/qualidade_agenda/update_cbos', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2036,7 +2180,6 @@ async function saveCbos() {
             if ('valor'       in n) cbosData[esp].ValorPMinimoVagaDisponivel = n.valor;
             recalcularStatusLocal(esp);
             $('#modalEditCbos').modal('hide');
-            const partes = [];
             if ('prazo_ans'   in n) partes.push(`ANS ${n.prazo_ans}d`);
             if ('prazo_camim' in n) partes.push(`CAMIM ${n.prazo_camim}d`);
             if ('valor'       in n) partes.push(`mín. vagas ${n.valor}%`);
@@ -2052,11 +2195,68 @@ async function saveCbos() {
     }
 }
 
+function openEditTodos() {
+    ['todosPrazoAns','todosPrazoCamim','todosValor','todosDiasMin'].forEach(id => el(id).value = '');
+    el('todosConfirma').checked = false;
+    el('todosMsg').textContent = '';
+    el('todosConfirmaLabel').textContent = `Confirmo que quero aplicar em todas as ${Object.keys(cbosData).length} especialidades.`;
+    $('#modalEditTodos').modal('show');
+}
+
+async function saveCbosTodos() {
+    const lerNum = (id) => { const v = el(id).value.trim(); return v === '' ? null : Number(v); };
+    const msg = el('todosMsg');
+    const body = {};
+    const pa = lerNum('todosPrazoAns'), pc = lerNum('todosPrazoCamim'), va = lerNum('todosValor'), dm = lerNum('todosDiasMin');
+    if (pa !== null) body.prazo_ans = pa;
+    if (pc !== null) body.prazo_camim = pc;
+    if (va !== null) body.valor = va;
+    if (dm !== null) body.dias_minimos = dm;
+    if (!Object.keys(body).length) { msg.innerHTML = '<span class="text-danger">Preencha pelo menos um campo.</span>'; return; }
+    if ((pa !== null && (pa < 0 || pa > 365)) || (pc !== null && (pc < 0 || pc > 365)) || (dm !== null && (dm < 0 || dm > 365))) {
+        msg.innerHTML = '<span class="text-danger">Dias devem estar entre 0 e 365.</span>'; return;
+    }
+    if (va !== null && (va < 0 || va > 100)) { msg.innerHTML = '<span class="text-danger">% mínimo entre 0 e 100.</span>'; return; }
+    if (!el('todosConfirma').checked) { msg.innerHTML = '<span class="text-danger">Marque a confirmação.</span>'; return; }
+    el('btnSaveTodos').disabled = true;
+    msg.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Aplicando em todas...</span>';
+    try {
+        const r = await fetch('/api/qualidade_agenda/update_cbos_todos', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body), credentials: 'same-origin',
+        });
+        const data = await r.json();
+        if (!data.ok) { msg.innerHTML = `<span class="text-danger">${data.error || 'Erro ao aplicar.'}</span>`; return; }
+        const n = data.novos || {};
+        Object.keys(cbosData).forEach(esp => {
+            if ('prazo_ans'   in n) cbosData[esp].prazoconsultaans   = n.prazo_ans;
+            if ('prazo_camim' in n) cbosData[esp].prazoconsultacamim = n.prazo_camim;
+            if ('valor'       in n) cbosData[esp].ValorPMinimoVagaDisponivel = n.valor;
+            if (Object.keys(n).length) recalcularStatusLocal(esp);
+        });
+        if (data.dias_minimos !== null && data.dias_minimos !== undefined) {
+            (data.especialidades || Object.keys(cbosData)).forEach(esp => { qaConfig.dias[esp] = data.dias_minimos; });
+        }
+        $('#modalEditTodos').modal('hide');
+        const partes = [];
+        if ('prazo_ans'   in n) partes.push(`ANS ${n.prazo_ans}d`);
+        if ('prazo_camim' in n) partes.push(`CAMIM ${n.prazo_camim}d`);
+        if ('valor'       in n) partes.push(`mín. vagas ${n.valor}%`);
+        if (data.dias_minimos !== null && data.dias_minimos !== undefined) partes.push(`vaga a partir de ${data.dias_minimos}d`);
+        showToast(`${data.rows_affected} especialidades: ${partes.join(' · ')}`, 'success');
+        renderAll();
+    } catch (e) {
+        msg.innerHTML = `<span class="text-danger">Erro de rede: ${e.message}</span>`;
+    } finally {
+        el('btnSaveTodos').disabled = false;
+    }
+}
+
 // Tabelas largas viram cards no celular: cada <td> ganha o texto do <th>
 // correspondente em data-label e o CSS (.tbl-cards) desenha o rótulo na frente.
 function aplicarRotulosMobile() {
     document.querySelectorAll('table.tbl-cards').forEach(tbl => {
-        const ths = Array.from(tbl.querySelectorAll('thead th')).map(th => th.textContent.trim());
+        const ths = Array.from(tbl.querySelectorAll('thead th')).map(th => th.dataset.label || th.textContent.trim());
         tbl.querySelectorAll('tbody tr').forEach(tr => {
             const tds = tr.children;
             if (tds.length < 2) return;   // linha "Carregando…" / vazia (colspan)
@@ -3005,6 +3205,26 @@ function getPostoHealth(data) {
     return result;
 }
 
+// Último mês FECHADO (nunca o corrente). Em 04/11/2026 o cruzamento pegava
+// novembro com 4 dias: 14.331 consultas "Não atendido" eram consultas FUTURAS
+// ainda não realizadas e viraram "taxa de faltas de 90%". Set/26 = 25%, out = 21%.
+function getLatestClosedMonth(jsonData) {
+    if (!jsonData) return null;
+    const source = jsonData.dados || jsonData.months || jsonData;
+    if (typeof source !== 'object') return null;
+    const now = new Date();
+    const atual = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const months = Object.keys(source).filter(k => /^\d{4}-\d{2}$/.test(k) && k < atual).sort();
+    return months.length ? months[months.length - 1] : null;
+}
+function mesExtenso(ym) {
+    if (!ym) return '';
+    const [y, m] = ym.split('-');
+    const nomes = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    return `${nomes[parseInt(m,10)-1]}/${y.slice(2)}`;
+}
+let crossConsultasMes = null;
+
 function getLatestMonth(jsonData) {
     if (!jsonData) return null;
     // growth: has .dados[month], vendas/mensalidades: top-level [month], consultas: .months[month]
@@ -3024,7 +3244,8 @@ function renderCrossRef() {
     const latestGrowth = getLatestMonth(crossData.growth);
     const latestMens   = getLatestMonth(crossData.mensalidades);
     const latestVendas = getLatestMonth(crossData.vendas);
-    const latestConsul = getLatestMonth(crossData.consultas);
+    const latestConsul = getLatestClosedMonth(crossData.consultas);
+    crossConsultasMes = latestConsul;
     const postoMetrics = {};
 
     postosVisiveis.forEach(p => {
@@ -3159,7 +3380,7 @@ function renderCrossKpis(metrics, ctx) {
         totalMensQtd > 0 ? { num: totalMensQtd.toLocaleString('pt-BR'), label: `Mensalidades Recebidas`, color: '#28a745', help: 'Quantidade de mensalidades recebidas no mês. Fonte: consolidado_mensal_por_posto.json.' } : null,
         totalMensValor > 0 ? { num: 'R$ ' + (totalMensValor / 1000).toFixed(0) + 'k', label: 'Receita Mensalidades', color: '#17a2b8', help: 'Valor total das mensalidades recebidas (R$). Fonte: consolidado_mensal_por_posto.json.' } : null,
         churnAvg !== null ? { num: churnAvg + '%', label: 'Churn Mensal', color: churnAvg > 10 ? '#dc3545' : churnAvg > 5 ? '#fd7e14' : '#28a745', help: 'Média do churn operacional: cancelamentos do mês ÷ base de contratos do mês anterior × 100. Fonte: growth_dashboard.json (Cad_Cliente + vw_fin_receita2).' } : null,
-        pctFaltas !== null ? { num: pctFaltas + '%', label: 'Faltas em Consultas', color: pctFaltas > 20 ? '#dc3545' : pctFaltas > 10 ? '#fd7e14' : '#28a745', help: 'Percentual de faltas sobre total de consultas agendadas. Cálculo: faltas ÷ total × 100. Fonte: consultas_mensal_status_consolidado.json.' } : null,
+        pctFaltas !== null ? { num: pctFaltas + '%', label: `Faltas em Consultas (${mesExtenso(crossConsultasMes)})`, color: pctFaltas > 20 ? '#dc3545' : pctFaltas > 10 ? '#fd7e14' : '#28a745', help: 'Percentual de faltas sobre total de consultas agendadas. Cálculo: faltas ÷ total × 100. Fonte: consultas_mensal_status_consolidado.json.' } : null,
         totalVendas > 0 ? { num: totalVendas, label: 'Vendas no Mês', color: '#555', help: 'Quantidade de vendas no mês. Fonte: vendas_mensal.json.' } : null,
         avgMeta !== null ? { num: avgMeta + '%', label: 'Atingimento de Meta', color: avgMeta >= 100 ? '#28a745' : avgMeta >= 70 ? '#fd7e14' : '#dc3545', help: 'Média do percentual de atingimento da meta de vendas. Cálculo: vendas_realizadas ÷ vendas_meta × 100. Fonte: json_metas.' } : null,
     ].filter(Boolean);
@@ -3453,7 +3674,7 @@ function renderCrossParecer(metrics, health, agendaData, ctx) {
     const totalFaltas = vals.reduce((s,m) => s + (m.consultas_faltas||0), 0);
     if (totalCons > 0) {
         const pf = Math.round(totalFaltas / totalCons * 100);
-        parecer += `<li><strong>Consultas e Faltas:</strong> ${totalCons.toLocaleString('pt-BR')} consultas no período com taxa de faltas de ${pf}%. `;
+        parecer += `<li><strong>Consultas e Faltas (${mesExtenso(crossConsultasMes)}, último mês fechado):</strong> ${totalCons.toLocaleString('pt-BR')} consultas com taxa de faltas de ${pf}% (faltas do paciente ÷ total; médico que faltou não conta). `;
         if (pf > 15) parecer += `Taxa <span style="color:#dc3545;">elevada</span> — verificar se pacientes estão desmarcando por dificuldade de agendar especialidades complementares.`;
         else parecer += `Dentro do esperado.`;
         parecer += `</li>`;
