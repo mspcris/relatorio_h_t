@@ -75,6 +75,12 @@ TZ=America/Sao_Paulo
 # Export notas RPS — de hora em hora (mudou em 2026-04-19 de 1x/dia -> */1h)
 0    * * * * root flock -n /opt/relatorio_h_t/locks/export_notas_rps.lock  /opt/relatorio_h_t/export_notas_rps.sh      >>/var/log/relatorio_h_t/export_notas_rps.log 2>&1
 
+# Churn de um mês (kpi_churn_1m.html) — de hora em hora, no minuto 40 — criado em 2026-11-05
+# Só SELECT nos postos. Parte dos CSVs do export_vendas (o export_metas das :05 refaz o mês
+# corrente) e relê a mensalidade do mês seguinte das 4 turmas mais recentes.
+# /bin/bash na frente: o deploy copia .sh novo sem bit de execução.
+40   * * * * root flock -n /opt/relatorio_h_t/locks/export_churn1m.lock /bin/bash /opt/relatorio_h_t/export_churn1m.sh >>/var/log/relatorio_h_t/export_churn1m.log 2>&1
+
 # Contabilidade - Notas — de hora em hora, no minuto 20 (depois do notas RPS).
 # /bin/bash na frente: o deploy copia .sh novo sem bit de execução.
 20   * * * * root flock -n /opt/relatorio_h_t/locks/export_contab_notas.lock /bin/bash /opt/relatorio_h_t/export_contab_notas.sh >>/var/log/relatorio_h_t/export_contab_notas.log 2>&1

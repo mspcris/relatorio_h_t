@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>CAMIM — Churn de um mês</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- KPI Metadata (Manus Integration) -->
+    <meta name="kpi-id" content="churn_1m" />
+    <meta name="kpi-title" content="Churn de um mês" />
+    <meta name="kpi-description" content="De quem fez o plano num mês, quantos pagaram a mensalidade de referência do mês seguinte até o dia de corte. Por posto, com pagamento até o vencimento e depois do vencimento." />
+    <meta name="kpi-category" content="Clientes" />
+    <meta name="kpi-keywords" content="churn, churn de um mes, churn1m, fidelizacao, vendas, mensalidade, inadimplencia, primeiro mes" />
+
+    <!-- CORE CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap">
+
+    <!-- CSS DO PROJETO -->
+    <link rel="stylesheet" href="/css/style2.css?v=20251114">
+    <link rel="stylesheet" href="/css/style_kpi.css?v=20251114&force=1">
+
+    <link rel="shortcut icon" href="/images/Logo Camim-01_200px.png" type="image/x-icon">
+
+    <!-- JS BASE -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <style>
+        :root {
+            --kpi-loaded: 1;
+            /* tinta e superfície */
+            --c1-ink: #1d1d1f;
+            --c1-ink2: #52514e;
+            --c1-ink3: #86868b;
+            --c1-line: #e6e6e3;
+            --c1-soft: #f6f7f6;
+            --c1-teal: #00695c;
+            --c1-teal-soft: #e0f2f1;
+            /* segmentos — ordem fixa, validada para daltonismo (dataviz/validate_palette.js) */
+            --seg-dia: #008300;
+            --seg-atr: #eda100;
+            --seg-pos: #2a78d6;
+            --seg-abe: #e34948;
+            --seg-can: #6250d6;
+            --seg-sem: #9aa0a6;
+        }
+
+        html { font-size: 16px; }
+
+        body {
+            font-size: 1rem;
+            -webkit-font-smoothing: antialiased;
+            font-family: "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        .sidebar .nav-link { font-size: .95rem; }
+        .brand-link .brand-text { font-size: 1rem; }
+        h3, .card-title { font-size: 1.15rem; font-weight: 600; }
+        .mini { font-size: .85rem; }
+        .stack>*+* { margin-top: 14px; }
+        .card { border-radius: 12px; }
+
+        /* ---------- régua ---------- */
+        .c1-regua {
+            background: var(--c1-teal-soft);
+            border-left: 4px solid var(--c1-teal);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: .92rem;
+            color: #37474f;
+            line-height: 1.55;
+        }
+        .c1-regua code { background: #c8e6e2; padding: 1px 6px; border-radius: 4px; color: #004d40; }
+
+        /* ---------- filtros ---------- */
+        .c1-campo { display: flex; flex-direction: column; gap: 2px; }
+        .c1-campo label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c1-ink3); margin: 0; }
+        .c1-mes { display: flex; align-items: center; gap: 4px; }
+        .c1-mes .btn { padding: .2rem .55rem; flex: 0 0 auto !important; width: auto !important; }
+        .c1-mes input { width: 160px; }
+        #inpCorte { width: 84px; font-weight: 700; font-size: 1.05rem; text-align: center; }
+        .c1-corte-wrap { display: flex; align-items: center; gap: 8px; }
+        .c1-corte-dica { font-size: .82rem; color: var(--c1-ink2); max-width: 300px; line-height: 1.25; }
+        #btnAtualizar { background: var(--c1-teal); border-color: var(--c1-teal); color: #fff; font-weight: 600; padding: .32rem .9rem; }
+        #btnAtualizar.pendente { box-shadow: 0 0 0 4px rgba(0, 105, 92, .25); animation: c1pulse 1.1s ease-in-out infinite; }
+        @keyframes c1pulse { 50% { box-shadow: 0 0 0 8px rgba(0, 105, 92, .08); } }
+        .c1-switch { display: flex; align-items: center; gap: 8px; font-size: .88rem; color: var(--c1-ink2); cursor: pointer; margin: 0; }
+        .c1-switch input { width: 16px; height: 16px; }
+
+        /* ---------- âncora da turma ---------- */
+        .c1-hero-head { background: var(--c1-teal); color: #fff; border-radius: 12px 12px 0 0; padding: 12px 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+        .c1-hero-head h3 { margin: 0; font-size: 1.15rem; }
+        .c1-hero-head .c1-escopo { font-size: .85rem; opacity: .9; }
+        .c1-selo { margin-left: auto; font-size: .78rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, .18); }
+        .c1-selo.parcial { background: #ffe082; color: #5d4037; }
+
+        .c1-hero { display: grid; grid-template-columns: 1fr auto 1.25fr auto 1.1fr; gap: 10px; align-items: stretch; padding: 18px; }
+        .c1-step { background: var(--c1-soft); border: 1px solid var(--c1-line); border-radius: 12px; padding: 14px 16px; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+        .c1-step:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0, 0, 0, .08); }
+        .c1-step .c1-rot { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--c1-ink3); }
+        .c1-step .c1-num { font-size: 2.6rem; font-weight: 700; line-height: 1.05; color: var(--c1-ink); font-variant-numeric: tabular-nums; }
+        .c1-step .c1-cap { font-size: .95rem; color: var(--c1-ink2); line-height: 1.3; margin-top: 2px; }
+        .c1-step .c1-sub { font-size: .82rem; color: var(--c1-ink3); margin-top: 4px; }
+        .c1-step.c1-churn { background: #fff; border: 2px solid var(--c1-teal); }
+        .c1-step.c1-churn .c1-num { color: var(--c1-teal); font-size: 3.1rem; }
+        .c1-arrow { display: flex; align-items: center; color: #b0b5b3; font-size: 1.2rem; }
+
+        .c1-barra { display: flex; height: 26px; margin: 0 18px; border-radius: 8px; overflow: hidden; background: #eee; gap: 2px; }
+        .c1-barra>div { height: 100%; min-width: 2px; cursor: pointer; transition: filter .15s; }
+        .c1-barra>div:hover { filter: brightness(1.12); }
+        .c1-legenda { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px 14px; padding: 12px 18px 4px; }
+        .c1-leg { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+        .c1-leg:hover { background: var(--c1-soft); }
+        .c1-dot { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 11px; transform: translateY(1px); }
+        .c1-leg .c1-leg-n { font-weight: 700; font-size: 1.1rem; color: var(--c1-ink); font-variant-numeric: tabular-nums; }
+        .c1-leg .c1-leg-p { font-size: .85rem; color: var(--c1-ink3); font-variant-numeric: tabular-nums; }
+        .c1-leg .c1-leg-t { font-size: .88rem; color: var(--c1-ink2); line-height: 1.2; }
+        .c1-conta { margin: 6px 18px 16px; padding: 8px 12px; background: var(--c1-soft); border-radius: 8px; font-size: .9rem; color: var(--c1-ink2); font-variant-numeric: tabular-nums; }
+        .c1-conta b { color: var(--c1-ink); }
+        .c1-aviso { margin: 0 18px 12px; padding: 8px 12px; border-radius: 8px; font-size: .88rem; background: #fff8e1; border-left: 4px solid #ffc107; color: #5d4037; }
+
+        /* ---------- gráficos ---------- */
+        .c1-chart { position: relative; height: 320px; }
+        .c1-chart.baixo { height: 280px; }
+        .c1-nota { font-size: .84rem; color: var(--c1-ink2); line-height: 1.45; }
+        .c1-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .c1-chip { border: 1px solid var(--c1-line); background: #fff; border-radius: 10px; padding: 6px 12px; cursor: pointer; text-align: center; min-width: 92px; transition: all .15s; }
+        .c1-chip:hover { border-color: var(--c1-teal); transform: translateY(-1px); }
+        .c1-chip.ativo { background: var(--c1-teal); border-color: var(--c1-teal); color: #fff; }
+        .c1-chip .c1-chip-t { font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; opacity: .75; }
+        .c1-chip .c1-chip-v { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .c1-chip.vazio { cursor: default; opacity: .5; }
+
+        /* ---------- tabelas ---------- */
+        .c1-tbl { width: 100%; border-collapse: collapse; font-size: .92rem; font-variant-numeric: tabular-nums; }
+        .c1-tbl th { font-size: .7rem; text-transform: uppercase; letter-spacing: .02em; color: var(--c1-ink3); font-weight: 700; padding: 8px 8px; border-bottom: 2px solid var(--c1-line); text-align: right; white-space: nowrap; cursor: pointer; user-select: none; background: #fff; }
+        .c1-tbl th:first-child, .c1-tbl td:first-child { text-align: left; }
+        .c1-tbl td { padding: 9px 8px; border-bottom: 1px solid var(--c1-line); text-align: right; vertical-align: middle; }
+        .c1-tbl tbody tr:hover { background: #fafbfa; }
+        .c1-tbl tfoot td { font-weight: 700; border-top: 2px solid var(--c1-line); border-bottom: none; background: var(--c1-soft); }
+        .c1-tbl .lnk { cursor: pointer; border-bottom: 1px dotted #b0b5b3; }
+        .c1-tbl .lnk:hover { color: var(--c1-teal); border-bottom-color: var(--c1-teal); }
+        .c1-tbl .sub { display: block; font-size: .78rem; color: var(--c1-ink3); }
+        .c1-posto { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+        .c1-letra { width: 26px; height: 26px; border-radius: 7px; background: var(--c1-teal); color: #fff; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; font-size: .85rem; flex: 0 0 26px; }
+        .c1-mini { display: flex; height: 12px; width: 110px; flex: 0 0 110px; border-radius: 4px; overflow: hidden; gap: 1px; background: #eee; margin-left: auto; }
+        .c1-mini>div { height: 100%; }
+        .c1-churn-cel { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+        .c1-churn-bar { width: 64px; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; }
+        .c1-churn-bar>div { height: 100%; background: var(--c1-teal); border-radius: 4px; }
+        .c1-churn-v { font-weight: 700; min-width: 54px; text-align: right; }
+        .c1-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+        .c1-heat { border-collapse: separate; border-spacing: 3px; font-size: .86rem; font-variant-numeric: tabular-nums; width: 100%; }
+        .c1-heat th { font-size: .72rem; text-transform: uppercase; color: var(--c1-ink3); font-weight: 700; padding: 4px 6px; text-align: center; white-space: nowrap; cursor: pointer; }
+        .c1-heat th.sel { color: var(--c1-teal); text-decoration: underline; }
+        .c1-heat td { padding: 7px 6px; text-align: center; border-radius: 6px; cursor: pointer; min-width: 58px; }
+        .c1-heat td:first-child, .c1-heat th:first-child { text-align: left; white-space: nowrap; cursor: default; background: #fff; position: sticky; left: 0; }
+        .c1-heat td.parcial { font-style: italic; outline: 1px dashed #b0b5b3; outline-offset: -1px; }
+        .c1-heat td.vazio { color: #c3c2b7; cursor: default; }
+        .c1-heat tr.total td { font-weight: 700; }
+
+        /* ---------- modal (overlay próprio, não depende do Bootstrap) ---------- */
+        .mdl { position: fixed; inset: 0; background: rgba(15, 23, 20, .55); z-index: 2000; display: none; align-items: flex-start; justify-content: center; padding: 3vh 12px; overflow-y: auto; }
+        .mdl.aberto { display: flex; }
+        .mdl-box { background: #fff; border-radius: 14px; width: min(1180px, 100%); box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }
+        .mdl-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px 10px; border-bottom: 1px solid var(--c1-line); }
+        .mdl-head h4 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+        .mdl-head .mdl-sub { font-size: .88rem; color: var(--c1-ink2); }
+        .mdl-x { margin-left: auto; border: none; background: none; font-size: 1.6rem; line-height: 1; color: var(--c1-ink3); cursor: pointer; }
+        .mdl-ferr { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 20px; }
+        .mdl-ferr input { max-width: 260px; }
+        .mdl-fchip { border: 1px solid var(--c1-line); border-radius: 999px; padding: 3px 10px; font-size: .82rem; cursor: pointer; background: #fff; display: inline-flex; align-items: center; gap: 6px; }
+        .mdl-fchip.ativo { background: var(--c1-ink); color: #fff; border-color: var(--c1-ink); }
+        .mdl-body { padding: 0 20px 18px; }
+        .mdl-body .c1-tbl td, .mdl-body .c1-tbl th { text-align: left; }
+        .mdl-body .c1-tbl td.num, .mdl-body .c1-tbl th.num { text-align: right; }
+        .c1-sit { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+        @media (max-width: 992px) {
+            .c1-hero { grid-template-columns: 1fr; }
+            .c1-arrow { justify-content: center; transform: rotate(90deg); height: 18px; }
+            .c1-step .c1-num { font-size: 2.2rem; }
+            .c1-step.c1-churn .c1-num { font-size: 2.6rem; }
+            .c1-chart { height: 280px; }
+            .c1-mini { display: none; }
+            .c1-corte-dica { max-width: none; }
+        }
+    </style>
+</head>
+
+<body class="hold-transition sidebar-mini">
+    <div class="wrapper">
+        <!-- NAVBAR -->
+        <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a></li>
+            </ul>
+            <span class="ml-2 font-weight-bold d-flex align-items-center">
+                <img src="/images/Logo Camim-01_200px.png" height="30" alt="Logo Camim">
+                <span class="ml-2 d-none d-md-inline">Quem tem saúde é mais feliz!</span>
+                <span id="jsonInfo" class="ml-3 text-muted mini"></span>
+            </span>
+        </nav>
+
+        <!-- SIDEBAR (fallback sem JS — o menu real vem de /js/menu.js) -->
+        <aside class="main-sidebar sidebar-dark-primary elevation-4">
+            <a href="/index.html" class="brand-link"><span class="brand-text font-weight-light">MENU</span></a>
+            <div class="sidebar">
+                <nav class="mt-2">
+                    <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+                        <li class="nav-item"><a href="/index.html" class="nav-link"><i class="nav-icon fas fa-search"></i><p>Buscar</p></a></li>
+                        {% if USER_IS_ADMIN %}
+                        <li class="nav-item"><a href="/admin" class="nav-link" style="border-left:3px solid #f39c12"><i class="nav-icon fas fa-users-cog" style="color:#f39c12"></i><p>Admin</p></a></li>
+                        {% endif %}
+                        <li class="nav-item"><a href="/kpi_fidelizacao_cliente.html" class="nav-link"><i class="nav-icon fas fa-handshake"></i><p>KPI Fidelização Churn</p></a></li>
+                        <li class="nav-item"><a href="/kpi_churn_1m.html" class="nav-link active"><i class="nav-icon fas fa-user-clock"></i><p>Churn de um mês</p></a></li>
+                        <li class="nav-item"><a href="/mais_servicos" class="nav-link"><i class="nav-icon fas fa-th-large"></i><p>Mais Serviços</p></a></li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- CONTEÚDO -->
+        <div class="content-wrapper">
+            <nav class="navbar navbar-expand navbar-white navbar-light">
+                <div class="d-flex w-100 align-items-center">
+                    <span class="ml-2 font-weight-bold">Churn de um mês</span>
+                    <a href="/kpi_fidelizacao_cliente.html" class="ml-3 mini text-muted"><i class="fas fa-level-up-alt fa-rotate-270 mr-1"></i>KPI Fidelização Churn</a>
+                    <div class="ml-auto"><span id="ia-anchor"></span></div>
+                </div>
+            </nav>
+
+            <section class="content p-3 stack">
+                <div id="err" class="text-danger mb-1"></div>
+
+                <!-- RÉGUA -->
+                <div class="c1-regua">
+                    <strong>Como medimos o churn de um mês:</strong> pegamos quem <strong>fez o plano</strong> num mês (a mesma venda do KPI Vendas) e olhamos <strong>só</strong> a mensalidade de <strong>referência do mês seguinte</strong>.
+                    Quem pagou até o <strong>dia de corte</strong> ficou; quem não pagou é churn.
+                    <span id="reguaExemplo"></span>
+                    <br><code>churn de um mês = (fizeram o plano &minus; pagaram a mensalidade do mês seguinte até o corte) &divide; fizeram o plano</code>
+                </div>
+
+                <!-- FILTROS -->
+                <div class="card">
+                    <div class="kpi-filter-panel">
+                        <div class="kpi-filter-row kpi-filter-postos">
+                            <div class="posto-groups">
+                                <div class="btn-group">
+                                    <button id="btnGrupoTodos" class="btn active">Todos</button>
+                                    <button id="btnGrupoAltamiro" class="btn" title="A B G I N R X Y">Altamiro</button>
+                                    <button id="btnGrupoCouto" class="btn" title="C D J M P">Couto</button>
+                                </div>
+                            </div>
+                            <div class="filter-sep-v"></div>
+                            <ul id="postoTabs" class="nav nav-pills posto-tabs-inline"></ul>
+                        </div>
+                        <div class="kpi-filter-row kpi-filter-actions">
+                            <div class="c1-campo">
+                                <label for="inpMes">Turma — mês em que fez o plano</label>
+                                <div class="c1-mes">
+                                    <button id="btnMesAnt" class="btn btn-sm btn-outline-secondary" title="Turma anterior"><i class="fas fa-chevron-left"></i></button>
+                                    <input id="inpMes" type="month" class="form-control form-control-sm">
+                                    <button id="btnMesProx" class="btn btn-sm btn-outline-secondary" title="Turma seguinte"><i class="fas fa-chevron-right"></i></button>
+                                </div>
+                            </div>
+                            <div class="filter-sep-v d-none d-md-block"></div>
+                            <div class="c1-campo">
+                                <label for="inpCorte">Dia de corte</label>
+                                <div class="c1-corte-wrap">
+                                    <input id="inpCorte" type="number" min="1" max="31" step="1" value="15" class="form-control form-control-sm" inputmode="numeric">
+                                    <button id="btnAtualizar" class="btn btn-sm"><i class="fas fa-sync-alt mr-1"></i>Atualizar</button>
+                                    <span class="c1-corte-dica" id="corteDica"></span>
+                                </div>
+                            </div>
+                            <div class="filter-sep-v d-none d-md-block"></div>
+                            <label class="c1-switch" title="Planos sem cobrança mensal (ex.: SÓCIO, CAMIM Liberty) não geram mensalidade no mês seguinte. Marcado, eles saem da turma; desmarcado, contam como quem não pagou.">
+                                <input type="checkbox" id="chkTirarSem">
+                                <span>Tirar da turma quem <strong>não tem mensalidade lançada</strong> no mês seguinte</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="avisoPostos"></div>
+
+                <!-- ÂNCORA DA TURMA -->
+                <div class="card" style="overflow:hidden">
+                    <div class="c1-hero-head">
+                        <h3 id="heroTitulo">Turma</h3>
+                        <span class="c1-escopo" id="heroEscopo"></span>
+                        <span class="c1-selo" id="heroSelo"></span>
+                    </div>
+                    <div id="heroCorpo"><div class="text-muted text-center p-4">Carregando dados...</div></div>
+                </div>
+
+                <!-- EVOLUÇÃO + ATRASO -->
+                <div class="row">
+                    <div class="col-lg-7">
+                        <div class="card">
+                            <div class="card-header"><h3 class="card-title mb-0">Churn de um mês — turma a turma</h3></div>
+                            <div class="card-body">
+                                <div class="c1-chart"><canvas id="chEvolucao"></canvas></div>
+                                <div class="c1-nota mt-2" id="notaEvolucao"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="card">
+                            <div class="card-header"><h3 class="card-title mb-0" id="tituloAtraso">Quando pagaram, em relação ao vencimento</h3></div>
+                            <div class="card-body">
+                                <div class="c1-chart"><canvas id="chAtraso"></canvas></div>
+                                <div class="c1-nota mt-2">Cada barra é a fatia <strong>da turma</strong> que pagou naquele intervalo. Verde: até o vencimento. Amarelo: depois do vencimento, mas dentro do corte. Azul: pagou, mas só depois do corte — no dia do corte ainda era churn.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CURVA DO CORTE -->
+                <div class="card">
+                    <div class="card-header"><h3 class="card-title mb-0" id="tituloCurva">E se o corte fosse outro dia?</h3></div>
+                    <div class="card-body">
+                        <div class="c1-chart baixo"><canvas id="chCurva"></canvas></div>
+                        <div class="c1-nota mt-2" id="notaCurva"></div>
+                        <div class="c1-chips" id="chipsCorte"></div>
+                    </div>
+                </div>
+
+                <!-- POR POSTO -->
+                <div class="card">
+                    <div class="card-header d-flex align-items-center flex-wrap" style="gap:8px">
+                        <h3 class="card-title mb-0" id="tituloPostos">Por posto</h3>
+                        <span class="mini text-muted ml-auto">clique num número para ver os clientes · clique no cabeçalho para ordenar</span>
+                    </div>
+                    <div class="card-body p-0 c1-scroll" id="tabPostos"></div>
+                </div>
+
+                <!-- MAPA POSTO × TURMA -->
+                <div class="card">
+                    <div class="card-header d-flex align-items-center flex-wrap" style="gap:8px">
+                        <h3 class="card-title mb-0">Churn de um mês — posto × turma</h3>
+                        <span class="mini text-muted ml-auto">quanto mais escuro, maior o churn · <em>itálico tracejado</em> = turma ainda antes do corte</span>
+                    </div>
+                    <div class="card-body c1-scroll" id="tabHeat"></div>
+                </div>
+
+                <!-- COMO FOI CALCULADO -->
+                <div class="card">
+                    <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-calculator mr-2"></i>Como foi calculado</h3></div>
+                    <div class="card-body c1-nota" id="comoCalculado"></div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- MODAL: lista de clientes -->
+    <div class="mdl" id="mdl">
+        <div class="mdl-box">
+            <div class="mdl-head">
+                <div>
+                    <h4 id="mdlTitulo"></h4>
+                    <div class="mdl-sub" id="mdlSub"></div>
+                </div>
+                <button class="mdl-x" id="mdlX" title="Fechar">&times;</button>
+            </div>
+            <div class="mdl-ferr">
+                <input id="mdlBusca" type="search" class="form-control form-control-sm" placeholder="Buscar nome, matrícula, plano, vendedor…">
+                <span id="mdlChips" class="d-inline-flex flex-wrap" style="gap:6px"></span>
+                <button id="mdlCsv" class="btn btn-sm btn-outline-secondary ml-auto"><i class="fas fa-file-csv mr-1"></i>Baixar CSV</button>
+            </div>
+            <div class="mdl-body c1-scroll" id="mdlCorpo"></div>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        'use strict';
+
+        // ------------------------------------------------------------------
+        // Constantes
+        // ------------------------------------------------------------------
+        const POSTOS = ['A', 'B', 'C', 'D', 'G', 'I', 'J', 'M', 'N', 'P', 'R', 'X', 'Y'];
+        const GRUPOS_POSTO = { altamiro: ['A', 'B', 'G', 'I', 'N', 'R', 'X', 'Y'], couto: ['C', 'D', 'J', 'M', 'P'] };
+        const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+        const MESES3 = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+        // Segmentos: ordem e cor FIXAS (a cor é do segmento, nunca da posição).
+        const SEG = [
+            { k: 'dia', cor: '#008300', rot: 'Pagou até o vencimento', curto: 'Até o vencimento' },
+            { k: 'atr', cor: '#eda100', rot: 'Pagou depois do vencimento, até o corte', curto: 'Após o vencimento' },
+            { k: 'pos', cor: '#2a78d6', rot: 'Pagou só depois do corte', curto: 'Depois do corte' },
+            { k: 'abe', cor: '#e34948', rot: 'Não pagou — mensalidade em aberto', curto: 'Em aberto' },
+            { k: 'can', cor: '#6250d6', rot: 'Mensalidade cancelada ou abonada', curto: 'Cancelada / abonada' },
+            { k: 'sem', cor: '#9aa0a6', rot: 'Sem mensalidade lançada no mês seguinte', curto: 'Sem mensalidade' },
+        ];
+        const SEGK = Object.fromEntries(SEG.map(s => [s.k, s]));
+        const TEAL = '#00695c';
+
+        const el = id => document.getElementById(id);
+        const nf = v => Number(v || 0).toLocaleString('pt-BR');
+        const pf = v => (v == null || !isFinite(v)) ? '—' : v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+        const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+        // ------------------------------------------------------------------
+        // Estado
+        // ------------------------------------------------------------------
+        let DATA = null, C = {};          // C = índice das colunas pelo nome
+        let selPostos = 'ALL';
+        let ym = '';                      // turma (mês da venda)
+        let corte = 15;                   // dia de corte APLICADO
+        let tirarSem = false;
+        let dadosAte = '';                // até que dia os pagamentos foram lidos
+        let ordPostos = { col: 'churn', dir: -1 };
+        const charts = {};
+
+        try {
+            const c = parseInt(localStorage.getItem('churn1m_corte'), 10);
+            if (c >= 1 && c <= 31) corte = c;
+            tirarSem = localStorage.getItem('churn1m_tirar_sem') === '1';
+        } catch (e) { /* sem storage: segue com o padrão */ }
+
+        // ------------------------------------------------------------------
+        // Datas (tudo em texto ISO — compara como string)
+        // ------------------------------------------------------------------
+        function ymAdd(s, n) {
+            let y = +s.slice(0, 4), m = +s.slice(5, 7) - 1 + n;
+            y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+            return y + '-' + String(m + 1).padStart(2, '0');
+        }
+        const nomeMes = s => MESES[+s.slice(5, 7) - 1] + '/' + s.slice(0, 4);
+        const mesCurto = s => MESES3[+s.slice(5, 7) - 1] + '/' + s.slice(2, 4);
+        const fmtData = iso => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '—';
+        const fmtDM = iso => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '—';
+        const ultimoDia = s => new Date(Date.UTC(+s.slice(0, 4), +s.slice(5, 7), 0)).getUTCDate();
+        const addDias = (iso, n) => new Date(Date.parse(iso) + n * 864e5).toISOString().slice(0, 10);
+        const difDias = (a, b) => Math.round((Date.parse(a) - Date.parse(b)) / 864e5);
+
+        // Corte da turma: dia D do mês DEPOIS da referência (venda jan → ref fev → corte D/mar).
+        function dataCorte(ymVenda, dia) {
+            const mc = ymAdd(ymVenda, 2);
+            return mc + '-' + String(Math.min(dia, ultimoDia(mc))).padStart(2, '0');
+        }
+
+        // ------------------------------------------------------------------
+        // Conta
+        // ------------------------------------------------------------------
+        function postosSel() {
+            return selPostos === 'ALL' ? POSTOS.slice() : POSTOS.filter(p => selPostos.has(p));
+        }
+
+        function linhasDe(ymVenda, postos) {
+            const t = (DATA.turmas || {})[ymVenda] || {};
+            const out = [];
+            for (const p of postos) {
+                const e = t[p];
+                if (!e) continue;
+                for (const r of e.rows) out.push({ p, r });
+            }
+            return out;
+        }
+
+        function classificar(r, corteISO) {
+            const sit = r[C.sit], pag = r[C.pag], venc = r[C.venc];
+            if (sit === 'S') return 'sem';
+            if (sit === 'P' && pag) {
+                if (pag > corteISO) return 'pos';
+                return (venc && pag > venc) ? 'atr' : 'dia';
+            }
+            if (sit === 'C' || sit === 'B') return 'can';
+            return 'abe';
+        }
+
+        // Resumo de uma turma para um conjunto de postos, com o corte dado.
+        function resumo(ymVenda, postos, dia) {
+            const corteISO = dataCorte(ymVenda, dia == null ? corte : dia);
+            const s = { ym: ymVenda, ref: ymAdd(ymVenda, 1), corteISO, n: 0, dia: 0, atr: 0, pos: 0, abe: 0, can: 0, sem: 0, linhas: [] };
+            for (const it of linhasDe(ymVenda, postos)) {
+                const k = classificar(it.r, corteISO);
+                s[k]++; s.n++;
+                s.linhas.push({ p: it.p, r: it.r, k });
+            }
+            s.base = tirarSem ? s.n - s.sem : s.n;
+            s.pagaram = s.dia + s.atr;
+            s.nao = s.base - s.pagaram;
+            s.churn = s.base > 0 ? s.nao / s.base * 100 : null;
+            s.aguardando = s.ref > dadosAte.slice(0, 7);          // a referência nem começou
+            s.parcial = !s.aguardando && corteISO > dadosAte;     // corte ainda não chegou
+            return s;
+        }
+
+        const segVisiveis = () => SEG.filter(s => !(tirarSem && s.k === 'sem'));
+
+        function turmasDisponiveis() {
+            return Object.keys(DATA.turmas || {}).sort();
+        }
+
+        // Turmas que já têm algo para mostrar (a referência já começou).
+        function turmasComReferencia() {
+            return turmasDisponiveis().filter(t => ymAdd(t, 1) <= dadosAte.slice(0, 7));
+        }
+
+        // Turmas cuja mensalidade de referência já teve o mês inteiro para vencer.
+        // Enquanto a referência está em curso quase ninguém pagou ainda, e a barra
+        // de 90% achataria todas as outras — essas ficam fora do gráfico e do mapa
+        // (continuam abertas no seletor, com o selo de parcial).
+        function turmasMaduras() {
+            return turmasDisponiveis().filter(t => ymAdd(t, 1) < dadosAte.slice(0, 7));
+        }
+        function avisoEmCurso() {
+            const fora = turmasComReferencia().filter(t => !turmasMaduras().includes(t));
+            return fora.length ? ` A turma de ${fora.map(mesCurto).join(', ')} ainda não entra aqui: a mensalidade de ${fora.map(t => mesCurto(ymAdd(t, 1))).join(', ')} está vencendo agora — dá para abri-la no seletor de turma.` : '';
+        }
+
+        function turmaPadrao() {
+            const ts = turmasComReferencia();
+            const fechadas = ts.filter(t => dataCorte(t, corte) <= dadosAte);
+            return fechadas.length ? fechadas[fechadas.length - 1] : (ts[ts.length - 1] || turmasDisponiveis().pop() || '');
+        }
+
+        function escopoTexto() {
+            const ps = postosSel();
+            if (selPostos === 'ALL') return 'rede inteira (13 postos)';
+            const g = grupoAtivo();
+            if (g) return 'grupo ' + (g === 'altamiro' ? 'Altamiro' : 'Couto') + ' (' + ps.join(' ') + ')';
+            if (ps.length === 1) return 'posto ' + ps[0] + ' — ' + nomePosto(ps[0]);
+            return ps.length + ' postos (' + ps.join(' ') + ')';
+        }
+        const nomePosto = p => ((DATA._meta || {}).postos_nomes || {})[p] || p;
+
+        // ------------------------------------------------------------------
+        // Filtros
+        // ------------------------------------------------------------------
+        function buildPostoTabs() {
+            const ul = el('postoTabs');
+            ul.innerHTML = POSTOS.map(p => `<li class="nav-item"><a data-posto="${p}" class="nav-link" href="#" title="${esc(nomePosto(p))}">${p}</a></li>`).join('');
+            marcarPostos();
+        }
+        function marcarPostos() {
+            const all = selPostos === 'ALL';
+            document.querySelectorAll('#postoTabs .nav-link').forEach(a => a.classList.toggle('active', !all && selPostos.has(a.dataset.posto)));
+            const g = grupoAtivo();
+            el('btnGrupoTodos').classList.toggle('active', all);
+            el('btnGrupoAltamiro').classList.toggle('active', g === 'altamiro');
+            el('btnGrupoCouto').classList.toggle('active', g === 'couto');
+        }
+        function grupoAtivo() {
+            if (selPostos === 'ALL') return null;
+            const s = [...selPostos].sort().join(',');
+            for (const [nome, lista] of Object.entries(GRUPOS_POSTO)) if (lista.slice().sort().join(',') === s) return nome;
+            return null;
+        }
+
+        function ligarFiltros() {
+            el('postoTabs').addEventListener('click', e => {
+                const a = e.target.closest('.nav-link'); if (!a) return;
+                e.preventDefault();
+                const p = a.dataset.posto;
+                let sel = selPostos === 'ALL' ? new Set() : new Set(selPostos);
+                if (sel.has(p)) sel.delete(p); else sel.add(p);
+                selPostos = (sel.size === 0 || sel.size === POSTOS.length) ? 'ALL' : sel;
+                marcarPostos(); render();
+            });
+            el('btnGrupoTodos').onclick = () => { selPostos = 'ALL'; marcarPostos(); render(); };
+            el('btnGrupoAltamiro').onclick = () => { selPostos = new Set(GRUPOS_POSTO.altamiro); marcarPostos(); render(); };
+            el('btnGrupoCouto').onclick = () => { selPostos = new Set(GRUPOS_POSTO.couto); marcarPostos(); render(); };
+
+            el('inpMes').addEventListener('change', () => { if (el('inpMes').value) setTurma(el('inpMes').value); });
+            el('btnMesAnt').onclick = () => passoTurma(-1);
+            el('btnMesProx').onclick = () => passoTurma(1);
+
+            const inp = el('inpCorte');
+            inp.addEventListener('input', () => {
+                el('btnAtualizar').classList.toggle('pendente', parseInt(inp.value, 10) !== corte);
+                dicaCorte();
+            });
+            inp.addEventListener('keydown', e => { if (e.key === 'Enter') aplicarCorte(); });
+            el('btnAtualizar').onclick = aplicarCorte;
+
+            el('chkTirarSem').addEventListener('change', () => {
+                tirarSem = el('chkTirarSem').checked;
+                try { localStorage.setItem('churn1m_tirar_sem', tirarSem ? '1' : '0'); } catch (e) { }
+                render();
+            });
+        }
+
+        function aplicarCorte() {
+            let v = parseInt(el('inpCorte').value, 10);
+            if (!(v >= 1)) v = 15;
+            if (v > 31) v = 31;
+            corte = v;
+            el('inpCorte').value = v;
+            el('btnAtualizar').classList.remove('pendente');
+            try { localStorage.setItem('churn1m_corte', String(v)); } catch (e) { }
+            render();
+        }
+
+        function setTurma(novo) {
+            const ts = turmasDisponiveis();
+            if (!ts.length) return;
+            if (novo < ts[0]) novo = ts[0];
+            if (novo > ts[ts.length - 1]) novo = ts[ts.length - 1];
+            ym = novo;
+            el('inpMes').value = ym;
+            render();
+        }
+        function passoTurma(n) { setTurma(ymAdd(ym, n)); }
+
+        function dicaCorte() {
+            const v = Math.min(31, Math.max(1, parseInt(el('inpCorte').value, 10) || corte));
+            if (!ym) return;
+            el('corteDica').innerHTML = `a mensalidade de <strong>${nomeMes(ymAdd(ym, 1))}</strong> conta se foi paga até <strong>${fmtData(dataCorte(ym, v))}</strong>`;
+        }
+
+        // ------------------------------------------------------------------
+        // Render geral
+        // ------------------------------------------------------------------
+        function render() {
+            if (!DATA || !ym) return;
+            dicaCorte();
+            const S = resumo(ym, postosSel());
+            renderRegua(S);
+            renderAvisos();
+            renderHero(S);
+            renderEvolucao();
+            renderAtraso(S);
+            renderCurva(S);
+            renderPostos();
+            renderHeat();
+            renderComo(S);
+        }
+
+        function renderRegua(S) {
+            el('reguaExemplo').innerHTML = ` Nesta tela: fez o plano em <strong>${nomeMes(S.ym)}</strong> &rarr; mensalidade de <strong>${nomeMes(S.ref)}</strong> &rarr; paga até <strong>${fmtData(S.corteISO)}</strong> (corte no dia ${corte}).`;
+        }
+
+        function renderAvisos() {
+            const erros = (DATA._meta || {}).erros || {};
+            const faltam = postosSel().filter(p => !((DATA.turmas[ym] || {})[p]));
+            let h = '';
+            const comErro = postosSel().filter(p => erros[p]);
+            if (comErro.length) h += `<div class="c1-aviso" style="margin:0 0 8px"><i class="fas fa-exclamation-triangle mr-1"></i><strong>Sem leitura na última carga:</strong> ${comErro.map(p => p + ' — ' + esc(nomePosto(p))).join(', ')}. O que aparece desses postos é o dado da carga anterior.</div>`;
+            if (faltam.length) h += `<div class="c1-aviso" style="margin:0 0 8px"><i class="fas fa-exclamation-triangle mr-1"></i><strong>Sem dado desta turma:</strong> ${faltam.join(', ')}. Esses postos ficaram fora da conta (não é zero venda).</div>`;
+            el('avisoPostos').innerHTML = h;
+        }
+
+        // ------------------------------------------------------------------
+        // Âncora
+        // ------------------------------------------------------------------
+        function renderHero(S) {
+            el('heroTitulo').textContent = 'Turma de ' + nomeMes(S.ym);
+            el('heroEscopo').textContent = escopoTexto();
+            const selo = el('heroSelo');
+            selo.className = 'c1-selo' + (S.parcial || S.aguardando ? ' parcial' : '');
+            selo.textContent = S.aguardando ? 'aguardando a referência' : (S.parcial ? 'parcial — corte em ' + fmtData(S.corteISO) : 'fechada no corte de ' + fmtData(S.corteISO));
+
+            if (!S.n) {
+                el('heroCorpo').innerHTML = '<div class="text-muted text-center p-4">Nenhum plano feito nesta turma para os postos escolhidos.</div>';
+                return;
+            }
+            const segs = segVisiveis();
+            const pctBase = v => S.base > 0 ? v / S.base * 100 : 0;
+            let aviso = '';
+            if (S.aguardando) aviso = `<div class="c1-aviso"><strong>A mensalidade de ${nomeMes(S.ref)} ainda não começou a vencer.</strong> Por enquanto só aparece quem pagou adiantado.</div>`;
+            else if (S.parcial) aviso = `<div class="c1-aviso"><strong>Turma ainda aberta:</strong> o corte é ${fmtData(S.corteISO)} e os pagamentos foram lidos até ${fmtData(dadosAte)} (faltam ${difDias(S.corteISO, dadosAte)} dias). O churn daqui ainda vai cair conforme os pagamentos entram.</div>`;
+            const semFora = tirarSem && S.sem ? `<div class="c1-aviso" style="background:#f1f3f4;border-left-color:#9aa0a6;color:#3c4043"><strong>${nf(S.sem)}</strong> ${S.sem === 1 ? 'cliente fez' : 'clientes fizeram'} o plano mas não ${S.sem === 1 ? 'tem' : 'têm'} mensalidade lançada em ${nomeMes(S.ref)} e ${S.sem === 1 ? 'ficou' : 'ficaram'} <strong>fora da conta</strong> (a turma do KPI Vendas é ${nf(S.n)}). <a href="#" data-seg="sem">ver quem são</a></div>` : '';
+
+            el('heroCorpo').innerHTML = `
+                <div class="c1-hero">
+                    <div class="c1-step" data-seg="turma">
+                        <div class="c1-rot">Fizeram o plano</div>
+                        <div class="c1-num">${nf(S.base)}</div>
+                        <div class="c1-cap">em <strong>${nomeMes(S.ym)}</strong></div>
+                        <div class="c1-sub">a mesma venda do KPI Vendas${tirarSem && S.sem ? ' (' + nf(S.n) + '), menos ' + nf(S.sem) + ' sem mensalidade' : ''}</div>
+                    </div>
+                    <div class="c1-arrow"><i class="fas fa-arrow-right"></i></div>
+                    <div class="c1-step" data-seg="pagaram">
+                        <div class="c1-rot">Pagaram a mensalidade seguinte</div>
+                        <div class="c1-num">${nf(S.pagaram)}</div>
+                        <div class="c1-cap">referência <strong>${nomeMes(S.ref)}</strong>, paga até <strong>${fmtData(S.corteISO)}</strong></div>
+                        <div class="c1-sub">${pf(pctBase(S.pagaram))} da turma</div>
+                    </div>
+                    <div class="c1-arrow"><i class="fas fa-arrow-right"></i></div>
+                    <div class="c1-step c1-churn" data-seg="nao">
+                        <div class="c1-rot">Churn de um mês</div>
+                        <div class="c1-num">${pf(S.churn)}</div>
+                        <div class="c1-cap"><strong>${nf(S.nao)}</strong> de ${nf(S.base)} não pagaram até o corte</div>
+                        <div class="c1-sub">${nf(S.nao)} &divide; ${nf(S.base)}</div>
+                    </div>
+                </div>
+                ${aviso}${semFora}
+                <div class="c1-barra">${segs.filter(s => S[s.k] > 0).map(s => `<div data-seg="${s.k}" style="background:${s.cor};flex:${S[s.k]} 1 0" title="${esc(s.rot)}: ${nf(S[s.k])} (${pf(pctBase(S[s.k]))})"></div>`).join('')}</div>
+                <div class="c1-legenda">${segs.map(s => `
+                    <div class="c1-leg" data-seg="${s.k}">
+                        <span class="c1-dot" style="background:${s.cor}"></span>
+                        <span><span class="c1-leg-n">${nf(S[s.k])}</span> <span class="c1-leg-p">${pf(pctBase(S[s.k]))} da turma</span><br><span class="c1-leg-t">${esc(s.rot)}</span></span>
+                    </div>`).join('')}
+                </div>
+                <div class="c1-conta">Confere: ${segs.map(s => nf(S[s.k])).join(' + ')} = <b>${nf(S.base)}</b> ${segs.reduce((a, s) => a + S[s.k], 0) === S.base ? '✔ fecha com a turma' : '✘ não fecha'}
+                    &nbsp;·&nbsp; pagaram até o corte = ${nf(S.dia)} + ${nf(S.atr)} = <b>${nf(S.pagaram)}</b>
+                    &nbsp;·&nbsp; churn = ${nf(S.base)} &minus; ${nf(S.pagaram)} = <b>${nf(S.nao)}</b></div>`;
+
+            el('heroCorpo').querySelectorAll('[data-seg]').forEach(n => n.addEventListener('click', e => {
+                e.preventDefault();
+                abrirLista(S.ym, postosSel(), n.dataset.seg);
+            }));
+        }
+
+        // ------------------------------------------------------------------
+        // Gráficos
+        // ------------------------------------------------------------------
+        if (window.Chart) {
+            Chart.defaults.font.family = '"Source Sans Pro", system-ui, sans-serif';
+            Chart.defaults.font.size = 13;
+            Chart.defaults.color = '#52514e';
+        }
+        const GRID = { color: '#ececea', drawTicks: false };
+
+        function hachura(cor) {
+            const c = document.createElement('canvas'); c.width = c.height = 8;
+            const x = c.getContext('2d');
+            x.fillStyle = 'rgba(0,105,92,.12)'; x.fillRect(0, 0, 8, 8);
+            x.strokeStyle = cor; x.lineWidth = 2;
+            x.beginPath(); x.moveTo(0, 8); x.lineTo(8, 0); x.moveTo(-2, 2); x.lineTo(2, -2); x.moveTo(6, 10); x.lineTo(10, 6); x.stroke();
+            return x.createPattern(c, 'repeat');
+        }
+
+        const rotuloBarras = {
+            id: 'rotuloBarras',
+            afterDatasetsDraw(chart) {
+                const { ctx } = chart, meta = chart.getDatasetMeta(0), d = chart.data.datasets[0].data;
+                ctx.save(); ctx.font = '600 12px "Source Sans Pro", sans-serif'; ctx.fillStyle = '#1d1d1f'; ctx.textAlign = 'center';
+                meta.data.forEach((b, i) => { if (d[i] != null) ctx.fillText(d[i].toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%', b.x, b.y - 6); });
+                ctx.restore();
+            }
+        };
+
+        const linhaCorte = {
+            id: 'linhaCorte',
+            afterDatasetsDraw(chart, _a, o) {
+                if (o == null || o.index == null || o.index < 0) return;
+                const { ctx, chartArea: a, scales } = chart;
+                const x = scales.x.getPixelForValue(o.index);
+                if (x < a.left || x > a.right) return;
+                ctx.save();
+                ctx.strokeStyle = TEAL; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+                ctx.beginPath(); ctx.moveTo(x, a.top); ctx.lineTo(x, a.bottom); ctx.stroke();
+                ctx.setLineDash([]); ctx.fillStyle = TEAL; ctx.font = '700 12px "Source Sans Pro", sans-serif';
+                const dir = x > (a.left + a.right) / 2;
+                ctx.textAlign = dir ? 'right' : 'left';
+                ctx.fillText(o.label || '', x + (dir ? -8 : 8), a.top + 14);
+                ctx.restore();
+            }
+        };
+
+        function novoChart(id, cfg) {
+            if (charts[id]) charts[id].destroy();
+            charts[id] = new Chart(el(id), cfg);
+        }
+
+        function renderEvolucao() {
+            const ts = turmasMaduras().slice(-13);
+            const ps = postosSel();
+            const R = ts.map(t => resumo(t, ps));
+            const solido = 'rgba(0,105,92,.42)', hach = hachura(TEAL);
+            novoChart('chEvolucao', {
+                type: 'bar',
+                data: {
+                    labels: ts.map(mesCurto),
+                    datasets: [{
+                        label: 'Churn de um mês',
+                        data: R.map(r => r.churn == null ? null : +r.churn.toFixed(1)),
+                        backgroundColor: R.map(r => r.parcial ? hach : (r.ym === ym ? TEAL : solido)),
+                        borderColor: R.map(r => r.ym === ym ? '#003d33' : 'transparent'),
+                        borderWidth: R.map(r => r.ym === ym ? 2 : 0),
+                        borderRadius: 4, maxBarThickness: 46,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    layout: { padding: { top: 20 } },
+                    onClick: (_e, els) => { if (els.length) setTurma(ts[els[0].index]); },
+                    onHover: (e, els) => { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: it => 'Turma de ' + nomeMes(ts[it[0].dataIndex]),
+                                label: it => { const r = R[it.dataIndex]; return ' Churn de um mês: ' + pf(r.churn) + (r.parcial ? ' (parcial)' : ''); },
+                                afterLabel: it => { const r = R[it.dataIndex]; return [nf(r.base) + ' fizeram o plano', nf(r.pagaram) + ' pagaram ' + mesCurto(r.ref) + ' até ' + fmtDM(r.corteISO), nf(r.nao) + ' não pagaram até o corte']; }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { beginAtZero: true, grid: GRID, border: { display: false }, ticks: { callback: v => v + '%' }, title: { display: true, text: '% da turma que não pagou até o corte' } }
+                    }
+                },
+                plugins: [rotuloBarras]
+            });
+            const parc = R.filter(r => r.parcial).map(r => mesCurto(r.ym));
+            el('notaEvolucao').innerHTML = `Cada barra é uma turma (mês em que fez o plano), sempre com o corte no <strong>dia ${corte}</strong> — ${escopoTexto()}. Clique numa barra para abrir a turma.` +
+                (parc.length ? ` Barras <strong>hachuradas</strong> (${parc.join(', ')}): o corte ainda não chegou, o número ainda vai cair.` : '') + avisoEmCurso();
+        }
+
+        const FAIXAS = [
+            { t: '2 dias ou mais antes', a: -9999, b: -2 },
+            { t: 'Na véspera ou no dia', a: -1, b: 0 },
+            { t: '1 a 3 dias depois', a: 1, b: 3 },
+            { t: '4 a 7 dias depois', a: 4, b: 7 },
+            { t: '8 a 15 dias depois', a: 8, b: 15 },
+            { t: '16 a 30 dias depois', a: 16, b: 30 },
+            { t: 'Mais de 30 dias depois', a: 31, b: 99999 },
+        ];
+
+        function renderAtraso(S) {
+            el('tituloAtraso').textContent = 'Quando pagaram ' + mesCurto(S.ref) + ', em relação ao vencimento';
+            const cont = { dia: FAIXAS.map(() => 0), atr: FAIXAS.map(() => 0), pos: FAIXAS.map(() => 0) };
+            for (const l of S.linhas) {
+                if (!cont[l.k]) continue;
+                const pag = l.r[C.pag], venc = l.r[C.venc] || pag;
+                const d = difDias(pag, venc);
+                const i = FAIXAS.findIndex(f => d >= f.a && d <= f.b);
+                if (i >= 0) cont[l.k][i]++;
+            }
+            const pct = v => S.base > 0 ? +(v / S.base * 100).toFixed(1) : 0;
+            novoChart('chAtraso', {
+                type: 'bar',
+                data: {
+                    labels: FAIXAS.map(f => f.t),
+                    datasets: ['dia', 'atr', 'pos'].map(k => ({
+                        label: SEGK[k].curto, data: cont[k].map(pct), _n: cont[k],
+                        backgroundColor: SEGK[k].cor, borderColor: '#fff', borderWidth: 1, borderRadius: 3, maxBarThickness: 26,
+                    }))
+                },
+                options: {
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12, usePointStyle: false } },
+                        tooltip: { callbacks: { label: it => ' ' + it.dataset.label + ': ' + nf(it.dataset._n[it.dataIndex]) + ' clientes (' + pf(it.parsed.x) + ' da turma)' } }
+                    },
+                    scales: {
+                        x: { stacked: true, beginAtZero: true, grid: GRID, border: { display: false }, ticks: { callback: v => v + '%' } },
+                        y: { stacked: true, grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        function renderCurva(S) {
+            el('tituloCurva').textContent = 'E se o corte fosse outro dia? — pagamentos da mensalidade de ' + nomeMes(S.ref) + ', dia a dia';
+            const ini = S.ref + '-01';
+            let fim = addDias(ymAdd(S.ref, 2) + '-01', 14);        // até o dia 15 do 2º mês depois da referência
+            if (fim > dadosAte) fim = dadosAte;
+            const dias = [];
+            for (let d = ini; d <= fim; d = addDias(d, 1)) dias.push(d);
+            const pags = S.linhas.filter(l => l.r[C.sit] === 'P' && l.r[C.pag]).map(l => l.r[C.pag]).sort();
+            let j = 0;
+            const acum = dias.map(d => { while (j < pags.length && pags[j] <= d) j++; return S.base > 0 ? +(j / S.base * 100).toFixed(1) : 0; });
+            const idxCorte = dias.indexOf(S.corteISO);
+
+            if (!dias.length) {
+                if (charts.chCurva) { charts.chCurva.destroy(); delete charts.chCurva; }
+                el('notaCurva').innerHTML = 'A mensalidade de ' + nomeMes(S.ref) + ' ainda não começou.';
+                el('chipsCorte').innerHTML = '';
+                return;
+            }
+            novoChart('chCurva', {
+                type: 'line',
+                data: {
+                    labels: dias.map(fmtDM),
+                    datasets: [{
+                        label: '% da turma que já tinha pago', data: acum,
+                        borderColor: '#008300', backgroundColor: 'rgba(0,131,0,.09)', fill: true,
+                        borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, tension: .15,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        linhaCorte: { index: idxCorte, label: idxCorte >= 0 ? 'corte ' + fmtDM(S.corteISO) + ' · ' + pf(acum[idxCorte]) + ' pagaram' : '' },
+                        tooltip: {
+                            callbacks: {
+                                title: it => 'Até ' + fmtData(dias[it[0].dataIndex]),
+                                label: it => ' ' + pf(it.parsed.y) + ' da turma já tinha pago',
+                                afterLabel: it => 'churn com corte neste dia: ' + pf(100 - it.parsed.y)
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 14, maxRotation: 0 } },
+                        y: { min: 0, max: 100, grid: GRID, border: { display: false }, ticks: { callback: v => v + '%' }, title: { display: true, text: '% da turma que já tinha pago' } }
+                    }
+                },
+                plugins: [linhaCorte]
+            });
+            el('notaCurva').innerHTML = `A linha sobe conforme a turma paga a mensalidade de ${nomeMes(S.ref)}. O que falta para 100% em cada dia é o churn que você veria se o corte fosse ali. ` +
+                (idxCorte < 0 && S.corteISO > dadosAte ? `O corte de ${fmtData(S.corteISO)} ainda não chegou — a linha vai até ${fmtData(dadosAte)}, último dia lido.` : `A linha tracejada é o corte aplicado (${fmtData(S.corteISO)}).`) +
+                ` Abaixo, o churn desta turma em outros dias de corte — clique para aplicar.`;
+
+            // Cortes alternativos
+            const ps = postosSel();
+            const mc = ymAdd(S.ym, 2);
+            const opcoes = [5, 10, 15, 20, 25, ultimoDia(mc)];
+            if (!opcoes.includes(corte)) opcoes.push(corte);
+            opcoes.sort((a, b) => a - b);
+            const fimRef = S.ref + '-' + String(ultimoDia(S.ref)).padStart(2, '0');
+            const pagosAte = d => { let n = 0; for (const p of pags) { if (p <= d) n++; else break; } return n; };
+            let h = '';
+            const chip = (t, dataISO, dia) => {
+                const futuro = dataISO > dadosAte;
+                const v = S.base > 0 ? (S.base - pagosAte(dataISO)) / S.base * 100 : null;
+                return `<div class="c1-chip${dia === corte ? ' ativo' : ''}${dia == null ? ' vazio' : ''}" ${dia != null ? 'data-dia="' + dia + '"' : ''} title="Pago até ${fmtData(dataISO)}${futuro ? ' — data ainda não chegou, número parcial' : ''}">
+                    <div class="c1-chip-t">${t}</div><div class="c1-chip-v">${pf(v)}${futuro ? '*' : ''}</div><div class="c1-chip-t">${fmtDM(dataISO)}</div></div>`;
+            };
+            h += chip('fim de ' + mesCurto(S.ref), fimRef, null);
+            for (const d of opcoes) h += chip('corte dia ' + d, dataCorte(S.ym, d), d);
+            el('chipsCorte').innerHTML = h + (opcoes.some(d => dataCorte(S.ym, d) > dadosAte) ? '<div class="c1-nota align-self-center">* data que ainda não chegou — parcial</div>' : '');
+            el('chipsCorte').querySelectorAll('[data-dia]').forEach(n => n.onclick = () => { el('inpCorte').value = n.dataset.dia; aplicarCorte(); });
+        }
+
+        // ------------------------------------------------------------------
+        // Tabela por posto
+        // ------------------------------------------------------------------
+        function miniBarra(S) {
+            return `<div class="c1-mini" title="${segVisiveis().filter(s => S[s.k]).map(s => s.curto + ': ' + nf(S[s.k])).join(' · ')}">${segVisiveis().filter(s => S[s.k] > 0).map(s => `<div style="background:${s.cor};flex:${S[s.k]} 1 0"></div>`).join('')}</div>`;
+        }
+
+        function renderPostos() {
+            const ps = postosSel();
+            const ref = ymAdd(ym, 1), cISO = dataCorte(ym, corte);
+            el('tituloPostos').textContent = `Por posto — fez o plano em ${nomeMes(ym)}, mensalidade de ${nomeMes(ref)} paga até ${fmtData(cISO)}`;
+            const L = ps.map(p => ({ p, S: resumo(ym, [p]) })).filter(x => (DATA.turmas[ym] || {})[x.p]);
+            const val = { posto: x => x.p, base: x => x.S.base, dia: x => x.S.dia, atr: x => x.S.atr, pagaram: x => x.S.pagaram, nao: x => x.S.nao, churn: x => x.S.churn == null ? -1 : x.S.churn, pos: x => x.S.pos };
+            const f = val[ordPostos.col] || val.churn;
+            L.sort((a, b) => { const x = f(a), y = f(b); return (x > y ? 1 : x < y ? -1 : 0) * ordPostos.dir; });
+            const T = resumo(ym, L.map(x => x.p));
+            const max = Math.max(1, ...L.map(x => x.S.churn || 0));
+            const pctd = (v, S) => `<span class="sub">${pf(S.base > 0 ? v / S.base * 100 : null)}</span>`;
+            const cel = (S, postos, seg, v, comPct) => `<td><span class="lnk" data-postos="${postos.join('')}" data-seg="${seg}">${nf(v)}</span>${comPct ? pctd(v, S) : ''}</td>`;
+            const seta = c => ordPostos.col === c ? (ordPostos.dir > 0 ? ' ▲' : ' ▼') : '';
+            const linha = (rot, S, postos, total) => `<tr>
+                <td>${rot}</td>
+                ${cel(S, postos, 'turma', S.base, false)}
+                ${cel(S, postos, 'dia', S.dia, true)}
+                ${cel(S, postos, 'atr', S.atr, true)}
+                ${cel(S, postos, 'pagaram', S.pagaram, true)}
+                ${cel(S, postos, 'nao', S.nao, true)}
+                <td><div class="c1-churn-cel"><div class="c1-churn-bar"><div style="width:${S.churn == null ? 0 : Math.max(2, S.churn / max * 100)}%"></div></div><span class="c1-churn-v">${pf(S.churn)}</span></div></td>
+                ${cel(S, postos, 'pos', S.pos, false)}
+            </tr>`;
+            el('tabPostos').innerHTML = `<table class="c1-tbl">
+                <thead><tr>
+                    <th data-ord="posto">Posto${seta('posto')}</th>
+                    <th data-ord="base">Fizeram o plano<br>em ${mesCurto(ym)}${seta('base')}</th>
+                    <th data-ord="dia">Pagaram ${mesCurto(ref)}<br>até o vencimento${seta('dia')}</th>
+                    <th data-ord="atr">Pagaram ${mesCurto(ref)}<br>após o vencimento${seta('atr')}</th>
+                    <th data-ord="pagaram">Pagaram ${mesCurto(ref)}<br>até ${fmtDM(cISO)}${seta('pagaram')}</th>
+                    <th data-ord="nao">Não pagaram<br>até o corte${seta('nao')}</th>
+                    <th data-ord="churn">Churn<br>de um mês${seta('churn')}</th>
+                    <th data-ord="pos" title="Pagaram a mensalidade, mas só depois do dia de corte. No corte, contaram como churn.">Pagaram só<br>após o corte${seta('pos')}</th>
+                </tr></thead>
+                <tbody>${L.map(x => linha(`<div class="c1-posto"><span class="c1-letra">${x.p}</span><span>${esc(nomePosto(x.p))}</span>${miniBarra(x.S)}</div>`, x.S, [x.p])).join('') || '<tr><td colspan="8" class="text-center text-muted p-3">Sem dado para esta turma.</td></tr>'}</tbody>
+                ${L.length > 1 ? '<tfoot>' + linha(`<div class="c1-posto"><span>${selPostos === 'ALL' ? 'Rede' : 'Seleção'} (${L.length} postos)</span>${miniBarra(T)}</div>`, T, L.map(x => x.p)) + '</tfoot>' : ''}
+            </table>`;
+            el('tabPostos').querySelectorAll('th[data-ord]').forEach(th => th.onclick = () => {
+                const c = th.dataset.ord;
+                ordPostos = { col: c, dir: ordPostos.col === c ? -ordPostos.dir : (c === 'posto' ? 1 : -1) };
+                renderPostos();
+            });
+            el('tabPostos').querySelectorAll('.lnk').forEach(n => n.onclick = () => abrirLista(ym, n.dataset.postos.split(''), n.dataset.seg));
+        }
+
+        // ------------------------------------------------------------------
+        // Mapa posto × turma
+        // ------------------------------------------------------------------
+        function renderHeat() {
+            const ts = turmasMaduras().slice(-12);
+            const ps = postosSel();
+            const M = {};
+            let min = Infinity, max = -Infinity;
+            const guarda = (chave, t, postos) => {
+                const r = resumo(t, postos);
+                (M[chave] = M[chave] || {})[t] = r;
+                if (r.churn != null && r.base >= 5 && !r.parcial) { min = Math.min(min, r.churn); max = Math.max(max, r.churn); }
+            };
+            for (const t of ts) { for (const p of ps) guarda(p, t, [p]); guarda('*', t, ps); }
+            if (!isFinite(min)) { min = 0; max = 1; }
+            const cor = v => {
+                const k = Math.max(0, Math.min(1, (v - min) / Math.max(1e-9, max - min)));
+                const a = [240, 247, 245], b = [0, 77, 64];
+                const c = a.map((x, i) => Math.round(x + (b[i] - x) * k));
+                return { bg: `rgb(${c.join(',')})`, fg: k > .55 ? '#fff' : '#1d1d1f' };
+            };
+            const celula = (chave, t) => {
+                const r = M[chave][t];
+                if (!r || !r.n) return '<td class="vazio">—</td>';
+                const c = r.parcial ? { bg: '#f6f7f6', fg: '#52514e' } : cor(r.churn);
+                return `<td class="${r.parcial ? 'parcial' : ''}" data-t="${t}" data-p="${chave}" style="background:${c.bg};color:${c.fg}" title="${chave === '*' ? 'Seleção' : esc(nomePosto(chave))} · turma de ${nomeMes(t)}: ${nf(r.base)} fizeram o plano, ${nf(r.pagaram)} pagaram ${mesCurto(r.ref)} até ${fmtDM(r.corteISO)}${r.parcial ? ' (parcial)' : ''}">${pf(r.churn)}</td>`;
+            };
+            el('tabHeat').innerHTML = `<table class="c1-heat">
+                <thead><tr><th>Posto</th>${ts.map(t => `<th data-t="${t}" class="${t === ym ? 'sel' : ''}" title="Abrir a turma de ${nomeMes(t)}">${mesCurto(t)}</th>`).join('')}</tr></thead>
+                <tbody>
+                    ${ps.map(p => `<tr><td><span class="c1-letra" style="width:22px;height:22px;flex-basis:22px;font-size:.78rem">${p}</span> ${esc(nomePosto(p))}</td>${ts.map(t => celula(p, t)).join('')}</tr>`).join('')}
+                    ${ps.length > 1 ? `<tr class="total"><td>${selPostos === 'ALL' ? 'Rede' : 'Seleção'}</td>${ts.map(t => celula('*', t)).join('')}</tr>` : ''}
+                </tbody></table>`;
+            el('tabHeat').querySelectorAll('th[data-t]').forEach(th => th.onclick = () => setTurma(th.dataset.t));
+            el('tabHeat').querySelectorAll('td[data-t]').forEach(td => td.onclick = () => abrirLista(td.dataset.t, td.dataset.p === '*' ? ps : [td.dataset.p], 'nao'));
+        }
+
+        function renderComo(S) {
+            const m = DATA._meta || {};
+            el('comoCalculado').innerHTML = `
+                <ul class="mb-2 pl-3">
+                    <li><strong>Turma</strong> = quem fez o plano no mês, pela regra única de venda (mensalidade paga + taxa de inscrição paga + cliente ativo, no mês em que ficou completo). É o mesmo número do KPI Vendas e do KPI Metas.</li>
+                    <li><strong>Mensalidade do mês seguinte</strong> = a mensalidade cuja <em>data de referência</em> cai no mês depois da venda. Não importa em que mês foi paga, importa a referência.</li>
+                    <li><strong>Dia de corte</strong> = último dia em que o pagamento ainda conta, sempre no mês <em>depois</em> da referência. Turma de ${nomeMes(S.ym)}, referência ${nomeMes(S.ref)}, corte no dia ${corte}: conta o que foi pago até <strong>${fmtData(S.corteISO)}</strong>. Mudar o dia e clicar em Atualizar refaz a página inteira, sem nova consulta ao ERP.</li>
+                    <li><strong>Data do pagamento</strong> = o dia em que o cliente pagou (não o dia em que o banco devolveu). <strong>Até o vencimento</strong> = pagou no dia do vencimento ou antes; <strong>após o vencimento</strong> = pagou depois, mas dentro do corte.</li>
+                    <li><strong>Sem mensalidade lançada</strong> = fez o plano, mas o ERP não tem mensalidade com referência no mês seguinte (planos sem cobrança mensal, como SÓCIO e CAMIM Liberty, e cadastro incompleto). Por padrão contam como quem não pagou; a chave no filtro tira esses clientes da turma.</li>
+                    <li>Todo percentual desta página é sobre a <strong>turma</strong> — nenhum card usa outra base.</li>
+                    <li>Turma cujo corte ainda não chegou aparece como <strong>parcial</strong>: o número é o de hoje e ainda vai cair.</li>
+                </ul>
+                <strong>Fonte:</strong> json_vendas/churn1m.json &larr; export_churn1m.py &larr; CSVs do export_vendas.py (turma) + Fin_Receita de cada posto (mensalidade de referência do mês seguinte).
+                <br><strong>Atualização:</strong> de hora em hora. Pagamentos lidos até <strong>${fmtData(dadosAte)}</strong>${m.gerado_em ? ' (carga de ' + fmtData(m.gerado_em.slice(0, 10)) + ' às ' + m.gerado_em.slice(11, 16) + ')' : ''}.`;
+        }
+
+        // ------------------------------------------------------------------
+        // Modal — clientes por trás de um número
+        // ------------------------------------------------------------------
+        const GRUPOS_LISTA = {
+            turma: { t: 'Fizeram o plano', ks: null },
+            pagaram: { t: 'Pagaram a mensalidade seguinte até o corte', ks: ['dia', 'atr'] },
+            nao: { t: 'Não pagaram até o corte (churn de um mês)', ks: ['pos', 'abe', 'can', 'sem'] },
+        };
+        let listaAtual = { linhas: [], filtro: null, titulo: '' };
+
+        function abrirLista(ymVenda, postos, seg) {
+            const S = resumo(ymVenda, postos);
+            const g = GRUPOS_LISTA[seg];
+            let ks = g ? g.ks : [seg];
+            let linhas = S.linhas.filter(l => !ks || ks.includes(l.k));
+            if (tirarSem && seg !== 'sem') linhas = linhas.filter(l => l.k !== 'sem');
+            const titulo = g ? g.t : SEGK[seg].rot;
+            listaAtual = { linhas, filtro: null, S, titulo, arquivo: `churn1m_${ymVenda}_${postos.length === POSTOS.length ? 'rede' : postos.join('')}_${seg}.csv` };
+            el('mdlTitulo').textContent = titulo + ' — ' + nf(linhas.length) + (linhas.length === 1 ? ' cliente' : ' clientes');
+            el('mdlSub').innerHTML = `Turma de <strong>${nomeMes(ymVenda)}</strong> · mensalidade de <strong>${nomeMes(S.ref)}</strong> · corte em <strong>${fmtData(S.corteISO)}</strong> · ${postos.length === POSTOS.length ? 'rede inteira' : postos.map(p => p + ' ' + esc(nomePosto(p))).join(', ')}`;
+            el('mdlBusca').value = '';
+            desenharChips();
+            desenharLista();
+            el('mdl').classList.add('aberto');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function desenharChips() {
+            const cont = {};
+            listaAtual.linhas.forEach(l => cont[l.k] = (cont[l.k] || 0) + 1);
+            const ks = SEG.filter(s => cont[s.k]);
+            el('mdlChips').innerHTML = ks.length > 1 ? ks.map(s => `<span class="mdl-fchip${listaAtual.filtro === s.k ? ' ativo' : ''}" data-k="${s.k}"><span class="c1-dot" style="background:${s.cor};transform:none"></span>${s.curto} · ${nf(cont[s.k])}</span>`).join('') : '';
+            el('mdlChips').querySelectorAll('[data-k]').forEach(n => n.onclick = () => { listaAtual.filtro = listaAtual.filtro === n.dataset.k ? null : n.dataset.k; desenharChips(); desenharLista(); });
+        }
+
+        function linhasFiltradas() {
+            const q = el('mdlBusca').value.trim().toLowerCase();
+            return listaAtual.linhas.filter(l => {
+                if (listaAtual.filtro && l.k !== listaAtual.filtro) return false;
+                if (!q) return true;
+                const r = l.r;
+                return (r[C.nome] + ' ' + r[C.matricula] + ' ' + r[C.plano] + ' ' + r[C.vendedor]).toLowerCase().includes(q);
+            });
+        }
+
+        function diasTexto(l) {
+            const pag = l.r[C.pag], venc = l.r[C.venc];
+            if (!pag || !venc) return '';
+            const d = difDias(pag, venc);
+            return d === 0 ? 'no dia' : (d < 0 ? (-d) + ' d antes' : d + ' d depois');
+        }
+
+        function desenharLista() {
+            const L = linhasFiltradas();
+            const MAX = 2000;
+            el('mdlCorpo').innerHTML = `<table class="c1-tbl">
+                <thead><tr><th>Posto</th><th>Matrícula</th><th>Cliente</th><th>Plano</th><th>Vendedor</th><th>Fez o plano</th><th>Vencimento</th><th>Pagamento</th><th>Pagou</th><th class="num">Valor</th><th>Situação</th></tr></thead>
+                <tbody>${L.slice(0, MAX).map(l => {
+                    const r = l.r, s = SEGK[l.k];
+                    return `<tr><td>${l.p}</td><td>${esc(r[C.matricula])}</td><td>${esc(r[C.nome])}</td><td>${esc(r[C.plano])}</td><td>${esc(r[C.vendedor])}</td>
+                        <td>${fmtData(r[C.venda])}</td><td>${fmtData(r[C.venc])}</td><td>${fmtData(r[C.pag])}</td><td>${diasTexto(l)}</td>
+                        <td class="num">${r[C.valor] == null ? '—' : Number(r[C.valor]).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td><span class="c1-sit"><span class="c1-dot" style="background:${s.cor};transform:none"></span>${s.curto}</span></td></tr>`;
+                }).join('') || '<tr><td colspan="11" class="text-center text-muted p-3">Nenhum cliente.</td></tr>'}</tbody></table>
+                ${L.length > MAX ? `<div class="c1-aviso mt-2" style="margin-left:0;margin-right:0">Mostrando ${nf(MAX)} de ${nf(L.length)} — o CSV traz todos.</div>` : ''}`;
+        }
+
+        function baixarCsv() {
+            const L = linhasFiltradas();
+            const cab = ['Posto', 'Matricula', 'Cliente', 'Plano', 'Vendedor', 'Admissao', 'Fez o plano', 'Vencimento', 'Pagamento', 'Dias do vencimento ao pagamento', 'Valor', 'Situacao'];
+            const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+            const linhas = L.map(l => {
+                const r = l.r;
+                const d = (r[C.pag] && r[C.venc]) ? difDias(r[C.pag], r[C.venc]) : '';
+                return [l.p, r[C.matricula], r[C.nome], r[C.plano], r[C.vendedor], fmtData(r[C.admissao]), fmtData(r[C.venda]), fmtData(r[C.venc]), r[C.pag] ? fmtData(r[C.pag]) : '', d,
+                    r[C.valor] == null ? '' : String(r[C.valor]).replace('.', ','), SEGK[l.k].rot].map(q).join(';');
+            });
+            const blob = new Blob(['﻿' + cab.map(q).join(';') + '\n' + linhas.join('\n')], { type: 'text/csv;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = listaAtual.arquivo || 'churn1m.csv';
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        }
+
+        function fecharModal() { el('mdl').classList.remove('aberto'); document.body.style.overflow = ''; }
+        el('mdlX').onclick = fecharModal;
+        el('mdl').addEventListener('click', e => { if (e.target === el('mdl')) fecharModal(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharModal(); });
+        el('mdlBusca').addEventListener('input', desenharLista);
+        el('mdlCsv').onclick = baixarCsv;
+
+        // ------------------------------------------------------------------
+        // Carga
+        // ------------------------------------------------------------------
+        async function carregar() {
+            try {
+                const r = await fetch('/json_vendas/churn1m.json', { credentials: 'same-origin', cache: 'no-cache' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                DATA = await r.json();
+            } catch (e) {
+                el('err').textContent = 'Não consegui carregar os dados do churn de um mês (' + e.message + '). A carga roda de hora em hora — se a página acabou de ser publicada, o primeiro arquivo ainda não foi gerado.';
+                el('heroCorpo').innerHTML = '<div class="text-muted text-center p-4">Sem dados.</div>';
+                return;
+            }
+            (DATA.cols || []).forEach((c, i) => C[c] = i);
+            const m = DATA._meta || {};
+            dadosAte = m.dados_ate || new Date().toISOString().slice(0, 10);
+            el('jsonInfo').textContent = m.gerado_em ? 'dados de ' + fmtData(m.gerado_em.slice(0, 10)) + ' ' + m.gerado_em.slice(11, 16) : '';
+
+            el('inpCorte').value = corte;
+            el('chkTirarSem').checked = tirarSem;
+            const ts = turmasDisponiveis();
+            if (ts.length) { el('inpMes').min = ts[0]; el('inpMes').max = ts[ts.length - 1]; }
+            buildPostoTabs();
+            ligarFiltros();
+            ym = turmaPadrao();
+            el('inpMes').value = ym;
+            render();
+        }
+
+        carregar();
+    })();
+    </script>
+
+    <script src="/js/etl_status.js"></script>
+    <script>
+        if (window.ETLStatus) ETLStatus.init({
+            metaUrl: '/json_vendas/_etl_meta_export_churn1m.json',
+            expectedPostos: ['A', 'N', 'X', 'Y', 'B', 'R', 'P', 'C', 'D', 'G', 'I', 'M', 'J']
+        });
+    </script>
+    <script src="/js/menu.js"></script>
+</body>
+
+</html>

@@ -236,6 +236,8 @@ _TEMPLATE_TO_PAGINA = {
     "KPI_prescricao.html":              "kpi_prescricao",
     "kpi_prescricao.html":              "kpi_prescricao",
     "kpi_fidelizacao_cliente.html":     "kpi_fidelizacao",
+    # Churn de um mês: aninhado sob a Fidelização, usa a MESMA permissão.
+    "kpi_churn_1m.html":                "kpi_fidelizacao",
     "kpi_governo.html":                 "kpi_governo",
     "kpi_liberty.html":                 "kpi_liberty",
     "kpi_receita_despesa.html":         "kpi_receita_despesa",
@@ -1849,6 +1851,9 @@ def r8(): return render_protected_page("kpi_vendas.html")
 @app.get('/kpi_fidelizacao_cliente')
 def r_fidelizacao(): return render_protected_page("kpi_fidelizacao_cliente.html")
 
+@app.get('/kpi_churn_1m')
+def r_churn_1m(): return render_protected_page("kpi_churn_1m.html")
+
 @app.get('/kpi_egide')
 def r_egide(): return render_protected_page("kpi_egide.html")
 
@@ -2312,6 +2317,9 @@ def h6(): return render_protected_page("kpi_receita_despesa.html")
 
 @app.get('/kpi_fidelizacao_cliente.html')
 def h_fidelizacao(): return render_protected_page("kpi_fidelizacao_cliente.html")
+
+@app.get('/kpi_churn_1m.html')
+def h_churn_1m(): return render_protected_page("kpi_churn_1m.html")
 
 @app.get('/kpi_egide.html')
 def h_egide(): return render_protected_page("kpi_egide.html")

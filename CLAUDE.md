@@ -2210,6 +2210,46 @@ Detalhes em **[docs/2026-10-27_fidelizacao_churn_cohort.md](docs/2026-10-27_fide
 
 ---
 
+## Churn de um mês (`/kpi_churn_1m.html`) — ESBOÇO, 2026-11-05
+
+Pedido do Cristiano, aninhado sob "KPI Fidelização Churn" no menu: *"100
+clientes fizeram o plano em janeiro. 90 pagaram fevereiro, então churn1m de
+10%."* É um **esboço para ele reagir em cima** — as regras abaixo marcadas como
+"decisão minha" ainda não foram confirmadas por ele.
+
+| Peça | Papel |
+|---|---|
+| `export_churn1m.py` + `.sh` | turma = CSVs do `export_vendas` (regra única, `conta = 1`); lê em `Fin_Receita` a mensalidade de **referência** (`DataMensalidade`) do mês seguinte; cron `40 * * * *` |
+| `json_vendas/churn1m.json` | uma linha por cliente da turma: vencimento, data de pagamento, situação (~4,5 MB, 2025-01 em diante) |
+| `kpi_churn_1m.html` | aplica o **dia de corte** no navegador — trocar o dia não consulta o ERP |
+
+- **Corte = dia D do mês DEPOIS da referência** (dele): venda jan → referência
+  fev → paga até D/mar. Padrão 15; vale ao clicar em Atualizar (ou Enter);
+  fica guardado no navegador.
+- **Turma = regra única de venda** — nunca uma segunda contagem. Quem completou
+  o plano e foi desativado sai da venda e, portanto, da turma (0 a 2 por mês na
+  rede; o ETL conta em `fora_desativados`).
+- **Data do pagamento = `DataPagamento`** (dia em que o cliente pagou), não a
+  `DataPagamentoAuto` do KPI Vendas — é o que compara com o vencimento sem
+  punir o boleto que o banco devolve um dia depois. *Decisão minha.*
+- **"Sem mensalidade lançada"**: planos sem cobrança mensal (SÓCIO, CAMIM
+  Liberty) não têm mensalidade no mês seguinte. Por padrão contam como não
+  pagou (a regra literal); a chave do filtro tira da turma. Em Campinho pesa:
+  45 de 212 em set/26. *Decisão minha — perguntar.*
+- **Todo % é sobre a turma** (regra do denominador único). Os seis segmentos
+  somam a turma e a tela imprime a conferência.
+- Turma com corte no futuro = **parcial** (selo, barra hachurada); turma cuja
+  referência ainda está em curso fica fora do gráfico e do mapa (90 % de
+  "churn" achataria o resto), mas abre pelo seletor.
+- Página usa a permissão `kpi_fidelizacao` (sem page_key novo, sem seed).
+- O ETL relê só as 4 turmas mais recentes por execução (`MESES_REFAZ`);
+  `--force` relê tudo (~8 min, é CPU do `linhas_do_csv`). Posto que falha
+  mantém o dado anterior e sai em `_meta.erros`.
+- Medido em 05/11: rede, turma de ago/26 = 1.189 planos, 951 pagaram set/26 até
+  15/10 → 20,0 %; 13 turmas entre 18,9 % e 26 %.
+
+---
+
 ## Higienização — fonte é o RDS, não mais o servidor do Caio (2026-11-04)
 
 O app de higienização (`gestao-backend`, higienizacao.propagacaodigital.com.br,

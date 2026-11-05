@@ -51,6 +51,8 @@
     { href: '/kpi_clientes.html',                  icon: 'fa-users',                   label: 'KPI Clientes' },
     { href: '/KPI_prescricao.html',                icon: 'fa-prescription-bottle-alt', label: 'KPI Prescrições' },
     { href: '/kpi_fidelizacao_cliente.html',       icon: 'fa-handshake',               label: 'KPI Fidelização Churn' },
+    // sub: true = item aninhado sob o anterior (recuo + seta)
+    { href: '/kpi_churn_1m.html',                  icon: 'fa-level-up-alt fa-rotate-90', label: 'Churn de um mês', sub: true },
     { href: '/kpi_consultas_status.html',          icon: 'fa-stethoscope',             label: 'KPI Consultas (Status)' },
     { href: '/kpi_notas_rps.html',                 icon: 'fa-file-invoice',            label: 'KPI Notas x RPS' },
     { href: '/kpi_metas.html',                     icon: 'fa-bullseye',                label: 'KPI Metas (Mens/Vendas)' },
@@ -106,7 +108,8 @@
             + '</button></form></li>';
         }
         var active    = isActive(i.href) ? ' active' : '';
-        var liStyle   = i.style     ? ' style="' + i.style + '"'     : '';
+        var estilo    = (i.sub ? 'padding-left:2.1rem;font-size:.9rem;' : '') + (i.style || '');
+        var liStyle   = estilo      ? ' style="' + estilo + '"'      : '';
         var icoStyle  = i.iconStyle ? ' style="' + i.iconStyle + '"' : '';
         var iconHTML;
         if (i.iconSvg && SVG_ICONS[i.iconSvg]) {
