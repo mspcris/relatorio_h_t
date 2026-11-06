@@ -2602,3 +2602,35 @@ para a investigação inteira. O essencial:
   padrão e os botões funcionam nele.
 - **JS novo nessa página vai DENTRO do IIFE do script inline.** Cair em
   `<script src>` ou depois do `})();` mata o botão sem erro em log nenhum.
+
+---
+
+## KPI Consultas (Status): filtro de status, barra empilhada e PDF completo (2026-11-06)
+
+Pedido do Cristiano em `kpi_consultas_status.html`: exportar tudo em PDF em vez
+de andar de 10 em 10, filtrar por status, e a barra dizer o que é **marcado** e
+o que é **realizado**. Só front — o `consultas_mensal_status_consolidado.json`
+já traz `por_especialidade` e `por_medico` com todos os baldes.
+
+- **Status = os baldes do ETL** (`classify_group`), não os 9 status crus do ERP:
+  Realizadas (Atendido + Aguardando) · Médico faltou · Faltas (Faltou, Ausente,
+  Não atendido, pendência de pagamento/guia) · Pend. recepção. Uma lista só,
+  `STATUS_DEFS`, alimenta botões, cores, gráficos e PDF. Filtrar pelo status cru
+  exigiria regravar o consolidado.
+- **"Marcadas (todas)"** = total previsto. Nesse modo a barra dos "Top" é
+  **empilhada por status** e leva escrito `9.242 marcadas · 6.148 realizadas
+  (66,5%)`; com um status escolhido, `773 de 2.678 marcadas (28,9%)`. No celular
+  (canvas < 600 px) o texto vai por cima da barra, versão curta.
+- **Com status escolhido só entra quem tem consulta nele**; a linha de total do
+  PDF continua sendo a do período inteiro (mesma base dos cards).
+- **"Faltas" nos Top de especialidade mudou**: era faltas + pend. recepção, agora
+  é só faltas (igual aos cards e à tabela) — pend. recepção ganhou botão próprio.
+  Diferença medida em ago–out/26: 93 em 21.601. O contexto da IA
+  (`espFaltas`) segue com a soma antiga.
+- **PDF** (jsPDF + autoTable no clique, mesmo padrão do `kpi_notas_rps.html`):
+  botão do topo = resumo + mês a mês + **todas** as especialidades e **todos** os
+  médicos; botão de cada card = só aquela lista. Sai o retrato da última
+  filtragem (`ULTIMO`), no status de cada card. Médico traz os postos onde atendeu.
+- **QA**: Chrome headless (puppeteer-core) contra cópia do consolidado de
+  produção, com conta independente em Node: totais 89.374 batendo, 57
+  especialidades e 278 médicos no PDF, texto da barra cabendo em 1500 e 360 px.

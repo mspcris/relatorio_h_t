@@ -105,6 +105,10 @@
 
     .chart-card .card-body { height:360px; }
 
+    /* Filtro de status dos "Top": no celular os botões quebram de linha em vez de vazar */
+    .status-btns { flex-wrap:wrap; }
+    .status-btns .btn { white-space:nowrap; }
+
     .pill { display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:999px; background:#f3f4f6; }
     .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
   </style>
@@ -209,7 +213,12 @@
     <nav class="navbar navbar-expand navbar-white navbar-light">
       <div class="d-flex w-100 align-items-center">
         <span class="ml-2 font-weight-bold">KPI Consultas — Status</span>
-        <div class="ml-auto">
+        <div class="ml-auto d-flex align-items-center flex-wrap justify-content-end" style="gap:6px">
+          <span id="pdfStatus" class="mini text-muted"></span>
+          <button id="btnPdfTudo" class="btn btn-sm btn-outline-danger" data-aviso="#pdfStatus"
+                  title="Baixar em PDF o período filtrado: resumo, mês a mês e a lista COMPLETA de especialidades e de médicos">
+            <i class="fas fa-file-pdf mr-1"></i>Exportar PDF
+          </button>
           <button id="btnComparar" class="btn btn-sm btn-outline-secondary" title="Mostrar/ocultar bloco de comparação">Comparar</button>
           <span id="ia-anchor"></span>
         </div>
@@ -380,19 +389,23 @@
 
       <!-- Top — Especialidades -->
       <div class="card chart-card">
-        <div class="card-header d-flex align-items-center justify-content-between">
+        <div class="card-header d-flex align-items-center justify-content-between flex-wrap" style="gap:8px">
           <h3 class="card-title mb-0">Top — Especialidades (período)</h3>
 
-          <div class="d-flex align-items-center" style="gap:8px">
-            <div class="btn-group btn-group-sm" role="group" aria-label="Modo especialidades">
-              <button id="btnEspTotal" class="btn btn-outline-secondary">Consultas</button>
-              <button id="btnEspFaltas" class="btn btn-outline-secondary">Faltas</button>
-            </div>
+          <div class="d-flex align-items-center flex-wrap" style="gap:8px">
+            <div id="espStatusBtns" class="btn-group btn-group-sm status-btns" role="group" aria-label="Status das consultas — especialidades"></div>
 
+            <span id="espPos" class="mini muted"></span>
             <div class="btn-group btn-group-sm" role="group" aria-label="Paginação especialidades">
               <button id="btnEspPrev" class="btn btn-outline-secondary" title="Anterior"><i class="fas fa-chevron-left"></i></button>
               <button id="btnEspNext" class="btn btn-outline-secondary" title="Próximo"><i class="fas fa-chevron-right"></i></button>
             </div>
+
+            <button id="btnEspPdf" class="btn btn-sm btn-outline-danger" data-aviso="#espPdfStatus"
+                    title="Baixar em PDF a lista COMPLETA de especialidades do período (não só as 10 do gráfico), no status escolhido">
+              <i class="fas fa-file-pdf mr-1"></i>PDF
+            </button>
+            <span id="espPdfStatus" class="mini text-muted"></span>
           </div>
         </div>
 
@@ -401,19 +414,23 @@
 
       <!-- Top — Médicos -->
       <div class="card chart-card">
-        <div class="card-header d-flex align-items-center justify-content-between">
+        <div class="card-header d-flex align-items-center justify-content-between flex-wrap" style="gap:8px">
           <h3 class="card-title mb-0">Top — Médicos (período)</h3>
 
-          <div class="d-flex align-items-center" style="gap:8px">
-            <div class="btn-group btn-group-sm" role="group" aria-label="Modo médicos">
-              <button id="btnMedTotal" class="btn btn-outline-secondary">Consultas</button>
-              <button id="btnMedFaltas" class="btn btn-outline-secondary">Faltas</button>
-            </div>
+          <div class="d-flex align-items-center flex-wrap" style="gap:8px">
+            <div id="medStatusBtns" class="btn-group btn-group-sm status-btns" role="group" aria-label="Status das consultas — médicos"></div>
 
+            <span id="medPos" class="mini muted"></span>
             <div class="btn-group btn-group-sm" role="group" aria-label="Paginação médicos">
               <button id="btnMedPrev" class="btn btn-outline-secondary" title="Anterior"><i class="fas fa-chevron-left"></i></button>
               <button id="btnMedNext" class="btn btn-outline-secondary" title="Próximo"><i class="fas fa-chevron-right"></i></button>
             </div>
+
+            <button id="btnMedPdf" class="btn btn-sm btn-outline-danger" data-aviso="#medPdfStatus"
+                    title="Baixar em PDF a lista COMPLETA de médicos do período (não só as 10 do gráfico), no status escolhido">
+              <i class="fas fa-file-pdf mr-1"></i>PDF
+            </button>
+            <span id="medPdfStatus" class="mini text-muted"></span>
           </div>
         </div>
 
@@ -783,6 +800,45 @@
     map.set(nome, (map.get(nome)||0) + (total||0));
   }
 
+  // Soma TODOS os baldes de status por nome (especialidade ou médico) e guarda
+  // em quais postos o nome apareceu. É o que alimenta a lista completa do PDF.
+  const BALDES = ['total', 'realizadas', 'faltas', 'medico_faltou', 'pend_recepcao', 'outros'];
+  // Os status desta página são os baldes do ETL (classify_group em
+  // export_consultas_mensal_json.py). `oque` diz quais status do ERP caem em cada um.
+  // Ordem = a da tabela mensal e do gráfico empilhado.
+  const STATUS_DEFS = [
+    { key:'total',         label:'Marcadas (todas)', col:'Total',        cor:'#36a2eb', oque:'Todas as consultas marcadas (previstas) no período' },
+    { key:'realizadas',    label:'Realizadas',     col:'Realizadas',     cor:'#60a5fa', oque:'Atendido e Aguardando' },
+    { key:'medico_faltou', label:'Médico faltou',  col:'Médico faltou',  cor:'#f59e0b', oque:'Médico faltou' },
+    { key:'faltas',        label:'Faltas',         col:'Faltas',         cor:'#ef4444', oque:'Faltou, Ausente, Não atendido e pendência de pagamento ou de guia' },
+    { key:'pend_recepcao', label:'Pend. recepção', col:'Pend. recepção', cor:'#a78bfa', oque:'Pendência recepção' },
+    { key:'outros',        label:'Outros',         col:'Outros',         cor:'#9ca3af', oque:'Qualquer outro status' },
+  ];
+  const statusDef = key => STATUS_DEFS.find(s => s.key === key) || STATUS_DEFS[0];
+
+  // Lista COMPLETA (sem paginar) de um mapa nome -> baldes, do maior para o menor
+  // no status pedido. Com status escolhido, só entra quem tem consulta nele; os
+  // totais continuam sendo os do período inteiro (mesma base dos cards).
+  function linhasRanking(aggMap, statusKey){
+    const todas = [...aggMap.entries()].map(([nome, o]) => ({ ...o, nome, postos: [...o.postos].sort() }));
+    const totais = {};
+    for(const b of BALDES) totais[b] = todas.reduce((a, x) => a + x[b], 0);
+    const rows = (statusKey === 'total' ? todas : todas.filter(x => x[statusKey] > 0))
+      .sort((a, b) => (b[statusKey] - a[statusKey]) || (b.total - a.total) || a.nome.localeCompare(b.nome, 'pt-BR'));
+    return { rows, totais, totalNomes: todas.length, omitidos: todas.length - rows.length };
+  }
+
+  function addAggFull(map, nome, it, posto){
+    let o = map.get(nome);
+    if(!o){
+      o = { postos: new Set() };
+      for(const b of BALDES) o[b] = 0;
+      map.set(nome, o);
+    }
+    for(const b of BALDES) o[b] += toInt(it[b]);
+    o.postos.add(posto);
+  }
+
   function buildAggMapsForPeriod(selection, fromYm, toYm){
     const meses = ymRange(fromYm, toYm);
     const postos = getSelectedPostos(selection);
@@ -791,6 +847,8 @@
     const espFaltas = new Map(); // faltas + pend_recepcao (regra do seu front)
     const medTotal = new Map();
     const medFaltas = new Map(); // somente faltas (mantive igual seu front)
+    const espAgg = new Map();    // nome -> { total, realizadas, faltas, medico_faltou, pend_recepcao, outros, postos }
+    const medAgg = new Map();
 
     for(const ym of meses){
       const node = monthNode(ym);
@@ -816,6 +874,7 @@
           // faltas aqui = faltas + pend_recepcao
           const faltasEsp = toInt(it.faltas) + toInt(it.pend_recepcao);
           addAggMap(espFaltas, it.nome || 'Sem especialidade', faltasEsp);
+          addAggFull(espAgg, it.nome || 'Sem especialidade', it, p);
         }
 
         const medList = normalizeAggList(medSrc, null);
@@ -823,11 +882,12 @@
           addAggMap(medTotal, it.nome || 'Sem médico', toInt(it.total));
           // faltas médico = apenas "faltas" (igual seu JS anterior)
           addAggMap(medFaltas, it.nome || 'Sem médico', toInt(it.faltas));
+          addAggFull(medAgg, it.nome || 'Sem médico', it, p);
         }
       }
     }
 
-    return { meses, espTotal, espFaltas, medTotal, medFaltas };
+    return { meses, espTotal, espFaltas, medTotal, medFaltas, espAgg, medAgg };
   }
 
   async function loadConsolidated(){
@@ -936,28 +996,64 @@
   // =========================================================
   const TOP_PAGE_SIZE = 10;
 
-  let espMode = 'total'; // 'total' | 'faltas'
-  let medMode = 'total'; // 'total' | 'faltas'
+  // Status escolhido em cada "Top" (chave de STATUS_DEFS). Vale para o gráfico e para o PDF.
+  let espMode = 'total';
+  let medMode = 'total';
+
+  // Retrato da última renderização: o PDF sai igual ao que está na tela,
+  // mesmo que as datas tenham sido digitadas sem clicar em Filtrar.
+  let ULTIMO = null;
   let espPage = 0;
   let medPage = 0;
 
   function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
 
-  function topPage(map, page, pageSize){
-    const all = [...map.entries()].sort((a,b)=>b[1]-a[1]);
-    const totalPages = Math.max(1, Math.ceil(all.length / pageSize));
-    const p = clamp(page, 0, totalPages - 1);
-    const slice = all.slice(p * pageSize, p * pageSize + pageSize);
-    return { slice, totalPages, page: p, totalItems: all.length };
+  function renderStatusBtns(boxId, modo, temOutros){
+    const box = el(boxId);
+    if(!box) return;
+    box.innerHTML = STATUS_DEFS
+      .filter(s => s.key !== 'outros' || temOutros)
+      .map(s => `<button type="button" data-status-key="${s.key}" title="${s.oque}" aria-pressed="${s.key === modo}"
+                         class="btn ${s.key === modo ? 'btn-secondary active' : 'btn-outline-secondary'}">${s.label}</button>`)
+      .join('');
   }
 
-  function setBtnActive(aId, bId, modeIsA){
-    const a = el(aId), b = el(bId);
-    if(!a || !b) return;
-    a.classList.toggle('btn-secondary', modeIsA);
-    a.classList.toggle('btn-outline-secondary', !modeIsA);
-    b.classList.toggle('btn-secondary', !modeIsA);
-    b.classList.toggle('btn-outline-secondary', modeIsA);
+  // Desenha um "Top" (10 por página) no status escolhido e devolve a página efetiva.
+  function desenhaTop(ch, aggMap, modo, page, pref, temOutros){
+    const def = statusDef(modo);
+    const rk = linhasRanking(aggMap, modo);
+    const totalPages = Math.max(1, Math.ceil(rk.rows.length / TOP_PAGE_SIZE));
+    const p = clamp(page, 0, totalPages - 1);
+    const slice = rk.rows.slice(p * TOP_PAGE_SIZE, (p + 1) * TOP_PAGE_SIZE);
+    const P = pref.charAt(0).toUpperCase() + pref.slice(1);
+
+    renderStatusBtns(`#${pref}StatusBtns`, modo, temOutros);
+    setDisabled(`#btn${P}Prev`, p <= 0);
+    setDisabled(`#btn${P}Next`, p >= totalPages - 1);
+    setDisabled(`#btn${P}Pdf`, !rk.rows.length);
+    const pos = el(`#${pref}Pos`);
+    if(pos) pos.textContent = rk.rows.length
+      ? `${p * TOP_PAGE_SIZE + 1}–${p * TOP_PAGE_SIZE + slice.length} de ${fmtInt.format(rk.rows.length)}`
+      : 'nenhum no período';
+
+    const rev = slice.slice().reverse();
+    // "Marcadas (todas)": a barra é o total marcado, repartido por status.
+    // Com um status escolhido: só aquele status.
+    const partes = modo === 'total'
+      ? STATUS_DEFS.filter(s => s.key !== 'total' && (s.key !== 'outros' || temOutros))
+      : [def];
+    ch.$linhas = rev;
+    ch.$modo = modo;
+    ch.data.labels = rev.map(x => x.nome);
+    ch.data.datasets = partes.map(s => ({
+      label: s.col,
+      data: rev.map(x => x[s.key]),
+      backgroundColor: s.cor + '99',
+      borderColor: s.cor,
+      borderWidth: 1
+    }));
+    ch.update();
+    return p;
   }
 
   function setDisabled(id, disabled){
@@ -966,6 +1062,68 @@
   }
 
   let chTotal, chStack, chEsp, chMed;
+
+  // Texto de cada barra dos "Top": diz o que é MARCADO e o que é REALIZADO
+  // (ou, com um status escolhido, quanto ele pesa nas marcadas).
+  const fmtPct1 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  function textoBarra(x, modo, curto){
+    const p = (a, b) => b > 0 ? fmtPct1.format(a / b * 100) + '%' : '-';
+    if(modo === 'total'){
+      return curto
+        ? `${fmtInt.format(x.total)} marcadas · ${p(x.realizadas, x.total)} realiz.`
+        : `${fmtInt.format(x.total)} marcadas · ${fmtInt.format(x.realizadas)} realizadas (${p(x.realizadas, x.total)})`;
+    }
+    return curto
+      ? `${fmtInt.format(x[modo])} de ${fmtInt.format(x.total)} (${p(x[modo], x.total)})`
+      : `${fmtInt.format(x[modo])} de ${fmtInt.format(x.total)} marcadas (${p(x[modo], x.total)})`;
+  }
+
+  // Plugin dos "Top": escreve o texto no fim da barra (tela larga, reservando o
+  // espaço à direita) ou por cima dela, a partir da esquerda (celular).
+  const rotuloBarra = {
+    id: 'rotuloBarra',
+    _fonte: () => `600 11px ${Chart.defaults.font.family}`,
+    beforeLayout(chart){
+      const linhas = chart.$linhas || [];
+      chart.$curto = chart.width < 600;
+      let larg = 0;
+      if(!chart.$curto){
+        chart.ctx.save();
+        chart.ctx.font = this._fonte();
+        for(const x of linhas) larg = Math.max(larg, chart.ctx.measureText(textoBarra(x, chart.$modo, false)).width);
+        chart.ctx.restore();
+      }
+      chart.options.layout.padding.right = chart.$curto ? 4 : Math.ceil(larg) + 14;
+    },
+    afterDatasetsDraw(chart){
+      const linhas = chart.$linhas || [];
+      if(!linhas.length) return;
+      const { ctx, chartArea } = chart;
+      const metas = chart.getSortedVisibleDatasetMetas();
+      ctx.save();
+      ctx.font = this._fonte();
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(255,255,255,.85)';
+      ctx.fillStyle = '#1f2937';
+      linhas.forEach((x, i) => {
+        let fim = chartArea.left, yy = null;
+        for(const m of metas){
+          const e = m.data[i];
+          if(!e) continue;
+          fim = Math.max(fim, e.x);
+          yy = e.y;
+        }
+        if(yy == null) return;
+        const txt = textoBarra(x, chart.$modo, chart.$curto);
+        const xx = chart.$curto ? chartArea.left + 4 : fim + 6;
+        ctx.strokeText(txt, xx, yy);
+        ctx.fillText(txt, xx, yy);
+      });
+      ctx.restore();
+    }
+  };
 
   function initCharts(){
     const baseLine = { responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false}, scales:{ y:{ beginAtZero:true } } };
@@ -983,14 +1141,26 @@
       }
     });
 
+    // Os dois "Top": barra empilhada por status (o comprimento é o total MARCADO,
+    // a parte azul é o que foi REALIZADO) e o número escrito na própria barra.
+    const optTop = () => ({
+      responsive:true, maintainAspectRatio:false, indexAxis:'y',
+      interaction:{ mode:'index', axis:'y', intersect:false },
+      layout:{ padding:{ right:0 } },
+      scales:{ x:{ stacked:true, beginAtZero:true }, y:{ stacked:true } },
+      plugins:{ tooltip:{ callbacks:{
+        footer: items => {
+          const x = items.length ? (items[0].chart.$linhas || [])[items[0].dataIndex] : null;
+          return x ? `Marcadas: ${fmtInt.format(x.total)}` : '';
+        }
+      } } }
+    });
     chEsp = new Chart(document.getElementById('chartEsp'), {
-      type:'bar', data:{ labels:[], datasets:[] },
-      options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', scales:{ x:{ beginAtZero:true } } }
+      type:'bar', data:{ labels:[], datasets:[] }, options: optTop(), plugins:[rotuloBarra]
     });
 
     chMed = new Chart(document.getElementById('chartMed'), {
-      type:'bar', data:{ labels:[], datasets:[] },
-      options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', scales:{ x:{ beginAtZero:true } } }
+      type:'bar', data:{ labels:[], datasets:[] }, options: optTop(), plugins:[rotuloBarra]
     });
   }
 
@@ -1009,48 +1179,22 @@
     chTotal.update();
 
     chStack.data.labels = labels;
-    chStack.data.datasets = [
-      { label:'Realizadas', data: series.map(x=>x.realizadas) },
-      { label:'Médico faltou', data: series.map(x=>x.medico_faltou) },
-      { label:'Faltas', data: series.map(x=>x.faltas) },
-      { label:'Pend. recepção', data: series.map(x=>x.pend_recepcao) },
-      { label:'Outros', data: series.map(x=>x.outros) },
-    ];
+    // mesmas cores das bolinhas dos KPIs e dos "Top" — um status, uma cor na página toda
+    chStack.data.datasets = STATUS_DEFS.filter(s => s.key !== 'total').map(s => ({
+      label: s.col,
+      data: series.map(x => x[s.key]),
+      backgroundColor: s.cor + '99',
+      borderColor: s.cor,
+      borderWidth: 1
+    }));
     chStack.update();
 
-    // --- TOP Especialidades ---
-    const espMapUse = (espMode === 'faltas') ? agg.espFaltas : agg.espTotal;
-    const espPg = topPage(espMapUse, espPage, TOP_PAGE_SIZE);
-    espPage = espPg.page;
-
-    setBtnActive('#btnEspTotal', '#btnEspFaltas', espMode === 'total');
-    setDisabled('#btnEspPrev', espPage <= 0);
-    setDisabled('#btnEspNext', espPage >= espPg.totalPages - 1);
-
-    const espSlice = espPg.slice.slice().reverse();
-    chEsp.data.labels = espSlice.map(x=>x[0]);
-    chEsp.data.datasets = [{
-      label: (espMode === 'faltas') ? 'Faltas (qtde pacientes)' : 'Consultas (qtde)',
-      data: espSlice.map(x=>x[1])
-    }];
-    chEsp.update();
-
-    // --- TOP Médicos ---
-    const medMapUse = (medMode === 'faltas') ? agg.medFaltas : agg.medTotal;
-    const medPg = topPage(medMapUse, medPage, TOP_PAGE_SIZE);
-    medPage = medPg.page;
-
-    setBtnActive('#btnMedTotal', '#btnMedFaltas', medMode === 'total');
-    setDisabled('#btnMedPrev', medPage <= 0);
-    setDisabled('#btnMedNext', medPage >= medPg.totalPages - 1);
-
-    const medSlice = medPg.slice.slice().reverse();
-    chMed.data.labels = medSlice.map(x=>x[0]);
-    chMed.data.datasets = [{
-      label: (medMode === 'faltas') ? 'Faltas (qtde pacientes)' : 'Consultas (qtde)',
-      data: medSlice.map(x=>x[1])
-    }];
-    chMed.update();
+    // --- TOP Especialidades / Médicos (status escolhido em cada um) ---
+    const temOutros = sum(series.map(x => x.outros)) > 0;
+    if(!temOutros && espMode === 'outros') espMode = 'total';
+    if(!temOutros && medMode === 'outros') medMode = 'total';
+    espPage = desenhaTop(chEsp, agg.espAgg, espMode, espPage, 'esp', temOutros);
+    medPage = desenhaTop(chMed, agg.medAgg, medMode, medPage, 'med', temOutros);
   }
 
   // =========================================================
@@ -1291,6 +1435,7 @@ INSTRUÇÕES PARA A IA:
 
     const agg = buildAggMapsForPeriod(sel2, from, to);
     const k = buildKpisFromSeries(series, agg.espTotal, agg.medTotal);
+    ULTIMO = { from, to, sel: (sel2 === 'ALL' ? 'ALL' : new Set(sel2)), series, agg, k };
 
     const box = el('#kpisSel2'); if(box){
       box.innerHTML = '';
@@ -1315,6 +1460,225 @@ INSTRUÇÕES PARA A IA:
 
     // Atualiza contexto da IA com o dataset completo
     window.__kpi_contexto = buildKpiContextConsultas(from, to, sel2);
+  }
+
+  // =========================================================
+  // EXPORTAR PDF — a lista COMPLETA de especialidades e de médicos
+  // Na tela os "Top" andam de 10 em 10; o PDF traz todos de uma vez, no
+  // período/postos da última filtragem e no status escolhido em cada "Top".
+  // Texto vetorial (jsPDF + autoTable, carregados só no clique) — mesmo
+  // padrão do kpi_notas_rps.html. Só Latin-1 nos textos fixos (fonte padrão).
+  // =========================================================
+  const PDF_LIBS = [
+    'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+    'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'
+  ];
+  let pdfLibsPromise = null;
+  function carregarPdfLibs(){
+    if(pdfLibsPromise) return pdfLibsPromise;
+    const carregar = src => new Promise((ok, erro) => {
+      const sc = document.createElement('script');
+      sc.src = src;
+      sc.onload = ok;
+      sc.onerror = () => erro(new Error('biblioteca de PDF não carregou'));
+      document.head.appendChild(sc);
+    });
+    pdfLibsPromise = PDF_LIBS.reduce((p, src) => p.then(() => carregar(src)), Promise.resolve())
+      .catch(e => { pdfLibsPromise = null; throw e; });
+    return pdfLibsPromise;
+  }
+
+  function descreveSelecao(sel){
+    const letras = (sel === 'ALL' ? POSTOS : [...sel]).slice().sort();
+    const lista = letras.join(', ');
+    if(sel === 'ALL') return `Todos (${lista})`;
+    const doGrupo = g => GRUPOS_POSTO[g].filter(p => POSTOS.includes(p)).sort().join(', ');
+    if(lista && lista === doGrupo('altamiro')) return `Grupo Altamiro (${lista})`;
+    if(lista && lista === doGrupo('couto')) return `Grupo Couto (${lista})`;
+    return lista || '-';
+  }
+
+  // Tudo que o PDF precisa, tirado do retrato da tela (ULTIMO).
+  function dadosPdfConsultas(partes){
+    const u = ULTIMO;
+    if(!u) return null;
+    const ymTxt = ym => { const [y, m] = ym.split('-'); return `${m}/${y}`; };
+    const dh = d => d.toLocaleString('pt-BR', { dateStyle:'short', timeStyle:'short' });
+    const base = (CONS && CONS.generated_at) ? new Date(CONS.generated_at) : null;
+    return {
+      partes,
+      from: u.from, to: u.to,
+      periodo: u.from === u.to ? ymTxt(u.from) : `${ymTxt(u.from)} a ${ymTxt(u.to)}`,
+      mesEmAndamento: u.to >= ymNow(),
+      postosTxt: descreveSelecao(u.sel),
+      postosArq: labelSelec(u.sel),
+      series: u.series,
+      k: u.k,
+      esp: linhasRanking(u.agg.espAgg, espMode), statusEsp: espMode,
+      med: linhasRanking(u.agg.medAgg, medMode), statusMed: medMode,
+      baseEm: (base && !isNaN(base)) ? dh(base) : '',
+      geradoEm: dh(new Date()),
+      usuario: window.USER_EMAIL || ''
+    };
+  }
+
+  function montarPdfConsultas(jsPDF, d){
+    const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'landscape', compress:true });
+    const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+    const ML = 10, MT = 16, MB = 12;
+    const n  = v => fmtInt.format(v || 0);
+    const pc = (a, b) => { const v = pct(a, b); return v == null ? '-' : fmtPct.format(v) + '%'; };
+    // colunas de status (Outros só aparece se existir no período)
+    const cols = STATUS_DEFS.filter(s => s.key !== 'total' && (s.key !== 'outros' || d.k.outros > 0));
+
+    // ---- cabeçalho da primeira página
+    let y = 14;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(20);
+    doc.text('CAMIM - Consultas por status', ML, y);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(40);
+    y += 6;
+    doc.text(`Período: ${d.periodo}     Postos: ${d.postosTxt}`, ML, y);
+    doc.setFontSize(8); doc.setTextColor(110);
+    y += 4.5;
+    doc.text([
+      d.baseEm ? `Dados atualizados em ${d.baseEm}.` : '',
+      d.mesEmAndamento ? 'O período inclui o mês em andamento (números parciais).' : ''
+    ].filter(Boolean).join(' '), ML, y);
+    y += 8;
+
+    const secao = (txt, sub) => {
+      if(y > H - 45){ doc.addPage(); y = MT + 2; }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(20);
+      doc.text(txt, ML, y);
+      if(sub){
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(110);
+        const linhas = doc.splitTextToSize(sub, W - 2 * ML);
+        doc.text(linhas, ML, y + 4.2);
+        y += 3.6 * linhas.length + 1;
+      }
+      y += 3;
+    };
+
+    // textCols: colunas de texto (à esquerda); o resto é número (à direita).
+    // destaque: coluna em negrito (a do status que ordena a lista).
+    const tabela = (opts, textCols, destaque) => {
+      doc.autoTable(Object.assign({
+        startY: y,
+        theme: 'striped',
+        margin: { left: ML, right: ML, top: MT, bottom: MB },
+        styles: { font:'helvetica', fontSize:8, cellPadding:1.3, overflow:'linebreak' },
+        headStyles: { fillColor:[0, 148, 2], textColor:255, fontStyle:'bold' },
+        footStyles: { fillColor:[226, 236, 226], textColor:20, fontStyle:'bold' },
+        showFoot: 'lastPage',
+        rowPageBreak: 'avoid',
+        didParseCell: c => {
+          c.cell.styles.halign = textCols.includes(c.column.index) ? 'left' : 'right';
+          if(c.column.index === destaque) c.cell.styles.fontStyle = 'bold';
+        }
+      }, opts));
+      y = doc.lastAutoTable.finalY + 9;
+    };
+
+    // ---- resumo + mês a mês
+    if(d.partes.resumo){
+      secao('Resumo do período');
+      tabela({
+        tableWidth: 190,
+        head: [['Status', 'Consultas', '% do total', 'O que entra neste status']],
+        body: [
+          ['Total previsto', n(d.k.total), pc(d.k.total, d.k.total), STATUS_DEFS[0].oque],
+          ...cols.map(s => [s.col, n(d.k[s.key]), pc(d.k[s.key], d.k.total), s.oque])
+        ]
+      }, [0, 3], -1);
+
+      secao('Mês a mês', '% = parte das consultas do próprio mês.');
+      tabela({
+        head: [['Mês', 'Total', ...cols.flatMap(s => [s.col, '%'])]],
+        body: d.series.map(x => [mFmt(x.ym), n(x.total), ...cols.flatMap(s => [n(x[s.key]), pc(x[s.key], x.total)])]),
+        foot: [['Total', n(d.k.total), ...cols.flatMap(s => [n(d.k[s.key]), pc(d.k[s.key], d.k.total)])]]
+      }, [0], -1);
+    }
+
+    // ---- lista completa (especialidades / médicos)
+    const ranking = (titulo, rotulo, plural, rk, statusKey, comPostos) => {
+      const def = statusDef(statusKey);
+      const filtrado = statusKey !== 'total';
+      const sub = [
+        filtrado
+          ? `Status: ${def.col} (${def.oque}). Entram só ${plural} com consulta neste status, do maior para o menor.`
+          : 'Todos os status, do maior para o menor total de consultas.',
+        (filtrado && rk.omitidos) ? `Ficaram fora ${n(rk.omitidos)} sem consulta neste status.` : '',
+        '% = parte das consultas da própria linha. A linha de total é a do período inteiro.'
+      ].filter(Boolean).join(' ');
+      secao(`${titulo} - ${n(rk.rows.length)}${filtrado ? ` de ${n(rk.totalNomes)}` : ''}`, sub);
+
+      if(!rk.rows.length){
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(60);
+        doc.text('Nenhum registro neste status no período.', ML, y + 2);
+        y += 12;
+        return;
+      }
+      const iTotal = comPostos ? 3 : 2;
+      const iStatus = cols.findIndex(s => s.key === statusKey);
+      const destaque = (filtrado && iStatus >= 0) ? iTotal + 1 + iStatus * 2 : iTotal;
+      const extra = v => comPostos ? [v] : [];
+      tabela({
+        head: [['#', rotulo, ...extra('Postos'), 'Total', ...cols.flatMap(s => [s.col, '%'])]],
+        body: rk.rows.map((x, i) => [
+          String(i + 1), x.nome, ...extra(x.postos.join(' ')), n(x.total),
+          ...cols.flatMap(s => [n(x[s.key]), pc(x[s.key], x.total)])
+        ]),
+        foot: [[
+          '', `Total do período (${n(rk.totalNomes)} ${plural})`, ...extra(''), n(rk.totais.total),
+          ...cols.flatMap(s => [n(rk.totais[s.key]), pc(rk.totais[s.key], rk.totais.total)])
+        ]],
+        columnStyles: comPostos ? { 2: { cellWidth: 30 } } : {}
+      }, comPostos ? [1, 2] : [1], destaque);
+    };
+    if(d.partes.esp) ranking('Especialidades', 'Especialidade', 'especialidades', d.esp, d.statusEsp, false);
+    if(d.partes.med) ranking('Médicos', 'Médico', 'médicos', d.med, d.statusMed, true);
+
+    // ---- cabeçalho corrido + rodapé em todas as páginas
+    const np = doc.getNumberOfPages();
+    for(let i = 1; i <= np; i++){
+      doc.setPage(i);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120);
+      if(i > 1) doc.text(`CAMIM - Consultas por status  |  ${d.periodo}  |  Postos: ${d.postosTxt}`, ML, 10);
+      doc.text(`Gerado em ${d.geradoEm}${d.usuario ? ' por ' + d.usuario : ''}`, ML, H - 6);
+      doc.text(`Página ${i} de ${np}`, W - ML, H - 6, { align: 'right' });
+    }
+    return doc;
+  }
+
+  async function exportarPdfConsultas(partes, btn){
+    const st = (btn && btn.dataset.aviso) ? el(btn.dataset.aviso) : null;
+    const aviso = (txt, erro) => {
+      if(!st) return;
+      st.textContent = txt;
+      st.className = 'mini ' + (erro ? 'text-danger' : 'text-muted');
+    };
+    if(!ULTIMO){ aviso('Os dados ainda estão carregando.', true); return; }
+    if(btn) btn.disabled = true;
+    aviso('Gerando PDF…');
+    try{
+      await carregarPdfLibs();
+      const d = dadosPdfConsultas(partes);
+      const doc = montarPdfConsultas(window.jspdf.jsPDF, d);
+      const st2 = k => k === 'total' ? '' : '_' + k;
+      const sufixo = partes.resumo ? ''
+        : (partes.esp ? '_especialidades' + st2(d.statusEsp) : '_medicos' + st2(d.statusMed));
+      doc.save(`consultas_status${sufixo}_${d.from}_a_${d.to}_${d.postosArq}.pdf`);
+      const oque = [
+        partes.esp ? `${fmtInt.format(d.esp.rows.length)} especialidades` : '',
+        partes.med ? `${fmtInt.format(d.med.rows.length)} médicos` : ''
+      ].filter(Boolean).join(' e ');
+      aviso(`PDF gerado: ${oque}, ${doc.getNumberOfPages()} pág.`);
+    } catch(e){
+      console.error(e);
+      aviso('Não foi possível gerar o PDF: ' + (e && e.message || e), true);
+    } finally {
+      if(btn) btn.disabled = false;
+    }
   }
 
   function setPressed(btn, on, variant='primary'){
@@ -1491,26 +1855,24 @@ INSTRUÇÕES PARA A IA:
       renderSel2();
     });
 
-    // Top Especialidades: modo + paginação
-    if(el('#btnEspTotal')) el('#btnEspTotal').addEventListener('click', ()=>{
-      espMode = 'total'; espPage = 0; renderSel2();
-    });
-    if(el('#btnEspFaltas')) el('#btnEspFaltas').addEventListener('click', ()=>{
-      espMode = 'faltas'; espPage = 0; renderSel2();
-    });
+    // Top Especialidades / Médicos: status + paginação + PDF
+    const ligaStatus = (boxId, aplica) => {
+      const box = el(boxId);
+      if(box) box.addEventListener('click', e => {
+        const b = e.target.closest('[data-status-key]');
+        if(!b) return;
+        aplica(b.dataset.statusKey);
+        renderSel2();
+      });
+    };
+    ligaStatus('#espStatusBtns', k => { espMode = k; espPage = 0; });
+    ligaStatus('#medStatusBtns', k => { medMode = k; medPage = 0; });
+
     if(el('#btnEspPrev')) el('#btnEspPrev').addEventListener('click', ()=>{
       espPage = Math.max(0, espPage - 1); renderSel2();
     });
     if(el('#btnEspNext')) el('#btnEspNext').addEventListener('click', ()=>{
       espPage = espPage + 1; renderSel2();
-    });
-
-    // Top Médicos: modo + paginação
-    if(el('#btnMedTotal')) el('#btnMedTotal').addEventListener('click', ()=>{
-      medMode = 'total'; medPage = 0; renderSel2();
-    });
-    if(el('#btnMedFaltas')) el('#btnMedFaltas').addEventListener('click', ()=>{
-      medMode = 'faltas'; medPage = 0; renderSel2();
     });
     if(el('#btnMedPrev')) el('#btnMedPrev').addEventListener('click', ()=>{
       medPage = Math.max(0, medPage - 1); renderSel2();
@@ -1518,6 +1880,14 @@ INSTRUÇÕES PARA A IA:
     if(el('#btnMedNext')) el('#btnMedNext').addEventListener('click', ()=>{
       medPage = medPage + 1; renderSel2();
     });
+
+    const ligaPdf = (id, partes) => {
+      const b = el(id);
+      if(b) b.addEventListener('click', () => exportarPdfConsultas(partes, b));
+    };
+    ligaPdf('#btnPdfTudo', { resumo:true,  esp:true,  med:true  });
+    ligaPdf('#btnEspPdf',  { resumo:false, esp:true,  med:false });
+    ligaPdf('#btnMedPdf',  { resumo:false, esp:false, med:true  });
 
     const btnCmp = el('#btnComparar');
     if(btnCmp) btnCmp.addEventListener('click', ()=>{
